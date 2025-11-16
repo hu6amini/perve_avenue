@@ -929,6 +929,8 @@ div[class="atwho-view"]{z-index:11!important}
 .gstl_50.gssb_c{border-radius:5px}
 .gsc-completion-container{background:var(--menul)!important;border:1px solid var(--dkbrd)!important;border-radius:5px;display:flex;font-family:quicksand!important}
 .gsc-completion-container tbody{display:flex;flex-direction:column;width:100%}
+.gssb_a{display:block;min-width:100%}
+.gsc-completion-selected{background:#090A0C3c!important;cursor:pointer!important}
 
 /*ads*/
 .FFA-head span,.ve-dropdown ul.ve-dropdown-list>li>button[data-placeholder]::after{font-family:quicksand!important}
