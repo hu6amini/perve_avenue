@@ -931,6 +931,8 @@ div[class="atwho-view"]{z-index:11!important}
 .gsc-completion-container tbody{display:flex;flex-direction:column;width:100%}
 .gssb_a{display:block;min-width:100%}
 .gsc-completion-selected{background:#090A0C3c!important;cursor:pointer!important}
+.gsc-results-wrapper-overlay{background:var(--backg)!important}
+.gsc-results{background:var(--contt)!important}
 
 /*ads*/
 .FFA-head span,.ve-dropdown ul.ve-dropdown-list>li>button[data-placeholder]::after{font-family:quicksand!important}
