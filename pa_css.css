@@ -935,6 +935,7 @@ div[class="atwho-view"]{z-index:11!important}
 .gsc-results{background:var(--contt)!important}
 .gsc-results-wrapper-overlay{border-radius:5px!important;height:unset!important;left:0!important;margin:13px auto!important;padding:21px!important;top:0!important;width:unset!important}
 .gsc-results-close-btn{background-image:none!important}
+.gsc-results-close-btn::before{color:var(--redft);content:'\f00d';font-size:1.313rem}
 
 /*ads*/
 .FFA-head span,.ve-dropdown ul.ve-dropdown-list>li>button[data-placeholder]::after{font-family:quicksand!important}
