@@ -938,7 +938,7 @@ div[class="atwho-view"]{z-index:11!important}
 .gsc-results-close-btn::before{color:var(--redft);content:'\f00d';font-size:1.313rem}
 .gsc-results-wrapper-visible{min-width:100%}
 .gsc-above-wrapper-area{background:var(--contt);border-bottom:none!important;padding:13px!important}
-.gsc-tabsArea{bavkground:var(--contt);border-bottom:0!important;border-top-left-radius:5px;border-top-right-radius:5px;margin-top:0!important}
+.gsc-tabsArea{background:var(--contt);border-bottom:0!important;border-top-left-radius:5px;border-top-right-radius:5px;margin-top:0!important}
 
 /*ads*/
 .FFA-head span,.ve-dropdown ul.ve-dropdown-list>li>button[data-placeholder]::after{font-family:quicksand!important}
