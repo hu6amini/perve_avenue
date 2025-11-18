@@ -940,6 +940,8 @@ div[class="atwho-view"]{z-index:11!important}
 .gsc-tabsArea{background:var(--contt);border-bottom:0!important;border-top-left-radius:5px;border-top-right-radius:5px;margin-top:0!important}
 .gsc-webResult.gsc-result{border-radius:5px;padding:13px!important}
 .gsc-expansionArea{display:flex;flex-direction:column;gap:13px}
+.gsc-modal-background-image{background-color:var(--menul);border-radius:5px;height:100%!important}
+.gsc-modal-background-image-visible{opacity:.618!important}
 
 /*ads*/
 .FFA-head span,.ve-dropdown ul.ve-dropdown-list>li>button[data-placeholder]::after{font-family:quicksand!important}
