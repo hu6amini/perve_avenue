@@ -508,7 +508,7 @@ input#embed-url-input{background:var(--txtim);border:none;border-radius:4px;colo
 .prvcomb td[width="16%"][valign="middle"][nowrap]{align-items:center;background-color:var(--contt);border:1px solid var(--ltbrd);border-bottom:none;border-top-left-radius:5px;border-top-right-radius:5px;display:flex;flex-wrap:wrap;padding:0 6px;width:100%}
 .guest.error.no_view_topic .darkbar,.guest.error.no_permission .darkbar:not(.skin_tbl[style="width:60%;min-width:500px"]),.error.profile_guest .darkbar.Item{border-top:1px solid var(--ltbrd)} 
 .guest.error .darkbar.Item, .error.profile_guest .darkbar.Item{padding:8px 13px 13px}
-.error li.Item,#tippy-19 li:not(.st-emoji-list li),#tippy-21 ul.ve-dropdown-list,#mod .Sub.Item[style="width:67%"] + .list,#board .zz:not(.board.List .zz,.stats.List .zz),.send .list:not(.list.st-editor-area.st-editor-area-desktop,.list.st-editor-area.st-editor-area-desktop.st-editor-area-active,.send .cronRow .list,.cp.send .list),.gsc-expansionArea{padding:13px}
+.error li.Item,#tippy-19 li:not(.st-emoji-list li),#tippy-21 ul.ve-dropdown-list,#mod .Sub.Item[style="width:67%"] + .list,#board .zz:not(.board.List .zz,.stats.List .zz,.user-result-item .zz),.send .list:not(.list.st-editor-area.st-editor-area-desktop,.list.st-editor-area.st-editor-area-desktop.st-editor-area-active,.send .cronRow .list,.cp.send .list),.gsc-expansionArea{padding:13px}
 #attach input.textinput[name="FILE_UPLOAD"],#user [accept="image/*"]{padding:13px 0}
 .error .skin_tbl[style="width:60%;min-width:500px"],#Post,.Sortable.ui-sortable textarea{width:100%!important}
 .error .skin_tbl[style="width:60%;min-width:500px"] .Sub.Item{padding:8px 0 13px 0!important;text-align:right!important;width:100%!important}
