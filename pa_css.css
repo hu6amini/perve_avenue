@@ -928,8 +928,7 @@ div[class="atwho-view"]{z-index:11!important}
 .lg-item.lg-loaded.lg-current:not(.lg-item.lg-loaded.lg-current.lg-complete)::after,.lg-css3.lg-slide.lg-use-css3 .lg-item.lg-current:not(.lg-item.lg-next-slide.lg-current.lg-loaded.lg-complete,.lg-item.lg-loaded.lg-current.lg-complete)::after,.lg-outer .lg-item:not(.lg-item.lg-loaded.lg-complete)::after,.lg-item:not(.lg-complete)::after{animation:fa-spin 2s linear infinite;content:'\e1d4';font-size:2em;left:0;position:absolute;top:50%;width:100%}
 .gsc-search-button-v2::before{content:'\f002'}
 .gstl_50.gssb_c{border-radius:5px}
-.gsc-completion-container{background:var(--menul)!important;border:1px solid var(--dkbrd)!important;border-radius:5px;display:flex;font-family:quicksand!important}
-.gsc-completion-container tbody{display:flex;flex-direction:column;width:100%}
+.gsc-completion-container{background:var(--menul)!important;border:1px solid var(--dkbrd)!important;font-family:quicksand!important}
 .gssb_a{display:block;min-width:100%}
 .gsc-completion-selected{background:#090A0C3c!important;cursor:pointer!important}
 .gsc-results{background:var(--contt)!important;border-bottom-left-radius:5px;border-bottom-right-radius:5px}
