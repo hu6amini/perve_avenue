@@ -456,6 +456,7 @@ img[src="https://img.forumfree.net/home/images/avatar_email.png"]{background:url
 #notifications-box{align-items:center;display:flex!important;flex-direction:column;overflow-x:hidden!important}
 #notifications-modal .notification-container,.ve-content div[data-type=spoiler].code::after,.st-emoji-notice-content,.st-emoji-user-list .st-emoji-user,.gsc-input{width:100%}
 .footer{margin:0 13px;width:100%}
+.footer_links{margin:13px}
 #notifications-more{background:none!important;box-shadow:none!important;min-height:50px;transition:none}
 .notification-container .aa:not(#msg .notification-container .aa){padding:0!important;width:4px!important}
 .notification-container .aa .avatar:not(#msg .notification-container .aa .avatar){height:48px!important;width:48px!important}
@@ -948,7 +949,7 @@ div[class="atwho-view"]{z-index:11!important}
 .FFA-element{background:none!important;border:1px solid var(--ltbrd);box-shadow:none!important;margin:0!important;padding:13px!important}
 .FFA-element .FFA-title > a{color:var(--mdcol)!important;font-family:'Bree Serif';font-size:.875rem!important;font-weight:450;line-height:1.618!important;max-height:none!important}
 .FFA-element .FFA-desc > a{color:var(--ltcol)!important;line-height:1.618!important}
-#FFA-box,.footer_links{margin-bottom:13px}
+#FFA-box{margin-bottom:13px}
 .FFA-head{margin:13px!important}
 .FFA-row-elements{gap:13px}
 
