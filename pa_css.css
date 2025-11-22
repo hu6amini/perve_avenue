@@ -903,7 +903,7 @@ a.a2a_dd.nolink::before{content:'\f1e0'}
 .clipbd,.note{align-items:center;animation:slideinout 3.82s forwards;background:var(--ltgry)!important;box-shadow:var(--hfsha);color:var(--ftcol);display:flex;font-size:1.375rem;height:60px;justify-content:center;left:0;opacity:0;padding:15px;position:fixed;right:0;top:-60px;width:100%;z-index: 9}
 div[class="atwho-view"]{z-index:11!important}
 .lazyload,img[loading="lazy"]{height:auto;display:inline-block;max-width:100%}
-#msgForm{background-color:var(--contt);border-bottom-left-radius:4px;border-bottom-right-radius:4px;box-shadow:var(--hfsha);margin:0 0 21px;padding:12px;position:relative}
+#msgForm{background-color:var(--contt);border-bottom-left-radius:4px;border-bottom-right-radius:4px;box-shadow:var(--hfsha);padding:12px;position:relative}
 .online .bb .nick div::before,.online .bb div::before,a[onclick="return enableFFM()"]::before{content:'\f87a \00a0'}
 .st-emoji-checkbox .lbl[for="filter-rid-10"]{background-image:url(https://upload.forumfree.net/i/fc11517378/emojis/kekw.png)}
 .st-emoji-checkbox .lbl[for="filter-rid-1"]{background-image:url(https://upload.forumfree.net/i/fc11517378/emojis/rofl.png)}
