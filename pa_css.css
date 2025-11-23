@@ -918,6 +918,9 @@ div[class="atwho-view"]{z-index:11!important}
 .st-emoji-checkbox .lbl[for="filter-rid-9"]{background-image:url(https://upload.forumfree.net/i/fc11517378/emojis/red_pepper.png)}
 .st-emoji-checkbox .lbl[for="filter-rid-11"]{background-image:url(https://upload.forumfree.net/i/fc11517378/emojis/banana.png)}
 .st-emoji-checkbox .lbl{background-position:left;background-repeat:no-repeat;background-size:22px 22px;font-size:0;height:22px;margin-left:8px;padding-left:22px}
+.birthday a{background-image:url("https://res.cloudinary.com/dbdf6gwgo/image/upload/v1637308887/forum/icons/birthday_dk_cfwl0g.gif");background-position:50%;background-size:90px 68px!important;color:var(--ftcol);font-weight:700;margin-left:3px;text-shadow:none!important}
+.birthday::before{background:url("https://res.cloudinary.com/dbdf6gwgo/image/upload/v1632725898/forum/icons/partying-face_1f973_tkscqb.png")50% no-repeat;background-size:21px;content:'';display:inline-block;height:21px;margin-right:5px;position:relative;top:3px;width: 21px}
+.birthday, .birthday dt, .birthday b {font-size:.875rem!important;font-weight:450;margin:auto;padding:7px 0;text-align:center}
 .fui.st-emoji-filter-pop.fui-interactive .fui-container{min-width:auto;padding:13px!important}
 .fui.st-emoji-filter-pop.fui-interactive .st-emoji-filter-list{gap:8px;padding:0}
 #search .post td.Item:not(.title2.top>td.Item){padding-bottom:58px!important;position:relative}
