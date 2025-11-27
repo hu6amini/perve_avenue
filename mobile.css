@@ -1,5 +1,4 @@
 body.mobile .menuwrap{padding:10px;width:100%}
-#search.mobile .topic .post,.mobile .post,#blog.mobile .comments .post,.mobile .summary .list > *,.mobile .topic .mback,#search.mobile .mback,.mobile .board .mainbg::before,.mobile .online .mainbg::before,.mobile .members .mainbg::before,#topic.mobile .skin_tbl::before,.mobile.guest.error.no_view_topic .msg .mainbg::before,.mobile.guest.error.no_permission .msg .mainbg::before,.mobile .error .mainbg::before,#search.mobile .skin_tbl::before,.mobile .group .mainbg::before,.mobile .forum .mainbg::before,.mobile .search .skin_tbl::before,#mod.mobile .cp .skin_tbl::before,.mobile .send,.mobile .send::before,.mobile .skin-section,.mobile .tag{border-radius:0!important}
 .mobile .buttons{margin-top:13px}
 .mobile .topic .navsub.bottom{padding:0 13px 0 13px}
 .mobile .menuwrap,.mobile #home svg{height:56px!important}
@@ -12,7 +11,6 @@ body.mobile .menuwrap{padding:10px;width:100%}
 @media(max-width: 768px) {
 .menuwrap{padding:10px!important;width:100%}
 .mobile-menu-container{margin:0!important}
-#search.mobile .topic .post,.mobile .post,#blog.mobile .comments .post,.mobile .summary .list > *,.mobile .topic .mback,#search.mobile .mback,.mobile .board .mainbg::before,.mobile .online .mainbg::before,.mobile .members .mainbg::before,#topic .skin_tbl::before,.guest.error.no_view_topic .msg .mainbg::before,.guest.error.no_permission .msg .mainbg::before,.error .mainbg::before,#search.posts .skin_tbl::before,.group .mainbg::before,.forum .mainbg::before,.search .skin_tbl::before,#mod .cp .skin_tbl::before,.send,.send::before,.skin-section,.tag{border-radius:0!important}
 #notif{margin-left:auto!important}
 #home svg{height:35px!important}
 .post{flex-direction:column}
@@ -36,6 +34,7 @@ body.mobile .menuwrap{padding:10px;width:100%}
 #topic .post .nick,#blog .post .nick,#topic .post .details dl:not(.u_location,.box_offline .u_status,.box_online .u_status),#blog .post .left .details dl:not(.u_location,.box_offline .u_status,.box_online .u_status){display:inline-block!important}
 #topic .post .nick+p,#blog .post .nick+p,#topic .post .u_location,#blog .post .u_location,#pahome,#messenger,#topics,#admin,#nick,#mod{display:none}
 }
+
 
 
 
