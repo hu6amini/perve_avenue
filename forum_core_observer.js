@@ -5,6 +5,7 @@ class ForumCoreObserver {
     #initialScanComplete = false;
     #debounceTimeouts = new Map();
     #processedNodes = new WeakSet();
+    #cleanupIntervalId = null;
     
     // Private fields for better encapsulation
     #callbacks = new Map();           // id -> callback config
