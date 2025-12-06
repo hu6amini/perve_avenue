@@ -1,9 +1,16 @@
-// Forum Core Observer - Enhanced 100% bulletproof version (Debugged)
-class ForumCoreObserver {
-    constructor() {
+// Forum Core Observer - 100% Always Available Version
+(function() {
+    'use strict';
+    
+    // Store callbacks that try to register before observer is ready
+    var pendingRegistrations = [];
+    var pendingDebouncedRegistrations = [];
+    
+    // Create the actual observer class
+    var ForumCoreObserver = function() {
         // Core registry
-        this.callbacks = [];                // {id, callback, priority, selector, pageTypes, dependencies}
-        this.debouncedCallbacks = [];       // Debounced callbacks
+        this.callbacks = [];
+        this.debouncedCallbacks = [];
         
         // Performance tracking
         this.debounceTimeouts = new Map();
@@ -29,11 +36,6 @@ class ForumCoreObserver {
                 mutationBatchSize: 50,
                 debounceThreshold: 100,
                 idleCallbackTimeout: 2000
-            },
-            memory: {
-                maxProcessedNodes: 10000,
-                cleanupInterval: 30000,
-                nodeTTL: 300000
             }
         };
         
@@ -44,261 +46,75 @@ class ForumCoreObserver {
         this.pageState = null;
         this.initialScanComplete = false;
         this.initialized = false;
-    }
+    };
     
-    init() {
-        if (this.initialized) {
-            console.log('Forum Core Observer already initialized');
-            return;
-        }
+    ForumCoreObserver.prototype.init = function() {
+        if (this.initialized) return;
         
         try {
-            // First, set up page state
             this.pageState = this.detectPageState();
-            
-            // Create observer
             this.observer = new MutationObserver(this.handleMutations.bind(this));
-            
-            // IMPORTANT: Wait for DOM to be ready
-            if (document.readyState === 'loading') {
-                // DOM not ready yet, wait for it
-                document.addEventListener('DOMContentLoaded', this.startObserving.bind(this));
-            } else {
-                // DOM already ready
-                this.startObserving();
-            }
-            
-            // Listen for page visibility changes
-            document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-            
-            this.initialized = true;
-            console.log('🚀 Forum Core Observer initialized successfully');
-            
-        } catch (error) {
-            console.error('Failed to initialize Forum Core Observer:', error);
-            // Don't throw, just mark as failed
-            this.initialized = false;
-        }
-    }
-    
-    startObserving() {
-        try {
-            // Start observing
             this.observer.observe(document.documentElement, this.config.observerOptions);
+            this.scanExistingContent();
+            this.initialized = true;
             
-            // Initial scan of existing content
-            setTimeout(this.scanExistingContent.bind(this), 0);
+            console.log('✅ Forum Core Observer initialized');
             
-            // Setup periodic cleanup
-            this.setupCleanup();
+            // Process any pending registrations
+            this.processPendingRegistrations();
             
-            console.log('✅ Observer started, scanning existing content...');
         } catch (error) {
-            console.error('Failed to start observing:', error);
+            console.error('Observer init error:', error);
         }
-    }
+    };
     
-    detectPageState() {
-        try {
-            var path = window.location.pathname;
-            
-            return {
-                isForum: path.indexOf('/f/') !== -1 || !!document.querySelector('.board, .big_list'),
-                isTopic: path.indexOf('/t/') !== -1 || !!document.querySelector('.modern-topic-title'),
-                isBlog: path.indexOf('/b/') !== -1 || !!document.querySelector('#blog, .article'),
-                isProfile: path.indexOf('/user/') !== -1 || !!document.querySelector('.modern-profile'),
-                isSearch: path.indexOf('/search/') !== -1 || !!document.querySelector('#search.posts'),
-                isDarkMode: document.documentElement.getAttribute('data-theme') === 'dark',
-                isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
-                isMobile: window.innerWidth <= 768,
-                pageId: this.generatePageId()
-            };
-        } catch (error) {
-            console.warn('Failed to detect page state:', error);
-            return {
-                isForum: false,
-                isTopic: false,
-                isBlog: false,
-                isProfile: false,
-                isSearch: false,
-                isDarkMode: false,
-                isLoggedIn: false,
-                isMobile: false,
-                pageId: 'unknown'
-            };
-        }
-    }
+    ForumCoreObserver.prototype.detectPageState = function() {
+        var path = window.location.pathname;
+        return {
+            isForum: path.indexOf('/f/') !== -1 || !!document.querySelector('.board, .big_list'),
+            isTopic: path.indexOf('/t/') !== -1 || !!document.querySelector('.modern-topic-title'),
+            isBlog: path.indexOf('/b/') !== -1 || !!document.querySelector('#blog, .article'),
+            isProfile: path.indexOf('/user/') !== -1 || !!document.querySelector('.modern-profile'),
+            isSearch: path.indexOf('/search/') !== -1 || !!document.querySelector('#search.posts')
+        };
+    };
     
-    generatePageId() {
-        return Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    }
-    
-    handleMutations(mutations) {
+    ForumCoreObserver.prototype.handleMutations = function(mutations) {
         if (!this.initialized) return;
         
-        this.mutationMetrics.totalMutations += mutations.length;
-        this.mutationMetrics.lastMutationTime = Date.now();
-        
-        // Filter mutations
-        var validMutations = this.filterMutations(mutations);
-        
-        if (validMutations.length === 0) return;
-        
-        // Add to processing queue
-        for (var i = 0; i < validMutations.length; i++) {
-            this.mutationQueue.push(validMutations[i]);
-        }
-        
-        // Process if not already processing
-        if (!this.isProcessing) {
-            this.processMutationQueue();
-        }
-    }
-    
-    filterMutations(mutations) {
-        var filteredMutations = [];
-        
         for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
-            var shouldInclude = true;
-            
-            // Skip mutations from our own scripts
-            if (mutation.target.dataset && mutation.target.dataset.observerOrigin === 'forum-script') {
-                shouldInclude = false;
-            }
-            
-            if (shouldInclude && mutation.target.nodeType === Node.ELEMENT_NODE) {
-                try {
-                    var style = window.getComputedStyle(mutation.target);
-                    if (style.display === 'none' || style.visibility === 'hidden') {
-                        shouldInclude = false;
-                    }
-                } catch (e) {
-                    // Element might not be in DOM anymore
-                    shouldInclude = false;
-                }
-            }
-            
-            if (shouldInclude && mutation.type === 'characterData') {
-                var parent = mutation.target.parentElement;
-                if (parent && !this.shouldObserveTextChanges(parent)) {
-                    shouldInclude = false;
-                }
-            }
-            
-            if (shouldInclude && mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                var oldValue = mutation.oldValue || '';
-                var newValue = mutation.target.getAttribute('style') || '';
-                if (!this.styleChangeAffectsDOM(oldValue, newValue)) {
-                    shouldInclude = false;
-                }
-            }
-            
-            if (shouldInclude) {
-                filteredMutations.push(mutation);
-            }
+            this.mutationQueue.push(mutations[i]);
         }
         
-        return filteredMutations;
-    }
-    
-    shouldObserveTextChanges(element) {
-        var tagName = element.tagName.toLowerCase();
-        var interactiveTags = ['a', 'button', 'input', 'textarea', 'select'];
-        var contentTags = ['div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td'];
-        
-        if (interactiveTags.indexOf(tagName) !== -1) return true;
-        if (contentTags.indexOf(tagName) !== -1 && element.className.indexOf('content') !== -1) return true;
-        
-        var forumContentClasses = ['post', 'article', 'comment', 'quote', 'signature'];
-        for (var i = 0; i < forumContentClasses.length; i++) {
-            if (element.classList.contains(forumContentClasses[i])) {
-                return true;
-            }
+        if (!this.isProcessing) {
+            this.processMutations();
         }
-        
-        return false;
-    }
+    };
     
-    styleChangeAffectsDOM(oldStyle, newStyle) {
-        var visibilityProps = ['display', 'visibility', 'opacity', 'position', 'width', 'height'];
-        var oldProps = this.parseStyleString(oldStyle);
-        var newProps = this.parseStyleString(newStyle);
-        
-        for (var i = 0; i < visibilityProps.length; i++) {
-            var prop = visibilityProps[i];
-            if (oldProps[prop] !== newProps[prop]) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    parseStyleString(styleString) {
-        var result = {};
-        if (!styleString) return result;
-        
-        var parts = styleString.split(';');
-        for (var i = 0; i < parts.length; i++) {
-            var part = parts[i];
-            var keyValue = part.split(':');
-            if (keyValue.length >= 2) {
-                var key = keyValue[0].trim();
-                var value = keyValue[1].trim();
-                if (key && value) {
-                    result[key] = value;
-                }
-            }
-        }
-        
-        return result;
-    }
-    
-    processMutationQueue() {
+    ForumCoreObserver.prototype.processMutations = function() {
         var self = this;
-        if (self.isProcessing) return;
-        
         self.isProcessing = true;
-        var startTime = performance.now();
         
-        function processNext() {
+        function processBatch() {
             if (self.mutationQueue.length === 0) {
                 self.isProcessing = false;
-                var processingTime = performance.now() - startTime;
-                self.mutationMetrics.processedMutations++;
-                self.mutationMetrics.averageProcessingTime = 
-                    (self.mutationMetrics.averageProcessingTime * 0.9) + (processingTime * 0.1);
                 return;
             }
             
-            // Take batch
-            var batchSize = Math.min(self.config.performance.mutationBatchSize, self.mutationQueue.length);
-            var batch = self.mutationQueue.splice(0, batchSize);
+            var batch = self.mutationQueue.splice(0, self.config.performance.mutationBatchSize);
+            self.processBatch(batch);
             
-            // Process batch
-            try {
-                self.processMutationBatch(batch);
-                
-                // Check processing time
-                if (performance.now() - startTime > self.config.performance.maxProcessingTime) {
-                    // Yield to main thread
-                    setTimeout(processNext, 0);
-                } else {
-                    // Continue immediately
-                    processNext();
-                }
-            } catch (error) {
-                console.error('Error processing mutation batch:', error);
+            if (self.mutationQueue.length > 0) {
+                setTimeout(processBatch, 0);
+            } else {
                 self.isProcessing = false;
             }
         }
         
-        processNext();
-    }
+        processBatch();
+    };
     
-    processMutationBatch(mutations) {
-        var self = this;
+    ForumCoreObserver.prototype.processBatch = function(mutations) {
         var affectedNodes = new Set();
         
         for (var i = 0; i < mutations.length; i++) {
@@ -307,194 +123,56 @@ class ForumCoreObserver {
             if (mutation.type === 'childList') {
                 for (var j = 0; j < mutation.addedNodes.length; j++) {
                     var node = mutation.addedNodes[j];
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        self.collectAllElements(node, affectedNodes);
+                    if (node.nodeType === 1) {
+                        this.collectNodes(node, affectedNodes);
                     }
                 }
             } else if (mutation.type === 'attributes') {
                 affectedNodes.add(mutation.target);
-            } else if (mutation.type === 'characterData') {
-                var parent = mutation.target.parentElement;
-                if (parent) {
-                    affectedNodes.add(parent);
-                }
             }
         }
         
-        // Process nodes
-        var nodesArray = Array.from(affectedNodes);
-        for (var k = 0; k < nodesArray.length; k++) {
-            var node = nodesArray[k];
-            if (node && !self.processedNodes.has(node)) {
-                try {
-                    self.processNode(node);
-                    self.processedNodes.add(node);
-                } catch (error) {
-                    console.warn('Failed to process node:', node, error);
-                }
+        var nodes = Array.from(affectedNodes);
+        for (var k = 0; k < nodes.length; k++) {
+            var node = nodes[k];
+            if (node && !this.processedNodes.has(node)) {
+                this.processNode(node);
+                this.processedNodes.add(node);
             }
         }
-    }
+    };
     
-    collectAllElements(root, collection) {
-        if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
-        
+    ForumCoreObserver.prototype.collectNodes = function(root, collection) {
+        if (!root || root.nodeType !== 1) return;
         collection.add(root);
         
-        if (root.children && root.children.length > 0) {
-            for (var i = 0; i < root.children.length; i++) {
-                this.collectAllElements(root.children[i], collection);
-            }
+        for (var i = 0; i < root.children.length; i++) {
+            this.collectNodes(root.children[i], collection);
         }
-    }
+    };
     
-    processNode(node) {
-        if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
-        
-        var self = this;
-        var matchingCallbacks = self.getMatchingCallbacks(node);
-        
-        if (matchingCallbacks.length === 0) return;
-        
-        // Group by priority
-        var priorityGroups = { critical: [], high: [], normal: [], low: [] };
-        
-        for (var i = 0; i < matchingCallbacks.length; i++) {
-            var callback = matchingCallbacks[i];
-            var priority = callback.priority || 'normal';
-            priorityGroups[priority].push(callback);
-        }
-        
-        // Execute in priority order
-        var executionOrder = ['critical', 'high', 'normal', 'low'];
-        
-        for (var j = 0; j < executionOrder.length; j++) {
-            var priority = executionOrder[j];
-            var callbacks = priorityGroups[priority];
-            
-            if (callbacks.length === 0) continue;
-            
-            if (priority === 'critical') {
-                // Execute immediately
-                for (var k = 0; k < callbacks.length; k++) {
-                    try {
-                        callbacks[k].fn(node);
-                    } catch (error) {
-                        console.error('Callback ' + callbacks[k].id + ' failed:', error);
-                    }
-                }
-            } else {
-                // Defer execution
-                (function(priorityCallbacks, targetNode) {
-                    var delay = { high: 50, normal: 100, low: 500 }[priority] || 100;
-                    
-                    if ('requestIdleCallback' in window) {
-                        requestIdleCallback(function() {
-                            for (var l = 0; l < priorityCallbacks.length; l++) {
-                                try {
-                                    priorityCallbacks[l].fn(targetNode);
-                                } catch (error) {
-                                    console.error('Callback ' + priorityCallbacks[l].id + ' failed:', error);
-                                }
-                            }
-                        }, { timeout: delay });
-                    } else {
-                        setTimeout(function() {
-                            for (var l = 0; l < priorityCallbacks.length; l++) {
-                                try {
-                                    priorityCallbacks[l].fn(targetNode);
-                                } catch (error) {
-                                    console.error('Callback ' + priorityCallbacks[l].id + ' failed:', error);
-                                }
-                            }
-                        }, delay);
-                    }
-                })(callbacks, node);
-            }
-        }
-    }
-    
-    getMatchingCallbacks(node) {
-        var self = this;
-        var matching = [];
+    ForumCoreObserver.prototype.processNode = function(node) {
+        if (!node || node.nodeType !== 1) return;
         
         for (var i = 0; i < this.callbacks.length; i++) {
             var callback = this.callbacks[i];
-            var shouldInclude = true;
-            
-            // Check page type restrictions
-            if (callback.pageTypes && self.pageState) {
-                var pageTypeMatch = false;
-                for (var j = 0; j < callback.pageTypes.length; j++) {
-                    var type = callback.pageTypes[j];
-                    var capitalized = type.charAt(0).toUpperCase() + type.slice(1);
-                    var stateKey = 'is' + capitalized;
-                    if (self.pageState[stateKey]) {
-                        pageTypeMatch = true;
-                        break;
-                    }
-                }
-                if (!pageTypeMatch) {
-                    shouldInclude = false;
-                }
-            }
-            
-            // Check dependencies
-            if (shouldInclude && callback.dependencies) {
-                var unmetDeps = [];
-                for (var k = 0; k < callback.dependencies.length; k++) {
-                    var dep = callback.dependencies[k];
-                    if (typeof dep === 'string') {
-                        if (!document.querySelector(dep)) {
-                            unmetDeps.push(dep);
-                        }
-                    } else if (typeof dep === 'function') {
-                        if (!dep()) {
-                            unmetDeps.push(dep);
-                        }
-                    }
-                }
-                
-                if (unmetDeps.length > 0) {
-                    shouldInclude = false;
-                }
-            }
-            
-            // Check selector match
-            if (shouldInclude && callback.selector) {
+            if (!callback.selector || node.matches(callback.selector) || node.querySelector(callback.selector)) {
                 try {
-                    if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
-                        shouldInclude = false;
-                    }
-                } catch (e) {
-                    // Invalid selector
-                    shouldInclude = false;
+                    callback.fn(node);
+                } catch (error) {
+                    console.error('Callback error:', error);
                 }
-            }
-            
-            if (shouldInclude) {
-                matching.push(callback);
             }
         }
-        
-        return matching;
-    }
+    };
     
-    scanExistingContent() {
+    ForumCoreObserver.prototype.scanExistingContent = function() {
         var self = this;
-        if (!self.initialized) return;
+        var selectors = ['.post', '.article', '.btn', '.modern-quote', '.modern-profile'];
         
-        // Scan for all forum-specific elements
-        var forumSelectors = [
-            '.post', '.article', '.btn', '.forminput', '.points_up', '.points_down',
-            '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
-            '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
-            '.profile-avatar', '.breadcrumb-item', '.page-number'
-        ];
-        
-        for (var i = 0; i < forumSelectors.length; i++) {
+        for (var i = 0; i < selectors.length; i++) {
             try {
-                var elements = document.querySelectorAll(forumSelectors[i]);
+                var elements = document.querySelectorAll(selectors[i]);
                 for (var j = 0; j < elements.length; j++) {
                     if (!self.processedNodes.has(elements[j])) {
                         self.processNode(elements[j]);
@@ -502,292 +180,217 @@ class ForumCoreObserver {
                     }
                 }
             } catch (error) {
-                console.warn('Failed to scan selector ' + forumSelectors[i] + ':', error);
+                // Ignore selector errors
             }
         }
         
-        self.initialScanComplete = true;
-        console.log('✅ Initial content scan complete - found ' + self.processedNodes.size + ' elements');
-    }
+        this.initialScanComplete = true;
+    };
     
-    setupCleanup() {
-        var self = this;
-        setInterval(function() {
-            self.cleanupProcessedNodes();
-        }, self.config.memory.cleanupInterval);
-    }
-    
-    cleanupProcessedNodes() {
-        // WeakSet auto-clears, just log size for monitoring
-        if (this.processedNodes.size > this.config.memory.maxProcessedNodes * 0.8) {
-            console.warn('Processed nodes approaching limit (' + this.processedNodes.size + ')');
+    ForumCoreObserver.prototype.processPendingRegistrations = function() {
+        // Process pending immediate registrations
+        for (var i = 0; i < pendingRegistrations.length; i++) {
+            this.register(pendingRegistrations[i]);
         }
-    }
-    
-    handleVisibilityChange() {
-        if (document.hidden) {
-            this.pause();
-        } else {
-            this.resume();
-        }
-    }
-    
-    pause() {
-        if (this.observer) {
-            this.observer.disconnect();
-        }
+        pendingRegistrations.length = 0;
         
-        // Clear pending timeouts
-        var timeoutIds = Array.from(this.debounceTimeouts.values());
-        for (var i = 0; i < timeoutIds.length; i++) {
-            clearTimeout(timeoutIds[i]);
+        // Process pending debounced registrations
+        for (var j = 0; j < pendingDebouncedRegistrations.length; j++) {
+            this.registerDebounced(pendingDebouncedRegistrations[j]);
         }
-        this.debounceTimeouts.clear();
-    }
+        pendingDebouncedRegistrations.length = 0;
+    };
     
-    resume() {
-        if (this.observer && this.initialized) {
-            try {
-                this.observer.observe(document.documentElement, this.config.observerOptions);
-            } catch (error) {
-                console.error('Failed to resume observer:', error);
-            }
-        }
-    }
-    
-    // PUBLIC API
-    
-    register(settings) {
+    ForumCoreObserver.prototype.register = function(settings) {
         if (!this.initialized) {
-            console.warn('Observer not initialized. Call init() first or check for errors.');
-            return 'error_not_initialized';
+            pendingRegistrations.push(settings);
+            return 'pending_' + Date.now();
         }
         
-        var id = settings.id || 'callback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        var id = settings.id || 'cb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
         
-        var callback = {
+        this.callbacks.push({
             id: id,
             fn: settings.callback,
             priority: settings.priority || 'normal',
             selector: settings.selector,
-            pageTypes: settings.pageTypes,
-            dependencies: settings.dependencies,
-            retryCount: 0,
-            maxRetries: settings.maxRetries || 0,
-            createdAt: Date.now()
-        };
+            pageTypes: settings.pageTypes
+        });
         
-        this.callbacks.push(callback);
-        
-        console.log('📝 Registered callback: ' + id + ' (priority: ' + callback.priority + ')');
-        
-        // Run immediately on existing elements
-        if (this.initialScanComplete && callback.selector) {
-            var self = this;
+        // Run on existing elements
+        if (this.initialScanComplete && settings.selector) {
             try {
-                var elements = document.querySelectorAll(callback.selector);
+                var elements = document.querySelectorAll(settings.selector);
                 for (var i = 0; i < elements.length; i++) {
-                    if (!self.processedNodes.has(elements[i])) {
-                        self.processNode(elements[i]);
+                    if (!this.processedNodes.has(elements[i])) {
+                        settings.callback(elements[i]);
                     }
                 }
             } catch (error) {
-                console.warn('Failed to run callback on existing elements:', error);
+                // Ignore
             }
         }
         
         return id;
-    }
+    };
     
-    registerDebounced(settings) {
-        var id = this.register(settings);
-        
-        this.debouncedCallbacks.push({
-            id: id,
-            callback: settings.callback,
-            delay: settings.delay || this.config.performance.debounceThreshold,
-            lastRun: 0
-        });
-        
-        return id;
-    }
+    ForumCoreObserver.prototype.registerDebounced = function(settings) {
+        return this.register(settings);
+    };
     
-    unregister(callbackId) {
-        // Remove from immediate callbacks
+    ForumCoreObserver.prototype.unregister = function(id) {
         for (var i = 0; i < this.callbacks.length; i++) {
-            if (this.callbacks[i].id === callbackId) {
+            if (this.callbacks[i].id === id) {
                 this.callbacks.splice(i, 1);
-                break;
+                return true;
             }
         }
-        
-        // Remove from debounced callbacks
-        for (var j = 0; j < this.debouncedCallbacks.length; j++) {
-            if (this.debouncedCallbacks[j].id === callbackId) {
-                this.debouncedCallbacks.splice(j, 1);
-                break;
-            }
-        }
-        
-        // Clear timeout
-        if (this.debounceTimeouts.has(callbackId)) {
-            clearTimeout(this.debounceTimeouts.get(callbackId));
-            this.debounceTimeouts.delete(callbackId);
-        }
-        
-        console.log('🗑️ Unregistered callback: ' + callbackId);
-        return true;
-    }
+        return false;
+    };
     
-    forceScan(selector) {
-        if (!this.initialized) return;
-        
+    ForumCoreObserver.prototype.forceScan = function(selector) {
         if (!selector) {
             this.scanExistingContent();
             return;
         }
         
-        var self = this;
         try {
             var elements = document.querySelectorAll(selector);
             for (var i = 0; i < elements.length; i++) {
-                if (!self.processedNodes.has(elements[i])) {
-                    self.processNode(elements[i]);
+                if (!this.processedNodes.has(elements[i])) {
+                    this.processNode(elements[i]);
                 }
             }
         } catch (error) {
-            console.error('Failed to force scan:', error);
+            // Ignore
         }
-    }
+    };
     
-    getStats() {
-        if (!this.initialized) {
-            return { error: 'Observer not initialized' };
-        }
-        
+    ForumCoreObserver.prototype.getStats = function() {
         return {
-            totalMutations: this.mutationMetrics.totalMutations,
-            processedMutations: this.mutationMetrics.processedMutations,
-            averageProcessingTime: this.mutationMetrics.averageProcessingTime,
-            lastMutationTime: this.mutationMetrics.lastMutationTime,
-            registeredCallbacks: this.callbacks.length,
-            debouncedCallbacks: this.debouncedCallbacks.length,
-            pendingTimeouts: this.debounceTimeouts.size,
+            initialized: this.initialized,
+            callbacks: this.callbacks.length,
             processedNodes: this.processedNodes.size,
-            pageState: this.pageState,
-            isProcessing: this.isProcessing,
-            queueLength: this.mutationQueue.length,
-            initialized: this.initialized
+            pendingRegistrations: pendingRegistrations.length
         };
+    };
+    
+    ForumCoreObserver.prototype.destroy = function() {
+        if (this.observer) {
+            this.observer.disconnect();
+        }
+        this.initialized = false;
+    };
+    
+    // ============================================
+    // GLOBAL SETUP - This runs immediately
+    // ============================================
+    
+    // Create the global object immediately
+    window.forumObserver = {
+        // Safe placeholder methods - will be replaced when real observer is ready
+        register: function(settings) {
+            console.log('⏳ Observer not ready, queuing registration:', settings.id || 'unnamed');
+            pendingRegistrations.push(settings);
+            return 'queued_' + Date.now();
+        },
+        
+        registerDebounced: function(settings) {
+            console.log('⏳ Observer not ready, queuing debounced registration:', settings.id || 'unnamed');
+            pendingDebouncedRegistrations.push(settings);
+            return 'queued_debounced_' + Date.now();
+        },
+        
+        unregister: function(id) {
+            console.log('⏳ Observer not ready, cannot unregister:', id);
+            return false;
+        },
+        
+        forceScan: function(selector) {
+            console.log('⏳ Observer not ready, cannot force scan');
+        },
+        
+        getStats: function() {
+            return {
+                status: 'initializing',
+                pendingRegistrations: pendingRegistrations.length,
+                pendingDebouncedRegistrations: pendingDebouncedRegistrations.length,
+                message: 'Observer will be ready soon'
+            };
+        },
+        
+        destroy: function() {
+            console.log('Observer not yet initialized');
+        },
+        
+        init: function() {
+            console.log('Manual init requested');
+        }
+    };
+    
+    // Create real observer instance
+    var realObserver = new ForumCoreObserver();
+    
+    // Replace placeholder methods when observer is ready
+    var originalRegister = window.forumObserver.register;
+    var originalRegisterDebounced = window.forumObserver.registerDebounced;
+    var originalUnregister = window.forumObserver.unregister;
+    var originalForceScan = window.forumObserver.forceScan;
+    var originalGetStats = window.forumObserver.getStats;
+    var originalDestroy = window.forumObserver.destroy;
+    
+    // Initialize when DOM is ready
+    function initializeObserver() {
+        realObserver.init();
+        
+        // Replace placeholder methods with real ones
+        window.forumObserver.register = function(settings) {
+            return realObserver.register(settings);
+        };
+        
+        window.forumObserver.registerDebounced = function(settings) {
+            return realObserver.registerDebounced(settings);
+        };
+        
+        window.forumObserver.unregister = function(id) {
+            return realObserver.unregister(id);
+        };
+        
+        window.forumObserver.forceScan = function(selector) {
+            return realObserver.forceScan(selector);
+        };
+        
+        window.forumObserver.getStats = function() {
+            return realObserver.getStats();
+        };
+        
+        window.forumObserver.destroy = function() {
+            return realObserver.destroy();
+        };
+        
+        window.forumObserver.init = function() {
+            // Already initialized
+        };
+        
+        console.log('✅ Forum Core Observer READY - All queued callbacks processed');
     }
     
-    destroy() {
-        this.pause();
-        
-        this.callbacks = [];
-        this.debouncedCallbacks = [];
-        this.processedNodes = new WeakSet();
-        this.mutationQueue = [];
-        this.debounceTimeouts.clear();
-        
-        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-        
-        this.initialized = false;
-        console.log('🛑 Forum Core Observer destroyed');
+    // Start initialization
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeObserver);
+    } else {
+        setTimeout(initializeObserver, 100);
     }
-}
-
-// Initialize with better error handling
-(function() {
-    try {
-        // Create instance but don't auto-init
-        var observerInstance = new ForumCoreObserver();
-        
-        // Auto-init when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(function() {
-                    observerInstance.init();
-                    window.forumObserver = observerInstance;
-                }, 0);
-            });
-        } else {
-            // DOM already ready
-            setTimeout(function() {
-                observerInstance.init();
-                window.forumObserver = observerInstance;
-            }, 0);
-        }
-        
-        // Provide safe API immediately
-        window.forumObserver = {
-            // These will be overwritten when real observer initializes
-            register: function(settings) {
-                console.warn('Observer not ready yet. Will register when initialized.');
-                return 'pending_registration';
-            },
-            registerDebounced: function(settings) {
-                console.warn('Observer not ready yet. Will register when initialized.');
-                return 'pending_registration';
-            },
-            unregister: function() { return false; },
-            forceScan: function() {},
-            getStats: function() { return { status: 'initializing' }; },
-            destroy: function() {},
-            init: function() { observerInstance.init(); }
-        };
-        
-        console.log('Forum Core Observer loading...');
-        
-    } catch (error) {
-        console.error('CRITICAL: Failed to create Forum Core Observer:', error);
-        
-        // Fallback: Provide dummy observer that logs errors
-        window.forumObserver = {
-            register: function(settings) {
-                console.error('Forum Core Observer failed to initialize. Cannot register:', settings.id || 'unknown');
-                return 'error_initialization_failed';
-            },
-            registerDebounced: function(settings) {
-                console.error('Forum Core Observer failed to initialize. Cannot register:', settings.id || 'unknown');
-                return 'error_initialization_failed';
-            },
-            unregister: function() { 
-                console.warn('Forum Core Observer not available');
-                return false; 
-            },
-            forceScan: function() { 
-                console.warn('Forum Core Observer not available'); 
-            },
-            getStats: function() { 
-                return { 
-                    error: 'Observer failed to initialize',
-                    details: 'Check browser console for errors'
-                }; 
-            },
-            destroy: function() {
-                console.warn('Forum Core Observer not available');
-            },
-            init: function() {
-                console.warn('Forum Core Observer initialization already failed');
-            }
-        };
-    }
+    
+    // Helper functions for easy access
+    window.registerForumScript = function(settings) {
+        return window.forumObserver.register(settings);
+    };
+    
+    window.registerDebouncedForumScript = function(settings) {
+        return window.forumObserver.registerDebounced(settings);
+    };
+    
+    console.log('🎯 Forum Core Observer LOADED - API available immediately');
+    
 })();
-
-// Helper function for other scripts to safely use
-window.registerForumScript = function(settings) {
-    if (!window.forumObserver) {
-        console.error('Forum Core Observer not available');
-        return 'error_not_available';
-    }
-    return window.forumObserver.register(settings);
-};
-
-window.registerDebouncedForumScript = function(settings) {
-    if (!window.forumObserver) {
-        console.error('Forum Core Observer not available');
-        return 'error_not_available';
-    }
-    return window.forumObserver.registerDebounced(settings);
-};
