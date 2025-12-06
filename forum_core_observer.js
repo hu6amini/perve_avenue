@@ -613,8 +613,13 @@ if (!globalThis.forumObserver) {
             globalThis.forumObserver?.destroy();
         }, { once: true });
         
-        // Export for debugging in development
-        if (import.meta.env?.DEV || globalThis.location?.hostname === 'localhost') {
+        // Export for debugging in development - FIXED LINE
+        // OLD: if (import.meta.env?.DEV || globalThis.location?.hostname === 'localhost') {
+        // NEW: Check for localhost or development environment
+        if (globalThis.location?.hostname === 'localhost' || 
+            globalThis.location?.hostname === '127.0.0.1' ||
+            globalThis.location?.hostname.startsWith('192.168.') ||
+            globalThis.location?.port) {
             globalThis.__FORUM_OBSERVER_DEBUG__ = globalThis.forumObserver;
         }
         
@@ -634,9 +639,4 @@ if (!globalThis.forumObserver) {
             }
         });
     }
-}
-
-// Export for ES modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ForumCoreObserver };
 }
