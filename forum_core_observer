@@ -1,4 +1,3 @@
-// Forum Core Observer - Modern 100% bulletproof version
 class ForumCoreObserver {
     #observer = null;
     #mutationQueue = [];
