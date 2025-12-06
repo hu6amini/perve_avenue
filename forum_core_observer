@@ -1,396 +1,642 @@
-// Forum Core Observer - 100% Always Available Version
-(function() {
-    'use strict';
+// Forum Core Observer - Modern 100% bulletproof version
+class ForumCoreObserver {
+    #observer = null;
+    #mutationQueue = [];
+    #isProcessing = false;
+    #initialScanComplete = false;
+    #debounceTimeouts = new Map();
+    #processedNodes = new WeakSet();
     
-    // Store callbacks that try to register before observer is ready
-    var pendingRegistrations = [];
-    var pendingDebouncedRegistrations = [];
+    // Private fields for better encapsulation
+    #callbacks = new Map();           // id -> callback config
+    #debouncedCallbacks = new Map();  // id -> debounced config
+    #pageState = this.#detectPageState();
     
-    // Create the actual observer class
-    var ForumCoreObserver = function() {
-        // Core registry
-        this.callbacks = [];
-        this.debouncedCallbacks = [];
-        
-        // Performance tracking
-        this.debounceTimeouts = new Map();
-        this.processedNodes = new WeakSet();
-        this.mutationMetrics = {
-            totalMutations: 0,
-            processedMutations: 0,
-            averageProcessingTime: 0,
-            lastMutationTime: 0
+    // Configuration with static getters
+    static get #OBSERVER_OPTIONS() {
+        return {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: ['class', 'id', 'style', 'data-*']
         };
-        
-        // Configuration
-        this.config = {
-            observerOptions: {
-                childList: true,
-                subtree: true,
-                characterData: true,
-                attributes: true,
-                attributeFilter: ['class', 'id', 'style', 'data-*']
-            },
-            performance: {
-                maxProcessingTime: 16,
-                mutationBatchSize: 50,
-                debounceThreshold: 100,
-                idleCallbackTimeout: 2000
-            }
+    }
+    
+    static get #PERFORMANCE_CONFIG() {
+        return {
+            maxProcessingTime: 16,        // 60fps budget
+            mutationBatchSize: 50,
+            debounceThreshold: 100,
+            idleCallbackTimeout: 2000
         };
-        
-        // State
-        this.observer = null;
-        this.mutationQueue = [];
-        this.isProcessing = false;
-        this.pageState = null;
-        this.initialScanComplete = false;
-        this.initialized = false;
+    }
+    
+    static get #MEMORY_CONFIG() {
+        return {
+            maxProcessedNodes: 10000,
+            cleanupInterval: 30000,
+            nodeTTL: 300000
+        };
+    }
+    
+    #mutationMetrics = {
+        totalMutations: 0n,
+        processedMutations: 0n,
+        averageProcessingTime: 0,
+        lastMutationTime: 0
     };
     
-    ForumCoreObserver.prototype.init = function() {
-        if (this.initialized) return;
+    constructor() {
+        this.#init();
+    }
+    
+    #init() {
+        // Create observer with private class field
+        this.#observer = new MutationObserver(this.#handleMutations.bind(this));
+        
+        // Observe entire document with modern options
+        this.#observer.observe(document.documentElement, ForumCoreObserver.#OBSERVER_OPTIONS);
+        
+        // Initial scan of existing content
+        this.#scanExistingContent();
+        
+        // Setup periodic cleanup with private method
+        this.#setupCleanup();
+        
+        // Use modern event listener with options
+        document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { passive: true });
+        
+        // Use console.group for better debugging
+        console.group('🚀 Forum Core Observer');
+        console.log('Initialized with 100% coverage');
+        console.log('Page state:', this.#pageState);
+        console.groupEnd();
+    }
+    
+    #detectPageState() {
+        const { pathname } = window.location;
+        const { className } = document.body;
+        const theme = document.documentElement.dataset?.theme;
+        
+        // Use optional chaining and nullish coalescing
+        const selectors = {
+            forum: '.board, .big_list',
+            topic: '.modern-topic-title',
+            blog: '#blog, .article',
+            profile: '.modern-profile',
+            search: '#search.posts'
+        };
+        
+        const checks = Object.entries(selectors).map(([key, selector]) => 
+            [key, document.querySelector(selector) ?? null]
+        );
+        
+        const pageChecks = Object.fromEntries(checks);
+        
+        return {
+            ...pageChecks,
+            isForum: pathname.includes('/f/') || pageChecks.forum,
+            isTopic: pathname.includes('/t/') || pageChecks.topic,
+            isBlog: pathname.includes('/b/') || pageChecks.blog,
+            isProfile: pathname.includes('/user/') || pageChecks.profile,
+            isSearch: pathname.includes('/search/') || pageChecks.search,
+            isDarkMode: theme === 'dark',
+            isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
+            isMobile: window.matchMedia('(max-width: 768px)').matches,
+            pageId: crypto.randomUUID?.() ?? `page_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        };
+    }
+    
+    #handleMutations(mutations) {
+        this.#mutationMetrics.totalMutations++;
+        this.#mutationMetrics.lastMutationTime = Date.now();
+        
+        // Filter mutations using modern array methods
+        const validMutations = mutations.filter(mutation => 
+            this.#shouldProcessMutation(mutation)
+        );
+        
+        if (!validMutations.length) return;
+        
+        // Use spread operator with BigInt
+        this.#mutationMetrics.totalMutations += BigInt(validMutations.length);
+        
+        // Add to queue
+        this.#mutationQueue.push(...validMutations);
+        
+        // Start processing if idle
+        if (!this.#isProcessing) {
+            this.#processMutationQueue();
+        }
+    }
+    
+    #shouldProcessMutation(mutation) {
+        // Skip mutations from our own scripts
+        if (mutation.target.dataset?.observerOrigin === 'forum-script') {
+            return false;
+        }
+        
+        // Skip invisible elements using optional chaining
+        const style = mutation.target.nodeType === Node.ELEMENT_NODE 
+            ? window.getComputedStyle(mutation.target)
+            : null;
+            
+        if (style?.display === 'none' || style?.visibility === 'hidden') {
+            return false;
+        }
+        
+        // Skip irrelevant text changes
+        if (mutation.type === 'characterData') {
+            const parent = mutation.target.parentElement;
+            return parent ? this.#shouldObserveTextChanges(parent) : false;
+        }
+        
+        // Skip non-critical style changes
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            const oldValue = mutation.oldValue ?? '';
+            const newValue = mutation.target.getAttribute('style') ?? '';
+            return this.#styleChangeAffectsDOM(oldValue, newValue);
+        }
+        
+        return true;
+    }
+    
+    #shouldObserveTextChanges(element) {
+        const tagName = element.tagName.toLowerCase();
+        const interactiveTags = new Set(['a', 'button', 'input', 'textarea', 'select']);
+        const forumContentClasses = new Set(['post', 'article', 'comment', 'quote', 'signature']);
+        
+        if (interactiveTags.has(tagName)) return true;
+        
+        // Check if any forum content class exists
+        return Array.from(element.classList).some(cls => 
+            forumContentClasses.has(cls)
+        );
+    }
+    
+    #styleChangeAffectsDOM(oldStyle, newStyle) {
+        const visibilityProps = new Set(['display', 'visibility', 'opacity', 'position', 'width', 'height']);
+        const oldProps = this.#parseStyleString(oldStyle);
+        const newProps = this.#parseStyleString(newStyle);
+        
+        return Array.from(visibilityProps).some(prop => 
+            oldProps[prop] !== newProps[prop]
+        );
+    }
+    
+    #parseStyleString(styleString) {
+        if (!styleString) return new Map();
+        
+        const pairs = styleString.split(';')
+            .map(part => part.split(':').map(s => s.trim()))
+            .filter(([key, value]) => key && value);
+            
+        return new Map(pairs);
+    }
+    
+    async #processMutationQueue() {
+        this.#isProcessing = true;
+        const startTime = performance.now();
         
         try {
-            this.pageState = this.detectPageState();
-            this.observer = new MutationObserver(this.handleMutations.bind(this));
-            this.observer.observe(document.documentElement, this.config.observerOptions);
-            this.scanExistingContent();
-            this.initialized = true;
-            
-            console.log('✅ Forum Core Observer initialized');
-            
-            // Process any pending registrations
-            this.processPendingRegistrations();
-            
-        } catch (error) {
-            console.error('Observer init error:', error);
-        }
-    };
-    
-    ForumCoreObserver.prototype.detectPageState = function() {
-        var path = window.location.pathname;
-        return {
-            isForum: path.indexOf('/f/') !== -1 || !!document.querySelector('.board, .big_list'),
-            isTopic: path.indexOf('/t/') !== -1 || !!document.querySelector('.modern-topic-title'),
-            isBlog: path.indexOf('/b/') !== -1 || !!document.querySelector('#blog, .article'),
-            isProfile: path.indexOf('/user/') !== -1 || !!document.querySelector('.modern-profile'),
-            isSearch: path.indexOf('/search/') !== -1 || !!document.querySelector('#search.posts')
-        };
-    };
-    
-    ForumCoreObserver.prototype.handleMutations = function(mutations) {
-        if (!this.initialized) return;
-        
-        for (var i = 0; i < mutations.length; i++) {
-            this.mutationQueue.push(mutations[i]);
-        }
-        
-        if (!this.isProcessing) {
-            this.processMutations();
-        }
-    };
-    
-    ForumCoreObserver.prototype.processMutations = function() {
-        var self = this;
-        self.isProcessing = true;
-        
-        function processBatch() {
-            if (self.mutationQueue.length === 0) {
-                self.isProcessing = false;
-                return;
-            }
-            
-            var batch = self.mutationQueue.splice(0, self.config.performance.mutationBatchSize);
-            self.processBatch(batch);
-            
-            if (self.mutationQueue.length > 0) {
-                setTimeout(processBatch, 0);
-            } else {
-                self.isProcessing = false;
-            }
-        }
-        
-        processBatch();
-    };
-    
-    ForumCoreObserver.prototype.processBatch = function(mutations) {
-        var affectedNodes = new Set();
-        
-        for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
-            
-            if (mutation.type === 'childList') {
-                for (var j = 0; j < mutation.addedNodes.length; j++) {
-                    var node = mutation.addedNodes[j];
-                    if (node.nodeType === 1) {
-                        this.collectNodes(node, affectedNodes);
-                    }
+            while (this.#mutationQueue.length) {
+                const batch = this.#mutationQueue.splice(0, ForumCoreObserver.#PERFORMANCE_CONFIG.mutationBatchSize);
+                await this.#processMutationBatch(batch);
+                
+                // Yield to main thread if taking too long
+                if (performance.now() - startTime > ForumCoreObserver.#PERFORMANCE_CONFIG.maxProcessingTime) {
+                    await new Promise(resolve => queueMicrotask(resolve));
                 }
-            } else if (mutation.type === 'attributes') {
-                affectedNodes.add(mutation.target);
+            }
+        } catch (error) {
+            console.error('Mutation processing error:', error);
+        } finally {
+            this.#isProcessing = false;
+            this.#mutationMetrics.processedMutations++;
+            
+            // Update metrics with exponential moving average
+            const processingTime = performance.now() - startTime;
+            this.#mutationMetrics.averageProcessingTime = 
+                this.#mutationMetrics.averageProcessingTime * 0.9 + processingTime * 0.1;
+        }
+    }
+    
+    async #processMutationBatch(mutations) {
+        const affectedNodes = new Set();
+        
+        for (const mutation of mutations) {
+            switch (mutation.type) {
+                case 'childList':
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            this.#collectAllElements(node, affectedNodes);
+                        }
+                    });
+                    break;
+                    
+                case 'attributes':
+                    affectedNodes.add(mutation.target);
+                    break;
+                    
+                case 'characterData':
+                    affectedNodes.add(mutation.target.parentElement);
+                    break;
             }
         }
         
-        var nodes = Array.from(affectedNodes);
-        for (var k = 0; k < nodes.length; k++) {
-            var node = nodes[k];
-            if (node && !this.processedNodes.has(node)) {
-                this.processNode(node);
-                this.processedNodes.add(node);
-            }
+        // Process nodes in parallel with concurrency limit
+        const nodeArray = Array.from(affectedNodes).filter(node => 
+            node && !this.#processedNodes.has(node)
+        );
+        
+        const CONCURRENCY_LIMIT = 4;
+        const chunks = [];
+        
+        for (let i = 0; i < nodeArray.length; i += CONCURRENCY_LIMIT) {
+            chunks.push(nodeArray.slice(i, i + CONCURRENCY_LIMIT));
         }
-    };
+        
+        for (const chunk of chunks) {
+            await Promise.allSettled(
+                chunk.map(node => this.#processNode(node))
+            );
+        }
+    }
     
-    ForumCoreObserver.prototype.collectNodes = function(root, collection) {
-        if (!root || root.nodeType !== 1) return;
+    #collectAllElements(root, collection) {
+        if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+        
         collection.add(root);
         
-        for (var i = 0; i < root.children.length; i++) {
-            this.collectNodes(root.children[i], collection);
+        // Use for...of for performance
+        for (const child of root.children) {
+            this.#collectAllElements(child, collection);
         }
-    };
+    }
     
-    ForumCoreObserver.prototype.processNode = function(node) {
-        if (!node || node.nodeType !== 1) return;
+    async #processNode(node) {
+        if (!node || this.#processedNodes.has(node)) return;
         
-        for (var i = 0; i < this.callbacks.length; i++) {
-            var callback = this.callbacks[i];
-            if (!callback.selector || node.matches(callback.selector) || node.querySelector(callback.selector)) {
-                try {
-                    callback.fn(node);
-                } catch (error) {
-                    console.error('Callback error:', error);
-                }
-            }
-        }
-    };
-    
-    ForumCoreObserver.prototype.scanExistingContent = function() {
-        var self = this;
-        var selectors = ['.post', '.article', '.btn', '.modern-quote', '.modern-profile'];
+        const matchingCallbacks = this.#getMatchingCallbacks(node);
+        if (!matchingCallbacks.length) return;
         
-        for (var i = 0; i < selectors.length; i++) {
-            try {
-                var elements = document.querySelectorAll(selectors[i]);
-                for (var j = 0; j < elements.length; j++) {
-                    if (!self.processedNodes.has(elements[j])) {
-                        self.processNode(elements[j]);
-                        self.processedNodes.add(elements[j]);
-                    }
-                }
-            } catch (error) {
-                // Ignore selector errors
-            }
-        }
+        // Group by priority using Map
+        const priorityGroups = new Map([
+            ['critical', []],
+            ['high', []],
+            ['normal', []],
+            ['low', []]
+        ]);
         
-        this.initialScanComplete = true;
-    };
-    
-    ForumCoreObserver.prototype.processPendingRegistrations = function() {
-        // Process pending immediate registrations
-        for (var i = 0; i < pendingRegistrations.length; i++) {
-            this.register(pendingRegistrations[i]);
-        }
-        pendingRegistrations.length = 0;
-        
-        // Process pending debounced registrations
-        for (var j = 0; j < pendingDebouncedRegistrations.length; j++) {
-            this.registerDebounced(pendingDebouncedRegistrations[j]);
-        }
-        pendingDebouncedRegistrations.length = 0;
-    };
-    
-    ForumCoreObserver.prototype.register = function(settings) {
-        if (!this.initialized) {
-            pendingRegistrations.push(settings);
-            return 'pending_' + Date.now();
-        }
-        
-        var id = settings.id || 'cb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-        
-        this.callbacks.push({
-            id: id,
-            fn: settings.callback,
-            priority: settings.priority || 'normal',
-            selector: settings.selector,
-            pageTypes: settings.pageTypes
+        matchingCallbacks.forEach(callback => {
+            const priority = callback.priority ?? 'normal';
+            priorityGroups.get(priority)?.push(callback);
         });
         
-        // Run on existing elements
-        if (this.initialScanComplete && settings.selector) {
-            try {
-                var elements = document.querySelectorAll(settings.selector);
-                for (var i = 0; i < elements.length; i++) {
-                    if (!this.processedNodes.has(elements[i])) {
-                        settings.callback(elements[i]);
-                    }
-                }
-            } catch (error) {
-                // Ignore
+        // Execute in priority order
+        for (const [priority, callbacks] of priorityGroups) {
+            if (!callbacks?.length) continue;
+            
+            if (priority === 'critical') {
+                await this.#executeCallbacks(callbacks, node);
+            } else {
+                this.#deferCallbacks(callbacks, node, priority);
             }
+        }
+        
+        this.#processedNodes.add(node);
+    }
+    
+    #getMatchingCallbacks(node) {
+        const matching = [];
+        
+        for (const callback of this.#callbacks.values()) {
+            // Check page type restrictions
+            if (callback.pageTypes?.length) {
+                const hasMatchingPageType = callback.pageTypes.some(type => 
+                    this.#pageState[`is${type.charAt(0).toUpperCase() + type.slice(1)}`]
+                );
+                if (!hasMatchingPageType) continue;
+            }
+            
+            // Check dependencies
+            if (callback.dependencies?.length) {
+                const unmetDeps = callback.dependencies.filter(dep => {
+                    if (typeof dep === 'string') return !document.querySelector(dep);
+                    if (typeof dep === 'function') return !dep();
+                    return true;
+                });
+                if (unmetDeps.length) continue;
+            }
+            
+            // Check selector match
+            if (callback.selector) {
+                if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
+                    continue;
+                }
+            }
+            
+            matching.push(callback);
+        }
+        
+        return matching;
+    }
+    
+    async #executeCallbacks(callbacks, node) {
+        const promises = callbacks.map(async callback => {
+            try {
+                await callback.fn(node);
+            } catch (error) {
+                console.error(`Callback ${callback.id} failed:`, error);
+                
+                // Retry logic with exponential backoff
+                if (callback.retryCount < (callback.maxRetries ?? 0)) {
+                    callback.retryCount = (callback.retryCount ?? 0) + 1;
+                    const delay = 100 * Math.pow(2, callback.retryCount - 1);
+                    
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return this.#executeCallbacks([callback], node);
+                }
+            }
+        });
+        
+        await Promise.allSettled(promises);
+    }
+    
+    #deferCallbacks(callbacks, node, priority) {
+        const delays = new Map([
+            ['high', 50],
+            ['normal', 100],
+            ['low', 500]
+        ]);
+        
+        const delay = delays.get(priority) ?? 100;
+        
+        // Use scheduler API if available
+        if (scheduler?.postTask) {
+            scheduler.postTask(() => 
+                this.#executeCallbacks(callbacks, node), 
+                { priority: 'user-visible', delay }
+            );
+        } else if (window.requestIdleCallback) {
+            requestIdleCallback(() => 
+                this.#executeCallbacks(callbacks, node),
+                { timeout: delay }
+            );
+        } else {
+            setTimeout(() => 
+                this.#executeCallbacks(callbacks, node),
+                delay
+            );
+        }
+    }
+    
+    #scanExistingContent() {
+        const forumSelectors = [
+            '.post', '.article', '.btn', '.forminput', '.points_up', '.points_down',
+            '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
+            '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
+            '.profile-avatar', '.breadcrumb-item', '.page-number'
+        ];
+        
+        const root = document.documentElement;
+        const observer = new MutationObserver((mutations, obs) => {
+            for (const selector of forumSelectors) {
+                root.querySelectorAll(selector).forEach(node => {
+                    if (!this.#processedNodes.has(node)) {
+                        this.#processNode(node);
+                    }
+                });
+            }
+            obs.disconnect();
+        });
+        
+        observer.observe(root, { childList: true, subtree: true });
+        
+        // Force immediate check
+        forumSelectors.forEach(selector => {
+            root.querySelectorAll(selector).forEach(node => {
+                if (!this.#processedNodes.has(node)) {
+                    this.#processNode(node);
+                }
+            });
+        });
+        
+        this.#initialScanComplete = true;
+        console.log('✅ Initial content scan complete');
+    }
+    
+    #setupCleanup() {
+        const intervalId = setInterval(() => {
+            if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes) {
+                console.warn('Processed nodes approaching limit');
+            }
+            
+            // Force GC if available
+            globalThis.gc?.();
+        }, ForumCoreObserver.#MEMORY_CONFIG.cleanupInterval);
+        
+        // Store interval ID for cleanup
+        this.#cleanupIntervalId = intervalId;
+    }
+    
+    #handleVisibilityChange() {
+        if (document.hidden) {
+            this.#pause();
+        } else {
+            this.#resume();
+            queueMicrotask(() => this.#scanExistingContent());
+        }
+    }
+    
+    #pause() {
+        this.#observer?.disconnect();
+        
+        // Clear all timeouts
+        for (const timeoutId of this.#debounceTimeouts.values()) {
+            clearTimeout(timeoutId);
+        }
+        this.#debounceTimeouts.clear();
+    }
+    
+    #resume() {
+        if (!this.#observer) {
+            this.#init();
+        } else {
+            this.#observer.observe(document.documentElement, ForumCoreObserver.#OBSERVER_OPTIONS);
+        }
+    }
+    
+    // PUBLIC API with modern methods
+    
+    register(settings) {
+        const id = settings.id ?? `callback_${Date.now()}_${crypto.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2)}`;
+        
+        const callback = {
+            id,
+            fn: settings.callback,
+            priority: settings.priority ?? 'normal',
+            selector: settings.selector,
+            pageTypes: settings.pageTypes,
+            dependencies: settings.dependencies,
+            retryCount: 0,
+            maxRetries: settings.maxRetries ?? 0,
+            createdAt: performance.now()
+        };
+        
+        this.#callbacks.set(id, callback);
+        console.log(`📝 Registered callback: ${id} (priority: ${callback.priority})`);
+        
+        // Run on existing elements
+        if (this.#initialScanComplete && callback.selector) {
+            const nodes = document.querySelectorAll(callback.selector);
+            nodes.forEach(node => {
+                if (!this.#processedNodes.has(node)) {
+                    this.#processNode(node);
+                }
+            });
         }
         
         return id;
-    };
+    }
     
-    ForumCoreObserver.prototype.registerDebounced = function(settings) {
-        return this.register(settings);
-    };
+    registerDebounced(settings) {
+        const id = this.register(settings);
+        
+        this.#debouncedCallbacks.set(id, {
+            callback: settings.callback,
+            delay: settings.delay ?? ForumCoreObserver.#PERFORMANCE_CONFIG.debounceThreshold,
+            lastRun: 0
+        });
+        
+        return id;
+    }
     
-    ForumCoreObserver.prototype.unregister = function(id) {
-        for (var i = 0; i < this.callbacks.length; i++) {
-            if (this.callbacks[i].id === id) {
-                this.callbacks.splice(i, 1);
-                return true;
-            }
+    unregister(callbackId) {
+        let removed = false;
+        
+        if (this.#callbacks.has(callbackId)) {
+            this.#callbacks.delete(callbackId);
+            removed = true;
         }
-        return false;
-    };
+        
+        if (this.#debouncedCallbacks.has(callbackId)) {
+            this.#debouncedCallbacks.delete(callbackId);
+            removed = true;
+        }
+        
+        if (this.#debounceTimeouts.has(callbackId)) {
+            clearTimeout(this.#debounceTimeouts.get(callbackId));
+            this.#debounceTimeouts.delete(callbackId);
+        }
+        
+        if (removed) {
+            console.log(`🗑️ Unregistered callback: ${callbackId}`);
+        }
+        
+        return removed;
+    }
     
-    ForumCoreObserver.prototype.forceScan = function(selector) {
+    // Utility methods
+    
+    forceScan(selector) {
         if (!selector) {
-            this.scanExistingContent();
+            this.#scanExistingContent();
             return;
         }
         
-        try {
-            var elements = document.querySelectorAll(selector);
-            for (var i = 0; i < elements.length; i++) {
-                if (!this.processedNodes.has(elements[i])) {
-                    this.processNode(elements[i]);
-                }
+        const nodes = document.querySelectorAll(selector);
+        nodes.forEach(node => {
+            if (!this.#processedNodes.has(node)) {
+                this.#processNode(node);
             }
-        } catch (error) {
-            // Ignore
-        }
-    };
+        });
+    }
     
-    ForumCoreObserver.prototype.getStats = function() {
+    getStats() {
         return {
-            initialized: this.initialized,
-            callbacks: this.callbacks.length,
-            processedNodes: this.processedNodes.size,
-            pendingRegistrations: pendingRegistrations.length
+            totalMutations: Number(this.#mutationMetrics.totalMutations),
+            processedMutations: Number(this.#mutationMetrics.processedMutations),
+            averageProcessingTime: this.#mutationMetrics.averageProcessingTime,
+            lastMutationTime: this.#mutationMetrics.lastMutationTime,
+            registeredCallbacks: this.#callbacks.size,
+            debouncedCallbacks: this.#debouncedCallbacks.size,
+            pendingTimeouts: this.#debounceTimeouts.size,
+            processedNodes: this.#processedNodes.size,
+            pageState: this.#pageState,
+            isProcessing: this.#isProcessing,
+            queueLength: this.#mutationQueue.length
         };
-    };
-    
-    ForumCoreObserver.prototype.destroy = function() {
-        if (this.observer) {
-            this.observer.disconnect();
-        }
-        this.initialized = false;
-    };
-    
-    // ============================================
-    // GLOBAL SETUP - This runs immediately
-    // ============================================
-    
-    // Create the global object immediately
-    window.forumObserver = {
-        // Safe placeholder methods - will be replaced when real observer is ready
-        register: function(settings) {
-            console.log('⏳ Observer not ready, queuing registration:', settings.id || 'unnamed');
-            pendingRegistrations.push(settings);
-            return 'queued_' + Date.now();
-        },
-        
-        registerDebounced: function(settings) {
-            console.log('⏳ Observer not ready, queuing debounced registration:', settings.id || 'unnamed');
-            pendingDebouncedRegistrations.push(settings);
-            return 'queued_debounced_' + Date.now();
-        },
-        
-        unregister: function(id) {
-            console.log('⏳ Observer not ready, cannot unregister:', id);
-            return false;
-        },
-        
-        forceScan: function(selector) {
-            console.log('⏳ Observer not ready, cannot force scan');
-        },
-        
-        getStats: function() {
-            return {
-                status: 'initializing',
-                pendingRegistrations: pendingRegistrations.length,
-                pendingDebouncedRegistrations: pendingDebouncedRegistrations.length,
-                message: 'Observer will be ready soon'
-            };
-        },
-        
-        destroy: function() {
-            console.log('Observer not yet initialized');
-        },
-        
-        init: function() {
-            console.log('Manual init requested');
-        }
-    };
-    
-    // Create real observer instance
-    var realObserver = new ForumCoreObserver();
-    
-    // Replace placeholder methods when observer is ready
-    var originalRegister = window.forumObserver.register;
-    var originalRegisterDebounced = window.forumObserver.registerDebounced;
-    var originalUnregister = window.forumObserver.unregister;
-    var originalForceScan = window.forumObserver.forceScan;
-    var originalGetStats = window.forumObserver.getStats;
-    var originalDestroy = window.forumObserver.destroy;
-    
-    // Initialize when DOM is ready
-    function initializeObserver() {
-        realObserver.init();
-        
-        // Replace placeholder methods with real ones
-        window.forumObserver.register = function(settings) {
-            return realObserver.register(settings);
-        };
-        
-        window.forumObserver.registerDebounced = function(settings) {
-            return realObserver.registerDebounced(settings);
-        };
-        
-        window.forumObserver.unregister = function(id) {
-            return realObserver.unregister(id);
-        };
-        
-        window.forumObserver.forceScan = function(selector) {
-            return realObserver.forceScan(selector);
-        };
-        
-        window.forumObserver.getStats = function() {
-            return realObserver.getStats();
-        };
-        
-        window.forumObserver.destroy = function() {
-            return realObserver.destroy();
-        };
-        
-        window.forumObserver.init = function() {
-            // Already initialized
-        };
-        
-        console.log('✅ Forum Core Observer READY - All queued callbacks processed');
     }
     
-    // Start initialization
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeObserver);
-    } else {
-        setTimeout(initializeObserver, 100);
+    destroy() {
+        this.#pause();
+        
+        if (this.#cleanupIntervalId) {
+            clearInterval(this.#cleanupIntervalId);
+        }
+        
+        this.#callbacks.clear();
+        this.#debouncedCallbacks.clear();
+        this.#processedNodes = new WeakSet();
+        this.#mutationQueue.length = 0;
+        this.#debounceTimeouts.clear();
+        
+        document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
+        
+        console.log('🛑 Forum Core Observer destroyed');
     }
     
-    // Helper functions for easy access
-    window.registerForumScript = function(settings) {
-        return window.forumObserver.register(settings);
-    };
-    
-    window.registerDebouncedForumScript = function(settings) {
-        return window.forumObserver.registerDebounced(settings);
-    };
-    
-    console.log('🎯 Forum Core Observer LOADED - API available immediately');
-    
-})();
+    // Static factory method
+    static create() {
+        return new ForumCoreObserver();
+    }
+}
+
+// Modern initialization with globalThis
+if (!globalThis.forumObserver) {
+    try {
+        globalThis.forumObserver = ForumCoreObserver.create();
+        
+        // Add global helper with proper error handling
+        globalThis.registerForumScript = (settings) => {
+            return globalThis.forumObserver?.register(settings) ?? null;
+        };
+        
+        globalThis.registerDebouncedForumScript = (settings) => {
+            return globalThis.forumObserver?.registerDebounced(settings) ?? null;
+        };
+        
+        // Auto-cleanup with modern event
+        globalThis.addEventListener('pagehide', () => {
+            globalThis.forumObserver?.destroy();
+        }, { once: true });
+        
+        // Export for debugging in development
+        if (import.meta.env?.DEV || globalThis.location?.hostname === 'localhost') {
+            globalThis.__FORUM_OBSERVER_DEBUG__ = globalThis.forumObserver;
+        }
+        
+        console.log('🎯 Forum Core Observer ready');
+        
+    } catch (error) {
+        console.error('Failed to initialize Forum Core Observer:', error);
+        
+        // Modern fallback with Proxy
+        globalThis.forumObserver = new Proxy({}, {
+            get(target, prop) {
+                const methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy'];
+                if (methods.includes(prop)) {
+                    return () => console.warn(`Forum Observer not initialized - ${prop} called`);
+                }
+                return undefined;
+            }
+        });
+    }
+}
+
+// Export for ES modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ForumCoreObserver };
+}
