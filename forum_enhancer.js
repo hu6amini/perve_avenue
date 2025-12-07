@@ -258,7 +258,7 @@ class PostModernizer {
  let nickElement = null; 
  let groupValue = ''; 
  
-  if (title2Top) { 
+ if (title2Top) { 
  const tdWrapper = title2Top.closest('td.left.Item'); 
  nickElement = title2Top.querySelector('.nick'); 
  
@@ -431,17 +431,11 @@ class PostModernizer {
  const colorTable = post.querySelector('table.color');
  
  if (colorTable) {
- // Get all tds from the color table
- const tds = colorTable.querySelectorAll('td');
- tds.forEach(td => {
- if (td.innerHTML && td.innerHTML.trim() !== '') {
- // Remove empty TDs
- if (!td.innerHTML.trim() || td.innerHTML.trim() === '<br>') {
- return;
+ // Get the content td directly
+ const contentTd = colorTable.querySelector('td');
+ if (contentTd && contentTd.innerHTML && contentTd.innerHTML.trim() !== '') {
+ contentHTML = contentTd.innerHTML;
  }
- contentHTML += td.outerHTML;
- }
- });
  }
  
  // Also try other selectors as fallback
@@ -452,7 +446,7 @@ class PostModernizer {
  post.querySelector('td[align]');
  
  if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
- contentHTML = contentElement.outerHTML;
+ contentHTML = contentElement.innerHTML;
  }
  }
  
@@ -511,7 +505,13 @@ class PostModernizer {
  locationDiv.appendChild(forumSpan);
  }
  
+ // FIX: Append to the td wrapper, not the tr
+ const tdWrapperInClone = title2TopClone.querySelector('td.Item.Justify');
+ if (tdWrapperInClone) {
+ tdWrapperInClone.appendChild(locationDiv);
+ } else {
  title2TopClone.appendChild(locationDiv);
+ }
  }
  
  // Remove original rt.Sub
@@ -535,7 +535,7 @@ class PostModernizer {
  }
  }
  
-  // Process content
+ // Process content
  if (contentHTML) {
  const contentWrapper = document.createElement('div');
  contentWrapper.className = 'post-main-content';
@@ -1418,7 +1418,7 @@ class PostModernizer {
  
  let html = '<div class="moderator-controls">' + 
  '<div class="multiquote-control">' + 
- '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' + 
+ '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnclick) + '" title="Select post for multiquote" type="button">' + 
  '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' + 
  '</button>' + 
  '<label class="multiquote-label">' + this.#escapeHtml(labelText) + '</label>' + 
