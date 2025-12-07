@@ -536,6 +536,7 @@ class PostModernizer {
  }
  
  // Process content
+ // Process content
  if (contentHTML) {
  const contentWrapper = document.createElement('div');
  contentWrapper.className = 'post-main-content';
@@ -543,12 +544,16 @@ class PostModernizer {
  // Use the HTML we extracted from the color table
  const tempDiv = document.createElement('div');
  tempDiv.innerHTML = contentHTML;
- const contentClone = tempDiv;
  
- this.#preserveMediaDimensions(contentClone);
+ // FIX: Append the children directly, not the wrapper div
+ while (tempDiv.firstChild) {
+ contentWrapper.appendChild(tempDiv.firstChild);
+ }
+ 
+ this.#preserveMediaDimensions(contentWrapper);
  
  // Process text content with same treatment as regular posts
- const walker = document.createTreeWalker(contentClone, NodeFilter.SHOW_TEXT, null, false);
+ const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
  const textNodes = [];
  let node;
  
@@ -574,8 +579,6 @@ class PostModernizer {
  }
  });
  }
- 
- contentWrapper.appendChild(contentClone);
  
  // Apply the same text and line break treatment as regular posts
  this.#processTextAndLineBreaks(contentWrapper);
