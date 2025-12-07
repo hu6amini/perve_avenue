@@ -258,27 +258,71 @@ class PostModernizer {
  let nickElement = null; 
  let groupValue = ''; 
  
- if (title2Top) { 
- const tdWrapper = title2Top.closest('td.left.Item'); 
- nickElement = title2Top.querySelector('.nick'); 
+ // Process title2.top for header
+ if (title2Top) {
+ const title2TopClone = title2Top.cloneNode(true);
  
- if (tdWrapper) { 
- const title2TopClone = title2Top.cloneNode(true); 
- title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove(); 
- title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove(); 
- title2TopClone.querySelector('.left.Item')?.remove(); 
- this.#removeBreakAndNbsp(title2TopClone); 
- postHeader.appendChild(title2TopClone); 
- tdWrapper.remove(); 
- } else { 
- const title2TopClone = title2Top.cloneNode(true); 
- title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove(); 
- title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove(); 
- title2TopClone.querySelector('.left.Item')?.remove(); 
- this.#removeBreakAndNbsp(title2TopClone); 
- postHeader.appendChild(title2TopClone); 
- } 
- } 
+ // Remove the points element from the title2.top clone
+ const pointsInTitle = title2TopClone.querySelector('.points');
+ if (pointsInTitle) {
+ pointsInTitle.remove();
+ }
+ 
+ // Extract location info from rt.Sub
+ if (rtSub) {
+ const topicLink = rtSub.querySelector('a[href*="?t="]');
+ const forumLink = rtSub.querySelector('a[href*="?f="]');
+ 
+ if (topicLink || forumLink) {
+ const locationDiv = document.createElement('div');
+ locationDiv.className = 'post-location';
+ 
+ if (topicLink) {
+ const topicSpan = document.createElement('span');
+ topicSpan.className = 'topic-link';
+ topicSpan.innerHTML = '<i class="fa-regular fa-file-lines"></i> ' + topicLink.textContent;
+ locationDiv.appendChild(topicSpan);
+ }
+ 
+ if (forumLink) {
+ const forumSpan = document.createElement('span');
+ forumSpan.className = 'forum-link';
+ forumSpan.innerHTML = '<i class="fa-regular fa-folder"></i> ' + forumLink.textContent;
+ if (topicLink) {
+ locationDiv.appendChild(document.createTextNode(' - '));
+ }
+ locationDiv.appendChild(forumSpan);
+ }
+ 
+ // FIX: Append to the td wrapper, not the tr
+ const tdWrapperInClone = title2TopClone.querySelector('td.Item.Justify');
+ if (tdWrapperInClone) {
+ tdWrapperInClone.appendChild(locationDiv);
+ } else {
+ title2TopClone.appendChild(locationDiv);
+ }
+ }
+ 
+ // Remove original rt.Sub
+ title2TopClone.querySelector('.rt.Sub')?.remove();
+ }
+ 
+ // Clean up
+ this.#removeBreakAndNbsp(title2TopClone);
+ title2TopClone.querySelector('.Break.Sub')?.remove();
+ 
+ // Extract just the divs from the TD, not the entire table structure
+ const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+ if (tdWrapper) {
+ const divs = tdWrapper.querySelectorAll('div');
+ divs.forEach(div => {
+ postHeader.appendChild(div.cloneNode(true));
+ });
+ tdWrapper.remove();
+ } else {
+ postHeader.appendChild(title2TopClone);
+ }
+ }
  
  const centerElements = post.querySelectorAll('tr.center'); 
  centerElements.forEach(centerElement => { 
