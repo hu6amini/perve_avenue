@@ -425,7 +425,37 @@ class PostModernizer {
  // Extract data from search post structure
  const title2Top = post.querySelector('.title2.top');
  const pointsElement = post.querySelector('.points');
- const contentElement = post.querySelector('td.Item table.color td');
+ 
+ // FIX: Extract content from the correct location in search posts
+ let contentHTML = '';
+ const colorTable = post.querySelector('table.color');
+ 
+ if (colorTable) {
+ // Get all tds from the color table
+ const tds = colorTable.querySelectorAll('td');
+ tds.forEach(td => {
+ if (td.innerHTML && td.innerHTML.trim() !== '') {
+ // Remove empty TDs
+ if (!td.innerHTML.trim() || td.innerHTML.trim() === '<br>') {
+ return;
+ }
+ contentHTML += td.outerHTML;
+ }
+ });
+ }
+ 
+ // Also try other selectors as fallback
+ if (!contentHTML) {
+ const contentElement = post.querySelector('td.Item table.color td') || 
+ post.querySelector('td.Item td') || 
+ post.querySelector('.color td') ||
+ post.querySelector('td[align]');
+ 
+ if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
+ contentHTML = contentElement.outerHTML;
+ }
+ }
+ 
  const editElement = post.querySelector('span.edit');
  const rtSub = post.querySelector('.rt.Sub');
  
@@ -448,6 +478,12 @@ class PostModernizer {
  // Process title2.top for header
  if (title2Top) {
  const title2TopClone = title2Top.cloneNode(true);
+ 
+ // FIX: Remove the points element from the title2.top clone
+ const pointsInTitle = title2TopClone.querySelector('.points');
+ if (pointsInTitle) {
+ pointsInTitle.remove();
+ }
  
  // Extract location info from rt.Sub
  if (rtSub) {
@@ -485,15 +521,30 @@ class PostModernizer {
  // Clean up
  this.#removeBreakAndNbsp(title2TopClone);
  title2TopClone.querySelector('.Break.Sub')?.remove();
+ 
+ // FIX: Extract just the divs from the TD, not the entire table structure
+ const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+ if (tdWrapper) {
+ const divs = tdWrapper.querySelectorAll('div');
+ divs.forEach(div => {
+ postHeader.appendChild(div.cloneNode(true));
+ });
+ tdWrapper.remove();
+ } else {
  postHeader.appendChild(title2TopClone);
+ }
  }
  
  // Process content
- if (contentElement) {
+ if (contentHTML) {
  const contentWrapper = document.createElement('div');
  contentWrapper.className = 'post-main-content';
  
- const contentClone = contentElement.cloneNode(true);
+ // Use the HTML we extracted from the color table
+ const tempDiv = document.createElement('div');
+ tempDiv.innerHTML = contentHTML;
+ const contentClone = tempDiv;
+ 
  this.#preserveMediaDimensions(contentClone);
  
  // Process text content
@@ -542,9 +593,9 @@ class PostModernizer {
  const postFooterActions = document.createElement('div');
  postFooterActions.className = 'post-actions';
  
- // Add points element if it exists, otherwise create empty one
+ // FIX: Check if points element exists and has content
  let pointsFooter;
- if (pointsElement) {
+ if (pointsElement && pointsElement.innerHTML.trim() !== '') {
  const pointsClone = pointsElement.cloneNode(true);
  pointsFooter = pointsClone;
  } else {
@@ -576,20 +627,32 @@ class PostModernizer {
  shareContainer.appendChild(shareButton);
  postFooter.appendChild(shareContainer);
  
- // Replace post content with modern structure
- const originalTagName = post.tagName;
- const originalAttributes = {};
+ // FIX: Better way to replace post content while preserving structure
+ const newPost = document.createElement('div');
+ newPost.className = 'post post-modernized search-post';
+ newPost.id = post.id;
+ 
+ // Copy all data attributes
  Array.from(post.attributes).forEach(attr => {
- originalAttributes[attr.name] = attr.value;
+ if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
+ // Skip these, we handle them separately
+ } else {
+ newPost.setAttribute(attr.name, attr.value);
+ }
  });
  
- const newPost = document.createElement(originalTagName);
- newPost.className = post.className;
- 
- // Copy original attributes
- Object.entries(originalAttributes).forEach(([name, value]) => {
- newPost.setAttribute(name, value);
+ // Copy data attributes
+ Array.from(post.attributes).forEach(attr => {
+ if (attr.name.startsWith('data-')) {
+ newPost.setAttribute(attr.name, attr.value);
+ }
  });
+ 
+ // Copy post classes (except the ones we add)
+ const originalClasses = post.className.split(' ').filter(cls => 
+ !cls.includes('post-modernized') && !cls.includes('search-post')
+ );
+ newPost.className = [...originalClasses, 'post', 'post-modernized', 'search-post'].join(' ');
  
  newPost.appendChild(postHeader);
  newPost.appendChild(postContent);
@@ -654,6 +717,14 @@ class PostModernizer {
  } else {
  lastWasParagraphEnd = false;
  }
+ });
+ 
+ // FIX: Handle quotes in search posts
+ contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
+ if (container.classList.contains('quote-modernized')) return;
+ 
+ this.#transformQuote(container);
+ container.classList.add('quote-modernized');
  });
  }
  
@@ -1116,17 +1187,22 @@ class PostModernizer {
  #removeBreakAndNbsp(element) { 
  element.querySelectorAll('.Break.Sub').forEach(el => el.remove()); 
  
- const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false); 
- const nodesToRemove = []; 
- let node; 
+ // Also remove any &nbsp; entities
+ const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+ const nodesToRemove = [];
+ let node;
  
- while (node = walker.nextNode()) { 
- if (node.textContent.includes('&nbsp;')) { 
- nodesToRemove.push(node); 
- } 
- } 
+ while (node = walker.nextNode()) {
+ if (node.textContent.includes('&nbsp;') || node.textContent.trim() === '') {
+ nodesToRemove.push(node);
+ }
+ }
  
- nodesToRemove.forEach(node => node.remove()); 
+ nodesToRemove.forEach(node => {
+ if (node.parentNode) {
+ node.parentNode.removeChild(node);
+ }
+ });
  } 
  
  #removeBottomBorderAndBr(element) { 
@@ -1592,7 +1668,7 @@ class PostModernizer {
  } 
  
 destroy() { 
- const ids = [this.#postModernizerId, this.#activeStateObserverId, 
+ const ids = [this.#postModernizerId, this.#activeStateObserverId,
  this.#debouncedObserverId, this.#cleanupObserverId, this.#searchPostObserverId]; 
  
  ids.forEach(id => id && globalThis.forumObserver?.unregister(id)); 
