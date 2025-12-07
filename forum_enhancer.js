@@ -1,29 +1,73 @@
 // Enhanced Post Transformation and Modernization System with HTML Structure Fix 
 // Now includes support for body#search posts
+// DOMContentLoaded-free version for flexible loading
 class PostModernizer { 
  #postModernizerId = null; 
  #activeStateObserverId = null; 
  #debouncedObserverId = null; 
  #cleanupObserverId = null; 
  #searchPostObserverId = null;
+ #retryTimeoutId = null;
+ #maxRetries = 10;
+ #retryCount = 0;
  
  constructor() { 
- this.#init(); 
+ this.#initWithRetry();
  } 
+ 
+ #initWithRetry() {
+ // Clear any existing retry timeout
+ if (this.#retryTimeoutId) {
+ clearTimeout(this.#retryTimeoutId);
+ this.#retryTimeoutId = null;
+ }
+ 
+ // Check if observer is available
+ if (!globalThis.forumObserver) {
+ if (this.#retryCount < this.#maxRetries) {
+ this.#retryCount++;
+ const delay = Math.min(100 * Math.pow(1.5, this.#retryCount - 1), 2000);
+ console.log(`Forum Observer not available, retry ${this.#retryCount}/${this.#maxRetries} in ${delay}ms`);
+ 
+ this.#retryTimeoutId = setTimeout(() => {
+ this.#initWithRetry();
+ }, delay);
+ } else {
+ console.error('Failed to initialize Post Modernizer: Forum Observer not available after maximum retries');
+ }
+ return;
+ }
+ 
+ // Reset retry counter on successful dependency check
+ this.#retryCount = 0;
+ 
+ // Proceed with initialization
+ this.#init();
+ }
  
  #init() { 
- if (!globalThis.forumObserver) { 
- console.error('Forum Core Observer not available'); 
- return; 
- } 
- 
+ try {
  this.#transformPostElements(); 
  this.#enhanceReputationSystem(); 
  this.#setupObserverCallbacks(); 
  this.#setupActiveStateObserver(); 
  this.#setupSearchPostObserver();
  
- console.log('Post Modernizer with HTML Structure Fix and Search Post Support initialized'); 
+ console.log('✅ Post Modernizer with HTML Structure Fix and Search Post Support initialized'); 
+ } catch (error) {
+ console.error('Post Modernizer initialization failed:', error);
+ 
+ // Fallback: retry initialization after a short delay
+ if (this.#retryCount < this.#maxRetries) {
+ this.#retryCount++;
+ const delay = 100 * Math.pow(2, this.#retryCount - 1);
+ console.log(`Initialization failed, retrying in ${delay}ms...`);
+ 
+ setTimeout(() => {
+ this.#initWithRetry();
+ }, delay);
+ }
+ }
  } 
  
  #setupObserverCallbacks() { 
@@ -1553,46 +1597,53 @@ destroy() {
  
  ids.forEach(id => id && globalThis.forumObserver?.unregister(id)); 
  
+ // Clear retry timeout
+ if (this.#retryTimeoutId) {
+ clearTimeout(this.#retryTimeoutId);
+ this.#retryTimeoutId = null;
+ }
+ 
  console.log('Post Modernizer destroyed'); 
  } 
 } 
  
-// Modern initialization 
-const initPostModernizer = () => { 
- if (globalThis.forumObserver) { 
- globalThis.postModernizer = new PostModernizer(); 
- } else { 
- console.error('Forum Core Observer not available - delaying Post Modernizer'); 
+// Modern initialization without DOMContentLoaded
+(function initPostModernizer() {
+ // Check if script is loaded before DOM is ready
+ const init = () => {
+ try {
+ // Create instance - it will handle its own initialization with retry logic
+ globalThis.postModernizer = new PostModernizer();
+ } catch (error) {
+ console.error('Failed to create Post Modernizer instance:', error);
  
- // Retry with exponential backoff 
- let retries = 0; 
- const maxRetries = 5; 
+ // Fallback: try again after a short delay
+ setTimeout(() => {
+ if (!globalThis.postModernizer) {
+ try {
+ globalThis.postModernizer = new PostModernizer();
+ } catch (retryError) {
+ console.error('Post Modernizer failed on retry:', retryError);
+ }
+ }
+ }, 100);
+ }
+ };
  
- const tryInit = () => { 
- if (globalThis.forumObserver) { 
- globalThis.postModernizer = new PostModernizer(); 
- } else if (retries < maxRetries) { 
- retries++; 
- setTimeout(tryInit, 100 * Math.pow(2, retries - 1)); 
- } else { 
- console.error('Failed to initialize Post Modernizer after ' + maxRetries + ' attempts'); 
- } 
- }; 
+ // If document is already ready, initialize immediately
+ if (document.readyState !== 'loading') {
+ // Use queueMicrotask to ensure other scripts have loaded
+ queueMicrotask(init);
+ } else {
+ // If still loading, wait for DOM to be ready but also start immediately
+ // This allows the script to work even if loaded late
+ init();
+ }
+})();
  
- setTimeout(tryInit, 100); 
- } 
-}; 
- 
-// Initialize when DOM is ready 
-if (document.readyState === 'loading') { 
- document.addEventListener('DOMContentLoaded', initPostModernizer); 
-} else { 
- initPostModernizer(); 
-} 
- 
-// Cleanup on page hide 
-globalThis.addEventListener('pagehide', () => { 
- if (globalThis.postModernizer && typeof globalThis.postModernizer.destroy === 'function') { 
- globalThis.postModernizer.destroy(); 
- } 
+// Cleanup on page hide
+globalThis.addEventListener('pagehide', () => {
+ if (globalThis.postModernizer && typeof globalThis.postModernizer.destroy === 'function') {
+ globalThis.postModernizer.destroy();
+ }
 });
