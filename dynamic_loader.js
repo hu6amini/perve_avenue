@@ -1,5 +1,5 @@
 // ============================================================================
-// FORUM SCRIPTS DYNAMIC LOADER - BODY VERSION
+// FORUM SCRIPTS DYNAMIC LOADER - BODY INJECTION VERSION
 // Place this script RIGHT AFTER the opening <body> tag
 // ============================================================================
 (function() {
@@ -13,8 +13,8 @@
         retryDelay: 1000,
         timeout: 10000, // 10 seconds timeout
         debug: true,
-        // NEW: Script injection preferences
-        injectTo: 'head',    // 'head' for dependencies, 'body' for performance
+        // CRITICAL CHANGE: Inject scripts into BODY, not head
+        injectTo: 'body',    // 'body' ensures scripts load after body exists
         startDelay: 50       // Small delay to let body initialize
     };
     
@@ -27,8 +27,9 @@
         observerTimeoutId: null,
         modernizerTimeoutId: null,
         loadStarted: false,
-        isBodyReady: !!document.body,  // Check if body exists immediately
-        isHeadReady: !!document.head   // Check if head exists
+        isBodyReady: !!document.body,
+        isHeadReady: !!document.head,
+        scriptsInjected: []  // Track injected scripts
     };
     
     // Logging helper
@@ -69,27 +70,38 @@
         }
     }
     
-    // Get the target element for script injection
+    // Get the target element for script injection - CRITICAL FIX
     function getInjectionTarget() {
-        if (CONFIG.injectTo === 'head' && state.isHeadReady) {
-            return document.head;
-        } else if (state.isBodyReady) {
+        // ALWAYS use body for injection when possible
+        if (document.body) {
+            log('Injecting scripts into body', 'debug');
             return document.body;
-        } else {
-            // Fallback to document.documentElement
-            return document.documentElement;
         }
+        
+        // Fallback for edge cases
+        log('Body not available, using documentElement', 'warn');
+        return document.documentElement;
     }
     
     // Safe script injection with validation
-    function injectScript(script, onLoad, onError) {
+    function injectScript(script, onLoad, onError, scriptType) {
         const target = getInjectionTarget();
         
         if (!target) {
-            log(`No injection target available (head: ${state.isHeadReady}, body: ${state.isBodyReady})`, 'error');
+            log(`No injection target available`, 'error');
             onError(new Error('No DOM element available for script injection'));
             return null;
         }
+        
+        // Track this script
+        state.scriptsInjected.push({
+            type: scriptType,
+            src: script.src,
+            timestamp: Date.now(),
+            injectedInto: target.tagName
+        });
+        
+        log(`Injecting ${scriptType} into ${target.tagName}...`, 'debug');
         
         // Clone handlers to prevent multiple calls
         let loadCalled = false;
@@ -98,6 +110,7 @@
         const safeOnLoad = () => {
             if (!loadCalled) {
                 loadCalled = true;
+                log(`${scriptType} loaded successfully`, 'debug');
                 onLoad();
             }
         };
@@ -105,6 +118,7 @@
         const safeOnError = (error) => {
             if (!errorCalled) {
                 errorCalled = true;
+                log(`${scriptType} load error: ${error.message}`, 'debug');
                 onError(error);
             }
         };
@@ -126,13 +140,25 @@
             originalOnLoad?.call(this);
         };
         
+        // CRITICAL: Append to body, not head!
         target.appendChild(script);
+        
+        // Verify injection
+        if (script.parentNode === target) {
+            log(`${scriptType} successfully injected into ${target.tagName}`, 'debug');
+        } else {
+            log(`${scriptType} may not have been injected properly`, 'warn');
+        }
+        
         return script;
     }
     
     // Load observer script
     function loadObserver() {
-        if (state.observerLoaded) return;
+        if (state.observerLoaded) {
+            log('Observer already loaded', 'debug');
+            return;
+        }
         
         log('Loading Forum Core Observer...', 'info');
         
@@ -153,7 +179,9 @@
         script.type = 'text/javascript';
         script.async = false; // Ensure sequential loading
         script.crossOrigin = 'anonymous';
-        script.dataset.loaderOrigin = 'forum-loader'; // Mark as from our loader
+        script.dataset.loaderOrigin = 'forum-loader';
+        script.dataset.injectedInto = 'body'; // Mark as injected into body
+        // DON'T use defer - we want immediate execution
         
         const injected = injectScript(
             script,
@@ -162,13 +190,21 @@
                 state.observerLoaded = true;
                 log('✅ Forum Core Observer loaded successfully', 'info');
                 
+                // Verify observer initialized
+                if (globalThis.forumObserver) {
+                    log('Forum Observer initialized successfully', 'info');
+                } else {
+                    log('Forum Observer loaded but not initialized', 'warn');
+                }
+                
                 // Wait a bit for observer initialization, then load modernizer
                 setTimeout(loadModernizer, CONFIG.startDelay);
             },
             (error) => {
                 clearTimeout(state.observerTimeoutId);
                 handleError('observer', error, CONFIG.observerScript);
-            }
+            },
+            'observer'
         );
         
         if (!injected) {
@@ -178,15 +214,22 @@
     
     // Load modernizer script
     function loadModernizer() {
-        // Only load if observer is loaded and initialized
+        // Check if already loaded
+        if (state.modernizerLoaded) {
+            log('Modernizer already loaded', 'debug');
+            checkInitialization();
+            return;
+        }
+        
+        // Only load if observer is loaded
         if (!state.observerLoaded) {
-            log('Waiting for observer before loading modernizer...', 'debug');
+            log('Observer not loaded yet, waiting...', 'debug');
             
-            // Check if observer becomes available
+            // Wait for observer
             const checkInterval = setInterval(() => {
-                if (globalThis.forumObserver || state.observerLoaded) {
+                if (state.observerLoaded) {
                     clearInterval(checkInterval);
-                    log('Observer now available, loading modernizer...', 'debug');
+                    log('Observer now loaded, proceeding with modernizer...', 'debug');
                     forceLoadModernizer();
                 }
             }, 100);
@@ -194,12 +237,11 @@
             // Timeout for waiting
             setTimeout(() => {
                 clearInterval(checkInterval);
-                if (!state.observerLoaded && !globalThis.forumObserver) {
-                    log('Observer not available after wait, attempting modernizer load anyway...', 'warn');
-                    // Continue anyway - modernizer has its own retry logic
+                if (!state.observerLoaded) {
+                    log('Observer still not loaded after wait, attempting modernizer anyway...', 'warn');
                     forceLoadModernizer();
                 }
-            }, 2000);
+            }, 3000);
             
             return;
         }
@@ -208,8 +250,6 @@
     }
     
     function forceLoadModernizer() {
-        if (state.modernizerLoaded) return;
-        
         log('Loading Post Modernizer...', 'info');
         
         // Clear any existing timeout
@@ -229,7 +269,9 @@
         script.type = 'text/javascript';
         script.async = false; // Ensure sequential loading
         script.crossOrigin = 'anonymous';
-        script.dataset.loaderOrigin = 'forum-loader'; // Mark as from our loader
+        script.dataset.loaderOrigin = 'forum-loader';
+        script.dataset.injectedInto = 'body'; // Mark as injected into body
+        // DON'T use defer - we want immediate execution
         
         const injected = injectScript(
             script,
@@ -237,6 +279,13 @@
                 clearTimeout(state.modernizerTimeoutId);
                 state.modernizerLoaded = true;
                 log('✅ Post Modernizer loaded successfully', 'info');
+                
+                // Verify modernizer initialized
+                if (globalThis.postModernizer) {
+                    log('Post Modernizer initialized successfully', 'info');
+                } else {
+                    log('Post Modernizer loaded but not initialized', 'warn');
+                }
                 
                 // Check if both scripts initialized properly
                 setTimeout(() => {
@@ -246,7 +295,8 @@
             (error) => {
                 clearTimeout(state.modernizerTimeoutId);
                 handleError('modernizer', error, CONFIG.modernizerScript);
-            }
+            },
+            'modernizer'
         );
         
         if (!injected) {
@@ -256,6 +306,8 @@
     
     // Check if scripts initialized properly
     function checkInitialization() {
+        log('Checking script initialization...', 'debug');
+        
         const checks = {
             'Forum Observer': () => globalThis.forumObserver,
             'Post Modernizer': () => globalThis.postModernizer
@@ -264,7 +316,8 @@
         let allInitialized = true;
         
         Object.entries(checks).forEach(([name, check]) => {
-            if (check()) {
+            const isInitialized = check();
+            if (isInitialized) {
                 log(`✅ ${name} initialized successfully`, 'info');
             } else {
                 log(`⚠️ ${name} script loaded but not initialized`, 'warn');
@@ -278,6 +331,22 @@
             dispatchLoadComplete();
         } else {
             log('Some forum features may not be fully available', 'warn');
+            
+            // Try to auto-recover
+            if (!globalThis.forumObserver && state.observerLoaded) {
+                log('Attempting to manually initialize observer...', 'debug');
+                setTimeout(() => {
+                    if (!globalThis.forumObserver && typeof ForumCoreObserver !== 'undefined') {
+                        try {
+                            globalThis.forumObserver = ForumCoreObserver.create();
+                            log('Manually initialized Forum Observer', 'info');
+                            checkInitialization();
+                        } catch (e) {
+                            log(`Manual initialization failed: ${e.message}`, 'error');
+                        }
+                    }
+                }, 1000);
+            }
         }
     }
     
@@ -287,10 +356,12 @@
             detail: {
                 observer: globalThis.forumObserver,
                 modernizer: globalThis.postModernizer,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                scripts: state.scriptsInjected
             }
         });
         document.dispatchEvent(event);
+        log('Dispatched forumScriptsLoaded event', 'debug');
     }
     
     // Start loading - BODY VERSION: Start immediately
@@ -303,6 +374,9 @@
         state.loadStarted = true;
         log('Starting forum scripts loading sequence from body...', 'info');
         
+        // Check current DOM state
+        log(`DOM state: body=${!!document.body}, head=${!!document.head}, readyState=${document.readyState}`, 'debug');
+        
         // Small delay to ensure DOM is ready
         setTimeout(() => {
             loadObserver();
@@ -311,40 +385,45 @@
     
     // Monitor DOM readiness
     function waitForDOM() {
-        // If body doesn't exist yet, wait for it
-        if (!state.isBodyReady) {
-            log('Body not ready, waiting...', 'debug');
-            
-            const observer = new MutationObserver(() => {
-                if (document.body) {
-                    observer.disconnect();
-                    state.isBodyReady = true;
-                    log('Body is now ready', 'debug');
-                    startLoading();
-                }
-            });
-            
-            observer.observe(document.documentElement, { childList: true, subtree: true });
-            
-            // Fallback timeout
-            setTimeout(() => {
-                observer.disconnect();
-                if (document.body) {
-                    state.isBodyReady = true;
-                    startLoading();
-                } else {
-                    log('Body still not available after timeout, trying anyway...', 'warn');
-                    startLoading();
-                }
-            }, 1000);
-        } else {
-            // Body exists, start immediately
+        // Check if body exists
+        if (document.body) {
+            state.isBodyReady = true;
+            log('Body exists, starting load immediately', 'debug');
             startLoading();
+        } else {
+            log('Body not found, waiting for DOM...', 'debug');
+            
+            // Use DOMContentLoaded as fallback
+            document.addEventListener('DOMContentLoaded', () => {
+                state.isBodyReady = !!document.body;
+                log(`DOMContentLoaded fired, body exists: ${state.isBodyReady}`, 'debug');
+                startLoading();
+            }, { once: true });
+            
+            // Also try immediate check
+            const immediateCheck = setInterval(() => {
+                if (document.body) {
+                    clearInterval(immediateCheck);
+                    state.isBodyReady = true;
+                    log('Body found via interval check', 'debug');
+                    startLoading();
+                }
+            }, 100);
+            
+            // Cleanup after 5 seconds
+            setTimeout(() => {
+                clearInterval(immediateCheck);
+                if (!state.loadStarted) {
+                    log('DOM not ready after timeout, trying anyway...', 'warn');
+                    startLoading();
+                }
+            }, 5000);
         }
     }
     
     // Initialize loader - BODY VERSION
-    log('Forum Scripts Loader initializing in body...', 'info');
+    log('Forum Scripts Body Loader initializing...', 'info');
+    log(`Loader location: ${document.currentScript?.parentNode?.tagName || 'unknown'}`, 'debug');
     
     // Check if we're really in a browser environment
     if (typeof document === 'undefined') {
@@ -355,7 +434,7 @@
     // Start loading process
     waitForDOM();
     
-    // Expose loader for debugging with enhanced API
+    // Expose loader for debugging
     globalThis.__forumLoader = {
         config: CONFIG,
         state: state,
@@ -366,6 +445,7 @@
             state.modernizerLoaded = false;
             state.observerRetries = 0;
             state.modernizerRetries = 0;
+            state.scriptsInjected = [];
             
             // Clear timeouts
             if (state.observerTimeoutId) clearTimeout(state.observerTimeoutId);
@@ -378,7 +458,8 @@
                 observer: {
                     loaded: state.observerLoaded,
                     initialized: !!globalThis.forumObserver,
-                    retries: state.observerRetries
+                    retries: state.observerRetries,
+                    exists: typeof ForumCoreObserver !== 'undefined'
                 },
                 modernizer: {
                     loaded: state.modernizerLoaded,
@@ -388,27 +469,31 @@
                 loadStarted: state.loadStarted,
                 domReady: {
                     body: state.isBodyReady,
-                    head: state.isHeadReady
-                },
-                environment: {
-                    inBrowser: typeof document !== 'undefined',
+                    head: state.isHeadReady,
                     readyState: document.readyState
-                }
+                },
+                scripts: state.scriptsInjected,
+                injectionTarget: getInjectionTarget()?.tagName || 'none'
             };
         },
-        // New: Force initialization check
-        forceCheck: () => {
-            checkInitialization();
-            return this.checkStatus();
+        // Debug: Show all script tags
+        debugScripts: () => {
+            const scripts = document.querySelectorAll('script[src*="forum"], script[data-loader-origin]');
+            return Array.from(scripts).map(s => ({
+                src: s.src,
+                parent: s.parentNode.tagName,
+                async: s.async,
+                defer: s.defer,
+                dataset: s.dataset
+            }));
         },
-        // New: Get injection target info
-        getInjectionTarget: () => {
+        // Force injection test
+        testInjection: () => {
             const target = getInjectionTarget();
-            return {
-                element: target?.tagName || 'none',
-                type: CONFIG.injectTo,
-                available: !!target
-            };
+            const testScript = document.createElement('script');
+            testScript.textContent = 'console.log("Test script injected into", document.currentScript.parentNode.tagName);';
+            target.appendChild(testScript);
+            return { target: target.tagName, success: testScript.parentNode === target };
         }
     };
     
@@ -436,5 +521,13 @@
         if (state.observerTimeoutId) clearTimeout(state.observerTimeoutId);
         if (state.modernizerTimeoutId) clearTimeout(state.modernizerTimeoutId);
     });
+    
+    // Also expose a simple init check
+    setTimeout(() => {
+        if (!state.loadStarted) {
+            log('Loader not started after timeout, forcing start...', 'warn');
+            startLoading();
+        }
+    }, 1000);
     
 })();
