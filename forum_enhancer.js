@@ -535,8 +535,7 @@ class PostModernizer {
  }
  }
  
- // Process content
- // Process content
+  // Process content
  if (contentHTML) {
  const contentWrapper = document.createElement('div');
  contentWrapper.className = 'post-main-content';
@@ -545,7 +544,24 @@ class PostModernizer {
  const tempDiv = document.createElement('div');
  tempDiv.innerHTML = contentHTML;
  
- // FIX: Append the children directly, not the wrapper div
+ // FIX: Check if the first child is a div that should be unwrapped
+ // If the tempDiv has only one child that's a div, move its children up
+ if (tempDiv.children.length === 1 && tempDiv.firstElementChild?.tagName === 'DIV') {
+ const wrapperDiv = tempDiv.firstElementChild;
+ 
+ // Check if this div contains a quote (has .quote_top)
+ const hasQuote = wrapperDiv.querySelector('.quote_top');
+ 
+ if (!hasQuote) {
+ // If it's not a quote div, unwrap it
+ while (wrapperDiv.firstChild) {
+ tempDiv.appendChild(wrapperDiv.firstChild);
+ }
+ wrapperDiv.remove();
+ }
+ }
+ 
+ // Now append the children
  while (tempDiv.firstChild) {
  contentWrapper.appendChild(tempDiv.firstChild);
  }
@@ -585,16 +601,18 @@ class PostModernizer {
  
  // Clean up search post content structure
  this.#cleanupSearchPostContent(contentWrapper);
- postContent.appendChild(contentWrapper);
  
- // Handle edit span
- if (editElement) {
- editElement.classList.add('post-edit');
- const timeMatch = editElement.textContent.match(/Edited by .+? - (.+)/);
+ // Handle edit span - find it in the contentWrapper
+ const editSpanInContent = contentWrapper.querySelector('span.edit');
+ if (editSpanInContent) {
+ editSpanInContent.classList.add('post-edit');
+ const timeMatch = editSpanInContent.textContent.match(/Edited by .+? - (.+)/);
  if (timeMatch) {
- editElement.innerHTML = '<i class="fa-regular fa-pen-to-square"></i> Edited on <time>' + this.#escapeHtml(timeMatch[1]) + '</time>';
+ editSpanInContent.innerHTML = '<i class="fa-regular fa-pen-to-square"></i> Edited on <time>' + this.#escapeHtml(timeMatch[1]) + '</time>';
  }
  }
+ 
+ postContent.appendChild(contentWrapper);
  }
  
  // Create reputation footer for search posts
