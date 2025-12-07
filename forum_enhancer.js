@@ -426,7 +426,7 @@ class PostModernizer {
  const title2Top = post.querySelector('.title2.top');
  const pointsElement = post.querySelector('.points');
  
- // FIX: Extract content from the correct location in search posts
+ // Extract content from the correct location in search posts
  let contentHTML = '';
  const colorTable = post.querySelector('table.color');
  
@@ -479,7 +479,7 @@ class PostModernizer {
  if (title2Top) {
  const title2TopClone = title2Top.cloneNode(true);
  
- // FIX: Remove the points element from the title2.top clone
+ // Remove the points element from the title2.top clone
  const pointsInTitle = title2TopClone.querySelector('.points');
  if (pointsInTitle) {
  pointsInTitle.remove();
@@ -522,7 +522,7 @@ class PostModernizer {
  this.#removeBreakAndNbsp(title2TopClone);
  title2TopClone.querySelector('.Break.Sub')?.remove();
  
- // FIX: Extract just the divs from the TD, not the entire table structure
+ // Extract just the divs from the TD, not the entire table structure
  const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
  if (tdWrapper) {
  const divs = tdWrapper.querySelectorAll('div');
@@ -547,7 +547,7 @@ class PostModernizer {
  
  this.#preserveMediaDimensions(contentClone);
  
- // Process text content
+ // Process text content with same treatment as regular posts
  const walker = document.createTreeWalker(contentClone, NodeFilter.SHOW_TEXT, null, false);
  const textNodes = [];
  let node;
@@ -576,6 +576,11 @@ class PostModernizer {
  }
  
  contentWrapper.appendChild(contentClone);
+ 
+ // Apply the same text and line break treatment as regular posts
+ this.#processTextAndLineBreaks(contentWrapper);
+ 
+ // Clean up search post content structure
  this.#cleanupSearchPostContent(contentWrapper);
  postContent.appendChild(contentWrapper);
  
@@ -593,19 +598,92 @@ class PostModernizer {
  const postFooterActions = document.createElement('div');
  postFooterActions.className = 'post-actions';
  
- // FIX: Check if points element exists and has content
+ // Check if points element exists and has content
  let pointsFooter;
  if (pointsElement && pointsElement.innerHTML.trim() !== '') {
  const pointsClone = pointsElement.cloneNode(true);
  pointsFooter = pointsClone;
+ 
+ // Extract the em element and href if it exists
+ const emElement = pointsFooter.querySelector('em');
+ const linkElement = pointsFooter.querySelector('a');
+ const href = linkElement?.getAttribute('href');
+ 
+ // Get the points value and class
+ let pointsValue = '0';
+ let pointsClass = 'points_pos';
+ 
+ if (emElement) {
+ pointsValue = emElement.textContent.trim();
+ pointsClass = emElement.className;
+ }
+ 
+ // Create new points structure
+ const newPoints = document.createElement('div');
+ newPoints.className = 'points active';
+ newPoints.id = pointsElement.id || '';
+ 
+ if (href) {
+ // If there's a link, wrap em in it
+ const link = document.createElement('a');
+ link.href = href;
+ if (linkElement?.getAttribute('rel')) {
+ link.setAttribute('rel', linkElement.getAttribute('rel'));
+ }
+ 
+ const em = document.createElement('em');
+ em.className = pointsClass;
+ em.textContent = pointsValue;
+ link.appendChild(em);
+ newPoints.appendChild(link);
  } else {
- // Create empty points element for consistency
- pointsFooter = document.createElement('div');
- pointsFooter.className = 'points';
- const pointsLink = document.createElement('a');
- pointsLink.href = '#';
- pointsLink.innerHTML = '<em class="points_pos">0</em>';
- pointsFooter.appendChild(pointsLink);
+ // If no link, just add the em
+ const em = document.createElement('em');
+ em.className = pointsClass;
+ em.textContent = pointsValue;
+ newPoints.appendChild(em);
+ }
+ 
+ // Add the appropriate thumbs-up/down span
+ const thumbsSpan = document.createElement('span');
+ thumbsSpan.className = 'points_up opacity';
+ 
+ const icon = document.createElement('i');
+ if (pointsClass === 'points_pos') {
+ thumbsSpan.classList.add('active');
+ icon.className = 'fa-regular fa-thumbs-up';
+ } else if (pointsClass === 'points_neg') {
+ icon.className = 'fa-regular fa-thumbs-down';
+ } else {
+ icon.className = 'fa-regular fa-thumbs-up';
+ }
+ 
+ icon.setAttribute('aria-hidden', 'true');
+ thumbsSpan.appendChild(icon);
+ newPoints.appendChild(thumbsSpan);
+ 
+ pointsFooter = newPoints;
+ } else {
+ // Create no_points structure for posts without points
+ const noPoints = document.createElement('div');
+ noPoints.className = 'points no_points';
+ 
+ const em = document.createElement('em');
+ em.className = 'points_pos';
+ em.textContent = '0';
+ noPoints.appendChild(em);
+ 
+ const thumbsSpan = document.createElement('span');
+ thumbsSpan.className = 'points_up opacity';
+ 
+ const icon = document.createElement('i');
+ icon.className = 'fa-regular fa-thumbs-up';
+ icon.setAttribute('aria-hidden', 'true');
+ 
+ thumbsSpan.appendChild(icon);
+ noPoints.appendChild(thumbsSpan);
+ 
+ pointsFooter = noPoints;
  }
  
  postFooterActions.appendChild(pointsFooter);
@@ -627,7 +705,7 @@ class PostModernizer {
  shareContainer.appendChild(shareButton);
  postFooter.appendChild(shareContainer);
  
- // FIX: Better way to replace post content while preserving structure
+ // Better way to replace post content while preserving structure
  const newPost = document.createElement('div');
  newPost.className = 'post post-modernized search-post';
  newPost.id = post.id;
@@ -681,45 +759,7 @@ class PostModernizer {
  }
  });
  
- // Clean up line breaks
- contentWrapper.querySelectorAll('br').forEach(br => {
- const prevSibling = br.previousElementSibling;
- const nextSibling = br.nextElementSibling;
- 
- if (prevSibling && nextSibling) {
- const prevIsText = prevSibling.nodeType === Node.ELEMENT_NODE && 
- (prevSibling.tagName === 'SPAN' || prevSibling.tagName === 'P' || prevSibling.tagName === 'DIV');
- const nextIsText = nextSibling.nodeType === Node.ELEMENT_NODE && 
- (nextSibling.tagName === 'SPAN' || nextSibling.tagName === 'P' || nextSibling.tagName === 'DIV');
- 
- if (prevIsText && nextIsText) {
- prevSibling.classList.add('paragraph-end');
- br.remove();
- } else {
- br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
- }
- } else {
- br.remove();
- }
- });
- 
- // Remove multiple consecutive line breaks
- const textElements = contentWrapper.querySelectorAll('span, p, div');
- let lastWasParagraphEnd = false;
- 
- textElements.forEach(el => {
- if (el.classList.contains('paragraph-end')) {
- if (lastWasParagraphEnd) {
- el.classList.remove('paragraph-end');
- } else {
- lastWasParagraphEnd = true;
- }
- } else {
- lastWasParagraphEnd = false;
- }
- });
- 
- // FIX: Handle quotes in search posts
+ // Handle quotes in search posts
  contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
  if (container.classList.contains('quote-modernized')) return;
  
