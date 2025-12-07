@@ -1,260 +1,136 @@
 // ============================================================================
-// FORUM SCRIPTS BODY LOADER - SIMPLE & GUARANTEED
-// Place this script RIGHT AFTER the opening <body> tag
+// PATCHED forum_core_observer.js - FIX for document.body null error
+// Use this instead of the original if you continue to have issues
 // ============================================================================
-(function() {
-    'use strict';
+class ForumCoreObserver {
+    #observer = null;
+    #mutationQueue = [];
+    #isProcessing = false;
+    #initialScanComplete = false;
+    #debounceTimeouts = new Map();
+    #processedNodes = new WeakSet();
+    #cleanupIntervalId = null;
     
-    console.log('%c[Forum Loader] Starting from body...', 'color: #4CAF50; font-weight: bold;');
+    // Private fields for better encapsulation
+    #callbacks = new Map();           // id -> callback config
+    #debouncedCallbacks = new Map();  // id -> debounced config
+    #pageState = null; // Will be initialized later
     
-    // Verify we're in body
-    const currentScript = document.currentScript;
-    if (currentScript && currentScript.parentNode) {
-        console.log(`%c[Forum Loader] Loader is in: ${currentScript.parentNode.tagName}`, 'color: #2196F3;');
+    // Configuration with static getters
+    static get #OBSERVER_OPTIONS() {
+        return {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: ['class', 'id', 'style', 'data-*']
+        };
     }
     
-    // Configuration
-    const CONFIG = {
-        observerScript: 'https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0e0384d/forum_core_observer.js',
-        modernizerScript: 'https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@88d60a8/forum_enhacer.js',
-        timeout: 10000
-    };
-    
-    // Track loaded scripts
-    const loadedScripts = new Set();
-    let observerLoaded = false;
-    let modernizerLoaded = false;
-    
-    // Create a unique ID for our script container
-    const containerId = 'forum-scripts-container-' + Date.now();
-    
-    // METHOD 1: Direct script tags (most reliable)
-    function loadWithDirectScriptTags() {
-        console.log('%c[Forum Loader] Loading with direct script tags...', 'color: #4CAF50;');
-        
-        // Create a container div at the end of body
-        const container = document.createElement('div');
-        container.id = containerId;
-        container.style.display = 'none';
-        document.body.appendChild(container);
-        
-        // Create observer script
-        const observerScript = document.createElement('script');
-        observerScript.src = CONFIG.observerScript;
-        observerScript.async = false; // Important: no async
-        observerScript.defer = false; // Important: no defer
-        observerScript.crossOrigin = 'anonymous';
-        observerScript.dataset.loader = 'forum-loader';
-        observerScript.dataset.position = 'body-end';
-        
-        observerScript.onload = function() {
-            console.log('%c✅ Forum Observer loaded from body', 'color: #4CAF50;');
-            observerLoaded = true;
-            loadedScripts.add('observer');
-            
-            // Wait a moment, then load modernizer
-            setTimeout(loadModernizerScript, 100);
-        };
-        
-        observerScript.onerror = function() {
-            console.error('%c❌ Failed to load Forum Observer', 'color: #F44336;');
-            // Try fallback method
-            setTimeout(loadWithXHR, 1000);
-        };
-        
-        // Append to container (which is in body)
-        container.appendChild(observerScript);
-        
-        console.log(`%c[Forum Loader] Observer script appended to: ${observerScript.parentNode.parentNode.tagName}`, 'color: #2196F3;');
+    constructor() {
+        // Wait for body to exist before initializing
+        this.#waitForBody();
     }
     
-    function loadModernizerScript() {
-        if (modernizerLoaded) return;
-        
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        
-        const modernizerScript = document.createElement('script');
-        modernizerScript.src = CONFIG.modernizerScript;
-        modernizerScript.async = false;
-        modernizerScript.defer = false;
-        modernizerScript.crossOrigin = 'anonymous';
-        modernizerScript.dataset.loader = 'forum-loader';
-        modernizerScript.dataset.position = 'body-end';
-        
-        modernizerScript.onload = function() {
-            console.log('%c✅ Forum Modernizer loaded from body', 'color: #4CAF50;');
-            modernizerLoaded = true;
-            loadedScripts.add('modernizer');
-            checkInitialization();
-        };
-        
-        modernizerScript.onerror = function() {
-            console.error('%c❌ Failed to load Forum Modernizer', 'color: #F44336;');
-        };
-        
-        container.appendChild(modernizerScript);
-    }
-    
-    // METHOD 2: XHR as fallback
-    function loadWithXHR() {
-        console.log('%c[Forum Loader] Trying XHR fallback...', 'color: #FF9800;');
-        
-        // Load observer
-        const xhr1 = new XMLHttpRequest();
-        xhr1.open('GET', CONFIG.observerScript, true);
-        xhr1.onload = function() {
-            if (xhr1.status === 200) {
-                const script = document.createElement('script');
-                script.textContent = xhr1.responseText;
-                script.dataset.loader = 'forum-loader-xhr';
-                document.body.appendChild(script);
-                observerLoaded = true;
-                console.log('%c✅ Forum Observer loaded via XHR', 'color: #4CAF50;');
-                loadModernizerXHR();
-            }
-        };
-        xhr1.send();
-    }
-    
-    function loadModernizerXHR() {
-        const xhr2 = new XMLHttpRequest();
-        xhr2.open('GET', CONFIG.modernizerScript, true);
-        xhr2.onload = function() {
-            if (xhr2.status === 200) {
-                const script = document.createElement('script');
-                script.textContent = xhr2.responseText;
-                script.dataset.loader = 'forum-loader-xhr';
-                document.body.appendChild(script);
-                modernizerLoaded = true;
-                console.log('%c✅ Forum Modernizer loaded via XHR', 'color: #4CAF50;');
-                checkInitialization();
-            }
-        };
-        xhr2.send();
-    }
-    
-    // METHOD 3: Document.write (only as last resort)
-    function loadWithDocumentWrite() {
-        console.log('%c[Forum Loader] Using document.write as last resort...', 'color: #FF9800;');
-        
-        document.write(
-            '<script src="' + CONFIG.observerScript + '" async="false" defer="false" crossorigin="anonymous" data-loader="forum-loader-docwrite"><\/script>' +
-            '<script src="' + CONFIG.modernizerScript + '" async="false" defer="false" crossorigin="anonymous" data-loader="forum-loader-docwrite"><\/script>'
-        );
-    }
-    
-    // Check initialization
-    function checkInitialization() {
-        console.log('%c[Forum Loader] Checking initialization...', 'color: #2196F3;');
-        
-        setTimeout(() => {
-            const checks = [
-                { name: 'Forum Observer', check: () => window.forumObserver || globalThis.forumObserver },
-                { name: 'Forum Modernizer', check: () => window.postModernizer || globalThis.postModernizer }
-            ];
-            
-            checks.forEach(({ name, check }) => {
-                if (check()) {
-                    console.log(`%c✅ ${name} initialized`, 'color: #4CAF50;');
-                } else {
-                    console.warn(`%c⚠️ ${name} not initialized`, 'color: #FF9800;');
+    #waitForBody() {
+        if (document.body) {
+            this.#initialize();
+        } else {
+            // Wait for body to be created
+            const observer = new MutationObserver(() => {
+                if (document.body) {
+                    observer.disconnect();
+                    this.#initialize();
                 }
             });
+            observer.observe(document.documentElement, { childList: true });
             
-            // Report final status
-            if (checks.every(c => c.check())) {
-                console.log('%c🎉 All forum scripts loaded and initialized!', 'color: #4CAF50; font-weight: bold; font-size: 14px;');
-                dispatchLoadComplete();
-            }
-        }, 500);
-    }
-    
-    function dispatchLoadComplete() {
-        const event = new CustomEvent('forumScriptsLoaded', {
-            detail: {
-                observer: window.forumObserver || globalThis.forumObserver,
-                modernizer: window.postModernizer || globalThis.postModernizer,
-                timestamp: Date.now()
-            }
-        });
-        document.dispatchEvent(event);
-    }
-    
-    // Start loading
-    function startLoading() {
-        console.log('%c[Forum Loader] Body exists, starting load...', 'color: #4CAF50;');
-        
-        // Method 1: Try direct script tags first
-        loadWithDirectScriptTags();
-        
-        // Fallback timer
-        setTimeout(() => {
-            if (!observerLoaded || !modernizerLoaded) {
-                console.warn('%c[Forum Loader] Primary method taking too long, trying fallback...', 'color: #FF9800;');
-                if (!observerLoaded) {
-                    loadWithXHR();
-                }
-            }
-        }, CONFIG.timeout);
-    }
-    
-    // Check if body exists and start
-    function init() {
-        if (document.body) {
-            startLoading();
-        } else {
-            console.log('%c[Forum Loader] Waiting for body...', 'color: #2196F3;');
-            
-            // Wait for body
-            const checkBody = setInterval(() => {
-                if (document.body) {
-                    clearInterval(checkBody);
-                    startLoading();
-                }
-            }, 100);
-            
-            // Fallback
-            setTimeout(() => {
-                clearInterval(checkBody);
-                if (document.body) {
-                    startLoading();
-                } else {
-                    console.error('%c[Forum Loader] Body never appeared!', 'color: #F44336;');
-                    // Try document.write as last resort
-                    loadWithDocumentWrite();
-                }
-            }, 5000);
+            // Fallback: Also listen for DOMContentLoaded
+            document.addEventListener('DOMContentLoaded', () => {
+                observer.disconnect();
+                this.#initialize();
+            }, { once: true });
         }
     }
     
-    // Debug: Show all script tags
-    function debugScripts() {
-        console.log('%c[Forum Loader] All scripts on page:', 'color: #9C27B0; font-weight: bold;');
-        document.querySelectorAll('script').forEach((script, i) => {
-            console.log(`${i}. ${script.src || 'inline'} → parent: ${script.parentNode.tagName}`);
-        });
+    #initialize() {
+        // Now that body exists, detect page state
+        this.#pageState = this.#detectPageState();
+        
+        // Create observer
+        this.#observer = new MutationObserver(this.#handleMutations.bind(this));
+        
+        // Observe entire document
+        this.#observer.observe(document.documentElement, ForumCoreObserver.#OBSERVER_OPTIONS);
+        
+        // Initial scan
+        this.#scanExistingContent();
+        
+        console.log('🚀 Forum Core Observer initialized successfully');
+        console.log('Page state:', this.#pageState);
     }
     
-    // Initialize
-    setTimeout(init, 0);
+    #detectPageState() {
+        const { pathname } = window.location;
+        const body = document.body;
+        const theme = document.documentElement.dataset?.theme;
+        
+        // SAFE: Use optional chaining for body access
+        const selectors = {
+            forum: '.board, .big_list',
+            topic: '.modern-topic-title',
+            blog: '#blog, .article',
+            profile: '.modern-profile',
+            search: '#search.posts'
+        };
+        
+        const checks = Object.entries(selectors).map(([key, selector]) => 
+            [key, document.querySelector(selector) ?? null]
+        );
+        
+        const pageChecks = Object.fromEntries(checks);
+        
+        return {
+            ...pageChecks,
+            isForum: pathname.includes('/f/') || pageChecks.forum,
+            isTopic: pathname.includes('/t/') || pageChecks.topic,
+            isBlog: pathname.includes('/b/') || pageChecks.blog,
+            isProfile: pathname.includes('/user/') || pageChecks.profile,
+            isSearch: pathname.includes('/search/') || pageChecks.search,
+            isDarkMode: theme === 'dark',
+            isLoggedIn: !!(body?.querySelector('.menuwrap .avatar')),
+            isMobile: window.matchMedia('(max-width: 768px)').matches,
+            pageId: `page_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            bodyClass: body?.className || ''
+        };
+    }
     
-    // Expose debug tools
-    window.__forumDebug = {
-        checkStatus: () => ({
-            observer: { loaded: observerLoaded, initialized: !!(window.forumObserver || globalThis.forumObserver) },
-            modernizer: { loaded: modernizerLoaded, initialized: !!(window.postModernizer || globalThis.postModernizer) },
-            bodyExists: !!document.body,
-            scripts: Array.from(loadedScripts)
-        }),
-        debugScripts: debugScripts,
-        reload: () => {
-            console.log('%c[Forum Loader] Manual reload...', 'color: #2196F3;');
-            observerLoaded = false;
-            modernizerLoaded = false;
-            loadedScripts.clear();
-            startLoading();
-        }
-    };
+    // ... rest of the class methods remain the same ...
     
-})();
+    #handleMutations(mutations) {
+        // Implementation...
+    }
+    
+    #scanExistingContent() {
+        // Implementation...
+    }
+    
+    register(settings) {
+        // Implementation...
+        return 'callback_id';
+    }
+    
+    static create() {
+        return new ForumCoreObserver();
+    }
+}
+
+// Global initialization
+if (!globalThis.forumObserver) {
+    try {
+        globalThis.forumObserver = ForumCoreObserver.create();
+        console.log('🎯 Forum Core Observer ready');
+    } catch (error) {
+        console.error('Failed to initialize Forum Core Observer:', error);
+    }
+}
