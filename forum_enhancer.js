@@ -475,8 +475,8 @@ class PostModernizer {
  postNumber.textContent = '#' + (index + 1);
  postHeader.appendChild(postNumber);
  
- // Process title2.top for header
- if (title2Top) {
+// Process title2.top for header
+if (title2Top) {
  const title2TopClone = title2Top.cloneNode(true);
  
  // Remove the points element from the title2.top clone
@@ -486,12 +486,13 @@ class PostModernizer {
  }
  
  // Extract location info from rt.Sub
+ let locationDiv = null;
  if (rtSub) {
  const topicLink = rtSub.querySelector('a[href*="?t="]');
  const forumLink = rtSub.querySelector('a[href*="?f="]');
  
  if (topicLink || forumLink) {
- const locationDiv = document.createElement('div');
+ locationDiv = document.createElement('div');
  locationDiv.className = 'post-location';
  
  if (topicLink) {
@@ -510,8 +511,6 @@ class PostModernizer {
  }
  locationDiv.appendChild(forumSpan);
  }
- 
- title2TopClone.appendChild(locationDiv);
  }
  
  // Remove original rt.Sub
@@ -530,10 +529,19 @@ class PostModernizer {
  postHeader.appendChild(div.cloneNode(true));
  });
  tdWrapper.remove();
+ 
+ // Add the location div AFTER the other divs
+ if (locationDiv) {
+ postHeader.appendChild(locationDiv);
+ }
  } else {
+ // If no td wrapper, just append everything
+ if (locationDiv) {
+ title2TopClone.appendChild(locationDiv);
+ }
  postHeader.appendChild(title2TopClone);
  }
- }
+}
  
   // Process content
  if (contentHTML) {
