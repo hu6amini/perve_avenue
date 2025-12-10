@@ -1,5 +1,5 @@
 // Enhanced Post Transformation and Modernization System with HTML Structure Fix 
-// Now includes support for body#search posts
+// Now includes support for body#search posts and preserves anchor elements
 // DOMContentLoaded-free version for flexible loading
 class PostModernizer { 
  #postModernizerId = null; 
@@ -234,6 +234,15 @@ class PostModernizer {
  
  post.classList.add('post-modernized'); 
  
+ // Extract and preserve anchor elements before transformation
+ const anchorDiv = post.querySelector('.anchor');
+ let anchorElements = null;
+ if (anchorDiv) {
+ anchorElements = anchorDiv.cloneNode(true);
+ // Remove the anchor div from original post to avoid duplication
+ anchorDiv.remove();
+ }
+ 
  const title2Top = post.querySelector('.title2.top'); 
  const miniButtons = title2Top?.querySelector('.mini_buttons.points.Sub'); 
  const stEmoji = title2Top?.querySelector('.st-emoji.st-emoji-rep.st-emoji-post'); 
@@ -249,6 +258,15 @@ class PostModernizer {
  
  const postFooter = document.createElement('div'); 
  postFooter.className = 'post-footer'; 
+ 
+ // Add preserved anchor elements as the first child of the post
+ if (anchorElements) {
+ const anchorContainer = document.createElement('div');
+ anchorContainer.className = 'anchor-container';
+ anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+ anchorContainer.appendChild(anchorElements);
+ postHeader.appendChild(anchorContainer);
+ }
  
  const postNumber = document.createElement('span'); 
  postNumber.className = 'post-number'; 
@@ -404,6 +422,7 @@ class PostModernizer {
  this.#addReputationToFooter(miniButtons, stEmoji, postFooter); 
  } 
  
+ // Clear post content and rebuild with preserved structure
  post.innerHTML = ''; 
  post.appendChild(postHeader); 
  post.appendChild(userInfo); 
@@ -413,6 +432,13 @@ class PostModernizer {
  this.#convertMiniButtonsToButtons(post); 
  this.#addShareButton(post); 
  this.#cleanupPostContent(post); 
+ 
+ // Ensure post ID is preserved for anchor linking
+ const postId = post.id;
+ if (postId && postId.startsWith('ee')) {
+ // Also add a data attribute for easy reference
+ post.setAttribute('data-post-id', postId.replace('ee', ''));
+ }
  }); 
  } 
  
@@ -421,6 +447,15 @@ class PostModernizer {
  
  posts.forEach((post, index) => {
  post.classList.add('post-modernized', 'search-post');
+ 
+ // Extract and preserve anchor elements for search posts
+ const anchorDiv = post.querySelector('.anchor');
+ let anchorElements = null;
+ if (anchorDiv) {
+ anchorElements = anchorDiv.cloneNode(true);
+ // Remove the anchor div from original post to avoid duplication
+ anchorDiv.remove();
+ }
  
  // Extract data from search post structure
  const title2Top = post.querySelector('.title2.top');
@@ -469,14 +504,23 @@ class PostModernizer {
  const postFooter = document.createElement('div');
  postFooter.className = 'post-footer search-post-footer';
  
+ // Add preserved anchor elements as the first child of the post
+ if (anchorElements) {
+ const anchorContainer = document.createElement('div');
+ anchorContainer.className = 'anchor-container';
+ anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+ anchorContainer.appendChild(anchorElements);
+ postHeader.appendChild(anchorContainer);
+ }
+ 
  // Post number (for search, we can use index)
  const postNumber = document.createElement('span');
  postNumber.className = 'post-number';
  postNumber.textContent = '#' + (index + 1);
  postHeader.appendChild(postNumber);
  
-// Process title2.top for header
-if (title2Top) {
+ // Process title2.top for header
+ if (title2Top) {
  const title2TopClone = title2Top.cloneNode(true);
  
  // Remove the points element from the title2.top clone
@@ -541,9 +585,9 @@ if (title2Top) {
  }
  postHeader.appendChild(title2TopClone);
  }
-}
+ }
  
-  // Process content
+ // Process content
  if (contentHTML) {
  const contentWrapper = document.createElement('div');
  contentWrapper.className = 'post-main-content';
