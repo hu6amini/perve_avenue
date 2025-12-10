@@ -229,10 +229,22 @@ class PostModernizer {
  const urlParams = new URLSearchParams(window.location.search); 
  const startOffset = parseInt(urlParams.get('st') ?? '0'); 
  
- posts.forEach((post, index) => { 
- if (post.closest('body#search')) return; // Skip search posts, handled separately
+ posts.forEach((post, index) => {
+ if (post.closest('body#search')) return;
  
- post.classList.add('post-modernized'); 
+ post.classList.add('post-modernized');
+ 
+ // Find or create the anchor element
+ const originalAnchor = post.querySelector('.anchor a[id^="entry"]');
+ const anchorId = originalAnchor?.id || `entry${post.id.replace('ee', '')}`;
+ 
+ // Create the anchor wrapper
+ const anchorWrapper = document.createElement('div');
+ anchorWrapper.className = 'anchor';
+ 
+ const anchorElement = document.createElement('a');
+ anchorElement.id = anchorId;
+ anchorWrapper.appendChild(anchorElement); 
  
  const title2Top = post.querySelector('.title2.top'); 
  const miniButtons = title2Top?.querySelector('.mini_buttons.points.Sub'); 
@@ -405,6 +417,7 @@ class PostModernizer {
  } 
  
  post.innerHTML = ''; 
+ post.appendChild(anchorWrapper);
  post.appendChild(postHeader); 
  post.appendChild(userInfo); 
  post.appendChild(postContent); 
@@ -419,8 +432,22 @@ class PostModernizer {
  #transformSearchPostElements() {
  const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
  
- posts.forEach((post, index) => {
- post.classList.add('post-modernized', 'search-post');
+ const newPost = document.createElement('div');
+newPost.className = 'post post-modernized search-post';
+
+// Get the post ID and create anchor
+let postId = post.id;
+let anchorId = `entry${postId.replace('ee', '')}`;
+
+// Create anchor wrapper
+const anchorWrapper = document.createElement('div');
+anchorWrapper.className = 'anchor';
+
+const anchorElement = document.createElement('a');
+anchorElement.id = anchorId;
+anchorWrapper.appendChild(anchorElement);
+
+newPost.id = postId;
  
  // Extract data from search post structure
  const title2Top = post.querySelector('.title2.top');
@@ -761,6 +788,7 @@ if (title2Top) {
  );
  newPost.className = [...originalClasses, 'post', 'post-modernized', 'search-post'].join(' ');
  
+ newPost.appendChild(anchorWrapper);
  newPost.appendChild(postHeader);
  newPost.appendChild(postContent);
  newPost.appendChild(postFooter);
