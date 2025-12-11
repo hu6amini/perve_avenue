@@ -1,5 +1,6 @@
 // Enhanced Post Transformation and Modernization System with HTML Structure Fix 
-// Now includes support for body#search posts and preserves anchor elements
+// Now includes support for body#search posts, preserves anchor elements,
+// and features enhanced anchor navigation with smart quote buttons
 // DOMContentLoaded-free version for flexible loading
 class PostModernizer { 
  #postModernizerId = null; 
@@ -52,8 +53,10 @@ class PostModernizer {
  this.#setupObserverCallbacks(); 
  this.#setupActiveStateObserver(); 
  this.#setupSearchPostObserver();
+ this.#setupEnhancedAnchorNavigation();
+ this.#enhanceQuoteLinks();
  
- console.log('✅ Post Modernizer with HTML Structure Fix and Search Post Support initialized'); 
+ console.log('✅ Post Modernizer with Enhanced Anchor Navigation initialized'); 
  } catch (error) {
  console.error('Post Modernizer initialization failed:', error);
  
@@ -272,6 +275,11 @@ class PostModernizer {
  postNumber.className = 'post-number'; 
  postNumber.textContent = '#' + (startOffset + index + 1); 
  postHeader.appendChild(postNumber); 
+ 
+ // Add NEW badge if this post has #newpost anchor
+ if (anchorElements && anchorElements.querySelector('#newpost')) {
+ this.#addNewPostBadge(postHeader);
+ }
  
  let nickElement = null; 
  let groupValue = ''; 
@@ -518,6 +526,11 @@ class PostModernizer {
  postNumber.className = 'post-number';
  postNumber.textContent = '#' + (index + 1);
  postHeader.appendChild(postNumber);
+ 
+ // Add NEW badge for search posts too
+ if (anchorElements && anchorElements.querySelector('#newpost')) {
+ this.#addNewPostBadge(postHeader);
+ }
  
  // Process title2.top for header
  if (title2Top) {
@@ -1097,10 +1110,12 @@ class PostModernizer {
  '<div class="quote-info">' + 
  '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' + 
  '</div>' + 
- '</div>' + 
- '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post">' + 
+ '</div>'; 
+ 
+ // Create smart quote jump button instead of regular link
+ html += '<button class="quote-jump-btn" data-target-url="' + this.#escapeHtml(linkHref) + '" title="Go to quoted post">' + 
  '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' + 
- '</a>' + 
+ '</button>' + 
  '</div>'; 
  
  html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' + 
@@ -1119,7 +1134,13 @@ class PostModernizer {
  
  if (isLongContent) { 
  this.#addQuoteEventListeners(modernQuote); 
- } 
+ }
+ 
+ // Enhance the quote jump button
+ const quoteJumpBtn = modernQuote.querySelector('.quote-jump-btn');
+ if (quoteJumpBtn) {
+ this.#enhanceSingleQuoteButton(quoteJumpBtn);
+ }
  } 
  
  #isLongContent(contentElement) { 
@@ -1770,14 +1791,788 @@ class PostModernizer {
  }); 
  } 
  
- #escapeHtml(unsafe) { 
- if (typeof unsafe !== 'string') return unsafe; 
- return unsafe 
- .replace(/&/g, '&amp;') 
- .replace(/</g, '&lt;') 
- .replace(/>/g, '&gt;') 
- .replace(/"/g, '&quot;') 
- .replace(/'/g, '&#039;'); 
+ // ============================================
+ // ENHANCED ANCHOR NAVIGATION & QUOTE LINKS
+ // ============================================
+ 
+ #setupEnhancedAnchorNavigation() {
+ // Override the default anchor scroll behavior
+ document.addEventListener('click', (e) => {
+ const link = e.target.closest('a[href*="#"]');
+ if (!link) return;
+ 
+ const href = link.getAttribute('href');
+ const url = new URL(href, window.location.origin);
+ const hashMatch = href.match(/#([^?&]+)/);
+ 
+ if (!hashMatch) return;
+ 
+ const anchorId = hashMatch[1];
+ 
+ // Check if this is a cross-page anchor (different page parameters)
+ const isCrossPage = this.#isCrossPageAnchor(url);
+ 
+ if (anchorId === 'lastpost' || anchorId === 'newpost' || anchorId.startsWith('entry')) {
+ e.preventDefault();
+ 
+ if (isCrossPage) {
+ // Handle cross-page navigation
+ this.#handleCrossPageAnchor(url, anchorId, link);
+ } else {
+ // Same-page anchor navigation
+ this.#scrollToAnchorWithPrecision(anchorId, link);
+ }
+ }
+ });
+ 
+ // Handle URL hash changes
+ window.addEventListener('hashchange', () => {
+ const hash = window.location.hash.substring(1);
+ if (hash && (hash === 'lastpost' || hash === 'newpost' || hash.startsWith('entry'))) {
+ setTimeout(() => this.#scrollToAnchorWithPrecision(hash), 100);
+ }
+ });
+ 
+ // Initial page load with hash
+ if (window.location.hash) {
+ const hash = window.location.hash.substring(1);
+ if (hash && (hash === 'lastpost' || hash === 'newpost' || hash.startsWith('entry'))) {
+ setTimeout(() => this.#scrollToAnchorWithPrecision(hash), 500);
+ }
+ }
+ }
+ 
+ #isCrossPageAnchor(url) {
+ // Check if the URL points to a different page than current
+ const currentUrl = new URL(window.location.href);
+ 
+ // Compare page parameters
+ const currentPage = this.#getPageNumber(currentUrl);
+ const targetPage = this.#getPageNumber(url);
+ 
+ // Also check if it's the same topic/forum
+ const currentTopic = currentUrl.searchParams.get('t');
+ const targetTopic = url.searchParams.get('t');
+ const currentForum = currentUrl.searchParams.get('f');
+ const targetForum = url.searchParams.get('f');
+ 
+ // It's cross-page if:
+ // 1. Different page number AND same topic/forum
+ // 2. OR different topic/forum entirely
+ return (
+ (currentPage !== targetPage && currentTopic === targetTopic && currentForum === targetForum) ||
+ (currentTopic !== targetTopic) ||
+ (currentForum !== targetForum)
+ );
+ }
+ 
+ #getPageNumber(url) {
+ // Extract page number from URL parameters
+ const stParam = url.searchParams.get('st');
+ if (stParam) {
+ // Calculate page number based on 'st' parameter (posts per page)
+ const postsPerPage = 30; // Adjust based on your forum's setting
+ return Math.floor(parseInt(stParam) / postsPerPage) + 1;
+ }
+ 
+ // Check for 'page' parameter (if forum uses different pagination)
+ const pageParam = url.searchParams.get('page');
+ if (pageParam) return parseInt(pageParam);
+ 
+ return 1; // Default to page 1
+ }
+ 
+ #handleCrossPageAnchor(url, anchorId, triggerElement) {
+ console.log(`Cross-page anchor detected: ${anchorId} on page ${this.#getPageNumber(url)}`);
+ 
+ // Show loading state
+ this.#showCrossPageLoading(anchorId, triggerElement);
+ 
+ // Check if we should navigate immediately or confirm with user
+ const shouldNavigate = this.#shouldNavigateCrossPage(url, anchorId);
+ 
+ if (shouldNavigate) {
+ // Navigate to the other page
+ window.location.href = url.href;
+ } else {
+ // Show preview/confirmation
+ this.#showCrossPagePreview(url, anchorId, triggerElement);
+ }
+ }
+ 
+ #shouldNavigateCrossPage(url, anchorId) {
+ // Decide whether to navigate immediately or show preview
+ // Consider: distance between pages, user preferences, etc.
+ 
+ const currentPage = this.#getPageNumber(new URL(window.location.href));
+ const targetPage = this.#getPageNumber(url);
+ const pageDifference = Math.abs(currentPage - targetPage);
+ 
+ // Navigate immediately if:
+ // 1. Only 1-2 pages away
+ // 2. User has "auto-navigate" preference enabled
+ // 3. It's #lastpost or #newpost anchor
+ 
+ if (anchorId === 'lastpost' || anchorId === 'newpost') {
+ return true; // Always navigate for these special anchors
+ }
+ 
+ if (pageDifference <= 2) {
+ return true; // Close pages, navigate immediately
+ }
+ 
+ // For distant pages, check user preference
+ const userPref = localStorage.getItem('forum_auto_navigate_pages') || 'false';
+ return userPref === 'true';
+ }
+ 
+ #showCrossPageLoading(anchorId, triggerElement) {
+ // Add loading indicator to the clicked link
+ triggerElement.classList.add('anchor-loading');
+ 
+ const originalHTML = triggerElement.innerHTML;
+ triggerElement.innerHTML = `
+ <span class="anchor-loading-spinner">
+ <i class="fa-regular fa-spinner fa-spin"></i>
+ </span>
+ <span class="anchor-loading-text">Loading...</span>
+ `;
+ 
+ // Remove loading state after 3 seconds (timeout safety)
+ setTimeout(() => {
+ triggerElement.classList.remove('anchor-loading');
+ triggerElement.innerHTML = originalHTML;
+ }, 3000);
+ }
+ 
+ #showCrossPagePreview(url, anchorId, triggerElement) {
+ // Create a preview modal/dropdown
+ const preview = document.createElement('div');
+ preview.className = 'cross-page-preview';
+ preview.innerHTML = `
+ <div class="preview-content">
+ <div class="preview-header">
+ <h4>Post on Another Page</h4>
+ <button class="preview-close" aria-label="Close">
+ <i class="fa-regular fa-times"></i>
+ </button>
+ </div>
+ <div class="preview-body">
+ <p>This quoted post is on page ${this.#getPageNumber(url)}.</p>
+ <div class="preview-actions">
+ <button class="btn btn-primary preview-navigate">
+ <i class="fa-regular fa-arrow-right"></i>
+ Go to Page ${this.#getPageNumber(url)}
+ </button>
+ <button class="btn btn-secondary preview-cancel">
+ Cancel
+ </button>
+ </div>
+ <div class="preview-settings">
+ <label>
+ <input type="checkbox" id="auto-navigate-future">
+ Always navigate to posts on other pages
+ </label>
+ </div>
+ </div>
+ </div>
+ `;
+ 
+ // Position near the clicked link
+ const rect = triggerElement.getBoundingClientRect();
+ preview.style.cssText = `
+ position: fixed;
+ top: ${rect.bottom + 10}px;
+ left: ${rect.left}px;
+ z-index: 1000;
+ background: var(--surface-color);
+ border: 1px solid var(--border-color);
+ border-radius: var(--radius);
+ box-shadow: var(--shadow-lg);
+ width: 300px;
+ max-width: 90vw;
+ `;
+ 
+ document.body.appendChild(preview);
+ 
+ // Add event listeners
+ const navigateBtn = preview.querySelector('.preview-navigate');
+ const cancelBtn = preview.querySelector('.preview-cancel');
+ const closeBtn = preview.querySelector('.preview-close');
+ const autoNavigateCheckbox = preview.querySelector('#auto-navigate-future');
+ 
+ const removePreview = () => {
+ document.body.removeChild(preview);
+ };
+ 
+ navigateBtn.addEventListener('click', () => {
+ // Save user preference
+ if (autoNavigateCheckbox.checked) {
+ localStorage.setItem('forum_auto_navigate_pages', 'true');
+ }
+ window.location.href = url.href;
+ });
+ 
+ cancelBtn.addEventListener('click', removePreview);
+ closeBtn.addEventListener('click', removePreview);
+ 
+ // Close when clicking outside
+ setTimeout(() => {
+ const outsideClickHandler = (e) => {
+ if (!preview.contains(e.target) && e.target !== triggerElement) {
+ removePreview();
+ document.removeEventListener('click', outsideClickHandler);
+ }
+ };
+ document.addEventListener('click', outsideClickHandler);
+ }, 100);
+ }
+ 
+ #scrollToAnchorWithPrecision(anchorId, triggerElement = null) {
+ console.log(`Navigating to anchor: ${anchorId}`);
+ 
+ // Find the anchor element
+ const anchorElement = document.getElementById(anchorId);
+ 
+ if (!anchorElement) {
+ console.warn(`Anchor #${anchorId} not found on this page`);
+ 
+ // Check if this might be a cross-page anchor that wasn't detected earlier
+ if (triggerElement && triggerElement.href) {
+ const url = new URL(triggerElement.href, window.location.origin);
+ if (this.#isCrossPageAnchor(url)) {
+ // This should have been caught earlier, but handle it now
+ this.#handleCrossPageAnchor(url, anchorId, triggerElement);
+ return;
+ }
+ }
+ 
+ // Show helpful message for missing anchor
+ this.#showMissingAnchorMessage(anchorId, triggerElement);
+ return;
+ }
+ 
+ // Find the post containing this anchor
+ const postElement = anchorElement.closest('.post');
+ if (!postElement) {
+ console.warn(`Post containing anchor #${anchorId} not found`);
+ this.#scrollToElementWithOffset(anchorElement);
+ return;
+ }
+ 
+ // Use the forum's existing focus class for highlighting
+ this.#focusPost(postElement);
+ 
+ // Scroll to the post header (more reliable than anchor position)
+ const postHeader = postElement.querySelector('.post-header');
+ if (postHeader) {
+ this.#scrollToElementWithOffset(postHeader, 20);
+ } else {
+ this.#scrollToElementWithOffset(postElement, 20);
+ }
+ 
+ // Also focus on the post for keyboard navigation
+ postElement.setAttribute('tabindex', '-1');
+ postElement.focus({ preventScroll: true });
+ 
+ // Update URL hash without triggering another scroll
+ history.replaceState(null, null, `#${anchorId}`);
+ 
+ // Scroll to ensure post is visible in viewport
+ setTimeout(() => {
+ this.#ensurePostVisible(postElement);
+ }, 100);
+ }
+ 
+ #focusPost(postElement, anchorType = 'entry') {
+ // Remove focus from any previously focused posts
+ document.querySelectorAll('.post.focus').forEach(post => {
+ post.classList.remove('focus');
+ post.removeAttribute('data-anchor-type');
+ });
+ 
+ // Add the focus class and anchor type
+ postElement.classList.add('focus');
+ postElement.setAttribute('data-anchor-type', anchorType);
+ 
+ // Remove focus when user clicks anywhere else
+ const removeFocusHandler = (e) => {
+ if (!postElement.contains(e.target)) {
+ postElement.classList.remove('focus');
+ postElement.removeAttribute('data-anchor-type');
+ document.removeEventListener('click', removeFocusHandler);
+ document.removeEventListener('keydown', escapeHandler);
+ }
+ };
+ 
+ // Also remove focus on Escape key
+ const escapeHandler = (e) => {
+ if (e.key === 'Escape') {
+ postElement.classList.remove('focus');
+ postElement.removeAttribute('data-anchor-type');
+ document.removeEventListener('click', removeFocusHandler);
+ document.removeEventListener('keydown', escapeHandler);
+ }
+ };
+ 
+ document.addEventListener('click', removeFocusHandler);
+ document.addEventListener('keydown', escapeHandler);
+ 
+ // Auto-remove after 10 seconds (optional safety)
+ setTimeout(() => {
+ postElement.classList.remove('focus');
+ postElement.removeAttribute('data-anchor-type');
+ document.removeEventListener('click', removeFocusHandler);
+ document.removeEventListener('keydown', escapeHandler);
+ }, 10000);
+ }
+ 
+ #ensurePostVisible(postElement) {
+ const rect = postElement.getBoundingClientRect();
+ const viewportHeight = window.innerHeight;
+ const viewportWidth = window.innerWidth;
+ 
+ // Check if post is mostly visible
+ const isVisible = (
+ rect.top >= 0 &&
+ rect.left >= 0 &&
+ rect.bottom <= viewportHeight &&
+ rect.right <= viewportWidth
+ );
+ 
+ // If not visible, adjust scroll
+ if (!isVisible) {
+ const headerHeight = this.#getFixedHeaderHeight();
+ const targetScroll = rect.top + window.pageYOffset - headerHeight - 20;
+ 
+ if ('scrollBehavior' in document.documentElement.style) {
+ window.scrollTo({
+ top: targetScroll,
+ behavior: 'smooth'
+ });
+ } else {
+ window.scrollTo(0, targetScroll);
+ }
+ }
+ }
+ 
+ #scrollToElementWithOffset(element, additionalOffset = 0) {
+ const elementRect = element.getBoundingClientRect();
+ const offsetTop = elementRect.top + window.pageYOffset;
+ const headerHeight = this.#getFixedHeaderHeight();
+ const targetScroll = offsetTop - headerHeight - additionalOffset;
+ 
+ // Use smooth scrolling if supported
+ if ('scrollBehavior' in document.documentElement.style) {
+ window.scrollTo({
+ top: targetScroll,
+ behavior: 'smooth'
+ });
+ } else {
+ window.scrollTo(0, targetScroll);
+ }
+ }
+ 
+ #getFixedHeaderHeight() {
+ let totalHeight = 0;
+ 
+ const headerSelectors = [
+ '.header_h',
+ '.menuwrap',
+ '.modern-nav.top-nav',
+ '[style*="fixed"]',
+ '[style*="sticky"]'
+ ];
+ 
+ headerSelectors.forEach(selector => {
+ const elements = document.querySelectorAll(selector);
+ elements.forEach(el => {
+ const rect = el.getBoundingClientRect();
+ const style = window.getComputedStyle(el);
+ const position = style.position;
+ 
+ if (position === 'fixed' || position === 'sticky') {
+ totalHeight += rect.height;
+ }
+ });
+ });
+ 
+ return Math.max(totalHeight, 80);
+ }
+ 
+ #showMissingAnchorMessage(anchorId, triggerElement) {
+ // Create a temporary notification
+ const message = document.createElement('div');
+ message.className = 'anchor-missing-message';
+ message.innerHTML = `
+ <i class="fa-regular fa-info-circle"></i>
+ <span>This post isn't on the current page.</span>
+ `;
+ 
+ message.style.cssText = `
+ position: fixed;
+ bottom: 20px;
+ right: 20px;
+ background: var(--warning-color);
+ color: white;
+ padding: 12px 16px;
+ border-radius: var(--radius);
+ box-shadow: var(--shadow-lg);
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ z-index: 1000;
+ animation: slideInUp 0.3s ease-out;
+ `;
+ 
+ document.body.appendChild(message);
+ 
+ // Remove after 5 seconds
+ setTimeout(() => {
+ message.style.animation = 'slideOutDown 0.3s ease-out';
+ setTimeout(() => {
+ if (message.parentNode) {
+ document.body.removeChild(message);
+ }
+ }, 300);
+ }, 5000);
+ }
+ 
+ // ============================================
+ // ENHANCED QUOTE LINKS
+ // ============================================
+ 
+ #enhanceQuoteLinks() {
+ // Process existing quote links
+ this.#processExistingQuoteLinks();
+ 
+ // Watch for new quote links added dynamically
+ this.#setupQuoteLinkObserver();
+ }
+ 
+ #processExistingQuoteLinks() {
+ // Find all modern quote links and buttons
+ document.querySelectorAll('.quote-link, .quote-jump-btn').forEach(link => {
+ this.#enhanceSingleQuoteButton(link);
+ });
+ 
+ // Also process old-style quote_top links
+ document.querySelectorAll('.quote_top a[href*="#entry"]').forEach(link => {
+ this.#enhanceSingleQuoteButton(link);
+ });
+ }
+ 
+ #enhanceSingleQuoteButton(element) {
+ const href = element.getAttribute('href') || element.getAttribute('data-target-url');
+ if (!href || !href.includes('#entry')) return;
+ 
+ // Parse the URL
+ const url = new URL(href, window.location.origin);
+ const anchorId = url.hash.substring(1);
+ const isCrossPage = this.#isCrossPageAnchor(url);
+ 
+ // Update or create button
+ if (element.tagName === 'A') {
+ // Replace anchor with button
+ const button = document.createElement('button');
+ button.className = 'quote-jump-btn';
+ button.setAttribute('data-anchor-id', anchorId);
+ button.setAttribute('data-is-cross-page', isCrossPage.toString());
+ button.setAttribute('data-target-url', href);
+ button.setAttribute('title', isCrossPage ? 'Go to post on another page' : 'Jump to quoted post');
+ button.setAttribute('aria-label', isCrossPage ? 'Go to quoted post on another page' : 'Jump to quoted post');
+ 
+ // Keep the original icon
+ const icon = element.querySelector('i')?.cloneNode(true) || 
+ document.createElement('i');
+ if (!icon.className.includes('fa-')) {
+ icon.className = 'fa-regular fa-chevron-up';
+ }
+ 
+ // Add cross-page indicator
+ if (isCrossPage) {
+ const indicator = document.createElement('span');
+ indicator.className = 'cross-page-indicator';
+ indicator.innerHTML = '↗';
+ button.appendChild(indicator);
+ }
+ 
+ button.appendChild(icon);
+ 
+ // Add click handler
+ button.addEventListener('click', (e) => {
+ e.preventDefault();
+ e.stopPropagation();
+ this.#handleQuoteJumpClick(button);
+ });
+ 
+ // Replace the link with button
+ element.parentNode.replaceChild(button, element);
+ } else {
+ // Update existing button
+ element.setAttribute('data-anchor-id', anchorId);
+ element.setAttribute('data-is-cross-page', isCrossPage.toString());
+ element.setAttribute('data-target-url', href);
+ element.setAttribute('title', isCrossPage ? 'Go to post on another page' : 'Jump to quoted post');
+ element.setAttribute('aria-label', isCrossPage ? 'Go to quoted post on another page' : 'Jump to quoted post');
+ 
+ // Update cross-page indicator
+ let indicator = element.querySelector('.cross-page-indicator');
+ if (isCrossPage && !indicator) {
+ indicator = document.createElement('span');
+ indicator.className = 'cross-page-indicator';
+ indicator.innerHTML = '↗';
+ element.appendChild(indicator);
+ } else if (!isCrossPage && indicator) {
+ indicator.remove();
+ }
+ 
+ // Update click handler
+ const oldHandler = element.onclick;
+ element.onclick = null;
+ element.addEventListener('click', (e) => {
+ e.preventDefault();
+ e.stopPropagation();
+ this.#handleQuoteJumpClick(element);
+ });
+ }
+ }
+ 
+ #handleQuoteJumpClick(button) {
+ const anchorId = button.getAttribute('data-anchor-id');
+ const isCrossPage = button.getAttribute('data-is-cross-page') === 'true';
+ const targetUrl = button.getAttribute('data-target-url');
+ 
+ // Add loading state
+ this.#setButtonLoading(button, true);
+ 
+ if (isCrossPage) {
+ // Handle cross-page quote
+ this.#handleCrossPageQuote(targetUrl, anchorId, button);
+ } else {
+ // Same-page quote - use enhanced scrolling
+ this.#jumpToQuoteOnSamePage(anchorId, button);
+ }
+ }
+ 
+ #jumpToQuoteOnSamePage(anchorId, button) {
+ // Find the anchor
+ const anchorElement = document.getElementById(anchorId);
+ 
+ if (!anchorElement) {
+ // Anchor not found (might have been removed during transformation)
+ this.#handleMissingAnchor(anchorId, button);
+ return;
+ }
+ 
+ // Find the post containing this anchor
+ const postElement = anchorElement.closest('.post');
+ 
+ if (!postElement) {
+ this.#scrollToElementWithOffset(anchorElement);
+ this.#setButtonLoading(button, false);
+ return;
+ }
+ 
+ // Highlight the post using existing focus system
+ this.#focusPost(postElement);
+ 
+ // Scroll to the post
+ const postHeader = postElement.querySelector('.post-header');
+ if (postHeader) {
+ this.#scrollToElementWithOffset(postHeader, 20);
+ } else {
+ this.#scrollToElementWithOffset(postElement, 20);
+ }
+ 
+ // Focus for keyboard navigation
+ postElement.setAttribute('tabindex', '-1');
+ postElement.focus({ preventScroll: true });
+ 
+ // Remove loading state
+ setTimeout(() => {
+ this.#setButtonLoading(button, false);
+ }, 500);
+ }
+ 
+ #handleCrossPageQuote(targetUrl, anchorId, button) {
+ const url = new URL(targetUrl, window.location.origin);
+ 
+ // Check if it's a distant page
+ const currentPage = this.#getPageNumber(new URL(window.location.href));
+ const targetPage = this.#getPageNumber(url);
+ const pageDifference = Math.abs(currentPage - targetPage);
+ 
+ // For close pages (1-2 pages), navigate immediately
+ if (pageDifference <= 2) {
+ window.location.href = targetUrl;
+ return;
+ }
+ 
+ // For distant pages, show confirmation
+ this.#showCrossPageQuoteConfirmation(targetUrl, anchorId, button);
+ }
+ 
+ #showCrossPageQuoteConfirmation(targetUrl, anchorId, button) {
+ const url = new URL(targetUrl, window.location.origin);
+ const targetPage = this.#getPageNumber(url);
+ 
+ // Create confirmation tooltip
+ const tooltip = document.createElement('div');
+ tooltip.className = 'quote-confirmation-tooltip';
+ tooltip.innerHTML = `
+ <div class="tooltip-content">
+ <p>This quoted post is on page ${targetPage}.</p>
+ <div class="tooltip-actions">
+ <button class="btn btn-sm btn-primary goto-page-btn">
+ Go to page ${targetPage}
+ </button>
+ <button class="btn btn-sm btn-secondary cancel-btn">
+ Cancel
+ </button>
+ </div>
+ <label class="tooltip-remember">
+ <input type="checkbox" class="remember-choice">
+ Remember my choice
+ </label>
+ </div>
+ `;
+ 
+ // Position near the button
+ const rect = button.getBoundingClientRect();
+ tooltip.style.cssText = `
+ position: absolute;
+ top: ${rect.bottom + 5}px;
+ left: ${rect.left}px;
+ z-index: 1000;
+ background: var(--surface-color);
+ border: 1px solid var(--border-color);
+ border-radius: var(--radius);
+ box-shadow: var(--shadow-lg);
+ width: 220px;
+ padding: 12px;
+ animation: tooltipFadeIn 0.2s ease-out;
+ `;
+ 
+ document.body.appendChild(tooltip);
+ 
+ // Add event listeners
+ const gotoBtn = tooltip.querySelector('.goto-page-btn');
+ const cancelBtn = tooltip.querySelector('.cancel-btn');
+ const rememberCheckbox = tooltip.querySelector('.remember-choice');
+ 
+ const removeTooltip = () => {
+ tooltip.style.animation = 'tooltipFadeOut 0.2s ease-out';
+ setTimeout(() => {
+ if (tooltip.parentNode) {
+ document.body.removeChild(tooltip);
+ }
+ this.#setButtonLoading(button, false);
+ }, 200);
+ };
+ 
+ gotoBtn.addEventListener('click', () => {
+ // Save preference if checked
+ if (rememberCheckbox.checked) {
+ localStorage.setItem('forum_auto_navigate_quotes', 'true');
+ }
+ window.location.href = targetUrl;
+ });
+ 
+ cancelBtn.addEventListener('click', removeTooltip);
+ 
+ // Close on outside click
+ setTimeout(() => {
+ const clickHandler = (e) => {
+ if (!tooltip.contains(e.target) && e.target !== button) {
+ removeTooltip();
+ document.removeEventListener('click', clickHandler);
+ }
+ };
+ document.addEventListener('click', clickHandler);
+ }, 100);
+ }
+ 
+ #setButtonLoading(button, isLoading) {
+ if (isLoading) {
+ button.classList.add('loading');
+ const icon = button.querySelector('i');
+ if (icon) {
+ icon.className = 'fa-regular fa-spinner fa-spin';
+ }
+ button.disabled = true;
+ } else {
+ button.classList.remove('loading');
+ const icon = button.querySelector('i');
+ if (icon && icon.className.includes('fa-spinner')) {
+ icon.className = 'fa-regular fa-chevron-up';
+ }
+ button.disabled = false;
+ }
+ }
+ 
+ #setupQuoteLinkObserver() {
+ // Watch for new quote links being added
+ if (globalThis.forumObserver) {
+ globalThis.forumObserver.register({
+ id: 'quote-link-enhancer',
+ callback: (node) => this.#handleNewQuoteLinks(node),
+ selector: '.quote-link, .quote_top a[href*="#entry"], .quote-jump-btn',
+ priority: 'normal'
+ });
+ } else {
+ // Fallback: check periodically
+ setInterval(() => this.#processExistingQuoteLinks(), 2000);
+ }
+ }
+ 
+ #handleNewQuoteLinks(node) {
+ if (node.matches('.quote-link') || node.matches('.quote_top a[href*="#entry"]') || node.matches('.quote-jump-btn')) {
+ this.#enhanceSingleQuoteButton(node);
+ } else {
+ // Check children
+ node.querySelectorAll('.quote-link, .quote_top a[href*="#entry"], .quote-jump-btn').forEach(link => {
+ this.#enhanceSingleQuoteButton(link);
+ });
+ }
+ }
+ 
+ // ============================================
+ // NEW POST BADGE
+ // ============================================
+ 
+ #addNewPostBadge(postHeader) {
+ // Create the NEW badge
+ const newBadge = document.createElement('span');
+ newBadge.className = 'post-new-badge';
+ newBadge.textContent = 'NEW';
+ newBadge.setAttribute('aria-label', 'New post since your last visit');
+ 
+ // Add it to the post header (right after post number)
+ const postNumber = postHeader.querySelector('.post-number');
+ if (postNumber) {
+ // Create a wrapper for badges if it doesn't exist
+ let badgeContainer = postHeader.querySelector('.post-badges');
+ if (!badgeContainer) {
+ badgeContainer = document.createElement('div');
+ badgeContainer.className = 'post-badges';
+ postHeader.insertBefore(badgeContainer, postNumber.nextSibling);
+ }
+ badgeContainer.appendChild(newBadge);
+ } else {
+ // Fallback: add directly to header
+ postHeader.insertBefore(newBadge, postHeader.firstChild);
+ }
+ }
+ 
+ #escapeHtml(unsafe) {
+ if (typeof unsafe !== 'string') return unsafe;
+ return unsafe
+ .replace(/&/g, '&amp;')
+ .replace(/</g, '&lt;')
+ .replace(/>/g, '&gt;')
+ .replace(/"/g, '&quot;')
+ .replace(/'/g, '&#039;');
  } 
  
 destroy() { 
