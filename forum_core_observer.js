@@ -28,7 +28,8 @@ class ForumCoreObserver {
             maxProcessingTime: 16,        // 60fps budget
             mutationBatchSize: 50,
             debounceThreshold: 100,
-            idleCallbackTimeout: 2000
+            idleCallbackTimeout: 2000,
+            searchPageBatchSize: 10       // NEW: Special batch size for search pages
         };
     }
     
@@ -68,8 +69,8 @@ class ForumCoreObserver {
         document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { passive: true });
         
         // Use console.group for better debugging
-        console.group('🚀 Forum Core Observer');
-        console.log('Initialized with 100% coverage');
+        console.group('🚀 Enhanced Forum Core Observer');
+        console.log('Initialized with Post Modernizer optimizations');
         console.log('Page state:', this.#pageState);
         console.groupEnd();
     }
@@ -82,10 +83,11 @@ class ForumCoreObserver {
         // Use optional chaining and nullish coalescing
         const selectors = {
             forum: '.board, .big_list',
-            topic: '.modern-topic-title',
+            topic: '.modern-topic-title, .post',
             blog: '#blog, .article',
-            profile: '.modern-profile',
-            search: '#search.posts'
+            profile: '.modern-profile, .profile',
+            search: '#search.posts, body#search',
+            modernized: '.post-modernized'  // NEW: Track modernized content
         };
         
         const checks = Object.entries(selectors).map(([key, selector]) => 
@@ -101,6 +103,10 @@ class ForumCoreObserver {
             isBlog: pathname.includes('/b/') || pageChecks.blog,
             isProfile: pathname.includes('/user/') || pageChecks.profile,
             isSearch: pathname.includes('/search/') || pageChecks.search,
+            hasModernizedPosts: !!pageChecks.modernized,  // NEW: Track modernized posts
+            hasModernizedQuotes: !!document.querySelector('.modern-quote'),  // NEW
+            hasModernizedProfile: !!document.querySelector('.modern-profile'),  // NEW
+            hasModernizedNavigation: !!document.querySelector('.modern-nav'),  // NEW
             isDarkMode: theme === 'dark',
             isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
             isMobile: window.matchMedia('(max-width: 768px)').matches,
@@ -137,6 +143,11 @@ class ForumCoreObserver {
             return false;
         }
         
+        // NEW: Skip mutations in already modernized content
+        if (this.#shouldSkipPostModernizerProcessing(mutation.target)) {
+            return false;
+        }
+        
         // Skip invisible elements using optional chaining
         const style = mutation.target.nodeType === Node.ELEMENT_NODE 
             ? window.getComputedStyle(mutation.target)
@@ -162,10 +173,52 @@ class ForumCoreObserver {
         return true;
     }
     
+    #shouldSkipPostModernizerProcessing(node) {
+        // Skip nodes that are already modernized
+        if (node.classList?.contains('post-modernized')) {
+            return true;
+        }
+        
+        // Skip nodes inside modernized posts
+        if (node.closest('.post-modernized')) {
+            return true;
+        }
+        
+        // Skip nodes inside modern quotes
+        if (node.closest('.modern-quote')) {
+            return true;
+        }
+        
+        // Skip nodes inside modern profiles
+        if (node.closest('.modern-profile')) {
+            return true;
+        }
+        
+        // Skip modern navigation elements
+        if (node.closest('.modern-nav, .modern-breadcrumb, .modern-topic-title')) {
+            return true;
+        }
+        
+        // Skip Post Modernizer-specific elements
+        const modernizerElements = [
+            '.post-new-badge', '.quote-jump-btn', '.anchor-container',
+            '.modern-bottom-actions', '.multiquote-control',
+            '.moderator-controls', '.ip-address-control'
+        ];
+        
+        for (const selector of modernizerElements) {
+            if (node.matches?.(selector) || node.closest?.(selector)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
     #shouldObserveTextChanges(element) {
         const tagName = element.tagName.toLowerCase();
         const interactiveTags = new Set(['a', 'button', 'input', 'textarea', 'select']);
-        const forumContentClasses = new Set(['post', 'article', 'comment', 'quote', 'signature']);
+        const forumContentClasses = new Set(['post', 'article', 'comment', 'quote', 'signature', 'post-text']);
         
         if (interactiveTags.has(tagName)) return true;
         
@@ -201,6 +254,12 @@ class ForumCoreObserver {
         
         try {
             while (this.#mutationQueue.length) {
+                // NEW: Special handling for search pages
+                if (this.#pageState.isSearch && this.#mutationQueue.length > 10) {
+                    await this.#processSearchPageBatch();
+                    continue;
+                }
+                
                 const batch = this.#mutationQueue.splice(0, ForumCoreObserver.#PERFORMANCE_CONFIG.mutationBatchSize);
                 await this.#processMutationBatch(batch);
                 
@@ -245,7 +304,22 @@ class ForumCoreObserver {
             }
         }
         
-        // Process nodes in parallel with concurrency limit
+        // NEW: Special handling for search page posts
+        if (this.#pageState.isSearch) {
+            const searchPosts = Array.from(affectedNodes).filter(node => 
+                node.classList?.contains('post') && 
+                node.closest('body#search')
+            );
+            
+            if (searchPosts.length > 5) {
+                await this.#processSearchPostsBatch(searchPosts);
+                
+                // Remove processed search posts from affectedNodes
+                searchPosts.forEach(post => affectedNodes.delete(post));
+            }
+        }
+        
+        // Process remaining nodes in parallel with concurrency limit
         const nodeArray = Array.from(affectedNodes).filter(node => 
             node && !this.#processedNodes.has(node)
         );
@@ -255,6 +329,95 @@ class ForumCoreObserver {
         
         for (let i = 0; i < nodeArray.length; i += CONCURRENCY_LIMIT) {
             chunks.push(nodeArray.slice(i, i + CONCURRENCY_LIMIT));
+        }
+        
+        for (const chunk of chunks) {
+            await Promise.allSettled(
+                chunk.map(node => this.#processNode(node))
+            );
+        }
+    }
+    
+    async #processSearchPageBatch() {
+        const batchSize = ForumCoreObserver.#PERFORMANCE_CONFIG.searchPageBatchSize;
+        const batch = this.#mutationQueue.splice(0, batchSize);
+        
+        console.log(`🔍 Processing search page batch: ${batch.length} mutations`);
+        
+        // Group mutations by type for efficient processing
+        const addedNodes = new Set();
+        const attributeNodes = new Set();
+        const textNodes = new Set();
+        
+        for (const mutation of batch) {
+            switch (mutation.type) {
+                case 'childList':
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            this.#collectAllElements(node, addedNodes);
+                        }
+                    });
+                    break;
+                    
+                case 'attributes':
+                    attributeNodes.add(mutation.target);
+                    break;
+                    
+                case 'characterData':
+                    textNodes.add(mutation.target.parentElement);
+                    break;
+            }
+        }
+        
+        // Process search posts first (higher priority)
+        const searchPosts = Array.from(addedNodes).filter(node => 
+            node.classList?.contains('post') && node.closest('body#search')
+        );
+        
+        if (searchPosts.length > 0) {
+            await this.#processSearchPostsBatch(searchPosts);
+        }
+        
+        // Process other elements
+        const otherNodes = new Set([
+            ...Array.from(addedNodes).filter(node => !searchPosts.includes(node)),
+            ...attributeNodes,
+            ...textNodes
+        ]);
+        
+        await this.#processNodeBatch(Array.from(otherNodes));
+    }
+    
+    async #processSearchPostsBatch(posts) {
+        console.log(`📋 Processing ${posts.length} search posts in batch`);
+        
+        // Process posts in smaller chunks to avoid blocking
+        const CHUNK_SIZE = 3;
+        for (let i = 0; i < posts.length; i += CHUNK_SIZE) {
+            const chunk = posts.slice(i, i + CHUNK_SIZE);
+            
+            await Promise.allSettled(
+                chunk.map(post => {
+                    if (!this.#processedNodes.has(post)) {
+                        return this.#processNode(post);
+                    }
+                    return Promise.resolve();
+                })
+            );
+            
+            // Yield to main thread between chunks
+            if (i + CHUNK_SIZE < posts.length) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+    }
+    
+    async #processNodeBatch(nodes) {
+        const CONCURRENCY_LIMIT = 4;
+        const chunks = [];
+        
+        for (let i = 0; i < nodes.length; i += CONCURRENCY_LIMIT) {
+            chunks.push(nodes.slice(i, i + CONCURRENCY_LIMIT));
         }
         
         for (const chunk of chunks) {
@@ -314,10 +477,20 @@ class ForumCoreObserver {
         for (const callback of this.#callbacks.values()) {
             // Check page type restrictions
             if (callback.pageTypes?.length) {
-                const hasMatchingPageType = callback.pageTypes.some(type => 
-                    this.#pageState[`is${type.charAt(0).toUpperCase() + type.slice(1)}`]
-                );
+                const hasMatchingPageType = callback.pageTypes.some(type => {
+                    const stateKey = `is${type.charAt(0).toUpperCase() + type.slice(1)}`;
+                    return this.#pageState[stateKey];
+                });
                 if (!hasMatchingPageType) continue;
+            }
+            
+            // NEW: Special handling for quote links
+            if (callback.id?.includes('quote-link') || callback.id?.includes('anchor')) {
+                const isQuoteLink = node.matches?.('.quote-link, .quote_top a[href*="#entry"]');
+                if (!isQuoteLink) {
+                    const hasQuoteLink = node.querySelector?.('.quote-link, .quote_top a[href*="#entry"]');
+                    if (!hasQuoteLink) continue;
+                }
             }
             
             // Check dependencies
@@ -397,7 +570,13 @@ class ForumCoreObserver {
             '.post', '.article', '.btn', '.forminput', '.points_up', '.points_down',
             '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
             '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
-            '.profile-avatar', '.breadcrumb-item', '.page-number'
+            '.profile-avatar', '.breadcrumb-item', '.page-number',
+            // NEW: Post Modernizer elements
+            '.post-modernized', '.modern-quote', '.modern-profile', '.modern-topic-title',
+            '.modern-breadcrumb', '.modern-nav', '.post-new-badge', '.quote-jump-btn',
+            '.anchor-container', '.modern-bottom-actions', '.multiquote-control',
+            '.moderator-controls', '.ip-address-control', '.search-post',
+            '.post-actions', '.user-info', '.post-content', '.post-footer'
         ];
         
         const root = document.documentElement;
@@ -425,12 +604,20 @@ class ForumCoreObserver {
         
         this.#initialScanComplete = true;
         console.log('✅ Initial content scan complete');
+        console.log(`📊 Found: ${document.querySelectorAll('.post-modernized').length} modernized posts`);
+        console.log(`📊 Found: ${document.querySelectorAll('.modern-quote').length} modern quotes`);
     }
     
     #setupCleanup() {
         const intervalId = setInterval(() => {
             if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes) {
                 console.warn('Processed nodes approaching limit');
+                
+                // Clear processed nodes if getting too large
+                if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes * 1.5) {
+                    console.warn('Clearing processed nodes cache');
+                    this.#processedNodes = new WeakSet();
+                }
             }
             
             // Force GC if available
@@ -566,7 +753,18 @@ class ForumCoreObserver {
             processedNodes: this.#processedNodes.size,
             pageState: this.#pageState,
             isProcessing: this.#isProcessing,
-            queueLength: this.#mutationQueue.length
+            queueLength: this.#mutationQueue.length,
+            // NEW: Post Modernizer specific stats
+            postModernizerStats: {
+                modernizedPosts: document.querySelectorAll('.post-modernized').length,
+                modernQuotes: document.querySelectorAll('.modern-quote').length,
+                modernProfiles: document.querySelectorAll('.modern-profile').length,
+                modernNavigation: document.querySelectorAll('.modern-nav, .modern-breadcrumb, .modern-topic-title').length,
+                anchorContainers: document.querySelectorAll('.anchor-container').length,
+                quoteJumpButtons: document.querySelectorAll('.quote-jump-btn').length,
+                postNewBadges: document.querySelectorAll('.post-new-badge').length,
+                modernizedElements: document.querySelectorAll('[class*="modern-"], [class*="-modernized"]').length
+            }
         };
     }
     
@@ -585,7 +783,44 @@ class ForumCoreObserver {
         
         document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
         
-        console.log('🛑 Forum Core Observer destroyed');
+        console.log('🛑 Enhanced Forum Core Observer destroyed');
+    }
+    
+    // NEW: Method to check if Post Modernizer is active
+    isPostModernizerActive() {
+        return {
+            hasModernizer: !!globalThis.postModernizer,
+            modernizedPosts: document.querySelectorAll('.post-modernized').length,
+            modernizedQuotes: document.querySelectorAll('.modern-quote').length,
+            isInitialized: this.#pageState.hasModernizedPosts || this.#pageState.hasModernizedQuotes
+        };
+    }
+    
+    // NEW: Method to optimize for Post Modernizer
+    optimizeForPostModernizer() {
+        console.log('🔧 Optimizing for Post Modernizer');
+        
+        // Skip already modernized content
+        const skipSelectors = [
+            '.post-modernized',
+            '.modern-quote',
+            '.modern-profile',
+            '.modern-nav',
+            '.modern-breadcrumb'
+        ];
+        
+        skipSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(node => {
+                this.#processedNodes.add(node);
+            });
+        });
+        
+        return {
+            skippedNodes: skipSelectors.reduce((total, selector) => 
+                total + document.querySelectorAll(selector).length, 0
+            ),
+            message: 'Post Modernizer optimization applied'
+        };
     }
     
     // Static factory method
@@ -608,32 +843,44 @@ if (!globalThis.forumObserver) {
             return globalThis.forumObserver?.registerDebounced(settings) ?? null;
         };
         
+        // NEW: Add Post Modernizer helper
+        globalThis.getPostModernizerStats = () => {
+            return globalThis.forumObserver?.getStats().postModernizerStats ?? {};
+        };
+        
         // Auto-cleanup with modern event
         globalThis.addEventListener('pagehide', () => {
             globalThis.forumObserver?.destroy();
         }, { once: true });
         
-        // Export for debugging in development - FIXED LINE
-        // OLD: if (import.meta.env?.DEV || globalThis.location?.hostname === 'localhost') {
-        // NEW: Check for localhost or development environment
+        // Auto-optimize for Post Modernizer after initialization
+        setTimeout(() => {
+            if (globalThis.forumObserver) {
+                globalThis.forumObserver.optimizeForPostModernizer();
+            }
+        }, 1000);
+        
+        // Export for debugging in development
         if (globalThis.location?.hostname === 'localhost' || 
             globalThis.location?.hostname === '127.0.0.1' ||
             globalThis.location?.hostname.startsWith('192.168.') ||
             globalThis.location?.port) {
             globalThis.__FORUM_OBSERVER_DEBUG__ = globalThis.forumObserver;
+            console.log('🔍 Forum Core Observer debug mode enabled');
         }
         
-        console.log('🎯 Forum Core Observer ready');
+        console.log('🎯 Enhanced Forum Core Observer ready');
+        console.log('🚀 Post Modernizer optimizations active');
         
     } catch (error) {
-        console.error('Failed to initialize Forum Core Observer:', error);
+        console.error('Failed to initialize Enhanced Forum Core Observer:', error);
         
         // Modern fallback with Proxy
         globalThis.forumObserver = new Proxy({}, {
             get(target, prop) {
-                const methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy'];
+                const methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy', 'optimizeForPostModernizer'];
                 if (methods.includes(prop)) {
-                    return () => console.warn(`Forum Observer not initialized - ${prop} called`);
+                    return () => console.warn(`Enhanced Forum Observer not initialized - ${prop} called`);
                 }
                 return undefined;
             }
