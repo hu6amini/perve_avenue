@@ -1,6 +1,6 @@
 // Enhanced Post Transformation and Modernization System with HTML Structure Fix 
 // Now includes support for body#search posts, preserves anchor elements,
-// and features enhanced smart quote navigation
+// features enhanced smart quote navigation, and modern spoiler system
 // DOMContentLoaded-free version for flexible loading
 class PostModernizer { 
  #postModernizerId = null; 
@@ -87,7 +87,7 @@ class PostModernizer {
  this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({ 
  id: 'post-modernizer-transform', 
  callback: (node) => this.#handlePostTransformation(node), 
- selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top)', 
+ selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"]', 
  delay: 100, 
  priority: 'normal',
  pageTypes: ['topic', 'blog'] // Only for topic and blog pages
@@ -203,7 +203,8 @@ class PostModernizer {
  node.querySelector('.post') || 
  node.querySelector('.st-emoji') || 
  node.querySelector('.title2.bottom') || 
- node.querySelector('div[align="center"]:has(.quote_top)'); 
+ node.querySelector('div[align="center"]:has(.quote_top)') ||
+ node.querySelector('div.spoiler[align="center"]'); 
  
  if (needsTransformation) { 
  this.#transformPostElements(); 
@@ -417,6 +418,7 @@ class PostModernizer {
  this.#cleanupPostContentStructure(contentWrapper); 
  postContent.appendChild(contentWrapper); 
  this.#modernizeQuotes(contentWrapper); 
+ this.#modernizeSpoilers(contentWrapper); // Add spoiler modernization
  } 
  }); 
  
@@ -674,6 +676,10 @@ class PostModernizer {
  }
  }
  
+ // Modernize quotes and spoilers in search posts
+ this.#modernizeQuotes(contentWrapper);
+ this.#modernizeSpoilers(contentWrapper);
+ 
  postContent.appendChild(contentWrapper);
  }
  
@@ -848,6 +854,14 @@ class PostModernizer {
  
  this.#transformQuote(container);
  container.classList.add('quote-modernized');
+ });
+ 
+ // Handle spoilers in search posts
+ contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
+ if (container.classList.contains('spoiler-modernized')) return;
+ 
+ this.#transformSpoiler(container);
+ container.classList.add('spoiler-modernized');
  });
  }
  
@@ -1074,249 +1088,371 @@ class PostModernizer {
  }); 
  } 
  
- #modernizeQuotes(contentWrapper) { 
- contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => { 
- if (container.classList.contains('quote-modernized')) return; 
+ #modernizeQuotes(contentWrapper) {
+ contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
+ if (container.classList.contains('quote-modernized')) return;
  
- this.#transformQuote(container); 
- container.classList.add('quote-modernized'); 
- }); 
- } 
+ this.#transformQuote(container);
+ container.classList.add('quote-modernized');
+ });
  
- #transformQuote(container) { 
- const quoteTop = container.querySelector('.quote_top'); 
- const quoteContent = container.querySelector('.quote'); 
+ // Also modernize spoilers
+ this.#modernizeSpoilers(contentWrapper);
+ }
  
- if (!quoteTop || !quoteContent) return; 
+ #modernizeSpoilers(contentWrapper) {
+ contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
+ if (container.classList.contains('spoiler-modernized')) return;
  
- const quoteText = quoteTop.textContent.trim(); 
- const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/); 
- const author = match ? match[1].trim() : 'Unknown'; 
- const quoteLink = quoteTop.querySelector('a'); 
- const linkHref = quoteLink?.href ?? '#'; 
- const isLongContent = this.#isLongContent(quoteContent); 
+ this.#transformSpoiler(container);
+ container.classList.add('spoiler-modernized');
+ });
+ }
  
- const modernQuote = document.createElement('div'); 
- modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : ''); 
+ #transformQuote(container) {
+ const quoteTop = container.querySelector('.quote_top');
+ const quoteContent = container.querySelector('.quote');
  
- let html = '<div class="quote-header">' + 
- '<div class="quote-meta">' + 
- '<div class="quote-icon">' + 
- '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' + 
- '</div>' + 
- '<div class="quote-info">' + 
- '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' + 
- '</div>' + 
- '</div>' + 
- '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post">' + 
- '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' + 
- '</a>' + 
- '</div>'; 
+ if (!quoteTop || !quoteContent) return;
  
- html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' + 
- this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) + 
- '</div>'; 
+ const quoteText = quoteTop.textContent.trim();
+ const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/);
+ const author = match ? match[1].trim() : 'Unknown';
+ const quoteLink = quoteTop.querySelector('a');
+ const linkHref = quoteLink?.href ?? '#';
+ const isLongContent = this.#isLongContent(quoteContent);
  
- if (isLongContent) { 
- html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' + 
- '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
- 'Show more' + 
- '</button>'; 
- } 
+ const modernQuote = document.createElement('div');
+ modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : '');
  
- modernQuote.innerHTML = html; 
- container.replaceWith(modernQuote); 
+ let html = '<div class="quote-header">' +
+ '<div class="quote-meta">' +
+ '<div class="quote-icon">' +
+ '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
+ '</div>' +
+ '<div class="quote-info">' +
+ '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' +
+ '</div>' +
+ '</div>' +
+ '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post">' +
+ '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' +
+ '</a>' +
+ '</div>';
  
- if (isLongContent) { 
- this.#addQuoteEventListeners(modernQuote); 
- } 
+ html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' +
+ this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) +
+ '</div>';
+ 
+ if (isLongContent) {
+ html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' +
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+ 'Show more' +
+ '</button>';
+ }
+ 
+ modernQuote.innerHTML = html;
+ container.replaceWith(modernQuote);
+ 
+ if (isLongContent) {
+ this.#addQuoteEventListeners(modernQuote);
+ }
  
  // Enhance the quote link after it's added to DOM
- setTimeout(() => { 
- const quoteLink = modernQuote.querySelector('.quote-link'); 
- if (quoteLink) { 
- this.#enhanceSingleQuoteLink(quoteLink); 
- } 
- }, 10); 
- } 
+ setTimeout(() => {
+ const quoteLink = modernQuote.querySelector('.quote-link');
+ if (quoteLink) {
+ this.#enhanceSingleQuoteLink(quoteLink);
+ }
+ }, 10);
+ }
  
- #isLongContent(contentElement) { 
- const clone = contentElement.cloneNode(true); 
- const textLength = clone.textContent.trim().length; 
- const mediaElements = clone.querySelectorAll('img, iframe, video, object, embed'); 
- const mediaCount = mediaElements.length; 
- const totalElements = clone.querySelectorAll('*').length; 
+ #transformSpoiler(container) {
+ const spoilerTop = container.querySelector('.code_top');
+ const spoilerContent = container.querySelector('.code[align="left"]');
  
- let contentScore = 0; 
+ if (!spoilerTop || !spoilerContent) return;
  
- if (textLength > 800) contentScore += 3; 
- else if (textLength > 500) contentScore += 2; 
- else if (textLength > 300) contentScore += 1; 
+ const spoilerText = spoilerTop.textContent.trim();
+ const isLongContent = this.#isLongContent(spoilerContent);
  
- if (mediaCount >= 3) contentScore += 3; 
- else if (mediaCount >= 2) contentScore += 2; 
- else if (mediaCount >= 1) contentScore += 1; 
+ const modernSpoiler = document.createElement('div');
+ modernSpoiler.className = 'modern-spoiler';
  
- if (totalElements > 20) contentScore += 2; 
- else if (totalElements > 10) contentScore += 1; 
+ // Check if spoiler should start collapsed
+ const spoilerStyle = spoilerContent.getAttribute('style') || '';
+ const isInitiallyHidden = spoilerStyle.includes('display: none') || 
+ spoilerStyle.includes('display:none');
  
- const hasIframeOrVideo = clone.querySelector('iframe, video'); 
- if (hasIframeOrVideo) contentScore += 3; 
+ if (!isInitiallyHidden) {
+ modernSpoiler.classList.add('expanded');
+ }
  
- const images = clone.querySelectorAll('img'); 
- if (images.length >= 2) { 
- let totalPixelArea = 0; 
- images.forEach(img => { 
- const width = parseInt(img.getAttribute('width')) || 0; 
- const height = parseInt(img.getAttribute('height')) || 0; 
- totalPixelArea += width * height; 
- }); 
- if (totalPixelArea > 500000) contentScore += 2; 
- } 
+ let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="' + 
+ (!isInitiallyHidden).toString() + '">' +
+ '<div class="spoiler-icon">' +
+ '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
+ '</div>' +
+ '<div class="spoiler-info">' +
+ '<span class="spoiler-title">SPOILER</span>' +
+ '<span class="spoiler-hint">Click to reveal hidden content</span>' +
+ '</div>' +
+ '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
+ '<i class="fa-regular fa-chevron-' + (isInitiallyHidden ? 'down' : 'up') + '" aria-hidden="true"></i>' +
+ '</button>' +
+ '</div>';
  
- return contentScore >= 4; 
- } 
+ html += '<div class="spoiler-content' + 
+ (isLongContent && isInitiallyHidden ? ' collapsible-content' : '') + 
+ (!isInitiallyHidden ? ' expanded' : '') + '">' +
+ this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
+ '</div>';
  
- #preserveMediaDimensionsInHTML(html) { 
- const tempDiv = document.createElement('div'); 
- tempDiv.innerHTML = html; 
- this.#preserveMediaDimensions(tempDiv); 
- return tempDiv.innerHTML; 
- } 
+ if (isLongContent && isInitiallyHidden) {
+ html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+ 'Show more' +
+ '</button>';
+ }
  
- #preserveMediaDimensions(element) { 
- element.querySelectorAll('img').forEach(img => { 
- const originalWidth = img.getAttribute('width'); 
- const originalHeight = img.getAttribute('height'); 
+ modernSpoiler.innerHTML = html;
+ container.replaceWith(modernSpoiler);
  
- if (originalWidth && originalHeight) { 
- img.setAttribute('width', originalWidth); 
- img.setAttribute('height', originalHeight); 
- img.style.width = originalWidth + 'px'; 
- img.style.height = originalHeight + 'px'; 
- } else if (!img.hasAttribute('loading')) { 
- img.setAttribute('loading', 'lazy'); 
- } 
+ // Add event listeners
+ this.#addSpoilerEventListeners(modernSpoiler);
+ }
  
- if (!img.hasAttribute('alt')) { 
- img.setAttribute('alt', 'Image'); 
- } 
- }); 
+ #addSpoilerEventListeners(spoilerElement) {
+ const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
+ const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
+ const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
+ const spoilerContent = spoilerElement.querySelector('.spoiler-content');
+ const isLongContent = spoilerContent.classList.contains('collapsible-content');
  
- element.querySelectorAll('iframe').forEach(iframe => { 
- const originalWidth = iframe.getAttribute('width'); 
- const originalHeight = iframe.getAttribute('height'); 
+ // Toggle spoiler on header click
+ const toggleSpoiler = () => {
+ const isExpanded = spoilerElement.classList.toggle('expanded');
+ const icon = spoilerToggle.querySelector('i');
  
- if (originalWidth && originalHeight) { 
- iframe.setAttribute('width', originalWidth); 
- iframe.setAttribute('height', originalHeight); 
- iframe.style.width = originalWidth + 'px'; 
- iframe.style.height = originalHeight + 'px'; 
- } else { 
- iframe.setAttribute('width', '560'); 
- iframe.setAttribute('height', '315'); 
- } 
+ // Update ARIA attributes
+ spoilerHeader.setAttribute('aria-expanded', isExpanded.toString());
  
- if (!iframe.hasAttribute('title')) { 
- iframe.setAttribute('title', 'Embedded content'); 
- } 
+ // Update icon
+ if (icon) {
+ icon.className = 'fa-regular fa-chevron-' + (isExpanded ? 'up' : 'down');
+ }
  
- if (!iframe.hasAttribute('loading')) { 
- iframe.setAttribute('loading', 'lazy'); 
- } 
- }); 
+ // Handle long content
+ if (isLongContent && isExpanded) {
+ expandBtn?.style.setProperty('display', 'none');
+ spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
+ setTimeout(() => {
+ spoilerContent.style.maxHeight = 'none';
+ }, 300);
+ }
+ };
  
- element.querySelectorAll('video').forEach(video => { 
- const originalWidth = video.getAttribute('width'); 
- const originalHeight = video.getAttribute('height'); 
+ spoilerHeader.addEventListener('click', toggleSpoiler);
+ spoilerToggle.addEventListener('click', (e) => {
+ e.stopPropagation();
+ toggleSpoiler();
+ });
  
- if (originalWidth && originalHeight) { 
- video.setAttribute('width', originalWidth); 
- video.setAttribute('height', originalHeight); 
- video.style.width = originalWidth + 'px'; 
- video.style.height = originalHeight + 'px'; 
- } 
+ spoilerHeader.addEventListener('keydown', (e) => {
+ if (e.key === 'Enter' || e.key === ' ') {
+ e.preventDefault();
+ toggleSpoiler();
+ }
+ });
  
- if (!video.hasAttribute('controls')) { 
- video.setAttribute('controls', ''); 
- } 
- }); 
- } 
+ // Expand button for long content
+ if (expandBtn) {
+ expandBtn.addEventListener('click', () => {
+ spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
+ expandBtn.style.display = 'none';
+ setTimeout(() => {
+ spoilerContent.style.maxHeight = 'none';
+ }, 300);
+ });
+ }
+ }
  
- #addQuoteEventListeners(quoteElement) { 
- const expandBtn = quoteElement.querySelector('.quote-expand-btn'); 
- const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content'); 
+ #isLongContent(contentElement) {
+ const clone = contentElement.cloneNode(true);
+ const textLength = clone.textContent.trim().length;
+ const mediaElements = clone.querySelectorAll('img, iframe, video, object, embed');
+ const mediaCount = mediaElements.length;
+ const totalElements = clone.querySelectorAll('*').length;
  
- if (expandBtn && quoteContent) { 
- expandBtn.addEventListener('click', () => { 
- quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px'; 
- expandBtn.style.display = 'none'; 
- setTimeout(() => { 
- quoteContent.style.maxHeight = 'none'; 
- }, 300); 
- }); 
- } 
- } 
+ let contentScore = 0;
  
- #addReputationToFooter(miniButtons, stEmoji, postFooter) { 
- if (miniButtons || stEmoji) { 
- const postActions = document.createElement('div'); 
- postActions.className = 'post-actions'; 
+ if (textLength > 800) contentScore += 3;
+ else if (textLength > 500) contentScore += 2;
+ else if (textLength > 300) contentScore += 1;
  
- if (miniButtons) { 
- this.#cleanupMiniButtons(miniButtons); 
- this.#setInitialPointsState(miniButtons); 
- const pointsContainer = miniButtons.querySelector('.points'); 
- if (pointsContainer) { 
- this.#updatePointsContainerActiveState(pointsContainer); 
- } 
- postActions.appendChild(miniButtons); 
- } 
+ if (mediaCount >= 3) contentScore += 3;
+ else if (mediaCount >= 2) contentScore += 2;
+ else if (mediaCount >= 1) contentScore += 1;
  
- if (stEmoji) { 
- const emojiContainer = stEmoji.querySelector('.st-emoji-container'); 
- if (emojiContainer) { 
- this.#updateEmojiContainerActiveState(emojiContainer); 
- } 
- postActions.appendChild(stEmoji); 
- } 
+ if (totalElements > 20) contentScore += 2;
+ else if (totalElements > 10) contentScore += 1;
  
- postFooter.insertBefore(postActions, postFooter.firstChild); 
- } 
- } 
+ const hasIframeOrVideo = clone.querySelector('iframe, video');
+ if (hasIframeOrVideo) contentScore += 3;
  
- #modernizeBottomElements(title2Bottom, postFooter) { 
- title2Bottom.querySelectorAll('.rt.Sub').forEach(rtSub => { 
- const label = rtSub.querySelector('label'); 
- const checkbox = rtSub.querySelector('input[type="checkbox"]'); 
- const ipAddress = rtSub.querySelector('.ip_address'); 
+ const images = clone.querySelectorAll('img');
+ if (images.length >= 2) {
+ let totalPixelArea = 0;
+ images.forEach(img => {
+ const width = parseInt(img.getAttribute('width')) || 0;
+ const height = parseInt(img.getAttribute('height')) || 0;
+ totalPixelArea += width * height;
+ });
+ if (totalPixelArea > 500000) contentScore += 2;
+ }
  
- const modernContainer = document.createElement('div'); 
- modernContainer.className = 'modern-bottom-actions'; 
+ return contentScore >= 4;
+ }
  
- let html = ''; 
+ #preserveMediaDimensionsInHTML(html) {
+ const tempDiv = document.createElement('div');
+ tempDiv.innerHTML = html;
+ this.#preserveMediaDimensions(tempDiv);
+ return tempDiv.innerHTML;
+ }
  
- if (label && checkbox && !ipAddress) { 
- html = this.#createModernMultiquote(label, checkbox); 
- } else if (ipAddress && checkbox) { 
- html = this.#createModernModeratorView(ipAddress, checkbox, label); 
- } else if (ipAddress) { 
- html = this.#createModernIPAddress(ipAddress); 
- } else if (checkbox) { 
- html = this.#createBasicMultiquote(checkbox); 
- } else if (label) { 
- html = this.#createLabelOnly(label); 
- } 
+ #preserveMediaDimensions(element) {
+ element.querySelectorAll('img').forEach(img => {
+ const originalWidth = img.getAttribute('width');
+ const originalHeight = img.getAttribute('height');
  
- if (html) { 
- modernContainer.innerHTML = html; 
- postFooter.appendChild(modernContainer); 
- } 
- }); 
- } 
+ if (originalWidth && originalHeight) {
+ img.setAttribute('width', originalWidth);
+ img.setAttribute('height', originalHeight);
+ img.style.width = originalWidth + 'px';
+ img.style.height = originalHeight + 'px';
+ } else if (!img.hasAttribute('loading')) {
+ img.setAttribute('loading', 'lazy');
+ }
  
- #removeBreakAndNbsp(element) { 
- element.querySelectorAll('.Break.Sub').forEach(el => el.remove()); 
+ if (!img.hasAttribute('alt')) {
+ img.setAttribute('alt', 'Image');
+ }
+ });
+ 
+ element.querySelectorAll('iframe').forEach(iframe => {
+ const originalWidth = iframe.getAttribute('width');
+ const originalHeight = iframe.getAttribute('height');
+ 
+ if (originalWidth && originalHeight) {
+ iframe.setAttribute('width', originalWidth);
+ iframe.setAttribute('height', originalHeight);
+ iframe.style.width = originalWidth + 'px';
+ iframe.style.height = originalHeight + 'px';
+ } else {
+ iframe.setAttribute('width', '560');
+ iframe.setAttribute('height', '315');
+ }
+ 
+ if (!iframe.hasAttribute('title')) {
+ iframe.setAttribute('title', 'Embedded content');
+ }
+ 
+ if (!iframe.hasAttribute('loading')) {
+ iframe.setAttribute('loading', 'lazy');
+ }
+ });
+ 
+ element.querySelectorAll('video').forEach(video => {
+ const originalWidth = video.getAttribute('width');
+ const originalHeight = video.getAttribute('height');
+ 
+ if (originalWidth && originalHeight) {
+ video.setAttribute('width', originalWidth);
+ video.setAttribute('height', originalHeight);
+ video.style.width = originalWidth + 'px';
+ video.style.height = originalHeight + 'px';
+ }
+ 
+ if (!video.hasAttribute('controls')) {
+ video.setAttribute('controls', '');
+ }
+ });
+ }
+ 
+ #addQuoteEventListeners(quoteElement) {
+ const expandBtn = quoteElement.querySelector('.quote-expand-btn');
+ const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
+ 
+ if (expandBtn && quoteContent) {
+ expandBtn.addEventListener('click', () => {
+ quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
+ expandBtn.style.display = 'none';
+ setTimeout(() => {
+ quoteContent.style.maxHeight = 'none';
+ }, 300);
+ });
+ }
+ }
+ 
+ #addReputationToFooter(miniButtons, stEmoji, postFooter) {
+ if (miniButtons || stEmoji) {
+ const postActions = document.createElement('div');
+ postActions.className = 'post-actions';
+ 
+ if (miniButtons) {
+ this.#cleanupMiniButtons(miniButtons);
+ this.#setInitialPointsState(miniButtons);
+ const pointsContainer = miniButtons.querySelector('.points');
+ if (pointsContainer) {
+ this.#updatePointsContainerActiveState(pointsContainer);
+ }
+ postActions.appendChild(miniButtons);
+ }
+ 
+ if (stEmoji) {
+ const emojiContainer = stEmoji.querySelector('.st-emoji-container');
+ if (emojiContainer) {
+ this.#updateEmojiContainerActiveState(emojiContainer);
+ }
+ postActions.appendChild(stEmoji);
+ }
+ 
+ postFooter.insertBefore(postActions, postFooter.firstChild);
+ }
+ }
+ 
+ #modernizeBottomElements(title2Bottom, postFooter) {
+ title2Bottom.querySelectorAll('.rt.Sub').forEach(rtSub => {
+ const label = rtSub.querySelector('label');
+ const checkbox = rtSub.querySelector('input[type="checkbox"]');
+ const ipAddress = rtSub.querySelector('.ip_address');
+ 
+ const modernContainer = document.createElement('div');
+ modernContainer.className = 'modern-bottom-actions';
+ 
+ let html = '';
+ 
+ if (label && checkbox && !ipAddress) {
+ html = this.#createModernMultiquote(label, checkbox);
+ } else if (ipAddress && checkbox) {
+ html = this.#createModernModeratorView(ipAddress, checkbox, label);
+ } else if (ipAddress) {
+ html = this.#createModernIPAddress(ipAddress);
+ } else if (checkbox) {
+ html = this.#createBasicMultiquote(checkbox);
+ } else if (label) {
+ html = this.#createLabelOnly(label);
+ }
+ 
+ if (html) {
+ modernContainer.innerHTML = html;
+ postFooter.appendChild(modernContainer);
+ }
+ });
+ }
+ 
+ #removeBreakAndNbsp(element) {
+ element.querySelectorAll('.Break.Sub').forEach(el => el.remove());
  
  // Also remove any &nbsp; entities
  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
@@ -1334,472 +1470,472 @@ class PostModernizer {
  node.parentNode.removeChild(node);
  }
  });
- } 
- 
- #removeBottomBorderAndBr(element) { 
- element.querySelectorAll('.bottomborder').forEach(bottomBorder => { 
- bottomBorder.remove(); 
- bottomBorder.nextElementSibling?.tagName === 'BR' && bottomBorder.nextElementSibling.remove(); 
- }); 
- } 
- 
- #cleanupPostContent(post) { 
- post.querySelectorAll('.bottomborder').forEach(bottomBorder => { 
- bottomBorder.parentNode?.removeChild(bottomBorder); 
- bottomBorder.nextElementSibling?.tagName === 'BR' && 
- bottomBorder.parentNode?.removeChild(bottomBorder.nextElementSibling); 
- }); 
- } 
- 
- #createStatElement(iconClass, value, additionalClass) { 
- const statDiv = document.createElement('div'); 
- statDiv.className = 'stat ' + additionalClass; 
- 
- const icon = document.createElement('i'); 
- icon.className = iconClass; 
- icon.setAttribute('aria-hidden', 'true'); 
- 
- const span = document.createElement('span'); 
- span.textContent = value; 
- 
- statDiv.appendChild(icon); 
- statDiv.appendChild(span); 
- 
- return statDiv; 
- } 
- 
- #cleanupMiniButtons(miniButtons) { 
- const walker = document.createTreeWalker(miniButtons, NodeFilter.SHOW_TEXT, null, false); 
- const nodesToRemove = []; 
- let node; 
- 
- while (node = walker.nextNode()) { 
- if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) { 
- nodesToRemove.push(node); 
- } 
- } 
- 
- nodesToRemove.forEach(node => node.parentNode?.removeChild(node)); 
- 
- Array.from(miniButtons.childNodes).forEach(child => { 
- if (child.nodeType === Node.TEXT_NODE && 
- (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) { 
- miniButtons.removeChild(child); 
- } 
- }); 
- } 
- 
- #setInitialPointsState(miniButtons) { 
- const pointsContainer = miniButtons.querySelector('.points'); 
- if (!pointsContainer) return; 
- 
- const pointsPos = pointsContainer.querySelector('.points_pos'); 
- const pointsNeg = pointsContainer.querySelector('.points_neg'); 
- const pointsUp = pointsContainer.querySelector('.points_up'); 
- const pointsDown = pointsContainer.querySelector('.points_down'); 
- const bulletDelete = pointsContainer.querySelector('.bullet_delete'); 
- 
- if (bulletDelete) { 
- if (pointsPos) { 
- pointsUp?.classList.add('active'); 
- pointsDown?.classList.remove('active'); 
- } else if (pointsNeg) { 
- const pointsUpIcon = pointsUp?.querySelector('i'); 
- const pointsDownIcon = pointsDown?.querySelector('i'); 
- 
- if (pointsUpIcon?.classList.contains('fa-thumbs-down')) { 
- pointsUp?.classList.add('active'); 
- } 
- if (pointsDownIcon?.classList.contains('fa-thumbs-down')) { 
- pointsDown?.classList.add('active'); 
- } 
- 
- if (pointsUp?.classList.contains('active')) { 
- pointsDown?.classList.remove('active'); 
- } else if (pointsDown?.classList.contains('active')) { 
- pointsUp?.classList.remove('active'); 
- } 
- } 
- } 
- } 
- 
- #createModernMultiquote(label, checkbox) { 
- const labelText = label.textContent.replace('multiquote »', '').trim(); 
- const originalOnClick = label.getAttribute('onclick') ?? ''; 
- 
- let html = '<div class="multiquote-control">' + 
- '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' + 
- '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' + 
- '</button>' + 
- '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>'; 
- 
- if (checkbox) { 
- html += '<div class="user-checkbox-container">' + 
- checkbox.outerHTML + 
- '</div>'; 
- } 
- 
- html += '</div>'; 
- return html; 
- } 
- 
- #createBasicMultiquote(checkbox) { 
- const postId = checkbox.id.replace('p', ''); 
- const originalOnClick = "document.getElementById('" + checkbox.id + "').checked=!document.getElementById('" + checkbox.id + "').checked;post('" + postId + "')"; 
- 
- return '<div class="multiquote-control">' + 
- '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' + 
- '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' + 
- '</button>' + 
- '<label class="multiquote-label">Quote +</label>' + 
- '<div class="user-checkbox-container">' + 
- checkbox.outerHTML + 
- '</div>' + 
- '</div>'; 
- } 
- 
- #createLabelOnly(label) { 
- const labelText = label.textContent.replace('multiquote »', '').trim(); 
- const originalOnClick = label.getAttribute('onclick') ?? ''; 
- 
- return '<div class="multiquote-control">' + 
- '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' + 
- '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' + 
- '</button>' + 
- '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>' + 
- '</div>'; 
- } 
- 
- #createModernModeratorView(ipAddress, checkbox, label) { 
- const ipLink = ipAddress.querySelector('a'); 
- const ipTextElement = ipAddress.querySelector('dd'); 
- const ipText = ipTextElement?.textContent ?? ''; 
- 
- let originalOnClick = ''; 
- let labelText = 'Quote +'; 
- 
- if (label) { 
- originalOnClick = label.getAttribute('onclick') ?? ''; 
- labelText = label.textContent.replace('multiquote »', '').trim() || 'Quote +'; 
- } else { 
- const postId = checkbox.id.replace('p', ''); 
- originalOnClick = "document.getElementById('" + checkbox.id + "').checked=!document.getElementById('" + checkbox.id + "').checked;post('" + postId + "')"; 
- } 
- 
- let html = '<div class="moderator-controls">' + 
- '<div class="multiquote-control">' + 
- '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' + 
- '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' + 
- '</button>' + 
- '<label class="multiquote-label">' + this.#escapeHtml(labelText) + '</label>' + 
- '</div>' + 
- '<div class="ip-address-control">' + 
- '<span class="ip-label">IP:</span>' + 
- '<span class="ip-value">'; 
- 
- if (ipLink) { 
- html += '<a href="' + this.#escapeHtml(ipLink.href) + '" target="_self" class="ip-link">' + this.#escapeHtml(ipText) + '</a>'; 
- } else { 
- html += '<span class="ip-text">' + this.#escapeHtml(ipText) + '</span>'; 
- } 
- 
- html += '</span></div>' + 
- '<div class="mod-checkbox-container">' + 
- checkbox.outerHTML + 
- '</div></div>'; 
- 
- return html; 
- } 
- 
- #createModernIPAddress(ipAddress) { 
- const ipLink = ipAddress.querySelector('a'); 
- const ipTextElement = ipAddress.querySelector('dd'); 
- const ipText = ipTextElement?.textContent ?? ''; 
- 
- let html = '<div class="ip-address-control">' + 
- '<span class="ip-label">IP:</span>' + 
- '<span class="ip-value">'; 
- 
- if (ipLink) { 
- html += '<a href="' + this.#escapeHtml(ipLink.href) + '" target="_self" class="ip-link">' + this.#escapeHtml(ipText) + '</a>'; 
- } else { 
- html += '<span class="ip-text">' + this.#escapeHtml(ipText) + '</span>'; 
- } 
- 
- html += '</span></div>'; 
- return html; 
- } 
- 
- #convertMiniButtonsToButtons(post) { 
- const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub'); 
- if (!miniButtonsContainer) return; 
- 
- miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => { 
- const href = link.getAttribute('href'); 
- 
- if (href?.startsWith('javascript:')) { 
- const jsCode = href.replace('javascript:', ''); 
- if (jsCode.includes('delete_post')) { 
- const button = document.createElement('button'); 
- button.className = 'btn btn-icon btn-delete'; 
- button.setAttribute('data-action', 'delete'); 
- button.setAttribute('onclick', jsCode); 
- button.setAttribute('title', 'Delete'); 
- button.setAttribute('type', 'button'); 
- 
- let buttonHTML = link.innerHTML; 
- buttonHTML = buttonHTML.replace(/<i(?![^>]*aria-hidden)/g, '<i aria-hidden="true" '); 
- button.innerHTML = buttonHTML; 
- 
- link.parentNode.replaceChild(button, link); 
- } 
- } else if (href?.includes('CODE=08')) { 
- link.classList.add('btn', 'btn-icon', 'btn-edit'); 
- link.setAttribute('data-action', 'edit'); 
- link.setAttribute('title', 'Edit'); 
- 
- const icon = link.querySelector('i'); 
- icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true'); 
- } else if (href?.includes('CODE=02')) { 
- link.classList.add('btn', 'btn-icon', 'btn-quote'); 
- link.setAttribute('data-action', 'quote'); 
- link.setAttribute('title', 'Quote'); 
- link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel')); 
- 
- const icon = link.querySelector('i'); 
- icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true'); 
- } else if (href) { 
- link.classList.add('btn', 'btn-icon'); 
- link.querySelectorAll('i').forEach(icon => { 
- !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true'); 
- }); 
- } 
- }); 
- 
- this.#reorderPostButtons(miniButtonsContainer); 
- } 
- 
- #addShareButton(post) { 
- const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub'); 
- if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return; 
- 
- const shareButton = document.createElement('button'); 
- shareButton.className = 'btn btn-icon btn-share'; 
- shareButton.setAttribute('data-action', 'share'); 
- shareButton.setAttribute('title', 'Share this post'); 
- shareButton.setAttribute('type', 'button'); 
- shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>'; 
- 
- const deleteButton = miniButtonsContainer.querySelector('.btn-delete, [data-action="delete"]'); 
- if (deleteButton) { 
- miniButtonsContainer.insertBefore(shareButton, deleteButton); 
- } else { 
- miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild); 
- } 
- 
- shareButton.addEventListener('click', () => this.#handleSharePost(post)); 
- } 
- 
- #reorderPostButtons(container) { 
- const elements = Array.from(container.children); 
- const order = ['share', 'quote', 'edit', 'delete']; 
- 
- elements.sort((a, b) => { 
- const getAction = (element) => { 
- const dataAction = element.getAttribute('data-action'); 
- if (dataAction && order.includes(dataAction)) return dataAction; 
- 
- if (element.classList.contains('btn-share')) return 'share'; 
- if (element.classList.contains('btn-quote')) return 'quote'; 
- if (element.classList.contains('btn-edit')) return 'edit'; 
- if (element.classList.contains('btn-delete')) return 'delete'; 
- 
- if (element.href) { 
- if (element.href.includes('CODE=02')) return 'quote'; 
- if (element.href.includes('CODE=08')) return 'edit'; 
- } 
- 
- if (element.onclick?.toString().includes('delete_post')) return 'delete'; 
- 
- return 'other'; 
- }; 
- 
- const actionA = getAction(a); 
- const actionB = getAction(b); 
- const indexA = order.indexOf(actionA); 
- const indexB = order.indexOf(actionB); 
- 
- if (indexA !== -1 && indexB !== -1) return indexA - indexB; 
- if (indexA !== -1) return -1; 
- if (indexB !== -1) return 1; 
- return 0; 
- }); 
- 
- container.innerHTML = ''; 
- elements.forEach(el => container.appendChild(el)); 
- } 
- 
- #handleSharePost(post) { 
- let postLink = null; 
- 
- const timestampLink = post.querySelector('.post-header .lt.Sub a[href*="#entry"]'); 
- if (timestampLink) { 
- postLink = timestampLink.href; 
- } 
- 
- if (!postLink) { 
- const timeLink = post.querySelector('.post-header time[class*="when"]'); 
- if (timeLink?.closest('a')) { 
- postLink = timeLink.closest('a').href; 
- } 
- } 
- 
- if (!postLink) { 
- const postIdMatch = post.id.match(/\d+/); 
- if (postIdMatch) { 
- const postId = postIdMatch[0]; 
- const topicMatch = window.location.href.match(/t=(\d+)/); 
- if (topicMatch) { 
- postLink = window.location.origin + '/?t=' + topicMatch[1] + '#entry' + postId; 
- } 
- } 
- } 
- 
- if (postLink) { 
- this.#copyToClipboard(postLink); 
- } else { 
- this.#showNotification('Could not find post link', 'error'); 
- } 
- } 
- 
- #copyToClipboard(text) { 
- if (navigator.clipboard?.writeText) { 
- navigator.clipboard.writeText(text).then(() => { 
- this.#showNotification('Link copied to clipboard!', 'success'); 
- }).catch(() => { 
- this.#fallbackCopy(text); 
- }); 
- } else { 
- this.#fallbackCopy(text); 
- } 
- } 
- 
- #fallbackCopy(text) { 
- const textArea = document.createElement('textarea'); 
- textArea.value = text; 
- textArea.style.cssText = 'position:fixed;opacity:0'; 
- document.body.appendChild(textArea); 
- textArea.focus(); 
- textArea.select(); 
- 
- try { 
- if (document.execCommand('copy')) { 
- this.#showNotification('Link copied to clipboard!', 'success'); 
- } else { 
- this.#showNotification('Failed to copy link', 'error'); 
- } 
- } catch { 
- this.#showNotification('Failed to copy link', 'error'); 
- } finally { 
- document.body.removeChild(textArea); 
- } 
- } 
- 
- #showNotification(message, type) { 
- document.querySelector('.share-notification')?.remove(); 
- 
- const notification = document.createElement('div'); 
- notification.className = 'share-notification share-notification-' + type; 
- 
- notification.style.cssText = 
- 'position:fixed;' + 
- 'top:20px;' + 
- 'right:20px;' + 
- 'padding:12px 20px;' + 
- 'border-radius:var(--radius);' + 
- 'background:' + (type === 'success' ? 'var(--success-color)' : 'var(--danger-color)') + ';' + 
- 'color:white;' + 
- 'font-weight:500;' + 
- 'box-shadow:var(--shadow-lg);' + 
- 'z-index:9;' + 
- 'display:flex;' + 
- 'align-items:center;' + 
- 'gap:10px;' + 
- 'animation:slideIn 0.3s ease-out;' + 
- 'max-width:300px;'; 
- 
- const icon = type === 'success' 
- ? '<i class="fa-regular fa-check-circle" aria-hidden="true"></i>' 
- : '<i class="fa-regular fa-exclamation-circle" aria-hidden="true"></i>'; 
- 
- notification.innerHTML = icon + '<span>' + message + '</span>'; 
- document.body.appendChild(notification); 
- 
- setTimeout(() => { 
- if (notification.parentNode) { 
- notification.style.animation = 'slideOut 0.3s ease-out'; 
- setTimeout(() => notification.parentNode?.removeChild(notification), 300); 
- } 
- }, 3000); 
- 
- if (!document.querySelector('#share-notification-styles')) { 
- const style = document.createElement('style'); 
- style.id = 'share-notification-styles'; 
- style.textContent = 
- '@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}' + 
- '@keyframes slideOut{from{transform:translateX(0);opacity:1;}to{transform:translateX(100%);opacity:0;}}'; 
- document.head.appendChild(style); 
- } 
- } 
- 
- #enhanceReputationSystem() { 
- document.addEventListener('click', (e) => { 
- const pointsUp = e.target.closest('.points_up'); 
- const pointsDown = e.target.closest('.points_down'); 
- const emojiPreview = e.target.closest('.st-emoji-preview'); 
- 
- if (pointsUp || pointsDown) { 
- const pointsContainer = (pointsUp || pointsDown).closest('.points'); 
- const bulletDelete = pointsContainer?.querySelector('.bullet_delete'); 
- 
- if (bulletDelete && bulletDelete.onclick && 
- (pointsContainer.querySelector('.points_pos') || 
- pointsContainer.querySelector('.points_neg'))) { 
- bulletDelete.onclick(); 
- e.preventDefault(); 
- e.stopPropagation(); 
- return; 
- } 
- 
- if (pointsUp) { 
- pointsContainer?.querySelector('.points_down')?.classList.remove('active'); 
- pointsUp.classList.add('active'); 
- } 
- 
- if (pointsDown) { 
- pointsContainer?.querySelector('.points_up')?.classList.remove('active'); 
- pointsDown.classList.add('active'); 
- } 
- } 
- 
- if (emojiPreview) { 
- emojiPreview.closest('.st-emoji-container')?.classList.toggle('active'); 
- } 
- }); 
- } 
- 
- #escapeHtml(unsafe) { 
- if (typeof unsafe !== 'string') return unsafe; 
- return unsafe 
- .replace(/&/g, '&amp;') 
- .replace(/</g, '&lt;') 
- .replace(/>/g, '&gt;') 
- .replace(/"/g, '&quot;') 
- .replace(/'/g, '&#039;'); 
- } 
+ }
+ 
+ #removeBottomBorderAndBr(element) {
+ element.querySelectorAll('.bottomborder').forEach(bottomBorder => {
+ bottomBorder.remove();
+ bottomBorder.nextElementSibling?.tagName === 'BR' && bottomBorder.nextElementSibling.remove();
+ });
+ }
+ 
+ #cleanupPostContent(post) {
+ post.querySelectorAll('.bottomborder').forEach(bottomBorder => {
+ bottomBorder.parentNode?.removeChild(bottomBorder);
+ bottomBorder.nextElementSibling?.tagName === 'BR' &&
+ bottomBorder.parentNode?.removeChild(bottomBorder.nextElementSibling);
+ });
+ }
+ 
+ #createStatElement(iconClass, value, additionalClass) {
+ const statDiv = document.createElement('div');
+ statDiv.className = 'stat ' + additionalClass;
+ 
+ const icon = document.createElement('i');
+ icon.className = iconClass;
+ icon.setAttribute('aria-hidden', 'true');
+ 
+ const span = document.createElement('span');
+ span.textContent = value;
+ 
+ statDiv.appendChild(icon);
+ statDiv.appendChild(span);
+ 
+ return statDiv;
+ }
+ 
+ #cleanupMiniButtons(miniButtons) {
+ const walker = document.createTreeWalker(miniButtons, NodeFilter.SHOW_TEXT, null, false);
+ const nodesToRemove = [];
+ let node;
+ 
+ while (node = walker.nextNode()) {
+ if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) {
+ nodesToRemove.push(node);
+ }
+ }
+ 
+ nodesToRemove.forEach(node => node.parentNode?.removeChild(node));
+ 
+ Array.from(miniButtons.childNodes).forEach(child => {
+ if (child.nodeType === Node.TEXT_NODE &&
+ (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
+ miniButtons.removeChild(child);
+ }
+ });
+ }
+ 
+ #setInitialPointsState(miniButtons) {
+ const pointsContainer = miniButtons.querySelector('.points');
+ if (!pointsContainer) return;
+ 
+ const pointsPos = pointsContainer.querySelector('.points_pos');
+ const pointsNeg = pointsContainer.querySelector('.points_neg');
+ const pointsUp = pointsContainer.querySelector('.points_up');
+ const pointsDown = pointsContainer.querySelector('.points_down');
+ const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+ 
+ if (bulletDelete) {
+ if (pointsPos) {
+ pointsUp?.classList.add('active');
+ pointsDown?.classList.remove('active');
+ } else if (pointsNeg) {
+ const pointsUpIcon = pointsUp?.querySelector('i');
+ const pointsDownIcon = pointsDown?.querySelector('i');
+ 
+ if (pointsUpIcon?.classList.contains('fa-thumbs-down')) {
+ pointsUp?.classList.add('active');
+ }
+ if (pointsDownIcon?.classList.contains('fa-thumbs-down')) {
+ pointsDown?.classList.add('active');
+ }
+ 
+ if (pointsUp?.classList.contains('active')) {
+ pointsDown?.classList.remove('active');
+ } else if (pointsDown?.classList.contains('active')) {
+ pointsUp?.classList.remove('active');
+ }
+ }
+ }
+ }
+ 
+ #createModernMultiquote(label, checkbox) {
+ const labelText = label.textContent.replace('multiquote »', '').trim();
+ const originalOnClick = label.getAttribute('onclick') ?? '';
+ 
+ let html = '<div class="multiquote-control">' +
+ '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' +
+ '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+ '</button>' +
+ '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>';
+ 
+ if (checkbox) {
+ html += '<div class="user-checkbox-container">' +
+ checkbox.outerHTML +
+ '</div>';
+ }
+ 
+ html += '</div>';
+ return html;
+ }
+ 
+ #createBasicMultiquote(checkbox) {
+ const postId = checkbox.id.replace('p', '');
+ const originalOnClick = "document.getElementById('" + checkbox.id + "').checked=!document.getElementById('" + checkbox.id + "').checked;post('" + postId + "')";
+ 
+ return '<div class="multiquote-control">' +
+ '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' +
+ '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+ '</button>' +
+ '<label class="multiquote-label">Quote +</label>' +
+ '<div class="user-checkbox-container">' +
+ checkbox.outerHTML +
+ '</div>' +
+ '</div>';
+ }
+ 
+ #createLabelOnly(label) {
+ const labelText = label.textContent.replace('multiquote »', '').trim();
+ const originalOnClick = label.getAttribute('onclick') ?? '';
+ 
+ return '<div class="multiquote-control">' +
+ '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' +
+ '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+ '</button>' +
+ '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>' +
+ '</div>';
+ }
+ 
+ #createModernModeratorView(ipAddress, checkbox, label) {
+ const ipLink = ipAddress.querySelector('a');
+ const ipTextElement = ipAddress.querySelector('dd');
+ const ipText = ipTextElement?.textContent ?? '';
+ 
+ let originalOnClick = '';
+ let labelText = 'Quote +';
+ 
+ if (label) {
+ originalOnClick = label.getAttribute('onclick') ?? '';
+ labelText = label.textContent.replace('multiquote »', '').trim() || 'Quote +';
+ } else {
+ const postId = checkbox.id.replace('p', '');
+ originalOnClick = "document.getElementById('" + checkbox.id + "').checked=!document.getElementById('" + checkbox.id + "').checked;post('" + postId + "')";
+ }
+ 
+ let html = '<div class="moderator-controls">' +
+ '<div class="multiquote-control">' +
+ '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' +
+ '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+ '</button>' +
+ '<label class="multiquote-label">' + this.#escapeHtml(labelText) + '</label>' +
+ '</div>' +
+ '<div class="ip-address-control">' +
+ '<span class="ip-label">IP:</span>' +
+ '<span class="ip-value">';
+ 
+ if (ipLink) {
+ html += '<a href="' + this.#escapeHtml(ipLink.href) + '" target="_self" class="ip-link">' + this.#escapeHtml(ipText) + '</a>';
+ } else {
+ html += '<span class="ip-text">' + this.#escapeHtml(ipText) + '</span>';
+ }
+ 
+ html += '</span></div>' +
+ '<div class="mod-checkbox-container">' +
+ checkbox.outerHTML +
+ '</div></div>';
+ 
+ return html;
+ }
+ 
+ #createModernIPAddress(ipAddress) {
+ const ipLink = ipAddress.querySelector('a');
+ const ipTextElement = ipAddress.querySelector('dd');
+ const ipText = ipTextElement?.textContent ?? '';
+ 
+ let html = '<div class="ip-address-control">' +
+ '<span class="ip-label">IP:</span>' +
+ '<span class="ip-value">';
+ 
+ if (ipLink) {
+ html += '<a href="' + this.#escapeHtml(ipLink.href) + '" target="_self" class="ip-link">' + this.#escapeHtml(ipText) + '</a>';
+ } else {
+ html += '<span class="ip-text">' + this.#escapeHtml(ipText) + '</span>';
+ }
+ 
+ html += '</span></div>';
+ return html;
+ }
+ 
+ #convertMiniButtonsToButtons(post) {
+ const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
+ if (!miniButtonsContainer) return;
+ 
+ miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
+ const href = link.getAttribute('href');
+ 
+ if (href?.startsWith('javascript:')) {
+ const jsCode = href.replace('javascript:', '');
+ if (jsCode.includes('delete_post')) {
+ const button = document.createElement('button');
+ button.className = 'btn btn-icon btn-delete';
+ button.setAttribute('data-action', 'delete');
+ button.setAttribute('onclick', jsCode);
+ button.setAttribute('title', 'Delete');
+ button.setAttribute('type', 'button');
+ 
+ let buttonHTML = link.innerHTML;
+ buttonHTML = buttonHTML.replace(/<i(?![^>]*aria-hidden)/g, '<i aria-hidden="true" ');
+ button.innerHTML = buttonHTML;
+ 
+ link.parentNode.replaceChild(button, link);
+ }
+ } else if (href?.includes('CODE=08')) {
+ link.classList.add('btn', 'btn-icon', 'btn-edit');
+ link.setAttribute('data-action', 'edit');
+ link.setAttribute('title', 'Edit');
+ 
+ const icon = link.querySelector('i');
+ icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+ } else if (href?.includes('CODE=02')) {
+ link.classList.add('btn', 'btn-icon', 'btn-quote');
+ link.setAttribute('data-action', 'quote');
+ link.setAttribute('title', 'Quote');
+ link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+ 
+ const icon = link.querySelector('i');
+ icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+ } else if (href) {
+ link.classList.add('btn', 'btn-icon');
+ link.querySelectorAll('i').forEach(icon => {
+ !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+ });
+ }
+ });
+ 
+ this.#reorderPostButtons(miniButtonsContainer);
+ }
+ 
+ #addShareButton(post) {
+ const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub');
+ if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return;
+ 
+ const shareButton = document.createElement('button');
+ shareButton.className = 'btn btn-icon btn-share';
+ shareButton.setAttribute('data-action', 'share');
+ shareButton.setAttribute('title', 'Share this post');
+ shareButton.setAttribute('type', 'button');
+ shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+ 
+ const deleteButton = miniButtonsContainer.querySelector('.btn-delete, [data-action="delete"]');
+ if (deleteButton) {
+ miniButtonsContainer.insertBefore(shareButton, deleteButton);
+ } else {
+ miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild);
+ }
+ 
+ shareButton.addEventListener('click', () => this.#handleSharePost(post));
+ }
+ 
+ #reorderPostButtons(container) {
+ const elements = Array.from(container.children);
+ const order = ['share', 'quote', 'edit', 'delete'];
+ 
+ elements.sort((a, b) => {
+ const getAction = (element) => {
+ const dataAction = element.getAttribute('data-action');
+ if (dataAction && order.includes(dataAction)) return dataAction;
+ 
+ if (element.classList.contains('btn-share')) return 'share';
+ if (element.classList.contains('btn-quote')) return 'quote';
+ if (element.classList.contains('btn-edit')) return 'edit';
+ if (element.classList.contains('btn-delete')) return 'delete';
+ 
+ if (element.href) {
+ if (element.href.includes('CODE=02')) return 'quote';
+ if (element.href.includes('CODE=08')) return 'edit';
+ }
+ 
+ if (element.onclick?.toString().includes('delete_post')) return 'delete';
+ 
+ return 'other';
+ };
+ 
+ const actionA = getAction(a);
+ const actionB = getAction(b);
+ const indexA = order.indexOf(actionA);
+ const indexB = order.indexOf(actionB);
+ 
+ if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+ if (indexA !== -1) return -1;
+ if (indexB !== -1) return 1;
+ return 0;
+ });
+ 
+ container.innerHTML = '';
+ elements.forEach(el => container.appendChild(el));
+ }
+ 
+ #handleSharePost(post) {
+ let postLink = null;
+ 
+ const timestampLink = post.querySelector('.post-header .lt.Sub a[href*="#entry"]');
+ if (timestampLink) {
+ postLink = timestampLink.href;
+ }
+ 
+ if (!postLink) {
+ const timeLink = post.querySelector('.post-header time[class*="when"]');
+ if (timeLink?.closest('a')) {
+ postLink = timeLink.closest('a').href;
+ }
+ }
+ 
+ if (!postLink) {
+ const postIdMatch = post.id.match(/\d+/);
+ if (postIdMatch) {
+ const postId = postIdMatch[0];
+ const topicMatch = window.location.href.match(/t=(\d+)/);
+ if (topicMatch) {
+ postLink = window.location.origin + '/?t=' + topicMatch[1] + '#entry' + postId;
+ }
+ }
+ }
+ 
+ if (postLink) {
+ this.#copyToClipboard(postLink);
+ } else {
+ this.#showNotification('Could not find post link', 'error');
+ }
+ }
+ 
+ #copyToClipboard(text) {
+ if (navigator.clipboard?.writeText) {
+ navigator.clipboard.writeText(text).then(() => {
+ this.#showNotification('Link copied to clipboard!', 'success');
+ }).catch(() => {
+ this.#fallbackCopy(text);
+ });
+ } else {
+ this.#fallbackCopy(text);
+ }
+ }
+ 
+ #fallbackCopy(text) {
+ const textArea = document.createElement('textarea');
+ textArea.value = text;
+ textArea.style.cssText = 'position:fixed;opacity:0';
+ document.body.appendChild(textArea);
+ textArea.focus();
+ textArea.select();
+ 
+ try {
+ if (document.execCommand('copy')) {
+ this.#showNotification('Link copied to clipboard!', 'success');
+ } else {
+ this.#showNotification('Failed to copy link', 'error');
+ }
+ } catch {
+ this.#showNotification('Failed to copy link', 'error');
+ } finally {
+ document.body.removeChild(textArea);
+ }
+ }
+ 
+ #showNotification(message, type) {
+ document.querySelector('.share-notification')?.remove();
+ 
+ const notification = document.createElement('div');
+ notification.className = 'share-notification share-notification-' + type;
+ 
+ notification.style.cssText =
+ 'position:fixed;' +
+ 'top:20px;' +
+ 'right:20px;' +
+ 'padding:12px 20px;' +
+ 'border-radius:var(--radius);' +
+ 'background:' + (type === 'success' ? 'var(--success-color)' : 'var(--danger-color)') + ';' +
+ 'color:white;' +
+ 'font-weight:500;' +
+ 'box-shadow:var(--shadow-lg);' +
+ 'z-index:9;' +
+ 'display:flex;' +
+ 'align-items:center;' +
+ 'gap:10px;' +
+ 'animation:slideIn 0.3s ease-out;' +
+ 'max-width:300px;';
+ 
+ const icon = type === 'success'
+ ? '<i class="fa-regular fa-check-circle" aria-hidden="true"></i>'
+ : '<i class="fa-regular fa-exclamation-circle" aria-hidden="true"></i>';
+ 
+ notification.innerHTML = icon + '<span>' + message + '</span>';
+ document.body.appendChild(notification);
+ 
+ setTimeout(() => {
+ if (notification.parentNode) {
+ notification.style.animation = 'slideOut 0.3s ease-out';
+ setTimeout(() => notification.parentNode?.removeChild(notification), 300);
+ }
+ }, 3000);
+ 
+ if (!document.querySelector('#share-notification-styles')) {
+ const style = document.createElement('style');
+ style.id = 'share-notification-styles';
+ style.textContent =
+ '@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}' +
+ '@keyframes slideOut{from{transform:translateX(0);opacity:1;}to{transform:translateX(100%);opacity:0;}}';
+ document.head.appendChild(style);
+ }
+ }
+ 
+ #enhanceReputationSystem() {
+ document.addEventListener('click', (e) => {
+ const pointsUp = e.target.closest('.points_up');
+ const pointsDown = e.target.closest('.points_down');
+ const emojiPreview = e.target.closest('.st-emoji-preview');
+ 
+ if (pointsUp || pointsDown) {
+ const pointsContainer = (pointsUp || pointsDown).closest('.points');
+ const bulletDelete = pointsContainer?.querySelector('.bullet_delete');
+ 
+ if (bulletDelete && bulletDelete.onclick &&
+ (pointsContainer.querySelector('.points_pos') ||
+ pointsContainer.querySelector('.points_neg'))) {
+ bulletDelete.onclick();
+ e.preventDefault();
+ e.stopPropagation();
+ return;
+ }
+ 
+ if (pointsUp) {
+ pointsContainer?.querySelector('.points_down')?.classList.remove('active');
+ pointsUp.classList.add('active');
+ }
+ 
+ if (pointsDown) {
+ pointsContainer?.querySelector('.points_up')?.classList.remove('active');
+ pointsDown.classList.add('active');
+ }
+ }
+ 
+ if (emojiPreview) {
+ emojiPreview.closest('.st-emoji-container')?.classList.toggle('active');
+ }
+ });
+ }
+ 
+ #escapeHtml(unsafe) {
+ if (typeof unsafe !== 'string') return unsafe;
+ return unsafe
+ .replace(/&/g, '&amp;')
+ .replace(/</g, '&lt;')
+ .replace(/>/g, '&gt;')
+ .replace(/"/g, '&quot;')
+ .replace(/'/g, '&#039;');
+ }
  
  // ==============================
- // NEW: ENHANCED ANCHOR NAVIGATION
+ // ENHANCED ANCHOR NAVIGATION
  // ==============================
  
  #setupEnhancedAnchorNavigation() {
@@ -1999,7 +2135,7 @@ class PostModernizer {
  }
  
  // ==============================
- // NEW: ENHANCED QUOTE LINKS
+ // ENHANCED QUOTE LINKS
  // ==============================
  
  #enhanceQuoteLinks() {
@@ -2042,7 +2178,7 @@ class PostModernizer {
  button.setAttribute('type', 'button');
  
  // Keep the original icon or create a new one
- const icon = link.querySelector('i')?.cloneNode(true) || 
+ const icon = link.querySelector('i')?.cloneNode(true) ||
  document.createElement('i');
  if (!icon.className.includes('fa-')) {
  icon.className = 'fa-regular fa-chevron-up';
@@ -2174,7 +2310,7 @@ class PostModernizer {
  }
  
  // ==============================
- // NEW: NEW POST BADGE
+ // NEW POST BADGE
  // ==============================
  
  #addNewPostBadge(post, postHeader) {
