@@ -1213,11 +1213,17 @@ class PostModernizer {
   const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
   const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
   const spoilerContent = spoilerElement.querySelector('.spoiler-content');
+  const chevronIcon = spoilerToggle.querySelector('i');
   
   // Initial state - content starts HIDDEN (collapsed)
   spoilerContent.style.maxHeight = '0';
   spoilerContent.style.padding = '0 16px';
   spoilerHeader.setAttribute('aria-expanded', 'false');
+  
+  // Set chevron to default (down) position - no rotation
+  if (chevronIcon) {
+    chevronIcon.style.transform = 'rotate(0deg)';
+  }
   
   // Show expand button for long content when collapsed
   if (isLongContent && expandBtn) {
@@ -1227,16 +1233,15 @@ class PostModernizer {
   // Toggle spoiler on header click
   const toggleSpoiler = (shouldExpand = null) => {
     const isExpanded = shouldExpand !== null ? shouldExpand : !spoilerElement.classList.contains('expanded');
-    const chevronIcon = spoilerToggle.querySelector('i');
     
     if (isExpanded) {
       // Expand
       spoilerElement.classList.add('expanded');
       spoilerHeader.setAttribute('aria-expanded', 'true');
       
-      // Update chevron to UP
+      // Rotate chevron 180 degrees (pointing up)
       if (chevronIcon) {
-        chevronIcon.className = 'fa-regular fa-chevron-up';
+        chevronIcon.style.transform = 'rotate(180deg)';
       }
       
       if (isLongContent) {
@@ -1261,9 +1266,9 @@ class PostModernizer {
       spoilerElement.classList.remove('expanded');
       spoilerHeader.setAttribute('aria-expanded', 'false');
       
-      // Update chevron to DOWN
+      // Rotate chevron back to 0 degrees (pointing down)
       if (chevronIcon) {
-        chevronIcon.className = 'fa-regular fa-chevron-down';
+        chevronIcon.style.transform = 'rotate(0deg)';
       }
       
       // Animate collapse
