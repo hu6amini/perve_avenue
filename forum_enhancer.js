@@ -171,21 +171,28 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
         }, 5000);
     }
     
-    // Start initialization based on document state
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    // Start initialization - NO DOMContentLoaded
+    function startInitialization() {
         // Use queueMicrotask if available for immediate execution
         if (typeof queueMicrotask !== 'undefined') {
             queueMicrotask(checkAndInit);
         } else {
             setTimeout(checkAndInit, 0);
         }
-    } else {
-        // Use modern event listener with once option
-        var handler = function() {
-            document.removeEventListener('DOMContentLoaded', handler);
-            setTimeout(checkAndInit, 100);
+    }
+    
+    // Check document state and start immediately
+    if (document.readyState === 'loading') {
+        // If still loading, schedule for when ready
+        document.onreadystatechange = function() {
+            if (document.readyState === 'interactive' || document.readyState === 'complete') {
+                document.onreadystatechange = null;
+                startInitialization();
+            }
         };
-        document.addEventListener('DOMContentLoaded', handler);
+    } else {
+        // Already loaded or interactive, start now
+        startInitialization();
     }
     
     // Expose API for other scripts
