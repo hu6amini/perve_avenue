@@ -1,3 +1,6 @@
+//Twemoji
+twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
+
 // Enhanced Post Transformation and Modernization System with HTML Structure Fix 
 // Now includes support for body#search posts, preserves anchor elements,
 // features enhanced smart quote navigation, and modern spoiler system
