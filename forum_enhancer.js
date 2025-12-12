@@ -1172,13 +1172,12 @@ class PostModernizer {
  
  if (!spoilerTop || !spoilerContent) return;
  
- const spoilerText = spoilerTop.textContent.trim();
  const isLongContent = this.#isLongContent(spoilerContent);
  
  const modernSpoiler = document.createElement('div');
  modernSpoiler.className = 'modern-spoiler';
  
- // Check if spoiler should start collapsed based on original display style
+ // Check if spoiler should start collapsed
  const spoilerStyle = spoilerContent.getAttribute('style') || '';
  const isInitiallyHidden = spoilerStyle.includes('display: none') || 
  spoilerStyle.includes('display:none');
@@ -1190,7 +1189,6 @@ class PostModernizer {
  '</div>' +
  '<div class="spoiler-info">' +
  '<span class="spoiler-title">SPOILER</span>' +
- '<span class="spoiler-hint">Click to reveal hidden content</span>' +
  '</div>' +
  '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
  '<i class="fa-regular fa-chevron-' + (isInitiallyHidden ? 'down' : 'up') + '" aria-hidden="true"></i>' +
@@ -1202,7 +1200,7 @@ class PostModernizer {
  this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
  '</div>';
  
- if (isLongContent && isInitiallyHidden) {
+ if (isLongContent) {
  html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
  '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
  'Show more' +
@@ -1212,41 +1210,86 @@ class PostModernizer {
  modernSpoiler.innerHTML = html;
  container.replaceWith(modernSpoiler);
  
- // If spoiler should start expanded, add the expanded class
- if (!isInitiallyHidden) {
- modernSpoiler.classList.add('expanded');
- }
- 
  // Add event listeners
- this.#addSpoilerEventListeners(modernSpoiler);
+ this.#addSpoilerEventListeners(modernSpoiler, isInitiallyHidden);
  }
  
- #addSpoilerEventListeners(spoilerElement) {
+ #addSpoilerEventListeners(spoilerElement, isInitiallyHidden = true) {
  const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
  const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
  const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
  const spoilerContent = spoilerElement.querySelector('.spoiler-content');
  const isLongContent = spoilerContent.classList.contains('collapsible-content');
  
- // Toggle spoiler on header click
- const toggleSpoiler = () => {
- const isExpanded = spoilerElement.classList.toggle('expanded');
- const icon = spoilerToggle.querySelector('i');
+ // Initial state - content starts hidden
+ spoilerContent.style.maxHeight = '0';
+ spoilerContent.style.overflow = 'hidden';
  
- // Update ARIA attributes
- spoilerHeader.setAttribute('aria-expanded', isExpanded.toString());
- 
- // Update icon
- if (icon) {
- icon.className = 'fa-regular fa-chevron-' + (isExpanded ? 'up' : 'down');
+ // If initially shown (rare case), expand it
+ if (!isInitiallyHidden) {
+ spoilerElement.classList.add('expanded');
+ spoilerContent.style.maxHeight = 'none';
+ spoilerContent.style.padding = '16px';
+ if (isLongContent) {
+ spoilerContent.style.maxHeight = '250px';
+ }
  }
  
- // Handle expand button visibility
- if (expandBtn) {
+ // Toggle spoiler on header click
+ const toggleSpoiler = () => {
+ const isExpanded = spoilerElement.classList.contains('expanded');
+ const icon = spoilerToggle.querySelector('i');
+ 
  if (isExpanded) {
- expandBtn.style.display = 'none';
- } else if (isLongContent) {
+ // Collapse
+ spoilerElement.classList.remove('expanded');
+ spoilerHeader.setAttribute('aria-expanded', 'false');
+ 
+ if (icon) {
+ icon.className = 'fa-regular fa-chevron-down';
+ }
+ 
+ // Animate collapse
+ if (isLongContent) {
+ spoilerContent.style.maxHeight = '250px';
+ // Force reflow
+ void spoilerContent.offsetHeight;
+ spoilerContent.style.maxHeight = '0';
+ spoilerContent.style.padding = '0 16px';
+ } else {
+ spoilerContent.style.maxHeight = '0';
+ spoilerContent.style.padding = '0 16px';
+ }
+ 
+ // Show expand button if content is long
+ if (isLongContent && expandBtn) {
+ setTimeout(() => {
  expandBtn.style.display = 'flex';
+ }, 300);
+ }
+ } else {
+ // Expand
+ spoilerElement.classList.add('expanded');
+ spoilerHeader.setAttribute('aria-expanded', 'true');
+ 
+ if (icon) {
+ icon.className = 'fa-regular fa-chevron-up';
+ }
+ 
+ // Animate expansion
+ if (isLongContent) {
+ spoilerContent.style.maxHeight = '250px';
+ spoilerContent.style.padding = '16px';
+ // Hide expand button
+ if (expandBtn) {
+ expandBtn.style.display = 'none';
+ }
+ } else {
+ spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
+ spoilerContent.style.padding = '16px';
+ setTimeout(() => {
+ spoilerContent.style.maxHeight = 'none';
+ }, 300);
  }
  }
  };
@@ -1266,8 +1309,12 @@ class PostModernizer {
  
  // Expand button for long content
  if (expandBtn) {
- expandBtn.addEventListener('click', (e) => {
- e.stopPropagation();
+ // Initially hide expand button if content is collapsed
+ if (isInitiallyHidden) {
+ expandBtn.style.display = 'flex';
+ }
+ 
+ expandBtn.addEventListener('click', () => {
  spoilerElement.classList.add('expanded');
  spoilerHeader.setAttribute('aria-expanded', 'true');
  
@@ -1276,7 +1323,14 @@ class PostModernizer {
  icon.className = 'fa-regular fa-chevron-up';
  }
  
+ // Expand to show all content
+ spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
+ spoilerContent.style.padding = '16px';
  expandBtn.style.display = 'none';
+ 
+ setTimeout(() => {
+ spoilerContent.style.maxHeight = 'none';
+ }, 300);
  });
  }
  }
