@@ -1197,10 +1197,9 @@ class PostModernizer {
  '</button>' +
  '</div>';
  
- // Add CSS classes instead of inline styles
  html += '<div class="spoiler-content' + 
- (isLongContent && isInitiallyHidden ? ' collapsible-content' : '') + 
- (isInitiallyHidden ? ' collapsed' : '') + '">' +
+ (isLongContent ? ' collapsible-content' : '') + 
+ '">' +
  this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
  '</div>';
  
@@ -1223,42 +1222,36 @@ class PostModernizer {
  const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
  const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
  const spoilerContent = spoilerElement.querySelector('.spoiler-content');
- const isLongContent = spoilerContent.classList.contains('collapsible-content');
  
- // Initial state - don't use inline styles, let CSS handle it
+ // Add expanded class to content if not initially hidden
  if (!isInitiallyHidden) {
+ spoilerContent.classList.add('expanded');
  spoilerElement.classList.add('expanded');
  }
  
  // Toggle spoiler on header click
  const toggleSpoiler = () => {
- const isExpanded = !spoilerElement.classList.contains('expanded');
+ const isExpanded = spoilerElement.classList.toggle('expanded');
  const icon = spoilerToggle.querySelector('i');
- 
- // Update expanded class
- if (isExpanded) {
- spoilerElement.classList.add('expanded');
- spoilerContent.classList.remove('collapsed');
- } else {
- spoilerElement.classList.remove('expanded');
- spoilerContent.classList.add('collapsed');
- }
  
  // Update ARIA attributes
  spoilerHeader.setAttribute('aria-expanded', isExpanded.toString());
+ 
+ // Update content class
+ if (isExpanded) {
+ spoilerContent.classList.add('expanded');
+ } else {
+ spoilerContent.classList.remove('expanded');
+ }
  
  // Update icon
  if (icon) {
  icon.className = 'fa-regular fa-chevron-' + (isExpanded ? 'up' : 'down');
  }
  
- // Handle expand button visibility
- if (isLongContent) {
- if (isExpanded) {
- expandBtn?.style.setProperty('display', 'none');
- } else {
- expandBtn?.style.setProperty('display', 'flex');
- }
+ // Show/hide expand button for long content
+ if (expandBtn && spoilerContent.classList.contains('collapsible-content')) {
+ expandBtn.style.display = isExpanded ? 'none' : 'flex';
  }
  };
  
@@ -1279,7 +1272,7 @@ class PostModernizer {
  if (expandBtn) {
  expandBtn.addEventListener('click', () => {
  spoilerElement.classList.add('expanded');
- spoilerContent.classList.remove('collapsed');
+ spoilerContent.classList.add('expanded');
  spoilerHeader.setAttribute('aria-expanded', 'true');
  
  const icon = spoilerToggle.querySelector('i');
