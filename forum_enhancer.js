@@ -97,7 +97,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
             globalThis.forumObserver.register({
                 id: 'emoji-replacer',
                 callback: replaceCustomEmojis,
-                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align]',
+                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align], .picker-custom-grid',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'search', 'forum']
             });
