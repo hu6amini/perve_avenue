@@ -1177,15 +1177,6 @@ class PostModernizer {
   const modernSpoiler = document.createElement('div');
   modernSpoiler.className = 'modern-spoiler';
   
-  // Check if spoiler should start collapsed - IMPORTANT: spoilers should ALWAYS start collapsed
-  // Even if the original HTML shows content, we want the modern spoiler to be collapsed by default
-  const spoilerStyle = spoilerContent.getAttribute('style') || '';
-  const isContentVisible = !spoilerStyle.includes('display: none') && 
-                           !spoilerStyle.includes('display:none');
-  
-  // Modern spoilers should ALWAYS start collapsed, regardless of original state
-  // This matches user expectations - spoilers hide content until clicked
-  
   let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
     '<div class="spoiler-icon">' +
     '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
@@ -1216,23 +1207,17 @@ class PostModernizer {
   // Add event listeners - spoiler starts collapsed
   this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
 }
- 
- #addSpoilerEventListeners(spoilerElement, isLongContent = false) {
+
+#addSpoilerEventListeners(spoilerElement, isLongContent = false) {
   const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
   const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
   const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
   const spoilerContent = spoilerElement.querySelector('.spoiler-content');
-  const chevronIcon = spoilerToggle.querySelector('i');
   
   // Initial state - content starts HIDDEN (collapsed)
   spoilerContent.style.maxHeight = '0';
   spoilerContent.style.padding = '0 16px';
   spoilerHeader.setAttribute('aria-expanded', 'false');
-  
-  // Set chevron to down (collapsed state)
-  if (chevronIcon) {
-    chevronIcon.className = 'fa-regular fa-chevron-down';
-  }
   
   // Show expand button for long content when collapsed
   if (isLongContent && expandBtn) {
@@ -1242,13 +1227,14 @@ class PostModernizer {
   // Toggle spoiler on header click
   const toggleSpoiler = (shouldExpand = null) => {
     const isExpanded = shouldExpand !== null ? shouldExpand : !spoilerElement.classList.contains('expanded');
+    const chevronIcon = spoilerToggle.querySelector('i');
     
     if (isExpanded) {
       // Expand
       spoilerElement.classList.add('expanded');
       spoilerHeader.setAttribute('aria-expanded', 'true');
       
-      // Update chevron to UP (expanded state)
+      // Update chevron to UP
       if (chevronIcon) {
         chevronIcon.className = 'fa-regular fa-chevron-up';
       }
@@ -1275,7 +1261,7 @@ class PostModernizer {
       spoilerElement.classList.remove('expanded');
       spoilerHeader.setAttribute('aria-expanded', 'false');
       
-      // Update chevron to DOWN (collapsed state)
+      // Update chevron to DOWN
       if (chevronIcon) {
         chevronIcon.className = 'fa-regular fa-chevron-down';
       }
