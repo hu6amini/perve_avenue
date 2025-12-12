@@ -2,208 +2,195 @@
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
 
 //Default emojis to Twemoji
-// Optimized Emoji Replacer with Dependency Checking
+// Optimized Emoji Replacer for ForumCoreObserver (Works with deferred loading)
 (function() {
     'use strict';
     
-    // Configuration
-    const CONFIG = {
-        EMOJI_MAP: {
-            'https://img.forumfree.net/html/emoticons/new/heart.svg': '2764.svg',
-            'https://img.forumfree.net/html/emoticons/new/flame.svg': '1f525.svg',
-            'https://img.forumfree.net/html/emoticons/new/ph34r.svg': '1f977.svg',
-            'https://img.forumfree.net/html/emoticons/new/sick.svg': '1f922.svg',
-            'https://img.forumfree.net/html/emoticons/new/alien.svg': '1f47d.svg',
-            'https://img.forumfree.net/html/emoticons/new/wink.svg': '1f609.svg',
-            'https://img.forumfree.net/html/emoticons/new/rotfl.svg': '1f923.svg',
-            'https://img.forumfree.net/html/emoticons/new/hearts.svg': '1f60d.svg',
-            'https://img.forumfree.net/html/emoticons/new/huh.svg': '1f928.svg',
-            'https://img.forumfree.net/html/emoticons/new/dry.svg': '1f612.svg',
-            'https://img.forumfree.net/html/emoticons/new/happy.svg': '1f60a.svg',
-            'https://img.forumfree.net/html/emoticons/new/ohmy.svg': '1f62f.svg',
-            'https://img.forumfree.net/html/emoticons/new/tongue.svg': '1f61b.svg',
-            'https://img.forumfree.net/html/emoticons/new/rolleyes.svg': '1f644.svg',
-            'https://img.forumfree.net/html/emoticons/new/love.svg': '1f970.svg',
-            'https://img.forumfree.net/html/emoticons/new/think.svg': '1f914.svg',
-            'https://img.forumfree.net/html/emoticons/new/kiss.svg': '1f618.svg',
-            'https://img.forumfree.net/html/emoticons/new/bigcry.svg': '1f62d.svg',
-            'https://img.forumfree.net/html/emoticons/new/wub.svg': '1f60b.svg',
-            'https://img.forumfree.net/html/emoticons/new/cool.svg': '1f60e.svg'
-        },
-        TWEMOJI_BASE_URL: 'https://twemoji.maxcdn.com/v/latest/svg/',
-        PROCESSED_CLASS: 'twemoji-processed'
+    // Use Map for faster lookups
+    const EMOJI_MAP = new Map([
+        ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/ph34r.svg', '1f977.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/sick.svg', '1f922.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/alien.svg', '1f47d.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/wink.svg', '1f609.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/rotfl.svg', '1f923.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/hearts.svg', '1f60d.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/huh.svg', '1f928.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/dry.svg', '1f612.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f60a.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/ohmy.svg', '1f62f.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/tongue.svg', '1f61b.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/rolleyes.svg', '1f644.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/love.svg', '1f970.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/think.svg', '1f914.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/kiss.svg', '1f618.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/bigcry.svg', '1f62d.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/wub.svg', '1f60b.svg'],
+        ['https://img.forumfree.net/html/emoticons/new/cool.svg', '1f60e.svg']
+    ]);
+    
+    const TWEMOJI_CONFIG = {
+        folder: 'svg',
+        ext: '.svg',
+        base: 'https://twemoji.maxcdn.com/v/latest/',
+        className: 'twemoji',
+        size: 'svg'
     };
     
-    // State
-    var isInitialized = false;
-    var dependenciesReady = false;
+    const PROCESSED_CLASS = 'twemoji-processed';
+    const TWEMOJI_BASE_URL = TWEMOJI_CONFIG.base + 'svg/';
+    
+    // Optimized selector generator
+    function getEmojiSelector(src) {
+        return 'img[src="' + src + '"]:not(.' + PROCESSED_CLASS + ')';
+    }
     
     // Main processing function
     function replaceCustomEmojis(container) {
         if (!container || !container.querySelectorAll) return;
         
-        for (var oldSrc in CONFIG.EMOJI_MAP) {
-            if (!CONFIG.EMOJI_MAP.hasOwnProperty(oldSrc)) continue;
+        // Process custom emojis
+        for (const [oldSrc, newFile] of EMOJI_MAP) {
+            const selector = getEmojiSelector(oldSrc);
+            const imgs = container.querySelectorAll(selector);
             
-            var newFile = CONFIG.EMOJI_MAP[oldSrc];
-            var selector = 'img[src="' + oldSrc + '"]:not(.' + CONFIG.PROCESSED_CLASS + ')';
-            var imgs = container.querySelectorAll(selector);
-            
-            for (var i = 0; i < imgs.length; i++) {
-                var img = imgs[i];
-                img.src = CONFIG.TWEMOJI_BASE_URL + newFile;
-                img.classList.add('twemoji', CONFIG.PROCESSED_CLASS);
+            for (let i = 0; i < imgs.length; i++) {
+                const img = imgs[i];
+                img.src = TWEMOJI_BASE_URL + newFile;
+                img.classList.add('twemoji', PROCESSED_CLASS);
                 img.loading = 'lazy';
                 img.decoding = 'async';
                 
+                // Error handling with fallback
                 img.onerror = function() {
                     console.warn('Failed to load emoji: ' + newFile);
                     this.src = oldSrc;
-                    this.classList.remove(CONFIG.PROCESSED_CLASS);
+                    this.classList.remove(PROCESSED_CLASS);
                 };
             }
         }
         
-        // Parse Unicode emojis if Twemoji is available
+        // Parse Unicode emojis with Twemoji (non-blocking)
         if (window.twemoji && window.twemoji.parse) {
-            window.twemoji.parse(container, {
-                folder: 'svg',
-                ext: '.svg',
-                base: 'https://twemoji.maxcdn.com/v/latest/',
-                className: 'twemoji',
-                size: 'svg'
-            });
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(function() {
+                    twemoji.parse(container, TWEMOJI_CONFIG);
+                }, { timeout: 1000 });
+            } else {
+                setTimeout(function() {
+                    twemoji.parse(container, TWEMOJI_CONFIG);
+                }, 0);
+            }
         }
     }
     
-    // Check dependencies
-    function checkDependencies() {
-        // Both Twemoji AND ForumObserver need to be available
-        dependenciesReady = !!(window.twemoji && window.forumObserver);
-        return dependenciesReady;
-    }
-    
-    // Initialize with ForumCoreObserver
-    function initWithObserver() {
-        if (!window.forumObserver || typeof window.forumObserver.register !== 'function') {
-            console.warn('ForumCoreObserver not available for emoji replacer');
-            return false;
-        }
+    // Initialization function
+    function initEmojiReplacement() {
+        // Replace emojis in existing content
+        replaceCustomEmojis(document.body);
         
-        try {
-            // Register for different content types
-            window.forumObserver.register({
-                id: 'emoji-replacer-main',
+        // Register with ForumCoreObserver
+        if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+            // Register for new content
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer',
                 callback: replaceCustomEmojis,
-                selector: '.post, .article, .content, .color, .post-content, .article .color',
+                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align]',
                 priority: 'normal',
-                pageTypes: ['topic', 'blog', 'search']
+                pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             
-            window.forumObserver.register({
+            // Register for specific elements that often contain emojis
+            globalThis.forumObserver.register({
                 id: 'emoji-replacer-quotes',
                 callback: replaceCustomEmojis,
-                selector: '.quote, .modern-quote, .spoiler, .modern-spoiler',
+                selector: '.quote, .code, .spoiler, .modern-quote, .modern-spoiler',
                 priority: 'normal'
             });
             
+            // Register for user-generated content areas
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-user-content',
+                callback: replaceCustomEmojis,
+                selector: '.signature, .user-info, .profile-content, .post-content',
+                priority: 'low'
+            });
+            
             console.log('✅ Emoji replacer registered with ForumCoreObserver');
-            return true;
-        } catch (error) {
-            console.error('Failed to register emoji replacer:', error);
-            return false;
-        }
-    }
-    
-    // Initial scan of existing content
-    function scanExistingContent() {
-        if (!dependenciesReady) return;
-        
-        // Scan key areas for emojis
-        var areas = [
-            document.body,
-            ...document.querySelectorAll('.post, .article, .content, .color')
-        ];
-        
-        for (var i = 0; i < areas.length; i++) {
-            replaceCustomEmojis(areas[i]);
-        }
-        
-        console.log('🔍 Initial emoji scan complete');
-    }
-    
-    // Main initialization
-    function initialize() {
-        if (isInitialized) return;
-        
-        if (checkDependencies()) {
-            // Both dependencies are ready
-            scanExistingContent();
-            
-            if (initWithObserver()) {
-                isInitialized = true;
-                console.log('🚀 Emoji replacer fully initialized');
-            }
         } else {
-            // Wait for dependencies
-            waitForDependencies();
+            console.warn('ForumCoreObserver not available, using fallback observer');
+            setupFallbackObserver();
         }
     }
     
-    // Wait for missing dependencies
-    function waitForDependencies() {
-        var maxAttempts = 50; // 5 seconds total
-        var attempts = 0;
-        
-        function check() {
-            attempts++;
-            
-            if (checkDependencies()) {
-                // Dependencies ready, initialize
-                setTimeout(initialize, 100);
-                return;
-            }
-            
-            if (attempts >= maxAttempts) {
-                console.warn('Timeout waiting for dependencies');
-                // Try to work with what we have
-                if (window.twemoji) {
-                    console.log('ForumObserver not found, using direct processing');
-                    replaceCustomEmojis(document.body);
-                    isInitialized = true;
+    // Fallback if ForumCoreObserver is not available
+    function setupFallbackObserver() {
+        if (typeof MutationObserver !== 'undefined') {
+            var observer = new MutationObserver(function(mutations) {
+                for (var i = 0; i < mutations.length; i++) {
+                    for (var j = 0; j < mutations[i].addedNodes.length; j++) {
+                        var node = mutations[i].addedNodes[j];
+                        if (node.nodeType === 1) {
+                            replaceCustomEmojis(node);
+                        }
+                    }
                 }
-                return;
-            }
+            });
             
-            // Check again in 100ms
-            setTimeout(check, 100);
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
         }
-        
-        check();
     }
     
-    // Start initialization immediately
-    function start() {
-        // Check current state
-        if (document.readyState === 'loading') {
-            // Document still loading, wait a bit
-            setTimeout(start, 100);
+    // Wait for everything to be ready
+    function waitForDependencies() {
+        // Check if Twemoji is already loaded
+        if (window.twemoji) {
+            console.log('Twemoji already loaded, initializing emoji replacer');
+            initEmojiReplacement();
             return;
         }
         
-        // Start initialization process
-        initialize();
+        console.log('Waiting for Twemoji to load...');
+        
+        // Wait for Twemoji to load
+        var checkCount = 0;
+        var maxChecks = 50; // 5 seconds at 100ms intervals
+        
+        var checkInterval = setInterval(function() {
+            checkCount++;
+            
+            if (window.twemoji) {
+                clearInterval(checkInterval);
+                console.log('Twemoji loaded after ' + (checkCount * 100) + 'ms');
+                initEmojiReplacement();
+            } else if (checkCount >= maxChecks) {
+                clearInterval(checkInterval);
+                console.warn('Twemoji not loaded after 5 seconds, proceeding without it');
+                initEmojiReplacement();
+            }
+        }, 100);
     }
     
-    // Start the script
-    start();
-    
-    // Expose API
+    // Expose API for other scripts
     window.emojiReplacer = {
         replace: replaceCustomEmojis,
-        init: initialize,
-        isInitialized: function() { return isInitialized; }
+        init: initEmojiReplacement,
+        isReady: function() { return !!window.twemoji; }
     };
+    
+    // Start waiting for dependencies when script loads
+    console.log('Emoji replacer script loaded');
+    
+    // Wait for DOM to be ready and Twemoji to load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', waitForDependencies);
+    } else {
+        waitForDependencies();
+    }
     
 })();
 
