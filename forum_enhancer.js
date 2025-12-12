@@ -1178,13 +1178,10 @@ class PostModernizer {
  const modernSpoiler = document.createElement('div');
  modernSpoiler.className = 'modern-spoiler';
  
- // Check if spoiler should start collapsed
+ // Check if spoiler should start collapsed based on original display style
  const spoilerStyle = spoilerContent.getAttribute('style') || '';
  const isInitiallyHidden = spoilerStyle.includes('display: none') || 
  spoilerStyle.includes('display:none');
- 
- // Don't add expanded class initially - we'll control this via CSS/JS
- // modernSpoiler.classList.toggle('expanded', !isInitiallyHidden);
  
  let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="' + 
  (!isInitiallyHidden).toString() + '">' +
@@ -1201,13 +1198,12 @@ class PostModernizer {
  '</div>';
  
  html += '<div class="spoiler-content' + 
- (isLongContent && isInitiallyHidden ? ' collapsible-content' : '') + 
- '" style="' + (isInitiallyHidden ? 'display: none;' : 'display: block;') + '">' +
+ (isLongContent ? ' collapsible-content' : '') + '">' +
  this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
  '</div>';
  
  if (isLongContent && isInitiallyHidden) {
- html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content" style="display: none;">' +
+ html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
  '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
  'Show more' +
  '</button>';
@@ -1216,35 +1212,26 @@ class PostModernizer {
  modernSpoiler.innerHTML = html;
  container.replaceWith(modernSpoiler);
  
- // Add event listeners
- this.#addSpoilerEventListeners(modernSpoiler, isInitiallyHidden);
+ // If spoiler should start expanded, add the expanded class
+ if (!isInitiallyHidden) {
+ modernSpoiler.classList.add('expanded');
  }
  
- #addSpoilerEventListeners(spoilerElement, isInitiallyHidden = true) {
+ // Add event listeners
+ this.#addSpoilerEventListeners(modernSpoiler);
+ }
+ 
+ #addSpoilerEventListeners(spoilerElement) {
  const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
  const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
  const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
  const spoilerContent = spoilerElement.querySelector('.spoiler-content');
  const isLongContent = spoilerContent.classList.contains('collapsible-content');
  
- // Initial state
- if (!isInitiallyHidden) {
- spoilerElement.classList.add('expanded');
- spoilerContent.style.display = 'block';
- spoilerContent.style.maxHeight = 'none';
- }
- 
  // Toggle spoiler on header click
  const toggleSpoiler = () => {
- const isExpanded = !spoilerElement.classList.contains('expanded');
+ const isExpanded = spoilerElement.classList.toggle('expanded');
  const icon = spoilerToggle.querySelector('i');
- 
- // Update expanded class
- if (isExpanded) {
- spoilerElement.classList.add('expanded');
- } else {
- spoilerElement.classList.remove('expanded');
- }
  
  // Update ARIA attributes
  spoilerHeader.setAttribute('aria-expanded', isExpanded.toString());
@@ -1254,172 +1241,44 @@ class PostModernizer {
  icon.className = 'fa-regular fa-chevron-' + (isExpanded ? 'up' : 'down');
  }
  
- // Handle content visibility with animation
+ // Handle expand button visibility
+ if (expandBtn) {
  if (isExpanded) {
- spoilerContent.style.display = 'block';
- if (isLongContent) {
- spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
- setTimeout(() => {
- spoilerContent.style.maxHeight = 'none';
- #transformSpoiler(container) {
-   const spoilerTop = container.querySelector('.code_top');
-   const spoilerContent = container.querySelector('.code[align="left"]');
-   
-   if (!spoilerTop || !spoilerContent) return;
-   
-   const spoilerText = spoilerTop.textContent.trim();
-   const isLongContent = this.#isLongContent(spoilerContent);
-   
-   const modernSpoiler = document.createElement('div');
-   modernSpoiler.className = 'modern-spoiler';
-   
-   // Check if spoiler should start collapsed
-   const spoilerStyle = spoilerContent.getAttribute('style') || '';
-   const isInitiallyHidden = spoilerStyle.includes('display: none') || 
-                             spoilerStyle.includes('display:none');
-   
-   // Create spoiler HTML
-   let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="' + 
-              (isInitiallyHidden ? 'false' : 'true') + '">' +
-     '<div class="spoiler-icon">' +
-     '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
-     '</div>' +
-     '<div class="spoiler-info">' +
-     '<span class="spoiler-title">SPOILER</span>' +
-     '<span class="spoiler-hint">Click to reveal hidden content</span>' +
-     '</div>' +
-     '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
-     '<i class="fa-regular fa-chevron-' + (isInitiallyHidden ? 'down' : 'up') + '" aria-hidden="true"></i>' +
-     '</button>' +
-     '</div>';
-   
-   // Create content div - it will be hidden by default via CSS
-   html += '<div class="spoiler-content' + 
-           (isLongContent ? ' collapsible-content' : '') + '">' +
-     this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
-     '</div>';
-   
-   // Add expand button for long content (only show when expanded)
-   if (isLongContent) {
-     html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
-       '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-       'Show more' +
-       '</button>';
-   }
-   
-   modernSpoiler.innerHTML = html;
-   container.replaceWith(modernSpoiler);
-   
-   // If spoiler should start expanded, add the expanded class
-   if (!isInitiallyHidden) {
-     modernSpoiler.classList.add('expanded');
-     const content = modernSpoiler.querySelector('.spoiler-content');
-     if (content) {
-       // Force a reflow to ensure the transition works
-       void content.offsetHeight;
-       content.style.maxHeight = content.scrollHeight + 'px';
-       content.style.opacity = '1';
-       if (isLongContent) {
-         content.style.maxHeight = '250px';
-       }
-     }
-   }
-   
-   // Add event listeners
-   this.#addSpoilerEventListeners(modernSpoiler, isInitiallyHidden);
+ expandBtn.style.display = 'none';
+ } else if (isLongContent) {
+ expandBtn.style.display = 'flex';
+ }
+ }
+ };
+ 
+ spoilerHeader.addEventListener('click', toggleSpoiler);
+ spoilerToggle.addEventListener('click', (e) => {
+ e.stopPropagation();
+ toggleSpoiler();
+ });
+ 
+ spoilerHeader.addEventListener('keydown', (e) => {
+ if (e.key === 'Enter' || e.key === ' ') {
+ e.preventDefault();
+ toggleSpoiler();
+ }
+ });
+ 
+ // Expand button for long content
+ if (expandBtn) {
+ expandBtn.addEventListener('click', (e) => {
+ e.stopPropagation();
+ spoilerElement.classList.add('expanded');
+ spoilerHeader.setAttribute('aria-expanded', 'true');
+ 
+ const icon = spoilerToggle.querySelector('i');
+ if (icon) {
+ icon.className = 'fa-regular fa-chevron-up';
  }
  
- #addSpoilerEventListeners(spoilerElement, isInitiallyHidden = true) {
-   const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
-   const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
-   const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
-   const spoilerContent = spoilerElement.querySelector('.spoiler-content');
-   const isLongContent = spoilerContent.classList.contains('collapsible-content');
-   
-   // Toggle spoiler on header click
-   const toggleSpoiler = () => {
-     const isExpanded = spoilerElement.classList.toggle('expanded');
-     const icon = spoilerToggle.querySelector('i');
-     
-     // Update ARIA attributes
-     spoilerHeader.setAttribute('aria-expanded', isExpanded.toString());
-     
-     // Update icon
-     if (icon) {
-       icon.className = 'fa-regular fa-chevron-' + (isExpanded ? 'up' : 'down');
-     }
-     
-     // Handle content visibility with animation
-     if (isExpanded) {
-       // Show content
-       spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
-       spoilerContent.style.opacity = '1';
-       
-       // For long content, set initial max-height
-       if (isLongContent) {
-         spoilerContent.style.maxHeight = '250px';
-         spoilerContent.classList.remove('fully-expanded');
-         // Show expand button
-         expandBtn.style.display = 'flex';
-       }
-       
-       // Show expand button after a delay
-       setTimeout(() => {
-         if (expandBtn) {
-           expandBtn.style.display = 'flex';
-         }
-       }, 300);
-     } else {
-       // Hide content
-       spoilerContent.style.maxHeight = '0';
-       spoilerContent.style.opacity = '0';
-       spoilerContent.classList.remove('fully-expanded');
-       
-       // Hide expand button
-       if (expandBtn) {
-         expandBtn.style.display = 'none';
-       }
-     }
-   };
-   
-   spoilerHeader.addEventListener('click', toggleSpoiler);
-   spoilerToggle.addEventListener('click', (e) => {
-     e.stopPropagation();
-     toggleSpoiler();
-   });
-   
-   spoilerHeader.addEventListener('keydown', (e) => {
-     if (e.key === 'Enter' || e.key === ' ') {
-       e.preventDefault();
-       toggleSpoiler();
-     }
-   });
-   
-   // Expand button for long content
-   if (expandBtn) {
-     expandBtn.style.display = 'none'; // Start hidden
-     
-     expandBtn.addEventListener('click', () => {
-       // Expand fully
-       spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
-       spoilerContent.classList.add('fully-expanded');
-       
-       // Hide expand button after animation
-       setTimeout(() => {
-         expandBtn.style.display = 'none';
-       }, 300);
-       
-       // Remove max-height after animation completes
-       setTimeout(() => {
-         spoilerContent.style.maxHeight = 'none';
-       }, 600);
-     });
-     
-     // Show expand button only when spoiler is expanded
-     if (!isInitiallyHidden) {
-       expandBtn.style.display = 'flex';
-     }
-   }
+ expandBtn.style.display = 'none';
+ });
+ }
  }
  
  #isLongContent(contentElement) {
