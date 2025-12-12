@@ -1183,9 +1183,8 @@ class PostModernizer {
  const isInitiallyHidden = spoilerStyle.includes('display: none') || 
  spoilerStyle.includes('display:none');
  
- if (!isInitiallyHidden) {
- modernSpoiler.classList.add('expanded');
- }
+ // Don't add expanded class initially - we'll control this via CSS/JS
+ // modernSpoiler.classList.toggle('expanded', !isInitiallyHidden);
  
  let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="' + 
  (!isInitiallyHidden).toString() + '">' +
@@ -1203,12 +1202,12 @@ class PostModernizer {
  
  html += '<div class="spoiler-content' + 
  (isLongContent && isInitiallyHidden ? ' collapsible-content' : '') + 
- (!isInitiallyHidden ? ' expanded' : '') + '">' +
+ '" style="' + (isInitiallyHidden ? 'display: none;' : 'display: block;') + '">' +
  this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
  '</div>';
  
  if (isLongContent && isInitiallyHidden) {
- html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
+ html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content" style="display: none;">' +
  '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
  'Show more' +
  '</button>';
@@ -1218,20 +1217,34 @@ class PostModernizer {
  container.replaceWith(modernSpoiler);
  
  // Add event listeners
- this.#addSpoilerEventListeners(modernSpoiler);
+ this.#addSpoilerEventListeners(modernSpoiler, isInitiallyHidden);
  }
  
- #addSpoilerEventListeners(spoilerElement) {
+ #addSpoilerEventListeners(spoilerElement, isInitiallyHidden = true) {
  const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
  const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
  const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
  const spoilerContent = spoilerElement.querySelector('.spoiler-content');
  const isLongContent = spoilerContent.classList.contains('collapsible-content');
  
+ // Initial state
+ if (!isInitiallyHidden) {
+ spoilerElement.classList.add('expanded');
+ spoilerContent.style.display = 'block';
+ spoilerContent.style.maxHeight = 'none';
+ }
+ 
  // Toggle spoiler on header click
  const toggleSpoiler = () => {
- const isExpanded = spoilerElement.classList.toggle('expanded');
+ const isExpanded = !spoilerElement.classList.contains('expanded');
  const icon = spoilerToggle.querySelector('i');
+ 
+ // Update expanded class
+ if (isExpanded) {
+ spoilerElement.classList.add('expanded');
+ } else {
+ spoilerElement.classList.remove('expanded');
+ }
  
  // Update ARIA attributes
  spoilerHeader.setAttribute('aria-expanded', isExpanded.toString());
@@ -1241,13 +1254,33 @@ class PostModernizer {
  icon.className = 'fa-regular fa-chevron-' + (isExpanded ? 'up' : 'down');
  }
  
- // Handle long content
- if (isLongContent && isExpanded) {
- expandBtn?.style.setProperty('display', 'none');
+ // Handle content visibility with animation
+ if (isExpanded) {
+ spoilerContent.style.display = 'block';
+ if (isLongContent) {
  spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
  setTimeout(() => {
  spoilerContent.style.maxHeight = 'none';
  }, 300);
+ }
+ // Hide expand button if present
+ expandBtn?.style.setProperty('display', 'none');
+ } else {
+ if (isLongContent) {
+ spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
+ // Force reflow
+ void spoilerContent.offsetHeight;
+ spoilerContent.style.maxHeight = '0';
+ setTimeout(() => {
+ spoilerContent.style.display = 'none';
+ }, 300);
+ } else {
+ spoilerContent.style.display = 'none';
+ }
+ // Show expand button if present and content is long
+ if (isLongContent) {
+ expandBtn?.style.setProperty('display', 'flex');
+ }
  }
  };
  
@@ -1267,11 +1300,20 @@ class PostModernizer {
  // Expand button for long content
  if (expandBtn) {
  expandBtn.addEventListener('click', () => {
+ spoilerContent.style.display = 'block';
  spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
  expandBtn.style.display = 'none';
  setTimeout(() => {
  spoilerContent.style.maxHeight = 'none';
  }, 300);
+ 
+ // Also expand the spoiler
+ spoilerElement.classList.add('expanded');
+ spoilerHeader.setAttribute('aria-expanded', 'true');
+ const icon = spoilerToggle.querySelector('i');
+ if (icon) {
+ icon.className = 'fa-regular fa-chevron-up';
+ }
  });
  }
  }
