@@ -8,6 +8,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
     
     // Use Map for faster lookups
     const EMOJI_MAP = new Map([
+        ['https://img.forumfree.net/html/emoticons/new/biggrin.svg', '1f600.svg'],
         ['https://img.forumfree.net/html/emoticons/new/smile.svg', '1f642.svg'],
         ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],
         ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],
