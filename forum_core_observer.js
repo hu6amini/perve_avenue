@@ -1,3 +1,5 @@
+'use strict';
+
 class ForumCoreObserver {
     #observer = null;
     #mutationQueue = [];
@@ -7,12 +9,10 @@ class ForumCoreObserver {
     #processedNodes = new WeakSet();
     #cleanupIntervalId = null;
     
-    // Private fields for better encapsulation
-    #callbacks = new Map();           // id -> callback config
-    #debouncedCallbacks = new Map();  // id -> debounced config
+    #callbacks = new Map();
+    #debouncedCallbacks = new Map();
     #pageState = this.#detectPageState();
     
-    // Configuration with static getters
     static get #OBSERVER_OPTIONS() {
         return {
             childList: true,
@@ -25,11 +25,11 @@ class ForumCoreObserver {
     
     static get #PERFORMANCE_CONFIG() {
         return {
-            maxProcessingTime: 16,        // 60fps budget
+            maxProcessingTime: 16,
             mutationBatchSize: 50,
             debounceThreshold: 100,
             idleCallbackTimeout: 2000,
-            searchPageBatchSize: 10       // NEW: Special batch size for search pages
+            searchPageBatchSize: 10
         };
     }
     
@@ -53,48 +53,37 @@ class ForumCoreObserver {
     }
     
     #init() {
-        // Create observer with private class field
         this.#observer = new MutationObserver(this.#handleMutations.bind(this));
-        
-        // Observe entire document with modern options
         this.#observer.observe(document.documentElement, ForumCoreObserver.#OBSERVER_OPTIONS);
-        
-        // Initial scan of existing content
         this.#scanExistingContent();
-        
-        // Setup periodic cleanup with private method
         this.#setupCleanup();
         
-        // Use modern event listener with options
         document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { passive: true });
         
-        // Use console.group for better debugging
-        console.group('🚀 Enhanced Forum Core Observer');
+        console.group('Enhanced Forum Core Observer');
         console.log('Initialized with Post Modernizer optimizations');
-        console.log('Page state:', this.#pageState);
+        console.log('Page state: ' + JSON.stringify(this.#pageState));
         console.groupEnd();
     }
     
     #detectPageState() {
-        const { pathname } = window.location;
-        const { className } = document.body;
+        const pathname = window.location.pathname;
+        const className = document.body.className;
         const theme = document.documentElement.dataset?.theme;
         
-        // Use optional chaining and nullish coalescing
         const selectors = {
             forum: '.board, .big_list',
             topic: '.modern-topic-title, .post',
             blog: '#blog, .article',
             profile: '.modern-profile, .profile',
             search: '#search.posts, body#search',
-            modernized: '.post-modernized'  // NEW: Track modernized content
+            modernized: '.post-modernized'
         };
         
-        const checks = Object.entries(selectors).map(([key, selector]) => 
-            [key, document.querySelector(selector) ?? null]
-        );
-        
-        const pageChecks = Object.fromEntries(checks);
+        const pageChecks = {};
+        for (const [key, selector] of Object.entries(selectors)) {
+            pageChecks[key] = document.querySelector(selector) ?? null;
+        }
         
         return {
             ...pageChecks,
@@ -103,14 +92,14 @@ class ForumCoreObserver {
             isBlog: pathname.includes('/b/') || pageChecks.blog,
             isProfile: pathname.includes('/user/') || pageChecks.profile,
             isSearch: pathname.includes('/search/') || pageChecks.search,
-            hasModernizedPosts: !!pageChecks.modernized,  // NEW: Track modernized posts
-            hasModernizedQuotes: !!document.querySelector('.modern-quote'),  // NEW
-            hasModernizedProfile: !!document.querySelector('.modern-profile'),  // NEW
-            hasModernizedNavigation: !!document.querySelector('.modern-nav'),  // NEW
+            hasModernizedPosts: !!pageChecks.modernized,
+            hasModernizedQuotes: !!document.querySelector('.modern-quote'),
+            hasModernizedProfile: !!document.querySelector('.modern-profile'),
+            hasModernizedNavigation: !!document.querySelector('.modern-nav'),
             isDarkMode: theme === 'dark',
             isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
             isMobile: window.matchMedia('(max-width: 768px)').matches,
-            pageId: crypto.randomUUID?.() ?? `page_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            pageId: crypto.randomUUID?.() ?? 'page_' + Date.now() + '_' + Math.random().toString(36).slice(2)
         };
     }
     
@@ -118,52 +107,44 @@ class ForumCoreObserver {
         this.#mutationMetrics.totalMutations++;
         this.#mutationMetrics.lastMutationTime = Date.now();
         
-        // Filter mutations using modern array methods
-        const validMutations = mutations.filter(mutation => 
-            this.#shouldProcessMutation(mutation)
-        );
+        const validMutations = [];
+        for (const mutation of mutations) {
+            if (this.#shouldProcessMutation(mutation)) {
+                validMutations.push(mutation);
+            }
+        }
         
         if (!validMutations.length) return;
         
-        // Use spread operator with BigInt
         this.#mutationMetrics.totalMutations += BigInt(validMutations.length);
-        
-        // Add to queue
         this.#mutationQueue.push(...validMutations);
         
-        // Start processing if idle
         if (!this.#isProcessing) {
             this.#processMutationQueue();
         }
     }
     
     #shouldProcessMutation(mutation) {
-        // Skip mutations from our own scripts
         if (mutation.target.dataset?.observerOrigin === 'forum-script') {
             return false;
         }
         
-        // NEW: Skip mutations in already modernized content
         if (this.#shouldSkipPostModernizerProcessing(mutation.target)) {
             return false;
         }
         
-        // Skip invisible elements using optional chaining
-        const style = mutation.target.nodeType === Node.ELEMENT_NODE 
-            ? window.getComputedStyle(mutation.target)
-            : null;
-            
-        if (style?.display === 'none' || style?.visibility === 'hidden') {
-            return false;
+        if (mutation.target.nodeType === Node.ELEMENT_NODE) {
+            const style = window.getComputedStyle(mutation.target);
+            if (style.display === 'none' || style.visibility === 'hidden') {
+                return false;
+            }
         }
         
-        // Skip irrelevant text changes
         if (mutation.type === 'characterData') {
             const parent = mutation.target.parentElement;
             return parent ? this.#shouldObserveTextChanges(parent) : false;
         }
         
-        // Skip non-critical style changes
         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
             const oldValue = mutation.oldValue ?? '';
             const newValue = mutation.target.getAttribute('style') ?? '';
@@ -174,32 +155,26 @@ class ForumCoreObserver {
     }
     
     #shouldSkipPostModernizerProcessing(node) {
-        // Skip nodes that are already modernized
         if (node.classList?.contains('post-modernized')) {
             return true;
         }
         
-        // Skip nodes inside modernized posts
         if (node.closest('.post-modernized')) {
             return true;
         }
         
-        // Skip nodes inside modern quotes
         if (node.closest('.modern-quote')) {
             return true;
         }
         
-        // Skip nodes inside modern profiles
         if (node.closest('.modern-profile')) {
             return true;
         }
         
-        // Skip modern navigation elements
         if (node.closest('.modern-nav, .modern-breadcrumb, .modern-topic-title')) {
             return true;
         }
         
-        // Skip Post Modernizer-specific elements
         const modernizerElements = [
             '.post-new-badge', '.quote-jump-btn', '.anchor-container',
             '.modern-bottom-actions', '.multiquote-control',
@@ -222,10 +197,14 @@ class ForumCoreObserver {
         
         if (interactiveTags.has(tagName)) return true;
         
-        // Check if any forum content class exists
-        return Array.from(element.classList).some(cls => 
-            forumContentClasses.has(cls)
-        );
+        const elementClasses = Array.from(element.classList);
+        for (const cls of elementClasses) {
+            if (forumContentClasses.has(cls)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     #styleChangeAffectsDOM(oldStyle, newStyle) {
@@ -233,19 +212,29 @@ class ForumCoreObserver {
         const oldProps = this.#parseStyleString(oldStyle);
         const newProps = this.#parseStyleString(newStyle);
         
-        return Array.from(visibilityProps).some(prop => 
-            oldProps[prop] !== newProps[prop]
-        );
+        for (const prop of visibilityProps) {
+            if (oldProps.get(prop) !== newProps.get(prop)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     #parseStyleString(styleString) {
         if (!styleString) return new Map();
         
-        const pairs = styleString.split(';')
-            .map(part => part.split(':').map(s => s.trim()))
-            .filter(([key, value]) => key && value);
-            
-        return new Map(pairs);
+        const result = new Map();
+        const pairs = styleString.split(';');
+        
+        for (const pair of pairs) {
+            const [key, value] = pair.split(':').map(s => s.trim());
+            if (key && value) {
+                result.set(key, value);
+            }
+        }
+        
+        return result;
     }
     
     async #processMutationQueue() {
@@ -254,27 +243,25 @@ class ForumCoreObserver {
         
         try {
             while (this.#mutationQueue.length) {
-                // NEW: Special handling for search pages
                 if (this.#pageState.isSearch && this.#mutationQueue.length > 10) {
                     await this.#processSearchPageBatch();
                     continue;
                 }
                 
-                const batch = this.#mutationQueue.splice(0, ForumCoreObserver.#PERFORMANCE_CONFIG.mutationBatchSize);
+                const batchSize = ForumCoreObserver.#PERFORMANCE_CONFIG.mutationBatchSize;
+                const batch = this.#mutationQueue.splice(0, batchSize);
                 await this.#processMutationBatch(batch);
                 
-                // Yield to main thread if taking too long
                 if (performance.now() - startTime > ForumCoreObserver.#PERFORMANCE_CONFIG.maxProcessingTime) {
                     await new Promise(resolve => queueMicrotask(resolve));
                 }
             }
         } catch (error) {
-            console.error('Mutation processing error:', error);
+            console.error('Mutation processing error: ' + error);
         } finally {
             this.#isProcessing = false;
             this.#mutationMetrics.processedMutations++;
             
-            // Update metrics with exponential moving average
             const processingTime = performance.now() - startTime;
             this.#mutationMetrics.averageProcessingTime = 
                 this.#mutationMetrics.averageProcessingTime * 0.9 + processingTime * 0.1;
@@ -287,11 +274,11 @@ class ForumCoreObserver {
         for (const mutation of mutations) {
             switch (mutation.type) {
                 case 'childList':
-                    mutation.addedNodes.forEach(node => {
+                    for (const node of mutation.addedNodes) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             this.#collectAllElements(node, affectedNodes);
                         }
-                    });
+                    }
                     break;
                     
                 case 'attributes':
@@ -304,25 +291,29 @@ class ForumCoreObserver {
             }
         }
         
-        // NEW: Special handling for search page posts
         if (this.#pageState.isSearch) {
-            const searchPosts = Array.from(affectedNodes).filter(node => 
-                node.classList?.contains('post') && 
-                node.closest('body#search')
-            );
+            const searchPosts = [];
+            for (const node of affectedNodes) {
+                if (node.classList?.contains('post') && node.closest('body#search')) {
+                    searchPosts.push(node);
+                }
+            }
             
             if (searchPosts.length > 5) {
                 await this.#processSearchPostsBatch(searchPosts);
                 
-                // Remove processed search posts from affectedNodes
-                searchPosts.forEach(post => affectedNodes.delete(post));
+                for (const post of searchPosts) {
+                    affectedNodes.delete(post);
+                }
             }
         }
         
-        // Process remaining nodes in parallel with concurrency limit
-        const nodeArray = Array.from(affectedNodes).filter(node => 
-            node && !this.#processedNodes.has(node)
-        );
+        const nodeArray = [];
+        for (const node of affectedNodes) {
+            if (node && !this.#processedNodes.has(node)) {
+                nodeArray.push(node);
+            }
+        }
         
         const CONCURRENCY_LIMIT = 4;
         const chunks = [];
@@ -332,9 +323,8 @@ class ForumCoreObserver {
         }
         
         for (const chunk of chunks) {
-            await Promise.allSettled(
-                chunk.map(node => this.#processNode(node))
-            );
+            const promises = chunk.map(node => this.#processNode(node));
+            await Promise.allSettled(promises);
         }
     }
     
@@ -342,9 +332,8 @@ class ForumCoreObserver {
         const batchSize = ForumCoreObserver.#PERFORMANCE_CONFIG.searchPageBatchSize;
         const batch = this.#mutationQueue.splice(0, batchSize);
         
-        console.log(`🔍 Processing search page batch: ${batch.length} mutations`);
+        console.log('Processing search page batch: ' + batch.length + ' mutations');
         
-        // Group mutations by type for efficient processing
         const addedNodes = new Set();
         const attributeNodes = new Set();
         const textNodes = new Set();
@@ -352,11 +341,11 @@ class ForumCoreObserver {
         for (const mutation of batch) {
             switch (mutation.type) {
                 case 'childList':
-                    mutation.addedNodes.forEach(node => {
+                    for (const node of mutation.addedNodes) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             this.#collectAllElements(node, addedNodes);
                         }
-                    });
+                    }
                     break;
                     
                 case 'attributes':
@@ -369,43 +358,45 @@ class ForumCoreObserver {
             }
         }
         
-        // Process search posts first (higher priority)
-        const searchPosts = Array.from(addedNodes).filter(node => 
-            node.classList?.contains('post') && node.closest('body#search')
-        );
+        const searchPosts = [];
+        for (const node of addedNodes) {
+            if (node.classList?.contains('post') && node.closest('body#search')) {
+                searchPosts.push(node);
+            }
+        }
         
         if (searchPosts.length > 0) {
             await this.#processSearchPostsBatch(searchPosts);
         }
         
-        // Process other elements
-        const otherNodes = new Set([
-            ...Array.from(addedNodes).filter(node => !searchPosts.includes(node)),
-            ...attributeNodes,
-            ...textNodes
-        ]);
+        const otherNodes = new Set();
+        for (const node of addedNodes) {
+            if (!searchPosts.includes(node)) {
+                otherNodes.add(node);
+            }
+        }
+        for (const node of attributeNodes) otherNodes.add(node);
+        for (const node of textNodes) otherNodes.add(node);
         
         await this.#processNodeBatch(Array.from(otherNodes));
     }
     
     async #processSearchPostsBatch(posts) {
-        console.log(`📋 Processing ${posts.length} search posts in batch`);
+        console.log('Processing ' + posts.length + ' search posts in batch');
         
-        // Process posts in smaller chunks to avoid blocking
         const CHUNK_SIZE = 3;
         for (let i = 0; i < posts.length; i += CHUNK_SIZE) {
             const chunk = posts.slice(i, i + CHUNK_SIZE);
+            const promises = [];
             
-            await Promise.allSettled(
-                chunk.map(post => {
-                    if (!this.#processedNodes.has(post)) {
-                        return this.#processNode(post);
-                    }
-                    return Promise.resolve();
-                })
-            );
+            for (const post of chunk) {
+                if (!this.#processedNodes.has(post)) {
+                    promises.push(this.#processNode(post));
+                }
+            }
             
-            // Yield to main thread between chunks
+            await Promise.allSettled(promises);
+            
             if (i + CHUNK_SIZE < posts.length) {
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
@@ -421,9 +412,8 @@ class ForumCoreObserver {
         }
         
         for (const chunk of chunks) {
-            await Promise.allSettled(
-                chunk.map(node => this.#processNode(node))
-            );
+            const promises = chunk.map(node => this.#processNode(node));
+            await Promise.allSettled(promises);
         }
     }
     
@@ -432,7 +422,6 @@ class ForumCoreObserver {
         
         collection.add(root);
         
-        // Use for...of for performance
         for (const child of root.children) {
             this.#collectAllElements(child, collection);
         }
@@ -444,7 +433,6 @@ class ForumCoreObserver {
         const matchingCallbacks = this.#getMatchingCallbacks(node);
         if (!matchingCallbacks.length) return;
         
-        // Group by priority using Map
         const priorityGroups = new Map([
             ['critical', []],
             ['high', []],
@@ -452,12 +440,14 @@ class ForumCoreObserver {
             ['low', []]
         ]);
         
-        matchingCallbacks.forEach(callback => {
+        for (const callback of matchingCallbacks) {
             const priority = callback.priority ?? 'normal';
-            priorityGroups.get(priority)?.push(callback);
-        });
+            const group = priorityGroups.get(priority);
+            if (group) {
+                group.push(callback);
+            }
+        }
         
-        // Execute in priority order
         for (const [priority, callbacks] of priorityGroups) {
             if (!callbacks?.length) continue;
             
@@ -475,16 +465,18 @@ class ForumCoreObserver {
         const matching = [];
         
         for (const callback of this.#callbacks.values()) {
-            // Check page type restrictions
             if (callback.pageTypes?.length) {
-                const hasMatchingPageType = callback.pageTypes.some(type => {
-                    const stateKey = `is${type.charAt(0).toUpperCase() + type.slice(1)}`;
-                    return this.#pageState[stateKey];
-                });
+                let hasMatchingPageType = false;
+                for (const type of callback.pageTypes) {
+                    const stateKey = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
+                    if (this.#pageState[stateKey]) {
+                        hasMatchingPageType = true;
+                        break;
+                    }
+                }
                 if (!hasMatchingPageType) continue;
             }
             
-            // NEW: Special handling for quote links
             if (callback.id?.includes('quote-link') || callback.id?.includes('anchor')) {
                 const isQuoteLink = node.matches?.('.quote-link, .quote_top a[href*="#entry"]');
                 if (!isQuoteLink) {
@@ -493,17 +485,18 @@ class ForumCoreObserver {
                 }
             }
             
-            // Check dependencies
             if (callback.dependencies?.length) {
-                const unmetDeps = callback.dependencies.filter(dep => {
-                    if (typeof dep === 'string') return !document.querySelector(dep);
-                    if (typeof dep === 'function') return !dep();
-                    return true;
-                });
+                const unmetDeps = [];
+                for (const dep of callback.dependencies) {
+                    if (typeof dep === 'string' && !document.querySelector(dep)) {
+                        unmetDeps.push(dep);
+                    } else if (typeof dep === 'function' && !dep()) {
+                        unmetDeps.push(dep);
+                    }
+                }
                 if (unmetDeps.length) continue;
             }
             
-            // Check selector match
             if (callback.selector) {
                 if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
                     continue;
@@ -521,9 +514,8 @@ class ForumCoreObserver {
             try {
                 await callback.fn(node);
             } catch (error) {
-                console.error(`Callback ${callback.id} failed:`, error);
+                console.error('Callback ' + callback.id + ' failed: ' + error);
                 
-                // Retry logic with exponential backoff
                 if (callback.retryCount < (callback.maxRetries ?? 0)) {
                     callback.retryCount = (callback.retryCount ?? 0) + 1;
                     const delay = 100 * Math.pow(2, callback.retryCount - 1);
@@ -546,7 +538,6 @@ class ForumCoreObserver {
         
         const delay = delays.get(priority) ?? 100;
         
-        // Use scheduler API if available
         if (scheduler?.postTask) {
             scheduler.postTask(() => 
                 this.#executeCallbacks(callbacks, node), 
@@ -571,7 +562,6 @@ class ForumCoreObserver {
             '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
             '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
             '.profile-avatar', '.breadcrumb-item', '.page-number',
-            // NEW: Post Modernizer elements
             '.post-modernized', '.modern-quote', '.modern-profile', '.modern-topic-title',
             '.modern-breadcrumb', '.modern-nav', '.post-new-badge', '.quote-jump-btn',
             '.anchor-container', '.modern-bottom-actions', '.multiquote-control',
@@ -582,30 +572,31 @@ class ForumCoreObserver {
         const root = document.documentElement;
         const observer = new MutationObserver((mutations, obs) => {
             for (const selector of forumSelectors) {
-                root.querySelectorAll(selector).forEach(node => {
+                const nodes = root.querySelectorAll(selector);
+                for (const node of nodes) {
                     if (!this.#processedNodes.has(node)) {
                         this.#processNode(node);
                     }
-                });
+                }
             }
             obs.disconnect();
         });
         
         observer.observe(root, { childList: true, subtree: true });
         
-        // Force immediate check
-        forumSelectors.forEach(selector => {
-            root.querySelectorAll(selector).forEach(node => {
+        for (const selector of forumSelectors) {
+            const nodes = root.querySelectorAll(selector);
+            for (const node of nodes) {
                 if (!this.#processedNodes.has(node)) {
                     this.#processNode(node);
                 }
-            });
-        });
+            }
+        }
         
         this.#initialScanComplete = true;
-        console.log('✅ Initial content scan complete');
-        console.log(`📊 Found: ${document.querySelectorAll('.post-modernized').length} modernized posts`);
-        console.log(`📊 Found: ${document.querySelectorAll('.modern-quote').length} modern quotes`);
+        console.log('Initial content scan complete');
+        console.log('Found: ' + document.querySelectorAll('.post-modernized').length + ' modernized posts');
+        console.log('Found: ' + document.querySelectorAll('.modern-quote').length + ' modern quotes');
     }
     
     #setupCleanup() {
@@ -613,18 +604,15 @@ class ForumCoreObserver {
             if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes) {
                 console.warn('Processed nodes approaching limit');
                 
-                // Clear processed nodes if getting too large
                 if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes * 1.5) {
                     console.warn('Clearing processed nodes cache');
                     this.#processedNodes = new WeakSet();
                 }
             }
             
-            // Force GC if available
             globalThis.gc?.();
         }, ForumCoreObserver.#MEMORY_CONFIG.cleanupInterval);
         
-        // Store interval ID for cleanup
         this.#cleanupIntervalId = intervalId;
     }
     
@@ -640,7 +628,6 @@ class ForumCoreObserver {
     #pause() {
         this.#observer?.disconnect();
         
-        // Clear all timeouts
         for (const timeoutId of this.#debounceTimeouts.values()) {
             clearTimeout(timeoutId);
         }
@@ -655,10 +642,9 @@ class ForumCoreObserver {
         }
     }
     
-    // PUBLIC API with modern methods
-    
     register(settings) {
-        const id = settings.id ?? `callback_${Date.now()}_${crypto.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2)}`;
+        const id = settings.id ?? 'callback_' + Date.now() + '_' + 
+            (crypto.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2));
         
         const callback = {
             id,
@@ -673,16 +659,15 @@ class ForumCoreObserver {
         };
         
         this.#callbacks.set(id, callback);
-        console.log(`📝 Registered callback: ${id} (priority: ${callback.priority})`);
+        console.log('Registered callback: ' + id + ' (priority: ' + callback.priority + ')');
         
-        // Run on existing elements
         if (this.#initialScanComplete && callback.selector) {
             const nodes = document.querySelectorAll(callback.selector);
-            nodes.forEach(node => {
+            for (const node of nodes) {
                 if (!this.#processedNodes.has(node)) {
                     this.#processNode(node);
                 }
-            });
+            }
         }
         
         return id;
@@ -719,13 +704,11 @@ class ForumCoreObserver {
         }
         
         if (removed) {
-            console.log(`🗑️ Unregistered callback: ${callbackId}`);
+            console.log('Unregistered callback: ' + callbackId);
         }
         
         return removed;
     }
-    
-    // Utility methods
     
     forceScan(selector) {
         if (!selector) {
@@ -734,14 +717,23 @@ class ForumCoreObserver {
         }
         
         const nodes = document.querySelectorAll(selector);
-        nodes.forEach(node => {
+        for (const node of nodes) {
             if (!this.#processedNodes.has(node)) {
                 this.#processNode(node);
             }
-        });
+        }
     }
     
     getStats() {
+        const modernizedPosts = document.querySelectorAll('.post-modernized').length;
+        const modernQuotes = document.querySelectorAll('.modern-quote').length;
+        const modernProfiles = document.querySelectorAll('.modern-profile').length;
+        const modernNavigation = document.querySelectorAll('.modern-nav, .modern-breadcrumb, .modern-topic-title').length;
+        const anchorContainers = document.querySelectorAll('.anchor-container').length;
+        const quoteJumpButtons = document.querySelectorAll('.quote-jump-btn').length;
+        const postNewBadges = document.querySelectorAll('.post-new-badge').length;
+        const modernizedElements = document.querySelectorAll('[class*="modern-"], [class*="-modernized"]').length;
+        
         return {
             totalMutations: Number(this.#mutationMetrics.totalMutations),
             processedMutations: Number(this.#mutationMetrics.processedMutations),
@@ -754,16 +746,15 @@ class ForumCoreObserver {
             pageState: this.#pageState,
             isProcessing: this.#isProcessing,
             queueLength: this.#mutationQueue.length,
-            // NEW: Post Modernizer specific stats
             postModernizerStats: {
-                modernizedPosts: document.querySelectorAll('.post-modernized').length,
-                modernQuotes: document.querySelectorAll('.modern-quote').length,
-                modernProfiles: document.querySelectorAll('.modern-profile').length,
-                modernNavigation: document.querySelectorAll('.modern-nav, .modern-breadcrumb, .modern-topic-title').length,
-                anchorContainers: document.querySelectorAll('.anchor-container').length,
-                quoteJumpButtons: document.querySelectorAll('.quote-jump-btn').length,
-                postNewBadges: document.querySelectorAll('.post-new-badge').length,
-                modernizedElements: document.querySelectorAll('[class*="modern-"], [class*="-modernized"]').length
+                modernizedPosts,
+                modernQuotes,
+                modernProfiles,
+                modernNavigation,
+                anchorContainers,
+                quoteJumpButtons,
+                postNewBadges,
+                modernizedElements
             }
         };
     }
@@ -783,10 +774,9 @@ class ForumCoreObserver {
         
         document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
         
-        console.log('🛑 Enhanced Forum Core Observer destroyed');
+        console.log('Enhanced Forum Core Observer destroyed');
     }
     
-    // NEW: Method to check if Post Modernizer is active
     isPostModernizerActive() {
         return {
             hasModernizer: !!globalThis.postModernizer,
@@ -796,11 +786,9 @@ class ForumCoreObserver {
         };
     }
     
-    // NEW: Method to optimize for Post Modernizer
     optimizeForPostModernizer() {
-        console.log('🔧 Optimizing for Post Modernizer');
+        console.log('Optimizing for Post Modernizer');
         
-        // Skip already modernized content
         const skipSelectors = [
             '.post-modernized',
             '.modern-quote',
@@ -809,32 +797,30 @@ class ForumCoreObserver {
             '.modern-breadcrumb'
         ];
         
-        skipSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(node => {
+        let skippedTotal = 0;
+        for (const selector of skipSelectors) {
+            const nodes = document.querySelectorAll(selector);
+            for (const node of nodes) {
                 this.#processedNodes.add(node);
-            });
-        });
+            }
+            skippedTotal += nodes.length;
+        }
         
         return {
-            skippedNodes: skipSelectors.reduce((total, selector) => 
-                total + document.querySelectorAll(selector).length, 0
-            ),
+            skippedNodes: skippedTotal,
             message: 'Post Modernizer optimization applied'
         };
     }
     
-    // Static factory method
     static create() {
         return new ForumCoreObserver();
     }
 }
 
-// Modern initialization with globalThis
 if (!globalThis.forumObserver) {
     try {
         globalThis.forumObserver = ForumCoreObserver.create();
         
-        // Add global helper with proper error handling
         globalThis.registerForumScript = (settings) => {
             return globalThis.forumObserver?.register(settings) ?? null;
         };
@@ -843,44 +829,40 @@ if (!globalThis.forumObserver) {
             return globalThis.forumObserver?.registerDebounced(settings) ?? null;
         };
         
-        // NEW: Add Post Modernizer helper
         globalThis.getPostModernizerStats = () => {
             return globalThis.forumObserver?.getStats().postModernizerStats ?? {};
         };
         
-        // Auto-cleanup with modern event
         globalThis.addEventListener('pagehide', () => {
             globalThis.forumObserver?.destroy();
         }, { once: true });
         
-        // Auto-optimize for Post Modernizer after initialization
         setTimeout(() => {
             if (globalThis.forumObserver) {
                 globalThis.forumObserver.optimizeForPostModernizer();
             }
         }, 1000);
         
-        // Export for debugging in development
-        if (globalThis.location?.hostname === 'localhost' || 
-            globalThis.location?.hostname === '127.0.0.1' ||
-            globalThis.location?.hostname.startsWith('192.168.') ||
+        const hostname = globalThis.location?.hostname;
+        if (hostname === 'localhost' || 
+            hostname === '127.0.0.1' ||
+            hostname?.startsWith('192.168.') ||
             globalThis.location?.port) {
             globalThis.__FORUM_OBSERVER_DEBUG__ = globalThis.forumObserver;
-            console.log('🔍 Forum Core Observer debug mode enabled');
+            console.log('Forum Core Observer debug mode enabled');
         }
         
-        console.log('🎯 Enhanced Forum Core Observer ready');
-        console.log('🚀 Post Modernizer optimizations active');
+        console.log('Enhanced Forum Core Observer ready');
+        console.log('Post Modernizer optimizations active');
         
     } catch (error) {
-        console.error('Failed to initialize Enhanced Forum Core Observer:', error);
+        console.error('Failed to initialize Enhanced Forum Core Observer: ' + error);
         
-        // Modern fallback with Proxy
         globalThis.forumObserver = new Proxy({}, {
             get(target, prop) {
                 const methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy', 'optimizeForPostModernizer'];
                 if (methods.includes(prop)) {
-                    return () => console.warn(`Enhanced Forum Observer not initialized - ${prop} called`);
+                    return () => console.warn('Enhanced Forum Observer not initialized - ' + prop + ' called');
                 }
                 return undefined;
             }
