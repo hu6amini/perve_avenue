@@ -16,9 +16,9 @@ const EMOJI_MAP = new Map([
   ['https://img.forumfree.net/html/emoticons/new/w00t.svg', '1f92f.svg'],      // 🤯 :woot:
   
   // Smileys and people - ADD biggrin.svg
-  ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f600.svg'],     // 😀 :D (standard grin)
-  ['https://img.forumfree.net/html/emoticons/new/biggrin.svg', '1f603.svg'],   // 😃 :D (bigger grin) - NEW!
-  ['https://img.forumfree.net/html/emoticons/new/bigsmile.svg', '1f604.svg'],  // 😄 =) (smiling with eyes)
+  ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f60a.svg'],     // 😊 ^_^
+  ['https://img.forumfree.net/html/emoticons/new/biggrin.svg', '1f600.svg'],   // 😀 :D (bigger grin) - NEW!
+  ['https://img.forumfree.net/html/emoticons/new/bigsmile.svg', '1f603.svg'],  // 😃 =) (smiling with eyes)
   ['https://img.forumfree.net/html/emoticons/new/smile.svg', '1f642.svg'],     // 🙂 :) (gentle smile)
   ['https://img.forumfree.net/html/emoticons/new/wink.svg', '1f609.svg'],      // 😉 ;)
   ['https://img.forumfree.net/html/emoticons/new/tongue.svg', '1f61b.svg'],    // 😛 :P
@@ -31,7 +31,7 @@ const EMOJI_MAP = new Map([
   ['https://img.forumfree.net/html/emoticons/new/love.svg', '1f970.svg'],      // 🥰 :]
   ['https://img.forumfree.net/html/emoticons/new/wub.svg', '1f60b.svg'],       // 😋 :wub:
   ['https://img.forumfree.net/html/emoticons/new/kiss.svg', '1f618.svg'],      // 😘 :*:
-  ['https://img.forumfree.net/html/emoticons/new/blush.svg', '1f60a.svg'],     // 😊 *^^*
+  ['https://img.forumfree.net/html/emoticons/new/blush.svg', '263a.svg'],      // ☺️ *^^*
   ['https://img.forumfree.net/html/emoticons/new/joy.svg', '1f60f.svg'],       // 😏 ^U^
   ['https://img.forumfree.net/html/emoticons/new/cool.svg', '1f60e.svg'],      // 😎 :B):
   
