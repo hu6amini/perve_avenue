@@ -1199,65 +1199,141 @@ class PostModernizer {
  element.querySelectorAll('table.color:empty').forEach(table => table.remove()); 
  } 
  
- #cleanupPostContentStructure(contentElement) { 
- // Remove td elements directly inside post-main-content 
- contentElement.querySelectorAll('.post-main-content > td').forEach(td => { 
- while (td.firstChild) { 
- contentElement.appendChild(td.firstChild); 
- } 
- td.remove(); 
- }); 
- 
- // Remove all other TDs 
- contentElement.querySelectorAll('td').forEach(td => { 
- const parent = td.parentNode; 
- if (parent) { 
- while (td.firstChild) { 
- parent.insertBefore(td.firstChild, td); 
- } 
- td.remove(); 
- } 
- }); 
- 
- // Remove TRs 
- contentElement.querySelectorAll('tr').forEach(tr => { 
- const parent = tr.parentNode; 
- if (parent) { 
- while (tr.firstChild) { 
- parent.insertBefore(tr.firstChild, tr); 
- } 
- tr.remove(); 
- } 
- }); 
- 
- // Remove TBODYs 
- contentElement.querySelectorAll('tbody').forEach(tbody => { 
- const parent = tbody.parentNode; 
- if (parent) { 
- while (tbody.firstChild) { 
- parent.insertBefore(tbody.firstChild, tbody); 
- } 
- tbody.remove(); 
- } 
- }); 
- 
- // Remove TABLEs 
- contentElement.querySelectorAll('table').forEach(table => { 
- const parent = table.parentNode; 
- if (parent) { 
- while (table.firstChild) { 
- parent.insertBefore(table.firstChild, table); 
- } 
- table.remove(); 
- } 
- }); 
- 
- this.#cleanEmptyElements(contentElement); 
- this.#processTextAndLineBreaks(contentElement); 
- this.#cleanupEditSpans(contentElement); 
- this.#processSignature(contentElement); 
- this.#cleanInvalidAttributes(contentElement); 
- } 
+#cleanupPostContentStructure(contentElement) { 
+    // Remove td elements directly inside post-main-content 
+    contentElement.querySelectorAll('.post-main-content > td').forEach(td => { 
+        while (td.firstChild) { 
+            contentElement.appendChild(td.firstChild); 
+        } 
+        td.remove(); 
+    }); 
+
+    // Remove all other TDs 
+    contentElement.querySelectorAll('td').forEach(td => { 
+        const parent = td.parentNode; 
+        if (parent) { 
+            while (td.firstChild) { 
+                parent.insertBefore(td.firstChild, td); 
+            } 
+            td.remove(); 
+        } 
+    }); 
+
+    // Remove TRs 
+    contentElement.querySelectorAll('tr').forEach(tr => { 
+        const parent = tr.parentNode; 
+        if (parent) { 
+            while (tr.firstChild) { 
+                parent.insertBefore(tr.firstChild, tr); 
+            } 
+            tr.remove(); 
+        } 
+    }); 
+
+    // Remove TBODYs 
+    contentElement.querySelectorAll('tbody').forEach(tbody => { 
+        const parent = tbody.parentNode; 
+        if (parent) { 
+            while (tbody.firstChild) { 
+                parent.insertBefore(tbody.firstChild, tbody); 
+            } 
+            tbody.remove(); 
+        } 
+    }); 
+
+    // Remove TABLEs 
+    contentElement.querySelectorAll('table').forEach(table => { 
+        const parent = table.parentNode; 
+        if (parent) { 
+            while (table.firstChild) { 
+                parent.insertBefore(table.firstChild, table); 
+            } 
+            table.remove(); 
+        } 
+    }); 
+
+    // Clean up <br> elements that are between block elements
+    this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+    
+    this.#cleanEmptyElements(contentElement); 
+    this.#processTextAndLineBreaks(contentElement); 
+    this.#cleanupEditSpans(contentElement); 
+    this.#processSignature(contentElement); 
+    this.#cleanInvalidAttributes(contentElement); 
+} 
+
+ // Add this new method to clean up line breaks between block elements
+#cleanUpLineBreaksBetweenBlocks(element) {
+    const blockSelectors = [
+        '.modern-spoiler',
+        '.modern-code', 
+        '.modern-quote',
+        'div[align="center"]:has(.code_top)',
+        'div[align="center"].spoiler',
+        'div[align="center"]:has(.quote_top)'
+    ];
+    
+    // Find all block elements
+    const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
+    
+    // Sort by DOM position
+    blocks.sort((a, b) => {
+        const position = a.compareDocumentPosition(b);
+        return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+    
+    // Remove <br> elements that come immediately after block elements
+    blocks.forEach(block => {
+        let nextSibling = block.nextSibling;
+        
+        while (nextSibling) {
+            // If it's a <br> element, remove it
+            if (nextSibling.nodeType === Node.ELEMENT_NODE && 
+                nextSibling.tagName === 'BR') {
+                const brToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                brToRemove.remove();
+            } 
+            // If it's a text node with only whitespace, remove it
+            else if (nextSibling.nodeType === Node.TEXT_NODE && 
+                     /^\s*$/.test(nextSibling.textContent)) {
+                const textToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                textToRemove.remove();
+            } 
+            // Stop when we hit another element
+            else {
+                break;
+            }
+        }
+    });
+    
+    // Also clean up <br> elements that come immediately before modernized elements
+    blocks.forEach(block => {
+        let prevSibling = block.previousSibling;
+        
+        while (prevSibling) {
+            // If it's a <br> element, remove it
+            if (prevSibling.nodeType === Node.ELEMENT_NODE && 
+                prevSibling.tagName === 'BR') {
+                const brToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                brToRemove.remove();
+            } 
+            // If it's a text node with only whitespace, remove it
+            else if (prevSibling.nodeType === Node.TEXT_NODE && 
+                     /^\s*$/.test(prevSibling.textContent)) {
+                const textToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                textToRemove.remove();
+            } 
+            // Stop when we hit another element
+            else {
+                break;
+            }
+        }
+    });
+}
  
  #cleanEmptyElements(element) { 
  element.querySelectorAll(':empty').forEach(emptyEl => { 
@@ -1294,66 +1370,82 @@ class PostModernizer {
  }); 
  } 
  
- #processTextAndLineBreaks(element) { 
- const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false); 
- const textNodes = []; 
- let node; 
- 
- while (node = walker.nextNode()) { 
- if (node.textContent.trim() !== '') { 
- textNodes.push(node); 
- } 
- } 
- 
- textNodes.forEach(textNode => { 
- if (textNode.parentNode && !textNode.parentNode.classList?.contains('post-text')) { 
- const span = document.createElement('span'); 
- span.className = 'post-text'; 
- span.textContent = textNode.textContent; 
- textNode.parentNode.replaceChild(span, textNode); 
- } 
- }); 
- 
- element.querySelectorAll('br').forEach(br => { 
- const prevSibling = br.previousElementSibling; 
- const nextSibling = br.nextElementSibling; 
- 
- if (prevSibling && nextSibling) { 
- const prevIsPostText = prevSibling.classList?.contains('post-text'); 
- const nextIsPostText = nextSibling.classList?.contains('post-text'); 
- 
- if (prevIsPostText && nextIsPostText) { 
- prevSibling.classList.add('paragraph-end'); 
- br.remove(); 
- } else { 
- br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em'; 
- } 
- } else { 
- br.remove(); 
- } 
- }); 
- 
- const postTextElements = element.querySelectorAll('.post-text'); 
- for (let i = 0; i < postTextElements.length - 1; i++) { 
- const current = postTextElements[i]; 
- const next = postTextElements[i + 1]; 
- 
- let nodeBetween = current.nextSibling; 
- let onlyWhitespace = true; 
- 
- while (nodeBetween && nodeBetween !== next) { 
- if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') { 
- onlyWhitespace = false; 
- break; 
- } 
- nodeBetween = nodeBetween.nextSibling; 
- } 
- 
- if (onlyWhitespace) { 
- current.classList.add('paragraph-end'); 
- } 
- } 
- } 
+#processTextAndLineBreaks(element) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    const textNodes = [];
+    let node;
+
+    while (node = walker.nextNode()) {
+        if (node.textContent.trim() !== '') {
+            textNodes.push(node);
+        }
+    }
+
+    textNodes.forEach(textNode => {
+        if (textNode.parentNode && !textNode.parentNode.classList?.contains('post-text')) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
+        }
+    });
+
+    // Be more selective about which <br> elements to keep
+    element.querySelectorAll('br').forEach(br => {
+        const prevSibling = br.previousElementSibling;
+        const nextSibling = br.nextElementSibling;
+
+        // Don't process <br> elements that are children of modern elements
+        if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header')) {
+            return;
+        }
+
+        if (prevSibling && nextSibling) {
+            const prevIsPostText = prevSibling.classList?.contains('post-text');
+            const nextIsPostText = nextSibling.classList?.contains('post-text');
+
+            if (prevIsPostText && nextIsPostText) {
+                prevSibling.classList.add('paragraph-end');
+                br.remove();
+            } else {
+                // Check if this <br> is between modern elements
+                const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote');
+                const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote');
+                
+                if (prevIsModern && nextIsModern) {
+                    // Remove <br> between modern elements - spacing is handled by CSS
+                    br.remove();
+                } else {
+                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                }
+            }
+        } else {
+            // Remove orphaned <br> elements
+            br.remove();
+        }
+    });
+
+    const postTextElements = element.querySelectorAll('.post-text');
+    for (let i = 0; i < postTextElements.length - 1; i++) {
+        const current = postTextElements[i];
+        const next = postTextElements[i + 1];
+
+        let nodeBetween = current.nextSibling;
+        let onlyWhitespace = true;
+
+        while (nodeBetween && nodeBetween !== next) {
+            if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                onlyWhitespace = false;
+                break;
+            }
+            nodeBetween = nodeBetween.nextSibling;
+        }
+
+        if (onlyWhitespace) {
+            current.classList.add('paragraph-end');
+        }
+    }
+}
  
  #cleanupEditSpans(element) { 
  element.querySelectorAll('span.edit').forEach(span => { 
