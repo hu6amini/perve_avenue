@@ -271,7 +271,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 
 // Enhanced Post Transformation and Modernization System with HTML Structure Fix 
 // Now includes support for body#search posts, preserves anchor elements,
-// features enhanced smart quote navigation, and modern spoiler system
+// features enhanced smart quote navigation, modern spoiler system, and modern code blocks
 // DOMContentLoaded-free version for flexible loading
 class PostModernizer { 
  #postModernizerId = null; 
@@ -280,6 +280,7 @@ class PostModernizer {
  #cleanupObserverId = null; 
  #searchPostObserverId = null;
  #quoteLinkObserverId = null;
+ #codeBlockObserverId = null;
  #retryTimeoutId = null;
  #maxRetries = 10;
  #retryCount = 0;
@@ -325,10 +326,11 @@ class PostModernizer {
  this.#setupObserverCallbacks(); 
  this.#setupActiveStateObserver(); 
  this.#setupSearchPostObserver();
- this.#setupEnhancedAnchorNavigation(); // Enhanced anchor handling
- this.#enhanceQuoteLinks(); // Smart quote buttons
+ this.#setupEnhancedAnchorNavigation();
+ this.#enhanceQuoteLinks();
+ this.#modernizeCodeBlocks(); // Modernize code blocks
  
- console.log('✅ Post Modernizer with enhanced anchor navigation initialized'); 
+ console.log('✅ Post Modernizer with enhanced anchor navigation and code blocks initialized'); 
  } catch (error) {
  console.error('Post Modernizer initialization failed:', error);
  
@@ -475,7 +477,8 @@ class PostModernizer {
  node.querySelector('.st-emoji') || 
  node.querySelector('.title2.bottom') || 
  node.querySelector('div[align="center"]:has(.quote_top)') ||
- node.querySelector('div.spoiler[align="center"]'); 
+ node.querySelector('div.spoiler[align="center"]') ||
+ node.querySelector('div[align="center"]:has(.code_top)'); // Add code blocks
  
  if (needsTransformation) { 
  this.#transformPostElements(); 
@@ -690,6 +693,7 @@ class PostModernizer {
  postContent.appendChild(contentWrapper); 
  this.#modernizeQuotes(contentWrapper); 
  this.#modernizeSpoilers(contentWrapper); // Add spoiler modernization
+ this.#modernizeCodeBlocksInContent(contentWrapper); // Modernize code blocks in content
  } 
  }); 
  
@@ -947,9 +951,10 @@ class PostModernizer {
  }
  }
  
- // Modernize quotes and spoilers in search posts
+ // Modernize quotes, spoilers, and code blocks in search posts
  this.#modernizeQuotes(contentWrapper);
  this.#modernizeSpoilers(contentWrapper);
+ this.#modernizeCodeBlocksInContent(contentWrapper);
  
  postContent.appendChild(contentWrapper);
  }
@@ -1133,6 +1138,14 @@ class PostModernizer {
  
  this.#transformSpoiler(container);
  container.classList.add('spoiler-modernized');
+ });
+ 
+ // Handle code blocks in search posts
+ contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
+ if (container.classList.contains('code-modernized')) return;
+ 
+ this.#transformCodeBlock(container);
+ container.classList.add('code-modernized');
  });
  }
  
@@ -1366,9 +1379,6 @@ class PostModernizer {
  this.#transformQuote(container);
  container.classList.add('quote-modernized');
  });
- 
- // Also modernize spoilers
- this.#modernizeSpoilers(contentWrapper);
  }
  
  #modernizeSpoilers(contentWrapper) {
@@ -1377,6 +1387,15 @@ class PostModernizer {
  
  this.#transformSpoiler(container);
  container.classList.add('spoiler-modernized');
+ });
+ }
+ 
+ #modernizeCodeBlocksInContent(contentWrapper) {
+ contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
+ if (container.classList.contains('code-modernized')) return;
+ 
+ this.#transformCodeBlock(container);
+ container.classList.add('code-modernized');
  });
  }
  
@@ -2661,10 +2680,263 @@ class PostModernizer {
  }
  }
  
+ // ==============================
+ // MODERN CODE BLOCKS
+ // ==============================
+ 
+ #modernizeCodeBlocks() {
+ // Process existing code blocks
+ this.#processExistingCodeBlocks();
+ 
+ // Watch for new code blocks
+ this.#setupCodeBlockObserver();
+ }
+ 
+ #processExistingCodeBlocks() {
+ document.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
+ if (container.classList.contains('code-modernized')) return;
+ this.#transformCodeBlock(container);
+ container.classList.add('code-modernized');
+ });
+ }
+ 
+ #transformCodeBlock(container) {
+ const codeTop = container.querySelector('.code_top');
+ const codeContent = container.querySelector('.code');
+ 
+ if (!codeTop || !codeContent) return;
+ 
+ const codeText = codeTop.textContent.trim();
+ const codeType = codeText.toUpperCase();
+ const isLongContent = this.#isLongContent(codeContent);
+ 
+ const modernCode = document.createElement('div');
+ modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
+ 
+ let html = '<div class="code-header" role="button" tabindex="0">' +
+ '<div class="code-icon">' +
+ '<i class="fa-regular fa-code" aria-hidden="true"></i>' +
+ '</div>' +
+ '<div class="code-info">' +
+ '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
+ '<span class="code-hint">Click to copy code</span>' +
+ '</div>' +
+ '<button class="code-copy-btn" type="button" aria-label="Copy code">' +
+ '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +
+ '</button>' +
+ '</div>';
+ 
+ html += '<div class="code-content' + 
+ (isLongContent ? ' collapsible-content' : '') + '">' +
+ '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
+ '</div>';
+ 
+ if (isLongContent) {
+ html += '<button class="code-expand-btn" type="button" aria-label="Show full code">' +
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+ 'Show more code' +
+ '</button>';
+ }
+ 
+ modernCode.innerHTML = html;
+ container.replaceWith(modernCode);
+ 
+ // Add event listeners
+ this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
+ }
+ 
+ #addCodeEventListeners(codeElement, codeText, isLongContent = false) {
+ const codeHeader = codeElement.querySelector('.code-header');
+ const copyBtn = codeElement.querySelector('.code-copy-btn');
+ const expandBtn = codeElement.querySelector('.code-expand-btn');
+ const codeContent = codeElement.querySelector('.code-content');
+ const codeTitle = codeElement.querySelector('.code-title');
+ 
+ // Copy functionality
+ copyBtn.addEventListener('click', (e) => {
+ e.stopPropagation();
+ this.#copyCodeToClipboard(codeText, codeTitle.textContent);
+ });
+ 
+ // Header click toggles expansion/collapse for long content
+ if (isLongContent) {
+ codeHeader.addEventListener('click', () => {
+ this.#toggleCodeExpansion(codeElement);
+ });
+ 
+ codeHeader.addEventListener('keydown', (e) => {
+ if (e.key === 'Enter' || e.key === ' ') {
+ e.preventDefault();
+ this.#toggleCodeExpansion(codeElement);
+ }
+ });
+ 
+ // Expand button
+ expandBtn.addEventListener('click', () => {
+ this.#toggleCodeExpansion(codeElement, true);
+ });
+ }
+ 
+ // Syntax highlighting detection
+ this.#applySyntaxHighlighting(codeElement, codeTitle.textContent);
+ }
+ 
+ #toggleCodeExpansion(codeElement, forceExpand = null) {
+ const codeContent = codeElement.querySelector('.code-content');
+ const expandBtn = codeElement.querySelector('.code-expand-btn');
+ const isExpanded = forceExpand !== null ? forceExpand : !codeElement.classList.contains('expanded');
+ 
+ if (isExpanded) {
+ codeElement.classList.add('expanded');
+ codeContent.style.maxHeight = codeContent.scrollHeight + 'px';
+ if (expandBtn) {
+ expandBtn.style.display = 'none';
+ }
+ 
+ setTimeout(() => {
+ codeContent.style.maxHeight = 'none';
+ }, 300);
+ } else {
+ codeElement.classList.remove('expanded');
+ codeContent.style.maxHeight = codeContent.scrollHeight + 'px';
+ 
+ // Force reflow
+ void codeContent.offsetHeight;
+ 
+ codeContent.style.maxHeight = '0';
+ if (expandBtn) {
+ setTimeout(() => {
+ expandBtn.style.display = 'flex';
+ }, 300);
+ }
+ }
+ }
+ 
+ #copyCodeToClipboard(codeText, codeType) {
+ navigator.clipboard.writeText(codeText).then(() => {
+ this.#showCopyNotification('Copied ' + codeType + ' to clipboard!');
+ }).catch(() => {
+ this.#fallbackCopy(codeText, codeType);
+ });
+ }
+ 
+ #showCopyNotification(message) {
+ const notification = document.createElement('div');
+ notification.className = 'code-copy-notification';
+ notification.textContent = message;
+ 
+ notification.style.cssText = `
+ position: fixed;
+ bottom: 20px;
+ right: 20px;
+ padding: 12px 20px;
+ background: var(--success-color);
+ color: white;
+ border-radius: var(--radius);
+ box-shadow: var(--shadow-lg);
+ z-index: 9;
+ animation: slideIn 0.3s ease-out;
+ `;
+ 
+ document.body.appendChild(notification);
+ 
+ setTimeout(() => {
+ notification.style.animation = 'slideOut 0.3s ease-out';
+ setTimeout(() => notification.remove(), 300);
+ }, 2000);
+ }
+ 
+ #applySyntaxHighlighting(codeElement, codeType) {
+ const code = codeElement.querySelector('code');
+ if (!code) return;
+ 
+ const text = code.textContent;
+ 
+ // Basic syntax highlighting based on code type
+ if (codeType === 'JAVASCRIPT' || codeType === 'JS') {
+ code.innerHTML = this.#highlightJavaScript(text);
+ } else if (codeType === 'HTML' || codeType === 'XML') {
+ code.innerHTML = this.#highlightHTML(text);
+ } else if (codeType === 'CSS') {
+ code.innerHTML = this.#highlightCSS(text);
+ }
+ 
+ // Add line numbers for longer code
+ if (text.split('\n').length > 10) {
+ this.#addLineNumbers(codeElement);
+ }
+ }
+ 
+ #highlightJavaScript(code) {
+ return code
+ .replace(/\/\/.*$/gm, '<span class="code-comment">$&</span>')
+ .replace(/\/\*[\s\S]*?\*\//g, '<span class="code-comment">$&</span>')
+ .replace(/(\b(function|const|let|var|return|if|else|for|while|try|catch|class|import|export)\b)/g, '<span class="code-keyword">$1</span>')
+ .replace(/(\b(true|false|null|undefined)\b)/g, '<span class="code-literal">$1</span>')
+ .replace(/(\b(\d+)\b)/g, '<span class="code-number">$1</span>')
+ .replace(/(["'`][^"'`]*["'`])/g, '<span class="code-string">$1</span>');
+ }
+ 
+ #highlightHTML(code) {
+ return code
+ .replace(/&lt;\/?([a-zA-Z][a-zA-Z0-9]*)/g, '<span class="code-tag">&lt;$1</span>')
+ .replace(/(&lt;\/[a-zA-Z][a-zA-Z0-9]*&gt;)/g, '<span class="code-tag">$1</span>')
+ .replace(/([a-zA-Z\-]+)=/g, '<span class="code-attribute">$1</span>=')
+ .replace(/("[^"]*"|'[^']*')/g, '<span class="code-value">$1</span>')
+ .replace(/&lt;!--[\s\S]*?--&gt;/g, '<span class="code-comment">$&</span>');
+ }
+ 
+ #highlightCSS(code) {
+ return code
+ .replace(/([a-zA-Z\-]+)\s*:/g, '<span class="code-property">$1</span>:')
+ .replace(/#[0-9a-fA-F]{3,6}/g, '<span class="code-color">$&</span>')
+ .replace(/(rgb|rgba|hsl|hsla)\([^)]+\)/g, '<span class="code-color">$&</span>')
+ .replace(/(\b([0-9]+(\.[0-9]+)?)(px|em|rem|%|vh|vw)\b)/g, '<span class="code-number">$1</span>')
+ .replace(/\/\*[\s\S]*?\*\//g, '<span class="code-comment">$&</span>');
+ }
+ 
+ #addLineNumbers(codeElement) {
+ const codeContent = codeElement.querySelector('code');
+ const lines = codeContent.innerHTML.split('\n');
+ 
+ if (lines.length > 1) {
+ let numberedHTML = '';
+ lines.forEach((line, index) => {
+ numberedHTML += `<span class="line-number">${index + 1}</span>${line}\n`;
+ });
+ codeContent.innerHTML = numberedHTML;
+ codeElement.classList.add('has-line-numbers');
+ }
+ }
+ 
+ #setupCodeBlockObserver() {
+ if (globalThis.forumObserver) {
+ this.#codeBlockObserverId = globalThis.forumObserver.register({
+ id: 'code-block-modernizer',
+ callback: (node) => this.#handleNewCodeBlocks(node),
+ selector: 'div[align="center"]:has(.code_top)',
+ priority: 'normal'
+ });
+ } else {
+ setInterval(() => this.#processExistingCodeBlocks(), 2000);
+ }
+ }
+ 
+ #handleNewCodeBlocks(node) {
+ if (node.matches('div[align="center"]:has(.code_top)')) {
+ this.#transformCodeBlock(node);
+ } else {
+ node.querySelectorAll('div[align="center"]:has(.code_top)').forEach(block => {
+ this.#transformCodeBlock(block);
+ });
+ }
+ }
+ 
 destroy() { 
  const ids = [this.#postModernizerId, this.#activeStateObserverId,
  this.#debouncedObserverId, this.#cleanupObserverId, 
- this.#searchPostObserverId, this.#quoteLinkObserverId]; 
+ this.#searchPostObserverId, this.#quoteLinkObserverId,
+ this.#codeBlockObserverId]; 
  
  ids.forEach(id => id && globalThis.forumObserver?.unregister(id)); 
  
