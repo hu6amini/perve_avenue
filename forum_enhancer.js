@@ -2,11 +2,11 @@
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
 
 //Default emojis to Twemoji
-// Optimized Emoji Replacer for ForumCoreObserver - Enhanced Edition
+// Optimized Emoji Replacer for ForumCoreObserver - Picker Edition
 (function() {
     'use strict';
     
-const EMOJI_MAP = new Map([
+    const EMOJI_MAP = new Map([
       // Heart and symbols
       ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],      // ❤️ <3
       ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],     // 🔥 :f:
@@ -66,333 +66,246 @@ const EMOJI_MAP = new Map([
       ['https://img.forumfree.net/html/emoticons/new/alien.svg', '1f47d.svg'],     // 👽 :alienff:
       ['https://img.forumfree.net/html/emoticons/new/shifty.svg', '1f608.svg'],    // 😈 :shifty:
       ['https://img.forumfree.net/html/emoticons/new/blink.svg', '1f440.svg']      // 👀 :blink:
-    ]);    
-    const CONFIG = {
-        twemoji: {
-            base: 'https://twemoji.maxcdn.com/v/latest/svg/',
-            className: 'twemoji',
-            size: 'svg'
-        },
-        classes: {
-            processed: 'twemoji-processed'
-        },
-        selectors: {
-            picker: '.picker-custom-grid, .picker-custom-item, .image-thumbnail',
-            content: '.post, .article, .content, .reply, .comment, .color, td[align], div[align]',
-            quotes: '.quote, .code, .spoiler, .modern-quote, .modern-spoiler',
-            userContent: '.signature, .user-info, .profile-content, .post-content'
-        },
-        delays: {
-            pickerCheck: 300,
-            initialization: 100
-        }
+    ]);
+    
+    const TWEMOJI_CONFIG = {
+        folder: 'svg',
+        ext: '.svg',
+        base: 'https://twemoji.maxcdn.com/v/latest/',
+        className: 'twemoji',
+        size: 'svg'
     };
     
-    class EmojiReplacer {
-        #isInitialized = false;
-        #observerIds = new Set();
-        #emojiPromises = new WeakMap();
+    const PROCESSED_CLASS = 'twemoji-processed';
+    const TWEMOJI_BASE_URL = TWEMOJI_CONFIG.base + 'svg/';
+    
+    // Enhanced selector generator for picker support
+    function getEmojiSelectors(src) {
+        return [
+            'img[src="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
+            'img[data-emoticon-url="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
+            'img[data-emoticon-preview="' + src + '"]:not(.' + PROCESSED_CLASS + ')'
+        ];
+    }
+    
+    // Enhanced processing function for picker support
+    function replaceCustomEmojis(container) {
+        if (!container || !container.querySelectorAll) return;
         
-        constructor() {
-            this.init = this.init.bind(this);
-            this.replaceCustomEmojis = this.replaceCustomEmojis.bind(this);
-        }
-        
-        // Generate selectors with cache
-        getEmojiSelectors(src) {
-            return [
-                `img[src="${src}"]:not(.${CONFIG.classes.processed})`,
-                `img[data-emoticon-url="${src}"]:not(.${CONFIG.classes.processed})`,
-                `img[data-emoticon-preview="${src}"]:not(.${CONFIG.classes.processed})`
-            ];
-        }
-        
-        // Process a single emoji with promise-based loading
-        async processEmoji(img, oldSrc, newFile) {
-            if (this.#emojiPromises.has(img)) {
-                return this.#emojiPromises.get(img);
-            }
+        // Process custom emojis - now includes picker attributes
+        for (const [oldSrc, newFile] of EMOJI_MAP) {
+            const selectors = getEmojiSelectors(oldSrc);
             
-            const promise = new Promise((resolve) => {
-                // Store original attributes
-                const original = {
-                    src: img.src,
-                    alt: img.alt || '',
-                    dataEmoticonUrl: img.getAttribute('data-emoticon-url'),
-                    dataEmoticonPreview: img.getAttribute('data-emoticon-preview'),
-                    dataText: img.getAttribute('data-text'),
-                    className: img.className
-                };
+            for (const selector of selectors) {
+                const imgs = container.querySelectorAll(selector);
                 
-                // Create new image for preloading
-                const preloadImg = new Image();
-                preloadImg.crossOrigin = 'anonymous';
-                preloadImg.referrerPolicy = 'no-referrer';
-                
-                preloadImg.onload = () => {
-                    // Update the actual image
-                    img.src = preloadImg.src;
-                    img.classList.add('twemoji', CONFIG.classes.processed);
+                for (let i = 0; i < imgs.length; i++) {
+                    const img = imgs[i];
+                    
+                    // Store original attributes before replacing
+                    const originalAttrs = {
+                        src: img.src,
+                        alt: img.alt,
+                        dataEmoticonUrl: img.getAttribute('data-emoticon-url'),
+                        dataEmoticonPreview: img.getAttribute('data-emoticon-preview'),
+                        dataText: img.getAttribute('data-text')
+                    };
+                    
+                    // Replace with Twemoji
+                    img.src = TWEMOJI_BASE_URL + newFile;
+                    img.classList.add('twemoji', PROCESSED_CLASS);
                     img.loading = 'lazy';
                     img.decoding = 'async';
                     
-                    // Restore forum data attributes
-                    if (original.dataEmoticonUrl) {
-                        img.setAttribute('data-emoticon-url', original.dataEmoticonUrl);
+                    // CRITICAL: Restore forum's data attributes for picker functionality
+                    if (originalAttrs.dataEmoticonUrl) {
+                        img.setAttribute('data-emoticon-url', originalAttrs.dataEmoticonUrl);
                     }
-                    if (original.dataEmoticonPreview) {
-                        img.setAttribute('data-emoticon-preview', original.dataEmoticonPreview);
+                    if (originalAttrs.dataEmoticonPreview) {
+                        img.setAttribute('data-emoticon-preview', originalAttrs.dataEmoticonPreview);
                     }
-                    if (original.dataText) {
-                        img.setAttribute('data-text', original.dataText);
+                    if (originalAttrs.dataText) {
+                        img.setAttribute('data-text', originalAttrs.dataText);
                     }
-                    if (original.alt) {
-                        img.alt = original.alt;
+                    if (originalAttrs.alt) {
+                        img.alt = originalAttrs.alt;
                     }
                     
-                    resolve(true);
-                };
-                
-                preloadImg.onerror = () => {
-                    console.warn(`Failed to load emoji: ${newFile}`);
-                    img.classList.remove(CONFIG.classes.processed);
-                    resolve(false);
-                };
-                
-                preloadImg.src = `${CONFIG.twemoji.base}${newFile}`;
+                    // Error handling with full fallback
+                    img.onerror = function() {
+                        console.warn('Failed to load emoji: ' + newFile);
+                        this.src = originalAttrs.src;
+                        this.classList.remove(PROCESSED_CLASS);
+                        
+                        // Restore all original attributes on error
+                        if (originalAttrs.dataEmoticonUrl) {
+                            this.setAttribute('data-emoticon-url', originalAttrs.dataEmoticonUrl);
+                        }
+                        if (originalAttrs.dataEmoticonPreview) {
+                            this.setAttribute('data-emoticon-preview', originalAttrs.dataEmoticonPreview);
+                        }
+                        if (originalAttrs.dataText) {
+                            this.setAttribute('data-text', originalAttrs.dataText);
+                        }
+                        if (originalAttrs.alt) {
+                            this.alt = originalAttrs.alt;
+                        }
+                    };
+                }
+            }
+        }
+        
+        // Parse Unicode emojis with Twemoji (non-blocking)
+        if (window.twemoji && window.twemoji.parse) {
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(function() {
+                    twemoji.parse(container, TWEMOJI_CONFIG);
+                }, { timeout: 1000 });
+            } else {
+                setTimeout(function() {
+                    twemoji.parse(container, TWEMOJI_CONFIG);
+                }, 0);
+            }
+        }
+    }
+    
+    // Initialization function - Using ONLY ForumCoreObserver
+    function initEmojiReplacement() {
+        // Initial replacement of existing content
+        replaceCustomEmojis(document.body);
+        
+        // Register with ForumCoreObserver - NO SEPARATE MUTATION OBSERVER
+        if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+            // 1. High priority for emoji picker (critical for UX)
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-picker',
+                callback: replaceCustomEmojis,
+                selector: '.picker-custom-grid, .picker-custom-item, .image-thumbnail',
+                priority: 'high', // High priority for picker
+                pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             
-            this.#emojiPromises.set(img, promise);
-            return promise;
+            // 2. Normal priority for content areas
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-content',
+                callback: replaceCustomEmojis,
+                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align]',
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'search', 'forum']
+            });
+            
+            // 3. Specialized for quote blocks
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-quotes',
+                callback: replaceCustomEmojis,
+                selector: '.quote, .code, .spoiler, .modern-quote, .modern-spoiler',
+                priority: 'normal'
+            });
+            
+            // 4. Low priority for signatures and user content
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-user-content',
+                callback: replaceCustomEmojis,
+                selector: '.signature, .user-info, .profile-content, .post-content',
+                priority: 'low'
+            });
+            
+            console.log('✅ Emoji replacer fully integrated with ForumCoreObserver');
+            
+            // Force immediate scan for picker elements that might already exist
+            setTimeout(function() {
+                const pickerGrid = document.querySelector('.picker-custom-grid');
+                if (pickerGrid) {
+                    console.log('🎨 Found existing emoji picker, processing...');
+                    replaceCustomEmojis(pickerGrid);
+                }
+            }, 500);
+            
+        } else {
+            console.error('❌ ForumCoreObserver not available - emoji replacement disabled');
+            // No fallback - we rely on ForumCoreObserver
+        }
+    }
+    
+    // Check if Twemoji is available
+    function checkAndInit() {
+        if (window.twemoji) {
+            initEmojiReplacement();
+            return;
         }
         
-        // Main replacement function with batch processing
-        async replaceCustomEmojis(container) {
-            if (!container?.querySelectorAll) return;
-            
-            const promises = [];
-            
-            // Process custom emojis
-            for (const [oldSrc, newFile] of EMOJI_MAP) {
-                const selectors = this.getEmojiSelectors(oldSrc);
-                
-                for (const selector of selectors) {
-                    const imgs = container.querySelectorAll(selector);
-                    
-                    for (const img of imgs) {
-                        promises.push(this.processEmoji(img, oldSrc, newFile));
-                    }
-                }
+        // Wait for Twemoji
+        var checkInterval = setInterval(function() {
+            if (window.twemoji) {
+                clearInterval(checkInterval);
+                initEmojiReplacement();
             }
-            
-            // Wait for all emoji loads
-            await Promise.allSettled(promises);
-            
-            // Parse Unicode emojis if Twemoji is available
-            if (window.twemoji?.parse) {
-                if (typeof scheduler !== 'undefined' && scheduler.postTask) {
-                    scheduler.postTask(() => {
-                        twemoji.parse(container, CONFIG.twemoji);
-                    }, { priority: 'background' });
-                } else if (typeof requestIdleCallback !== 'undefined') {
-                    requestIdleCallback(() => {
-                        twemoji.parse(container, CONFIG.twemoji);
-                    }, { timeout: 1000 });
-                } else {
-                    setTimeout(() => {
-                        twemoji.parse(container, CONFIG.twemoji);
-                    }, 0);
-                }
-            }
-        }
+        }, 100);
         
-        // Initialize with ForumCoreObserver
-        async init() {
-            if (this.#isInitialized) return;
-            
-            // Initial replacement
-            await this.replaceCustomEmojis(document.body);
-            
-            // Register with ForumCoreObserver
-            if (globalThis.forumObserver?.register) {
-                const observers = [
-                    {
-                        id: 'emoji-replacer-picker',
-                        callback: this.replaceCustomEmojis,
-                        selector: CONFIG.selectors.picker,
-                        priority: 'high',
-                        pageTypes: ['topic', 'blog', 'search', 'forum']
-                    },
-                    {
-                        id: 'emoji-replacer-content',
-                        callback: this.replaceCustomEmojis,
-                        selector: CONFIG.selectors.content,
-                        priority: 'normal',
-                        pageTypes: ['topic', 'blog', 'search', 'forum']
-                    },
-                    {
-                        id: 'emoji-replacer-quotes',
-                        callback: this.replaceCustomEmojis,
-                        selector: CONFIG.selectors.quotes,
-                        priority: 'normal'
-                    },
-                    {
-                        id: 'emoji-replacer-user-content',
-                        callback: this.replaceCustomEmojis,
-                        selector: CONFIG.selectors.userContent,
-                        priority: 'low'
-                    }
-                ];
-                
-                observers.forEach((config) => {
-                    const id = globalThis.forumObserver.register(config);
-                    if (id) this.#observerIds.add(id);
-                });
-                
-                console.log('✅ Emoji replacer fully integrated with ForumCoreObserver');
-                
-                // Check for existing picker
-                if (typeof scheduler !== 'undefined' && scheduler.postTask) {
-                    scheduler.postTask(() => {
-                        this.forcePickerUpdate();
-                    }, { delay: CONFIG.delays.pickerCheck });
-                } else {
-                    setTimeout(() => {
-                        this.forcePickerUpdate();
-                    }, CONFIG.delays.pickerCheck);
-                }
-                
-                this.#isInitialized = true;
-            } else {
-                console.error('❌ ForumCoreObserver not available - emoji replacement disabled');
+        // Timeout after 5 seconds
+        setTimeout(function() {
+            clearInterval(checkInterval);
+            if (!window.twemoji) {
+                console.warn('Twemoji not loaded after 5 seconds, proceeding without it');
+                initEmojiReplacement();
             }
+        }, 5000);
+    }
+    
+    // Start initialization
+    function startInitialization() {
+        if (typeof queueMicrotask !== 'undefined') {
+            queueMicrotask(checkAndInit);
+        } else {
+            setTimeout(checkAndInit, 0);
         }
-        
-        // Force update picker emojis
-        forcePickerUpdate() {
+    }
+    
+    // Check document state
+    if (document.readyState === 'loading') {
+        document.onreadystatechange = function() {
+            if (document.readyState === 'interactive' || document.readyState === 'complete') {
+                document.onreadystatechange = null;
+                startInitialization();
+            }
+        };
+    } else {
+        startInitialization();
+    }
+    
+    // Expose API
+    window.emojiReplacer = {
+        replace: replaceCustomEmojis,
+        init: initEmojiReplacement,
+        isReady: function() { return !!window.twemoji; },
+        // New method specifically for picker
+        forcePickerUpdate: function() {
             const pickerGrid = document.querySelector('.picker-custom-grid');
             if (pickerGrid) {
                 console.log('🔧 Force-updating emoji picker...');
-                return this.replaceCustomEmojis(pickerGrid);
+                replaceCustomEmojis(pickerGrid);
+                return true;
             }
-            return Promise.resolve(false);
+            return false;
         }
-        
-        // Cleanup method
-        destroy() {
-            // Unregister from ForumCoreObserver
-            if (globalThis.forumObserver?.unregister) {
-                for (const id of this.#observerIds) {
-                    globalThis.forumObserver.unregister(id);
-                }
-            }
-            
-            this.#observerIds.clear();
-            this.#emojiPromises = new WeakMap();
-            this.#isInitialized = false;
-            
-            console.log('🗑️ Emoji replacer destroyed');
-        }
-        
-        // Check if ready
-        isReady() {
-            return !!window.twemoji;
-        }
-    }
+    };
     
-    // Global initialization
-    let replacerInstance = null;
-    
-    function initialize() {
-        if (replacerInstance) return;
+    // Hook into common emoji picker triggers (lightweight event listeners only)
+    document.addEventListener('click', function(e) {
+        // Check for common emoji picker triggers
+        const target = e.target;
+        const isLikelyEmojiTrigger = target.matches(
+            '[onclick*="emoticon"], [onclick*="smiley"], ' +
+            '.emoticon-btn, .smiley-btn, button:has(img[src*="emoticon"])'
+        );
         
-        replacerInstance = new EmojiReplacer();
-        
-        // Use scheduler API if available for better initialization timing
-        if (typeof scheduler !== 'undefined' && scheduler.postTask) {
-            scheduler.postTask(() => {
-                replacerInstance.init();
-            }, { delay: CONFIG.delays.initialization });
-        } else {
-            setTimeout(() => {
-                replacerInstance.init();
-            }, CONFIG.delays.initialization);
+        if (isLikelyEmojiTrigger) {
+            // Schedule picker check after short delay
+            setTimeout(function() {
+                window.emojiReplacer.forcePickerUpdate();
+            }, 300);
         }
-        
-        // Lightweight click listener for picker triggers
-        document.addEventListener('click', (e) => {
-            const target = e.target;
-            const isEmojiTrigger = target.matches?.(
-                '[onclick*="emoticon"], [onclick*="smiley"], ' +
-                '.emoticon-btn, .smiley-btn, button:has(img[src*="emoticon"])'
-            );
-            
-            if (isEmojiTrigger && replacerInstance) {
-                if (typeof scheduler !== 'undefined' && scheduler.postTask) {
-                    scheduler.postTask(() => {
-                        replacerInstance.forcePickerUpdate();
-                    }, { delay: CONFIG.delays.pickerCheck });
-                } else {
-                    setTimeout(() => {
-                        replacerInstance.forcePickerUpdate();
-                    }, CONFIG.delays.pickerCheck);
-                }
-            }
-        }, { passive: true, capture: true });
-        
-        // Cleanup on page hide
-        globalThis.addEventListener('pagehide', () => {
-            if (replacerInstance) {
-                replacerInstance.destroy();
-                replacerInstance = null;
-            }
-        }, { once: true });
-        
-        // Export API
-        globalThis.emojiReplacer = {
-            replace: (container) => replacerInstance?.replaceCustomEmojis(container),
-            init: () => replacerInstance?.init(),
-            destroy: () => {
-                replacerInstance?.destroy();
-                replacerInstance = null;
-            },
-            forcePickerUpdate: () => replacerInstance?.forcePickerUpdate(),
-            isReady: () => replacerInstance?.isReady() ?? false,
-            getInstance: () => replacerInstance
-        };
-        
-        console.log('🚀 Emoji Replacer initialized');
-    }
-    
-    // Check document state and initialize
-    function checkAndStart() {
-        // Use queueMicrotask for next microtask
-        if (typeof queueMicrotask !== 'undefined') {
-            queueMicrotask(initialize);
-        } else {
-            // Fallback to Promise if available
-            if (typeof Promise !== 'undefined') {
-                Promise.resolve().then(initialize);
-            } else {
-                setTimeout(initialize, 0);
-            }
-        }
-    }
-    
-    // Start when document is ready
-    if (document.readyState !== 'loading') {
-        checkAndStart();
-    } else {
-        // Use modern event listener
-        const controller = new AbortController();
-        document.addEventListener('DOMContentLoaded', checkAndStart, { 
-            signal: controller.signal,
-            once: true 
-        });
-        
-        // Fallback in case DOMContentLoaded already fired
-        setTimeout(checkAndStart, 1000);
-    }
+    }, { passive: true });
     
 })();
 
