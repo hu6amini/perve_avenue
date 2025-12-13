@@ -68,7 +68,7 @@ document.head.appendChild(instantPagePreload);
                 // Add forum_core_observer.js with same attributes as pa_scripts
                 const forumCoreObserver = document.createElement("script");
                 Object.assign(forumCoreObserver, {
-                    src: "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@faf8747/forum_core_observer.js",
+                    src: "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@736d335/forum_core_observer.js",
                     defer: true,
                     crossOrigin: "anonymous",
                     referrerPolicy: "no-referrer"
