@@ -6,56 +6,65 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 (function() {
     'use strict';
     
-    const EMOJI_MAP = new Map([
-  // Already mapped in your current script
-  ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],      // ❤️
-  ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],     // 🔥
-  ['https://img.forumfree.net/html/emoticons/new/ph34r.svg', '1f977.svg'],     // 🥷
-  ['https://img.forumfree.net/html/emoticons/new/sick.svg', '1f922.svg'],      // 🤢
-  ['https://img.forumfree.net/html/emoticons/new/alien.svg', '1f47d.svg'],     // 👽
-  ['https://img.forumfree.net/html/emoticons/new/wink.svg', '1f609.svg'],      // 😉
-  ['https://img.forumfree.net/html/emoticons/new/rotfl.svg', '1f923.svg'],     // 🤣
-  ['https://img.forumfree.net/html/emoticons/new/hearts.svg', '1f60d.svg'],    // 😍
-  ['https://img.forumfree.net/html/emoticons/new/huh.svg', '1f928.svg'],       // 🤨
-  ['https://img.forumfree.net/html/emoticons/new/dry.svg', '1f612.svg'],       // 😒
-  ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f600.svg'],     // 😀
-  ['https://img.forumfree.net/html/emoticons/new/ohmy.svg', '1f62f.svg'],      // 😯
-  ['https://img.forumfree.net/html/emoticons/new/tongue.svg', '1f61b.svg'],    // 😛
-  ['https://img.forumfree.net/html/emoticons/new/rolleyes.svg', '1f644.svg'],  // 🙄
-  ['https://img.forumfree.net/html/emoticons/new/love.svg', '1f970.svg'],      // 🥰
-  ['https://img.forumfree.net/html/emoticons/new/think.svg', '1f914.svg'],     // 🤔
-  ['https://img.forumfree.net/html/emoticons/new/kiss.svg', '1f618.svg'],      // 😘
-  ['https://img.forumfree.net/html/emoticons/new/bigcry.svg', '1f62d.svg'],    // 😭
-  ['https://img.forumfree.net/html/emoticons/new/wub.svg', '1f60b.svg'],       // 😋
-  ['https://img.forumfree.net/html/emoticons/new/cool.svg', '1f60e.svg'],      // 😎
-  
-  // NEW MAPPINGS NEEDED (from your post):
-  ['https://img.forumfree.net/html/emoticons/new/laugh.svg', '1f606.svg'],     // 😆 :lol:
-  ['https://img.forumfree.net/html/emoticons/new/sleep.svg', '1f634.svg'],     // 😴 -_-
-  ['https://img.forumfree.net/html/emoticons/new/mad.svg', '1f620.svg'],       // 😠 :angry:
-  ['https://img.forumfree.net/html/emoticons/new/sad.svg', '1f641.svg'],       // 🙁 :(
-  ['https://img.forumfree.net/html/emoticons/new/unsure.svg', '1f615.svg'],    // 😕 :unsure:
-  ['https://img.forumfree.net/html/emoticons/new/wacko.svg', '1f92a.svg'],     // 🤪 :wacko:
-  ['https://img.forumfree.net/html/emoticons/new/blink.svg', '1f440.svg'],     // 👀 :blink:
-  ['https://img.forumfree.net/html/emoticons/new/cry.svg', '1f622.svg'],       // 😢 :cry:
-  ['https://img.forumfree.net/html/emoticons/new/shifty.svg', '1f608.svg'],    // 😈 :shifty:
+const EMOJI_MAP = new Map([
+  // Heart and symbols
+  ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],      // ❤️ <3
+  ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],     // 🔥 :f:
+  ['https://img.forumfree.net/html/emoticons/new/stars.svg', '1f929.svg'],     // 🤩 *_*
+  ['https://img.forumfree.net/html/emoticons/new/thumbup.svg', '1f44d.svg'],   // 👍 :b:
+  ['https://img.forumfree.net/html/emoticons/new/thumbdown.svg', '1f44e.svg'], // 👎 :p:
   ['https://img.forumfree.net/html/emoticons/new/w00t.svg', '1f389.svg'],      // 🎉 :woot:
-  ['https://img.forumfree.net/html/emoticons/new/stars.svg', '1f31f.svg'],     // 🌟 *_*
+  
+  // Smileys and people
+  ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f600.svg'],     // 😀 :D
+  ['https://img.forumfree.net/html/emoticons/new/bigsmile.svg', '1f603.svg'],  // 😃 =)
+  ['https://img.forumfree.net/html/emoticons/new/smile.svg', '1f642.svg'],     // 🙂 :) (if it exists)
+  ['https://img.forumfree.net/html/emoticons/new/wink.svg', '1f609.svg'],      // 😉 ;)
+  ['https://img.forumfree.net/html/emoticons/new/tongue.svg', '1f61b.svg'],    // 😛 :P
   ['https://img.forumfree.net/html/emoticons/new/blep.svg', '1f61c.svg'],      // 😜 ;P
   ['https://img.forumfree.net/html/emoticons/new/bleh.svg', '1f61d.svg'],      // 😝 :XP:
-  ['https://img.forumfree.net/html/emoticons/new/upside.svg', '1f643.svg'],    // 🙃 (:
-  ['https://img.forumfree.net/html/emoticons/new/bigsmile.svg', '1f603.svg'],  // 😃 =)
+  ['https://img.forumfree.net/html/emoticons/new/laugh.svg', '1f606.svg'],     // 😆 :lol:
   ['https://img.forumfree.net/html/emoticons/new/haha.svg', '1f602.svg'],      // 😂 X)
-  ['https://img.forumfree.net/html/emoticons/new/distraught.svg', '1f626.svg'], // 😦 :D:
-  ['https://img.forumfree.net/html/emoticons/new/squint.svg', '1f62c.svg'],    // 😬 >.<
-  ['https://img.forumfree.net/html/emoticons/new/doh.svg', '1f623.svg'],       // 😣 >_<
-  ['https://img.forumfree.net/html/emoticons/new/disgust.svg', '1f611.svg'],   // 😑 =_=
-  ['https://img.forumfree.net/html/emoticons/new/neutral.svg', '1f610.svg'],   // 😐 :|
-  ['https://img.forumfree.net/html/emoticons/new/mouthless.svg', '1f636.svg'], // 😶 :?
-  ['https://img.forumfree.net/html/emoticons/new/thumbdown.svg', '1f44e.svg'], // 👎 :p:
-  ['https://img.forumfree.net/html/emoticons/new/joy.svg', '1f60f.svg'],       // 😏 ^U^
+  ['https://img.forumfree.net/html/emoticons/new/rotfl.svg', '1f923.svg'],     // 🤣 :XD:
+  ['https://img.forumfree.net/html/emoticons/new/hearts.svg', '1f60d.svg'],    // 😍 3_3
+  ['https://img.forumfree.net/html/emoticons/new/love.svg', '1f970.svg'],      // 🥰 :]
+  ['https://img.forumfree.net/html/emoticons/new/wub.svg', '1f60b.svg'],       // 😋 :wub:
+  ['https://img.forumfree.net/html/emoticons/new/kiss.svg', '1f618.svg'],      // 😘 :*:
   ['https://img.forumfree.net/html/emoticons/new/blush.svg', '1f60a.svg'],     // 😊 *^^*
-  ['https://img.forumfree.net/html/emoticons/new/thumbup.svg', '1f44d.svg']    // 👍 :b:
+  ['https://img.forumfree.net/html/emoticons/new/joy.svg', '1f60f.svg'],       // 😏 ^U^
+  ['https://img.forumfree.net/html/emoticons/new/cool.svg', '1f60e.svg'],      // 😎 :B):
+  
+  // Negative emotions
+  ['https://img.forumfree.net/html/emoticons/new/sad.svg', '1f641.svg'],       // 🙁 :(
+  ['https://img.forumfree.net/html/emoticons/new/cry.svg', '1f622.svg'],       // 😢 :cry:
+  ['https://img.forumfree.net/html/emoticons/new/bigcry.svg', '1f62d.svg'],    // 😭 ;_;
+  ['https://img.forumfree.net/html/emoticons/new/mad.svg', '1f620.svg'],       // 😠 :angry:
+  ['https://img.forumfree.net/html/emoticons/new/dry.svg', '1f612.svg'],       // 😒 <_<
+  ['https://img.forumfree.net/html/emoticons/new/disgust.svg', '1f611.svg'],   // 😑 =_=
+  ['https://img.forumfree.net/html/emoticons/new/doh.svg', '1f623.svg'],       // 😣 >_<
+  
+  // Neutral/thinking
+  ['https://img.forumfree.net/html/emoticons/new/neutral.svg', '1f610.svg'],   // 😐 :|
+  ['https://img.forumfree.net/html/emoticons/new/unsure.svg', '1f615.svg'],    // 😕 :unsure:
+  ['https://img.forumfree.net/html/emoticons/new/mouthless.svg', '1f636.svg'], // 😶 :?
+  ['https://img.forumfree.net/html/emoticons/new/think.svg', '1f914.svg'],     // 🤔 :=/:
+  ['https://img.forumfree.net/html/emoticons/new/huh.svg', '1f928.svg'],       // 🤨 :huh:
+  
+  // Other expressions
+  ['https://img.forumfree.net/html/emoticons/new/ohmy.svg', '1f62f.svg'],      // 😯 :o:
+  ['https://img.forumfree.net/html/emoticons/new/rolleyes.svg', '1f644.svg'],  // 🙄 :rolleyes:
+  ['https://img.forumfree.net/html/emoticons/new/sleep.svg', '1f634.svg'],     // 😴 -_-
+  ['https://img.forumfree.net/html/emoticons/new/sick.svg', '1f922.svg'],      // 🤢 :sick:
+  ['https://img.forumfree.net/html/emoticons/new/distraught.svg', '1f626.svg'],// 😦 :D:
+  ['https://img.forumfree.net/html/emoticons/new/squint.svg', '1f62c.svg'],    // 😬 >.<
+  ['https://img.forumfree.net/html/emoticons/new/wacko.svg', '1f92a.svg'],     // 🤪 :wacko:
+  ['https://img.forumfree.net/html/emoticons/new/upside.svg', '1f643.svg'],    // 🙃 (:
+  
+  // Characters and creatures
+  ['https://img.forumfree.net/html/emoticons/new/ph34r.svg', '1f977.svg'],     // 🥷 :ph34r:
+  ['https://img.forumfree.net/html/emoticons/new/alien.svg', '1f47d.svg'],     // 👽 :alienff:
+  ['https://img.forumfree.net/html/emoticons/new/shifty.svg', '1f608.svg'],    // 😈 :shifty:
+  ['https://img.forumfree.net/html/emoticons/new/blink.svg', '1f440.svg']      // 👀 :blink:
 ]);
     
     const TWEMOJI_CONFIG = {
