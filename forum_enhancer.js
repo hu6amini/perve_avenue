@@ -13,7 +13,7 @@ const EMOJI_MAP = new Map([
   ['https://img.forumfree.net/html/emoticons/new/stars.svg', '1f929.svg'],     // 🤩 *_*
   ['https://img.forumfree.net/html/emoticons/new/thumbup.svg', '1f44d.svg'],   // 👍 :b:
   ['https://img.forumfree.net/html/emoticons/new/thumbdown.svg', '1f44e.svg'], // 👎 :p:
-  ['https://img.forumfree.net/html/emoticons/new/w00t.svg', '1f389.svg'],      // 🎉 :woot:
+  ['https://img.forumfree.net/html/emoticons/new/w00t.svg', '1f92f.svg'],      // 🤯 :woot:
   
   // Smileys and people - ADD biggrin.svg
   ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f600.svg'],     // 😀 :D (standard grin)
