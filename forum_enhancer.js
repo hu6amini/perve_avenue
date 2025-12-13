@@ -2,71 +2,71 @@
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
 
 //Default emojis to Twemoji
-// Optimized Emoji Replacer for ForumCoreObserver (No DOMContentLoaded)
+// Optimized Emoji Replacer for ForumCoreObserver - Picker Edition
 (function() {
     'use strict';
     
-const EMOJI_MAP = new Map([
-  // Heart and symbols
-  ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],      // ❤️ <3
-  ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],     // 🔥 :f:
-  ['https://img.forumfree.net/html/emoticons/new/stars.svg', '1f929.svg'],     // 🤩 *_*
-  ['https://img.forumfree.net/html/emoticons/new/thumbup.svg', '1f44d.svg'],   // 👍 :b:
-  ['https://img.forumfree.net/html/emoticons/new/thumbdown.svg', '1f44e.svg'], // 👎 :p:
-  ['https://img.forumfree.net/html/emoticons/new/w00t.svg', '1f92f.svg'],      // 🤯 :woot:
-  
-  // Smileys and people - ADD biggrin.svg
-  ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f60a.svg'],     // 😊 ^_^
-  ['https://img.forumfree.net/html/emoticons/new/biggrin.svg', '1f600.svg'],   // 😀 :D (bigger grin) - NEW!
-  ['https://img.forumfree.net/html/emoticons/new/bigsmile.svg', '1f603.svg'],  // 😃 =) (smiling with eyes)
-  ['https://img.forumfree.net/html/emoticons/new/smile.svg', '1f642.svg'],     // 🙂 :) (gentle smile)
-  ['https://img.forumfree.net/html/emoticons/new/wink.svg', '1f609.svg'],      // 😉 ;)
-  ['https://img.forumfree.net/html/emoticons/new/tongue.svg', '1f61b.svg'],    // 😛 :P
-  ['https://img.forumfree.net/html/emoticons/new/blep.svg', '1f61c.svg'],      // 😜 ;P
-  ['https://img.forumfree.net/html/emoticons/new/bleh.svg', '1f61d.svg'],      // 😝 :XP:
-  ['https://img.forumfree.net/html/emoticons/new/laugh.svg', '1f606.svg'],     // 😆 :lol:
-  ['https://img.forumfree.net/html/emoticons/new/haha.svg', '1f602.svg'],      // 😂 X)
-  ['https://img.forumfree.net/html/emoticons/new/rotfl.svg', '1f923.svg'],     // 🤣 :XD:
-  ['https://img.forumfree.net/html/emoticons/new/hearts.svg', '1f60d.svg'],    // 😍 3_3
-  ['https://img.forumfree.net/html/emoticons/new/love.svg', '1f970.svg'],      // 🥰 :]
-  ['https://img.forumfree.net/html/emoticons/new/wub.svg', '1f60b.svg'],       // 😋 :wub:
-  ['https://img.forumfree.net/html/emoticons/new/kiss.svg', '1f618.svg'],      // 😘 :*:
-  ['https://img.forumfree.net/html/emoticons/new/blush.svg', '263a.svg'],      // ☺️ *^^*
-  ['https://img.forumfree.net/html/emoticons/new/joy.svg', '1f60f.svg'],       // 😏 ^U^
-  ['https://img.forumfree.net/html/emoticons/new/cool.svg', '1f60e.svg'],      // 😎 :B):
-  
-  // Negative emotions
-  ['https://img.forumfree.net/html/emoticons/new/sad.svg', '1f641.svg'],       // 🙁 :(
-  ['https://img.forumfree.net/html/emoticons/new/cry.svg', '1f622.svg'],       // 😢 :cry:
-  ['https://img.forumfree.net/html/emoticons/new/bigcry.svg', '1f62d.svg'],    // 😭 ;_;
-  ['https://img.forumfree.net/html/emoticons/new/mad.svg', '1f620.svg'],       // 😠 :angry:
-  ['https://img.forumfree.net/html/emoticons/new/dry.svg', '1f612.svg'],       // 😒 <_<
-  ['https://img.forumfree.net/html/emoticons/new/disgust.svg', '1f611.svg'],   // 😑 =_=
-  ['https://img.forumfree.net/html/emoticons/new/doh.svg', '1f623.svg'],       // 😣 >_<
-  
-  // Neutral/thinking
-  ['https://img.forumfree.net/html/emoticons/new/neutral.svg', '1f610.svg'],   // 😐 :|
-  ['https://img.forumfree.net/html/emoticons/new/unsure.svg', '1f615.svg'],    // 😕 :unsure:
-  ['https://img.forumfree.net/html/emoticons/new/mouthless.svg', '1f636.svg'], // 😶 :?
-  ['https://img.forumfree.net/html/emoticons/new/think.svg', '1f914.svg'],     // 🤔 :=/:
-  ['https://img.forumfree.net/html/emoticons/new/huh.svg', '1f928.svg'],       // 🤨 :huh:
-  
-  // Other expressions
-  ['https://img.forumfree.net/html/emoticons/new/ohmy.svg', '1f62f.svg'],      // 😯 :o:
-  ['https://img.forumfree.net/html/emoticons/new/rolleyes.svg', '1f644.svg'],  // 🙄 :rolleyes:
-  ['https://img.forumfree.net/html/emoticons/new/sleep.svg', '1f634.svg'],     // 😴 -_-
-  ['https://img.forumfree.net/html/emoticons/new/sick.svg', '1f922.svg'],      // 🤢 :sick:
-  ['https://img.forumfree.net/html/emoticons/new/distraught.svg', '1f626.svg'],// 😦 :D:
-  ['https://img.forumfree.net/html/emoticons/new/squint.svg', '1f62c.svg'],    // 😬 >.<
-  ['https://img.forumfree.net/html/emoticons/new/wacko.svg', '1f92a.svg'],     // 🤪 :wacko:
-  ['https://img.forumfree.net/html/emoticons/new/upside.svg', '1f643.svg'],    // 🙃 (:
-  
-  // Characters and creatures
-  ['https://img.forumfree.net/html/emoticons/new/ph34r.svg', '1f977.svg'],     // 🥷 :ph34r:
-  ['https://img.forumfree.net/html/emoticons/new/alien.svg', '1f47d.svg'],     // 👽 :alienff:
-  ['https://img.forumfree.net/html/emoticons/new/shifty.svg', '1f608.svg'],    // 😈 :shifty:
-  ['https://img.forumfree.net/html/emoticons/new/blink.svg', '1f440.svg']      // 👀 :blink:
-]);
+    const EMOJI_MAP = new Map([
+      // Heart and symbols
+      ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'],      // ❤️ <3
+      ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'],     // 🔥 :f:
+      ['https://img.forumfree.net/html/emoticons/new/stars.svg', '1f929.svg'],     // 🤩 *_*
+      ['https://img.forumfree.net/html/emoticons/new/thumbup.svg', '1f44d.svg'],   // 👍 :b:
+      ['https://img.forumfree.net/html/emoticons/new/thumbdown.svg', '1f44e.svg'], // 👎 :p:
+      ['https://img.forumfree.net/html/emoticons/new/w00t.svg', '1f92f.svg'],      // 🤯 :woot:
+      
+      // Smileys and people
+      ['https://img.forumfree.net/html/emoticons/new/happy.svg', '1f60a.svg'],     // 😊 ^_^
+      ['https://img.forumfree.net/html/emoticons/new/biggrin.svg', '1f600.svg'],   // 😀 :D
+      ['https://img.forumfree.net/html/emoticons/new/bigsmile.svg', '1f603.svg'],  // 😃 =)
+      ['https://img.forumfree.net/html/emoticons/new/smile.svg', '1f642.svg'],     // 🙂 :)
+      ['https://img.forumfree.net/html/emoticons/new/wink.svg', '1f609.svg'],      // 😉 ;)
+      ['https://img.forumfree.net/html/emoticons/new/tongue.svg', '1f61b.svg'],    // 😛 :P
+      ['https://img.forumfree.net/html/emoticons/new/blep.svg', '1f61c.svg'],      // 😜 ;P
+      ['https://img.forumfree.net/html/emoticons/new/bleh.svg', '1f61d.svg'],      // 😝 :XP:
+      ['https://img.forumfree.net/html/emoticons/new/laugh.svg', '1f606.svg'],     // 😆 :lol:
+      ['https://img.forumfree.net/html/emoticons/new/haha.svg', '1f602.svg'],      // 😂 X)
+      ['https://img.forumfree.net/html/emoticons/new/rotfl.svg', '1f923.svg'],     // 🤣 :XD:
+      ['https://img.forumfree.net/html/emoticons/new/hearts.svg', '1f60d.svg'],    // 😍 3_3
+      ['https://img.forumfree.net/html/emoticons/new/love.svg', '1f970.svg'],      // 🥰 :]
+      ['https://img.forumfree.net/html/emoticons/new/wub.svg', '1f60b.svg'],       // 😋 :wub:
+      ['https://img.forumfree.net/html/emoticons/new/kiss.svg', '1f618.svg'],      // 😘 :*:
+      ['https://img.forumfree.net/html/emoticons/new/blush.svg', '263a.svg'],      // ☺️ *^^*
+      ['https://img.forumfree.net/html/emoticons/new/joy.svg', '1f60f.svg'],       // 😏 ^U^
+      ['https://img.forumfree.net/html/emoticons/new/cool.svg', '1f60e.svg'],      // 😎 :B):
+      
+      // Negative emotions
+      ['https://img.forumfree.net/html/emoticons/new/sad.svg', '1f641.svg'],       // 🙁 :(
+      ['https://img.forumfree.net/html/emoticons/new/cry.svg', '1f622.svg'],       // 😢 :cry:
+      ['https://img.forumfree.net/html/emoticons/new/bigcry.svg', '1f62d.svg'],    // 😭 ;_;
+      ['https://img.forumfree.net/html/emoticons/new/mad.svg', '1f620.svg'],       // 😠 :angry:
+      ['https://img.forumfree.net/html/emoticons/new/dry.svg', '1f612.svg'],       // 😒 <_<
+      ['https://img.forumfree.net/html/emoticons/new/disgust.svg', '1f611.svg'],   // 😑 =_=
+      ['https://img.forumfree.net/html/emoticons/new/doh.svg', '1f623.svg'],       // 😣 >_<
+      
+      // Neutral/thinking
+      ['https://img.forumfree.net/html/emoticons/new/neutral.svg', '1f610.svg'],   // 😐 :|
+      ['https://img.forumfree.net/html/emoticons/new/unsure.svg', '1f615.svg'],    // 😕 :unsure:
+      ['https://img.forumfree.net/html/emoticons/new/mouthless.svg', '1f636.svg'], // 😶 :?
+      ['https://img.forumfree.net/html/emoticons/new/think.svg', '1f914.svg'],     // 🤔 :=/:
+      ['https://img.forumfree.net/html/emoticons/new/huh.svg', '1f928.svg'],       // 🤨 :huh:
+      
+      // Other expressions
+      ['https://img.forumfree.net/html/emoticons/new/ohmy.svg', '1f62f.svg'],      // 😯 :o:
+      ['https://img.forumfree.net/html/emoticons/new/rolleyes.svg', '1f644.svg'],  // 🙄 :rolleyes:
+      ['https://img.forumfree.net/html/emoticons/new/sleep.svg', '1f634.svg'],     // 😴 -_-
+      ['https://img.forumfree.net/html/emoticons/new/sick.svg', '1f922.svg'],      // 🤢 :sick:
+      ['https://img.forumfree.net/html/emoticons/new/distraught.svg', '1f626.svg'],// 😦 :D:
+      ['https://img.forumfree.net/html/emoticons/new/squint.svg', '1f62c.svg'],    // 😬 >.<
+      ['https://img.forumfree.net/html/emoticons/new/wacko.svg', '1f92a.svg'],     // 🤪 :wacko:
+      ['https://img.forumfree.net/html/emoticons/new/upside.svg', '1f643.svg'],    // 🙃 (:
+      
+      // Characters and creatures
+      ['https://img.forumfree.net/html/emoticons/new/ph34r.svg', '1f977.svg'],     // 🥷 :ph34r:
+      ['https://img.forumfree.net/html/emoticons/new/alien.svg', '1f47d.svg'],     // 👽 :alienff:
+      ['https://img.forumfree.net/html/emoticons/new/shifty.svg', '1f608.svg'],    // 😈 :shifty:
+      ['https://img.forumfree.net/html/emoticons/new/blink.svg', '1f440.svg']      // 👀 :blink:
+    ]);
     
     const TWEMOJI_CONFIG = {
         folder: 'svg',
@@ -79,33 +79,79 @@ const EMOJI_MAP = new Map([
     const PROCESSED_CLASS = 'twemoji-processed';
     const TWEMOJI_BASE_URL = TWEMOJI_CONFIG.base + 'svg/';
     
-    // Optimized selector generator
-    function getEmojiSelector(src) {
-        return 'img[src="' + src + '"]:not(.' + PROCESSED_CLASS + ')';
+    // Enhanced selector generator for picker support
+    function getEmojiSelectors(src) {
+        return [
+            'img[src="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
+            'img[data-emoticon-url="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
+            'img[data-emoticon-preview="' + src + '"]:not(.' + PROCESSED_CLASS + ')'
+        ];
     }
     
-    // Main processing function
+    // Enhanced processing function for picker support
     function replaceCustomEmojis(container) {
         if (!container || !container.querySelectorAll) return;
         
-        // Process custom emojis
+        // Process custom emojis - now includes picker attributes
         for (const [oldSrc, newFile] of EMOJI_MAP) {
-            const selector = getEmojiSelector(oldSrc);
-            const imgs = container.querySelectorAll(selector);
+            const selectors = getEmojiSelectors(oldSrc);
             
-            for (let i = 0; i < imgs.length; i++) {
-                const img = imgs[i];
-                img.src = TWEMOJI_BASE_URL + newFile;
-                img.classList.add('twemoji', PROCESSED_CLASS);
-                img.loading = 'lazy';
-                img.decoding = 'async';
+            for (const selector of selectors) {
+                const imgs = container.querySelectorAll(selector);
                 
-                // Error handling with fallback
-                img.onerror = function() {
-                    console.warn('Failed to load emoji: ' + newFile);
-                    this.src = oldSrc;
-                    this.classList.remove(PROCESSED_CLASS);
-                };
+                for (let i = 0; i < imgs.length; i++) {
+                    const img = imgs[i];
+                    
+                    // Store original attributes before replacing
+                    const originalAttrs = {
+                        src: img.src,
+                        alt: img.alt,
+                        dataEmoticonUrl: img.getAttribute('data-emoticon-url'),
+                        dataEmoticonPreview: img.getAttribute('data-emoticon-preview'),
+                        dataText: img.getAttribute('data-text')
+                    };
+                    
+                    // Replace with Twemoji
+                    img.src = TWEMOJI_BASE_URL + newFile;
+                    img.classList.add('twemoji', PROCESSED_CLASS);
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
+                    
+                    // CRITICAL: Restore forum's data attributes for picker functionality
+                    if (originalAttrs.dataEmoticonUrl) {
+                        img.setAttribute('data-emoticon-url', originalAttrs.dataEmoticonUrl);
+                    }
+                    if (originalAttrs.dataEmoticonPreview) {
+                        img.setAttribute('data-emoticon-preview', originalAttrs.dataEmoticonPreview);
+                    }
+                    if (originalAttrs.dataText) {
+                        img.setAttribute('data-text', originalAttrs.dataText);
+                    }
+                    if (originalAttrs.alt) {
+                        img.alt = originalAttrs.alt;
+                    }
+                    
+                    // Error handling with full fallback
+                    img.onerror = function() {
+                        console.warn('Failed to load emoji: ' + newFile);
+                        this.src = originalAttrs.src;
+                        this.classList.remove(PROCESSED_CLASS);
+                        
+                        // Restore all original attributes on error
+                        if (originalAttrs.dataEmoticonUrl) {
+                            this.setAttribute('data-emoticon-url', originalAttrs.dataEmoticonUrl);
+                        }
+                        if (originalAttrs.dataEmoticonPreview) {
+                            this.setAttribute('data-emoticon-preview', originalAttrs.dataEmoticonPreview);
+                        }
+                        if (originalAttrs.dataText) {
+                            this.setAttribute('data-text', originalAttrs.dataText);
+                        }
+                        if (originalAttrs.alt) {
+                            this.alt = originalAttrs.alt;
+                        }
+                    };
+                }
             }
         }
         
@@ -123,23 +169,32 @@ const EMOJI_MAP = new Map([
         }
     }
     
-    // Initialization function
+    // Initialization function - Using ONLY ForumCoreObserver
     function initEmojiReplacement() {
-        // Replace emojis in existing content
+        // Initial replacement of existing content
         replaceCustomEmojis(document.body);
         
-        // Register with ForumCoreObserver
+        // Register with ForumCoreObserver - NO SEPARATE MUTATION OBSERVER
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-            // Register for new content
+            // 1. High priority for emoji picker (critical for UX)
             globalThis.forumObserver.register({
-                id: 'emoji-replacer',
+                id: 'emoji-replacer-picker',
                 callback: replaceCustomEmojis,
-                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align], .picker-custom-grid',
+                selector: '.picker-custom-grid, .picker-custom-item, .image-thumbnail',
+                priority: 'high', // High priority for picker
+                pageTypes: ['topic', 'blog', 'search', 'forum']
+            });
+            
+            // 2. Normal priority for content areas
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-content',
+                callback: replaceCustomEmojis,
+                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align]',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             
-            // Register for specific elements that often contain emojis
+            // 3. Specialized for quote blocks
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-quotes',
                 callback: replaceCustomEmojis,
@@ -147,7 +202,7 @@ const EMOJI_MAP = new Map([
                 priority: 'normal'
             });
             
-            // Register for user-generated content areas
+            // 4. Low priority for signatures and user content
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-user-content',
                 callback: replaceCustomEmojis,
@@ -155,43 +210,31 @@ const EMOJI_MAP = new Map([
                 priority: 'low'
             });
             
-            console.log('✅ Emoji replacer registered with ForumCoreObserver');
-        } else {
-            console.warn('ForumCoreObserver not available, using fallback observer');
-            setupFallbackObserver();
-        }
-    }
-    
-    // Fallback if ForumCoreObserver is not available
-    function setupFallbackObserver() {
-        if (typeof MutationObserver !== 'undefined') {
-            var observer = new MutationObserver(function(mutations) {
-                for (var i = 0; i < mutations.length; i++) {
-                    for (var j = 0; j < mutations[i].addedNodes.length; j++) {
-                        var node = mutations[i].addedNodes[j];
-                        if (node.nodeType === 1) {
-                            replaceCustomEmojis(node);
-                        }
-                    }
-                }
-            });
+            console.log('✅ Emoji replacer fully integrated with ForumCoreObserver');
             
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            // Force immediate scan for picker elements that might already exist
+            setTimeout(function() {
+                const pickerGrid = document.querySelector('.picker-custom-grid');
+                if (pickerGrid) {
+                    console.log('🎨 Found existing emoji picker, processing...');
+                    replaceCustomEmojis(pickerGrid);
+                }
+            }, 500);
+            
+        } else {
+            console.error('❌ ForumCoreObserver not available - emoji replacement disabled');
+            // No fallback - we rely on ForumCoreObserver
         }
     }
     
-    // Check if Twemoji is available and wait for it
+    // Check if Twemoji is available
     function checkAndInit() {
-        // Check if Twemoji is already loaded
         if (window.twemoji) {
             initEmojiReplacement();
             return;
         }
         
-        // If not loaded yet, wait for it
+        // Wait for Twemoji
         var checkInterval = setInterval(function() {
             if (window.twemoji) {
                 clearInterval(checkInterval);
@@ -209,9 +252,8 @@ const EMOJI_MAP = new Map([
         }, 5000);
     }
     
-    // Start initialization - NO DOMContentLoaded
+    // Start initialization
     function startInitialization() {
-        // Use queueMicrotask if available for immediate execution
         if (typeof queueMicrotask !== 'undefined') {
             queueMicrotask(checkAndInit);
         } else {
@@ -219,9 +261,8 @@ const EMOJI_MAP = new Map([
         }
     }
     
-    // Check document state and start immediately
+    // Check document state
     if (document.readyState === 'loading') {
-        // If still loading, schedule for when ready
         document.onreadystatechange = function() {
             if (document.readyState === 'interactive' || document.readyState === 'complete') {
                 document.onreadystatechange = null;
@@ -229,16 +270,42 @@ const EMOJI_MAP = new Map([
             }
         };
     } else {
-        // Already loaded or interactive, start now
         startInitialization();
     }
     
-    // Expose API for other scripts
+    // Expose API
     window.emojiReplacer = {
         replace: replaceCustomEmojis,
         init: initEmojiReplacement,
-        isReady: function() { return !!window.twemoji; }
+        isReady: function() { return !!window.twemoji; },
+        // New method specifically for picker
+        forcePickerUpdate: function() {
+            const pickerGrid = document.querySelector('.picker-custom-grid');
+            if (pickerGrid) {
+                console.log('🔧 Force-updating emoji picker...');
+                replaceCustomEmojis(pickerGrid);
+                return true;
+            }
+            return false;
+        }
     };
+    
+    // Hook into common emoji picker triggers (lightweight event listeners only)
+    document.addEventListener('click', function(e) {
+        // Check for common emoji picker triggers
+        const target = e.target;
+        const isLikelyEmojiTrigger = target.matches(
+            '[onclick*="emoticon"], [onclick*="smiley"], ' +
+            '.emoticon-btn, .smiley-btn, button:has(img[src*="emoticon"])'
+        );
+        
+        if (isLikelyEmojiTrigger) {
+            // Schedule picker check after short delay
+            setTimeout(function() {
+                window.emojiReplacer.forcePickerUpdate();
+            }, 300);
+        }
+    }, { passive: true });
     
 })();
 
