@@ -360,7 +360,7 @@ class PostModernizer {
  this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({ 
  id: 'post-modernizer-transform', 
  callback: (node) => this.#handlePostTransformation(node), 
- selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"]', 
+ selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)', 
  delay: 100, 
  priority: 'normal',
  pageTypes: ['topic', 'blog'] // Only for topic and blog pages
@@ -478,7 +478,7 @@ class PostModernizer {
  node.querySelector('.title2.bottom') || 
  node.querySelector('div[align="center"]:has(.quote_top)') ||
  node.querySelector('div.spoiler[align="center"]') ||
- node.querySelector('div[align="center"]:has(.code_top)'); // Add code blocks
+ node.querySelector('div[align="center"]:has(.code_top)'); 
  
  if (needsTransformation) { 
  this.#transformPostElements(); 
@@ -692,8 +692,8 @@ class PostModernizer {
  this.#cleanupPostContentStructure(contentWrapper); 
  postContent.appendChild(contentWrapper); 
  this.#modernizeQuotes(contentWrapper); 
- this.#modernizeSpoilers(contentWrapper); // Add spoiler modernization
- this.#modernizeCodeBlocksInContent(contentWrapper); // Modernize code blocks in content
+ this.#modernizeSpoilers(contentWrapper);
+ this.#modernizeCodeBlocksInContent(contentWrapper);
  } 
  }); 
  
@@ -1155,20 +1155,19 @@ class PostModernizer {
  
  #handleShareSearchPost(post) {
  let postLink = null;
- 
+
  // Try to find post link in the header
  const postLinkElement = post.querySelector('.post-header a[href*="#entry"]');
  if (postLinkElement) {
  postLink = postLinkElement.href;
  }
- 
+
  // If not found, try to construct from post ID
  if (!postLink) {
  const postIdMatch = post.id.match(/\d+/);
  if (postIdMatch) {
  const postId = postIdMatch[0];
  // Search posts might not have topic context in the DOM
- // We can try to get it from the location info
  const topicLink = post.querySelector('.topic-link');
  if (topicLink) {
  const topicMatch = topicLink.textContent.match(/t=(\d+)/);
@@ -1178,11 +1177,11 @@ class PostModernizer {
  }
  }
  }
- 
+
  if (postLink) {
- this.#copyToClipboard(postLink);
+ this.#copyPostLinkToClipboard(postLink);
  } else {
- this.#showNotification('Could not find post link', 'error');
+ this.#showCopyNotification('Could not find post link');
  }
  }
  
@@ -1199,141 +1198,140 @@ class PostModernizer {
  element.querySelectorAll('table.color:empty').forEach(table => table.remove()); 
  } 
  
-#cleanupPostContentStructure(contentElement) { 
-    // Remove td elements directly inside post-main-content 
-    contentElement.querySelectorAll('.post-main-content > td').forEach(td => { 
-        while (td.firstChild) { 
-            contentElement.appendChild(td.firstChild); 
-        } 
-        td.remove(); 
-    }); 
-
-    // Remove all other TDs 
-    contentElement.querySelectorAll('td').forEach(td => { 
-        const parent = td.parentNode; 
-        if (parent) { 
-            while (td.firstChild) { 
-                parent.insertBefore(td.firstChild, td); 
-            } 
-            td.remove(); 
-        } 
-    }); 
-
-    // Remove TRs 
-    contentElement.querySelectorAll('tr').forEach(tr => { 
-        const parent = tr.parentNode; 
-        if (parent) { 
-            while (tr.firstChild) { 
-                parent.insertBefore(tr.firstChild, tr); 
-            } 
-            tr.remove(); 
-        } 
-    }); 
-
-    // Remove TBODYs 
-    contentElement.querySelectorAll('tbody').forEach(tbody => { 
-        const parent = tbody.parentNode; 
-        if (parent) { 
-            while (tbody.firstChild) { 
-                parent.insertBefore(tbody.firstChild, tbody); 
-            } 
-            tbody.remove(); 
-        } 
-    }); 
-
-    // Remove TABLEs 
-    contentElement.querySelectorAll('table').forEach(table => { 
-        const parent = table.parentNode; 
-        if (parent) { 
-            while (table.firstChild) { 
-                parent.insertBefore(table.firstChild, table); 
-            } 
-            table.remove(); 
-        } 
-    }); 
-
-    // Clean up <br> elements that are between block elements
-    this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-    
-    this.#cleanEmptyElements(contentElement); 
-    this.#processTextAndLineBreaks(contentElement); 
-    this.#cleanupEditSpans(contentElement); 
-    this.#processSignature(contentElement); 
-    this.#cleanInvalidAttributes(contentElement); 
-} 
-
- // Add this new method to clean up line breaks between block elements
-#cleanUpLineBreaksBetweenBlocks(element) {
-    const blockSelectors = [
-        '.modern-spoiler',
-        '.modern-code', 
-        '.modern-quote',
-        'div[align="center"]:has(.code_top)',
-        'div[align="center"].spoiler',
-        'div[align="center"]:has(.quote_top)'
-    ];
-    
-    // Find all block elements
-    const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
-    
-    // Sort by DOM position
-    blocks.sort((a, b) => {
-        const position = a.compareDocumentPosition(b);
-        return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-    });
-    
-    // Remove <br> elements that come immediately after block elements
-    blocks.forEach(block => {
-        let nextSibling = block.nextSibling;
-        
-        while (nextSibling) {
-            // If it's a <br> element, remove it
-            if (nextSibling.nodeType === Node.ELEMENT_NODE && 
-                nextSibling.tagName === 'BR') {
-                const brToRemove = nextSibling;
-                nextSibling = nextSibling.nextSibling;
-                brToRemove.remove();
-            } 
-            // If it's a text node with only whitespace, remove it
-            else if (nextSibling.nodeType === Node.TEXT_NODE && 
-                     /^\s*$/.test(nextSibling.textContent)) {
-                const textToRemove = nextSibling;
-                nextSibling = nextSibling.nextSibling;
-                textToRemove.remove();
-            } 
-            // Stop when we hit another element
-            else {
-                break;
-            }
-        }
-    });
-    
-    // Also clean up <br> elements that come immediately before modernized elements
-    blocks.forEach(block => {
-        let prevSibling = block.previousSibling;
-        
-        while (prevSibling) {
-            // If it's a <br> element, remove it
-            if (prevSibling.nodeType === Node.ELEMENT_NODE && 
-                prevSibling.tagName === 'BR') {
-                const brToRemove = prevSibling;
-                prevSibling = prevSibling.previousSibling;
-                brToRemove.remove();
-            } 
-            // If it's a text node with only whitespace, remove it
-            else if (prevSibling.nodeType === Node.TEXT_NODE && 
-                     /^\s*$/.test(prevSibling.textContent)) {
-                const textToRemove = prevSibling;
-                prevSibling = prevSibling.previousSibling;
-                textToRemove.remove();
-            } 
-            // Stop when we hit another element
-            else {
-                break;
-            }
-        }
-    });
-}
+ #cleanupPostContentStructure(contentElement) { 
+ // Remove td elements directly inside post-main-content 
+ contentElement.querySelectorAll('.post-main-content > td').forEach(td => { 
+ while (td.firstChild) { 
+ contentElement.appendChild(td.firstChild); 
+ } 
+ td.remove(); 
+ }); 
+ 
+ // Remove all other TDs 
+ contentElement.querySelectorAll('td').forEach(td => { 
+ const parent = td.parentNode; 
+ if (parent) { 
+ while (td.firstChild) { 
+ parent.insertBefore(td.firstChild, td); 
+ } 
+ td.remove(); 
+ } 
+ }); 
+ 
+ // Remove TRs 
+ contentElement.querySelectorAll('tr').forEach(tr => { 
+ const parent = tr.parentNode; 
+ if (parent) { 
+ while (tr.firstChild) { 
+ parent.insertBefore(tr.firstChild, tr); 
+ } 
+ tr.remove(); 
+ } 
+ }); 
+ 
+ // Remove TBODYs 
+ contentElement.querySelectorAll('tbody').forEach(tbody => { 
+ const parent = tbody.parentNode; 
+ if (parent) { 
+ while (tbody.firstChild) { 
+ parent.insertBefore(tbody.firstChild, tbody); 
+ } 
+ tbody.remove(); 
+ } 
+ }); 
+ 
+ // Remove TABLEs 
+ contentElement.querySelectorAll('table').forEach(table => { 
+ const parent = table.parentNode; 
+ if (parent) { 
+ while (table.firstChild) { 
+ parent.insertBefore(table.firstChild, table); 
+ } 
+ table.remove(); 
+ } 
+ }); 
+ 
+ // Clean up <br> elements that are between block elements
+ this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+ 
+ this.#cleanEmptyElements(contentElement); 
+ this.#processTextAndLineBreaks(contentElement); 
+ this.#cleanupEditSpans(contentElement); 
+ this.#processSignature(contentElement); 
+ this.#cleanInvalidAttributes(contentElement); 
+ } 
+ 
+ #cleanUpLineBreaksBetweenBlocks(element) {
+ const blockSelectors = [
+ '.modern-spoiler',
+ '.modern-code', 
+ '.modern-quote',
+ 'div[align="center"]:has(.code_top)',
+ 'div[align="center"].spoiler',
+ 'div[align="center"]:has(.quote_top)'
+ ];
+ 
+ // Find all block elements
+ const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
+ 
+ // Sort by DOM position
+ blocks.sort((a, b) => {
+ const position = a.compareDocumentPosition(b);
+ return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+ });
+ 
+ // Remove <br> elements that come immediately after block elements
+ blocks.forEach(block => {
+ let nextSibling = block.nextSibling;
+ 
+ while (nextSibling) {
+ // If it's a <br> element, remove it
+ if (nextSibling.nodeType === Node.ELEMENT_NODE && 
+ nextSibling.tagName === 'BR') {
+ const brToRemove = nextSibling;
+ nextSibling = nextSibling.nextSibling;
+ brToRemove.remove();
+ } 
+ // If it's a text node with only whitespace, remove it
+ else if (nextSibling.nodeType === Node.TEXT_NODE && 
+ /^\s*$/.test(nextSibling.textContent)) {
+ const textToRemove = nextSibling;
+ nextSibling = nextSibling.nextSibling;
+ textToRemove.remove();
+ } 
+ // Stop when we hit another element
+ else {
+ break;
+ }
+ }
+ });
+ 
+ // Also clean up <br> elements that come immediately before modernized elements
+ blocks.forEach(block => {
+ let prevSibling = block.previousSibling;
+ 
+ while (prevSibling) {
+ // If it's a <br> element, remove it
+ if (prevSibling.nodeType === Node.ELEMENT_NODE && 
+ prevSibling.tagName === 'BR') {
+ const brToRemove = prevSibling;
+ prevSibling = prevSibling.previousSibling;
+ brToRemove.remove();
+ } 
+ // If it's a text node with only whitespace, remove it
+ else if (prevSibling.nodeType === Node.TEXT_NODE && 
+ /^\s*$/.test(prevSibling.textContent)) {
+ const textToRemove = prevSibling;
+ prevSibling = prevSibling.previousSibling;
+ textToRemove.remove();
+ } 
+ // Stop when we hit another element
+ else {
+ break;
+ }
+ }
+ });
+ }
  
  #cleanEmptyElements(element) { 
  element.querySelectorAll(':empty').forEach(emptyEl => { 
@@ -1370,82 +1368,81 @@ class PostModernizer {
  }); 
  } 
  
-#processTextAndLineBreaks(element) {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-    const textNodes = [];
-    let node;
-
-    while (node = walker.nextNode()) {
-        if (node.textContent.trim() !== '') {
-            textNodes.push(node);
-        }
-    }
-
-    textNodes.forEach(textNode => {
-        if (textNode.parentNode && !textNode.parentNode.classList?.contains('post-text')) {
-            const span = document.createElement('span');
-            span.className = 'post-text';
-            span.textContent = textNode.textContent;
-            textNode.parentNode.replaceChild(span, textNode);
-        }
-    });
-
-    // Be more selective about which <br> elements to keep
-    element.querySelectorAll('br').forEach(br => {
-        const prevSibling = br.previousElementSibling;
-        const nextSibling = br.nextElementSibling;
-
-        // Don't process <br> elements that are children of modern elements
-        if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header')) {
-            return;
-        }
-
-        if (prevSibling && nextSibling) {
-            const prevIsPostText = prevSibling.classList?.contains('post-text');
-            const nextIsPostText = nextSibling.classList?.contains('post-text');
-
-            if (prevIsPostText && nextIsPostText) {
-                prevSibling.classList.add('paragraph-end');
-                br.remove();
-            } else {
-                // Check if this <br> is between modern elements
-                const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote');
-                const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote');
-                
-                if (prevIsModern && nextIsModern) {
-                    // Remove <br> between modern elements - spacing is handled by CSS
-                    br.remove();
-                } else {
-                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-                }
-            }
-        } else {
-            // Remove orphaned <br> elements
-            br.remove();
-        }
-    });
-
-    const postTextElements = element.querySelectorAll('.post-text');
-    for (let i = 0; i < postTextElements.length - 1; i++) {
-        const current = postTextElements[i];
-        const next = postTextElements[i + 1];
-
-        let nodeBetween = current.nextSibling;
-        let onlyWhitespace = true;
-
-        while (nodeBetween && nodeBetween !== next) {
-            if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                onlyWhitespace = false;
-                break;
-            }
-            nodeBetween = nodeBetween.nextSibling;
-        }
-
-        if (onlyWhitespace) {
-            current.classList.add('paragraph-end');
-        }
-    }
-}
+ #processTextAndLineBreaks(element) { 
+ const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false); 
+ const textNodes = []; 
+ let node; 
+ 
+ while (node = walker.nextNode()) { 
+ if (node.textContent.trim() !== '') { 
+ textNodes.push(node); 
+ } 
+ } 
+ 
+ textNodes.forEach(textNode => { 
+ if (textNode.parentNode && !textNode.parentNode.classList?.contains('post-text')) { 
+ const span = document.createElement('span'); 
+ span.className = 'post-text'; 
+ span.textContent = textNode.textContent; 
+ textNode.parentNode.replaceChild(span, textNode); 
+ } 
+ }); 
+ 
+ element.querySelectorAll('br').forEach(br => { 
+ const prevSibling = br.previousElementSibling; 
+ const nextSibling = br.nextElementSibling; 
+ 
+ // Don't process <br> elements that are children of modern elements
+ if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header')) {
+ return;
+ }
+ 
+ if (prevSibling && nextSibling) { 
+ const prevIsPostText = prevSibling.classList?.contains('post-text'); 
+ const nextIsPostText = nextSibling.classList?.contains('post-text'); 
+ 
+ if (prevIsPostText && nextIsPostText) { 
+ prevSibling.classList.add('paragraph-end'); 
+ br.remove(); 
+ } else { 
+ // Check if this <br> is between modern elements
+ const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote'); 
+ const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote'); 
+  
+ if (prevIsModern && nextIsModern) { 
+ // Remove <br> between modern elements - spacing is handled by CSS
+ br.remove(); 
+ } else { 
+ br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em'; 
+ } 
+ } 
+ } else { 
+ // Remove orphaned <br> elements
+ br.remove(); 
+ } 
+ }); 
+ 
+ const postTextElements = element.querySelectorAll('.post-text'); 
+ for (let i = 0; i < postTextElements.length - 1; i++) { 
+ const current = postTextElements[i]; 
+ const next = postTextElements[i + 1]; 
+ 
+ let nodeBetween = current.nextSibling; 
+ let onlyWhitespace = true; 
+ 
+ while (nodeBetween && nodeBetween !== next) { 
+ if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') { 
+ onlyWhitespace = false; 
+ break; 
+ } 
+ nodeBetween = nodeBetween.nextSibling; 
+ } 
+ 
+ if (onlyWhitespace) { 
+ current.classList.add('paragraph-end'); 
+ } 
+ } 
+ } 
  
  #cleanupEditSpans(element) { 
  element.querySelectorAll('span.edit').forEach(span => { 
@@ -2208,19 +2205,19 @@ class PostModernizer {
  
  #handleSharePost(post) {
  let postLink = null;
- 
+
  const timestampLink = post.querySelector('.post-header .lt.Sub a[href*="#entry"]');
  if (timestampLink) {
  postLink = timestampLink.href;
  }
- 
+
  if (!postLink) {
  const timeLink = post.querySelector('.post-header time[class*="when"]');
  if (timeLink?.closest('a')) {
  postLink = timeLink.closest('a').href;
  }
  }
- 
+
  if (!postLink) {
  const postIdMatch = post.id.match(/\d+/);
  if (postIdMatch) {
@@ -2231,90 +2228,95 @@ class PostModernizer {
  }
  }
  }
- 
+
  if (postLink) {
- this.#copyToClipboard(postLink);
+ this.#copyPostLinkToClipboard(postLink);
  } else {
- this.#showNotification('Could not find post link', 'error');
+ this.#showCopyNotification('Could not find post link');
  }
  }
  
- #copyToClipboard(text) {
+ #copyPostLinkToClipboard(link) {
  if (navigator.clipboard?.writeText) {
- navigator.clipboard.writeText(text).then(() => {
- this.#showNotification('Link copied to clipboard!', 'success');
+ navigator.clipboard.writeText(link).then(() => {
+ this.#showCopyNotification('Post link copied to clipboard!');
  }).catch(() => {
- this.#fallbackCopy(text);
+ this.#fallbackCopyPostLink(link);
  });
  } else {
- this.#fallbackCopy(text);
+ this.#fallbackCopyPostLink(link);
  }
  }
  
- #fallbackCopy(text) {
+ #fallbackCopyPostLink(text) {
  const textArea = document.createElement('textarea');
  textArea.value = text;
  textArea.style.cssText = 'position:fixed;opacity:0';
  document.body.appendChild(textArea);
  textArea.focus();
  textArea.select();
- 
+
  try {
  if (document.execCommand('copy')) {
- this.#showNotification('Link copied to clipboard!', 'success');
+ this.#showCopyNotification('Post link copied to clipboard!');
  } else {
- this.#showNotification('Failed to copy link', 'error');
+ this.#showCopyNotification('Failed to copy link');
  }
  } catch {
- this.#showNotification('Failed to copy link', 'error');
+ this.#showCopyNotification('Failed to copy link');
  } finally {
  document.body.removeChild(textArea);
  }
  }
  
- #showNotification(message, type) {
- document.querySelector('.share-notification')?.remove();
- 
+ #showCopyNotification(message) {
  const notification = document.createElement('div');
- notification.className = 'share-notification share-notification-' + type;
- 
- notification.style.cssText =
- 'position:fixed;' +
- 'top:20px;' +
- 'right:20px;' +
- 'padding:12px 20px;' +
- 'border-radius:var(--radius);' +
- 'background:' + (type === 'success' ? 'var(--success-color)' : 'var(--danger-color)') + ';' +
- 'color:white;' +
- 'font-weight:500;' +
- 'box-shadow:var(--shadow-lg);' +
- 'z-index:9;' +
- 'display:flex;' +
- 'align-items:center;' +
- 'gap:10px;' +
- 'animation:slideIn 0.3s ease-out;' +
- 'max-width:300px;';
- 
- const icon = type === 'success'
- ? '<i class="fa-regular fa-check-circle" aria-hidden="true"></i>'
- : '<i class="fa-regular fa-exclamation-circle" aria-hidden="true"></i>';
- 
- notification.innerHTML = icon + '<span>' + message + '</span>';
+ notification.className = 'copy-notification';
+ notification.textContent = message;
+
+ notification.style.cssText = `
+ position: fixed;
+ bottom: 20px;
+ right: 20px;
+ padding: 12px 20px;
+ background: var(--success-color);
+ color: white;
+ border-radius: var(--radius);
+ box-shadow: var(--shadow-lg);
+ z-index: 9;
+ animation: slideIn 0.3s ease-out;
+ font-weight: 500;
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ `;
+
+ const icon = document.createElement('i');
+ icon.className = 'fa-regular fa-check-circle';
+ icon.setAttribute('aria-hidden', 'true');
+ notification.prepend(icon);
+
  document.body.appendChild(notification);
- 
+
  setTimeout(() => {
- if (notification.parentNode) {
  notification.style.animation = 'slideOut 0.3s ease-out';
- setTimeout(() => notification.parentNode?.removeChild(notification), 300);
- }
- }, 3000);
- 
- if (!document.querySelector('#share-notification-styles')) {
+ setTimeout(() => notification.remove(), 300);
+ }, 2000);
+
+ // Ensure animation styles exist
+ if (!document.querySelector('#copy-notification-animations')) {
  const style = document.createElement('style');
- style.id = 'share-notification-styles';
- style.textContent =
- '@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}' +
- '@keyframes slideOut{from{transform:translateX(0);opacity:1;}to{transform:translateX(100%);opacity:0;}}';
+ style.id = 'copy-notification-animations';
+ style.textContent = `
+ @keyframes slideIn {
+ from { transform: translateX(100%); opacity: 0; }
+ to { transform: translateX(0); opacity: 1; }
+ }
+ @keyframes slideOut {
+ from { transform: translateX(0); opacity: 1; }
+ to { transform: translateX(100%); opacity: 0; }
+ }
+ `;
  document.head.appendChild(style);
  }
  }
@@ -2805,13 +2807,13 @@ class PostModernizer {
  const modernCode = document.createElement('div');
  modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
  
- let html = '<div class="code-header" role="button" tabindex="0">' +
+ // REMOVED the code-hint span since header is not clickable
+ let html = '<div class="code-header">' +
  '<div class="code-icon">' +
  '<i class="fa-regular fa-code" aria-hidden="true"></i>' +
  '</div>' +
  '<div class="code-info">' +
  '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
- '<span class="code-hint">Click to copy code</span>' +
  '</div>' +
  '<button class="code-copy-btn" type="button" aria-label="Copy code">' +
  '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +
@@ -2842,35 +2844,25 @@ class PostModernizer {
  const copyBtn = codeElement.querySelector('.code-copy-btn');
  const expandBtn = codeElement.querySelector('.code-expand-btn');
  const codeContent = codeElement.querySelector('.code-content');
- const codeTitle = codeElement.querySelector('.code-title');
  
- // Copy functionality
+ // REMOVED role="button" and tabindex from header - only copy button should work
+ codeHeader.style.cursor = 'default';
+ 
+ // Only the copy button should have click functionality
  copyBtn.addEventListener('click', (e) => {
  e.stopPropagation();
- this.#copyCodeToClipboard(codeText, codeTitle.textContent);
+ this.#copyCodeToClipboard(codeText, 'code');
  });
  
- // Header click toggles expansion/collapse for long content
- if (isLongContent) {
- codeHeader.addEventListener('click', () => {
- this.#toggleCodeExpansion(codeElement);
- });
- 
- codeHeader.addEventListener('keydown', (e) => {
- if (e.key === 'Enter' || e.key === ' ') {
- e.preventDefault();
- this.#toggleCodeExpansion(codeElement);
- }
- });
- 
- // Expand button
+ // If there's an expand button (for long content), keep its functionality
+ if (expandBtn) {
  expandBtn.addEventListener('click', () => {
  this.#toggleCodeExpansion(codeElement, true);
  });
  }
  
  // Syntax highlighting detection
- this.#applySyntaxHighlighting(codeElement, codeTitle.textContent);
+ this.#applySyntaxHighlighting(codeElement);
  }
  
  #toggleCodeExpansion(codeElement, forceExpand = null) {
@@ -2908,41 +2900,38 @@ class PostModernizer {
  navigator.clipboard.writeText(codeText).then(() => {
  this.#showCopyNotification('Copied ' + codeType + ' to clipboard!');
  }).catch(() => {
- this.#fallbackCopy(codeText, codeType);
+ this.#fallbackCopyCode(codeText, codeType);
  });
  }
  
- #showCopyNotification(message) {
- const notification = document.createElement('div');
- notification.className = 'code-copy-notification';
- notification.textContent = message;
- 
- notification.style.cssText = `
- position: fixed;
- bottom: 20px;
- right: 20px;
- padding: 12px 20px;
- background: var(--success-color);
- color: white;
- border-radius: var(--radius);
- box-shadow: var(--shadow-lg);
- z-index: 9;
- animation: slideIn 0.3s ease-out;
- `;
- 
- document.body.appendChild(notification);
- 
- setTimeout(() => {
- notification.style.animation = 'slideOut 0.3s ease-out';
- setTimeout(() => notification.remove(), 300);
- }, 2000);
+ #fallbackCopyCode(text, codeType) {
+ const textArea = document.createElement('textarea');
+ textArea.value = text;
+ textArea.style.cssText = 'position:fixed;opacity:0';
+ document.body.appendChild(textArea);
+ textArea.focus();
+ textArea.select();
+
+ try {
+ if (document.execCommand('copy')) {
+ this.#showCopyNotification('Copied ' + codeType + ' to clipboard!');
+ } else {
+ this.#showCopyNotification('Failed to copy ' + codeType);
+ }
+ } catch {
+ this.#showCopyNotification('Failed to copy ' + codeType);
+ } finally {
+ document.body.removeChild(textArea);
+ }
  }
  
- #applySyntaxHighlighting(codeElement, codeType) {
+ #applySyntaxHighlighting(codeElement) {
  const code = codeElement.querySelector('code');
- if (!code) return;
+ const codeTitle = codeElement.querySelector('.code-title');
+ if (!code || !codeTitle) return;
  
  const text = code.textContent;
+ const codeType = codeTitle.textContent;
  
  // Basic syntax highlighting based on code type
  if (codeType === 'JAVASCRIPT' || codeType === 'JS') {
