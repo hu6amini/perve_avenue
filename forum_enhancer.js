@@ -2269,57 +2269,75 @@ class PostModernizer {
  }
  }
  
- #showCopyNotification(message) {
- const notification = document.createElement('div');
- notification.className = 'copy-notification';
- notification.textContent = message;
+#showCopyNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'copy-notification';
+    notification.textContent = message;
 
- notification.style.cssText = `
- position: fixed;
- bottom: 20px;
- right: 20px;
- padding: 12px 20px;
- background: var(--success-color);
- color: white;
- border-radius: var(--radius);
- box-shadow: var(--shadow-lg);
- z-index: 9;
- animation: slideIn 0.3s ease-out;
- font-weight: 500;
- display: flex;
- align-items: center;
- gap: 8px;
- `;
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: var(--success-color);
+        color: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+        z-index: 9999;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transform: translateX(calc(100% + 20px));
+        opacity: 0;
+        transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        pointer-events: none;
+        white-space: nowrap;
+    `;
 
- const icon = document.createElement('i');
- icon.className = 'fa-regular fa-check-circle';
- icon.setAttribute('aria-hidden', 'true');
- notification.prepend(icon);
+    const icon = document.createElement('i');
+    icon.className = 'fa-regular fa-check-circle';
+    icon.setAttribute('aria-hidden', 'true');
+    notification.prepend(icon);
 
- document.body.appendChild(notification);
+    document.body.appendChild(notification);
 
- setTimeout(() => {
- notification.style.animation = 'slideOut 0.3s ease-out';
- setTimeout(() => notification.remove(), 300);
- }, 2000);
+    // Use requestAnimationFrame for smooth entrance
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            notification.style.transform = 'translateX(0)';
+            notification.style.opacity = '1';
+        });
+    });
 
- // Ensure animation styles exist
- if (!document.querySelector('#copy-notification-animations')) {
- const style = document.createElement('style');
- style.id = 'copy-notification-animations';
- style.textContent = `
- @keyframes slideIn {
- from { transform: translateX(100%); opacity: 0; }
- to { transform: translateX(0); opacity: 1; }
- }
- @keyframes slideOut {
- from { transform: translateX(0); opacity: 1; }
- to { transform: translateX(100%); opacity: 0; }
- }
- `;
- document.head.appendChild(style);
- }
- }
+    // Auto-dismiss after 2 seconds
+    const dismissTimer = setTimeout(() => {
+        notification.style.transform = 'translateX(calc(100% + 20px))';
+        notification.style.opacity = '0';
+        
+        // Remove from DOM after transition completes
+        notification.addEventListener('transitionend', () => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, { once: true });
+    }, 2000);
+
+    // Allow manual dismissal on click
+    notification.style.pointerEvents = 'auto';
+    notification.style.cursor = 'pointer';
+    notification.addEventListener('click', () => {
+        clearTimeout(dismissTimer);
+        notification.style.transform = 'translateX(calc(100% + 20px))';
+        notification.style.opacity = '0';
+        
+        notification.addEventListener('transitionend', () => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, { once: true });
+    });
+}
  
  #enhanceReputationSystem() {
  document.addEventListener('click', (e) => {
