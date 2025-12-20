@@ -284,6 +284,7 @@ class PostModernizer {
  #retryTimeoutId = null;
  #maxRetries = 10;
  #retryCount = 0;
+ #dimensionCache = new Map();
  
  constructor() { 
  this.#initWithRetry();
@@ -301,7 +302,7 @@ class PostModernizer {
  if (this.#retryCount < this.#maxRetries) {
  this.#retryCount++;
  const delay = Math.min(100 * Math.pow(1.5, this.#retryCount - 1), 2000);
- console.log(`Forum Observer not available, retry ${this.#retryCount}/${this.#maxRetries} in ${delay}ms`);
+ console.log('Forum Observer not available, retry ' + this.#retryCount + '/' + this.#maxRetries + ' in ' + delay + 'ms');
  
  this.#retryTimeoutId = setTimeout(() => {
  this.#initWithRetry();
@@ -338,7 +339,7 @@ class PostModernizer {
  if (this.#retryCount < this.#maxRetries) {
  this.#retryCount++;
  const delay = 100 * Math.pow(2, this.#retryCount - 1);
- console.log(`Initialization failed, retrying in ${delay}ms...`);
+ console.log('Initialization failed, retrying in ' + delay + 'ms...');
  
  setTimeout(() => {
  this.#initWithRetry();
@@ -414,7 +415,7 @@ class PostModernizer {
  } 
  
  if (node.matches('.st-emoji-counter') || 
- (node.textContent?.trim() && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) { 
+ (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) { 
  hasEmojiChanges = true; 
  } 
  
@@ -442,8 +443,8 @@ class PostModernizer {
  
  const emojiCounter = emojiContainer.querySelector('.st-emoji-counter'); 
  const hasCount = emojiCounter && ( 
- (emojiCounter.dataset?.count && emojiCounter.dataset.count !== '0') || 
- (emojiCounter.textContent?.trim() && emojiCounter.textContent.trim() !== '0' && 
+ (emojiCounter.dataset && emojiCounter.dataset.count && emojiCounter.dataset.count !== '0') || 
+ (emojiCounter.textContent && emojiCounter.textContent.trim && emojiCounter.textContent.trim() !== '0' && 
  !isNaN(emojiCounter.textContent.trim())) 
  ); 
  
@@ -461,7 +462,7 @@ class PostModernizer {
  if (!node) return; 
  
  const needsCleanup = node.matches('.bullet_delete') || 
- node.textContent?.includes('&nbsp;') || 
+ (node.textContent && node.textContent.includes('&nbsp;')) || 
  /^\s*$/.test(node.textContent || ''); 
  
  if (needsCleanup) { 
@@ -506,7 +507,7 @@ class PostModernizer {
  #transformPostElements() { 
  const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)'); 
  const urlParams = new URLSearchParams(window.location.search); 
- const startOffset = parseInt(urlParams.get('st') ?? '0'); 
+ const startOffset = parseInt(urlParams.get('st') || '0'); 
  
  posts.forEach((post, index) => { 
  if (post.closest('body#search')) return; // Skip search posts, handled separately
@@ -523,8 +524,8 @@ class PostModernizer {
  }
  
  const title2Top = post.querySelector('.title2.top'); 
- const miniButtons = title2Top?.querySelector('.mini_buttons.points.Sub'); 
- const stEmoji = title2Top?.querySelector('.st-emoji.st-emoji-rep.st-emoji-post'); 
+ const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null; 
+ const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null; 
  
  const postHeader = document.createElement('div'); 
  postHeader.className = 'post-header'; 
@@ -564,17 +565,17 @@ class PostModernizer {
  
  if (tdWrapper) { 
  const title2TopClone = title2Top.cloneNode(true); 
- title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove(); 
- title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove(); 
- title2TopClone.querySelector('.left.Item')?.remove(); 
+ title2TopClone.querySelector('.mini_buttons.points.Sub') && title2TopClone.querySelector('.mini_buttons.points.Sub').remove(); 
+ title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') && title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post').remove(); 
+ title2TopClone.querySelector('.left.Item') && title2TopClone.querySelector('.left.Item').remove(); 
  this.#removeBreakAndNbsp(title2TopClone); 
  postHeader.appendChild(title2TopClone); 
  tdWrapper.remove(); 
  } else { 
  const title2TopClone = title2Top.cloneNode(true); 
- title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove(); 
- title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove(); 
- title2TopClone.querySelector('.left.Item')?.remove(); 
+ title2TopClone.querySelector('.mini_buttons.points.Sub') && title2TopClone.querySelector('.mini_buttons.points.Sub').remove(); 
+ title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') && title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post').remove(); 
+ title2TopClone.querySelector('.left.Item') && title2TopClone.querySelector('.left.Item').remove(); 
  this.#removeBreakAndNbsp(title2TopClone); 
  postHeader.appendChild(title2TopClone); 
  } 
@@ -591,12 +592,12 @@ class PostModernizer {
  
  if (details && avatar) { 
  const groupDd = details.querySelector('dl.u_group dd'); 
- groupValue = groupDd?.textContent?.trim() ?? ''; 
+ groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : ''; 
  
  userInfo.appendChild(avatar.cloneNode(true)); 
  
  const detailsClone = details.cloneNode(true); 
- detailsClone.querySelector('.avatar')?.remove(); 
+ detailsClone.querySelector('.avatar') && detailsClone.querySelector('.avatar').remove(); 
  
  if (nickElement) { 
  const nickClone = nickElement.cloneNode(true); 
@@ -610,16 +611,16 @@ class PostModernizer {
  } 
  } 
  
- detailsClone.querySelector('span.u_title')?.remove(); 
+ detailsClone.querySelector('span.u_title') && detailsClone.querySelector('span.u_title').remove(); 
  
  let rankHTML = ''; 
  const pWithURank = detailsClone.querySelector('p'); 
- if (pWithURank?.querySelector('span.u_rank')) { 
- rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML ?? ''; 
+ if (pWithURank && pWithURank.querySelector('span.u_rank')) { 
+ rankHTML = pWithURank.querySelector('span.u_rank') ? pWithURank.querySelector('span.u_rank').innerHTML : ''; 
  pWithURank.remove(); 
  } 
  
- detailsClone.querySelector('br.br_status')?.remove(); 
+ detailsClone.querySelector('br.br_status') && detailsClone.querySelector('br.br_status').remove(); 
  
  const userStats = document.createElement('div'); 
  userStats.className = 'user-stats'; 
@@ -648,7 +649,7 @@ class PostModernizer {
  const statusDl = originalDetails.querySelector('dl.u_status'); 
  if (statusDl) { 
  const statusDd = statusDl.querySelector('dd'); 
- const statusValue = statusDd?.textContent?.trim() ?? ''; 
+ const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : ''; 
  const isOnline = statusValue.toLowerCase().includes('online'); 
  const originalStatusIcon = statusDl.querySelector('dd i'); 
  
@@ -842,15 +843,15 @@ class PostModernizer {
  }
  locationDiv.appendChild(forumSpan);
  }
- }
  
  // Remove original rt.Sub
- title2TopClone.querySelector('.rt.Sub')?.remove();
+ title2TopClone.querySelector('.rt.Sub') && title2TopClone.querySelector('.rt.Sub').remove();
+ }
  }
  
  // Clean up
  this.#removeBreakAndNbsp(title2TopClone);
- title2TopClone.querySelector('.Break.Sub')?.remove();
+ title2TopClone.querySelector('.Break.Sub') && title2TopClone.querySelector('.Break.Sub').remove();
  
  // Extract just the divs from the TD, not the entire table structure
  const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
@@ -885,7 +886,7 @@ class PostModernizer {
  
  // FIX: Check if the first child is a div that should be unwrapped
  // If the tempDiv has only one child that's a div, move its children up
- if (tempDiv.children.length === 1 && tempDiv.firstElementChild?.tagName === 'DIV') {
+ if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
  const wrapperDiv = tempDiv.firstElementChild;
  
  // Check if this div contains a quote (has .quote_top)
@@ -924,7 +925,7 @@ class PostModernizer {
  if (searchQuery) {
  textNodes.forEach(textNode => {
  const text = textNode.textContent;
- const searchRegex = new RegExp(`(${this.#escapeRegex(searchQuery)})`, 'gi');
+ const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
  const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
  
  if (highlightedText !== text) {
@@ -972,7 +973,7 @@ class PostModernizer {
  // Extract the em element and href if it exists
  const emElement = pointsFooter.querySelector('em');
  const linkElement = pointsFooter.querySelector('a');
- const href = linkElement?.getAttribute('href');
+ const href = linkElement ? linkElement.getAttribute('href') : null;
  
  // Get the points value and class
  let pointsValue = '0';
@@ -992,7 +993,7 @@ class PostModernizer {
  // If there's a link, wrap em in it
  const link = document.createElement('a');
  link.href = href;
- if (linkElement?.getAttribute('rel')) {
+ if (linkElement && linkElement.getAttribute('rel')) {
  link.setAttribute('rel', linkElement.getAttribute('rel'));
  }
  
@@ -1095,7 +1096,7 @@ class PostModernizer {
  const originalClasses = post.className.split(' ').filter(cls => 
  !cls.includes('post-modernized') && !cls.includes('search-post')
  );
- newPost.className = [...originalClasses, 'post', 'post-modernized', 'search-post'].join(' ');
+ newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
  
  newPost.appendChild(postHeader);
  newPost.appendChild(postContent);
@@ -1350,7 +1351,7 @@ class PostModernizer {
  } 
  } 
  
- nodesToRemove.forEach(node => node.parentNode?.removeChild(node)); 
+ nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node)); 
  } 
  
  #cleanInvalidAttributes(element) { 
@@ -1380,7 +1381,7 @@ class PostModernizer {
  } 
  
  textNodes.forEach(textNode => { 
- if (textNode.parentNode && !textNode.parentNode.classList?.contains('post-text')) { 
+ if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) { 
  const span = document.createElement('span'); 
  span.className = 'post-text'; 
  span.textContent = textNode.textContent; 
@@ -1398,8 +1399,8 @@ class PostModernizer {
  }
  
  if (prevSibling && nextSibling) { 
- const prevIsPostText = prevSibling.classList?.contains('post-text'); 
- const nextIsPostText = nextSibling.classList?.contains('post-text'); 
+ const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text'); 
+ const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text'); 
  
  if (prevIsPostText && nextIsPostText) { 
  prevSibling.classList.add('paragraph-end'); 
@@ -1457,7 +1458,7 @@ class PostModernizer {
  #processSignature(element) { 
  element.querySelectorAll('.signature').forEach(sig => { 
  sig.classList.add('post-signature'); 
- sig.previousElementSibling?.tagName === 'BR' && sig.previousElementSibling.remove(); 
+ sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove(); 
  }); 
  } 
  
@@ -1498,7 +1499,7 @@ class PostModernizer {
  const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/);
  const author = match ? match[1].trim() : 'Unknown';
  const quoteLink = quoteTop.querySelector('a');
- const linkHref = quoteLink?.href ?? '#';
+ const linkHref = quoteLink ? quoteLink.href : '#';
  const isLongContent = this.#isLongContent(quoteContent);
  
  const modernQuote = document.createElement('div');
@@ -1592,7 +1593,7 @@ class PostModernizer {
   const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
   const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
   const spoilerContent = spoilerElement.querySelector('.spoiler-content');
-  const chevronIcon = spoilerToggle.querySelector('i');
+  const chevronIcon = spoilerToggle ? spoilerToggle.querySelector('i') : null;
   
   // Initial state - content starts HIDDEN (collapsed)
   spoilerContent.style.maxHeight = '0';
@@ -1675,10 +1676,12 @@ class PostModernizer {
   };
   
   spoilerHeader.addEventListener('click', () => toggleSpoiler());
-  spoilerToggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSpoiler();
-  });
+  if (spoilerToggle) {
+    spoilerToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSpoiler();
+    });
+  }
   
   spoilerHeader.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -1749,47 +1752,41 @@ class PostModernizer {
  }
  
  #preserveMediaDimensions(element) {
+ // Process images
  element.querySelectorAll('img').forEach(img => {
  const originalWidth = img.getAttribute('width');
  const originalHeight = img.getAttribute('height');
  
  if (originalWidth && originalHeight) {
+ // Preserve existing dimensions
  img.setAttribute('width', originalWidth);
  img.setAttribute('height', originalHeight);
- img.style.width = originalWidth + 'px';
- img.style.height = originalHeight + 'px';
- } else if (!img.hasAttribute('loading')) {
- img.setAttribute('loading', 'lazy');
+ 
+ // Use aspect-ratio CSS for better layout stability
+ if ('CSS' in window && 'supports' in window.CSS && window.CSS.supports('aspect-ratio', '1/1')) {
+ img.style.aspectRatio = originalWidth + '/' + originalHeight;
  }
  
- if (!img.hasAttribute('alt')) {
- img.setAttribute('alt', 'Image');
- }
- });
- 
- element.querySelectorAll('iframe').forEach(iframe => {
- const originalWidth = iframe.getAttribute('width');
- const originalHeight = iframe.getAttribute('height');
- 
- if (originalWidth && originalHeight) {
- iframe.setAttribute('width', originalWidth);
- iframe.setAttribute('height', originalHeight);
- iframe.style.width = originalWidth + 'px';
- iframe.style.height = originalHeight + 'px';
+ // Add CSS containment to prevent layout shift
+ img.style.cssText += ';max-width:100%;height:auto;contain:layout style;';
  } else {
- iframe.setAttribute('width', '560');
- iframe.setAttribute('height', '315');
+ // Images without dimensions - apply CSS-first approach
+ img.style.cssText += ';max-width:100%;height:auto;contain:layout style;background:linear-gradient(90deg,#f0f0f0 0%,#e0e0e0 100%);';
+ 
+ // For images without dimensions, use IntersectionObserver to fetch dimensions when visible
+ this.#lazyFetchImageDimensions(img);
  }
  
- if (!iframe.hasAttribute('title')) {
- iframe.setAttribute('title', 'Embedded content');
- }
- 
- if (!iframe.hasAttribute('loading')) {
- iframe.setAttribute('loading', 'lazy');
+ // Always add alt text if missing
+ if (!img.hasAttribute('alt')) {
+ img.setAttribute('alt', 'Forum image');
  }
  });
  
+ // Process iframes with smart defaults
+ this.#enhanceIframesInElement(element);
+ 
+ // Process videos
  element.querySelectorAll('video').forEach(video => {
  const originalWidth = video.getAttribute('width');
  const originalHeight = video.getAttribute('height');
@@ -1803,6 +1800,125 @@ class PostModernizer {
  
  if (!video.hasAttribute('controls')) {
  video.setAttribute('controls', '');
+ }
+ });
+ }
+ 
+ #lazyFetchImageDimensions(img) {
+ // Only fetch dimensions when image becomes visible
+ if ('IntersectionObserver' in window) {
+ const observer = new IntersectionObserver((entries) => {
+ entries.forEach(entry => {
+ if (entry.isIntersecting) {
+ observer.unobserve(img);
+ this.#fetchImageDimensionsWhenVisible(img);
+ }
+ });
+ }, { rootMargin: '300px' });
+ 
+ observer.observe(img);
+ } else {
+ // Fallback for browsers without IntersectionObserver
+ this.#fetchImageDimensionsWhenVisible(img);
+ }
+ }
+ 
+ #fetchImageDimensionsWhenVisible(img) {
+ // Check if image already loaded naturally
+ if (img.complete && img.naturalWidth > 0) {
+ this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+ return;
+ }
+ 
+ // Otherwise, wait for load event
+ img.addEventListener('load', () => {
+ if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+ this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+ }
+ }, { once: true });
+ }
+ 
+ #setImageDimensions(img, width, height) {
+ if (width > 0 && height > 0) {
+ // Update cache
+ this.#dimensionCache.set(img.src, { width: width, height: height });
+ 
+ // Apply dimensions in next animation frame
+ requestAnimationFrame(() => {
+ img.setAttribute('width', width);
+ img.setAttribute('height', height);
+ 
+ // Set aspect ratio if supported
+ if ('CSS' in window && 'supports' in window.CSS && window.CSS.supports('aspect-ratio', '1/1')) {
+ img.style.aspectRatio = width + '/' + height;
+ }
+ 
+ // Remove placeholder background
+ img.style.background = 'none';
+ });
+ }
+ }
+ 
+ #enhanceIframesInElement(element) {
+ element.querySelectorAll('iframe').forEach(iframe => {
+ const originalWidth = iframe.getAttribute('width');
+ const originalHeight = iframe.getAttribute('height');
+ 
+ // Common embed sizes for known platforms
+ const commonSizes = {
+ 'youtube.com': { width: '560', height: '315' },
+ 'youtu.be': { width: '560', height: '315' },
+ 'vimeo.com': { width: '640', height: '360' },
+ 'soundcloud.com': { width: '100%', height: '166' },
+ 'twitter.com': { width: '550', height: '400' },
+ 'x.com': { width: '550', height: '400' },
+ 'default': { width: '100%', height: '400' }
+ };
+ 
+ let src = iframe.src || iframe.dataset.src || '';
+ let dimensions = commonSizes.default;
+ 
+ // Match against known embeds
+ for (var domain in commonSizes) {
+ if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+ dimensions = commonSizes[domain];
+ break;
+ }
+ }
+ 
+ // Only set dimensions if not already present
+ if (!originalWidth || !originalHeight) {
+ iframe.setAttribute('width', dimensions.width);
+ iframe.setAttribute('height', dimensions.height);
+ 
+ // Add responsive wrapper for iframes without dimensions
+ const wrapper = document.createElement('div');
+ wrapper.className = 'iframe-wrapper';
+ 
+ // Calculate aspect ratio for responsive padding
+ if (dimensions.width !== '100%') {
+ const widthNum = parseInt(dimensions.width);
+ const heightNum = parseInt(dimensions.height);
+ if (widthNum > 0 && heightNum > 0) {
+ const paddingBottom = (heightNum / widthNum * 100) + '%';
+ wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+ } else {
+ wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+ }
+ } else {
+ wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+ }
+ 
+ iframe.parentNode.insertBefore(wrapper, iframe);
+ wrapper.appendChild(iframe);
+ 
+ // Make iframe fill wrapper
+ iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+ }
+ 
+ // Add title if missing
+ if (!iframe.hasAttribute('title')) {
+ iframe.setAttribute('title', 'Embedded content');
  }
  });
  }
@@ -1903,15 +2019,15 @@ class PostModernizer {
  #removeBottomBorderAndBr(element) {
  element.querySelectorAll('.bottomborder').forEach(bottomBorder => {
  bottomBorder.remove();
- bottomBorder.nextElementSibling?.tagName === 'BR' && bottomBorder.nextElementSibling.remove();
+ bottomBorder.nextElementSibling && bottomBorder.nextElementSibling.tagName === 'BR' && bottomBorder.nextElementSibling.remove();
  });
  }
  
  #cleanupPostContent(post) {
  post.querySelectorAll('.bottomborder').forEach(bottomBorder => {
- bottomBorder.parentNode?.removeChild(bottomBorder);
- bottomBorder.nextElementSibling?.tagName === 'BR' &&
- bottomBorder.parentNode?.removeChild(bottomBorder.nextElementSibling);
+ bottomBorder.parentNode && bottomBorder.parentNode.removeChild(bottomBorder);
+ bottomBorder.nextElementSibling && bottomBorder.nextElementSibling.tagName === 'BR' &&
+ bottomBorder.parentNode && bottomBorder.parentNode.removeChild(bottomBorder.nextElementSibling);
  });
  }
  
@@ -1943,7 +2059,7 @@ class PostModernizer {
  }
  }
  
- nodesToRemove.forEach(node => node.parentNode?.removeChild(node));
+ nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
  
  Array.from(miniButtons.childNodes).forEach(child => {
  if (child.nodeType === Node.TEXT_NODE &&
@@ -1965,23 +2081,23 @@ class PostModernizer {
  
  if (bulletDelete) {
  if (pointsPos) {
- pointsUp?.classList.add('active');
- pointsDown?.classList.remove('active');
+ pointsUp && pointsUp.classList.add('active');
+ pointsDown && pointsDown.classList.remove('active');
  } else if (pointsNeg) {
- const pointsUpIcon = pointsUp?.querySelector('i');
- const pointsDownIcon = pointsDown?.querySelector('i');
+ const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
+ const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
  
- if (pointsUpIcon?.classList.contains('fa-thumbs-down')) {
- pointsUp?.classList.add('active');
+ if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
+ pointsUp && pointsUp.classList.add('active');
  }
- if (pointsDownIcon?.classList.contains('fa-thumbs-down')) {
- pointsDown?.classList.add('active');
+ if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
+ pointsDown && pointsDown.classList.add('active');
  }
  
- if (pointsUp?.classList.contains('active')) {
- pointsDown?.classList.remove('active');
- } else if (pointsDown?.classList.contains('active')) {
- pointsUp?.classList.remove('active');
+ if (pointsUp && pointsUp.classList.contains('active')) {
+ pointsDown && pointsDown.classList.remove('active');
+ } else if (pointsDown && pointsDown.classList.contains('active')) {
+ pointsUp && pointsUp.classList.remove('active');
  }
  }
  }
@@ -1989,7 +2105,7 @@ class PostModernizer {
  
  #createModernMultiquote(label, checkbox) {
  const labelText = label.textContent.replace('multiquote »', '').trim();
- const originalOnClick = label.getAttribute('onclick') ?? '';
+ const originalOnClick = label.getAttribute('onclick') || '';
  
  let html = '<div class="multiquote-control">' +
  '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' +
@@ -2024,7 +2140,7 @@ class PostModernizer {
  
  #createLabelOnly(label) {
  const labelText = label.textContent.replace('multiquote »', '').trim();
- const originalOnClick = label.getAttribute('onclick') ?? '';
+ const originalOnClick = label.getAttribute('onclick') || '';
  
  return '<div class="multiquote-control">' +
  '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' +
@@ -2037,13 +2153,13 @@ class PostModernizer {
  #createModernModeratorView(ipAddress, checkbox, label) {
  const ipLink = ipAddress.querySelector('a');
  const ipTextElement = ipAddress.querySelector('dd');
- const ipText = ipTextElement?.textContent ?? '';
+ const ipText = ipTextElement && ipTextElement.textContent ? ipTextElement.textContent : '';
  
  let originalOnClick = '';
  let labelText = 'Quote +';
  
  if (label) {
- originalOnClick = label.getAttribute('onclick') ?? '';
+ originalOnClick = label.getAttribute('onclick') || '';
  labelText = label.textContent.replace('multiquote »', '').trim() || 'Quote +';
  } else {
  const postId = checkbox.id.replace('p', '');
@@ -2078,7 +2194,7 @@ class PostModernizer {
  #createModernIPAddress(ipAddress) {
  const ipLink = ipAddress.querySelector('a');
  const ipTextElement = ipAddress.querySelector('dd');
- const ipText = ipTextElement?.textContent ?? '';
+ const ipText = ipTextElement && ipTextElement.textContent ? ipTextElement.textContent : '';
  
  let html = '<div class="ip-address-control">' +
  '<span class="ip-label">IP:</span>' +
@@ -2101,7 +2217,7 @@ class PostModernizer {
  miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
  const href = link.getAttribute('href');
  
- if (href?.startsWith('javascript:')) {
+ if (href && href.startsWith('javascript:')) {
  const jsCode = href.replace('javascript:', '');
  if (jsCode.includes('delete_post')) {
  const button = document.createElement('button');
@@ -2117,14 +2233,14 @@ class PostModernizer {
  
  link.parentNode.replaceChild(button, link);
  }
- } else if (href?.includes('CODE=08')) {
+ } else if (href && href.includes('CODE=08')) {
  link.classList.add('btn', 'btn-icon', 'btn-edit');
  link.setAttribute('data-action', 'edit');
  link.setAttribute('title', 'Edit');
  
  const icon = link.querySelector('i');
  icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
- } else if (href?.includes('CODE=02')) {
+ } else if (href && href.includes('CODE=02')) {
  link.classList.add('btn', 'btn-icon', 'btn-quote');
  link.setAttribute('data-action', 'quote');
  link.setAttribute('title', 'Quote');
@@ -2183,7 +2299,7 @@ class PostModernizer {
  if (element.href.includes('CODE=08')) return 'edit';
  }
  
- if (element.onclick?.toString().includes('delete_post')) return 'delete';
+ if (element.onclick && element.onclick.toString().includes('delete_post')) return 'delete';
  
  return 'other';
  };
@@ -2213,7 +2329,7 @@ class PostModernizer {
 
  if (!postLink) {
  const timeLink = post.querySelector('.post-header time[class*="when"]');
- if (timeLink?.closest('a')) {
+ if (timeLink && timeLink.closest('a')) {
  postLink = timeLink.closest('a').href;
  }
  }
@@ -2237,7 +2353,7 @@ class PostModernizer {
  }
  
  #copyPostLinkToClipboard(link) {
- if (navigator.clipboard?.writeText) {
+ if (navigator.clipboard && navigator.clipboard.writeText) {
  navigator.clipboard.writeText(link).then(() => {
  this.#showCopyNotification('Post link copied to clipboard!');
  }).catch(() => {
@@ -2274,26 +2390,7 @@ class PostModernizer {
     notification.className = 'copy-notification';
     notification.textContent = message;
 
-    notification.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        background: var(--success-color);
-        color: white;
-        border-radius: var(--radius);
-        box-shadow: var(--shadow-lg);
-        z-index: 9999;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transform: translateX(calc(100% + 20px));
-        opacity: 0;
-        transition: transform 0.3s ease-out, opacity 0.3s ease-out;
-        pointer-events: none;
-        white-space: nowrap;
-    `;
+    notification.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;background:var(--success-color);color:white;border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index:9999;font-weight:500;display:flex;align-items:center;gap:8px;transform:translateX(calc(100% + 20px));opacity:0;transition:transform 0.3s ease-out,opacity 0.3s ease-out;pointer-events:none;white-space:nowrap;';
 
     const icon = document.createElement('i');
     icon.className = 'fa-regular fa-check-circle';
@@ -2347,7 +2444,7 @@ class PostModernizer {
  
  if (pointsUp || pointsDown) {
  const pointsContainer = (pointsUp || pointsDown).closest('.points');
- const bulletDelete = pointsContainer?.querySelector('.bullet_delete');
+ const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
  
  if (bulletDelete && bulletDelete.onclick &&
  (pointsContainer.querySelector('.points_pos') ||
@@ -2359,18 +2456,18 @@ class PostModernizer {
  }
  
  if (pointsUp) {
- pointsContainer?.querySelector('.points_down')?.classList.remove('active');
+ pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
  pointsUp.classList.add('active');
  }
  
  if (pointsDown) {
- pointsContainer?.querySelector('.points_up')?.classList.remove('active');
+ pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
  pointsDown.classList.add('active');
  }
  }
  
  if (emojiPreview) {
- emojiPreview.closest('.st-emoji-container')?.classList.toggle('active');
+ emojiPreview.closest('.st-emoji-container') && emojiPreview.closest('.st-emoji-container').classList.toggle('active');
  }
  });
  }
@@ -2437,12 +2534,12 @@ class PostModernizer {
  }
  
  #scrollToAnchorWithPrecision(anchorId, triggerElement = null) {
- console.log(`Navigating to anchor: ${anchorId}`);
+ console.log('Navigating to anchor: ' + anchorId);
  
  // Find the anchor element
  const anchorElement = document.getElementById(anchorId);
  if (!anchorElement) {
- console.warn(`Anchor #${anchorId} not found`);
+ console.warn('Anchor #' + anchorId + ' not found');
  if (triggerElement) {
  // Fallback to default behavior
  window.location.hash = anchorId;
@@ -2453,7 +2550,7 @@ class PostModernizer {
  // Find the post containing this anchor
  const postElement = anchorElement.closest('.post');
  if (!postElement) {
- console.warn(`Post containing anchor #${anchorId} not found`);
+ console.warn('Post containing anchor #' + anchorId + ' not found');
  this.#scrollToElementWithOffset(anchorElement);
  return;
  }
@@ -2474,7 +2571,7 @@ class PostModernizer {
  postElement.focus({ preventScroll: true });
  
  // Update URL hash without triggering another scroll
- history.replaceState(null, null, `#${anchorId}`);
+ history.replaceState(null, null, '#' + anchorId);
  }
  
  #focusPost(postElement) {
@@ -2629,7 +2726,7 @@ class PostModernizer {
  button.setAttribute('type', 'button');
  
  // Keep the original icon or create a new one
- const icon = link.querySelector('i')?.cloneNode(true) ||
+ const icon = link.querySelector('i') ? link.querySelector('i').cloneNode(true) :
  document.createElement('i');
  if (!icon.className.includes('fa-')) {
  icon.className = 'fa-regular fa-chevron-up';
@@ -2680,7 +2777,7 @@ class PostModernizer {
  
  if (!anchorElement) {
  // Anchor not found (might have been removed during transformation)
- console.warn(`Anchor #${anchorId} not found, falling back to standard navigation`);
+ console.warn('Anchor #' + anchorId + ' not found, falling back to standard navigation');
  window.location.hash = anchorId;
  this.#setButtonLoading(button, false);
  return;
@@ -2867,10 +2964,12 @@ class PostModernizer {
  codeHeader.style.cursor = 'default';
  
  // Only the copy button should have click functionality
+ if (copyBtn) {
  copyBtn.addEventListener('click', (e) => {
  e.stopPropagation();
  this.#copyCodeToClipboard(codeText, 'code');
  });
+ }
  
  // If there's an expand button (for long content), keep its functionality
  if (expandBtn) {
@@ -2915,11 +3014,15 @@ class PostModernizer {
  }
  
  #copyCodeToClipboard(codeText, codeType) {
+ if (navigator.clipboard && navigator.clipboard.writeText) {
  navigator.clipboard.writeText(codeText).then(() => {
  this.#showCopyNotification('Copied ' + codeType + ' to clipboard!');
  }).catch(() => {
  this.#fallbackCopyCode(codeText, codeType);
  });
+ } else {
+ this.#fallbackCopyCode(codeText, codeType);
+ }
  }
  
  #fallbackCopyCode(text, codeType) {
@@ -3001,7 +3104,7 @@ class PostModernizer {
  if (lines.length > 1) {
  let numberedHTML = '';
  lines.forEach((line, index) => {
- numberedHTML += `<span class="line-number">${index + 1}</span>${line}\n`;
+ numberedHTML += '<span class="line-number">' + (index + 1) + '</span>' + line + '\n';
  });
  codeContent.innerHTML = numberedHTML;
  codeElement.classList.add('has-line-numbers');
@@ -3037,7 +3140,7 @@ destroy() {
  this.#searchPostObserverId, this.#quoteLinkObserverId,
  this.#codeBlockObserverId]; 
  
- ids.forEach(id => id && globalThis.forumObserver?.unregister(id)); 
+ ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id)); 
  
  // Clear retry timeout
  if (this.#retryTimeoutId) {
