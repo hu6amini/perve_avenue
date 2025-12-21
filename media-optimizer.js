@@ -5,6 +5,75 @@
   const LAZY = 'lazy';
   const ASYNC_DECODING = 'async';
   
+  // ========== PERFORMANCE MONITORING ==========
+  let monitoredElements = [];
+  let successCount = 0;
+  let totalMonitored = 0;
+  
+  // Store original addEventListener to monitor load events
+  const originalAddEventListener = EventTarget.prototype.addEventListener;
+  
+  EventTarget.prototype.addEventListener = function(type, handler, options) {
+    // Monitor load events on images/iframes
+    if ((type === 'load' || type === 'error') && shouldOptimize(this)) {
+      totalMonitored++;
+      const element = this;
+      const startTime = performance.now();
+      const initialLoading = element.getAttribute('loading');
+      const initialDecoding = element.getAttribute('decoding');
+      
+      // Store monitoring data
+      const monitorData = {
+        element: element.tagName,
+        src: element.src || element.getAttribute('src') || '[no-src]',
+        initialLoading: initialLoading,
+        initialDecoding: initialDecoding,
+        startTime: startTime,
+        loadEventAttached: true
+      };
+      
+      monitoredElements.push(monitorData);
+      
+      // Check if attributes are already set
+      if (initialLoading === LAZY && 
+          (element.tagName !== 'IMG' || initialDecoding === ASYNC_DECODING)) {
+        successCount++;
+        monitorData.success = true;
+        monitorData.timing = 'before';
+      } else {
+        monitorData.success = false;
+      }
+      
+      // Override handler to check final state
+      const wrappedHandler = function(e) {
+        const finalLoading = element.getAttribute('loading');
+        const finalDecoding = element.getAttribute('decoding');
+        const loadTime = performance.now();
+        
+        monitorData.finalLoading = finalLoading;
+        monitorData.finalDecoding = finalDecoding;
+        monitorData.loadTime = loadTime;
+        monitorData.loaded = true;
+        
+        if (!monitorData.success && finalLoading === LAZY && 
+            (element.tagName !== 'IMG' || finalDecoding === ASYNC_DECODING)) {
+          successCount++;
+          monitorData.success = true;
+          monitorData.timing = 'during';
+        }
+        
+        // Call original handler
+        if (handler && typeof handler === 'function') {
+          handler.call(this, e);
+        }
+      };
+      
+      return originalAddEventListener.call(this, type, wrappedHandler, options);
+    }
+    
+    return originalAddEventListener.call(this, type, handler, options);
+  };
+  
   // ========== HELPER FUNCTIONS ==========
   const shouldOptimize = (element) => 
     element && (element.tagName === 'IMG' || element.tagName === 'IFRAME');
@@ -117,6 +186,58 @@
     }
   });
   
+  // ========== REPORTING FUNCTION ==========
+  const generateReport = () => {
+    console.log('=== MEDIA OPTIMIZER REPORT ===');
+    
+    // Test creation methods
+    const testImg1 = document.createElement('img');
+    console.log('createElement: loading=' + testImg1.getAttribute('loading') + ', decoding=' + testImg1.getAttribute('decoding'));
+    
+    if (window.Image) {
+      const testImg2 = new Image();
+      console.log('imageConstructor: loading=' + testImg2.getAttribute('loading') + ', decoding=' + testImg2.getAttribute('decoding'));
+    }
+    
+    // Count existing images
+    const images = document.querySelectorAll('img');
+    let lazyCount = 0;
+    let asyncCount = 0;
+    
+    for (let i = 0; i < images.length; i++) {
+      if (images[i].getAttribute('loading') === LAZY) lazyCount++;
+      if (images[i].getAttribute('decoding') === ASYNC_DECODING) asyncCount++;
+    }
+    
+    console.log('Existing images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
+    
+    // Load timing analysis
+    console.log('Total elements monitored: ' + totalMonitored);
+    
+    if (totalMonitored > 0) {
+      const successRate = Math.round((successCount / totalMonitored) * 100);
+      console.log('Successfully optimized before load: ' + successCount + '/' + totalMonitored + ' (' + successRate + '%)');
+      
+      if (successCount === totalMonitored) {
+        console.log('✅ All attributes set BEFORE element load');
+      } else {
+        console.log('⚠️ ' + (totalMonitored - successCount) + ' elements loaded before optimization');
+        
+        // Show details for failed ones
+        for (let i = 0; i < monitoredElements.length; i++) {
+          const item = monitoredElements[i];
+          if (!item.success || item.timing === 'during') {
+            console.warn('Late optimization #' + i + ': ' + item.element + ' - ' + item.src);
+          }
+        }
+      }
+    } else {
+      console.log('No load events monitored (static page or no new images)');
+    }
+    
+    console.log('=== REPORT COMPLETE ===');
+  };
+  
   // ========== INITIALIZATION ==========
   const init = () => {
     // Process existing elements
@@ -149,40 +270,13 @@
       });
     }
     
-    // Write console report after initialization
-    setTimeout(function() {
-      console.log('Media Optimizer initialized');
-      
-      // Test creation methods
-      const testImg1 = document.createElement('img');
-      console.log('createElement: loading=' + testImg1.getAttribute('loading') + ', decoding=' + testImg1.getAttribute('decoding'));
-      
-      if (window.Image) {
-        const testImg2 = new Image();
-        console.log('imageConstructor: loading=' + testImg2.getAttribute('loading') + ', decoding=' + testImg2.getAttribute('decoding'));
-      }
-      
-      // Count existing images
-      const images = document.querySelectorAll('img');
-      let lazyCount = 0;
-      let asyncCount = 0;
-      
-      for (let i = 0; i < images.length; i++) {
-        if (images[i].getAttribute('loading') === LAZY) lazyCount++;
-        if (images[i].getAttribute('decoding') === ASYNC_DECODING) asyncCount++;
-      }
-      
-      console.log('Existing images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
-      
-      // Visual indicator
-      if (images.length > 0) {
-        const badge = document.createElement('div');
-        badge.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#4CAF50;color:white;padding:8px 12px;border-radius:4px;font-family:sans-serif;font-size:11px;z-index:9999;opacity:0.9;';
-        badge.innerHTML = '✓ Media Optimized';
-        document.body.appendChild(badge);
-        setTimeout(function() { badge.remove(); }, 3000);
-      }
-    }, 100);
+    // Generate initial report after page load
+    window.addEventListener('load', function() {
+      setTimeout(generateReport, 1000);
+    });
+    
+    // Also report after 5 seconds for dynamically loaded content
+    setTimeout(generateReport, 5000);
   };
   
   // ========== START ==========
