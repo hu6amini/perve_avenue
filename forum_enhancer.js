@@ -1628,20 +1628,21 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-    #preserveMediaDimensions(element) {
+   #preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
         // Get original dimensions
         const originalWidth = parseInt(img.getAttribute('width'));
         const originalHeight = parseInt(img.getAttribute('height'));
         
-        // Determine context for sizing
+        // Determine context for emoji sizing
         const isInQuote = img.closest('.modern-quote, .quote-content');
         const isInSpoiler = img.closest('.modern-spoiler, .spoiler-content');
-        const isInSignature = img.closest('.post-signature, .signature');
+        const isInSignature = img.closest('.signature, .post-signature');
         const isInSmallContext = isInQuote || isInSpoiler || isInSignature;
         const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
         const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
         
         // Start with original dimensions if they exist
         let targetWidth = originalWidth;
@@ -1680,72 +1681,53 @@ class PostModernizer {
         }
         
         // Calculate aspect ratio
-        const aspectRatio = `${targetWidth} / ${targetHeight}`;
+        const aspectRatio = targetWidth + ' / ' + targetHeight;
         
-        // Apply CSS with minimal overrides - don't break existing styles
-        const existingStyle = img.getAttribute('style') || '';
-        
-        // Only add aspect-ratio if not already set and we have dimensions
-        if (!existingStyle.includes('aspect-ratio') && targetWidth && targetHeight) {
+        // Apply CSS with minimal overrides
+        if (!img.style.aspectRatio) {
             img.style.aspectRatio = aspectRatio;
         }
-        
-        // Only add contain if not already set
-        if (!existingStyle.includes('contain')) {
+        if (!img.style.contain) {
             img.style.contain = 'size layout style';
         }
-        
-        // Only add max-width if not already set
-        if (!existingStyle.includes('max-width') || img.style.maxWidth === 'none') {
+        if (!img.style.maxWidth || img.style.maxWidth === 'none') {
             img.style.maxWidth = '100%';
         }
-        
-        // Only set height if not already specified
-        if (!existingStyle.includes('height') || img.style.height === 'auto') {
+        if (!img.style.height || img.style.height === 'auto') {
             img.style.height = 'auto';
         }
         
         // Emoji-specific styling
         if (isTwemoji || isEmoji) {
-            // For emojis, ensure inline display with proper alignment
             img.style.display = 'inline-block';
             img.style.verticalAlign = 'middle';
             img.style.margin = '0 2px';
             
-            // Special handling for signature emojis - slightly smaller
+            // Add subtle opacity for signature emojis
             if (isInSignature) {
-                img.style.margin = '0 1px';
-                img.style.opacity = '0.9';
+                img.style.opacity = '0.85';
+                img.style.filter = 'grayscale(15%)';
             }
-        } else if (!existingStyle.includes('display') || img.style.display === 'inline') {
-            // For regular images, use block display unless specified
+        } else if (!img.style.display || img.style.display === 'inline') {
             img.style.display = 'block';
         }
         
-        // Add placeholder background only for non-emoji images that might shift
-        if (!img.complete && !isEmoji && !existingStyle.includes('background')) {
+        // Add placeholder only for non-emoji images
+        if (!img.complete && !isEmoji && !img.style.background) {
             img.style.background = 'linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 100%)';
         }
         
-        // Add alt text if missing (important for accessibility)
+        // Add alt text if missing
         if (!img.hasAttribute('alt')) {
             if (isEmoji) {
-                // Get emoji description from alt or try to extract from URL
-                let emojiAlt = 'Emoji';
-                if (img.src.includes('1f618')) emojiAlt = 'Kissing face with closed eyes emoji 😘';
-                else if (img.src.includes('1f60a')) emojiAlt = 'Smiling face with smiling eyes emoji 😊';
-                else if (img.src.includes('1f604')) emojiAlt = 'Smiling face with open mouth and smiling eyes emoji 😄';
-                // Add more emoji mappings as needed
-                
-                img.setAttribute('alt', emojiAlt);
+                img.setAttribute('alt', 'Emoji');
                 img.setAttribute('role', 'img');
             } else {
                 img.setAttribute('alt', 'Forum image');
             }
         }
         
-        // Set dimensions attributes if not already set
-        // This is crucial for CLS prevention
+        // Set dimensions if not already set
         if (!img.hasAttribute('width') && targetWidth) {
             img.setAttribute('width', targetWidth);
         }
@@ -1753,29 +1735,87 @@ class PostModernizer {
             img.setAttribute('height', targetHeight);
         }
         
-        // Async verification for dimension accuracy
+        // Async verification
         this.#lazyFetchAndUpdateImageDimensions(img);
     });
     
     // Process iframes with smart defaults
-    this.#enhanceIframesInElement(element);
+    element.querySelectorAll('iframe').forEach(iframe => {
+        const originalWidth = iframe.getAttribute('width');
+        const originalHeight = iframe.getAttribute('height');
+        
+        const commonSizes = {
+            'youtube.com': { width: '560', height: '315' },
+            'youtu.be': { width: '560', height: '315' },
+            'vimeo.com': { width: '640', height: '360' },
+            'soundcloud.com': { width: '100%', height: '166' },
+            'twitter.com': { width: '550', height: '400' },
+            'x.com': { width: '550', height: '400' },
+            'default': { width: '100%', height: '400' }
+        };
+        
+        let src = iframe.src || iframe.dataset.src || '';
+        let dimensions = commonSizes.default;
+        
+        for (var domain in commonSizes) {
+            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                dimensions = commonSizes[domain];
+                break;
+            }
+        }
+        
+        // Only set dimensions if not already present
+        if (!originalWidth || !originalHeight) {
+            iframe.setAttribute('width', dimensions.width);
+            iframe.setAttribute('height', dimensions.height);
+            
+            // Add responsive wrapper for iframes without dimensions
+            const wrapper = document.createElement('div');
+            wrapper.className = 'iframe-wrapper';
+            
+            if (dimensions.width !== '100%') {
+                const widthNum = parseInt(dimensions.width);
+                const heightNum = parseInt(dimensions.height);
+                if (widthNum > 0 && heightNum > 0) {
+                    const paddingBottom = (heightNum / widthNum * 100) + '%';
+                    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+                } else {
+                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                }
+            } else {
+                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+            }
+            
+            iframe.parentNode.insertBefore(wrapper, iframe);
+            wrapper.appendChild(iframe);
+            
+            // Make iframe fill wrapper
+            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        }
+        
+        // Add title if missing
+        if (!iframe.hasAttribute('title')) {
+            iframe.setAttribute('title', 'Embedded content');
+        }
+    });
     
     // Process videos
     element.querySelectorAll('video').forEach(video => {
         const originalWidth = parseInt(video.getAttribute('width'));
         const originalHeight = parseInt(video.getAttribute('height'));
         
-        // Only set dimensions if not already present
-        if (!originalWidth || !originalHeight) {
+        if (originalWidth && originalHeight) {
+            video.setAttribute('width', originalWidth);
+            video.setAttribute('height', originalHeight);
+            video.style.width = originalWidth + 'px';
+            video.style.height = originalHeight + 'px';
+        } else {
+            // Default video size
             video.style.width = '100%';
             video.style.maxWidth = '800px';
             video.style.height = 'auto';
-        } else {
-            video.style.width = originalWidth + 'px';
-            video.style.height = originalHeight + 'px';
         }
         
-        // Add controls if missing
         if (!video.hasAttribute('controls')) {
             video.setAttribute('controls', '');
         }
