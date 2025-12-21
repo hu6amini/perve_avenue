@@ -1,234 +1,233 @@
-(function() {
-    'use strict';
-    
-    // Configuration
-    var lazyAttributes = {
-        loading: 'lazy',
-        decoding: 'async'
+!function(){
+  // CRITICAL: Set as high priority
+  if(document.currentScript)document.currentScript.setAttribute('data-priority','highest');
+  
+  // 1. INTERCEPT SOURCE SETTING (Most important!)
+  var attrCache={};
+  var elProto=Element.prototype;
+  var setAttr=elProto.setAttribute;
+  var getAttr=elProto.getAttribute;
+  
+  // Track elements that might get src before attributes
+  var pendingSrc={};
+  
+  // Override setAttribute to catch src setting
+  elProto.setAttribute=function(name,value){
+    if(name==='src'||name==='srcset'){
+      var tag=this.tagName;
+      if(tag==='IMG'||tag==='IFRAME'){
+        // Check if attributes are set
+        if(!this.getAttribute('loading')&&tag==='IMG'&&!this.getAttribute('decoding')){
+          // Attributes NOT set yet - set them NOW
+          this.loading='lazy';
+          if(tag==='IMG')this.decoding='async';
+          
+          // Log if debugging
+          if(window.debugMediaOptimizer){
+            console.log('⚠️ Intercepted src before attributes:',{
+              element:tag,
+              src:value,
+              hadLoading:!!this.getAttribute('loading'),
+              hadDecoding:!!this.getAttribute('decoding')
+            });
+          }
+        }
+      }
+    }
+    return setAttr.call(this,name,value);
+  };
+  
+  // Also override property setting (img.src = '...')
+  var imgProto=HTMLImageElement&&HTMLImageElement.prototype;
+  var iframeProto=HTMLIFrameElement&&HTMLIFrameElement.prototype;
+  
+  function interceptSrcProperty(proto){
+    if(!proto)return;
+    var desc=Object.getOwnPropertyDescriptor(proto,'src');
+    if(desc&&desc.set){
+      var origSet=desc.set;
+      Object.defineProperty(proto,'src',{
+        set:function(value){
+          if(!this.getAttribute('loading')&&this.tagName==='IMG'&&!this.getAttribute('decoding')){
+            this.loading='lazy';
+            if(this.tagName==='IMG')this.decoding='async';
+          }
+          return origSet.call(this,value);
+        },
+        get:desc.get,
+        configurable:true
+      });
+    }
+  }
+  interceptSrcProperty(imgProto);
+  interceptSrcProperty(iframeProto);
+  
+  // 2. OVERRIDE ELEMENT CREATION (your existing code)
+  var ce=document.createElement,imgC=window.Image;
+  document.createElement=function(t){
+    var e=ce.call(document,t);
+    if(e.tagName==='IMG'||e.tagName==='IFRAME'){
+      // Set IMMEDIATELY on creation
+      e.loading='lazy';
+      e.tagName==='IMG'&&(e.decoding='async');
+    }
+    return e;
+  };
+  
+  // 3. OVERRIDE Image CONSTRUCTOR
+  if(imgC){
+    window.Image=function(){
+      var i=new imgC();
+      i.loading='lazy';
+      i.decoding='async';
+      return i;
     };
-    
-    // ========== OVERRIDE ELEMENT CREATION ==========
-    
-    // Store original methods
-    var originalCreateElement = document.createElement;
-    var originalImage = window.Image;
-    
-    // Override createElement to process img and iframe elements immediately
-    document.createElement = function(tagName, options) {
-        var element = originalCreateElement.call(document, tagName, options);
-        
-        // Process img and iframe elements as soon as they're created
-        var tagLower = tagName.toLowerCase();
-        if (tagLower === 'img') {
-            if (!element.hasAttribute('loading') || element.getAttribute('loading') === '') {
-                element.setAttribute('loading', lazyAttributes.loading);
+    window.Image.prototype=imgC.prototype;
+  }
+  
+  // 4. PROCESS EXISTING - use requestAnimationFrame for earliest possible
+  function processExisting(){
+    requestAnimationFrame(function(){
+      var els=document.querySelectorAll('img:not([loading]),iframe:not([loading]),img:not([decoding])');
+      for(var i=0;i<els.length;i++){
+        var el=els[i];
+        el.loading='lazy';
+        el.tagName==='IMG'&&!el.decoding&&(el.decoding='async');
+      }
+    });
+  }
+  
+  // 5. START AS EARLY AS POSSIBLE
+  if(document.readyState==='loading'){
+    // Use readystatechange instead of DOMContentLoaded (faster)
+    document.addEventListener('readystatechange',function(){
+      if(document.readyState==='interactive'||document.readyState==='complete'){
+        processExisting();
+      }
+    });
+    // Also run immediately in case we missed it
+    setTimeout(processExisting,0);
+  }else{
+    processExisting();
+  }
+  
+  // 6. MUTATION OBSERVER with priority handling
+  var mo=new MutationObserver(function(muts){
+    // Process in next microtask for speed
+    Promise.resolve().then(function(){
+      for(var i=0;i<muts.length;i++){
+        for(var j=0;j<muts[i].addedNodes.length;j++){
+          var node=muts[i].addedNodes[j];
+          if(node.nodeType===1){
+            // Process node itself
+            if(node.tagName==='IMG'||node.tagName==='IFRAME'){
+              node.loading='lazy';
+              node.tagName==='IMG'&&(node.decoding='async');
             }
-            if (!element.hasAttribute('decoding') || element.getAttribute('decoding') === '') {
-                element.setAttribute('decoding', lazyAttributes.decoding);
+            // Process children
+            if(node.querySelectorAll){
+              var children=node.querySelectorAll('img,iframe');
+              for(var k=0;k<children.length;k++){
+                var child=children[k];
+                child.loading='lazy';
+                child.tagName==='IMG'&&(child.decoding='async');
+              }
             }
-        } else if (tagLower === 'iframe') {
-            if (!element.hasAttribute('loading') || element.getAttribute('loading') === '') {
-                element.setAttribute('loading', lazyAttributes.loading);
-            }
+          }
         }
-        
-        return element;
-    };
+      }
+    });
+  });
+  
+  // Start observing as soon as body exists
+  function startObserving(){
+    if(document.body){
+      mo.observe(document.body,{childList:true,subtree:true});
+    }else{
+      setTimeout(startObserving,10);
+    }
+  }
+  startObserving();
+  
+  // 7. DEBUG MODE (optional)
+  window.debugMediaOptimizer=function(){
+    console.log('=== MEDIA OPTIMIZER DEBUG ===');
+    console.log('Script execution time:',performance.now().toFixed(2)+'ms');
+    console.log('Document readyState:',document.readyState);
     
-    // Override Image constructor
-    if (originalImage) {
-        window.Image = function(width, height) {
-            var img = new originalImage(width, height);
-            
-            // Set attributes on Image objects (which are HTMLImageElement instances)
-            if (!img.hasAttribute('loading') || img.getAttribute('loading') === '') {
-                img.setAttribute('loading', lazyAttributes.loading);
-            }
-            if (!img.hasAttribute('decoding') || img.getAttribute('decoding') === '') {
-                img.setAttribute('decoding', lazyAttributes.decoding);
-            }
-            
-            return img;
-        };
-        
-        // Copy prototype and static properties
-        window.Image.prototype = originalImage.prototype;
-        try {
-            Object.setPrototypeOf(window.Image, originalImage);
-        } catch (e) {
-            // Fallback for older browsers
-            for (var prop in originalImage) {
-                if (originalImage.hasOwnProperty(prop)) {
-                    window.Image[prop] = originalImage[prop];
-                }
-            }
+    // Test creation
+    var testImg=document.createElement('img');
+    console.log('Test image loading:',testImg.getAttribute('loading'));
+    console.log('Test image decoding:',testImg.getAttribute('decoding'));
+    
+    // Test Image constructor
+    var testImg2=new Image();
+    console.log('new Image() loading:',testImg2.getAttribute('loading'));
+    console.log('new Image() decoding:',testImg2.getAttribute('decoding'));
+  };
+}();
+
+
+
+
+
+!function(){
+  // Monitor image/iframe loading
+  var loadLog = [];
+  
+  // Override addEventListener for load/error events
+  var origAdd = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function(type, handler, options){
+    if((type==='load'||type==='error') && (this.tagName==='IMG'||this.tagName==='IFRAME')){
+      var start=Date.now();
+      var src=this.src||this.getAttribute('src')||'[no-src]';
+      var attrs={
+        loading:this.getAttribute('loading'),
+        decoding:this.getAttribute('decoding')
+      };
+      
+      loadLog.push({
+        element:this.tagName,
+        src:src,
+        attrs:attrs,
+        eventAdded:start,
+        attributesSet:start,
+        willLoad:!this.complete
+      });
+      
+      // Check if already loaded (happens fast)
+      setTimeout(function(){
+        if(!this.complete){
+          loadLog[loadLog.length-1].attributesSet=Date.now();
+          loadLog[loadLog.length-1].attrsAtLoad={
+            loading:this.getAttribute('loading'),
+            decoding:this.getAttribute('decoding')
+          };
         }
+      }.bind(this),0);
     }
-    
-    // ========== PROCESS EXISTING ELEMENTS ==========
-    
-    // Selectors for elements to process
-    var selectors = ['img:not([loading]), img[loading=""]', 'iframe:not([loading]), iframe[loading=""]'];
-    
-    // Process individual element
-    function processElement(element) {
-        var tagName = element.tagName;
-        if (tagName === 'IMG') {
-            // Set both loading and decoding for images
-            if (!element.hasAttribute('loading') || element.getAttribute('loading') === '') {
-                element.setAttribute('loading', lazyAttributes.loading);
-            }
-            if (!element.hasAttribute('decoding') || element.getAttribute('decoding') === '') {
-                element.setAttribute('decoding', lazyAttributes.decoding);
-            }
-        } else if (tagName === 'IFRAME') {
-            // Set only loading for iframes
-            if (!element.hasAttribute('loading') || element.getAttribute('loading') === '') {
-                element.setAttribute('loading', lazyAttributes.loading);
-            }
+    return origAdd.call(this,type,handler,options);
+  };
+  
+  // Log results after page load
+  window.addEventListener('load',function(){
+    setTimeout(function(){
+      console.log('=== LOAD TIMING ANALYSIS ===');
+      console.log('Total elements monitored: '+loadLog.length);
+      
+      var lateCount=0;
+      loadLog.forEach(function(item,idx){
+        if(item.attrsAtLoad&&(!item.attrsAtLoad.loading||item.attrsAtLoad.loading!=='lazy')){
+          console.warn('Late attribute #'+idx+':',item);
+          lateCount++;
         }
-    }
-    
-    // Process multiple elements
-    function processElements(elements) {
-        for (var i = 0; i < elements.length; i++) {
-            processElement(elements[i]);
-        }
-    }
-    
-    // Process existing elements on page load
-    function processExistingElements() {
-        // Process elements missing loading attribute
-        var query = selectors.join(', ');
-        var elementsMissingLoading = document.querySelectorAll(query);
-        processElements(elementsMissingLoading);
-        
-        // Process images missing decoding attribute (even if they have loading)
-        var imagesMissingDecoding = document.querySelectorAll('img:not([decoding]), img[decoding=""]');
-        for (var i = 0; i < imagesMissingDecoding.length; i++) {
-            var img = imagesMissingDecoding[i];
-            if (!img.hasAttribute('decoding') || img.getAttribute('decoding') === '') {
-                img.setAttribute('decoding', lazyAttributes.decoding);
-            }
-        }
-    }
-    
-    // ========== MUTATION OBSERVER ==========
-    
-    // MutationObserver callback
-    function mutationCallback(mutationsList) {
-        for (var i = 0; i < mutationsList.length; i++) {
-            var mutation = mutationsList[i];
-            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                var elementsToProcess = [];
-                
-                for (var j = 0; j < mutation.addedNodes.length; j++) {
-                    var node = mutation.addedNodes[j];
-                    if (node.nodeType === 1) { // Element node
-                        var nodeName = node.nodeName;
-                        
-                        // Check if the node itself matches our selectors
-                        if ((nodeName === 'IMG' && (!node.hasAttribute('loading') || node.getAttribute('loading') === '')) ||
-                            (nodeName === 'IFRAME' && (!node.hasAttribute('loading') || node.getAttribute('loading') === ''))) {
-                            elementsToProcess.push(node);
-                        }
-                        
-                        // Check for images missing decoding
-                        if (nodeName === 'IMG' && (!node.hasAttribute('decoding') || node.getAttribute('decoding') === '')) {
-                            if (!elementsToProcess.includes(node)) {
-                                elementsToProcess.push(node);
-                            }
-                        }
-                        
-                        // Check for child elements
-                        if (node.querySelectorAll) {
-                            // Elements missing loading
-                            var childElements = node.querySelectorAll(selectors.join(', '));
-                            for (var k = 0; k < childElements.length; k++) {
-                                if (!elementsToProcess.includes(childElements[k])) {
-                                    elementsToProcess.push(childElements[k]);
-                                }
-                            }
-                            
-                            // Images missing decoding
-                            var childImages = node.querySelectorAll('img:not([decoding]), img[decoding=""]');
-                            for (var k = 0; k < childImages.length; k++) {
-                                if (!elementsToProcess.includes(childImages[k])) {
-                                    elementsToProcess.push(childImages[k]);
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if (elementsToProcess.length > 0) {
-                    processElements(elementsToProcess);
-                }
-            }
-        }
-    }
-    
-    // Initialize mutation observer
-    function initObserver() {
-        if (typeof MutationObserver === 'undefined') return null;
-        
-        var observer = new MutationObserver(mutationCallback);
-        
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        return observer;
-    }
-    
-    // ========== INITIALIZATION ==========
-    
-    // Initialize the script
-    function init() {
-        // Process existing elements
-        processExistingElements();
-        
-        // Start observing for new elements
-        initObserver();
-    }
-    
-    // Start initialization as early as possible
-    if (document.body) {
-        init();
-    } else {
-        // If body doesn't exist yet, wait for it
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            // DOMContentLoaded already fired, use a fallback
-            if (document.readyState === 'interactive' || document.readyState === 'complete') {
-                setTimeout(init, 0);
-            } else {
-                document.addEventListener('DOMContentLoaded', init);
-            }
-        }
-    }
-    
-    // Also process when body becomes available
-    if (!document.body) {
-        var bodyObserver = new MutationObserver(function(mutations) {
-            for (var i = 0; i < mutations.length; i++) {
-                var mutation = mutations[i];
-                if (mutation.type === 'childList') {
-                    for (var j = 0; j < mutation.addedNodes.length; j++) {
-                        if (mutation.addedNodes[j].nodeName === 'BODY') {
-                            bodyObserver.disconnect();
-                            init();
-                            break;
-                        }
-                    }
-                }
-            }
-        });
-        
-        bodyObserver.observe(document.documentElement, {
-            childList: true
-        });
-    }
-})();
+      });
+      
+      if(lateCount===0){
+        console.log('✅ All attributes set BEFORE element load');
+      }else{
+        console.warn('⚠️ '+lateCount+' elements had late attribute setting');
+      }
+    },1000);
+  });
+}();
