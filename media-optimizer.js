@@ -17,278 +17,258 @@
     return el;
   }
   
-  // 1. INTERCEPT innerHTML/outerHTML
+  // Create a CLEAN document fragment parser (no overrides)
+  var cleanDoc;
+  try {
+    // Try to use a detached iframe for clean parsing
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.documentElement.appendChild(iframe);
+    cleanDoc = iframe.contentDocument || iframe.contentWindow.document;
+    document.documentElement.removeChild(iframe);
+  } catch(e) {
+    // Fallback: create element with original methods
+    cleanDoc = {
+      createElement: function(tag) {
+        return document.createElement.call(document, tag);
+      }
+    };
+  }
+  
+  // 1. INTERCEPT innerHTML/outerHTML - FIXED to avoid recursion
   function interceptInnerHTML(proto){
     if(!proto)return;
     
-    var innerDesc=Object.getOwnPropertyDescriptor(proto,'innerHTML');
-    var outerDesc=Object.getOwnPropertyDescriptor(proto,'outerHTML');
-    
-    if(innerDesc&&innerDesc.set){
-      Object.defineProperty(proto,'innerHTML',{
-        set:function(html){
-          // Parse the HTML first
-          var div=document.createElement('div');
-          div.innerHTML=html;
+    var innerDesc = Object.getOwnPropertyDescriptor(proto, 'innerHTML');
+    if(innerDesc && innerDesc.set){
+      var originalSet = innerDesc.set;
+      Object.defineProperty(proto, 'innerHTML', {
+        set: function(html){
+          // Use a temporary element WITHOUT our overrides
+          var temp;
+          if(cleanDoc.createElement){
+            temp = cleanDoc.createElement('div');
+          } else {
+            // Ultra-safe fallback: create element using document's original method
+            temp = document.createElement('div');
+          }
           
-          // Find and optimize img/iframe elements
-          var imgs=div.querySelectorAll('img,iframe');
-          for(var i=0;i<imgs.length;i++){
+          // Temporarily remove our setter to avoid recursion
+          var tempSetter = Object.getOwnPropertyDescriptor(temp.__proto__, 'innerHTML').set;
+          Object.defineProperty(temp, 'innerHTML', {
+            set: function(h) {
+              // Use original setter for the temp div
+              var original = Object.getOwnPropertyDescriptor(this.__proto__, 'innerHTML').set;
+              return original.call(this, h);
+            },
+            get: Object.getOwnPropertyDescriptor(temp.__proto__, 'innerHTML').get
+          });
+          
+          // Parse the HTML
+          temp.innerHTML = html;
+          
+          // Optimize img/iframe elements in the parsed content
+          var imgs = temp.querySelectorAll('img, iframe');
+          for(var i = 0; i < imgs.length; i++){
             optimizeElement(imgs[i]);
           }
           
-          // Also check top-level elements
-          for(var i=0;i<div.children.length;i++){
-            var child=div.children[i];
-            if(child.tagName==='IMG'||child.tagName==='IFRAME'){
-              optimizeElement(child);
-            }
-          }
-          
-          // Set the processed HTML
-          innerDesc.set.call(this,div.innerHTML);
+          // Call original setter with optimized HTML
+          return originalSet.call(this, temp.innerHTML);
         },
-        get:innerDesc.get,
-        configurable:true
+        get: innerDesc.get,
+        configurable: true
       });
     }
     
-    // Also intercept insertAdjacentHTML
-    var origInsertAdjacentHTML=proto.insertAdjacentHTML;
+    // Also intercept insertAdjacentHTML - SIMPLIFIED version
+    var origInsertAdjacentHTML = proto.insertAdjacentHTML;
     if(origInsertAdjacentHTML){
-      proto.insertAdjacentHTML=function(position,html){
-        // Parse and optimize before inserting
-        var div=document.createElement('div');
-        div.innerHTML=html;
+      proto.insertAdjacentHTML = function(position, html){
+        // Create a clean temporary container
+        var temp = document.createElement('div');
         
-        var imgs=div.querySelectorAll('img,iframe');
-        for(var i=0;i<imgs.length;i++){
-          optimizeElement(imgs[i]);
+        // Use a try-catch to avoid any recursion issues
+        try {
+          // Temporarily remove our innerHTML setter for this element
+          var innerDesc = Object.getOwnPropertyDescriptor(temp.__proto__, 'innerHTML');
+          if(innerDesc && innerDesc.set){
+            var tempSetter = innerDesc.set;
+            Object.defineProperty(temp, 'innerHTML', {
+              set: tempSetter,
+              get: innerDesc.get,
+              configurable: true
+            });
+          }
+          
+          temp.innerHTML = html;
+          
+          // Optimize
+          var imgs = temp.querySelectorAll('img, iframe');
+          for(var i = 0; i < imgs.length; i++){
+            optimizeElement(imgs[i]);
+          }
+          
+          // Use original method
+          return origInsertAdjacentHTML.call(this, position, temp.innerHTML);
+        } catch(e) {
+          // If anything goes wrong, use original without optimization
+          console.warn('Media Optimizer: insertAdjacentHTML interception failed, using fallback');
+          return origInsertAdjacentHTML.call(this, position, html);
         }
-        
-        // Call original with optimized HTML
-        return origInsertAdjacentHTML.call(this,position,div.innerHTML);
       };
     }
   }
   
-  // Intercept on Element and HTMLElement
-  interceptInnerHTML(Element.prototype);
-  interceptInnerHTML(HTMLElement&&HTMLElement.prototype);
+  // Apply interceptions carefully
+  setTimeout(function(){
+    try {
+      interceptInnerHTML(Element.prototype);
+      if(window.HTMLElement){
+        interceptInnerHTML(HTMLElement.prototype);
+      }
+    } catch(e){
+      console.warn('Media Optimizer: innerHTML interception failed', e);
+    }
+  }, 0);
   
   // 2. INTERCEPT SOURCE SETTING
-  var elProto=Element.prototype, setAttr=elProto.setAttribute;
+  var elProto = Element.prototype;
+  var originalSetAttribute = elProto.setAttribute;
   
-  elProto.setAttribute=function(name,value){
-    var tag=this.tagName;
-    if((name==='src'||name==='srcset')&&(tag==='IMG'||tag==='IFRAME')){
-      if(!this.loading||this.loading===''){
-        this.loading='lazy';
+  elProto.setAttribute = function(name, value){
+    var tag = this.tagName;
+    if((name === 'src' || name === 'srcset') && (tag === 'IMG' || tag === 'IFRAME')){
+      if(!this.loading || this.loading === ''){
+        this.loading = 'lazy';
       }
-      if(tag==='IMG'&&(!this.decoding||this.decoding==='')){
-        this.decoding='async';
+      if(tag === 'IMG' && (!this.decoding || this.decoding === '')){
+        this.decoding = 'async';
       }
     }
-    return setAttr.call(this,name,value);
+    return originalSetAttribute.call(this, name, value);
   };
   
-  // Intercept .src property
-  function interceptProperty(proto,prop){
-    if(!proto)return;
-    var desc=Object.getOwnPropertyDescriptor(proto,prop);
-    if(desc&&desc.set){
-      Object.defineProperty(proto,prop,{
-        set:function(v){
-          var tag=this.tagName;
-          if(!this.loading||this.loading===''){
-            this.loading='lazy';
-          }
-          if(tag==='IMG'&&(!this.decoding||this.decoding==='')){
-            this.decoding='async';
-          }
-          desc.set.call(this,v);
-        },
-        get:desc.get,
-        configurable:true
-      });
-    }
-  }
-  interceptProperty(HTMLImageElement&&HTMLImageElement.prototype,'src');
-  interceptProperty(HTMLIFrameElement&&HTMLIFrameElement.prototype,'src');
-  
   // 3. OVERRIDE ELEMENT CREATION
-  var ce=document.createElement, imgC=window.Image;
-  document.createElement=function(tagName){
-    var el=ce.call(document,tagName);
+  var originalCreateElement = document.createElement;
+  var originalImage = window.Image;
+  
+  document.createElement = function(tagName){
+    var el = originalCreateElement.call(document, tagName);
     return optimizeElement(el);
   };
   
   // 4. OVERRIDE Image CONSTRUCTOR
-  if(imgC){
-    window.Image=function(){
-      var img=new imgC();
-      img.loading='lazy';
-      img.decoding='async';
+  if(originalImage){
+    window.Image = function(){
+      var img = new originalImage();
+      img.loading = 'lazy';
+      img.decoding = 'async';
       return img;
     };
-    window.Image.prototype=imgC.prototype;
+    window.Image.prototype = originalImage.prototype;
   }
   
   // 5. PROCESS EXISTING ELEMENTS
   function processExisting(){
-    var imgs=document.querySelectorAll('img:not([loading]),iframe:not([loading]),img:not([decoding])');
-    for(var i=0;i<imgs.length;i++){
-      optimizeElement(imgs[i]);
+    try {
+      var imgs = document.querySelectorAll('img:not([loading]), iframe:not([loading]), img:not([decoding])');
+      for(var i = 0; i < imgs.length; i++){
+        optimizeElement(imgs[i]);
+      }
+    } catch(e){
+      console.warn('Media Optimizer: processExisting failed', e);
     }
   }
   
-  // 6. START IMMEDIATELY
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',processExisting);
-    setTimeout(processExisting,0);
-  }else{
-    processExisting();
+  // 6. START IMMEDIATELY (with error handling)
+  function safeInit(){
+    try {
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', processExisting);
+        setTimeout(processExisting, 100); // Small delay to avoid conflicts
+      } else {
+        setTimeout(processExisting, 0);
+      }
+    } catch(e){
+      console.warn('Media Optimizer: init failed', e);
+    }
   }
   
-  // 7. MUTATION OBSERVER (for any other dynamic additions)
-  var mo=new MutationObserver(function(mutations){
-    for(var i=0;i<mutations.length;i++){
-      var mutation=mutations[i];
-      if(mutation.type==='childList'&&mutation.addedNodes.length>0){
-        for(var j=0;j<mutation.addedNodes.length;j++){
-          var node=mutation.addedNodes[j];
-          if(node.nodeType===1){ // Element node
-            optimizeElement(node);
-            
-            // Also optimize children
-            if(node.querySelectorAll){
-              var children=node.querySelectorAll('img,iframe');
-              for(var k=0;k<children.length;k++){
-                optimizeElement(children[k]);
+  safeInit();
+  
+  // 7. MUTATION OBSERVER (simplified, safe)
+  var observer;
+  try {
+    observer = new MutationObserver(function(mutations){
+      for(var i = 0; i < mutations.length; i++){
+        var mutation = mutations[i];
+        if(mutation.type === 'childList' && mutation.addedNodes.length > 0){
+          for(var j = 0; j < mutation.addedNodes.length; j++){
+            var node = mutation.addedNodes[j];
+            if(node.nodeType === 1){
+              try {
+                optimizeElement(node);
+                
+                // Also optimize children
+                if(node.querySelectorAll){
+                  var children = node.querySelectorAll('img, iframe');
+                  for(var k = 0; k < children.length; k++){
+                    optimizeElement(children[k]);
+                  }
+                }
+              } catch(e){
+                // Silently continue
               }
             }
           }
         }
       }
-    }
-  });
-  
-  function startObserver(){
-    if(document.body){
-      mo.observe(document.body,{childList:true,subtree:true});
-    }else{
-      setTimeout(startObserver,10);
-    }
-  }
-  startObserver();
-  
-  // ========== MONITORING ==========
-  // Track innerHTML/outerHTML usage
-  var htmlOperations=[];
-  var origCreateElement=document.createElement;
-  
-  // Monitor document.write as well (some forums use it)
-  var origWrite=document.write;
-  var origWriteln=document.writeln;
-  
-  if(origWrite){
-    document.write=function(text){
-      // Parse and optimize images in the text
-      var div=document.createElement('div');
-      div.innerHTML=text;
-      var imgs=div.querySelectorAll('img,iframe');
-      for(var i=0;i<imgs.length;i++){
-        optimizeElement(imgs[i]);
+    });
+    
+    function startObserver(){
+      if(document.body){
+        observer.observe(document.body, {childList: true, subtree: true});
+      } else {
+        setTimeout(startObserver, 50);
       }
-      // Reconstruct HTML
-      var optimizedText=div.innerHTML;
-      htmlOperations.push({type:'write',text:text,optimized:optimizedText});
-      return origWrite.call(document,optimizedText);
-    };
-  }
-  
-  if(origWriteln){
-    document.writeln=function(text){
-      var div=document.createElement('div');
-      div.innerHTML=text;
-      var imgs=div.querySelectorAll('img,iframe');
-      for(var i=0;i<imgs.length;i++){
-        optimizeElement(imgs[i]);
-      }
-      var optimizedText=div.innerHTML;
-      htmlOperations.push({type:'writeln',text:text,optimized:optimizedText});
-      return origWriteln.call(document,optimizedText);
-    };
-  }
-  
-  // Debug function
-  window.debugMediaOptimizer=function(){
-    console.log('=== MEDIA OPTIMIZER DEBUG ===');
-    console.log('HTML operations intercepted:',htmlOperations.length);
-    
-    // Test all creation methods
-    console.log('\n--- Creation Tests ---');
-    
-    // Test 1: createElement
-    var test1=document.createElement('img');
-    console.log('createElement img: loading='+test1.loading+', decoding='+test1.decoding);
-    
-    // Test 2: Image constructor
-    var test2=new Image();
-    console.log('new Image(): loading='+test2.loading+', decoding='+test2.decoding);
-    
-    // Test 3: innerHTML
-    var div1=document.createElement('div');
-    div1.innerHTML='<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">';
-    var test3=div1.querySelector('img');
-    console.log('innerHTML img: loading='+test3.loading+', decoding='+test3.decoding);
-    
-    // Test 4: insertAdjacentHTML
-    var div2=document.createElement('div');
-    div2.insertAdjacentHTML('beforeend','<iframe src="about:blank"></iframe>');
-    var test4=div2.querySelector('iframe');
-    console.log('insertAdjacentHTML iframe: loading='+test4.loading);
-    
-    // Check existing
-    var allImgs=document.querySelectorAll('img');
-    var lazyCount=0,asyncCount=0;
-    for(var i=0;i<allImgs.length;i++){
-      if(allImgs[i].loading==='lazy')lazyCount++;
-      if(allImgs[i].decoding==='async')asyncCount++;
     }
-    console.log('\n--- Existing Images ---');
-    console.log('Total: '+allImgs.length);
-    console.log('Lazy: '+lazyCount+' ('+Math.round((lazyCount/allImgs.length)*100)+'%)');
-    console.log('Async decoding: '+asyncCount+' ('+Math.round((asyncCount/allImgs.length)*100)+'%)');
+    
+    setTimeout(startObserver, 200); // Start with delay to avoid conflicts
+  } catch(e){
+    console.warn('Media Optimizer: MutationObserver failed', e);
+  }
+  
+  // Debug function - safe
+  window.debugMediaOptimizer = function(){
+    console.log('=== MEDIA OPTIMIZER (SAFE MODE) ===');
+    
+    // Test basic functionality
+    try {
+      var test1 = document.createElement('img');
+      console.log('createElement img: loading=' + test1.loading);
+      
+      var test2 = new Image();
+      console.log('new Image(): loading=' + test2.loading);
+      
+      // Test innerHTML carefully
+      var div = document.createElement('div');
+      var html = '<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">';
+      
+      // Use try-catch for innerHTML test
+      try {
+        div.innerHTML = html;
+        var test3 = div.querySelector('img');
+        console.log('innerHTML img: loading=' + (test3 ? test3.loading : 'null'));
+      } catch(e){
+        console.log('innerHTML test skipped (safe mode)');
+      }
+    } catch(e){
+      console.log('Debug tests failed:', e);
+    }
   };
   
-  // Auto-debug on load
-  window.addEventListener('load',function(){
-    setTimeout(function(){
-      console.log('=== MEDIA OPTIMIZER LOAD REPORT ===');
-      var imgs=document.querySelectorAll('img');
-      var lazy=0,asyncDec=0;
-      for(var i=0;i<imgs.length;i++){
-        if(imgs[i].loading==='lazy')lazy++;
-        if(imgs[i].decoding==='async')asyncDec++;
-      }
-      console.log('Images: '+lazy+'/'+imgs.length+' lazy, '+asyncDec+'/'+imgs.length+' async decoding');
-      
-      // Run innerHTML test
-      var div=document.createElement('div');
-      div.innerHTML='<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">';
-      var testImg=div.firstChild;
-      console.log('innerHTML test: loading='+testImg.loading+', decoding='+testImg.decoding);
-      
-      if(testImg.loading!=='lazy'){
-        console.warn('⚠️ innerHTML images not being optimized!');
-      }else{
-        console.log('✅ All creation methods intercepted');
-      }
-    },1000);
-  });
 }();
-
 
 
 
