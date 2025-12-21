@@ -1630,139 +1630,12 @@ class PostModernizer {
 
 #preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
-        // Skip if already processed recently
-        if (img.dataset.dimensionsProcessed) {
-            return;
-        }
-        
-        // Get original dimensions from attributes first
-        const originalWidth = parseInt(img.getAttribute('width'));
-        const originalHeight = parseInt(img.getAttribute('height'));
-        
-        // Determine context for emoji sizing
-        const isInQuote = img.closest('.modern-quote, .quote-content');
-        const isInSpoiler = img.closest('.modern-spoiler, .spoiler-content');
-        const isInSignature = img.closest('.signature, .post-signature');
-        const isInSmallContext = isInQuote || isInSpoiler || isInSignature;
-        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                       img.className.includes('emoji');
-        
-        // Mark as processed
-        img.dataset.dimensionsProcessed = 'true';
-        
-        // Use original dimensions if they exist
-        let targetWidth = originalWidth;
-        let targetHeight = originalHeight;
-        
-        // Helper function to set dimensions
-        const setDimensions = (width, height) => {
-            // Calculate aspect ratio
-            const aspectRatio = width + ' / ' + height;
-            
-            // Apply CSS with minimal overrides
-            if (!img.style.aspectRatio) {
-                img.style.aspectRatio = aspectRatio;
-            }
-            if (!img.style.contain) {
-                img.style.contain = 'size layout style';
-            }
-            if (!img.style.maxWidth || img.style.maxWidth === 'none') {
-                img.style.maxWidth = '100%';
-            }
-            if (!img.style.height || img.style.height === 'auto') {
-                img.style.height = 'auto';
-            }
-            
-            // Set dimensions if not already set
-            if (!img.hasAttribute('width') && width) {
-                img.setAttribute('width', width);
-            }
-            if (!img.hasAttribute('height') && height) {
-                img.setAttribute('height', height);
-            }
-        };
-        
-        // If we have original dimensions, use them immediately
-        if (originalWidth && originalHeight) {
-            setDimensions(originalWidth, originalHeight);
-        } else if (isTwemoji || isEmoji) {
-            // Emoji sizing based on context
-            if (isInSmallContext) {
-                // Quote/Spoiler/Signature context: 14px font size
-                targetWidth = 18;  // Matches 14px text nicely
-                targetHeight = 18;
-            } else {
-                // Post content: 16px font size
-                targetWidth = 20;  // Matches 16px text nicely
-                targetHeight = 20;
-            }
-            setDimensions(targetWidth, targetHeight);
-        } else {
-            // For regular images, wait for them to load first
-            if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-                // Image already loaded
-                targetWidth = img.naturalWidth;
-                targetHeight = img.naturalHeight;
-                setDimensions(targetWidth, targetHeight);
-            } else {
-                // Image not loaded yet - set temporary dimensions and add load listener
-                const tempWidth = 600;  // Reasonable default
-                const tempHeight = 400;
-                setDimensions(tempWidth, tempHeight);
-                
-                // Add load listener to update with actual dimensions
-                const onLoad = () => {
-                    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                        // Update with actual dimensions
-                        setDimensions(img.naturalWidth, img.naturalHeight);
-                        
-                        // Update cache
-                        this.#dimensionCache.set(img.src, {
-                            width: img.naturalWidth,
-                            height: img.naturalHeight
-                        });
-                    }
-                    // Clean up listener
-                    img.removeEventListener('load', onLoad);
-                    img.removeEventListener('error', onError);
-                };
-                
-                const onError = () => {
-                    img.removeEventListener('load', onLoad);
-                    img.removeEventListener('error', onError);
-                };
-                
-                img.addEventListener('load', onLoad, { once: true });
-                img.addEventListener('error', onError, { once: true });
-                
-                // Also check periodically for images that might have loaded
-                // but missed the load event
-                let checks = 0;
-                const checkInterval = setInterval(() => {
-                    checks++;
-                    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                        clearInterval(checkInterval);
-                        onLoad();
-                    } else if (checks > 10) { // Stop checking after 2 seconds (10 * 200ms)
-                        clearInterval(checkInterval);
-                    }
-                }, 200);
-            }
-        }
-        
-        // Emoji-specific styling
-        if (isTwemoji || isEmoji) {
-            img.style.display = 'inline-block';
-            img.style.verticalAlign = 'text-bottom';
-            img.style.margin = '0 2px';
-        } else if (!img.style.display || img.style.display === 'inline') {
-            img.style.display = 'block';
-        }
-        
-        // Add alt text if missing
+        // Only handle alt text for accessibility
         if (!img.hasAttribute('alt')) {
+            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                           img.className.includes('emoji');
+            
             if (isEmoji) {
                 img.setAttribute('alt', 'Emoji');
                 img.setAttribute('role', 'img');
@@ -1770,9 +1643,20 @@ class PostModernizer {
                 img.setAttribute('alt', 'Forum image');
             }
         }
+        
+        // Force CSS styles for all images
+        img.style.aspectRatio = 'auto';
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'inline-block';
+        img.style.verticalAlign = 'middle';
+        
+        // Remove any explicit width/height attributes that might cause CLS
+        img.removeAttribute('width');
+        img.removeAttribute('height');
     });
     
-    // Process iframes with smart defaults
+    // Keep iframe handling (this is still valuable)
     element.querySelectorAll('iframe').forEach(iframe => {
         const originalWidth = iframe.getAttribute('width');
         const originalHeight = iframe.getAttribute('height');
@@ -1797,12 +1681,11 @@ class PostModernizer {
             }
         }
         
-        // Only set dimensions if not already present
         if (!originalWidth || !originalHeight) {
             iframe.setAttribute('width', dimensions.width);
             iframe.setAttribute('height', dimensions.height);
             
-            // Add responsive wrapper for iframes without dimensions
+            // Responsive wrapper for iframes
             const wrapper = document.createElement('div');
             wrapper.className = 'iframe-wrapper';
             
@@ -1812,115 +1695,18 @@ class PostModernizer {
                 if (widthNum > 0 && heightNum > 0) {
                     const paddingBottom = (heightNum / widthNum * 100) + '%';
                     wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-                } else {
-                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
                 }
-            } else {
-                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
             }
             
             iframe.parentNode.insertBefore(wrapper, iframe);
             wrapper.appendChild(iframe);
-            
-            // Make iframe fill wrapper
             iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
         }
         
-        // Add title if missing
         if (!iframe.hasAttribute('title')) {
             iframe.setAttribute('title', 'Embedded content');
         }
     });
-    
-    // Process videos
-    element.querySelectorAll('video').forEach(video => {
-        const originalWidth = parseInt(video.getAttribute('width'));
-        const originalHeight = parseInt(video.getAttribute('height'));
-        
-        if (originalWidth && originalHeight) {
-            video.setAttribute('width', originalWidth);
-            video.setAttribute('height', originalHeight);
-            video.style.width = originalWidth + 'px';
-            video.style.height = originalHeight + 'px';
-        } else {
-            // Default video size
-            video.style.width = '100%';
-            video.style.maxWidth = '800px';
-            video.style.height = 'auto';
-        }
-        
-        if (!video.hasAttribute('controls')) {
-            video.setAttribute('controls', '');
-        }
-    });
-}
-
-   #lazyFetchAndUpdateImageDimensions(img) {
-    // Skip if already verified
-    if (img.dataset.dimensionsVerified) return;
-    
-    const verifyDimensions = () => {
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            img.dataset.dimensionsVerified = 'true';
-            
-            const currentWidth = parseInt(img.getAttribute('width') || img.style.width);
-            const currentHeight = parseInt(img.getAttribute('height') || img.style.height);
-            
-            // Only update if our defaults were significantly wrong
-            if (!img.hasAttribute('width') && !img.hasAttribute('height')) {
-                if (currentWidth && currentHeight && 
-                    (Math.abs(img.naturalWidth - currentWidth) > currentWidth * 0.3 ||
-                     Math.abs(img.naturalHeight - currentHeight) > currentHeight * 0.3)) {
-                    
-                    // Update aspect ratio for better rendering
-                    img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-                    img.style.width = 'auto';
-                    img.style.height = 'auto';
-                    
-                    // Update attributes
-                    img.setAttribute('width', img.naturalWidth);
-                    img.setAttribute('height', img.naturalHeight);
-                }
-            }
-            
-            // Update cache
-            this.#dimensionCache.set(img.src, {
-                width: img.naturalWidth,
-                height: img.naturalHeight
-            });
-        }
-    };
-    
-    if (img.complete) {
-        verifyDimensions();
-    } else {
-        const onLoad = () => {
-            verifyDimensions();
-            img.removeEventListener('load', onLoad);
-            img.removeEventListener('error', onError);
-        };
-        
-        const onError = () => {
-            img.dataset.dimensionsVerified = 'true';
-            img.removeEventListener('load', onLoad);
-            img.removeEventListener('error', onError);
-        };
-        
-        img.addEventListener('load', onLoad);
-        img.addEventListener('error', onError);
-        
-        // Also check periodically
-        let checkCount = 0;
-        const checkInterval = setInterval(() => {
-            checkCount++;
-            if (img.complete) {
-                clearInterval(checkInterval);
-                verifyDimensions();
-            } else if (checkCount > 20) { // Stop after 4 seconds
-                clearInterval(checkInterval);
-            }
-        }, 200);
-    }
 }
 
     #enhanceIframesInElement(element) {
