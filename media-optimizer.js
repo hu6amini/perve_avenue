@@ -1,179 +1,207 @@
-!function(){
+(() => {
   'use strict';
   
-  // Store original methods (faster access)
-  var doc=document, win=window;
-  var origCreate=doc.createElement, origImage=win.Image;
-  var origSetAttr=Element.prototype.setAttribute;
+  // ========== CONFIGURATION ==========
+  const LAZY = 'lazy';
+  const ASYNC_DECODING = 'async';
   
-  // Optimize single element (cached values)
-  function optimize(el){
-    if(!el||!el.tagName)return el;
+  // ========== HELPER FUNCTIONS ==========
+  const shouldOptimize = (element) => 
+    element && (element.tagName === 'IMG' || element.tagName === 'IFRAME');
+  
+  const needsLoading = (element) => 
+    !element.hasAttribute('loading') || element.getAttribute('loading') === '';
+  
+  const needsDecoding = (element) => 
+    element.tagName === 'IMG' && (!element.hasAttribute('decoding') || element.getAttribute('decoding') === '');
+  
+  const optimizeElement = (element) => {
+    if (!shouldOptimize(element)) return element;
     
-    var tag=el.tagName, loading=el.loading, decoding=el.decoding;
+    if (needsLoading(element)) {
+      element.setAttribute('loading', LAZY);
+    }
     
-    if(tag==='IMG'||tag==='IFRAME'){
-      if(!loading){
-        el.loading='lazy';
-      }
-      if(tag==='IMG'&&!decoding){
-        el.decoding='async';
-      }
+    if (needsDecoding(element)) {
+      element.setAttribute('decoding', ASYNC_DECODING);
     }
-    return el;
-  }
-  
-  // ========== INTERCEPT SOURCE SETTING ==========
-  
-  // Override setAttribute (optimized)
-  Element.prototype.setAttribute=function(name,value){
-    // Check for src/srcset first (fast path)
-    if(name.charAt(0)==='s'&&(name==='src'||name==='srcset')){
-      var tag=this.tagName;
-      if(tag==='IMG'||tag==='IFRAME'){
-        var loading=this.loading, decoding=this.decoding;
-        if(!loading){
-          this.loading='lazy';
-        }
-        if(tag==='IMG'&&!decoding){
-          this.decoding='async';
-        }
-      }
-    }
-    return origSetAttr.call(this,name,value);
+    
+    return element;
   };
   
-  // Intercept .src property (optimized)
-  function interceptSrc(proto){
-    if(!proto)return;
-    var desc=Object.getOwnPropertyDescriptor(proto,'src');
-    if(desc&&desc.set){
-      Object.defineProperty(proto,'src',{
-        set:function(value){
-          var tag=this.tagName;
-          if(tag==='IMG'||tag==='IFRAME'){
-            if(!this.loading)this.loading='lazy';
-            if(tag==='IMG'&&!this.decoding)this.decoding='async';
-          }
-          desc.set.call(this,value);
+  // ========== OVERRIDE SETATTRIBUTE ==========
+  const originalSetAttribute = Element.prototype.setAttribute;
+  
+  Element.prototype.setAttribute = function(name, value) {
+    if ((name === 'src' || name === 'srcset') && shouldOptimize(this)) {
+      optimizeElement(this);
+    }
+    return originalSetAttribute.call(this, name, value);
+  };
+  
+  // ========== OVERRIDE SRC PROPERTY ==========
+  const interceptProperty = (proto, prop) => {
+    if (!proto) return;
+    
+    const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+    if (descriptor?.set) {
+      Object.defineProperty(proto, prop, {
+        set(value) {
+          optimizeElement(this);
+          descriptor.set.call(this, value);
         },
-        get:desc.get,
-        configurable:true
+        get: descriptor.get,
+        configurable: true
       });
     }
-  }
-  interceptSrc(HTMLImageElement&&HTMLImageElement.prototype);
-  interceptSrc(HTMLIFrameElement&&HTMLIFrameElement.prototype);
-  
-  // ========== OVERRIDE CREATION ==========
-  
-  // Override createElement (optimized)
-  doc.createElement=function(tagName){
-    var el=origCreate.call(doc,tagName);
-    return optimize(el);
   };
   
-  // Override Image constructor (optimized)
-  if(origImage){
-    win.Image=function(){
-      var img=new origImage();
-      img.loading='lazy';
-      img.decoding='async';
-      return img;
+  interceptProperty(HTMLImageElement?.prototype, 'src');
+  interceptProperty(HTMLIFrameElement?.prototype, 'src');
+  
+  // ========== OVERRIDE CREATELEMENT ==========
+  const originalCreateElement = document.createElement;
+  
+  document.createElement = function(tagName, options) {
+    const element = originalCreateElement.call(this, tagName, options);
+    return optimizeElement(element);
+  };
+  
+  // ========== OVERRIDE IMAGE CONSTRUCTOR ==========
+  const OriginalImage = window.Image;
+  
+  if (OriginalImage) {
+    window.Image = class extends OriginalImage {
+      constructor(width, height) {
+        super(width, height);
+        this.setAttribute('loading', LAZY);
+        this.setAttribute('decoding', ASYNC_DECODING);
+      }
     };
-    win.Image.prototype=origImage.prototype;
+    
+    // Ensure prototype chain is maintained
+    Object.setPrototypeOf(window.Image, OriginalImage);
   }
   
-  // ========== PROCESS EXISTING ==========
-  
-  function processExisting(){
-    // Single query, filter in loop (more efficient)
-    var els=doc.querySelectorAll('img, iframe');
-    for(var i=0,len=els.length;i<len;i++){
-      optimize(els[i]);
-    }
-  }
-  
-  // ========== INITIALIZATION ==========
-  
-  // Fast initialization
-  if(doc.readyState==='loading'){
-    // Single event listener
-    var onReady=function(){
-      processExisting();
-      doc.removeEventListener('DOMContentLoaded',onReady);
-    };
-    doc.addEventListener('DOMContentLoaded',onReady);
-  }else{
-    // Use microtask for immediate execution
-    Promise.resolve().then(processExisting);
-  }
+  // ========== PROCESS EXISTING ELEMENTS ==========
+  const processExisting = () => {
+    const selectors = [
+      'img:not([loading]), img[loading=""]',
+      'iframe:not([loading]), iframe[loading=""]',
+      'img:not([decoding]), img[decoding=""]'
+    ];
+    
+    const elements = document.querySelectorAll(selectors.join(', '));
+    elements.forEach(optimizeElement);
+  };
   
   // ========== MUTATION OBSERVER ==========
-  
-  // Optimized observer
-  var observer=new MutationObserver(function(mutations){
-    // Process in batch (faster than microtask for many mutations)
-    for(var i=0,len=mutations.length;i<len;i++){
-      var nodes=mutations[i].addedNodes;
-      for(var j=0,nodesLen=nodes.length;j<nodesLen;j++){
-        var node=nodes[j];
-        if(node.nodeType===1){
-          optimize(node);
-          // Process children if needed
-          var tag=node.tagName;
-          if(tag==='DIV'||tag==='SPAN'||tag==='P'){
-            var children=node.querySelectorAll('img, iframe');
-            for(var k=0,childrenLen=children.length;k<childrenLen;k++){
-              optimize(children[k]);
-            }
-          }
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type !== 'childList') continue;
+      
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue; // Not an element node
+        
+        optimizeElement(node);
+        
+        if (node.querySelectorAll) {
+          const children = node.querySelectorAll('img, iframe');
+          children.forEach(optimizeElement);
         }
       }
     }
   });
   
-  // Start observing
-  function startObserving(){
-    var body=doc.body;
-    if(body){
-      observer.observe(body,{childList:true,subtree:true});
-    }else{
-      setTimeout(startObserving,9); // ~1 frame at 120fps
+  // ========== INITIALIZATION ==========
+  const init = () => {
+    // Process existing elements
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', processExisting);
+    } else {
+      processExisting();
     }
-  }
-  setTimeout(startObserving,0);
-  
-  // ========== DEBUG ==========
-  
-  win.debugMediaOptimizer=function(){
-    console.log('Media Optimizer v2.0 (Optimized)');
     
-    // Performance test
-    var start=performance.now();
-    var test1=doc.createElement('img');
-    var test2=new win.Image();
-    var end=performance.now();
-    
-    console.log('Perf:',(end-start).toFixed(2)+'ms');
-    console.log('Tests:',{
-      createElement:{loading:test1.loading,decoding:test1.decoding},
-      newImage:{loading:test2.loading,decoding:test2.decoding}
-    });
-    
-    // Stats
-    var imgs=doc.querySelectorAll('img');
-    var lazy=0,asyncDec=0;
-    for(var i=0,len=imgs.length;i<len;i++){
-      if(imgs[i].loading==='lazy')lazy++;
-      if(imgs[i].decoding==='async')asyncDec++;
+    // Start observing
+    if (document.body) {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    } else {
+      // Wait for body to exist
+      const bodyObserver = new MutationObserver((_, obs) => {
+        if (document.body) {
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+          obs.disconnect();
+        }
+      });
+      
+      bodyObserver.observe(document.documentElement, {
+        childList: true
+      });
     }
-    console.log('Coverage:',lazy+'/'+imgs.length+' lazy ('+
-      Math.round((lazy/imgs.length)*100)+'%), '+
-      asyncDec+'/'+imgs.length+' async');
   };
   
-}();
+  // ========== DEBUG UTILITIES ==========
+  Object.defineProperty(window, 'debugMediaOptimizer', {
+    value: () => {
+      console.group('📊 Media Optimizer Debug');
+      console.log('Execution time:', performance.now().toFixed(2), 'ms');
+      console.log('Ready state:', document.readyState);
+      console.log('Observer:', observer ? 'Active' : 'Inactive');
+      
+      // Test cases
+      const tests = [
+        { name: 'createElement', element: document.createElement('img') },
+        { name: 'Image constructor', element: window.Image && new Image() },
+        { name: 'iframe', element: document.createElement('iframe') }
+      ];
+      
+      for (const test of tests) {
+        if (test.element) {
+          console.log(test.name, '→', {
+            loading: test.element.getAttribute('loading'),
+            decoding: test.element.getAttribute('decoding')
+          });
+        }
+      }
+      
+      // Stats
+      const images = document.querySelectorAll('img');
+      const iframes = document.querySelectorAll('iframe');
+      const optimizedImages = Array.from(images).filter(img => 
+        img.getAttribute('loading') === LAZY
+      ).length;
+      const asyncImages = Array.from(images).filter(img => 
+        img.getAttribute('decoding') === ASYNC_DECODING
+      ).length;
+      
+      console.log('📈 Statistics:');
+      console.log(`Images: ${optimizedImages}/${images.length} lazy (${Math.round(optimizedImages/images.length*100)}%)`);
+      console.log(`Images: ${asyncImages}/${images.length} async decoding (${Math.round(asyncImages/images.length*100)}%)`);
+      console.log(`Iframes: ${iframes.length} total`);
+      
+      console.groupEnd();
+    },
+    writable: false,
+    configurable: true
+  });
+  
+  // ========== START ==========
+  // Use microtask for initialization
+  Promise.resolve().then(init);
+  
+  // Fallback for older browsers
+  if (typeof Promise === 'undefined') {
+    setTimeout(init, 0);
+  }
+})();
+
+
 
 
 !function(){
