@@ -1700,7 +1700,7 @@ class PostModernizer {
         // Emoji-specific styling
         if (isTwemoji || isEmoji) {
             img.style.display = 'inline-block';
-            img.style.verticalAlign = 'middle';
+            img.style.verticalAlign = 'text-bottom';
             img.style.margin = '0 2px';
             
             // Add subtle opacity for signature emojis
