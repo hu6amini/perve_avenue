@@ -44,9 +44,9 @@
     if (!proto) return;
     
     const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
-    if (descriptor?.set) {
+    if (descriptor && descriptor.set) {
       Object.defineProperty(proto, prop, {
-        set(value) {
+        set: function(value) {
           optimizeElement(this);
           descriptor.set.call(this, value);
         },
@@ -56,8 +56,8 @@
     }
   };
   
-  interceptProperty(HTMLImageElement?.prototype, 'src');
-  interceptProperty(HTMLIFrameElement?.prototype, 'src');
+  interceptProperty(HTMLImageElement && HTMLImageElement.prototype, 'src');
+  interceptProperty(HTMLIFrameElement && HTMLIFrameElement.prototype, 'src');
   
   // ========== OVERRIDE CREATELEMENT ==========
   const originalCreateElement = document.createElement;
@@ -71,16 +71,14 @@
   const OriginalImage = window.Image;
   
   if (OriginalImage) {
-    window.Image = class extends OriginalImage {
-      constructor(width, height) {
-        super(width, height);
-        this.setAttribute('loading', LAZY);
-        this.setAttribute('decoding', ASYNC_DECODING);
-      }
+    window.Image = function(width, height) {
+      const img = new OriginalImage(width, height);
+      img.setAttribute('loading', LAZY);
+      img.setAttribute('decoding', ASYNC_DECODING);
+      return img;
     };
     
-    // Ensure prototype chain is maintained
-    Object.setPrototypeOf(window.Image, OriginalImage);
+    window.Image.prototype = OriginalImage.prototype;
   }
   
   // ========== PROCESS EXISTING ELEMENTS ==========
@@ -92,22 +90,28 @@
     ];
     
     const elements = document.querySelectorAll(selectors.join(', '));
-    elements.forEach(optimizeElement);
+    for (let i = 0; i < elements.length; i++) {
+      optimizeElement(elements[i]);
+    }
   };
   
   // ========== MUTATION OBSERVER ==========
   const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
+    for (let i = 0; i < mutations.length; i++) {
+      const mutation = mutations[i];
       if (mutation.type !== 'childList') continue;
       
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== 1) continue; // Not an element node
+      for (let j = 0; j < mutation.addedNodes.length; j++) {
+        const node = mutation.addedNodes[j];
+        if (node.nodeType !== 1) continue;
         
         optimizeElement(node);
         
         if (node.querySelectorAll) {
           const children = node.querySelectorAll('img, iframe');
-          children.forEach(optimizeElement);
+          for (let k = 0; k < children.length; k++) {
+            optimizeElement(children[k]);
+          }
         }
       }
     }
@@ -130,7 +134,7 @@
       });
     } else {
       // Wait for body to exist
-      const bodyObserver = new MutationObserver((_, obs) => {
+      const bodyObserver = new MutationObserver(function(_, obs) {
         if (document.body) {
           observer.observe(document.body, {
             childList: true,
@@ -144,123 +148,47 @@
         childList: true
       });
     }
-  };
-  
-  // ========== DEBUG UTILITIES ==========
-  Object.defineProperty(window, 'debugMediaOptimizer', {
-    value: () => {
-      console.group('📊 Media Optimizer Debug');
-      console.log('Execution time:', performance.now().toFixed(2), 'ms');
-      console.log('Ready state:', document.readyState);
-      console.log('Observer:', observer ? 'Active' : 'Inactive');
+    
+    // Write console report after initialization
+    setTimeout(function() {
+      console.log('Media Optimizer initialized');
       
-      // Test cases
-      const tests = [
-        { name: 'createElement', element: document.createElement('img') },
-        { name: 'Image constructor', element: window.Image && new Image() },
-        { name: 'iframe', element: document.createElement('iframe') }
-      ];
+      // Test creation methods
+      const testImg1 = document.createElement('img');
+      console.log('createElement: loading=' + testImg1.getAttribute('loading') + ', decoding=' + testImg1.getAttribute('decoding'));
       
-      for (const test of tests) {
-        if (test.element) {
-          console.log(test.name, '→', {
-            loading: test.element.getAttribute('loading'),
-            decoding: test.element.getAttribute('decoding')
-          });
-        }
+      if (window.Image) {
+        const testImg2 = new Image();
+        console.log('imageConstructor: loading=' + testImg2.getAttribute('loading') + ', decoding=' + testImg2.getAttribute('decoding'));
       }
       
-      // Stats
+      // Count existing images
       const images = document.querySelectorAll('img');
-      const iframes = document.querySelectorAll('iframe');
-      const optimizedImages = Array.from(images).filter(img => 
-        img.getAttribute('loading') === LAZY
-      ).length;
-      const asyncImages = Array.from(images).filter(img => 
-        img.getAttribute('decoding') === ASYNC_DECODING
-      ).length;
+      let lazyCount = 0;
+      let asyncCount = 0;
       
-      console.log('📈 Statistics:');
-      console.log(`Images: ${optimizedImages}/${images.length} lazy (${Math.round(optimizedImages/images.length*100)}%)`);
-      console.log(`Images: ${asyncImages}/${images.length} async decoding (${Math.round(asyncImages/images.length*100)}%)`);
-      console.log(`Iframes: ${iframes.length} total`);
+      for (let i = 0; i < images.length; i++) {
+        if (images[i].getAttribute('loading') === LAZY) lazyCount++;
+        if (images[i].getAttribute('decoding') === ASYNC_DECODING) asyncCount++;
+      }
       
-      console.groupEnd();
-    },
-    writable: false,
-    configurable: true
-  });
+      console.log('Existing images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
+      
+      // Visual indicator
+      if (images.length > 0) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#4CAF50;color:white;padding:8px 12px;border-radius:4px;font-family:sans-serif;font-size:11px;z-index:9999;opacity:0.9;';
+        badge.innerHTML = '✓ Media Optimized';
+        document.body.appendChild(badge);
+        setTimeout(function() { badge.remove(); }, 3000);
+      }
+    }, 100);
+  };
   
   // ========== START ==========
-  // Use microtask for initialization
-  Promise.resolve().then(init);
-  
-  // Fallback for older browsers
-  if (typeof Promise === 'undefined') {
+  if (typeof Promise !== 'undefined') {
+    Promise.resolve().then(init);
+  } else {
     setTimeout(init, 0);
   }
 })();
-
-
-
-
-!function(){
-  // Monitor image/iframe loading
-  var loadLog = [];
-  
-  // Override addEventListener for load/error events
-  var origAdd = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function(type, handler, options){
-    if((type==='load'||type==='error') && (this.tagName==='IMG'||this.tagName==='IFRAME')){
-      var start=Date.now();
-      var src=this.src||this.getAttribute('src')||'[no-src]';
-      var attrs={
-        loading:this.getAttribute('loading'),
-        decoding:this.getAttribute('decoding')
-      };
-      
-      loadLog.push({
-        element:this.tagName,
-        src:src,
-        attrs:attrs,
-        eventAdded:start,
-        attributesSet:start,
-        willLoad:!this.complete
-      });
-      
-      // Check if already loaded (happens fast)
-      setTimeout(function(){
-        if(!this.complete){
-          loadLog[loadLog.length-1].attributesSet=Date.now();
-          loadLog[loadLog.length-1].attrsAtLoad={
-            loading:this.getAttribute('loading'),
-            decoding:this.getAttribute('decoding')
-          };
-        }
-      }.bind(this),0);
-    }
-    return origAdd.call(this,type,handler,options);
-  };
-  
-  // Log results after page load
-  window.addEventListener('load',function(){
-    setTimeout(function(){
-      console.log('=== LOAD TIMING ANALYSIS ===');
-      console.log('Total elements monitored: '+loadLog.length);
-      
-      var lateCount=0;
-      loadLog.forEach(function(item,idx){
-        if(item.attrsAtLoad&&(!item.attrsAtLoad.loading||item.attrsAtLoad.loading!=='lazy')){
-          console.warn('Late attribute #'+idx+':',item);
-          lateCount++;
-        }
-      });
-      
-      if(lateCount===0){
-        console.log('✅ All attributes set BEFORE element load');
-      }else{
-        console.warn('⚠️ '+lateCount+' elements had late attribute setting');
-      }
-    },1000);
-  });
-}();
