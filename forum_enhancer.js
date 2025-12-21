@@ -1628,7 +1628,7 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-   #preserveMediaDimensions(element) {
+#preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
         // Get original dimensions
         const originalWidth = parseInt(img.getAttribute('width'));
@@ -1638,48 +1638,47 @@ class PostModernizer {
         const isInQuote = img.closest('.modern-quote, .quote-content');
         const isInSpoiler = img.closest('.modern-spoiler, .spoiler-content');
         const isInSignature = img.closest('.signature, .post-signature');
-        const isInFFATitle = img.closest('.FFA-title');
-        const isInSmallContext = (isInQuote || isInSpoiler || isInSignature) && !isInFFATitle; // UPDATED: Exclude FFA-title from small context
-const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-               (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-               img.className.includes('emoji');
-
-// Start with original dimensions if they exist
-let targetWidth = originalWidth;
-let targetHeight = originalHeight;
-
-// Only calculate defaults if no dimensions exist
-if (!targetWidth || !targetHeight) {
-    if (isTwemoji || isEmoji) {
-        // Emoji sizing based on context
-        if (isInSmallContext) {
-            // Quote/Spoiler/Signature context (but NOT FFA-title): 14px font size
-            targetWidth = 18;  // Matches 14px text nicely
-            targetHeight = 18;
-        } else {
-            // Post content AND FFA-title: 16px font size (20px emoji)
-            targetWidth = 20;  // Matches 16px text nicely
-            targetHeight = 20;
-        }
-    } else if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-        // Use natural dimensions for loaded images
-        targetWidth = img.naturalWidth;
-        targetHeight = img.naturalHeight;
-    } else {
-        // Forum image defaults (non-emoji)
-        const commonSizes = [
-            [800, 600],   // 4:3 ratio
-            [600, 400],   // 3:2 ratio  
-            [500, 500],   // Square
-            [400, 300]    // 4:3 ratio (small)
-        ];
+        const isInSmallContext = isInQuote || isInSpoiler || isInSignature;
+        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
         
-        const defaultSize = commonSizes[Math.min(3, Math.floor(Math.random() * 4))];
-        targetWidth = defaultSize[0];
-        targetHeight = defaultSize[1];
-    }
-}
+        // Start with original dimensions if they exist
+        let targetWidth = originalWidth;
+        let targetHeight = originalHeight;
+        
+        // Only calculate defaults if no dimensions exist
+        if (!targetWidth || !targetHeight) {
+            if (isTwemoji || isEmoji) {
+                // Emoji sizing based on context
+                if (isInSmallContext) {
+                    // Quote/Spoiler/Signature context: 14px font size
+                    targetWidth = 18;  // Matches 14px text nicely
+                    targetHeight = 18;
+                } else {
+                    // Post content: 16px font size
+                    targetWidth = 20;  // Matches 16px text nicely
+                    targetHeight = 20;
+                }
+            } else if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                // Use natural dimensions for loaded images
+                targetWidth = img.naturalWidth;
+                targetHeight = img.naturalHeight;
+            } else {
+                // Forum image defaults (non-emoji)
+                const commonSizes = [
+                    [800, 600],   // 4:3 ratio
+                    [600, 400],   // 3:2 ratio  
+                    [500, 500],   // Square
+                    [400, 300]    // 4:3 ratio (small)
+                ];
+                
+                const defaultSize = commonSizes[Math.min(3, Math.floor(Math.random() * 4))];
+                targetWidth = defaultSize[0];
+                targetHeight = defaultSize[1];
+            }
+        }
         
         // Calculate aspect ratio
         const aspectRatio = targetWidth + ' / ' + targetHeight;
@@ -1701,7 +1700,7 @@ if (!targetWidth || !targetHeight) {
         // Emoji-specific styling
         if (isTwemoji || isEmoji) {
             img.style.display = 'inline-block';
-            img.style.verticalAlign = 'text-bottom';
+            img.style.verticalAlign = 'middle';
             img.style.margin = '0 2px';
             
             // Add subtle opacity for signature emojis
