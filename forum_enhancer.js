@@ -1660,13 +1660,12 @@ class PostModernizer {
                     targetHeight = 20;
                 }
             } else {
-                // FOR REGULAR IMAGES: Don't guess dimensions, wait for image to load
-                // or use natural dimensions if available
+                // FOR REGULAR IMAGES: Use natural dimensions if available
                 if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
                     targetWidth = img.naturalWidth;
                     targetHeight = img.naturalHeight;
                 } else {
-                    // Don't set any dimensions for unloaded images
+                    // Don't set any dimensions for unloaded images - they'll be set after load
                     targetWidth = 0;
                     targetHeight = 0;
                     
@@ -1684,9 +1683,18 @@ class PostModernizer {
             }
         }
         
-        // Only set dimensions if we have valid values
+        // Always set width/height attributes if we have valid dimensions
+        // This is critical for preventing layout shifts
         if (targetWidth > 0 && targetHeight > 0) {
-            // Calculate aspect ratio
+            // Set the actual HTML attributes FIRST
+            if (!img.hasAttribute('width') || img.getAttribute('width') !== targetWidth.toString()) {
+                img.setAttribute('width', targetWidth);
+            }
+            if (!img.hasAttribute('height') || img.getAttribute('height') !== targetHeight.toString()) {
+                img.setAttribute('height', targetHeight);
+            }
+            
+            // Calculate aspect ratio and set CSS
             const aspectRatio = targetWidth + ' / ' + targetHeight;
             
             // Apply CSS if not already set
@@ -1701,14 +1709,6 @@ class PostModernizer {
             }
             if (!img.style.height || img.style.height === 'auto') {
                 img.style.height = 'auto';
-            }
-            
-            // Set dimensions if not already set
-            if (!img.hasAttribute('width') && targetWidth) {
-                img.setAttribute('width', targetWidth);
-            }
-            if (!img.hasAttribute('height') && targetHeight) {
-                img.setAttribute('height', targetHeight);
             }
         } else {
             // For images without dimensions yet, use intrinsic size
@@ -1728,8 +1728,6 @@ class PostModernizer {
             img.style.display = 'inline-block';
             img.style.verticalAlign = 'text-bottom';
             img.style.margin = '0 2px';
-            
-            // No opacity or filter for signature emojis (removed)
         } else if (!img.style.display || img.style.display === 'inline') {
             img.style.display = 'block';
         }
@@ -1744,8 +1742,10 @@ class PostModernizer {
             }
         }
         
-        // Async verification
-        this.#lazyFetchAndUpdateImageDimensions(img);
+        // Async verification - but only if we haven't already set dimensions
+        if (!img.complete && targetWidth === 0 && targetHeight === 0) {
+            this.#lazyFetchAndUpdateImageDimensions(img);
+        }
     });
     
     // Process iframes with smart defaults
@@ -1831,31 +1831,15 @@ class PostModernizer {
     });
 }
 
-// Handle image load errors
-#handleImageLoadError(img) {
-    // Set reasonable fallback dimensions for broken images
-    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-        img.setAttribute('width', '600');
-        img.setAttribute('height', '400');
-        img.style.aspectRatio = '600 / 400';
-    }
-}
-
 #lazyFetchAndUpdateImageDimensions(img) {
-    const updateDimensionsIfNeeded = () => {
+    const updateDimensions = () => {
         if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            const currentWidth = parseInt(img.getAttribute('width')) || 0;
-            const currentHeight = parseInt(img.getAttribute('height')) || 0;
+            // Always set width/height attributes when image loads
+            img.setAttribute('width', img.naturalWidth);
+            img.setAttribute('height', img.naturalHeight);
             
-            // Only update if our defaults were significantly wrong AND
-            // the image doesn't already have explicit dimensions
-            if (!img.hasAttribute('width') || !img.hasAttribute('height') ||
-                Math.abs(img.naturalWidth - currentWidth) > currentWidth * 0.5 ||
-                Math.abs(img.naturalHeight - currentHeight) > currentHeight * 0.5) {
-                
-                // Update aspect ratio for better rendering
-                img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-            }
+            // Update aspect ratio for better rendering
+            img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
             
             // Update cache
             this.#dimensionCache.set(img.src, {
@@ -1866,13 +1850,23 @@ class PostModernizer {
     };
     
     if (img.complete) {
-        updateDimensionsIfNeeded();
+        updateDimensions();
     } else {
-        img.addEventListener('load', updateDimensionsIfNeeded, { once: true });
+        img.addEventListener('load', updateDimensions, { once: true });
         img.addEventListener('error', () => {
             // Handle image load error
             this.#handleImageLoadError(img);
         }, { once: true });
+    }
+}
+
+// Handle image load errors
+#handleImageLoadError(img) {
+    // Set reasonable fallback dimensions for broken images
+    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+        img.setAttribute('width', '600');
+        img.setAttribute('height', '400');
+        img.style.aspectRatio = '600 / 400';
     }
 }
 
