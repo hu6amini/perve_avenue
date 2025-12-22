@@ -1630,7 +1630,7 @@ class PostModernizer {
 
 #preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
-        // Get original dimensions
+        // Get original dimensions from attributes
         const originalWidth = parseInt(img.getAttribute('width'));
         const originalHeight = parseInt(img.getAttribute('height'));
         
@@ -1644,7 +1644,7 @@ class PostModernizer {
                        (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
                        img.className.includes('emoji');
         
-        // Start with original dimensions if they exist
+        // Use original dimensions if they exist
         let targetWidth = originalWidth;
         let targetHeight = originalHeight;
         
@@ -1653,48 +1653,74 @@ class PostModernizer {
             if (isTwemoji || isEmoji) {
                 // Emoji sizing based on context
                 if (isInSmallContext) {
-                    // Quote/Spoiler/Signature context: 14px font size
-                    targetWidth = 18;  // Matches 14px text nicely
+                    targetWidth = 18;
                     targetHeight = 18;
                 } else {
-                    // Post content: 16px font size
-                    targetWidth = 20;  // Matches 16px text nicely
+                    targetWidth = 20;
                     targetHeight = 20;
                 }
-            } else if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-                // Use natural dimensions for loaded images
-                targetWidth = img.naturalWidth;
-                targetHeight = img.naturalHeight;
             } else {
-                // Forum image defaults (non-emoji)
-                const commonSizes = [
-                    [800, 600],   // 4:3 ratio
-                    [600, 400],   // 3:2 ratio  
-                    [500, 500],   // Square
-                    [400, 300]    // 4:3 ratio (small)
-                ];
-                
-                const defaultSize = commonSizes[Math.min(3, Math.floor(Math.random() * 4))];
-                targetWidth = defaultSize[0];
-                targetHeight = defaultSize[1];
+                // FOR REGULAR IMAGES: Don't guess dimensions, wait for image to load
+                // or use natural dimensions if available
+                if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    targetWidth = img.naturalWidth;
+                    targetHeight = img.naturalHeight;
+                } else {
+                    // Don't set any dimensions for unloaded images
+                    targetWidth = 0;
+                    targetHeight = 0;
+                    
+                    // Add event listeners for when image loads
+                    if (!img.complete) {
+                        img.addEventListener('load', () => {
+                            this.#updateImageDimensionsAfterLoad(img);
+                        }, { once: true });
+                        
+                        img.addEventListener('error', () => {
+                            this.#handleImageLoadError(img);
+                        }, { once: true });
+                    }
+                }
             }
         }
         
-        // Calculate aspect ratio
-        const aspectRatio = targetWidth + ' / ' + targetHeight;
-        
-        // Apply CSS with minimal overrides
-        if (!img.style.aspectRatio) {
-            img.style.aspectRatio = aspectRatio;
-        }
-        if (!img.style.contain) {
-            img.style.contain = 'size layout style';
-        }
-        if (!img.style.maxWidth || img.style.maxWidth === 'none') {
-            img.style.maxWidth = '100%';
-        }
-        if (!img.style.height || img.style.height === 'auto') {
-            img.style.height = 'auto';
+        // Only set dimensions if we have valid values
+        if (targetWidth > 0 && targetHeight > 0) {
+            // Calculate aspect ratio
+            const aspectRatio = targetWidth + ' / ' + targetHeight;
+            
+            // Apply CSS if not already set
+            if (!img.style.aspectRatio) {
+                img.style.aspectRatio = aspectRatio;
+            }
+            if (!img.style.contain) {
+                img.style.contain = 'size layout style';
+            }
+            if (!img.style.maxWidth || img.style.maxWidth === 'none') {
+                img.style.maxWidth = '100%';
+            }
+            if (!img.style.height || img.style.height === 'auto') {
+                img.style.height = 'auto';
+            }
+            
+            // Set dimensions if not already set
+            if (!img.hasAttribute('width') && targetWidth) {
+                img.setAttribute('width', targetWidth);
+            }
+            if (!img.hasAttribute('height') && targetHeight) {
+                img.setAttribute('height', targetHeight);
+            }
+        } else {
+            // For images without dimensions yet, use intrinsic size
+            if (!img.style.maxWidth || img.style.maxWidth === 'none') {
+                img.style.maxWidth = '100%';
+            }
+            if (!img.style.height || img.style.height === 'auto') {
+                img.style.height = 'auto';
+            }
+            if (!img.style.aspectRatio) {
+                img.style.aspectRatio = 'auto';
+            }
         }
         
         // Emoji-specific styling
@@ -1703,18 +1729,9 @@ class PostModernizer {
             img.style.verticalAlign = 'text-bottom';
             img.style.margin = '0 2px';
             
-            // Add subtle opacity for signature emojis
-            if (isInSignature) {
-                img.style.opacity = '0.85';
-                img.style.filter = 'grayscale(15%)';
-            }
+            // No opacity or filter for signature emojis (removed)
         } else if (!img.style.display || img.style.display === 'inline') {
             img.style.display = 'block';
-        }
-        
-        // Add placeholder only for non-emoji images
-        if (!img.complete && !isEmoji && !img.style.background) {
-            img.style.background = 'linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 100%)';
         }
         
         // Add alt text if missing
@@ -1725,14 +1742,6 @@ class PostModernizer {
             } else {
                 img.setAttribute('alt', 'Forum image');
             }
-        }
-        
-        // Set dimensions if not already set
-        if (!img.hasAttribute('width') && targetWidth) {
-            img.setAttribute('width', targetWidth);
-        }
-        if (!img.hasAttribute('height') && targetHeight) {
-            img.setAttribute('height', targetHeight);
         }
         
         // Async verification
@@ -1757,7 +1766,7 @@ class PostModernizer {
         let src = iframe.src || iframe.dataset.src || '';
         let dimensions = commonSizes.default;
         
-        for (var domain in commonSizes) {
+        for (let domain in commonSizes) {
             if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
                 dimensions = commonSizes[domain];
                 break;
@@ -1820,6 +1829,40 @@ class PostModernizer {
             video.setAttribute('controls', '');
         }
     });
+}
+
+// New helper method to update dimensions after image loads
+#updateImageDimensionsAfterLoad(img) {
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        const currentWidth = parseInt(img.getAttribute('width')) || 0;
+        const currentHeight = parseInt(img.getAttribute('height')) || 0;
+        
+        // Only update if attributes are missing or wrong
+        if (!img.hasAttribute('width') || !img.hasAttribute('height') ||
+            Math.abs(img.naturalWidth - currentWidth) > currentWidth * 0.5 ||
+            Math.abs(img.naturalHeight - currentHeight) > currentHeight * 0.5) {
+            
+            img.setAttribute('width', img.naturalWidth);
+            img.setAttribute('height', img.naturalHeight);
+            img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+        }
+        
+        // Update cache
+        this.#dimensionCache.set(img.src, {
+            width: img.naturalWidth,
+            height: img.naturalHeight
+        });
+    }
+}
+
+// Handle image load errors
+#handleImageLoadError(img) {
+    // Set reasonable fallback dimensions for broken images
+    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+        img.setAttribute('width', '600');
+        img.setAttribute('height', '400');
+        img.style.aspectRatio = '600 / 400';
+    }
 }
 
     #lazyFetchAndUpdateImageDimensions(img) {
