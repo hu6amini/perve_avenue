@@ -1744,8 +1744,8 @@ class PostModernizer {
             }
         }
         
-        // Async verification
-        this.#lazyFetchAndUpdateImageDimensions(img);
+        // Async verification - use the updated method
+        this.#lazyUpdateImageDimensions(img);
     });
     
     // Process iframes with smart defaults
@@ -1831,58 +1831,21 @@ class PostModernizer {
     });
 }
 
-// New helper method to update dimensions after image loads
-#updateImageDimensionsAfterLoad(img) {
-    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        const currentWidth = parseInt(img.getAttribute('width')) || 0;
-        const currentHeight = parseInt(img.getAttribute('height')) || 0;
-        
-        // Only update if attributes are missing or wrong
-        if (!img.hasAttribute('width') || !img.hasAttribute('height') ||
-            Math.abs(img.naturalWidth - currentWidth) > currentWidth * 0.5 ||
-            Math.abs(img.naturalHeight - currentHeight) > currentHeight * 0.5) {
-            
-            img.setAttribute('width', img.naturalWidth);
-            img.setAttribute('height', img.naturalHeight);
-            img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-        }
-        
-        // Update cache
-        this.#dimensionCache.set(img.src, {
-            width: img.naturalWidth,
-            height: img.naturalHeight
-        });
-    }
-}
-
-// Handle image load errors
-#handleImageLoadError(img) {
-    // Set reasonable fallback dimensions for broken images
-    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-        img.setAttribute('width', '600');
-        img.setAttribute('height', '400');
-        img.style.aspectRatio = '600 / 400';
-    }
-}
-
-    #lazyFetchAndUpdateImageDimensions(img) {
+// Updated consolidated method for lazy image dimension updates
+#lazyUpdateImageDimensions(img) {
     const updateDimensionsIfNeeded = () => {
         if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            const currentWidth = parseInt(img.getAttribute('width') || img.style.width);
-            const currentHeight = parseInt(img.getAttribute('height') || img.style.height);
+            const currentWidth = parseInt(img.getAttribute('width')) || 0;
+            const currentHeight = parseInt(img.getAttribute('height')) || 0;
             
-            // Only update if our defaults were significantly wrong AND
-            // the image doesn't already have explicit dimensions
-            if (!img.hasAttribute('width') && !img.hasAttribute('height')) {
-                if (Math.abs(img.naturalWidth - (currentWidth || 0)) > (currentWidth || 800) * 0.5 ||
-                    Math.abs(img.naturalHeight - (currentHeight || 0)) > (currentHeight || 600) * 0.5) {
-                    
-                    // Update aspect ratio for better rendering
-                    img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-                    
-                    // Remove placeholder background
-                    img.style.background = 'none';
-                }
+            // Only update if attributes are missing or wrong
+            if (!img.hasAttribute('width') || !img.hasAttribute('height') ||
+                Math.abs(img.naturalWidth - currentWidth) > currentWidth * 0.5 ||
+                Math.abs(img.naturalHeight - currentHeight) > currentHeight * 0.5) {
+                
+                img.setAttribute('width', img.naturalWidth);
+                img.setAttribute('height', img.naturalHeight);
+                img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
             }
             
             // Update cache
@@ -1898,12 +1861,25 @@ class PostModernizer {
     } else {
         img.addEventListener('load', updateDimensionsIfNeeded, { once: true });
         img.addEventListener('error', () => {
-            // Keep placeholder for broken images
-            img.style.background = 'linear-gradient(90deg, #ffcccc 0%, #ff9999 100%)';
+            // Handle broken images without background colors
+            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+                img.setAttribute('width', '600');
+                img.setAttribute('height', '400');
+                img.style.aspectRatio = '600 / 400';
+            }
         }, { once: true });
     }
 }
 
+// Handle image load errors (simplified version)
+#handleImageLoadError(img) {
+    // Set reasonable fallback dimensions for broken images
+    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+        img.setAttribute('width', '600');
+        img.setAttribute('height', '400');
+        img.style.aspectRatio = '600 / 400';
+    }
+}
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
             const originalWidth = iframe.getAttribute('width');
