@@ -1673,7 +1673,7 @@ class PostModernizer {
                     // Add event listeners for when image loads
                     if (!img.complete) {
                         img.addEventListener('load', () => {
-                            this.#updateImageDimensionsAfterLoad(img);
+                            this.#lazyFetchAndUpdateImageDimensions(img);
                         }, { once: true });
                         
                         img.addEventListener('error', () => {
@@ -1744,8 +1744,8 @@ class PostModernizer {
             }
         }
         
-        // Async verification - use the updated method
-        this.#lazyUpdateImageDimensions(img);
+        // Async verification
+        this.#lazyFetchAndUpdateImageDimensions(img);
     });
     
     // Process iframes with smart defaults
@@ -1831,20 +1831,29 @@ class PostModernizer {
     });
 }
 
-// Updated consolidated method for lazy image dimension updates
-#lazyUpdateImageDimensions(img) {
+// Handle image load errors
+#handleImageLoadError(img) {
+    // Set reasonable fallback dimensions for broken images
+    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+        img.setAttribute('width', '600');
+        img.setAttribute('height', '400');
+        img.style.aspectRatio = '600 / 400';
+    }
+}
+
+#lazyFetchAndUpdateImageDimensions(img) {
     const updateDimensionsIfNeeded = () => {
         if (img.naturalWidth > 0 && img.naturalHeight > 0) {
             const currentWidth = parseInt(img.getAttribute('width')) || 0;
             const currentHeight = parseInt(img.getAttribute('height')) || 0;
             
-            // Only update if attributes are missing or wrong
+            // Only update if our defaults were significantly wrong AND
+            // the image doesn't already have explicit dimensions
             if (!img.hasAttribute('width') || !img.hasAttribute('height') ||
                 Math.abs(img.naturalWidth - currentWidth) > currentWidth * 0.5 ||
                 Math.abs(img.naturalHeight - currentHeight) > currentHeight * 0.5) {
                 
-                img.setAttribute('width', img.naturalWidth);
-                img.setAttribute('height', img.naturalHeight);
+                // Update aspect ratio for better rendering
                 img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
             }
             
@@ -1861,25 +1870,12 @@ class PostModernizer {
     } else {
         img.addEventListener('load', updateDimensionsIfNeeded, { once: true });
         img.addEventListener('error', () => {
-            // Handle broken images without background colors
-            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-                img.setAttribute('width', '600');
-                img.setAttribute('height', '400');
-                img.style.aspectRatio = '600 / 400';
-            }
+            // Handle image load error
+            this.#handleImageLoadError(img);
         }, { once: true });
     }
 }
 
-// Handle image load errors (simplified version)
-#handleImageLoadError(img) {
-    // Set reasonable fallback dimensions for broken images
-    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-        img.setAttribute('width', '600');
-        img.setAttribute('height', '400');
-        img.style.aspectRatio = '600 / 400';
-    }
-}
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
             const originalWidth = iframe.getAttribute('width');
