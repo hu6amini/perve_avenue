@@ -131,100 +131,151 @@ class MediaDimensionExtractor {
     }
     
     #processImage(img) {
-    // Check if it's a twemoji FIRST (before cache or existing attributes)
-    const isTwemoji = img.src.indexOf('twemoji') > -1 || img.classList.contains('twemoji');
-    
-    if (isTwemoji) {
-        // ALWAYS set twemoji to proper size, ignore any existing dimensions
-        const size = this.#isInSmallContext(img) ? 18 : 20;
-        img.setAttribute('width', size);
-        img.setAttribute('height', size);
-        img.style.aspectRatio = size + ' / ' + size;
+        // Check if it's a twemoji FIRST (before cache or existing attributes)
+        const isTwemoji = img.src.indexOf('twemoji') > -1 || img.classList.contains('twemoji');
         
-        // Cache emoji dimensions
-        this.#cacheDimension(img.src, size, size);
-        return; // Skip all other processing for twemojis
-    }
-    
-    // Cache check first (hottest path)
-    const cached = this.#dimensionCache.get(img.src);
-    if (cached) {
-        this.#cacheHits++;
-        if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-            img.setAttribute('width', cached.width);
-            img.setAttribute('height', cached.height);
-            img.style.aspectRatio = cached.width + ' / ' + cached.height;
+        if (isTwemoji) {
+            // ALWAYS set twemoji to proper size, ignore any existing dimensions
+            const size = this.#isInSmallContext(img) ? 18 : 20;
+            img.setAttribute('width', size);
+            img.setAttribute('height', size);
+            img.style.aspectRatio = size + ' / ' + size;
+            
+            // Cache emoji dimensions
+            this.#cacheDimension(img.src, size, size);
+            return; // Skip all other processing for twemojis
         }
-        return;
-    }
-    this.#cacheMisses++;
-    
-    // Validate existing attributes
-    const widthAttr = img.getAttribute('width');
-    const heightAttr = img.getAttribute('height');
-    
-    if (widthAttr !== null && heightAttr !== null) {
-        const width = widthAttr | 0; // Fast integer conversion
-        const height = heightAttr | 0;
         
-        if (width > 0 && height > 0) {
-            // Validate against natural dimensions if available
+        // Check if image is in post preview (should not be cached)
+        const isInPreview = img.closest('#ajaxObject, #preview, #loading, .preview');
+        if (isInPreview) {
+            // Don't cache preview images - they might have different dimensions
+            this.#handlePreviewImage(img);
+            return;
+        }
+        
+        // Cache check first (hottest path)
+        const cached = this.#dimensionCache.get(img.src);
+        if (cached) {
+            this.#cacheHits++;
+            
+            // Verify cached dimensions are still valid
             if (img.complete && img.naturalWidth) {
-                const wDiff = Math.abs(img.naturalWidth - width);
-                const hDiff = Math.abs(img.naturalHeight - height);
+                const widthDiff = Math.abs(img.naturalWidth - cached.width);
+                const heightDiff = Math.abs(img.naturalHeight - cached.height);
                 
-                if (wDiff > width * 0.5 || hDiff > height * 0.5) {
-                    // Wrong dimensions - update
-                    this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                // If dimensions are significantly different, recalculate
+                if (widthDiff > cached.width * 0.5 || heightDiff > cached.height * 0.5) {
+                    this.#cacheMisses++; // Treat as miss
+                    this.#updateImageDimensions(img, img.naturalWidth, img.naturalHeight);
                     return;
                 }
             }
             
-            img.style.aspectRatio = width + ' / ' + height;
+            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+                img.setAttribute('width', cached.width);
+                img.setAttribute('height', cached.height);
+                img.style.aspectRatio = cached.width + ' / ' + cached.height;
+            }
             return;
+        }
+        this.#cacheMisses++;
+        
+        // Validate existing attributes
+        const widthAttr = img.getAttribute('width');
+        const heightAttr = img.getAttribute('height');
+        
+        if (widthAttr !== null && heightAttr !== null) {
+            const width = widthAttr | 0; // Fast integer conversion
+            const height = heightAttr | 0;
+            
+            if (width > 0 && height > 0) {
+                // Validate against natural dimensions if available
+                if (img.complete && img.naturalWidth) {
+                    const wDiff = Math.abs(img.naturalWidth - width);
+                    const hDiff = Math.abs(img.naturalHeight - height);
+                    
+                    if (wDiff > width * 0.5 || hDiff > height * 0.5) {
+                        // Wrong dimensions - update
+                        this.#updateImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                        return;
+                    }
+                }
+                
+                img.style.aspectRatio = width + ' / ' + height;
+                // Cache only if dimensions seem reasonable (not 0 or 1)
+                if (width > 10 && height > 10) {
+                    this.#cacheDimension(img.src, width, height);
+                }
+                return;
+            }
+        }
+        
+        // Other emoji detection (non-twemoji)
+        if (this.#isLikelyEmoji(img)) {
+            const size = this.#isInSmallContext(img) ? 18 : 20;
+            img.setAttribute('width', size);
+            img.setAttribute('height', size);
+            img.style.aspectRatio = size + ' / ' + size;
+            
+            // Cache emoji dimensions
+            this.#cacheDimension(img.src, size, size);
+            return;
+        }
+        
+        // Handle loading state
+        if (img.complete && img.naturalWidth) {
+            this.#updateImageDimensions(img, img.naturalWidth, img.naturalHeight);
+        } else {
+            this.#setupImageLoadListener(img);
         }
     }
     
-    // Other emoji detection (non-twemoji)
-    if (this.#isLikelyEmoji(img)) {
-        const size = this.#isInSmallContext(img) ? 18 : 20;
-        img.setAttribute('width', size);
-        img.setAttribute('height', size);
-        img.style.aspectRatio = size + ' / ' + size;
+    #handlePreviewImage(img) {
+        // Special handling for preview images - don't cache, always use natural dimensions
+        if (img.complete && img.naturalWidth) {
+            this.#updateImageDimensions(img, img.naturalWidth, img.naturalHeight, false); // don't cache
+        } else {
+            // Set up load listener for preview images
+            const loadHandler = (e) => {
+                const targetImg = e.target;
+                if (targetImg.naturalWidth) {
+                    this.#updateImageDimensions(targetImg, targetImg.naturalWidth, targetImg.naturalHeight, false);
+                }
+                targetImg.removeEventListener('load', loadHandler);
+                targetImg.removeEventListener('error', loadHandler);
+            };
+            
+            img.addEventListener('load', loadHandler, { once: true });
+            img.addEventListener('error', loadHandler, { once: true });
+            
+            // Set placeholder styling
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.opacity = '0.9'; // Slightly transparent to indicate preview
+        }
+    }
+    
+    #isLikelyEmoji(img) {
+        const src = img.src;
+        const className = img.className;
+        const alt = img.alt || '';
         
-        // Cache emoji dimensions
-        this.#cacheDimension(img.src, size, size);
-        return;
+        // Check for twemoji class too
+        if (className.indexOf('twemoji') > -1) return true;
+        
+        // Quick substring checks in order of probability
+        return src.indexOf('twemoji') > -1 || 
+               className.indexOf('emoji') > -1 ||
+               src.indexOf('emoji') > -1 ||
+               src.indexOf('smiley') > -1 ||
+               (src.indexOf('imgbox') > -1 && alt.indexOf('emoji') > -1);
     }
     
-    // Handle loading state
-    if (img.complete && img.naturalWidth) {
-        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-    } else {
-        this.#setupImageLoadListener(img);
+    #isInSmallContext(img) {
+        // Use a single query for all contexts
+        return !!img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature');
     }
-}
-
-#isLikelyEmoji(img) {
-    const src = img.src;
-    const className = img.className;
-    const alt = img.alt || '';
-    
-    // Check for twemoji class too
-    if (className.indexOf('twemoji') > -1) return true;
-    
-    // Quick substring checks in order of probability
-    return src.indexOf('twemoji') > -1 || 
-           className.indexOf('emoji') > -1 ||
-           src.indexOf('emoji') > -1 ||
-           src.indexOf('smiley') > -1 ||
-           (src.indexOf('imgbox') > -1 && alt.indexOf('emoji') > -1);
-}
-
-#isInSmallContext(img) {
-    // Use a single query for all contexts
-    return !!img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature');
-}
     
     #setupImageLoadListener(img) {
         // Avoid duplicate listeners
@@ -244,23 +295,49 @@ class MediaDimensionExtractor {
         delete img.__dimensionExtractorHandler;
         
         if (img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+            this.#updateImageDimensions(img, img.naturalWidth, img.naturalHeight);
         } else {
-            this.#setImageDimensions(img, 600, 400); // Broken image fallback
+            this.#updateImageDimensions(img, 600, 400, false); // Broken image fallback, don't cache
         }
     }
     
-    #setImageDimensions(img, width, height) {
+    #updateImageDimensions(img, width, height, shouldCache = true) {
+        // Don't cache if dimensions are suspicious
+        const isSuspiciousDimension = width < 10 || height < 10 || (width === 600 && height === 400);
+        
         // Set attributes and styles
         img.setAttribute('width', width);
         img.setAttribute('height', height);
         img.style.aspectRatio = width + ' / ' + height;
         
-        // Cache with LRU management
-        this.#cacheDimension(img.src, width, height);
+        // Cache only if shouldCache and dimensions are reasonable
+        if (shouldCache && !isSuspiciousDimension && width > 10 && height > 10) {
+            this.#cacheDimension(img.src, width, height);
+        }
     }
     
     #cacheDimension(src, width, height) {
+        // Skip caching for suspicious dimensions (like the 600x400 placeholder)
+        if (width === 600 && height === 400) return;
+        if (width < 10 || height < 10) return;
+        
+        // Check if we already have better dimensions cached
+        const existing = this.#dimensionCache.get(src);
+        if (existing) {
+            // Only update if new dimensions are significantly better
+            const areaExisting = existing.width * existing.height;
+            const areaNew = width * height;
+            
+            // If existing is placeholder-ish and new is real image, update
+            if (areaExisting < 100000 && areaNew > 100000) {
+                // Keep the new, better dimensions
+            } else if (areaNew > areaExisting * 1.5) {
+                // New dimensions are significantly larger, likely more accurate
+            } else {
+                return; // Keep existing dimensions
+            }
+        }
+        
         if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
             // Remove oldest entry (LRU)
             const oldestKey = this.#lruQueue.shift();
@@ -426,7 +503,6 @@ globalThis.addEventListener('pagehide', () => {
         }
     }
 });
-
 
 
 //Twemoji
