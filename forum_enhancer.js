@@ -131,33 +131,21 @@ class MediaDimensionExtractor {
     }
     
     #processImage(img) {
-    // FIRST: Check if this is any type of emoji
-    const isEmoji = this.#isLikelyEmoji(img);
+    // Check if it's a twemoji FIRST (before cache or existing attributes)
+    const isTwemoji = img.src.indexOf('twemoji') > -1 || img.classList.contains('twemoji');
     
-    if (isEmoji) {
-        // FORCE emoji sizing regardless of existing attributes
+    if (isTwemoji) {
+        // ALWAYS set twemoji to proper size, ignore any existing dimensions
         const size = this.#isInSmallContext(img) ? 18 : 20;
-        
-        // Remove any existing incorrect attributes
-        img.removeAttribute('width');
-        img.removeAttribute('height');
-        
-        // Set correct emoji dimensions
         img.setAttribute('width', size);
         img.setAttribute('height', size);
         img.style.aspectRatio = size + ' / ' + size;
         
-        // Apply emoji-specific styling
-        img.style.display = 'inline-block';
-        img.style.verticalAlign = 'text-bottom';
-        img.style.margin = '0 2px';
-        
         // Cache emoji dimensions
         this.#cacheDimension(img.src, size, size);
-        return;
+        return; // Skip all other processing for twemojis
     }
     
-    // Only process non-emoji images with the regular logic...
     // Cache check first (hottest path)
     const cached = this.#dimensionCache.get(img.src);
     if (cached) {
@@ -176,7 +164,7 @@ class MediaDimensionExtractor {
     const heightAttr = img.getAttribute('height');
     
     if (widthAttr !== null && heightAttr !== null) {
-        const width = widthAttr | 0;
+        const width = widthAttr | 0; // Fast integer conversion
         const height = heightAttr | 0;
         
         if (width > 0 && height > 0) {
@@ -186,6 +174,7 @@ class MediaDimensionExtractor {
                 const hDiff = Math.abs(img.naturalHeight - height);
                 
                 if (wDiff > width * 0.5 || hDiff > height * 0.5) {
+                    // Wrong dimensions - update
                     this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
                     return;
                 }
@@ -196,6 +185,18 @@ class MediaDimensionExtractor {
         }
     }
     
+    // Other emoji detection (non-twemoji)
+    if (this.#isLikelyEmoji(img)) {
+        const size = this.#isInSmallContext(img) ? 18 : 20;
+        img.setAttribute('width', size);
+        img.setAttribute('height', size);
+        img.style.aspectRatio = size + ' / ' + size;
+        
+        // Cache emoji dimensions
+        this.#cacheDimension(img.src, size, size);
+        return;
+    }
+    
     // Handle loading state
     if (img.complete && img.naturalWidth) {
         this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
@@ -203,28 +204,26 @@ class MediaDimensionExtractor {
         this.#setupImageLoadListener(img);
     }
 }
-    
-    #isLikelyEmoji(img) {
-    const src = img.src || '';
-    const className = img.className || '';
+
+#isLikelyEmoji(img) {
+    const src = img.src;
+    const className = img.className;
     const alt = img.alt || '';
     
-    // Check ALL possible emoji indicators
-    const isTwemoji = src.indexOf('twemoji') > -1;
-    const hasEmojiClass = className.indexOf('twemoji') > -1 || className.indexOf('emoji') > -1;
-    const hasEmojiInSrc = src.indexOf('emoji') > -1 || src.indexOf('smiley') > -1;
-    const isImgboxEmoji = src.indexOf('imgbox') > -1 && alt.indexOf('emoji') > -1;
+    // Check for twemoji class too
+    if (className.indexOf('twemoji') > -1) return true;
     
-    // Check for common emoji alt text patterns (like ":)", ":D", ";)", etc.)
-    const hasEmojiAlt = alt && (
-        alt.indexOf(':') > -1 || 
-        /^[:;][)\/(\\|DP]/.test(alt) ||
-        alt.length === 2 || // Most emojis are 2 chars like ":)"
-        alt === ';)' || alt === ':)' || alt === ':D' || alt === ':P' ||
-        alt === ';p' || alt === ';P' || alt === ':/' || alt === ':\\'
-    );
-    
-    return isTwemoji || hasEmojiClass || hasEmojiInSrc || isImgboxEmoji || hasEmojiAlt;
+    // Quick substring checks in order of probability
+    return src.indexOf('twemoji') > -1 || 
+           className.indexOf('emoji') > -1 ||
+           src.indexOf('emoji') > -1 ||
+           src.indexOf('smiley') > -1 ||
+           (src.indexOf('imgbox') > -1 && alt.indexOf('emoji') > -1);
+}
+
+#isInSmallContext(img) {
+    // Use a single query for all contexts
+    return !!img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature');
 }
     
     #setupImageLoadListener(img) {
