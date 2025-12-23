@@ -270,6 +270,313 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 })();
 
 
+// Media Dimension Extractor - Standalone script for extracting image/iframe dimensions
+// Works with ForumCoreObserver to pre-process media before PostModernizer
+'use strict';
+
+class MediaDimensionExtractor {
+    #observerId = null;
+    #processedMedia = new WeakSet();
+    #dimensionCache = new Map();
+    
+    constructor() {
+        this.#init();
+    }
+    
+    #init() {
+        if (!globalThis.forumObserver) {
+            console.warn('MediaDimensionExtractor: ForumObserver not available, retrying...');
+            setTimeout(() => this.#init(), 100);
+            return;
+        }
+        
+        this.#observerId = globalThis.forumObserver.register({
+            id: 'media-dimension-extractor',
+            callback: (node) => this.#processMedia(node),
+            selector: 'img, iframe, video',
+            priority: 'high',
+            pageTypes: ['topic', 'blog', 'search']
+        });
+        
+        this.#scanExistingMedia();
+        
+        console.log('✅ Media Dimension Extractor initialized');
+    }
+    
+    #scanExistingMedia() {
+        // Process all existing images, iframes, and videos
+        const mediaElements = document.querySelectorAll('img, iframe, video');
+        mediaElements.forEach(media => this.#processSingleMedia(media));
+    }
+    
+    #processMedia(node) {
+        if (this.#processedMedia.has(node)) return;
+        
+        if (node.matches('img, iframe, video')) {
+            this.#processSingleMedia(node);
+        } else {
+            node.querySelectorAll('img, iframe, video').forEach(media => {
+                if (!this.#processedMedia.has(media)) {
+                    this.#processSingleMedia(media);
+                }
+            });
+        }
+    }
+    
+    #processSingleMedia(media) {
+        if (this.#processedMedia.has(media)) return;
+        
+        switch (media.tagName.toLowerCase()) {
+            case 'img':
+                this.#processImage(media);
+                break;
+            case 'iframe':
+                this.#processIframe(media);
+                break;
+            case 'video':
+                this.#processVideo(media);
+                break;
+        }
+        
+        this.#processedMedia.add(media);
+    }
+    
+    #processImage(img) {
+        // Check if already has dimensions
+        const hasWidth = img.hasAttribute('width');
+        const hasHeight = img.hasAttribute('height');
+        
+        if (hasWidth && hasHeight) {
+            // Already has dimensions, just ensure they're numeric
+            const width = parseInt(img.getAttribute('width'));
+            const height = parseInt(img.getAttribute('height'));
+            
+            if (width > 0 && height > 0) {
+                // Update aspect ratio
+                img.style.aspectRatio = width + ' / ' + height;
+                return;
+            }
+        }
+        
+        // Determine if it's an emoji
+        const isInQuote = img.closest('.modern-quote, .quote-content');
+        const isInSpoiler = img.closest('.modern-spoiler, .spoiler-content');
+        const isInSignature = img.closest('.signature, .post-signature');
+        const isInSmallContext = isInQuote || isInSpoiler || isInSignature;
+        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
+        
+        if (isTwemoji || isEmoji) {
+            // Emoji sizing
+            const size = isInSmallContext ? 18 : 20;
+            img.setAttribute('width', size);
+            img.setAttribute('height', size);
+            img.style.aspectRatio = size + ' / ' + size;
+            return;
+        }
+        
+        // Check cache first
+        const cached = this.#dimensionCache.get(img.src);
+        if (cached) {
+            img.setAttribute('width', cached.width);
+            img.setAttribute('height', cached.height);
+            img.style.aspectRatio = cached.width + ' / ' + cached.height;
+            return;
+        }
+        
+        // If image is already loaded, use natural dimensions
+        if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+            return;
+        }
+        
+        // For unloaded images, add event listeners
+        if (!img.complete) {
+            const onLoad = () => {
+                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                }
+                img.removeEventListener('load', onLoad);
+                img.removeEventListener('error', onError);
+            };
+            
+            const onError = () => {
+                // Set fallback dimensions for broken images
+                this.#setImageDimensions(img, 600, 400);
+                img.removeEventListener('load', onLoad);
+                img.removeEventListener('error', onError);
+            };
+            
+            img.addEventListener('load', onLoad, { once: true });
+            img.addEventListener('error', onError, { once: true });
+        }
+        
+        // Set basic styles for images without dimensions yet
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
+        }
+        if (!img.style.height) {
+            img.style.height = 'auto';
+        }
+    }
+    
+    #setImageDimensions(img, width, height) {
+        img.setAttribute('width', width);
+        img.setAttribute('height', height);
+        img.style.aspectRatio = width + ' / ' + height;
+        
+        // Cache the dimensions
+        this.#dimensionCache.set(img.src, { width: width, height: height });
+        
+        // Ensure basic styles
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
+        }
+        if (!img.style.height) {
+            img.style.height = 'auto';
+        }
+    }
+    
+    #processIframe(iframe) {
+        const hasWidth = iframe.hasAttribute('width');
+        const hasHeight = iframe.hasAttribute('height');
+        
+        if (hasWidth && hasHeight) return;
+        
+        const commonSizes = {
+            'youtube.com': { width: '560', height: '315' },
+            'youtu.be': { width: '560', height: '315' },
+            'vimeo.com': { width: '640', height: '360' },
+            'soundcloud.com': { width: '100%', height: '166' },
+            'twitter.com': { width: '550', height: '400' },
+            'x.com': { width: '550', height: '400' },
+            'default': { width: '100%', height: '400' }
+        };
+        
+        const src = iframe.src || iframe.dataset.src || '';
+        let dimensions = commonSizes.default;
+        
+        for (var domain in commonSizes) {
+            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                dimensions = commonSizes[domain];
+                break;
+            }
+        }
+        
+        iframe.setAttribute('width', dimensions.width);
+        iframe.setAttribute('height', dimensions.height);
+        
+        // Create responsive wrapper if needed
+        if (dimensions.width !== '100%') {
+            var widthNum = parseInt(dimensions.width);
+            var heightNum = parseInt(dimensions.height);
+            
+            if (widthNum > 0 && heightNum > 0) {
+                var wrapper = document.createElement('div');
+                wrapper.className = 'iframe-wrapper';
+                var paddingBottom = (heightNum / widthNum * 100) + '%';
+                wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+                
+                iframe.parentNode.insertBefore(wrapper, iframe);
+                wrapper.appendChild(iframe);
+                
+                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            }
+        }
+        
+        if (!iframe.hasAttribute('title')) {
+            iframe.setAttribute('title', 'Embedded content');
+        }
+    }
+    
+    #processVideo(video) {
+        const hasWidth = video.hasAttribute('width');
+        const hasHeight = video.hasAttribute('height');
+        
+        if (hasWidth && hasHeight) return;
+        
+        // Set default video dimensions
+        video.style.width = '100%';
+        video.style.maxWidth = '800px';
+        video.style.height = 'auto';
+        
+        // Ensure controls are present
+        if (!video.hasAttribute('controls')) {
+            video.setAttribute('controls', '');
+        }
+    }
+    
+    #cleanup() {
+        if (globalThis.forumObserver && this.#observerId) {
+            globalThis.forumObserver.unregister(this.#observerId);
+        }
+    }
+    
+    // Public API
+    extractDimensionsForElement(element) {
+        if (!element) return;
+        
+        if (element.matches('img, iframe, video')) {
+            this.#processSingleMedia(element);
+        } else {
+            element.querySelectorAll('img, iframe, video').forEach(media => {
+                this.#processSingleMedia(media);
+            });
+        }
+    }
+    
+    getCacheStats() {
+        return {
+            cachedDimensions: this.#dimensionCache.size,
+            processedMedia: this.#processedMedia.size
+        };
+    }
+    
+    destroy() {
+        this.#cleanup();
+        console.log('Media Dimension Extractor destroyed');
+    }
+}
+
+// Initialize automatically
+(function initMediaDimensionExtractor() {
+    if (globalThis.mediaDimensionExtractor) return;
+    
+    const init = function() {
+        try {
+            globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+        } catch (error) {
+            console.error('Failed to create Media Dimension Extractor:', error);
+            
+            setTimeout(function() {
+                if (!globalThis.mediaDimensionExtractor) {
+                    try {
+                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+                    } catch (retryError) {
+                        console.error('Media Dimension Extractor failed on retry:', retryError);
+                    }
+                }
+            }, 100);
+        }
+    };
+    
+    if (document.readyState !== 'loading') {
+        queueMicrotask(init);
+    } else {
+        init();
+    }
+})();
+
+// Cleanup on page hide
+globalThis.addEventListener('pagehide', function() {
+    if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
+        globalThis.mediaDimensionExtractor.destroy();
+    }
+});
+
+
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, and modern code blocks
@@ -284,7 +591,6 @@ class PostModernizer {
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
-    #dimensionCache = new Map();
     #domUpdates = new WeakMap();
     #rafPending = false;
 
@@ -1629,101 +1935,23 @@ class PostModernizer {
     }
 
 #preserveMediaDimensions(element) {
+    // This method now just ensures basic styles and delegates to the extractor
+    
     element.querySelectorAll('img').forEach(img => {
-        // Get original dimensions from attributes
-        const originalWidth = parseInt(img.getAttribute('width'));
-        const originalHeight = parseInt(img.getAttribute('height'));
+        // Set basic display styles
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
+        }
+        if (!img.style.height) {
+            img.style.height = 'auto';
+        }
         
-        // Determine context for emoji sizing
-        const isInQuote = img.closest('.modern-quote, .quote-content');
-        const isInSpoiler = img.closest('.modern-spoiler, .spoiler-content');
-        const isInSignature = img.closest('.signature, .post-signature');
-        const isInSmallContext = isInQuote || isInSpoiler || isInSignature;
+        // Ensure emoji-specific styling
         const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
         const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
                        (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
                        img.className.includes('emoji');
         
-        // Use original dimensions if they exist
-        let targetWidth = originalWidth;
-        let targetHeight = originalHeight;
-        
-        // Only calculate defaults if no dimensions exist
-        if (!targetWidth || !targetHeight) {
-            if (isTwemoji || isEmoji) {
-                // Emoji sizing based on context
-                if (isInSmallContext) {
-                    targetWidth = 18;
-                    targetHeight = 18;
-                } else {
-                    targetWidth = 20;
-                    targetHeight = 20;
-                }
-            } else {
-                // FOR REGULAR IMAGES: Use natural dimensions if available
-                if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-                    targetWidth = img.naturalWidth;
-                    targetHeight = img.naturalHeight;
-                } else {
-                    // Don't set any dimensions for unloaded images - they'll be set after load
-                    targetWidth = 0;
-                    targetHeight = 0;
-                    
-                    // Add event listeners for when image loads
-                    if (!img.complete) {
-                        img.addEventListener('load', () => {
-                            this.#lazyFetchAndUpdateImageDimensions(img);
-                        }, { once: true });
-                        
-                        img.addEventListener('error', () => {
-                            this.#handleImageLoadError(img);
-                        }, { once: true });
-                    }
-                }
-            }
-        }
-        
-        // Always set width/height attributes if we have valid dimensions
-        // This is critical for preventing layout shifts
-        if (targetWidth > 0 && targetHeight > 0) {
-            // Set the actual HTML attributes FIRST
-            if (!img.hasAttribute('width') || img.getAttribute('width') !== targetWidth.toString()) {
-                img.setAttribute('width', targetWidth);
-            }
-            if (!img.hasAttribute('height') || img.getAttribute('height') !== targetHeight.toString()) {
-                img.setAttribute('height', targetHeight);
-            }
-            
-            // Calculate aspect ratio and set CSS
-            const aspectRatio = targetWidth + ' / ' + targetHeight;
-            
-            // Apply CSS if not already set
-            if (!img.style.aspectRatio) {
-                img.style.aspectRatio = aspectRatio;
-            }
-            if (!img.style.contain) {
-                img.style.contain = 'size layout style';
-            }
-            if (!img.style.maxWidth || img.style.maxWidth === 'none') {
-                img.style.maxWidth = '100%';
-            }
-            if (!img.style.height || img.style.height === 'auto') {
-                img.style.height = 'auto';
-            }
-        } else {
-            // For images without dimensions yet, use intrinsic size
-            if (!img.style.maxWidth || img.style.maxWidth === 'none') {
-                img.style.maxWidth = '100%';
-            }
-            if (!img.style.height || img.style.height === 'auto') {
-                img.style.height = 'auto';
-            }
-            if (!img.style.aspectRatio) {
-                img.style.aspectRatio = 'auto';
-            }
-        }
-        
-        // Emoji-specific styling
         if (isTwemoji || isEmoji) {
             img.style.display = 'inline-block';
             img.style.verticalAlign = 'text-bottom';
@@ -1741,133 +1969,14 @@ class PostModernizer {
                 img.setAttribute('alt', 'Forum image');
             }
         }
-        
-        // Async verification - but only if we haven't already set dimensions
-        if (!img.complete && targetWidth === 0 && targetHeight === 0) {
-            this.#lazyFetchAndUpdateImageDimensions(img);
-        }
     });
     
-    // Process iframes with smart defaults
-    element.querySelectorAll('iframe').forEach(iframe => {
-        const originalWidth = iframe.getAttribute('width');
-        const originalHeight = iframe.getAttribute('height');
-        
-        const commonSizes = {
-            'youtube.com': { width: '560', height: '315' },
-            'youtu.be': { width: '560', height: '315' },
-            'vimeo.com': { width: '640', height: '360' },
-            'soundcloud.com': { width: '100%', height: '166' },
-            'twitter.com': { width: '550', height: '400' },
-            'x.com': { width: '550', height: '400' },
-            'default': { width: '100%', height: '400' }
-        };
-        
-        let src = iframe.src || iframe.dataset.src || '';
-        let dimensions = commonSizes.default;
-        
-        for (let domain in commonSizes) {
-            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
-                dimensions = commonSizes[domain];
-                break;
-            }
-        }
-        
-        // Only set dimensions if not already present
-        if (!originalWidth || !originalHeight) {
-            iframe.setAttribute('width', dimensions.width);
-            iframe.setAttribute('height', dimensions.height);
-            
-            // Add responsive wrapper for iframes without dimensions
-            const wrapper = document.createElement('div');
-            wrapper.className = 'iframe-wrapper';
-            
-            if (dimensions.width !== '100%') {
-                const widthNum = parseInt(dimensions.width);
-                const heightNum = parseInt(dimensions.height);
-                if (widthNum > 0 && heightNum > 0) {
-                    const paddingBottom = (heightNum / widthNum * 100) + '%';
-                    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-                } else {
-                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-                }
-            } else {
-                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-            }
-            
-            iframe.parentNode.insertBefore(wrapper, iframe);
-            wrapper.appendChild(iframe);
-            
-            // Make iframe fill wrapper
-            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-        }
-        
-        // Add title if missing
-        if (!iframe.hasAttribute('title')) {
-            iframe.setAttribute('title', 'Embedded content');
+    // Process iframes and videos that might have been missed
+    element.querySelectorAll('iframe, video').forEach(media => {
+        if (globalThis.mediaDimensionExtractor) {
+            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
         }
     });
-    
-    // Process videos
-    element.querySelectorAll('video').forEach(video => {
-        const originalWidth = parseInt(video.getAttribute('width'));
-        const originalHeight = parseInt(video.getAttribute('height'));
-        
-        if (originalWidth && originalHeight) {
-            video.setAttribute('width', originalWidth);
-            video.setAttribute('height', originalHeight);
-            video.style.width = originalWidth + 'px';
-            video.style.height = originalHeight + 'px';
-        } else {
-            // Default video size
-            video.style.width = '100%';
-            video.style.maxWidth = '800px';
-            video.style.height = 'auto';
-        }
-        
-        if (!video.hasAttribute('controls')) {
-            video.setAttribute('controls', '');
-        }
-    });
-}
-
-#lazyFetchAndUpdateImageDimensions(img) {
-    const updateDimensions = () => {
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            // Always set width/height attributes when image loads
-            img.setAttribute('width', img.naturalWidth);
-            img.setAttribute('height', img.naturalHeight);
-            
-            // Update aspect ratio for better rendering
-            img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-            
-            // Update cache
-            this.#dimensionCache.set(img.src, {
-                width: img.naturalWidth,
-                height: img.naturalHeight
-            });
-        }
-    };
-    
-    if (img.complete) {
-        updateDimensions();
-    } else {
-        img.addEventListener('load', updateDimensions, { once: true });
-        img.addEventListener('error', () => {
-            // Handle image load error
-            this.#handleImageLoadError(img);
-        }, { once: true });
-    }
-}
-
-// Handle image load errors
-#handleImageLoadError(img) {
-    // Set reasonable fallback dimensions for broken images
-    if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-        img.setAttribute('width', '600');
-        img.setAttribute('height', '400');
-        img.style.aspectRatio = '600 / 400';
-    }
 }
 
     #enhanceIframesInElement(element) {
