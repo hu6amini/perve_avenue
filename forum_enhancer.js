@@ -130,19 +130,21 @@ class MediaDimensionExtractor {
         this.#processedMedia.add(media);
     }
 
-    #processImage(img) {  // Check if it's a twemoji FIRST (before cache or existing attributes)
+#processImage(img) {
+    // Check if it's a twemoji FIRST (before cache or existing attributes)
     const isTwemoji = img.src.indexOf('twemoji') > -1 || img.classList.contains('twemoji');
-if (isTwemoji) {
+    if (isTwemoji) {
         // ALWAYS set twemoji to proper size, ignore any existing dimensions
         const size = this.#isInSmallContext(img) ? 18 : 20;
- img.setAttribute('width', size);
+        img.setAttribute('width', size);
         img.setAttribute('height', size);
         img.style.aspectRatio = size + ' / ' + size;
- // Cache emoji dimensions
+        // Cache emoji dimensions
         this.#cacheDimension(img.src, size, size);
-       return; // Skip all other processing for twemojis
+        return; // Skip all other processing for twemojis
     }
-  // Cache check first (hottest path)
+
+    // Cache check first (hottest path)
     const cached = this.#dimensionCache.get(img.src);
     if (cached) {
         this.#cacheHits++;
@@ -159,7 +161,8 @@ if (isTwemoji) {
     const widthAttr = img.getAttribute('width');
     const heightAttr = img.getAttribute('height');
 
-    if (widthAttr !== null && heightAttr !== null) {   const width = widthAttr | 0; // Fast integer conversion
+    if (widthAttr !== null && heightAttr !== null) {
+        const width = widthAttr | 0; // Fast integer conversion
         const height = heightAttr | 0;
 
         if (width > 0 && height > 0) {
