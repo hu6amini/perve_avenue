@@ -131,72 +131,101 @@ class MediaDimensionExtractor {
     }
     
     #processImage(img) {
-        // Cache check first (hottest path)
-        const cached = this.#dimensionCache.get(img.src);
-        if (cached) {
-            this.#cacheHits++;
-            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-                img.setAttribute('width', cached.width);
-                img.setAttribute('height', cached.height);
-                img.style.aspectRatio = cached.width + ' / ' + cached.height;
-            }
-            return;
+    // FIRST: Check if this is any type of emoji
+    const isEmoji = this.#isLikelyEmoji(img);
+    
+    if (isEmoji) {
+        // FORCE emoji sizing regardless of existing attributes
+        const size = this.#isInSmallContext(img) ? 18 : 20;
+        
+        // Remove any existing incorrect attributes
+        img.removeAttribute('width');
+        img.removeAttribute('height');
+        
+        // Set correct emoji dimensions
+        img.setAttribute('width', size);
+        img.setAttribute('height', size);
+        img.style.aspectRatio = size + ' / ' + size;
+        
+        // Apply emoji-specific styling
+        img.style.display = 'inline-block';
+        img.style.verticalAlign = 'text-bottom';
+        img.style.margin = '0 2px';
+        
+        // Cache emoji dimensions
+        this.#cacheDimension(img.src, size, size);
+        return;
+    }
+    
+    // Only process non-emoji images with the regular logic...
+    // Cache check first (hottest path)
+    const cached = this.#dimensionCache.get(img.src);
+    if (cached) {
+        this.#cacheHits++;
+        if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+            img.setAttribute('width', cached.width);
+            img.setAttribute('height', cached.height);
+            img.style.aspectRatio = cached.width + ' / ' + cached.height;
         }
-        this.#cacheMisses++;
+        return;
+    }
+    this.#cacheMisses++;
+    
+    // Validate existing attributes
+    const widthAttr = img.getAttribute('width');
+    const heightAttr = img.getAttribute('height');
+    
+    if (widthAttr !== null && heightAttr !== null) {
+        const width = widthAttr | 0;
+        const height = heightAttr | 0;
         
-        // Validate existing attributes
-        const widthAttr = img.getAttribute('width');
-        const heightAttr = img.getAttribute('height');
-        
-        if (widthAttr !== null && heightAttr !== null) {
-            const width = widthAttr | 0; // Fast integer conversion
-            const height = heightAttr | 0;
-            
-            if (width > 0 && height > 0) {
-                // Validate against natural dimensions if available
-                if (img.complete && img.naturalWidth) {
-                    const wDiff = Math.abs(img.naturalWidth - width);
-                    const hDiff = Math.abs(img.naturalHeight - height);
-                    
-                    if (wDiff > width * 0.5 || hDiff > height * 0.5) {
-                        // Wrong dimensions - update
-                        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-                        return;
-                    }
-                }
+        if (width > 0 && height > 0) {
+            // Validate against natural dimensions if available
+            if (img.complete && img.naturalWidth) {
+                const wDiff = Math.abs(img.naturalWidth - width);
+                const hDiff = Math.abs(img.naturalHeight - height);
                 
-                img.style.aspectRatio = width + ' / ' + height;
-                return;
+                if (wDiff > width * 0.5 || hDiff > height * 0.5) {
+                    this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                    return;
+                }
             }
-        }
-        
-        // Fast emoji detection
-        if (this.#isLikelyEmoji(img)) {
-            const size = img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature') ? 18 : 20;
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            img.style.aspectRatio = size + ' / ' + size;
             
-            // Cache emoji dimensions
-            this.#cacheDimension(img.src, size, size);
+            img.style.aspectRatio = width + ' / ' + height;
             return;
-        }
-        
-        // Handle loading state
-        if (img.complete && img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-        } else {
-            this.#setupImageLoadListener(img);
         }
     }
     
-    #isLikelyEmoji(img) {
-        const src = img.src;
-        // Fast substring checks
-        return src.indexOf('twemoji') > -1 || 
-               src.indexOf('emoji') > -1 ||
-               (src.indexOf('imgbox') > -1 && img.alt && img.alt.indexOf('emoji') > -1);
+    // Handle loading state
+    if (img.complete && img.naturalWidth) {
+        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+    } else {
+        this.#setupImageLoadListener(img);
     }
+}
+    
+    #isLikelyEmoji(img) {
+    const src = img.src || '';
+    const className = img.className || '';
+    const alt = img.alt || '';
+    
+    // Check ALL possible emoji indicators
+    const isTwemoji = src.indexOf('twemoji') > -1;
+    const hasEmojiClass = className.indexOf('twemoji') > -1 || className.indexOf('emoji') > -1;
+    const hasEmojiInSrc = src.indexOf('emoji') > -1 || src.indexOf('smiley') > -1;
+    const isImgboxEmoji = src.indexOf('imgbox') > -1 && alt.indexOf('emoji') > -1;
+    
+    // Check for common emoji alt text patterns (like ":)", ":D", ";)", etc.)
+    const hasEmojiAlt = alt && (
+        alt.indexOf(':') > -1 || 
+        /^[:;][)\/(\\|DP]/.test(alt) ||
+        alt.length === 2 || // Most emojis are 2 chars like ":)"
+        alt === ';)' || alt === ':)' || alt === ':D' || alt === ':P' ||
+        alt === ';p' || alt === ';P' || alt === ':/' || alt === ':\\'
+    );
+    
+    return isTwemoji || hasEmojiClass || hasEmojiInSrc || isImgboxEmoji || hasEmojiAlt;
+}
     
     #setupImageLoadListener(img) {
         // Avoid duplicate listeners
