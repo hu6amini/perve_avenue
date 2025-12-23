@@ -1,3 +1,384 @@
+// Media Dimension Extractor - Optimized standalone script
+// Uses modern JS patterns for maximum performance
+'use strict';
+
+class MediaDimensionExtractor {
+    #observerId = null;
+    #processedMedia = new WeakSet();
+    #dimensionCache = new Map();
+    #pendingImages = new WeakMap();
+    
+    constructor() {
+        this.#init();
+    }
+    
+    #init() {
+        // Use requestIdleCallback for non-blocking initialization
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => this.#setupObserver(), { timeout: 1000 });
+        } else {
+            setTimeout(() => this.#setupObserver(), 0);
+        }
+    }
+    
+    #setupObserver() {
+        if (!globalThis.forumObserver) {
+            // Use exponential backoff for retry
+            this.#retryInit();
+            return;
+        }
+        
+        this.#observerId = globalThis.forumObserver.register({
+            id: 'media-dimension-extractor',
+            callback: (node) => this.#processMedia(node),
+            selector: 'img, iframe, video',
+            priority: 'high',
+            pageTypes: ['topic', 'blog', 'search']
+        });
+        
+        // Batch process existing media for better performance
+        this.#batchProcessExistingMedia();
+    }
+    
+    #retryInit(retryCount = 0) {
+        const maxRetries = 5;
+        const delay = Math.min(100 * Math.pow(2, retryCount), 2000);
+        
+        if (retryCount >= maxRetries) {
+            console.warn('MediaDimensionExtractor: Failed to initialize after ' + maxRetries + ' retries');
+            return;
+        }
+        
+        setTimeout(() => {
+            if (globalThis.forumObserver) {
+                this.#setupObserver();
+            } else {
+                this.#retryInit(retryCount + 1);
+            }
+        }, delay);
+    }
+    
+    #batchProcessExistingMedia() {
+        const mediaElements = document.querySelectorAll('img, iframe, video');
+        const batchSize = 10; // Process in batches to avoid blocking
+        
+        const processBatch = (startIndex) => {
+            const endIndex = Math.min(startIndex + batchSize, mediaElements.length);
+            
+            for (let i = startIndex; i < endIndex; i++) {
+                this.#processSingleMedia(mediaElements[i]);
+            }
+            
+            if (endIndex < mediaElements.length) {
+                // Use microtask for next batch to avoid blocking
+                queueMicrotask(() => processBatch(endIndex));
+            } else {
+                console.log('✅ Media Dimension Extractor initialized - Processed ' + mediaElements.length + ' media elements');
+            }
+        };
+        
+        processBatch(0);
+    }
+    
+    #processMedia(node) {
+        if (this.#processedMedia.has(node)) return;
+        
+        // Use a single DOM query for efficiency
+        if (node.matches('img, iframe, video')) {
+            this.#processSingleMedia(node);
+        } else {
+            const mediaElements = node.querySelectorAll('img, iframe, video');
+            const length = mediaElements.length;
+            
+            for (let i = 0; i < length; i++) {
+                const media = mediaElements[i];
+                if (!this.#processedMedia.has(media)) {
+                    this.#processSingleMedia(media);
+                }
+            }
+        }
+    }
+    
+    #processSingleMedia(media) {
+        if (this.#processedMedia.has(media)) return;
+        
+        const tag = media.tagName.toLowerCase();
+        
+        // Use a lookup table instead of switch for speed
+        const processors = {
+            'img': () => this.#processImage(media),
+            'iframe': () => this.#processIframe(media),
+            'video': () => this.#processVideo(media)
+        };
+        
+        if (processors[tag]) {
+            processors[tag]();
+            this.#processedMedia.add(media);
+        }
+    }
+    
+    #processImage(img) {
+        // Fast path: Check for existing valid dimensions first
+        const widthAttr = img.getAttribute('width');
+        const heightAttr = img.getAttribute('height');
+        
+        if (widthAttr && heightAttr) {
+            const width = parseInt(widthAttr, 10);
+            const height = parseInt(heightAttr, 10);
+            
+            if (width > 0 && height > 0) {
+                img.style.aspectRatio = width + ' / ' + height;
+                return;
+            }
+        }
+        
+        // Fast emoji detection with early returns
+        if (this.#isEmoji(img)) {
+            const size = this.#isInSmallContext(img) ? 18 : 20;
+            img.setAttribute('width', size);
+            img.setAttribute('height', size);
+            img.style.aspectRatio = size + ' / ' + size;
+            return;
+        }
+        
+        // Check cache
+        const cached = this.#dimensionCache.get(img.src);
+        if (cached) {
+            img.setAttribute('width', cached.width);
+            img.setAttribute('height', cached.height);
+            img.style.aspectRatio = cached.width + ' / ' + cached.height;
+            return;
+        }
+        
+        // Handle image based on loading state
+        if (img.complete && img.naturalWidth > 0) {
+            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+        } else {
+            this.#handleUnloadedImage(img);
+        }
+    }
+    
+    #isEmoji(img) {
+        const src = img.src;
+        const className = img.className;
+        const alt = img.alt || '';
+        
+        // Quick checks in order of probability
+        return src.includes('twemoji') ||
+               className.includes('emoji') ||
+               src.includes('emoji') ||
+               src.includes('smiley') ||
+               (src.includes('imgbox') && alt.includes('emoji'));
+    }
+    
+    #isInSmallContext(img) {
+        // Use a single query for all contexts
+        return !!img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature');
+    }
+    
+    #handleUnloadedImage(img) {
+        // Avoid duplicate event listeners
+        if (this.#pendingImages.has(img)) return;
+        
+        const handler = () => {
+            if (img.naturalWidth > 0) {
+                this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+            } else {
+                this.#setImageDimensions(img, 600, 400); // Fallback for broken images
+            }
+            
+            // Clean up
+            this.#pendingImages.delete(img);
+            img.removeEventListener('load', handler);
+            img.removeEventListener('error', handler);
+        };
+        
+        this.#pendingImages.set(img, handler);
+        img.addEventListener('load', handler, { once: true });
+        img.addEventListener('error', handler, { once: true });
+        
+        // Set basic styles immediately
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+    }
+    
+    #setImageDimensions(img, width, height) {
+        // Batch attribute updates
+        img.setAttribute('width', width);
+        img.setAttribute('height', height);
+        img.style.aspectRatio = width + ' / ' + height;
+        
+        // Cache with size limit
+        if (this.#dimensionCache.size < 1000) { // Prevent memory leaks
+            this.#dimensionCache.set(img.src, { width: width, height: height });
+        }
+    }
+    
+    #processIframe(iframe) {
+        const widthAttr = iframe.getAttribute('width');
+        const heightAttr = iframe.getAttribute('height');
+        
+        if (widthAttr && heightAttr) return;
+        
+        // Predefined size lookup
+        const sizeMap = {
+            'youtube.com': ['560', '315'],
+            'youtu.be': ['560', '315'],
+            'vimeo.com': ['640', '360'],
+            'soundcloud.com': ['100%', '166'],
+            'twitter.com': ['550', '400'],
+            'x.com': ['550', '400']
+        };
+        
+        const src = iframe.src || iframe.dataset.src || '';
+        let width = '100%';
+        let height = '400';
+        
+        // Fast lookup
+        for (const domain in sizeMap) {
+            if (src.includes(domain)) {
+                [width, height] = sizeMap[domain];
+                break;
+            }
+        }
+        
+        iframe.setAttribute('width', width);
+        iframe.setAttribute('height', height);
+        
+        // Create wrapper only for fixed-size iframes
+        if (width !== '100%') {
+            const widthNum = parseInt(width, 10);
+            const heightNum = parseInt(height, 10);
+            
+            if (widthNum > 0 && heightNum > 0) {
+                this.#createResponsiveWrapper(iframe, widthNum, heightNum);
+            }
+        }
+        
+        if (!iframe.hasAttribute('title')) {
+            iframe.setAttribute('title', 'Embedded content');
+        }
+    }
+    
+    #createResponsiveWrapper(iframe, widthNum, heightNum) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'iframe-wrapper';
+        const paddingBottom = (heightNum / widthNum * 100) + '%';
+        
+        // Use CSS class instead of inline styles when possible
+        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+        
+        const parent = iframe.parentNode;
+        parent.insertBefore(wrapper, iframe);
+        wrapper.appendChild(iframe);
+        
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+    }
+    
+    #processVideo(video) {
+        if (!video.hasAttribute('controls')) {
+            video.setAttribute('controls', '');
+        }
+        
+        // Only set styles if not already present
+        if (!video.style.width) {
+            video.style.width = '100%';
+            video.style.maxWidth = '800px';
+            video.style.height = 'auto';
+        }
+    }
+    
+    #cleanup() {
+        if (globalThis.forumObserver && this.#observerId) {
+            globalThis.forumObserver.unregister(this.#observerId);
+        }
+        
+        // Clean up pending image handlers
+        this.#pendingImages.clear();
+    }
+    
+    // Public API
+    extractDimensionsForElement(element) {
+        if (!element) return;
+        
+        if (element.matches('img, iframe, video')) {
+            this.#processSingleMedia(element);
+        } else {
+            const mediaElements = element.querySelectorAll('img, iframe, video');
+            const length = mediaElements.length;
+            
+            for (let i = 0; i < length; i++) {
+                this.#processSingleMedia(mediaElements[i]);
+            }
+        }
+    }
+    
+    getCacheStats() {
+        return {
+            cachedDimensions: this.#dimensionCache.size,
+            processedMedia: this.#processedMedia.size,
+            pendingImages: this.#pendingImages.size
+        };
+    }
+    
+    destroy() {
+        this.#cleanup();
+        console.log('Media Dimension Extractor destroyed');
+    }
+}
+
+// Optimized initialization
+(function initMediaDimensionExtractor() {
+    if (globalThis.mediaDimensionExractor) return;
+    
+    const init = function() {
+        try {
+            // Use performance mark to measure initialization time
+            performance.mark('media-extractor-start');
+            
+            globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+            
+            performance.mark('media-extractor-end');
+            performance.measure('media-extractor-init', 'media-extractor-start', 'media-extractor-end');
+            
+        } catch (error) {
+            console.error('Failed to create Media Dimension Extractor:', error);
+            
+            // Use exponential backoff for retry
+            setTimeout(function() {
+                if (!globalThis.mediaDimensionExtractor) {
+                    try {
+                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+                    } catch (retryError) {
+                        console.error('Media Dimension Extractor failed on retry:', retryError);
+                    }
+                }
+            }, Math.random() * 200 + 100); // Randomized delay to avoid thundering herd
+        }
+    };
+    
+    // Use the most appropriate initialization timing
+    if (document.readyState === 'complete') {
+        queueMicrotask(init);
+    } else if (document.readyState === 'interactive') {
+        setTimeout(init, 0);
+    } else {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+    }
+})();
+
+// Efficient cleanup
+globalThis.addEventListener('pagehide', function() {
+    if (globalThis.mediaDimensionExtractor) {
+        if (typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
+            requestIdleCallback(() => {
+                globalThis.mediaDimensionExtractor.destroy();
+            }, { timeout: 100 });
+        }
+    }
+});
+
+
 //Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
 
@@ -269,312 +650,6 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
     
 })();
 
-
-// Media Dimension Extractor - Standalone script for extracting image/iframe dimensions
-// Works with ForumCoreObserver to pre-process media before PostModernizer
-'use strict';
-
-class MediaDimensionExtractor {
-    #observerId = null;
-    #processedMedia = new WeakSet();
-    #dimensionCache = new Map();
-    
-    constructor() {
-        this.#init();
-    }
-    
-    #init() {
-        if (!globalThis.forumObserver) {
-            console.warn('MediaDimensionExtractor: ForumObserver not available, retrying...');
-            setTimeout(() => this.#init(), 100);
-            return;
-        }
-        
-        this.#observerId = globalThis.forumObserver.register({
-            id: 'media-dimension-extractor',
-            callback: (node) => this.#processMedia(node),
-            selector: 'img, iframe, video',
-            priority: 'high',
-            pageTypes: ['topic', 'blog', 'search']
-        });
-        
-        this.#scanExistingMedia();
-        
-        console.log('✅ Media Dimension Extractor initialized');
-    }
-    
-    #scanExistingMedia() {
-        // Process all existing images, iframes, and videos
-        const mediaElements = document.querySelectorAll('img, iframe, video');
-        mediaElements.forEach(media => this.#processSingleMedia(media));
-    }
-    
-    #processMedia(node) {
-        if (this.#processedMedia.has(node)) return;
-        
-        if (node.matches('img, iframe, video')) {
-            this.#processSingleMedia(node);
-        } else {
-            node.querySelectorAll('img, iframe, video').forEach(media => {
-                if (!this.#processedMedia.has(media)) {
-                    this.#processSingleMedia(media);
-                }
-            });
-        }
-    }
-    
-    #processSingleMedia(media) {
-        if (this.#processedMedia.has(media)) return;
-        
-        switch (media.tagName.toLowerCase()) {
-            case 'img':
-                this.#processImage(media);
-                break;
-            case 'iframe':
-                this.#processIframe(media);
-                break;
-            case 'video':
-                this.#processVideo(media);
-                break;
-        }
-        
-        this.#processedMedia.add(media);
-    }
-    
-    #processImage(img) {
-        // Check if already has dimensions
-        const hasWidth = img.hasAttribute('width');
-        const hasHeight = img.hasAttribute('height');
-        
-        if (hasWidth && hasHeight) {
-            // Already has dimensions, just ensure they're numeric
-            const width = parseInt(img.getAttribute('width'));
-            const height = parseInt(img.getAttribute('height'));
-            
-            if (width > 0 && height > 0) {
-                // Update aspect ratio
-                img.style.aspectRatio = width + ' / ' + height;
-                return;
-            }
-        }
-        
-        // Determine if it's an emoji
-        const isInQuote = img.closest('.modern-quote, .quote-content');
-        const isInSpoiler = img.closest('.modern-spoiler, .spoiler-content');
-        const isInSignature = img.closest('.signature, .post-signature');
-        const isInSmallContext = isInQuote || isInSpoiler || isInSignature;
-        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                       img.className.includes('emoji');
-        
-        if (isTwemoji || isEmoji) {
-            // Emoji sizing
-            const size = isInSmallContext ? 18 : 20;
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            img.style.aspectRatio = size + ' / ' + size;
-            return;
-        }
-        
-        // Check cache first
-        const cached = this.#dimensionCache.get(img.src);
-        if (cached) {
-            img.setAttribute('width', cached.width);
-            img.setAttribute('height', cached.height);
-            img.style.aspectRatio = cached.width + ' / ' + cached.height;
-            return;
-        }
-        
-        // If image is already loaded, use natural dimensions
-        if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-            return;
-        }
-        
-        // For unloaded images, add event listeners
-        if (!img.complete) {
-            const onLoad = () => {
-                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                    this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-                }
-                img.removeEventListener('load', onLoad);
-                img.removeEventListener('error', onError);
-            };
-            
-            const onError = () => {
-                // Set fallback dimensions for broken images
-                this.#setImageDimensions(img, 600, 400);
-                img.removeEventListener('load', onLoad);
-                img.removeEventListener('error', onError);
-            };
-            
-            img.addEventListener('load', onLoad, { once: true });
-            img.addEventListener('error', onError, { once: true });
-        }
-        
-        // Set basic styles for images without dimensions yet
-        if (!img.style.maxWidth) {
-            img.style.maxWidth = '100%';
-        }
-        if (!img.style.height) {
-            img.style.height = 'auto';
-        }
-    }
-    
-    #setImageDimensions(img, width, height) {
-        img.setAttribute('width', width);
-        img.setAttribute('height', height);
-        img.style.aspectRatio = width + ' / ' + height;
-        
-        // Cache the dimensions
-        this.#dimensionCache.set(img.src, { width: width, height: height });
-        
-        // Ensure basic styles
-        if (!img.style.maxWidth) {
-            img.style.maxWidth = '100%';
-        }
-        if (!img.style.height) {
-            img.style.height = 'auto';
-        }
-    }
-    
-    #processIframe(iframe) {
-        const hasWidth = iframe.hasAttribute('width');
-        const hasHeight = iframe.hasAttribute('height');
-        
-        if (hasWidth && hasHeight) return;
-        
-        const commonSizes = {
-            'youtube.com': { width: '560', height: '315' },
-            'youtu.be': { width: '560', height: '315' },
-            'vimeo.com': { width: '640', height: '360' },
-            'soundcloud.com': { width: '100%', height: '166' },
-            'twitter.com': { width: '550', height: '400' },
-            'x.com': { width: '550', height: '400' },
-            'default': { width: '100%', height: '400' }
-        };
-        
-        const src = iframe.src || iframe.dataset.src || '';
-        let dimensions = commonSizes.default;
-        
-        for (var domain in commonSizes) {
-            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
-                dimensions = commonSizes[domain];
-                break;
-            }
-        }
-        
-        iframe.setAttribute('width', dimensions.width);
-        iframe.setAttribute('height', dimensions.height);
-        
-        // Create responsive wrapper if needed
-        if (dimensions.width !== '100%') {
-            var widthNum = parseInt(dimensions.width);
-            var heightNum = parseInt(dimensions.height);
-            
-            if (widthNum > 0 && heightNum > 0) {
-                var wrapper = document.createElement('div');
-                wrapper.className = 'iframe-wrapper';
-                var paddingBottom = (heightNum / widthNum * 100) + '%';
-                wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-                
-                iframe.parentNode.insertBefore(wrapper, iframe);
-                wrapper.appendChild(iframe);
-                
-                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-            }
-        }
-        
-        if (!iframe.hasAttribute('title')) {
-            iframe.setAttribute('title', 'Embedded content');
-        }
-    }
-    
-    #processVideo(video) {
-        const hasWidth = video.hasAttribute('width');
-        const hasHeight = video.hasAttribute('height');
-        
-        if (hasWidth && hasHeight) return;
-        
-        // Set default video dimensions
-        video.style.width = '100%';
-        video.style.maxWidth = '800px';
-        video.style.height = 'auto';
-        
-        // Ensure controls are present
-        if (!video.hasAttribute('controls')) {
-            video.setAttribute('controls', '');
-        }
-    }
-    
-    #cleanup() {
-        if (globalThis.forumObserver && this.#observerId) {
-            globalThis.forumObserver.unregister(this.#observerId);
-        }
-    }
-    
-    // Public API
-    extractDimensionsForElement(element) {
-        if (!element) return;
-        
-        if (element.matches('img, iframe, video')) {
-            this.#processSingleMedia(element);
-        } else {
-            element.querySelectorAll('img, iframe, video').forEach(media => {
-                this.#processSingleMedia(media);
-            });
-        }
-    }
-    
-    getCacheStats() {
-        return {
-            cachedDimensions: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size
-        };
-    }
-    
-    destroy() {
-        this.#cleanup();
-        console.log('Media Dimension Extractor destroyed');
-    }
-}
-
-// Initialize automatically
-(function initMediaDimensionExtractor() {
-    if (globalThis.mediaDimensionExtractor) return;
-    
-    const init = function() {
-        try {
-            globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-        } catch (error) {
-            console.error('Failed to create Media Dimension Extractor:', error);
-            
-            setTimeout(function() {
-                if (!globalThis.mediaDimensionExtractor) {
-                    try {
-                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                    } catch (retryError) {
-                        console.error('Media Dimension Extractor failed on retry:', retryError);
-                    }
-                }
-            }, 100);
-        }
-    };
-    
-    if (document.readyState !== 'loading') {
-        queueMicrotask(init);
-    } else {
-        init();
-    }
-})();
-
-// Cleanup on page hide
-globalThis.addEventListener('pagehide', function() {
-    if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
-        globalThis.mediaDimensionExtractor.destroy();
-    }
-});
 
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
