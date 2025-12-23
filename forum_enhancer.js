@@ -1,30 +1,31 @@
-// Media Dimension Extractor - Optimized standalone script
-// Uses modern JS patterns for maximum performance
+// Ultra-Optimized Media Dimension Extractor for deferred loading
+// DOM is guaranteed to be ready when this executes (defer attribute)
 'use strict';
 
 class MediaDimensionExtractor {
     #observerId = null;
     #processedMedia = new WeakSet();
     #dimensionCache = new Map();
-    #pendingImages = new WeakMap();
+    #imageLoadHandler = null;
+    #cacheHits = 0;
+    #cacheMisses = 0;
+    #lruQueue = [];
+    #MAX_CACHE_SIZE = 500;
     
     constructor() {
+        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
         this.#init();
     }
     
     #init() {
-        // Use requestIdleCallback for non-blocking initialization
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => this.#setupObserver(), { timeout: 1000 });
-        } else {
-            setTimeout(() => this.#setupObserver(), 0);
-        }
+        // Immediate initialization - DOM is ready (defer)
+        this.#setupObserver();
     }
     
     #setupObserver() {
         if (!globalThis.forumObserver) {
-            // Use exponential backoff for retry
-            this.#retryInit();
+            // Quick retry for observer availability
+            setTimeout(() => this.#setupObserver(), 10);
             return;
         }
         
@@ -36,65 +37,77 @@ class MediaDimensionExtractor {
             pageTypes: ['topic', 'blog', 'search']
         });
         
-        // Batch process existing media for better performance
-        this.#batchProcessExistingMedia();
+        // Process all existing media using native DOM methods (fastest)
+        this.#processAllMediaNative();
     }
     
-    #retryInit(retryCount = 0) {
-        const maxRetries = 5;
-        const delay = Math.min(100 * Math.pow(2, retryCount), 2000);
-        
-        if (retryCount >= maxRetries) {
-            console.warn('MediaDimensionExtractor: Failed to initialize after ' + maxRetries + ' retries');
-            return;
-        }
-        
-        setTimeout(() => {
-            if (globalThis.forumObserver) {
-                this.#setupObserver();
-            } else {
-                this.#retryInit(retryCount + 1);
-            }
-        }, delay);
-    }
-    
-    #batchProcessExistingMedia() {
-        const mediaElements = document.querySelectorAll('img, iframe, video');
-        const batchSize = 10; // Process in batches to avoid blocking
-        
-        const processBatch = (startIndex) => {
-            const endIndex = Math.min(startIndex + batchSize, mediaElements.length);
-            
-            for (let i = startIndex; i < endIndex; i++) {
-                this.#processSingleMedia(mediaElements[i]);
-            }
-            
-            if (endIndex < mediaElements.length) {
-                // Use microtask for next batch to avoid blocking
-                queueMicrotask(() => processBatch(endIndex));
-            } else {
-                console.log('✅ Media Dimension Extractor initialized - Processed ' + mediaElements.length + ' media elements');
+    #processAllMediaNative() {
+        // Use native DOM collections for maximum speed
+        const processCollection = (collection) => {
+            const length = collection.length;
+            for (let i = 0; i < length; i++) {
+                const element = collection[i];
+                if (!this.#processedMedia.has(element)) {
+                    this.#processSingleMedia(element);
+                }
             }
         };
         
-        processBatch(0);
+        // Process in order of visual importance
+        processCollection(document.images); // Live HTMLCollection of images
+        processCollection(document.getElementsByTagName('iframe'));
+        processCollection(document.getElementsByTagName('video'));
+        
+        const totalProcessed = document.images.length + 
+                              document.getElementsByTagName('iframe').length +
+                              document.getElementsByTagName('video').length;
+        console.log('✅ Media Dimension Extractor: Processed ' + totalProcessed + ' media elements');
     }
     
     #processMedia(node) {
         if (this.#processedMedia.has(node)) return;
         
-        // Use a single DOM query for efficiency
-        if (node.matches('img, iframe, video')) {
-            this.#processSingleMedia(node);
-        } else {
-            const mediaElements = node.querySelectorAll('img, iframe, video');
-            const length = mediaElements.length;
-            
-            for (let i = 0; i < length; i++) {
-                const media = mediaElements[i];
-                if (!this.#processedMedia.has(media)) {
-                    this.#processSingleMedia(media);
-                }
+        const tag = node.tagName;
+        
+        // Fast tag detection
+        switch(tag) {
+            case 'IMG':
+                this.#processImage(node);
+                break;
+            case 'IFRAME':
+                this.#processIframe(node);
+                break;
+            case 'VIDEO':
+                this.#processVideo(node);
+                break;
+            default:
+                // Handle nested media
+                this.#processNestedMedia(node);
+        }
+    }
+    
+    #processNestedMedia(node) {
+        const images = node.getElementsByTagName('img');
+        const iframes = node.getElementsByTagName('iframe');
+        const videos = node.getElementsByTagName('video');
+        
+        let i, len;
+        for (i = 0, len = images.length; i < len; i++) {
+            const img = images[i];
+            if (!this.#processedMedia.has(img)) {
+                this.#processImage(img);
+            }
+        }
+        for (i = 0, len = iframes.length; i < len; i++) {
+            const iframe = iframes[i];
+            if (!this.#processedMedia.has(iframe)) {
+                this.#processIframe(iframe);
+            }
+        }
+        for (i = 0, len = videos.length; i < len; i++) {
+            const video = videos[i];
+            if (!this.#processedMedia.has(video)) {
+                this.#processVideo(video);
             }
         }
     }
@@ -102,142 +115,160 @@ class MediaDimensionExtractor {
     #processSingleMedia(media) {
         if (this.#processedMedia.has(media)) return;
         
-        const tag = media.tagName.toLowerCase();
-        
-        // Use a lookup table instead of switch for speed
-        const processors = {
-            'img': () => this.#processImage(media),
-            'iframe': () => this.#processIframe(media),
-            'video': () => this.#processVideo(media)
-        };
-        
-        if (processors[tag]) {
-            processors[tag]();
-            this.#processedMedia.add(media);
+        switch(media.tagName) {
+            case 'IMG':
+                this.#processImage(media);
+                break;
+            case 'IFRAME':
+                this.#processIframe(media);
+                break;
+            case 'VIDEO':
+                this.#processVideo(media);
+                break;
         }
+        
+        this.#processedMedia.add(media);
     }
     
     #processImage(img) {
-        // Fast path: Check for existing valid dimensions first
+        // Cache check first (hottest path)
+        const cached = this.#dimensionCache.get(img.src);
+        if (cached) {
+            this.#cacheHits++;
+            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+                img.setAttribute('width', cached.width);
+                img.setAttribute('height', cached.height);
+                img.style.aspectRatio = cached.width + ' / ' + cached.height;
+            }
+            return;
+        }
+        this.#cacheMisses++;
+        
+        // Validate existing attributes
         const widthAttr = img.getAttribute('width');
         const heightAttr = img.getAttribute('height');
         
-        if (widthAttr && heightAttr) {
-            const width = parseInt(widthAttr, 10);
-            const height = parseInt(heightAttr, 10);
+        if (widthAttr !== null && heightAttr !== null) {
+            const width = widthAttr | 0; // Fast integer conversion
+            const height = heightAttr | 0;
             
             if (width > 0 && height > 0) {
+                // Validate against natural dimensions if available
+                if (img.complete && img.naturalWidth) {
+                    const wDiff = Math.abs(img.naturalWidth - width);
+                    const hDiff = Math.abs(img.naturalHeight - height);
+                    
+                    if (wDiff > width * 0.5 || hDiff > height * 0.5) {
+                        // Wrong dimensions - update
+                        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                        return;
+                    }
+                }
+                
                 img.style.aspectRatio = width + ' / ' + height;
                 return;
             }
         }
         
-        // Fast emoji detection with early returns
-        if (this.#isEmoji(img)) {
-            const size = this.#isInSmallContext(img) ? 18 : 20;
+        // Fast emoji detection
+        if (this.#isLikelyEmoji(img)) {
+            const size = img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature') ? 18 : 20;
             img.setAttribute('width', size);
             img.setAttribute('height', size);
             img.style.aspectRatio = size + ' / ' + size;
+            
+            // Cache emoji dimensions
+            this.#cacheDimension(img.src, size, size);
             return;
         }
         
-        // Check cache
-        const cached = this.#dimensionCache.get(img.src);
-        if (cached) {
-            img.setAttribute('width', cached.width);
-            img.setAttribute('height', cached.height);
-            img.style.aspectRatio = cached.width + ' / ' + cached.height;
-            return;
-        }
-        
-        // Handle image based on loading state
-        if (img.complete && img.naturalWidth > 0) {
+        // Handle loading state
+        if (img.complete && img.naturalWidth) {
             this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
         } else {
-            this.#handleUnloadedImage(img);
+            this.#setupImageLoadListener(img);
         }
     }
     
-    #isEmoji(img) {
+    #isLikelyEmoji(img) {
         const src = img.src;
-        const className = img.className;
-        const alt = img.alt || '';
-        
-        // Quick checks in order of probability
-        return src.includes('twemoji') ||
-               className.includes('emoji') ||
-               src.includes('emoji') ||
-               src.includes('smiley') ||
-               (src.includes('imgbox') && alt.includes('emoji'));
+        // Fast substring checks
+        return src.indexOf('twemoji') > -1 || 
+               src.indexOf('emoji') > -1 ||
+               (src.indexOf('imgbox') > -1 && img.alt && img.alt.indexOf('emoji') > -1);
     }
     
-    #isInSmallContext(img) {
-        // Use a single query for all contexts
-        return !!img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature');
-    }
-    
-    #handleUnloadedImage(img) {
-        // Avoid duplicate event listeners
-        if (this.#pendingImages.has(img)) return;
+    #setupImageLoadListener(img) {
+        // Avoid duplicate listeners
+        if (img.__dimensionExtractorHandler) return;
         
-        const handler = () => {
-            if (img.naturalWidth > 0) {
-                this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-            } else {
-                this.#setImageDimensions(img, 600, 400); // Fallback for broken images
-            }
-            
-            // Clean up
-            this.#pendingImages.delete(img);
-            img.removeEventListener('load', handler);
-            img.removeEventListener('error', handler);
-        };
+        img.__dimensionExtractorHandler = this.#imageLoadHandler;
+        img.addEventListener('load', this.#imageLoadHandler, { once: true });
+        img.addEventListener('error', this.#imageLoadHandler, { once: true });
         
-        this.#pendingImages.set(img, handler);
-        img.addEventListener('load', handler, { once: true });
-        img.addEventListener('error', handler, { once: true });
-        
-        // Set basic styles immediately
+        // Prevent layout shift
         img.style.maxWidth = '100%';
         img.style.height = 'auto';
     }
     
+    #handleImageLoad(e) {
+        const img = e.target;
+        delete img.__dimensionExtractorHandler;
+        
+        if (img.naturalWidth) {
+            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+        } else {
+            this.#setImageDimensions(img, 600, 400); // Broken image fallback
+        }
+    }
+    
     #setImageDimensions(img, width, height) {
-        // Batch attribute updates
+        // Set attributes and styles
         img.setAttribute('width', width);
         img.setAttribute('height', height);
         img.style.aspectRatio = width + ' / ' + height;
         
-        // Cache with size limit
-        if (this.#dimensionCache.size < 1000) { // Prevent memory leaks
-            this.#dimensionCache.set(img.src, { width: width, height: height });
+        // Cache with LRU management
+        this.#cacheDimension(img.src, width, height);
+    }
+    
+    #cacheDimension(src, width, height) {
+        if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
+            // Remove oldest entry (LRU)
+            const oldestKey = this.#lruQueue.shift();
+            if (oldestKey) {
+                this.#dimensionCache.delete(oldestKey);
+            }
         }
+        
+        this.#dimensionCache.set(src, { width, height });
+        // Update LRU queue
+        const keyIndex = this.#lruQueue.indexOf(src);
+        if (keyIndex > -1) {
+            this.#lruQueue.splice(keyIndex, 1);
+        }
+        this.#lruQueue.push(src);
     }
     
     #processIframe(iframe) {
-        const widthAttr = iframe.getAttribute('width');
-        const heightAttr = iframe.getAttribute('height');
-        
-        if (widthAttr && heightAttr) return;
-        
-        // Predefined size lookup
-        const sizeMap = {
-            'youtube.com': ['560', '315'],
-            'youtu.be': ['560', '315'],
-            'vimeo.com': ['640', '360'],
-            'soundcloud.com': ['100%', '166'],
-            'twitter.com': ['550', '400'],
+        // Predefined sizes lookup
+        const IFRAME_SIZES = {
+            'youtube': ['560', '315'],
+            'youtu': ['560', '315'],
+            'vimeo': ['640', '360'],
+            'soundcloud': ['100%', '166'],
+            'twitter': ['550', '400'],
             'x.com': ['550', '400']
         };
         
-        const src = iframe.src || iframe.dataset.src || '';
+        const src = iframe.src || '';
         let width = '100%';
         let height = '400';
         
-        // Fast lookup
-        for (const domain in sizeMap) {
-            if (src.includes(domain)) {
-                [width, height] = sizeMap[domain];
+        // Fast domain detection
+        for (const domain in IFRAME_SIZES) {
+            if (src.indexOf(domain) > -1) {
+                [width, height] = IFRAME_SIZES[domain];
                 break;
             }
         }
@@ -245,13 +276,23 @@ class MediaDimensionExtractor {
         iframe.setAttribute('width', width);
         iframe.setAttribute('height', height);
         
-        // Create wrapper only for fixed-size iframes
+        // Create responsive wrapper for fixed sizes
         if (width !== '100%') {
-            const widthNum = parseInt(width, 10);
-            const heightNum = parseInt(height, 10);
+            const widthNum = width | 0;
+            const heightNum = height | 0;
             
             if (widthNum > 0 && heightNum > 0) {
-                this.#createResponsiveWrapper(iframe, widthNum, heightNum);
+                const parent = iframe.parentNode;
+                if (!parent || !parent.classList.contains('iframe-wrapper')) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'iframe-wrapper';
+                    const paddingBottom = (heightNum / widthNum * 100) + '%';
+                    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
+                    
+                    parent.insertBefore(wrapper, iframe);
+                    wrapper.appendChild(iframe);
+                    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
+                }
             }
         }
         
@@ -260,27 +301,13 @@ class MediaDimensionExtractor {
         }
     }
     
-    #createResponsiveWrapper(iframe, widthNum, heightNum) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'iframe-wrapper';
-        const paddingBottom = (heightNum / widthNum * 100) + '%';
-        
-        // Use CSS class instead of inline styles when possible
-        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-        
-        const parent = iframe.parentNode;
-        parent.insertBefore(wrapper, iframe);
-        wrapper.appendChild(iframe);
-        
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-    }
-    
     #processVideo(video) {
+        // Add controls if missing
         if (!video.hasAttribute('controls')) {
             video.setAttribute('controls', '');
         }
         
-        // Only set styles if not already present
+        // Set default dimensions if not already set
         if (!video.style.width) {
             video.style.width = '100%';
             video.style.maxWidth = '800px';
@@ -289,94 +316,89 @@ class MediaDimensionExtractor {
     }
     
     #cleanup() {
+        // Unregister from forum observer
         if (globalThis.forumObserver && this.#observerId) {
             globalThis.forumObserver.unregister(this.#observerId);
         }
         
-        // Clean up pending image handlers
-        this.#pendingImages.clear();
+        // Clean up event listeners
+        const images = document.images;
+        for (let i = 0, len = images.length; i < len; i++) {
+            const img = images[i];
+            if (img.__dimensionExtractorHandler) {
+                img.removeEventListener('load', this.#imageLoadHandler);
+                img.removeEventListener('error', this.#imageLoadHandler);
+                delete img.__dimensionExtractorHandler;
+            }
+        }
     }
     
-    // Public API
+    // Public API methods
     extractDimensionsForElement(element) {
         if (!element) return;
         
         if (element.matches('img, iframe, video')) {
             this.#processSingleMedia(element);
         } else {
-            const mediaElements = element.querySelectorAll('img, iframe, video');
-            const length = mediaElements.length;
-            
-            for (let i = 0; i < length; i++) {
-                this.#processSingleMedia(mediaElements[i]);
-            }
+            this.#processNestedMedia(element);
         }
     }
     
-    getCacheStats() {
+    getPerformanceStats() {
+        const total = this.#cacheHits + this.#cacheMisses;
+        const hitRate = total > 0 ? (this.#cacheHits / total * 100).toFixed(1) : 0;
+        
         return {
-            cachedDimensions: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size,
-            pendingImages: this.#pendingImages.size
+            cacheHits: this.#cacheHits,
+            cacheMisses: this.#cacheMisses,
+            cacheHitRate: hitRate + '%',
+            cacheSize: this.#dimensionCache.size,
+            processedMedia: this.#processedMedia.size
         };
     }
     
     destroy() {
         this.#cleanup();
-        console.log('Media Dimension Extractor destroyed');
+        console.log('Media Dimension Extractor destroyed', this.getPerformanceStats());
     }
 }
 
-// Optimized initialization
-(function initMediaDimensionExtractor() {
-    if (globalThis.mediaDimensionExractor) return;
-    
-    const init = function() {
-        try {
-            // Use performance mark to measure initialization time
-            performance.mark('media-extractor-start');
-            
-            globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-            
-            performance.mark('media-extractor-end');
-            performance.measure('media-extractor-init', 'media-extractor-start', 'media-extractor-end');
-            
-        } catch (error) {
-            console.error('Failed to create Media Dimension Extractor:', error);
-            
-            // Use exponential backoff for retry
-            setTimeout(function() {
-                if (!globalThis.mediaDimensionExtractor) {
-                    try {
-                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                    } catch (retryError) {
-                        console.error('Media Dimension Extractor failed on retry:', retryError);
-                    }
-                }
-            }, Math.random() * 200 + 100); // Randomized delay to avoid thundering herd
-        }
-    };
-    
-    // Use the most appropriate initialization timing
-    if (document.readyState === 'complete') {
-        queueMicrotask(init);
-    } else if (document.readyState === 'interactive') {
-        setTimeout(init, 0);
-    } else {
-        document.addEventListener('DOMContentLoaded', init, { once: true });
-    }
-})();
+// ============================================
+// INITIALIZATION - Optimized for defer loading
+// ============================================
 
-// Efficient cleanup
-globalThis.addEventListener('pagehide', function() {
-    if (globalThis.mediaDimensionExtractor) {
-        if (typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
-            requestIdleCallback(() => {
-                globalThis.mediaDimensionExtractor.destroy();
-            }, { timeout: 100 });
+// Deferred scripts execute after DOM is ready, no need for DOMContentLoaded
+if (!globalThis.mediaDimensionExtractor) {
+    try {
+        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+    } catch (error) {
+        console.error('MediaDimensionExtractor initialization failed:', error);
+        
+        // Single retry after short delay
+        setTimeout(() => {
+            if (!globalThis.mediaDimensionExtractor) {
+                try {
+                    globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+                } catch (retryError) {
+                    console.error('MediaDimensionExtractor retry failed:', retryError);
+                }
+            }
+        }, 50);
+    }
+}
+
+// Optional cleanup (browser handles most cleanup automatically)
+globalThis.addEventListener('pagehide', () => {
+    if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
+        // Use requestIdleCallback for non-blocking cleanup
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => globalThis.mediaDimensionExtractor.destroy());
+        } else {
+            setTimeout(() => globalThis.mediaDimensionExtractor.destroy(), 0);
         }
     }
 });
+
 
 
 //Twemoji
