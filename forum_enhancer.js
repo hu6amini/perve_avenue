@@ -1009,9 +1009,15 @@ class PostModernizer {
     }
 
     #createModernTimestamp(originalElement, dateString) {
+        if (typeof moment === 'undefined') {
+            console.warn('Moment.js not loaded, skipping timestamp transformation');
+            return originalElement;
+        }
+        
         const momentDate = this.#parseForumDate(dateString);
         
         if (!momentDate) {
+            console.log('Could not parse date:', dateString);
             return originalElement;
         }
         
@@ -1057,29 +1063,138 @@ class PostModernizer {
         return timeElement;
     }
 
-    #transformPostHeaderTimestamps(element) {
-        const timestampLinks = element.querySelectorAll('.lt.Sub a[href*="#entry"]');
+    #extractDateFromElement(element) {
+        // Try title attribute first
+        if (element.hasAttribute('title')) {
+            const title = element.getAttribute('title');
+            const dateMatch = title.match(/(?:Posted on\s+)?(.+)/i);
+            if (dateMatch) return dateMatch[1].trim();
+        }
         
-        timestampLinks.forEach(link => {
-            const timeElement = link.querySelector('span.when, time');
-            if (!timeElement) return;
-            
-            let dateString = '';
-            
-            if (timeElement.hasAttribute('title')) {
-                dateString = timeElement.getAttribute('title');
-            } else if (timeElement.textContent) {
-                const text = timeElement.textContent.trim();
-                const postedMatch = text.match(/Posted on\s+(.+)/);
-                dateString = postedMatch ? postedMatch[1] : text;
+        // Try parent link's title
+        if (element.parentElement && element.parentElement.tagName === 'A') {
+            const parentTitle = element.parentElement.getAttribute('title');
+            if (parentTitle) {
+                const dateMatch = parentTitle.match(/(?:Posted on\s+)?(.+)/i);
+                if (dateMatch) return dateMatch[1].trim();
             }
+        }
+        
+        // Try grandparent link's title
+        if (element.parentElement && element.parentElement.parentElement && 
+            element.parentElement.parentElement.tagName === 'A') {
+            const grandparentTitle = element.parentElement.parentElement.getAttribute('title');
+            if (grandparentTitle) {
+                const dateMatch = grandparentTitle.match(/(?:Posted on\s+)?(.+)/i);
+                if (dateMatch) return dateMatch[1].trim();
+            }
+        }
+        
+        // Try text content
+        if (element.textContent) {
+            const text = element.textContent.trim();
+            
+            // Common patterns
+            const patterns = [
+                /Posted on\s+(.+)/i,
+                /Posted\s+(.+)/i,
+                /on\s+(.+)/i,
+                /(\d{1,2}\/\d{1,2}\/\d{4}.+)/, // MM/DD/YYYY pattern
+                /(\d{4}-\d{1,2}-\d{1,2}.+)/    // YYYY-MM-DD pattern
+            ];
+            
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) return match[1].trim();
+            }
+            
+            // Last resort: return the whole text
+            return text;
+        }
+        
+        return null;
+    }
+
+    #transformTimestampElements(element) {
+        const timestampSelectors = [
+            '.lt.Sub a span.when',
+            '.lt.Sub time',
+            '.post-edit time',
+            '.lt.Sub span',
+            '.lt.Sub a',
+            '.title2.top time',
+            '.title2.top span',
+            '.title2.top a',
+            'span.when',
+            'a[href*="#entry"]',
+            'a[title*="/"]'
+        ];
+        
+        const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
+        
+        timestampElements.forEach(timestampElement => {
+            // Skip if already modernized
+            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
+                return;
+            }
+            
+            const dateString = this.#extractDateFromElement(timestampElement);
             
             if (dateString) {
-                const modernTimestamp = this.#createModernTimestamp(timeElement, dateString);
-                if (modernTimestamp !== timeElement) {
-                    link.replaceChild(modernTimestamp, timeElement);
+                console.log('Found timestamp element:', {
+                    element: timestampElement,
+                    dateString: dateString,
+                    html: timestampElement.outerHTML
+                });
+                
+                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
+                
+                if (modernTimestamp !== timestampElement) {
+                    // Try to replace intelligently
+                    const parent = timestampElement.parentNode;
+                    if (parent && parent.tagName === 'A' && parent.children.length === 1 && parent.children[0] === timestampElement) {
+                        // Replace the entire link if it only contains the timestamp
+                        parent.parentNode.replaceChild(modernTimestamp, parent);
+                    } else {
+                        timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                    }
                 }
             }
+        });
+    }
+
+    #transformPostHeaderTimestamps(postHeader) {
+        if (!postHeader) return;
+        
+        // Look for common timestamp patterns in post headers
+        const timestampPatterns = [
+            'a[href*="#entry"]',
+            'span.when',
+            'time',
+            '.lt.Sub a',
+            '.lt.Sub span'
+        ];
+        
+        timestampPatterns.forEach(pattern => {
+            const elements = postHeader.querySelectorAll(pattern);
+            elements.forEach(el => {
+                // Skip if already modernized
+                if (el.classList && el.classList.contains('modern-timestamp')) return;
+                
+                const dateString = this.#extractDateFromElement(el);
+                if (dateString) {
+                    console.log('Post header timestamp found:', {
+                        element: el,
+                        dateString: dateString,
+                        pattern: pattern
+                    });
+                    
+                    const modernTimestamp = this.#createModernTimestamp(el, dateString);
+                    if (modernTimestamp !== el) {
+                        el.parentNode.replaceChild(modernTimestamp, el);
+                    }
+                }
+            });
         });
     }
 
@@ -1321,8 +1436,9 @@ class PostModernizer {
                     title2TopClone.querySelector('.left.Item')?.remove();
                     this.#removeBreakAndNbsp(title2TopClone);
                     
-                    // 转换时间戳，但保留链接
+                    // Transform timestamps in the post header
                     this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
                     
                     postHeader.appendChild(title2TopClone);
                     tdWrapper.remove();
@@ -1333,8 +1449,9 @@ class PostModernizer {
                     title2TopClone.querySelector('.left.Item')?.remove();
                     this.#removeBreakAndNbsp(title2TopClone);
                     
-                    // 转换时间戳，但保留链接
+                    // Transform timestamps in the post header
                     this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
                     
                     postHeader.appendChild(title2TopClone);
                 }
@@ -1589,8 +1706,9 @@ class PostModernizer {
                 this.#removeBreakAndNbsp(title2TopClone);
                 title2TopClone.querySelector('.Break.Sub')?.remove();
 
-                // 转换搜索帖子头部的时间戳
+                // Transform timestamps in search posts
                 this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
 
                 const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
                 if (tdWrapper) {
