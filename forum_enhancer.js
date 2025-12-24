@@ -4,6 +4,7 @@
 
 class MediaDimensionExtractor {
     #observerId = null;
+    #twemojiObserver = null;
     #processedMedia = new WeakSet();
     #dimensionCache = new Map();
     #lruMap = new Map();
@@ -58,8 +59,105 @@ class MediaDimensionExtractor {
         this.#setupObserver();
         this.#cacheContextElements();
         
+        // Setup twemoji-specific observer
+        this.#setupTwemojiObserver();
+        
+        // Force fix existing twemojis immediately
+        this.#forceFixExistingTwemojis();
+        
+        // Delayed fixes for dynamically loaded content
+        setTimeout(function() {
+            this.#forceFixExistingTwemojis();
+            this.#forceProcessPreview();
+        }.bind(this), 100);
+        
+        setTimeout(function() {
+            this.#forceFixExistingTwemojis();
+        }.bind(this), 500);
+        
         this.#mark('init-end');
         this.#measure();
+    }
+
+    #setupTwemojiObserver() {
+        // Create observer specifically for twemoji attribute changes
+        this.#twemojiObserver = new MutationObserver(function(mutations) {
+            for (var i = 0; i < mutations.length; i++) {
+                var mutation = mutations[i];
+                if (mutation.type === 'attributes' && 
+                    (mutation.attributeName === 'width' || mutation.attributeName === 'height')) {
+                    
+                    var img = mutation.target;
+                    if (img.tagName === 'IMG' && 
+                        (img.src.includes('twemoji') || img.classList.contains('twemoji'))) {
+                        
+                        this.#fixTwemojiDimensions(img);
+                    }
+                }
+            }
+        }.bind(this));
+        
+        // Start observing the entire document for attribute changes
+        this.#twemojiObserver.observe(document.documentElement, {
+            attributes: true,
+            subtree: true,
+            attributeFilter: ['width', 'height', 'style']
+        });
+    }
+
+    #fixTwemojiDimensions(img) {
+        var width = img.getAttribute('width');
+        var height = img.getAttribute('height');
+        
+        // If dimensions exist and are too large for an emoji, fix them
+        if (width && height) {
+            var widthNum = parseInt(width);
+            var heightNum = parseInt(height);
+            
+            if (widthNum > 50 || heightNum > 50) {
+                var size = this.#isInSmallContext(img) ? 18 : 20;
+                
+                // Force correct dimensions using multiple methods
+                img.setAttribute('width', size);
+                img.setAttribute('height', size);
+                img.width = size;
+                img.height = size;
+                img.style.aspectRatio = size + ' / ' + size;
+                img.style.width = '';
+                img.style.height = '';
+                
+                // Mark as processed
+                this.#processedMedia.add(img);
+                
+                return true;
+            }
+        }
+        return false;
+    }
+
+    #forceFixExistingTwemojis() {
+        // Find ALL twemojis in the document
+        var twemojis = document.querySelectorAll('img[src*="twemoji"], img.twemoji, img.twemoji-processed, img[class*="emoji"]');
+        var fixedCount = 0;
+        
+        for (var i = 0; i < twemojis.length; i++) {
+            var img = twemojis[i];
+            
+            // Skip if already processed
+            if (this.#processedMedia.has(img)) continue;
+            
+            // Fix dimensions if needed
+            if (this.#fixTwemojiDimensions(img)) {
+                fixedCount++;
+            }
+            
+            // Mark as processed
+            this.#processedMedia.add(img);
+        }
+        
+        if (fixedCount > 0) {
+            console.log('🔧 Fixed ' + fixedCount + ' twemoji dimensions');
+        }
     }
 
     #mark(name) {
@@ -123,40 +221,9 @@ class MediaDimensionExtractor {
                 for (var i = 0; i < elements.length; i++) {
                     var element = elements[i];
                     this.#processPreviewContainer(element);
-                    
-                    // Also check for twemojis specifically
-                    var twemojis = element.querySelectorAll('img[src*="twemoji"], img.twemoji');
-                    for (var j = 0; j < twemojis.length; j++) {
-                        var twemoji = twemojis[j];
-                        if (!this.#processedMedia.has(twemoji)) {
-                            this.#processImage(twemoji);
-                        }
-                    }
                 }
             } catch (e) {
                 // Skip invalid selectors
-            }
-        }
-        
-        // Also directly scan for any twemojis in the entire document
-        var allTwemojis = document.querySelectorAll('img[src*="twemoji"]');
-        for (var k = 0; k < allTwemojis.length; k++) {
-            var twemoji = allTwemojis[k];
-            if (!this.#processedMedia.has(twemoji)) {
-                this.#processImage(twemoji);
-            }
-        }
-        
-        // Also check for emojis in forum text areas
-        var textAreas = document.querySelectorAll('textarea, .post-content, .post-text');
-        for (var t = 0; t < textAreas.length; t++) {
-            var textArea = textAreas[t];
-            var textEmojis = textArea.querySelectorAll('img[src*="emoji"], img.emoji');
-            for (var e = 0; e < textEmojis.length; e++) {
-                var emoji = textEmojis[e];
-                if (!this.#processedMedia.has(emoji)) {
-                    this.#processImage(emoji);
-                }
             }
         }
     }
@@ -307,23 +374,9 @@ class MediaDimensionExtractor {
         // Check if it's a twemoji FIRST (before cache or existing attributes)
         var isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
         if (isTwemoji) {
-            // ALWAYS set twemoji to proper size, OVERRIDE any existing dimensions
-            var size = this.#isInSmallContext(img) ? 18 : 20;
-            
-            // Force set attributes regardless of existing values
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            
-            // Ensure aspect ratio is correct
-            img.style.aspectRatio = size + ' / ' + size;
-            
-            // Remove any inline width/height styles that might override attributes
-            img.style.width = '';
-            img.style.height = '';
-            
-            // Cache emoji dimensions with a special key to prevent re-caching wrong size
-            this.#cacheDimension('twemoji_' + size, size, size);
-            return; // Skip all other processing for twemojis
+            // Force fix dimensions regardless of current state
+            this.#fixTwemojiDimensions(img);
+            return;
         }
 
         // Cache check first (hottest path)
@@ -558,6 +611,11 @@ class MediaDimensionExtractor {
         if (globalThis.forumObserver && this.#observerId) {
             globalThis.forumObserver.unregister(this.#observerId);
         }
+        
+        // Disconnect twemoji observer
+        if (this.#twemojiObserver) {
+            this.#twemojiObserver.disconnect();
+        }
 
         // Clean up event listeners
         var images = document.images;
@@ -647,7 +705,6 @@ globalThis.addEventListener('pagehide', function() {
         }
     }
 });
-
 
 
 //Twemoji
