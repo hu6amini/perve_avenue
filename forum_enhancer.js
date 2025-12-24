@@ -1009,59 +1009,45 @@ class PostModernizer {
     }
 
     #createModernTimestamp(originalElement, dateString) {
-        if (typeof moment === 'undefined') {
-            console.warn('Moment.js not loaded, skipping timestamp transformation');
-            return originalElement;
-        }
-        
-        const momentDate = this.#parseForumDate(dateString);
-        
-        if (!momentDate) {
-            console.log('Could not parse date:', dateString);
-            return originalElement;
-        }
-        
-        const timeElement = document.createElement('time');
-        timeElement.className = 'modern-timestamp';
-        timeElement.setAttribute('datetime', momentDate.toISOString());
-        timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
-        
-        const relativeSpan = document.createElement('span');
-        relativeSpan.className = 'relative-time';
-        relativeSpan.textContent = this.#formatTimeAgo(momentDate);
-        
-        const absoluteSpan = document.createElement('span');
-        absoluteSpan.className = 'absolute-time';
-        absoluteSpan.textContent = momentDate.format('MMM D, YYYY [at] h:mm A');
-        absoluteSpan.style.cssText = 'display:none;font-size:0.9em;color:#666;margin-left:8px;';
-        
-        timeElement.appendChild(relativeSpan);
-        timeElement.appendChild(absoluteSpan);
-        
-        const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-        timeElement.setAttribute('data-timestamp-id', timeElementId);
-        
-        const updateInterval = setInterval(() => {
-            if (!document.body.contains(timeElement)) {
-                clearInterval(updateInterval);
-                this.#timeUpdateIntervals.delete(timeElementId);
-                return;
-            }
-            relativeSpan.textContent = this.#formatTimeAgo(momentDate);
-        }, 60000);
-        
-        this.#timeUpdateIntervals.set(timeElementId, updateInterval);
-        
-        timeElement.addEventListener('mouseenter', () => {
-            absoluteSpan.style.display = 'inline';
-        });
-        
-        timeElement.addEventListener('mouseleave', () => {
-            absoluteSpan.style.display = 'none';
-        });
-        
-        return timeElement;
+    if (typeof moment === 'undefined') {
+        console.warn('Moment.js not loaded, skipping timestamp transformation');
+        return originalElement;
     }
+    
+    const momentDate = this.#parseForumDate(dateString);
+    
+    if (!momentDate) {
+        console.log('Could not parse date:', dateString);
+        return originalElement;
+    }
+    
+    const timeElement = document.createElement('time');
+    timeElement.className = 'modern-timestamp';
+    timeElement.setAttribute('datetime', momentDate.toISOString());
+    timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
+    
+    const relativeSpan = document.createElement('span');
+    relativeSpan.className = 'relative-time';
+    relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+    
+    timeElement.appendChild(relativeSpan);
+    
+    const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    timeElement.setAttribute('data-timestamp-id', timeElementId);
+    
+    const updateInterval = setInterval(() => {
+        if (!document.body.contains(timeElement)) {
+            clearInterval(updateInterval);
+            this.#timeUpdateIntervals.delete(timeElementId);
+            return;
+        }
+        relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+    }, 60000);
+    
+    this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+    
+    return timeElement;
+}
 
     #extractDateFromElement(element) {
         // Try title attribute first
