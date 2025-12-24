@@ -1424,9 +1424,8 @@ waitForMoment();
 
 
 
-// Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
-// Now includes CSS-first image dimension handling, optimized DOM updates,
-// enhanced accessibility, and modern code blocks
+// Enhanced Post Transformation and Modernization System with Full Timestamp Compatibility
+// Now fully compatible with timestamp script processed elements
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -1435,11 +1434,13 @@ class PostModernizer {
     #searchPostObserverId = null;
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
+    #timestampObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
     #domUpdates = new WeakMap();
     #rafPending = false;
+    #timestampProcessedElements = new WeakSet();
 
     constructor() {
         this.#initWithRetry();
@@ -1480,8 +1481,12 @@ class PostModernizer {
             this.#setupEnhancedAnchorNavigation();
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
+            this.#setupTimestampCompatibility();
 
-            console.log('✅ Post Modernizer with all optimizations initialized');
+            // Initial check for timestamp processed elements
+            setTimeout(() => this.#checkForTimestampElements(), 300);
+
+            console.log('✅ Post Modernizer with timestamp compatibility initialized');
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
 
@@ -1505,10 +1510,11 @@ class PostModernizer {
             priority: 'critical'
         });
 
+        // UPDATED: Added timestamp-processed selectors for compatibility
         this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({
             id: 'post-modernizer-transform',
             callback: (node) => this.#handlePostTransformation(node),
-            selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
+            selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top), time.u-dt, .timestamp-processed',
             delay: 100,
             priority: 'normal',
             pageTypes: ['topic', 'blog']
@@ -1522,6 +1528,15 @@ class PostModernizer {
             selector: 'body#search .post, body#search li.post',
             priority: 'high',
             pageTypes: ['search']
+        });
+    }
+
+    #setupTimestampCompatibility() {
+        this.#timestampObserverId = globalThis.forumObserver.register({
+            id: 'post-modernizer-timestamp-compatibility',
+            callback: (node) => this.#handleTimestampElements(node),
+            selector: 'time.u-dt, .timestamp-processed, span.edit',
+            priority: 'high'
         });
     }
 
@@ -1623,7 +1638,9 @@ class PostModernizer {
             node.querySelector('.title2.bottom') ||
             node.querySelector('div[align="center"]:has(.quote_top)') ||
             node.querySelector('div.spoiler[align="center"]') ||
-            node.querySelector('div[align="center"]:has(.code_top)');
+            node.querySelector('div[align="center"]:has(.code_top)') ||
+            node.matches('time.u-dt') ||
+            node.matches('.timestamp-processed');
 
         if (needsTransformation) {
             this.#transformPostElements();
@@ -1641,6 +1658,84 @@ class PostModernizer {
         if (needsTransformation) {
             this.#transformSearchPostElements();
         }
+    }
+
+    #handleTimestampElements(node) {
+        if (!node) return;
+
+        // Handle timestamp elements that appear after post modernization
+        if (node.matches('time.u-dt') || node.matches('.timestamp-processed') || node.matches('span.edit')) {
+            const post = node.closest('.post');
+            if (post && post.classList.contains('post-modernized')) {
+                this.#processTimestampInModernizedPost(post, node);
+            }
+        }
+
+        // Also check if any child elements are timestamps
+        node.querySelectorAll('time.u-dt, .timestamp-processed, span.edit').forEach(timestamp => {
+            const post = timestamp.closest('.post');
+            if (post && post.classList.contains('post-modernized')) {
+                this.#processTimestampInModernizedPost(post, timestamp);
+            }
+        });
+    }
+
+    #processTimestampInModernizedPost(post, timestampElement) {
+        if (this.#timestampProcessedElements.has(timestampElement)) return;
+
+        // Handle edited timestamps
+        if (timestampElement.matches('span.edit') || 
+            (timestampElement.matches('time.u-dt') && 
+             (timestampElement.textContent.includes('Edited') || 
+              timestampElement.closest('.post-edit')))) {
+            
+            timestampElement.classList.add('post-edit');
+            
+            // For old format span.edit
+            if (timestampElement.matches('span.edit')) {
+                const timeMatch = timestampElement.textContent.match(/Edited by .+? - (.+)/);
+                if (timeMatch) {
+                    timestampElement.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited on <time>' + 
+                        this.#escapeHtml(timeMatch[1]) + '</time>';
+                }
+            }
+            // For new format time.u-dt (already formatted by timestamp script)
+            else if (timestampElement.matches('time.u-dt') && !timestampElement.querySelector('i')) {
+                const icon = document.createElement('i');
+                icon.className = 'fa-regular fa-pen-to-square';
+                icon.setAttribute('aria-hidden', 'true');
+                timestampElement.parentNode.insertBefore(icon, timestampElement);
+            }
+        }
+
+        // Mark as processed
+        this.#timestampProcessedElements.add(timestampElement);
+
+        // Update post footer if needed
+        const postFooter = post.querySelector('.post-footer');
+        if (postFooter && timestampElement.closest('.post-footer')) {
+            this.#enhancePostFooterTimestamps(postFooter);
+        }
+    }
+
+    #enhancePostFooterTimestamps(postFooter) {
+        // Find and enhance any timestamp elements in the footer
+        postFooter.querySelectorAll('time.u-dt').forEach(timeEl => {
+            if (!this.#timestampProcessedElements.has(timeEl)) {
+                timeEl.classList.add('post-timestamp');
+                this.#timestampProcessedElements.add(timeEl);
+            }
+        });
+    }
+
+    #checkForTimestampElements() {
+        // Check all modernized posts for timestamp elements
+        document.querySelectorAll('.post-modernized').forEach(post => {
+            // Look for timestamp elements that need processing
+            post.querySelectorAll('time.u-dt, .timestamp-processed, span.edit').forEach(timestamp => {
+                this.#processTimestampInModernizedPost(post, timestamp);
+            });
+        });
     }
 
     #cleanupAllMiniButtons() {
@@ -1672,6 +1767,9 @@ class PostModernizer {
             const title2Top = post.querySelector('.title2.top');
             const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
             const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
+
+            // ENHANCED: Check for timestamp-processed elements in the title
+            const timestampElements = title2Top ? title2Top.querySelectorAll('time.u-dt, .timestamp-processed') : [];
 
             const postHeader = document.createElement('div');
             postHeader.className = 'post-header';
@@ -1714,6 +1812,14 @@ class PostModernizer {
                     title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
                     title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
                     title2TopClone.querySelector('.left.Item')?.remove();
+                    
+                    // PRESERVE timestamp elements
+                    timestampElements.forEach(timestamp => {
+                        if (title2TopClone.contains(timestamp)) {
+                            // Keep timestamp elements as-is (already processed by timestamp script)
+                        }
+                    });
+                    
                     this.#removeBreakAndNbsp(title2TopClone);
                     postHeader.appendChild(title2TopClone);
                     tdWrapper.remove();
@@ -1722,6 +1828,14 @@ class PostModernizer {
                     title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
                     title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
                     title2TopClone.querySelector('.left.Item')?.remove();
+                    
+                    // PRESERVE timestamp elements
+                    timestampElements.forEach(timestamp => {
+                        if (title2TopClone.contains(timestamp)) {
+                            // Keep timestamp elements as-is
+                        }
+                    });
+                    
                     this.#removeBreakAndNbsp(title2TopClone);
                     postHeader.appendChild(title2TopClone);
                 }
@@ -1872,6 +1986,11 @@ class PostModernizer {
             if (postId && postId.startsWith('ee')) {
                 post.setAttribute('data-post-id', postId.replace('ee', ''));
             }
+
+            // Process any timestamp elements that might be in the post
+            setTimeout(() => {
+                this.#processTimestampInModernizedPost(post);
+            }, 50);
         });
     }
 
@@ -1891,6 +2010,9 @@ class PostModernizer {
 
             const title2Top = post.querySelector('.title2.top');
             const pointsElement = post.querySelector('.points');
+
+            // ENHANCED: Check for timestamp elements
+            const timestampElements = title2Top ? title2Top.querySelectorAll('time.u-dt, .timestamp-processed, span.edit') : [];
 
             let contentHTML = '';
             const colorTable = post.querySelector('table.color');
@@ -1946,6 +2068,14 @@ class PostModernizer {
                 const title2TopClone = title2Top.cloneNode(true);
                 const pointsInTitle = title2TopClone.querySelector('.points');
                 pointsInTitle?.remove();
+
+                // PRESERVE timestamp elements
+                timestampElements.forEach(timestamp => {
+                    if (title2TopClone.contains(timestamp)) {
+                        // Mark as processed by post modernizer
+                        timestamp.classList.add('post-timestamp');
+                    }
+                });
 
                 let locationDiv = null;
                 if (rtSub) {
@@ -2053,6 +2183,7 @@ class PostModernizer {
                 this.#processTextAndLineBreaks(contentWrapper);
                 this.#cleanupSearchPostContent(contentWrapper);
 
+                // Handle edit timestamps in search posts
                 const editSpanInContent = contentWrapper.querySelector('span.edit');
                 if (editSpanInContent) {
                     editSpanInContent.classList.add('post-edit');
@@ -2061,6 +2192,19 @@ class PostModernizer {
                         editSpanInContent.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited on <time>' + this.#escapeHtml(timeMatch[1]) + '</time>';
                     }
                 }
+
+                // Also check for time.u-dt elements in search posts
+                contentWrapper.querySelectorAll('time.u-dt').forEach(timeEl => {
+                    if (timeEl.textContent.includes('Edited') || timeEl.closest('.post-edit')) {
+                        timeEl.classList.add('post-edit');
+                        if (!timeEl.querySelector('i')) {
+                            const icon = document.createElement('i');
+                            icon.className = 'fa-regular fa-pen-to-square';
+                            icon.setAttribute('aria-hidden', 'true');
+                            timeEl.parentNode.insertBefore(icon, timeEl);
+                        }
+                    }
+                });
 
                 this.#modernizeQuotes(contentWrapper);
                 this.#modernizeSpoilers(contentWrapper);
@@ -2199,6 +2343,11 @@ class PostModernizer {
 
             post.parentNode.replaceChild(newPost, post);
             this.#updatePointsContainerActiveState(pointsFooter);
+
+            // Process any timestamp elements
+            setTimeout(() => {
+                this.#processTimestampInModernizedPost(newPost);
+            }, 50);
         });
     }
 
@@ -2499,11 +2648,33 @@ class PostModernizer {
     }
 
     #cleanupEditSpans(element) {
+        // Handle OLD format: span.edit elements
         element.querySelectorAll('span.edit').forEach(span => {
             span.classList.add('post-edit');
             const timeMatch = span.textContent.match(/Edited by .+? - (.+)/);
             if (timeMatch) {
                 span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited on <time>' + this.#escapeHtml(timeMatch[1]) + '</time>';
+            }
+        });
+        
+        // Handle NEW format: time.u-dt elements (created by timestamp script)
+        element.querySelectorAll('time.u-dt').forEach(timeEl => {
+            // Check if this is an "edited" timestamp by checking content or context
+            const parentText = timeEl.parentElement?.textContent || '';
+            const previousText = timeEl.previousSibling?.textContent || '';
+            
+            if (parentText.includes('Edited') || previousText.includes('Edited') || 
+                timeEl.textContent.includes('Edited') || timeEl.closest('.post-edit')) {
+                
+                timeEl.classList.add('post-edit');
+                
+                // Add icon if not present
+                if (!timeEl.querySelector('i') && !timeEl.previousElementSibling?.matches('i.fa-pen-to-square')) {
+                    const icon = document.createElement('i');
+                    icon.className = 'fa-regular fa-pen-to-square';
+                    icon.setAttribute('aria-hidden', 'true');
+                    timeEl.parentNode.insertBefore(icon, timeEl);
+                }
             }
         });
     }
@@ -4029,7 +4200,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId];
+        this.#codeBlockObserverId, this.#timestampObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
