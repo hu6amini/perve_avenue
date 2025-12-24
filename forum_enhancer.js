@@ -4,6 +4,7 @@
 
 class MediaDimensionExtractor {
     #observerId = null;
+    #previewObserverId = null;
     #processedMedia = new WeakSet();
     #dimensionCache = new Map();
     #lruMap = new Map();
@@ -83,6 +84,7 @@ class MediaDimensionExtractor {
             return;
         }
 
+        // Main observer for regular media elements
         this.#observerId = globalThis.forumObserver.register({
             id: 'media-dimension-extractor',
             callback: function(node) {
@@ -90,11 +92,74 @@ class MediaDimensionExtractor {
             }.bind(this),
             selector: 'img, iframe, video',
             priority: 'high',
-            pageTypes: ['topic', 'blog', 'search']
+            pageTypes: ['topic', 'blog', 'search', 'preview']
+        });
+
+        // Special observer for preview containers to catch nested media
+        this.#previewObserverId = globalThis.forumObserver.register({
+            id: 'media-dimension-extractor-preview',
+            callback: function(node) {
+                // Check if this is a preview container
+                var isPreviewContainer = node.id === 'preview' || 
+                                       node.id === 'ajaxObject' || 
+                                       (node.classList && node.classList.contains('preview')) ||
+                                       (node.matches && node.matches('#preview, #ajaxObject, .preview'));
+                
+                // Check if node is inside a preview container
+                var inPreviewContainer = node.closest && 
+                                       (node.closest('#preview') || 
+                                        node.closest('#ajaxObject') || 
+                                        node.closest('.preview'));
+                
+                if (isPreviewContainer || inPreviewContainer) {
+                    // Process all media inside preview container
+                    this.#processPreviewContainer(node);
+                }
+            }.bind(this),
+            selector: '#preview, #ajaxObject, .preview, [id*="preview"], .Item.preview, .preview-content',
+            priority: 'critical',
+            pageTypes: ['topic', 'blog', 'search', 'preview']
         });
 
         // Process all existing media using batched approach
         this.#processAllMediaBatched();
+        
+        // Also process any existing preview content immediately
+        this.#forceProcessPreview();
+    }
+
+    #forceProcessPreview() {
+        // Look for preview containers and process their media immediately
+        var previewSelectors = ['#preview', '#ajaxObject', '.preview', '[id*="preview"]', '.Item.preview'];
+        
+        for (var s = 0; s < previewSelectors.length; s++) {
+            var selector = previewSelectors[s];
+            var elements = document.querySelectorAll(selector);
+            for (var i = 0; i < elements.length; i++) {
+                var element = elements[i];
+                this.#processPreviewContainer(element);
+            }
+        }
+    }
+
+    #processPreviewContainer(container) {
+        // Find all media in container and process immediately
+        var mediaElements = container.querySelectorAll('img, iframe, video');
+        
+        for (var i = 0; i < mediaElements.length; i++) {
+            var element = mediaElements[i];
+            if (!this.#processedMedia.has(element)) {
+                this.#processSingleMedia(element);
+            }
+        }
+        
+        // Also check if container itself is a media element
+        if ((container.tagName === 'IMG' || 
+             container.tagName === 'IFRAME' || 
+             container.tagName === 'VIDEO') && 
+            !this.#processedMedia.has(container)) {
+            this.#processSingleMedia(container);
+        }
     }
 
     #processAllMediaBatched() {
@@ -462,8 +527,13 @@ class MediaDimensionExtractor {
 
     #cleanup() {
         // Unregister from forum observer
-        if (globalThis.forumObserver && this.#observerId) {
-            globalThis.forumObserver.unregister(this.#observerId);
+        if (globalThis.forumObserver) {
+            if (this.#observerId) {
+                globalThis.forumObserver.unregister(this.#observerId);
+            }
+            if (this.#previewObserverId) {
+                globalThis.forumObserver.unregister(this.#previewObserverId);
+            }
         }
 
         // Clean up event listeners
@@ -554,6 +624,8 @@ globalThis.addEventListener('pagehide', function() {
         }
     }
 });
+
+
 
 //Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
