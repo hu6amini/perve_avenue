@@ -13,37 +13,32 @@ class ForumCoreObserver {
     #debouncedCallbacks = new Map();
     #pageState = this.#detectPageState();
     
-    static get #OBSERVER_OPTIONS() {
-        return {
+    // Performance optimized configuration
+    static #CONFIG = {
+        observer: {
             childList: true,
             subtree: true,
             characterData: true,
             attributes: true,
             attributeFilter: ['class', 'id', 'style', 'data-*']
-        };
-    }
-    
-    static get #PERFORMANCE_CONFIG() {
-        return {
+        },
+        performance: {
             maxProcessingTime: 16,
             mutationBatchSize: 50,
             debounceThreshold: 100,
             idleCallbackTimeout: 2000,
             searchPageBatchSize: 10
-        };
-    }
-    
-    static get #MEMORY_CONFIG() {
-        return {
+        },
+        memory: {
             maxProcessedNodes: 10000,
             cleanupInterval: 30000,
             nodeTTL: 300000
-        };
-    }
+        }
+    };
     
     #mutationMetrics = {
-        totalMutations: 0n,
-        processedMutations: 0n,
+        totalMutations: 0,
+        processedMutations: 0,
         averageProcessingTime: 0,
         lastMutationTime: 0
     };
@@ -54,24 +49,26 @@ class ForumCoreObserver {
     
     #init() {
         this.#observer = new MutationObserver(this.#handleMutations.bind(this));
-        this.#observer.observe(document.documentElement, ForumCoreObserver.#OBSERVER_OPTIONS);
+        this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
         this.#scanExistingContent();
         this.#setupCleanup();
         
-        document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { passive: true });
+        // Use passive event listener for better performance
+        document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { 
+            passive: true, 
+            capture: true 
+        });
         
-        console.group('Enhanced Forum Core Observer');
-        console.log('Initialized with Post Modernizer optimizations');
-        console.log('Page state: ' + JSON.stringify(this.#pageState));
-        console.groupEnd();
+        console.log('🔍 ForumCoreObserver initialized');
     }
     
     #detectPageState() {
-        const pathname = window.location.pathname;
-        const className = document.body.className;
-        const theme = document.documentElement.dataset?.theme;
+        var pathname = window.location.pathname;
+        var className = document.body.className;
+        var theme = document.documentElement.dataset?.theme;
         
-        const selectors = {
+        // Use direct DOM queries for maximum speed
+        var selectors = {
             forum: '.board, .big_list',
             topic: '.modern-topic-title, .post',
             blog: '#blog, .article',
@@ -80,13 +77,14 @@ class ForumCoreObserver {
             modernized: '.post-modernized'
         };
         
-        const pageChecks = {};
-        for (const [key, selector] of Object.entries(selectors)) {
-            pageChecks[key] = document.querySelector(selector) ?? null;
+        var pageChecks = {};
+        for (var key in selectors) {
+            if (selectors.hasOwnProperty(key)) {
+                pageChecks[key] = document.querySelector(selectors[key]) || null;
+            }
         }
         
         return {
-            ...pageChecks,
             isForum: pathname.includes('/f/') || pageChecks.forum,
             isTopic: pathname.includes('/t/') || pageChecks.topic,
             isBlog: pathname.includes('/b/') || pageChecks.blog,
@@ -98,108 +96,78 @@ class ForumCoreObserver {
             hasModernizedNavigation: !!document.querySelector('.modern-nav'),
             isDarkMode: theme === 'dark',
             isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
-            isMobile: window.matchMedia('(max-width: 768px)').matches,
-            pageId: crypto.randomUUID?.() ?? 'page_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+            isMobile: window.matchMedia('(max-width: 768px)').matches
         };
     }
     
     #handleMutations(mutations) {
-        this.#mutationMetrics.totalMutations++;
+        this.#mutationMetrics.totalMutations += mutations.length;
         this.#mutationMetrics.lastMutationTime = Date.now();
         
-        const validMutations = [];
-        for (const mutation of mutations) {
+        // Fast filter: only process mutations that are actually visible and not filtered
+        for (var i = 0; i < mutations.length; i++) {
+            var mutation = mutations[i];
             if (this.#shouldProcessMutation(mutation)) {
-                validMutations.push(mutation);
+                this.#mutationQueue.push(mutation);
             }
         }
         
-        if (!validMutations.length) return;
-        
-        this.#mutationMetrics.totalMutations += BigInt(validMutations.length);
-        this.#mutationQueue.push(...validMutations);
-        
-        if (!this.#isProcessing) {
+        if (this.#mutationQueue.length && !this.#isProcessing) {
             this.#processMutationQueue();
         }
     }
     
     #shouldProcessMutation(mutation) {
-        if (mutation.target.dataset?.observerOrigin === 'forum-script') {
+        var target = mutation.target;
+        
+        // Skip mutations with data-observer-origin flag
+        if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
             return false;
         }
         
-        if (this.#shouldSkipPostModernizerProcessing(mutation.target)) {
-            return false;
-        }
-        
-        if (mutation.target.nodeType === Node.ELEMENT_NODE) {
-            const style = window.getComputedStyle(mutation.target);
+        // Skip hidden elements
+        if (target.nodeType === Node.ELEMENT_NODE) {
+            var style = window.getComputedStyle(target);
             if (style.display === 'none' || style.visibility === 'hidden') {
                 return false;
             }
         }
         
+        // Special handling for character data
         if (mutation.type === 'characterData') {
-            const parent = mutation.target.parentElement;
+            var parent = target.parentElement;
             return parent ? this.#shouldObserveTextChanges(parent) : false;
         }
         
+        // Special handling for style changes
         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-            const oldValue = mutation.oldValue ?? '';
-            const newValue = mutation.target.getAttribute('style') ?? '';
+            var oldValue = mutation.oldValue || '';
+            var newValue = target.getAttribute('style') || '';
             return this.#styleChangeAffectsDOM(oldValue, newValue);
         }
         
+        // Process ALL other mutations (bulletproof approach)
         return true;
     }
     
-    #shouldSkipPostModernizerProcessing(node) {
-        if (node.classList?.contains('post-modernized')) {
-            return true;
-        }
-        
-        if (node.closest('.post-modernized')) {
-            return true;
-        }
-        
-        if (node.closest('.modern-quote')) {
-            return true;
-        }
-        
-        if (node.closest('.modern-profile')) {
-            return true;
-        }
-        
-        if (node.closest('.modern-nav, .modern-breadcrumb, .modern-topic-title')) {
-            return true;
-        }
-        
-        const modernizerElements = [
-            '.post-new-badge', '.quote-jump-btn', '.anchor-container',
-            '.modern-bottom-actions', '.multiquote-control',
-            '.moderator-controls', '.ip-address-control'
-        ];
-        
-        for (const selector of modernizerElements) {
-            if (node.matches?.(selector) || node.closest?.(selector)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
     #shouldObserveTextChanges(element) {
-        const tagName = element.tagName.toLowerCase();
-        const interactiveTags = new Set(['a', 'button', 'input', 'textarea', 'select']);
-        const forumContentClasses = new Set(['post', 'article', 'comment', 'quote', 'signature', 'post-text']);
+        var tagName = element.tagName.toLowerCase();
         
-        if (interactiveTags.has(tagName)) return true;
+        // Always observe interactive elements
+        if (tagName === 'a' || tagName === 'button' || tagName === 'input' || 
+            tagName === 'textarea' || tagName === 'select') {
+            return true;
+        }
         
-        const elementClasses = Array.from(element.classList);
-        for (const cls of elementClasses) {
-            if (forumContentClasses.has(cls)) {
+        // Observe forum content
+        var classList = element.classList;
+        if (classList) {
+            if (classList.contains('post') || 
+                classList.contains('article') || 
+                classList.contains('comment') || 
+                classList.contains('quote') || 
+                classList.contains('signature') || 
+                classList.contains('post-text')) {
                 return true;
             }
         }
@@ -208,11 +176,12 @@ class ForumCoreObserver {
     }
     
     #styleChangeAffectsDOM(oldStyle, newStyle) {
-        const visibilityProps = new Set(['display', 'visibility', 'opacity', 'position', 'width', 'height']);
-        const oldProps = this.#parseStyleString(oldStyle);
-        const newProps = this.#parseStyleString(newStyle);
+        var visibilityProps = ['display', 'visibility', 'opacity', 'position', 'width', 'height'];
+        var oldProps = this.#parseStyleString(oldStyle);
+        var newProps = this.#parseStyleString(newStyle);
         
-        for (const prop of visibilityProps) {
+        for (var i = 0; i < visibilityProps.length; i++) {
+            var prop = visibilityProps[i];
             if (oldProps.get(prop) !== newProps.get(prop)) {
                 return true;
             }
@@ -224,13 +193,18 @@ class ForumCoreObserver {
     #parseStyleString(styleString) {
         if (!styleString) return new Map();
         
-        const result = new Map();
-        const pairs = styleString.split(';');
+        var result = new Map();
+        var pairs = styleString.split(';');
         
-        for (const pair of pairs) {
-            const [key, value] = pair.split(':').map(s => s.trim());
-            if (key && value) {
-                result.set(key, value);
+        for (var i = 0; i < pairs.length; i++) {
+            var pair = pairs[i];
+            var colonIndex = pair.indexOf(':');
+            if (colonIndex > -1) {
+                var key = pair.substring(0, colonIndex).trim();
+                var value = pair.substring(colonIndex + 1).trim();
+                if (key && value) {
+                    result.set(key, value);
+                }
             }
         }
         
@@ -239,42 +213,49 @@ class ForumCoreObserver {
     
     async #processMutationQueue() {
         this.#isProcessing = true;
-        const startTime = performance.now();
+        var startTime = performance.now();
         
         try {
             while (this.#mutationQueue.length) {
-                if (this.#pageState.isSearch && this.#mutationQueue.length > 10) {
-                    await this.#processSearchPageBatch();
-                    continue;
-                }
+                var batchSize = Math.min(
+                    ForumCoreObserver.#CONFIG.performance.mutationBatchSize,
+                    this.#mutationQueue.length
+                );
                 
-                const batchSize = ForumCoreObserver.#PERFORMANCE_CONFIG.mutationBatchSize;
-                const batch = this.#mutationQueue.splice(0, batchSize);
+                var batch = this.#mutationQueue.splice(0, batchSize);
                 await this.#processMutationBatch(batch);
                 
-                if (performance.now() - startTime > ForumCoreObserver.#PERFORMANCE_CONFIG.maxProcessingTime) {
-                    await new Promise(resolve => queueMicrotask(resolve));
+                // Yield to prevent blocking
+                if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxProcessingTime) {
+                    await new Promise(function(resolve) {
+                        queueMicrotask(resolve);
+                    });
+                    startTime = performance.now();
                 }
             }
         } catch (error) {
-            console.error('Mutation processing error: ' + error);
+            console.error('Mutation processing error:', error);
         } finally {
             this.#isProcessing = false;
             this.#mutationMetrics.processedMutations++;
             
-            const processingTime = performance.now() - startTime;
+            var processingTime = performance.now() - startTime;
             this.#mutationMetrics.averageProcessingTime = 
                 this.#mutationMetrics.averageProcessingTime * 0.9 + processingTime * 0.1;
         }
     }
     
     async #processMutationBatch(mutations) {
-        const affectedNodes = new Set();
+        var affectedNodes = new Set();
         
-        for (const mutation of mutations) {
+        // Collect all affected nodes
+        for (var i = 0; i < mutations.length; i++) {
+            var mutation = mutations[i];
+            
             switch (mutation.type) {
                 case 'childList':
-                    for (const node of mutation.addedNodes) {
+                    for (var j = 0; j < mutation.addedNodes.length; j++) {
+                        var node = mutation.addedNodes[j];
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             this.#collectAllElements(node, affectedNodes);
                         }
@@ -286,133 +267,44 @@ class ForumCoreObserver {
                     break;
                     
                 case 'characterData':
-                    affectedNodes.add(mutation.target.parentElement);
-                    break;
-            }
-        }
-        
-        if (this.#pageState.isSearch) {
-            const searchPosts = [];
-            for (const node of affectedNodes) {
-                if (node.classList?.contains('post') && node.closest('body#search')) {
-                    searchPosts.push(node);
-                }
-            }
-            
-            if (searchPosts.length > 5) {
-                await this.#processSearchPostsBatch(searchPosts);
-                
-                for (const post of searchPosts) {
-                    affectedNodes.delete(post);
-                }
-            }
-        }
-        
-        const nodeArray = [];
-        for (const node of affectedNodes) {
-            if (node && !this.#processedNodes.has(node)) {
-                nodeArray.push(node);
-            }
-        }
-        
-        const CONCURRENCY_LIMIT = 4;
-        const chunks = [];
-        
-        for (let i = 0; i < nodeArray.length; i += CONCURRENCY_LIMIT) {
-            chunks.push(nodeArray.slice(i, i + CONCURRENCY_LIMIT));
-        }
-        
-        for (const chunk of chunks) {
-            const promises = chunk.map(node => this.#processNode(node));
-            await Promise.allSettled(promises);
-        }
-    }
-    
-    async #processSearchPageBatch() {
-        const batchSize = ForumCoreObserver.#PERFORMANCE_CONFIG.searchPageBatchSize;
-        const batch = this.#mutationQueue.splice(0, batchSize);
-        
-        console.log('Processing search page batch: ' + batch.length + ' mutations');
-        
-        const addedNodes = new Set();
-        const attributeNodes = new Set();
-        const textNodes = new Set();
-        
-        for (const mutation of batch) {
-            switch (mutation.type) {
-                case 'childList':
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            this.#collectAllElements(node, addedNodes);
-                        }
+                    var parent = mutation.target.parentElement;
+                    if (parent) {
+                        affectedNodes.add(parent);
                     }
                     break;
-                    
-                case 'attributes':
-                    attributeNodes.add(mutation.target);
-                    break;
-                    
-                case 'characterData':
-                    textNodes.add(mutation.target.parentElement);
-                    break;
             }
         }
         
-        const searchPosts = [];
-        for (const node of addedNodes) {
-            if (node.classList?.contains('post') && node.closest('body#search')) {
-                searchPosts.push(node);
+        // Process nodes
+        var nodeArray = Array.from(affectedNodes);
+        var nodesToProcess = [];
+        
+        // Filter out already processed nodes
+        for (var k = 0; k < nodeArray.length; k++) {
+            var node = nodeArray[k];
+            if (node && !this.#processedNodes.has(node)) {
+                nodesToProcess.push(node);
             }
         }
         
-        if (searchPosts.length > 0) {
-            await this.#processSearchPostsBatch(searchPosts);
+        if (!nodesToProcess.length) return;
+        
+        // Process in parallel chunks
+        var CONCURRENCY_LIMIT = 4;
+        var chunks = [];
+        
+        for (var l = 0; l < nodesToProcess.length; l += CONCURRENCY_LIMIT) {
+            chunks.push(nodesToProcess.slice(l, l + CONCURRENCY_LIMIT));
         }
         
-        const otherNodes = new Set();
-        for (const node of addedNodes) {
-            if (!searchPosts.includes(node)) {
-                otherNodes.add(node);
-            }
-        }
-        for (const node of attributeNodes) otherNodes.add(node);
-        for (const node of textNodes) otherNodes.add(node);
-        
-        await this.#processNodeBatch(Array.from(otherNodes));
-    }
-    
-    async #processSearchPostsBatch(posts) {
-        console.log('Processing ' + posts.length + ' search posts in batch');
-        
-        const CHUNK_SIZE = 3;
-        for (let i = 0; i < posts.length; i += CHUNK_SIZE) {
-            const chunk = posts.slice(i, i + CHUNK_SIZE);
-            const promises = [];
+        for (var m = 0; m < chunks.length; m++) {
+            var chunk = chunks[m];
+            var promises = [];
             
-            for (const post of chunk) {
-                if (!this.#processedNodes.has(post)) {
-                    promises.push(this.#processNode(post));
-                }
+            for (var n = 0; n < chunk.length; n++) {
+                promises.push(this.#processNode(chunk[n]));
             }
             
-            await Promise.allSettled(promises);
-            
-            if (i + CHUNK_SIZE < posts.length) {
-                await new Promise(resolve => setTimeout(resolve, 0));
-            }
-        }
-    }
-    
-    async #processNodeBatch(nodes) {
-        const CONCURRENCY_LIMIT = 4;
-        const chunks = [];
-        
-        for (let i = 0; i < nodes.length; i += CONCURRENCY_LIMIT) {
-            chunks.push(nodes.slice(i, i + CONCURRENCY_LIMIT));
-        }
-        
-        for (const chunk of chunks) {
-            const promises = chunk.map(node => this.#processNode(node));
             await Promise.allSettled(promises);
         }
     }
@@ -422,34 +314,40 @@ class ForumCoreObserver {
         
         collection.add(root);
         
-        for (const child of root.children) {
-            this.#collectAllElements(child, collection);
+        // Use for loop instead of for...of for better performance
+        var children = root.children;
+        for (var i = 0; i < children.length; i++) {
+            this.#collectAllElements(children[i], collection);
         }
     }
     
     async #processNode(node) {
         if (!node || this.#processedNodes.has(node)) return;
         
-        const matchingCallbacks = this.#getMatchingCallbacks(node);
+        var matchingCallbacks = this.#getMatchingCallbacks(node);
         if (!matchingCallbacks.length) return;
         
-        const priorityGroups = new Map([
-            ['critical', []],
-            ['high', []],
-            ['normal', []],
-            ['low', []]
-        ]);
+        // Group by priority
+        var priorityGroups = {
+            critical: [],
+            high: [],
+            normal: [],
+            low: []
+        };
         
-        for (const callback of matchingCallbacks) {
-            const priority = callback.priority ?? 'normal';
-            const group = priorityGroups.get(priority);
-            if (group) {
-                group.push(callback);
-            }
+        for (var i = 0; i < matchingCallbacks.length; i++) {
+            var callback = matchingCallbacks[i];
+            var priority = callback.priority || 'normal';
+            priorityGroups[priority].push(callback);
         }
         
-        for (const [priority, callbacks] of priorityGroups) {
-            if (!callbacks?.length) continue;
+        // Execute callbacks by priority
+        var priorities = ['critical', 'high', 'normal', 'low'];
+        for (var j = 0; j < priorities.length; j++) {
+            var priority = priorities[j];
+            var callbacks = priorityGroups[priority];
+            
+            if (!callbacks.length) continue;
             
             if (priority === 'critical') {
                 await this.#executeCallbacks(callbacks, node);
@@ -462,13 +360,18 @@ class ForumCoreObserver {
     }
     
     #getMatchingCallbacks(node) {
-        const matching = [];
+        var matching = [];
+        var callbackValues = Array.from(this.#callbacks.values());
         
-        for (const callback of this.#callbacks.values()) {
-            if (callback.pageTypes?.length) {
-                let hasMatchingPageType = false;
-                for (const type of callback.pageTypes) {
-                    const stateKey = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
+        for (var i = 0; i < callbackValues.length; i++) {
+            var callback = callbackValues[i];
+            
+            // Check page types
+            if (callback.pageTypes && callback.pageTypes.length) {
+                var hasMatchingPageType = false;
+                for (var j = 0; j < callback.pageTypes.length; j++) {
+                    var type = callback.pageTypes[j];
+                    var stateKey = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
                     if (this.#pageState[stateKey]) {
                         hasMatchingPageType = true;
                         break;
@@ -477,26 +380,7 @@ class ForumCoreObserver {
                 if (!hasMatchingPageType) continue;
             }
             
-            if (callback.id?.includes('quote-link') || callback.id?.includes('anchor')) {
-                const isQuoteLink = node.matches?.('.quote-link, .quote_top a[href*="#entry"]');
-                if (!isQuoteLink) {
-                    const hasQuoteLink = node.querySelector?.('.quote-link, .quote_top a[href*="#entry"]');
-                    if (!hasQuoteLink) continue;
-                }
-            }
-            
-            if (callback.dependencies?.length) {
-                const unmetDeps = [];
-                for (const dep of callback.dependencies) {
-                    if (typeof dep === 'string' && !document.querySelector(dep)) {
-                        unmetDeps.push(dep);
-                    } else if (typeof dep === 'function' && !dep()) {
-                        unmetDeps.push(dep);
-                    }
-                }
-                if (unmetDeps.length) continue;
-            }
-            
+            // Check selector
             if (callback.selector) {
                 if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
                     continue;
@@ -510,54 +394,54 @@ class ForumCoreObserver {
     }
     
     async #executeCallbacks(callbacks, node) {
-        const promises = callbacks.map(async callback => {
-            try {
-                await callback.fn(node);
-            } catch (error) {
-                console.error('Callback ' + callback.id + ' failed: ' + error);
-                
-                if (callback.retryCount < (callback.maxRetries ?? 0)) {
-                    callback.retryCount = (callback.retryCount ?? 0) + 1;
-                    const delay = 100 * Math.pow(2, callback.retryCount - 1);
-                    
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    return this.#executeCallbacks([callback], node);
+        var promises = [];
+        
+        for (var i = 0; i < callbacks.length; i++) {
+            var callback = callbacks[i];
+            promises.push((async function() {
+                try {
+                    await callback.fn(node);
+                } catch (error) {
+                    console.error('Callback ' + callback.id + ' failed:', error);
                 }
-            }
-        });
+            })());
+        }
         
         await Promise.allSettled(promises);
     }
     
     #deferCallbacks(callbacks, node, priority) {
-        const delays = new Map([
-            ['high', 50],
-            ['normal', 100],
-            ['low', 500]
-        ]);
+        var delays = {
+            high: 50,
+            normal: 100,
+            low: 500
+        };
         
-        const delay = delays.get(priority) ?? 100;
+        var delay = delays[priority] || 100;
         
-        if (scheduler?.postTask) {
-            scheduler.postTask(() => 
-                this.#executeCallbacks(callbacks, node), 
-                { priority: 'user-visible', delay }
-            );
+        // Use the best available scheduling API
+        if (typeof scheduler !== 'undefined' && scheduler.postTask) {
+            scheduler.postTask(function() {
+                this.#executeCallbacks(callbacks, node);
+            }.bind(this), { 
+                priority: 'user-visible', 
+                delay: delay 
+            });
         } else if (window.requestIdleCallback) {
-            requestIdleCallback(() => 
-                this.#executeCallbacks(callbacks, node),
-                { timeout: delay }
-            );
+            requestIdleCallback(function() {
+                this.#executeCallbacks(callbacks, node);
+            }.bind(this), { 
+                timeout: delay 
+            });
         } else {
-            setTimeout(() => 
-                this.#executeCallbacks(callbacks, node),
-                delay
-            );
+            setTimeout(function() {
+                this.#executeCallbacks(callbacks, node);
+            }.bind(this), delay);
         }
     }
     
     #scanExistingContent() {
-        const forumSelectors = [
+        var forumSelectors = [
             '.post', '.article', '.btn', '.forminput', '.points_up', '.points_down',
             '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
             '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
@@ -569,24 +453,13 @@ class ForumCoreObserver {
             '.post-actions', '.user-info', '.post-content', '.post-footer'
         ];
         
-        const root = document.documentElement;
-        const observer = new MutationObserver((mutations, obs) => {
-            for (const selector of forumSelectors) {
-                const nodes = root.querySelectorAll(selector);
-                for (const node of nodes) {
-                    if (!this.#processedNodes.has(node)) {
-                        this.#processNode(node);
-                    }
-                }
-            }
-            obs.disconnect();
-        });
-        
-        observer.observe(root, { childList: true, subtree: true });
-        
-        for (const selector of forumSelectors) {
-            const nodes = root.querySelectorAll(selector);
-            for (const node of nodes) {
+        // Scan all selectors
+        for (var i = 0; i < forumSelectors.length; i++) {
+            var selector = forumSelectors[i];
+            var nodes = document.querySelectorAll(selector);
+            
+            for (var j = 0; j < nodes.length; j++) {
+                var node = nodes[j];
                 if (!this.#processedNodes.has(node)) {
                     this.#processNode(node);
                 }
@@ -594,26 +467,26 @@ class ForumCoreObserver {
         }
         
         this.#initialScanComplete = true;
-        console.log('Initial content scan complete');
-        console.log('Found: ' + document.querySelectorAll('.post-modernized').length + ' modernized posts');
-        console.log('Found: ' + document.querySelectorAll('.modern-quote').length + ' modern quotes');
+        console.log('✅ Initial content scan complete');
     }
     
     #setupCleanup() {
-        const intervalId = setInterval(() => {
-            if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes) {
-                console.warn('Processed nodes approaching limit');
+        this.#cleanupIntervalId = setInterval(function() {
+            // Monitor memory usage
+            if (this.#processedNodes.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes) {
+                console.warn('Processed nodes approaching limit: ' + this.#processedNodes.size);
                 
-                if (this.#processedNodes.size > ForumCoreObserver.#MEMORY_CONFIG.maxProcessedNodes * 1.5) {
+                if (this.#processedNodes.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes * 1.5) {
                     console.warn('Clearing processed nodes cache');
                     this.#processedNodes = new WeakSet();
                 }
             }
             
-            globalThis.gc?.();
-        }, ForumCoreObserver.#MEMORY_CONFIG.cleanupInterval);
-        
-        this.#cleanupIntervalId = intervalId;
+            // Suggest garbage collection if available
+            if (typeof globalThis.gc === 'function') {
+                globalThis.gc();
+            }
+        }.bind(this), ForumCoreObserver.#CONFIG.memory.cleanupInterval);
     }
     
     #handleVisibilityChange() {
@@ -621,49 +494,59 @@ class ForumCoreObserver {
             this.#pause();
         } else {
             this.#resume();
-            queueMicrotask(() => this.#scanExistingContent());
+            // Rescan content when page becomes visible
+            queueMicrotask(function() {
+                this.#scanExistingContent();
+            }.bind(this));
         }
     }
     
     #pause() {
-        this.#observer?.disconnect();
+        if (this.#observer) {
+            this.#observer.disconnect();
+        }
         
-        for (const timeoutId of this.#debounceTimeouts.values()) {
-            clearTimeout(timeoutId);
+        // Clear all timeouts
+        var timeoutIds = Array.from(this.#debounceTimeouts.values());
+        for (var i = 0; i < timeoutIds.length; i++) {
+            clearTimeout(timeoutIds[i]);
         }
         this.#debounceTimeouts.clear();
     }
     
     #resume() {
         if (!this.#observer) {
-            this.#init();
-        } else {
-            this.#observer.observe(document.documentElement, ForumCoreObserver.#OBSERVER_OPTIONS);
+            this.#observer = new MutationObserver(this.#handleMutations.bind(this));
         }
+        
+        this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
     }
     
+    // Public API
     register(settings) {
-        const id = settings.id ?? 'callback_' + Date.now() + '_' + 
-            (crypto.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2));
+        var id = settings.id || 'callback_' + Date.now() + '_' + 
+            (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2));
         
-        const callback = {
-            id,
+        var callback = {
+            id: id,
             fn: settings.callback,
-            priority: settings.priority ?? 'normal',
+            priority: settings.priority || 'normal',
             selector: settings.selector,
             pageTypes: settings.pageTypes,
             dependencies: settings.dependencies,
             retryCount: 0,
-            maxRetries: settings.maxRetries ?? 0,
+            maxRetries: settings.maxRetries || 0,
             createdAt: performance.now()
         };
         
         this.#callbacks.set(id, callback);
-        console.log('Registered callback: ' + id + ' (priority: ' + callback.priority + ')');
+        console.log('📝 Registered callback: ' + id + ' (priority: ' + callback.priority + ')');
         
+        // If selector is provided, scan for existing matching nodes
         if (this.#initialScanComplete && callback.selector) {
-            const nodes = document.querySelectorAll(callback.selector);
-            for (const node of nodes) {
+            var nodes = document.querySelectorAll(callback.selector);
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
                 if (!this.#processedNodes.has(node)) {
                     this.#processNode(node);
                 }
@@ -674,11 +557,11 @@ class ForumCoreObserver {
     }
     
     registerDebounced(settings) {
-        const id = this.register(settings);
+        var id = this.register(settings);
         
         this.#debouncedCallbacks.set(id, {
             callback: settings.callback,
-            delay: settings.delay ?? ForumCoreObserver.#PERFORMANCE_CONFIG.debounceThreshold,
+            delay: settings.delay || ForumCoreObserver.#CONFIG.performance.debounceThreshold,
             lastRun: 0
         });
         
@@ -686,7 +569,7 @@ class ForumCoreObserver {
     }
     
     unregister(callbackId) {
-        let removed = false;
+        var removed = false;
         
         if (this.#callbacks.has(callbackId)) {
             this.#callbacks.delete(callbackId);
@@ -704,7 +587,7 @@ class ForumCoreObserver {
         }
         
         if (removed) {
-            console.log('Unregistered callback: ' + callbackId);
+            console.log('🗑️ Unregistered callback: ' + callbackId);
         }
         
         return removed;
@@ -716,8 +599,9 @@ class ForumCoreObserver {
             return;
         }
         
-        const nodes = document.querySelectorAll(selector);
-        for (const node of nodes) {
+        var nodes = document.querySelectorAll(selector);
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
             if (!this.#processedNodes.has(node)) {
                 this.#processNode(node);
             }
@@ -725,18 +609,9 @@ class ForumCoreObserver {
     }
     
     getStats() {
-        const modernizedPosts = document.querySelectorAll('.post-modernized').length;
-        const modernQuotes = document.querySelectorAll('.modern-quote').length;
-        const modernProfiles = document.querySelectorAll('.modern-profile').length;
-        const modernNavigation = document.querySelectorAll('.modern-nav, .modern-breadcrumb, .modern-topic-title').length;
-        const anchorContainers = document.querySelectorAll('.anchor-container').length;
-        const quoteJumpButtons = document.querySelectorAll('.quote-jump-btn').length;
-        const postNewBadges = document.querySelectorAll('.post-new-badge').length;
-        const modernizedElements = document.querySelectorAll('[class*="modern-"], [class*="-modernized"]').length;
-        
         return {
-            totalMutations: Number(this.#mutationMetrics.totalMutations),
-            processedMutations: Number(this.#mutationMetrics.processedMutations),
+            totalMutations: this.#mutationMetrics.totalMutations,
+            processedMutations: this.#mutationMetrics.processedMutations,
             averageProcessingTime: this.#mutationMetrics.averageProcessingTime,
             lastMutationTime: this.#mutationMetrics.lastMutationTime,
             registeredCallbacks: this.#callbacks.size,
@@ -745,17 +620,7 @@ class ForumCoreObserver {
             processedNodes: this.#processedNodes.size,
             pageState: this.#pageState,
             isProcessing: this.#isProcessing,
-            queueLength: this.#mutationQueue.length,
-            postModernizerStats: {
-                modernizedPosts,
-                modernQuotes,
-                modernProfiles,
-                modernNavigation,
-                anchorContainers,
-                quoteJumpButtons,
-                postNewBadges,
-                modernizedElements
-            }
+            queueLength: this.#mutationQueue.length
         };
     }
     
@@ -774,42 +639,7 @@ class ForumCoreObserver {
         
         document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
         
-        console.log('Enhanced Forum Core Observer destroyed');
-    }
-    
-    isPostModernizerActive() {
-        return {
-            hasModernizer: !!globalThis.postModernizer,
-            modernizedPosts: document.querySelectorAll('.post-modernized').length,
-            modernizedQuotes: document.querySelectorAll('.modern-quote').length,
-            isInitialized: this.#pageState.hasModernizedPosts || this.#pageState.hasModernizedQuotes
-        };
-    }
-    
-    optimizeForPostModernizer() {
-        console.log('Optimizing for Post Modernizer');
-        
-        const skipSelectors = [
-            '.post-modernized',
-            '.modern-quote',
-            '.modern-profile',
-            '.modern-nav',
-            '.modern-breadcrumb'
-        ];
-        
-        let skippedTotal = 0;
-        for (const selector of skipSelectors) {
-            const nodes = document.querySelectorAll(selector);
-            for (const node of nodes) {
-                this.#processedNodes.add(node);
-            }
-            skippedTotal += nodes.length;
-        }
-        
-        return {
-            skippedNodes: skippedTotal,
-            message: 'Post Modernizer optimization applied'
-        };
+        console.log('🔄 ForumCoreObserver destroyed');
     }
     
     static create() {
@@ -817,52 +647,40 @@ class ForumCoreObserver {
     }
 }
 
+// Initialize globally
 if (!globalThis.forumObserver) {
     try {
         globalThis.forumObserver = ForumCoreObserver.create();
         
-        globalThis.registerForumScript = (settings) => {
-            return globalThis.forumObserver?.register(settings) ?? null;
+        // Global helper functions
+        globalThis.registerForumScript = function(settings) {
+            return globalThis.forumObserver ? globalThis.forumObserver.register(settings) : null;
         };
         
-        globalThis.registerDebouncedForumScript = (settings) => {
-            return globalThis.forumObserver?.registerDebounced(settings) ?? null;
+        globalThis.registerDebouncedForumScript = function(settings) {
+            return globalThis.forumObserver ? globalThis.forumObserver.registerDebounced(settings) : null;
         };
         
-        globalThis.getPostModernizerStats = () => {
-            return globalThis.forumObserver?.getStats().postModernizerStats ?? {};
-        };
-        
-        globalThis.addEventListener('pagehide', () => {
-            globalThis.forumObserver?.destroy();
+        // Auto-cleanup on page hide
+        globalThis.addEventListener('pagehide', function() {
+            if (globalThis.forumObserver) {
+                globalThis.forumObserver.destroy();
+            }
         }, { once: true });
         
-        setTimeout(() => {
-            if (globalThis.forumObserver) {
-                globalThis.forumObserver.optimizeForPostModernizer();
-            }
-        }, 1000);
-        
-        const hostname = globalThis.location?.hostname;
-        if (hostname === 'localhost' || 
-            hostname === '127.0.0.1' ||
-            hostname?.startsWith('192.168.') ||
-            globalThis.location?.port) {
-            globalThis.__FORUM_OBSERVER_DEBUG__ = globalThis.forumObserver;
-            console.log('Forum Core Observer debug mode enabled');
-        }
-        
-        console.log('Enhanced Forum Core Observer ready');
-        console.log('Post Modernizer optimizations active');
+        console.log('🚀 ForumCoreObserver ready');
         
     } catch (error) {
-        console.error('Failed to initialize Enhanced Forum Core Observer: ' + error);
+        console.error('Failed to initialize ForumCoreObserver:', error);
         
+        // Fallback proxy
         globalThis.forumObserver = new Proxy({}, {
-            get(target, prop) {
-                const methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy', 'optimizeForPostModernizer'];
-                if (methods.includes(prop)) {
-                    return () => console.warn('Enhanced Forum Observer not initialized - ' + prop + ' called');
+            get: function(target, prop) {
+                var methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy'];
+                if (methods.indexOf(prop) > -1) {
+                    return function() {
+                        console.warn('ForumCoreObserver not initialized - ' + prop + ' called');
+                    };
                 }
                 return undefined;
             }
