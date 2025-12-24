@@ -13,10 +13,6 @@ class MediaDimensionExtractor {
     #cacheMisses = 0;
     #smallContextElements = null;
     #MAX_CACHE_SIZE = 500;
-    #perf = {
-        startTime: 0,
-        marks: []
-    };
 
     // Static configurations for better performance
     static #IFRAME_SIZES = new Map([
@@ -41,7 +37,6 @@ class MediaDimensionExtractor {
     static #EMOJI_SIZE_SMALL = 18;
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
-    static #CONCURRENCY_LIMIT = 4;
 
     constructor() {
         this.#imageLoadHandler = this.#handleImageLoad.bind(this);
@@ -49,33 +44,9 @@ class MediaDimensionExtractor {
     }
 
     #init() {
-        this.#mark('init-start');
-        
         // Immediate initialization - DOM is ready (defer)
         this.#setupObserver();
         this.#cacheContextElements();
-        
-        this.#mark('init-end');
-        this.#measure();
-    }
-
-    #mark(name) {
-        if (typeof performance !== 'undefined' && performance.mark) {
-            performance.mark('media-extractor-' + name);
-            this.#perf.marks.push(name);
-        }
-    }
-
-    #measure() {
-        if (typeof performance !== 'undefined' && performance.measure) {
-            for (let i = 1; i < this.#perf.marks.length; i++) {
-                performance.measure(
-                    'media-extractor-' + i,
-                    'media-extractor-' + this.#perf.marks[i-1],
-                    'media-extractor-' + this.#perf.marks[i]
-                );
-            }
-        }
     }
 
     #cacheContextElements() {
@@ -99,7 +70,6 @@ class MediaDimensionExtractor {
             },
             selector: 'img, iframe, video',
             priority: 'high'
-            // No pageTypes needed - observer is global now
         });
 
         // Process all existing media using batched approach
@@ -107,19 +77,11 @@ class MediaDimensionExtractor {
     }
 
     #processAllMediaBatched() {
-        this.#mark('batch-start');
-        
         const batches = [
             document.images,
             document.getElementsByTagName('iframe'),
             document.getElementsByTagName('video')
         ];
-        
-        const totalElements = batches.reduce((total, batch) => {
-            return total + batch.length;
-        }, 0);
-        
-        console.log('✅ Media Dimension Extractor: Processing ' + totalElements + ' media elements');
         
         // Process in batches to avoid blocking
         requestAnimationFrame(() => {
@@ -154,9 +116,6 @@ class MediaDimensionExtractor {
             requestAnimationFrame(() => {
                 this.#processBatch(batches, batchIndex, elementIndex);
             });
-        } else {
-            this.#mark('batch-end');
-            console.log('✅ Media Dimension Extractor: Batch processing complete');
         }
     }
 
@@ -279,8 +238,6 @@ class MediaDimensionExtractor {
             
             // Cache correct dimensions
             this.#cacheDimension(img.src, size, size);
-            
-            console.log('🔠 Fixed twemoji dimensions: ' + img.src + ' -> ' + size + 'x' + size);
             return;
         }
 
@@ -303,7 +260,7 @@ class MediaDimensionExtractor {
         const heightAttr = img.getAttribute('height');
 
         if (widthAttr !== null && heightAttr !== null) {
-            const width = widthAttr | 0; // Fast integer conversion
+            const width = widthAttr | 0;
             const height = heightAttr | 0;
 
             if (width > 0 && height > 0) {
@@ -452,7 +409,7 @@ class MediaDimensionExtractor {
         }
 
         this.#dimensionCache.set(cacheKey, { width, height });
-        this.#lruMap.set(cacheKey, performance.now()); // Use performance.now() for more precise timing
+        this.#lruMap.set(cacheKey, performance.now());
     }
 
     #processIframe(iframe) {
@@ -465,7 +422,7 @@ class MediaDimensionExtractor {
             if (src.includes(domain)) {
                 width = sizes[0];
                 height = sizes[1];
-                return true; // Break equivalent
+                return true;
             }
         });
 
@@ -523,7 +480,7 @@ class MediaDimensionExtractor {
         // Abort all pending event listeners
         this.#imageLoadAbortController.abort();
 
-        // Clean up event listeners
+        // Clean up event handlers
         const images = document.images;
         for (let i = 0, len = images.length; i < len; i++) {
             const img = images[i];
@@ -577,27 +534,12 @@ class MediaDimensionExtractor {
             cacheMisses: this.#cacheMisses,
             cacheHitRate: hitRate + '%',
             cacheSize: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size,
-            averageCacheAge: this.#calculateAverageCacheAge()
+            processedMedia: this.#processedMedia.size
         };
-    }
-
-    #calculateAverageCacheAge() {
-        if (this.#lruMap.size === 0) return 0;
-        
-        let totalAge = 0;
-        const now = performance.now();
-        
-        this.#lruMap.forEach((timestamp) => {
-            totalAge += now - timestamp;
-        });
-        
-        return Math.round(totalAge / this.#lruMap.size);
     }
 
     destroy() {
         this.#cleanup();
-        console.log('Media Dimension Extractor destroyed', this.getPerformanceStats());
     }
 }
 
@@ -610,8 +552,6 @@ if (!globalThis.mediaDimensionExtractor) {
     try {
         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
     } catch (error) {
-        console.error('MediaDimensionExtractor initialization failed:', error);
-
         // Single retry after short delay using requestIdleCallback
         if ('requestIdleCallback' in window) {
             requestIdleCallback(() => {
@@ -619,7 +559,7 @@ if (!globalThis.mediaDimensionExtractor) {
                     try {
                         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
                     } catch (retryError) {
-                        console.error('MediaDimensionExtractor retry failed:', retryError);
+                        // Silent fail
                     }
                 }
             }, { timeout: 50 });
@@ -629,7 +569,7 @@ if (!globalThis.mediaDimensionExtractor) {
                     try {
                         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
                     } catch (retryError) {
-                        console.error('MediaDimensionExtractor retry failed:', retryError);
+                        // Silent fail
                     }
                 }
             }, 50);
