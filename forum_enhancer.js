@@ -867,6 +867,563 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 
 
 
+//Timestamps
+function initTimestampScript() {
+    const t = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const e = document.body.classList.contains("guest");
+    
+    function i(e) {
+        const i = String(e).trim();
+        if (i.includes("T") && (i.includes("+") || i.includes("Z"))) {
+            const t = moment(i);
+            if (t.isValid()) return t;
+        }
+        const r = ["M/D/YYYY, h:mm A", "M/D/YYYY, h:mm:ss A", "D/M/YYYY, HH:mm", "D/M/YYYY, HH:mm:ss", "YYYY-MM-DD HH:mm:ss", "YYYY-MM-DDTHH:mm:ss", "YYYY/MM/DD HH:mm:ss", "MMMM D, YYYY, h:mm A", "MMM D, YYYY, h:mm A", "YYYY-MM-DD", "M/D/YYYY", "D/M/YYYY"];
+        for (const e of r) {
+            const r = moment(i, e, !0);
+            if (r.isValid()) return r;
+        }
+        for (const e of r) {
+            const r = moment(i, e, !1);
+            if (r.isValid()) return r;
+        }
+        const o = moment(i, moment.ISO_8601, !0);
+        return o.isValid() ? o : moment.invalid();
+    }
+    
+    function r(t) {
+        if (!t || !t.isValid()) return "Invalid date";
+        var e = moment(),
+            i = e.diff(t, "hours");
+        return i < 24 ? t.fromNow() : i < 48 ? "Yesterday at " + t.format("h:mm A") : i < 168 ? t.format("dddd [at] h:mm A") : t.format("MMM D, YYYY");
+    }
+    
+    function o(t) {
+        return !t || !t.isValid() ? "Invalid date" : t.format("MMM, YYYY");
+    }
+    
+    function a(e, i) {
+        try {
+            var r = moment.tz(e, i, "Europe/Rome");
+            return r.isValid() ? r.clone().tz(t) : null;
+        } catch (t) {
+            return null;
+        }
+    }
+    
+    function n(t) {
+        try {
+            if (!t) return !1;
+            const e = t.querySelector(".d_day"),
+                i = t.querySelector(".d_month"),
+                r = t.querySelector(".d_year");
+            return e && i && r && "" === i.textContent.trim() && "" !== r.textContent.trim() && !t.textContent.includes(":");
+        } catch (t) {
+            return !1;
+        }
+    }
+    
+    function m(t) {
+        try {
+            const e = t.querySelector(".d_day"),
+                i = t.querySelector(".d_year");
+            if (!e || !i) return null;
+            const r = parseInt(e.textContent.trim()),
+                o = i.textContent.trim();
+            if (isNaN(r) || !o) return null;
+            const a = moment({
+                year: o,
+                month: r - 1
+            });
+            return a.isValid() ? a : null;
+        } catch (t) {
+            return null;
+        }
+    }
+    
+    function l(t) {
+        try {
+            if (t.classList.contains("timestamp-processed")) return;
+            var e = t.getAttribute("datetime") || t.getAttribute("title") || t.textContent.trim(),
+                o = i(e);
+            if (o.isValid()) {
+                var a = document.createElement("time");
+                a.className = "u-dt";
+                a.setAttribute("dir", "auto");
+                a.setAttribute("datetime", o.format());
+                a.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+                a.textContent = r(o);
+                a.style.visibility = "visible";
+                a.classList.add("timestamp-processed");
+                t.replaceWith(a);
+            }
+        } catch (t) {}
+    }
+    
+    function c(t) {
+        try {
+            var e = t.textContent.trim(),
+                r = e.match(/^(Edited by .+?) - (.+)$/);
+            if (r) {
+                var o = r[1],
+                    a = r[2],
+                    n = i(a);
+                if (n.isValid()) {
+                    var m = n.format("MMM D, YYYY");
+                    t.textContent = o + ": " + m;
+                    var l = document.createElement("time");
+                    l.className = "u-dt";
+                    l.setAttribute("datetime", n.format());
+                    l.setAttribute("title", n.format("MMM D, YYYY [at] h:mm A"));
+                    l.textContent = m;
+                    t.innerHTML = o + ": ";
+                    t.appendChild(l);
+                    t.style.visibility = "visible";
+                }
+            }
+        } catch (t) {}
+    }
+    
+    function s(t) {
+        try {
+            var e = t.querySelector(".when");
+            if (!e) return;
+            var r = e.textContent.trim(),
+                o = i(r);
+            if (!o.isValid()) return;
+            var a = document.createElement("time");
+            a.className = "u-dt";
+            a.setAttribute("datetime", o.format());
+            a.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+            a.textContent = o.format("MMM D, YYYY");
+            a.style.visibility = "visible";
+            e.replaceWith(a);
+        } catch (t) {}
+    }
+    
+    function u(t) {
+        try {
+            if (!document.body.matches("#online")) return;
+            var e = t.textContent.trim(),
+                o = i(e);
+            if (o.isValid()) {
+                var a = document.createElement("time");
+                a.className = "u-dt";
+                a.classList.add("when");
+                a.setAttribute("dir", "auto");
+                a.setAttribute("datetime", o.format());
+                a.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+                a.textContent = r(o);
+                a.style.visibility = "visible";
+                t.replaceWith(a);
+            }
+        } catch (t) {}
+    }
+    
+    function d(t) {
+        try {
+            if (!document.body.matches("#blog")) return;
+            if (n(t)) {
+                var e = m(t);
+                if (e && e.isValid()) {
+                    var a = document.createElement("time");
+                    a.className = "u-dt";
+                    a.classList.add("when");
+                    a.setAttribute("dir", "auto");
+                    a.setAttribute("datetime", e.format());
+                    a.setAttribute("title", e.format("MMM, YYYY"));
+                    a.textContent = o(e);
+                    a.style.visibility = "visible";
+                    t.replaceWith(a);
+                    return;
+                }
+            }
+            var l = t.querySelector(".d_day") ? t.querySelector(".d_day").textContent.trim() : "",
+                c = t.querySelector(".d_month") ? t.querySelector(".d_month").textContent.trim() : "",
+                s = t.querySelector(".d_year") ? t.querySelector(".d_year").textContent.trim() : "";
+            c = c.replace(/([A-Za-z]+).*/, "$1");
+            var u = s + "-" + c + "-" + l,
+                e = moment(u, "YYYY-MMM-DD", !0);
+            e.isValid() || (e = i(u));
+            e.isValid() && (a = document.createElement("time"), a.className = "u-dt", a.classList.add("when"), a.setAttribute("dir", "auto"), a.setAttribute("datetime", e.format()), a.setAttribute("title", e.format("MMM D, YYYY [at] h:mm A")), a.textContent = r(e), a.style.visibility = "visible", t.replaceWith(a));
+        } catch (t) {}
+    }
+    
+    function f(t) {
+        try {
+            if (n(t)) {
+                var e = m(t);
+                if (e && e.isValid()) {
+                    var a = document.createElement("time");
+                    a.className = "u-dt";
+                    a.classList.add("when");
+                    a.setAttribute("dir", "auto");
+                    a.setAttribute("datetime", e.format());
+                    a.setAttribute("title", e.format("MMM, YYYY"));
+                    a.textContent = o(e);
+                    a.style.visibility = "visible";
+                    t.replaceWith(a);
+                    return;
+                }
+            }
+            var l = t.querySelector(".d_day") ? t.querySelector(".d_day").textContent.trim() : "",
+                c = t.querySelector(".d_month") ? t.querySelector(".d_month").textContent.trim() : "",
+                s = t.querySelector(".d_year") ? t.querySelector(".d_year").textContent.trim() : "";
+            c = c.replace(/([A-Za-z]+).*/, "$1");
+            var u = s + "-" + c + "-" + l,
+                e = moment(u, "YYYY-MMM-DD", !0);
+            e.isValid() || (e = i(u));
+            e.isValid() && (a = document.createElement("time"), a.className = "u-dt", a.classList.add("when"), a.setAttribute("dir", "auto"), a.setAttribute("datetime", e.format()), a.setAttribute("title", e.format("MMM D, YYYY [at] h:mm A")), a.textContent = r(e), a.style.visibility = "visible", t.replaceWith(a));
+        } catch (t) {}
+    }
+    
+    function Y(t) {
+        try {
+            if (!document.body.matches("#group, #members")) return;
+            var e = t.textContent.trim(),
+                r = i(e);
+            if (r.isValid()) {
+                var o = document.createElement("time");
+                o.className = "u-dt";
+                o.classList.add("cc");
+                o.setAttribute("dir", "auto");
+                o.setAttribute("datetime", r.format());
+                o.setAttribute("title", r.format("MMM D, YYYY"));
+                o.textContent = r.format("MMM D, YYYY");
+                o.style.visibility = "visible";
+                t.replaceWith(o);
+            }
+        } catch (t) {}
+    }
+    
+    function h(t) {
+        try {
+            if (!document.body.matches("#blog")) return;
+            var e = t.getAttribute("title") || t.textContent.trim();
+            e = e.split(":").slice(0, -1).join(":").trim();
+            var o = i(e);
+            if (o.isValid()) {
+                var a = document.createElement("time");
+                a.className = "u-dt";
+                a.classList.add("when");
+                a.setAttribute("dir", "auto");
+                a.setAttribute("datetime", o.format());
+                a.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+                a.textContent = r(o);
+                a.style.visibility = "visible";
+                t.replaceWith(a);
+            }
+        } catch (t) {}
+    }
+    
+    function y(t) {
+        try {
+            if (t.classList.contains("timestamp-processed")) return;
+            if (!document.body.matches("#board")) return;
+            var e = t.lastChild;
+            if (!e || e.nodeType !== Node.TEXT_NODE) return;
+            var i = e.textContent.trim(),
+                o = a(i, "D/M/YYYY, HH:mm");
+            if (!o) return;
+            var n = document.createElement("time");
+            n.className = "u-dt when";
+            n.setAttribute("dir", "auto");
+            n.setAttribute("datetime", o.format());
+            n.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+            n.textContent = r(o);
+            n.style.visibility = "visible";
+            n.classList.add("timestamp-processed");
+            t.replaceWith(n);
+        } catch (t) {}
+    }
+    
+    function b(t) {
+        try {
+            if (t.classList.contains("timestamp-processed")) return;
+            var e = t.lastChild;
+            if (!e || e.nodeType !== Node.TEXT_NODE) return;
+            var i = e.textContent.trim(),
+                o = a(i, "D/M/YYYY, HH:mm");
+            if (!o) return;
+            var n = document.createElement("time");
+            n.className = "u-dt when";
+            n.setAttribute("dir", "auto");
+            n.setAttribute("datetime", o.format());
+            n.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+            n.textContent = r(o);
+            n.style.visibility = "visible";
+            n.classList.add("timestamp-processed");
+            t.replaceWith(n);
+        } catch (t) {}
+    }
+    
+    function M(t) {
+        try {
+            var e = t.getAttribute("datetime") || t.textContent.trim();
+            if (t.classList.contains("st-emoji-epost-time")) {
+                var i = moment(e, "YYYY/MM/DD HH:mm", !0);
+                if (i && i.isValid()) {
+                    t.textContent = r(i);
+                    t.setAttribute("datetime", i.format());
+                    t.setAttribute("title", i.format("MMM D, YYYY [at] h:mm A"));
+                    t.style.visibility = "visible";
+                }
+                return;
+            }
+            var o = a(e, "YYYY/MM/DD HH:mm");
+            if (!o) return;
+            t.textContent = r(o);
+            t.setAttribute("datetime", o.format());
+            t.setAttribute("title", o.format("MMM D, YYYY [at] h:mm A"));
+            t.style.visibility = "visible";
+        } catch (t) {}
+    }
+    
+    function v(t) {
+        try {
+            var e = t.textContent.trim(),
+                i = moment(e, "YYYY/MM/DD HH:mm", !0);
+            if (i && i.isValid()) {
+                var o = document.createElement("time");
+                o.className = "u-dt st-emoji-post-time";
+                o.setAttribute("dir", "auto");
+                o.setAttribute("datetime", i.format());
+                o.setAttribute("title", i.format("MMM D, YYYY [at] h:mm A"));
+                o.textContent = r(i);
+                o.style.visibility = "visible";
+                t.replaceWith(o);
+            }
+        } catch (t) {}
+    }
+    
+    function A(t, e) {
+        try {
+            if (t.closest(".edit")) return;
+            if (t.classList.contains("timeago")) return;
+            if (".big_list .zz .when" === e && !document.body.matches("#board, #forum, #blog, #search")) return;
+            if (".post .title2.top .when" === e && !document.body.matches("#topic, #search, #blog")) return;
+            if (".summary .when" === e && !document.body.matches("#send")) return;
+            if (".article .title2.top .when" === e && !document.body.matches("#blog")) return;
+            var o = t.getAttribute("title") || t.textContent.trim();
+            t.children.length && "SPAN" === t.children[0].tagName && (o = t.childNodes[t.childNodes.length - 1].textContent.trim());
+            var a = i(o);
+            if (a.isValid()) {
+                if (t.classList.contains("st-emoji-notice-time") || t.classList.contains("st-emoji-epost-time")) M(t);
+                else {
+                    var n = document.createElement("time");
+                    n.className = "u-dt";
+                    t.classList.contains("when") && n.classList.add("when");
+                    t.classList.contains("Item") && n.classList.add("Item");
+                    n.setAttribute("dir", "auto");
+                    n.setAttribute("datetime", a.format());
+                    n.setAttribute("title", a.format("MMM D, YYYY [at] h:mm A"));
+                    n.textContent = r(a);
+                    n.style.visibility = "visible";
+                    n.classList.add("timestamp-processed");
+                    t.replaceWith(n);
+                }
+            }
+        } catch (t) {}
+    }
+
+    // Main processing function that replaces the original p() function
+    function processTimestampElements() {
+        try {
+            // Process existing elements on page load
+            document.querySelectorAll("dl.profile-joined, dl.profile-lastaction").forEach(s);
+            document.querySelectorAll(".timeago").forEach(l);
+            document.querySelectorAll(".post .edit").forEach(c);
+            document.querySelectorAll(".st-emoji-post-time").forEach(v);
+            
+            if (document.body.matches("#online")) {
+                document.querySelectorAll(".online .yy .when").forEach(u);
+            }
+            
+            if (document.body.matches("#blog")) {
+                document.querySelectorAll(".article .title2.top .when").forEach(d);
+                document.querySelectorAll(".bt_mini .when").forEach(f);
+                document.querySelectorAll(".mini_buttons .when").forEach(h);
+            }
+            
+            if (document.body.matches("#group, #members")) {
+                document.querySelectorAll(".big_list .cc").forEach(Y);
+            }
+            
+            if (document.body.matches("#board")) {
+                document.querySelectorAll(".side_topics .when").forEach(y);
+            }
+            
+            document.querySelectorAll(".lastarticles .topic .when").forEach(b);
+            document.querySelectorAll(".st-emoji-epost-time, .st-emoji-notice-time").forEach(M);
+            
+            var selectors = [
+                ".big_list .zz .when",
+                ".post-date", 
+                ".time",
+                ".date",
+                ".post .title2.top .when",
+                ".summary .when"
+            ];
+            
+            for (var e = 0; e < selectors.length; e++) {
+                var selector = selectors[e];
+                document.querySelectorAll(selector).forEach(function(t) {
+                    A(t, selector);
+                });
+            }
+        } catch (t) {}
+    }
+
+    // Register callbacks with ForumCoreObserver
+    function registerWithForumObserver() {
+        if (!globalThis.forumObserver || !globalThis.registerForumScript) {
+            console.error('ForumCoreObserver not available. Timestamp script cannot initialize.');
+            return;
+        }
+
+        // Register callbacks for different element types
+        const callbacks = [
+            {
+                id: 'timestamp-timeago',
+                selector: '.timeago',
+                callback: l,
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-post-edit',
+                selector: '.post .edit',
+                callback: c,
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-emoji-post-time',
+                selector: '.st-emoji-post-time',
+                callback: v,
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-online-when',
+                selector: '.online .yy .when',
+                callback: function(node) {
+                    if (document.body.matches("#online")) u(node);
+                },
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-blog-article-when',
+                selector: '.article .title2.top .when',
+                callback: function(node) {
+                    if (document.body.matches("#blog")) d(node);
+                },
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-blog-bt-mini',
+                selector: '.bt_mini .when',
+                callback: function(node) {
+                    if (document.body.matches("#blog")) f(node);
+                },
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-blog-mini-buttons',
+                selector: '.mini_buttons .when',
+                callback: function(node) {
+                    if (document.body.matches("#blog")) h(node);
+                },
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-group-cc',
+                selector: '.big_list .cc',
+                callback: function(node) {
+                    if (document.body.matches("#group, #members")) Y(node);
+                },
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-board-side-topics',
+                selector: '.side_topics .when',
+                callback: function(node) {
+                    if (document.body.matches("#board")) y(node);
+                },
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-lastarticles-topic',
+                selector: '.lastarticles .topic .when',
+                callback: b,
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-emoji-notice',
+                selector: '.st-emoji-epost-time, .st-emoji-notice-time',
+                callback: M,
+                priority: 'normal'
+            },
+            {
+                id: 'timestamp-profile-joined',
+                selector: 'dl.profile-joined, dl.profile-lastaction',
+                callback: s,
+                priority: 'normal'
+            }
+        ];
+
+        // Register general timestamp selectors with conditional logic
+        const generalSelectors = [
+            ".big_list .zz .when",
+            ".post-date", 
+            ".time",
+            ".date",
+            ".post .title2.top .when",
+            ".summary .when"
+        ];
+
+        generalSelectors.forEach((selector, index) => {
+            globalThis.registerForumScript({
+                id: `timestamp-general-${index}`,
+                selector: selector,
+                callback: function(node) {
+                    A(node, selector);
+                },
+                priority: 'normal'
+            });
+        });
+
+        // Register all callbacks
+        callbacks.forEach(callback => {
+            globalThis.registerForumScript(callback);
+        });
+
+        console.log('✅ Timestamp script registered with ForumCoreObserver');
+    }
+
+    // Initialize function
+    function init() {
+        // Process existing elements first
+        processTimestampElements();
+        
+        // Register with ForumCoreObserver for dynamic content
+        registerWithForumObserver();
+    }
+
+    // Start initialization
+    init();
+}
+
+function waitForMoment() {
+    if ("undefined" != typeof moment && "undefined" != typeof moment.tz) {
+        initTimestampScript();
+    } else {
+        setTimeout(waitForMoment, 50);
+    }
+}
+
+// Start the script
+waitForMoment();
+
+
+
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, and modern code blocks
