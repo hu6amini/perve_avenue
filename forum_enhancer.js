@@ -4,7 +4,6 @@
 
 class MediaDimensionExtractor {
     #observerId = null;
-    #previewObserverId = null;
     #processedMedia = new WeakSet();
     #dimensionCache = new Map();
     #lruMap = new Map();
@@ -84,82 +83,19 @@ class MediaDimensionExtractor {
             return;
         }
 
-        // Main observer for regular media elements
+        // Simple global registration - no pageTypes needed
         this.#observerId = globalThis.forumObserver.register({
             id: 'media-dimension-extractor',
             callback: function(node) {
                 this.#processMedia(node);
             }.bind(this),
             selector: 'img, iframe, video',
-            priority: 'high',
-            pageTypes: ['topic', 'blog', 'search', 'preview']
-        });
-
-        // Special observer for preview containers to catch nested media
-        this.#previewObserverId = globalThis.forumObserver.register({
-            id: 'media-dimension-extractor-preview',
-            callback: function(node) {
-                // Check if this is a preview container
-                var isPreviewContainer = node.id === 'preview' || 
-                                       node.id === 'ajaxObject' || 
-                                       (node.classList && node.classList.contains('preview')) ||
-                                       (node.matches && node.matches('#preview, #ajaxObject, .preview'));
-                
-                // Check if node is inside a preview container
-                var inPreviewContainer = node.closest && 
-                                       (node.closest('#preview') || 
-                                        node.closest('#ajaxObject') || 
-                                        node.closest('.preview'));
-                
-                if (isPreviewContainer || inPreviewContainer) {
-                    // Process all media inside preview container
-                    this.#processPreviewContainer(node);
-                }
-            }.bind(this),
-            selector: '#preview, #ajaxObject, .preview, [id*="preview"], .Item.preview, .preview-content',
-            priority: 'critical',
-            pageTypes: ['topic', 'blog', 'search', 'preview']
+            priority: 'high'
+            // No pageTypes - runs everywhere thanks to global observer
         });
 
         // Process all existing media using batched approach
         this.#processAllMediaBatched();
-        
-        // Also process any existing preview content immediately
-        this.#forceProcessPreview();
-    }
-
-    #forceProcessPreview() {
-        // Look for preview containers and process their media immediately
-        var previewSelectors = ['#preview', '#ajaxObject', '.preview', '[id*="preview"]', '.Item.preview'];
-        
-        for (var s = 0; s < previewSelectors.length; s++) {
-            var selector = previewSelectors[s];
-            var elements = document.querySelectorAll(selector);
-            for (var i = 0; i < elements.length; i++) {
-                var element = elements[i];
-                this.#processPreviewContainer(element);
-            }
-        }
-    }
-
-    #processPreviewContainer(container) {
-        // Find all media in container and process immediately
-        var mediaElements = container.querySelectorAll('img, iframe, video');
-        
-        for (var i = 0; i < mediaElements.length; i++) {
-            var element = mediaElements[i];
-            if (!this.#processedMedia.has(element)) {
-                this.#processSingleMedia(element);
-            }
-        }
-        
-        // Also check if container itself is a media element
-        if ((container.tagName === 'IMG' || 
-             container.tagName === 'IFRAME' || 
-             container.tagName === 'VIDEO') && 
-            !this.#processedMedia.has(container)) {
-            this.#processSingleMedia(container);
-        }
     }
 
     #processAllMediaBatched() {
@@ -290,9 +226,20 @@ class MediaDimensionExtractor {
         if (isTwemoji) {
             // ALWAYS set twemoji to proper size, ignore any existing dimensions
             var size = this.#isInSmallContext(img) ? 18 : 20;
+            
+            // Force set dimensions regardless of what's already there
             img.setAttribute('width', size);
             img.setAttribute('height', size);
             img.style.aspectRatio = size + ' / ' + size;
+            
+            // Remove any inline styles that might override our size
+            if (img.style.width && img.style.width !== size + 'px') {
+                img.style.width = size + 'px';
+            }
+            if (img.style.height && img.style.height !== size + 'px') {
+                img.style.height = size + 'px';
+            }
+            
             // Cache emoji dimensions
             this.#cacheDimension(img.src, size, size);
             return; // Skip all other processing for twemojis
@@ -321,6 +268,16 @@ class MediaDimensionExtractor {
             var height = heightAttr | 0;
 
             if (width > 0 && height > 0) {
+                // For twemojis, always override to proper size
+                if (img.src.includes('twemoji') || img.classList.contains('twemoji')) {
+                    var size = this.#isInSmallContext(img) ? 18 : 20;
+                    img.setAttribute('width', size);
+                    img.setAttribute('height', size);
+                    img.style.aspectRatio = size + ' / ' + size;
+                    this.#cacheDimension(img.src, size, size);
+                    return;
+                }
+
                 // Validate against natural dimensions if available
                 if (img.complete && img.naturalWidth) {
                     var wDiff = Math.abs(img.naturalWidth - width);
@@ -432,7 +389,16 @@ class MediaDimensionExtractor {
         delete img.__dimensionExtractorHandler;
 
         if (img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+            // Check if it's a twemoji
+            if (img.src.includes('twemoji') || img.classList.contains('twemoji')) {
+                var size = this.#isInSmallContext(img) ? 18 : 20;
+                img.setAttribute('width', size);
+                img.setAttribute('height', size);
+                img.style.aspectRatio = size + ' / ' + size;
+                this.#cacheDimension(img.src, size, size);
+            } else {
+                this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+            }
         } else {
             this.#setImageDimensions(img, 600, 400); // Broken image fallback
         }
@@ -527,13 +493,8 @@ class MediaDimensionExtractor {
 
     #cleanup() {
         // Unregister from forum observer
-        if (globalThis.forumObserver) {
-            if (this.#observerId) {
-                globalThis.forumObserver.unregister(this.#observerId);
-            }
-            if (this.#previewObserverId) {
-                globalThis.forumObserver.unregister(this.#previewObserverId);
-            }
+        if (globalThis.forumObserver && this.#observerId) {
+            globalThis.forumObserver.unregister(this.#observerId);
         }
 
         // Clean up event listeners
@@ -624,7 +585,6 @@ globalThis.addEventListener('pagehide', function() {
         }
     }
 });
-
 
 
 //Twemoji
