@@ -11,7 +11,7 @@ class ForumCoreObserver {
     
     #callbacks = new Map();
     #debouncedCallbacks = new Map();
-    #pageState = this.#detectPageState();
+    #pageState = this.#detectPageState(); // Keep for stats, but don't filter by it
     
     // Performance optimized configuration
     static #CONFIG = {
@@ -59,7 +59,7 @@ class ForumCoreObserver {
             capture: true 
         });
         
-        console.log('🔍 ForumCoreObserver initialized');
+        console.log('🔍 ForumCoreObserver initialized (GLOBAL - no page restrictions)');
     }
     
     #detectPageState() {
@@ -96,7 +96,10 @@ class ForumCoreObserver {
             hasModernizedNavigation: !!document.querySelector('.modern-nav'),
             isDarkMode: theme === 'dark',
             isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
-            isMobile: window.matchMedia('(max-width: 768px)').matches
+            isMobile: window.matchMedia('(max-width: 768px)').matches,
+            // Add detection for send/preview pages
+            isSendPage: document.body.id === 'send' || className.includes('send'),
+            hasPreview: !!document.querySelector('#preview, #ajaxObject, .preview, .Item.preview')
         };
     }
     
@@ -366,19 +369,19 @@ class ForumCoreObserver {
         for (var i = 0; i < callbackValues.length; i++) {
             var callback = callbackValues[i];
             
-            // Check page types
-            if (callback.pageTypes && callback.pageTypes.length) {
-                var hasMatchingPageType = false;
-                for (var j = 0; j < callback.pageTypes.length; j++) {
-                    var type = callback.pageTypes[j];
-                    var stateKey = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
-                    if (this.#pageState[stateKey]) {
-                        hasMatchingPageType = true;
-                        break;
-                    }
-                }
-                if (!hasMatchingPageType) continue;
-            }
+            // REMOVED: Page type filtering - runs globally on ALL pages
+            // if (callback.pageTypes && callback.pageTypes.length) {
+            //     var hasMatchingPageType = false;
+            //     for (var j = 0; j < callback.pageTypes.length; j++) {
+            //         var type = callback.pageTypes[j];
+            //         var stateKey = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
+            //         if (this.#pageState[stateKey]) {
+            //             hasMatchingPageType = true;
+            //             break;
+            //         }
+            //     }
+            //     if (!hasMatchingPageType) continue;
+            // }
             
             // Check selector
             if (callback.selector) {
@@ -453,21 +456,33 @@ class ForumCoreObserver {
             '.post-actions', '.user-info', '.post-content', '.post-footer'
         ];
         
+        // Add preview-related selectors
+        var previewSelectors = [
+            '#preview', '#ajaxObject', '.preview', '.Item.preview', 
+            '[id*="preview"]', '.preview-content', '.post-preview'
+        ];
+        
+        // Combine all selectors
+        var allSelectors = forumSelectors.concat(previewSelectors);
+        
         // Scan all selectors
-        for (var i = 0; i < forumSelectors.length; i++) {
-            var selector = forumSelectors[i];
-            var nodes = document.querySelectorAll(selector);
-            
-            for (var j = 0; j < nodes.length; j++) {
-                var node = nodes[j];
-                if (!this.#processedNodes.has(node)) {
-                    this.#processNode(node);
+        for (var i = 0; i < allSelectors.length; i++) {
+            var selector = allSelectors[i];
+            try {
+                var nodes = document.querySelectorAll(selector);
+                for (var j = 0; j < nodes.length; j++) {
+                    var node = nodes[j];
+                    if (!this.#processedNodes.has(node)) {
+                        this.#processNode(node);
+                    }
                 }
+            } catch (e) {
+                // Skip invalid selectors
             }
         }
         
         this.#initialScanComplete = true;
-        console.log('✅ Initial content scan complete');
+        console.log('✅ Initial content scan complete (GLOBAL mode)');
     }
     
     #setupCleanup() {
@@ -532,7 +547,7 @@ class ForumCoreObserver {
             fn: settings.callback,
             priority: settings.priority || 'normal',
             selector: settings.selector,
-            pageTypes: settings.pageTypes,
+            pageTypes: settings.pageTypes, // Still accept for compatibility, but won't be used
             dependencies: settings.dependencies,
             retryCount: 0,
             maxRetries: settings.maxRetries || 0,
@@ -540,7 +555,7 @@ class ForumCoreObserver {
         };
         
         this.#callbacks.set(id, callback);
-        console.log('📝 Registered callback: ' + id + ' (priority: ' + callback.priority + ')');
+        console.log('📝 Registered GLOBAL callback: ' + id + ' (priority: ' + callback.priority + ')');
         
         // If selector is provided, scan for existing matching nodes
         if (this.#initialScanComplete && callback.selector) {
@@ -668,7 +683,7 @@ if (!globalThis.forumObserver) {
             }
         }, { once: true });
         
-        console.log('🚀 ForumCoreObserver ready');
+        console.log('🚀 ForumCoreObserver ready (GLOBAL MODE)');
         
     } catch (error) {
         console.error('Failed to initialize ForumCoreObserver:', error);
