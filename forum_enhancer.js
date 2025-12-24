@@ -869,7 +869,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
-// enhanced accessibility, and modern code blocks
+// enhanced accessibility, modern code blocks, and Moment.js timestamps
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -883,6 +883,7 @@ class PostModernizer {
     #retryCount = 0;
     #domUpdates = new WeakMap();
     #rafPending = false;
+    #timeUpdateIntervals = new Map();
 
     constructor() {
         this.#initWithRetry();
@@ -898,7 +899,7 @@ class PostModernizer {
             if (this.#retryCount < this.#maxRetries) {
                 this.#retryCount++;
                 const delay = Math.min(100 * Math.pow(1.5, this.#retryCount - 1), 2000);
-                console.log(`Forum Observer not available, retry ${this.#retryCount}/${this.#maxRetries} in ${delay}ms`);
+                console.log('Forum Observer not available, retry ' + this.#retryCount + '/' + this.#maxRetries + ' in ' + delay + 'ms');
 
                 this.#retryTimeoutId = setTimeout(() => {
                     this.#initWithRetry();
@@ -931,7 +932,7 @@ class PostModernizer {
             if (this.#retryCount < this.#maxRetries) {
                 this.#retryCount++;
                 const delay = 100 * Math.pow(2, this.#retryCount - 1);
-                console.log(`Initialization failed, retrying in ${delay}ms...`);
+                console.log('Initialization failed, retrying in ' + delay + 'ms...');
 
                 setTimeout(() => {
                     this.#initWithRetry();
@@ -939,6 +940,168 @@ class PostModernizer {
             }
         }
     }
+
+    // ==============================
+    // MOMENT.JS TIMESTAMP FUNCTIONS
+    // ==============================
+
+    #parseForumDate(dateString) {
+        if (!dateString || typeof dateString !== 'string') {
+            return null;
+        }
+
+        const formats = [
+            'MM/DD/YYYY, h:mm A',
+            'MM/DD/YYYY, h:mm:ss A',
+            'MM/DD/YYYY, HH:mm',
+            'MM/DD/YYYY, HH:mm:ss',
+            'MM-DD-YYYY, h:mm A',
+            'DD/MM/YYYY, h:mm A'
+        ];
+        
+        let momentDate = null;
+        
+        for (let i = 0; i < formats.length; i++) {
+            const format = formats[i];
+            momentDate = moment(dateString, format, true);
+            if (momentDate && momentDate.isValid()) {
+                break;
+            }
+        }
+        
+        if (!momentDate || !momentDate.isValid()) {
+            const fallbackDate = new Date(dateString);
+            if (!isNaN(fallbackDate)) {
+                momentDate = moment(fallbackDate);
+            }
+        }
+        
+        return momentDate && momentDate.isValid() ? momentDate : null;
+    }
+
+    #formatTimeAgo(date) {
+        if (!date || !date.isValid()) {
+            return 'Unknown time';
+        }
+
+        const now = moment();
+        const diffInMinutes = now.diff(date, 'minutes');
+        const diffInHours = now.diff(date, 'hours');
+        const diffInDays = now.diff(date, 'days');
+        
+        if (diffInMinutes < 1) {
+            return 'Just now';
+        } else if (diffInMinutes < 60) {
+            return diffInMinutes + ' minute' + (diffInMinutes !== 1 ? 's' : '') + ' ago';
+        } else if (diffInHours < 24) {
+            return diffInHours + ' hour' + (diffInHours !== 1 ? 's' : '') + ' ago';
+        } else if (diffInDays < 7) {
+            return diffInDays + ' day' + (diffInDays !== 1 ? 's' : '') + ' ago';
+        } else if (diffInDays < 30) {
+            const weeks = Math.floor(diffInDays / 7);
+            return weeks + ' week' + (weeks !== 1 ? 's' : '') + ' ago';
+        } else if (diffInDays < 365) {
+            const months = Math.floor(diffInDays / 30);
+            return months + ' month' + (months !== 1 ? 's' : '') + ' ago';
+        } else {
+            return date.format('MMM D, YYYY');
+        }
+    }
+
+    #createModernTimestamp(originalElement, dateString) {
+        const momentDate = this.#parseForumDate(dateString);
+        
+        if (!momentDate) {
+            return originalElement;
+        }
+        
+        const timeElement = document.createElement('time');
+        timeElement.className = 'modern-timestamp';
+        timeElement.setAttribute('datetime', momentDate.toISOString());
+        timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
+        
+        const relativeSpan = document.createElement('span');
+        relativeSpan.className = 'relative-time';
+        relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+        
+        const absoluteSpan = document.createElement('span');
+        absoluteSpan.className = 'absolute-time';
+        absoluteSpan.textContent = momentDate.format('MMM D, YYYY [at] h:mm A');
+        absoluteSpan.style.cssText = 'display:none;font-size:0.9em;color:#666;margin-left:8px;';
+        
+        timeElement.appendChild(relativeSpan);
+        timeElement.appendChild(absoluteSpan);
+        
+        const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        timeElement.setAttribute('data-timestamp-id', timeElementId);
+        
+        const updateInterval = setInterval(() => {
+            if (!document.body.contains(timeElement)) {
+                clearInterval(updateInterval);
+                this.#timeUpdateIntervals.delete(timeElementId);
+                return;
+            }
+            relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+        }, 60000);
+        
+        this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+        
+        timeElement.addEventListener('mouseenter', () => {
+            absoluteSpan.style.display = 'inline';
+        });
+        
+        timeElement.addEventListener('mouseleave', () => {
+            absoluteSpan.style.display = 'none';
+        });
+        
+        return timeElement;
+    }
+
+    #transformTimestampElements(element) {
+        const timestampElements = element.querySelectorAll('.lt.Sub a span.when, .lt.Sub time, .post-edit time');
+        
+        timestampElements.forEach(timestampElement => {
+            let dateString = '';
+            
+            if (timestampElement.hasAttribute('title')) {
+                dateString = timestampElement.getAttribute('title');
+            } else if (timestampElement.textContent) {
+                const text = timestampElement.textContent.trim();
+                const postedMatch = text.match(/Posted on\s+(.+)/);
+                dateString = postedMatch ? postedMatch[1] : text;
+            }
+            
+            if (dateString) {
+                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
+                if (modernTimestamp !== timestampElement) {
+                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                }
+            }
+        });
+    }
+
+    #transformEditTimestamp(span) {
+        const timeMatch = span.textContent.match(/Edited by .+? - (.+)/);
+        if (timeMatch) {
+            const editDate = timeMatch[1];
+            const momentDate = this.#parseForumDate(editDate);
+            
+            if (momentDate) {
+                const timeElement = document.createElement('time');
+                timeElement.setAttribute('datetime', momentDate.toISOString());
+                timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
+                timeElement.textContent = this.#formatTimeAgo(momentDate);
+                
+                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited ' + timeElement.outerHTML;
+            } else {
+                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited on <time>' + this.#escapeHtml(editDate) + '</time>';
+            }
+        }
+    }
+
+    // ==============================
+    // OBSERVER SETUP
+    // ==============================
 
     #setupObserverCallbacks() {
         this.#cleanupObserverId = globalThis.forumObserver.register({
@@ -1101,10 +1264,8 @@ class PostModernizer {
 
             post.classList.add('post-modernized');
 
-            // Use DocumentFragment for batch DOM operations
             const fragment = document.createDocumentFragment();
 
-            // Extract and preserve anchor elements
             const anchorDiv = post.querySelector('.anchor');
             let anchorElements = null;
             if (anchorDiv) {
@@ -1128,7 +1289,6 @@ class PostModernizer {
             const postFooter = document.createElement('div');
             postFooter.className = 'post-footer';
 
-            // Add preserved anchor elements
             if (anchorElements) {
                 const anchorContainer = document.createElement('div');
                 anchorContainer.className = 'anchor-container';
@@ -1142,7 +1302,6 @@ class PostModernizer {
             postNumber.textContent = '#' + (startOffset + index + 1);
             postHeader.appendChild(postNumber);
 
-            // Add NEW badge
             this.#addNewPostBadge(post, postHeader);
 
             let nickElement = null;
@@ -1158,6 +1317,9 @@ class PostModernizer {
                     title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
                     title2TopClone.querySelector('.left.Item')?.remove();
                     this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformTimestampElements(title2TopClone);
+                    
                     postHeader.appendChild(title2TopClone);
                     tdWrapper.remove();
                 } else {
@@ -1166,6 +1328,9 @@ class PostModernizer {
                     title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
                     title2TopClone.querySelector('.left.Item')?.remove();
                     this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformTimestampElements(title2TopClone);
+                    
                     postHeader.appendChild(title2TopClone);
                 }
             }
@@ -1296,13 +1461,11 @@ class PostModernizer {
                 this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
             }
 
-            // Build structure in fragment first
             fragment.appendChild(postHeader);
             fragment.appendChild(userInfo);
             fragment.appendChild(postContent);
             fragment.appendChild(postFooter);
 
-            // Single DOM replacement
             post.innerHTML = '';
             post.appendChild(fragment);
 
@@ -1310,7 +1473,6 @@ class PostModernizer {
             this.#addShareButton(post);
             this.#cleanupPostContent(post);
 
-            // Ensure post ID is preserved
             const postId = post.id;
             if (postId && postId.startsWith('ee')) {
                 post.setAttribute('data-post-id', postId.replace('ee', ''));
@@ -1324,7 +1486,6 @@ class PostModernizer {
         posts.forEach((post, index) => {
             post.classList.add('post-modernized', 'search-post');
 
-            // Extract anchor elements
             const anchorDiv = post.querySelector('.anchor');
             let anchorElements = null;
             if (anchorDiv) {
@@ -1423,6 +1584,8 @@ class PostModernizer {
                 this.#removeBreakAndNbsp(title2TopClone);
                 title2TopClone.querySelector('.Break.Sub')?.remove();
 
+                this.#transformTimestampElements(title2TopClone);
+
                 const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
                 if (tdWrapper) {
                     const divs = tdWrapper.querySelectorAll('div');
@@ -1498,11 +1661,7 @@ class PostModernizer {
 
                 const editSpanInContent = contentWrapper.querySelector('span.edit');
                 if (editSpanInContent) {
-                    editSpanInContent.classList.add('post-edit');
-                    const timeMatch = editSpanInContent.textContent.match(/Edited by .+? - (.+)/);
-                    if (timeMatch) {
-                        editSpanInContent.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited on <time>' + this.#escapeHtml(timeMatch[1]) + '</time>';
-                    }
+                    this.#transformEditTimestamp(editSpanInContent);
                 }
 
                 this.#modernizeQuotes(contentWrapper);
@@ -1779,6 +1938,12 @@ class PostModernizer {
         this.#cleanInvalidAttributes(contentElement);
     }
 
+    #cleanupEditSpans(element) {
+        element.querySelectorAll('span.edit').forEach(span => {
+            this.#transformEditTimestamp(span);
+        });
+    }
+
     #cleanUpLineBreaksBetweenBlocks(element) {
         const blockSelectors = [
             '.modern-spoiler',
@@ -1939,16 +2104,6 @@ class PostModernizer {
                 current.classList.add('paragraph-end');
             }
         }
-    }
-
-    #cleanupEditSpans(element) {
-        element.querySelectorAll('span.edit').forEach(span => {
-            span.classList.add('post-edit');
-            const timeMatch = span.textContent.match(/Edited by .+? - (.+)/);
-            if (timeMatch) {
-                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited on <time>' + this.#escapeHtml(timeMatch[1]) + '</time>';
-            }
-        });
     }
 
     #processSignature(element) {
@@ -2225,10 +2380,7 @@ class PostModernizer {
     }
 
 #preserveMediaDimensions(element) {
-    // This method now just ensures basic styles and delegates to the extractor
-    
     element.querySelectorAll('img').forEach(img => {
-        // Set basic display styles
         if (!img.style.maxWidth) {
             img.style.maxWidth = '100%';
         }
@@ -2236,7 +2388,6 @@ class PostModernizer {
             img.style.height = 'auto';
         }
         
-        // Ensure emoji-specific styling
         const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
         const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
                        (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
@@ -2250,7 +2401,6 @@ class PostModernizer {
             img.style.display = 'block';
         }
         
-        // Add alt text if missing
         if (!img.hasAttribute('alt')) {
             if (isEmoji) {
                 img.setAttribute('alt', 'Emoji');
@@ -2261,7 +2411,6 @@ class PostModernizer {
         }
     });
     
-    // Process iframes and videos that might have been missed
     element.querySelectorAll('iframe, video').forEach(media => {
         if (globalThis.mediaDimensionExtractor) {
             globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
@@ -2527,7 +2676,7 @@ class PostModernizer {
 
     #createBasicMultiquote(checkbox) {
         const postId = checkbox.id.replace('p', '');
-        const originalOnClick = "document.getElementById('" + checkbox.id + "').checked=!document.getElementById('" + checkbox.id + "').checked;post('" + postId + "')";
+        const originalOnClick = 'document.getElementById(\'' + checkbox.id + '\').checked=!document.getElementById(\'' + checkbox.id + '\').checked;post(\'' + postId + '\')';
 
         return '<div class="multiquote-control">' +
             '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' +
@@ -2565,7 +2714,7 @@ class PostModernizer {
             labelText = label.textContent.replace('multiquote »', '').trim() || 'Quote +';
         } else {
             const postId = checkbox.id.replace('p', '');
-            originalOnClick = "document.getElementById('" + checkbox.id + "').checked=!document.getElementById('" + checkbox.id + "').checked;post('" + postId + "')";
+            originalOnClick = 'document.getElementById(\'' + checkbox.id + '\').checked=!document.getElementById(\'' + checkbox.id + '\').checked;post(\'' + postId + '\')';
         }
 
         let html = '<div class="moderator-controls">' +
@@ -3480,6 +3629,11 @@ class PostModernizer {
             clearTimeout(this.#retryTimeoutId);
             this.#retryTimeoutId = null;
         }
+
+        this.#timeUpdateIntervals.forEach(interval => {
+            clearInterval(interval);
+        });
+        this.#timeUpdateIntervals.clear();
 
         console.log('Post Modernizer destroyed');
     }
