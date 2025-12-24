@@ -1008,7 +1008,7 @@ class PostModernizer {
         }
     }
 
-    #createModernTimestamp(originalElement, dateString) {
+ #createModernTimestamp(originalElement, dateString) {
     if (typeof moment === 'undefined') {
         console.warn('Moment.js not loaded, skipping timestamp transformation');
         return originalElement;
@@ -1021,6 +1021,35 @@ class PostModernizer {
         return originalElement;
     }
     
+    // Create the link first
+    const link = document.createElement('a');
+    
+    // Try to preserve the original href if it exists
+    let originalHref = null;
+    if (originalElement.tagName === 'A') {
+        originalHref = originalElement.getAttribute('href');
+    } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
+        originalHref = originalElement.parentElement.getAttribute('href');
+    }
+    
+    if (originalHref) {
+        link.href = originalHref;
+    } else {
+        // Fallback: try to construct link from post ID
+        const postElement = originalElement.closest('.post');
+        if (postElement && postElement.id) {
+            const postIdMatch = postElement.id.match(/\d+/);
+            if (postIdMatch) {
+                const postId = postIdMatch[0];
+                const topicMatch = window.location.href.match(/t=(\d+)/);
+                if (topicMatch) {
+                    link.href = '#entry' + postId;
+                }
+            }
+        }
+    }
+    
+    // Create the time element
     const timeElement = document.createElement('time');
     timeElement.className = 'modern-timestamp';
     timeElement.setAttribute('datetime', momentDate.toISOString());
@@ -1031,6 +1060,7 @@ class PostModernizer {
     relativeSpan.textContent = this.#formatTimeAgo(momentDate);
     
     timeElement.appendChild(relativeSpan);
+    link.appendChild(timeElement);
     
     const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     timeElement.setAttribute('data-timestamp-id', timeElementId);
@@ -1046,7 +1076,7 @@ class PostModernizer {
     
     this.#timeUpdateIntervals.set(timeElementId, updateInterval);
     
-    return timeElement;
+    return link;
 }
 
     #extractDateFromElement(element) {
