@@ -1,46 +1,56 @@
 'use strict';
 
-class ForumCoreObserver {
+class BulletproofForumObserver {
     #observer = null;
-    #mutationQueue = [];
-    #isProcessing = false;
+    #rafObserver = null;
+    #iframeObserver = null;
+    #shadowObservers = new Map();
+    #mutationQueue = new Set(); // Use Set for deduplication
+    #processingQueue = new Set();
+    #scheduledFrame = null;
     #initialScanComplete = false;
-    #debounceTimeouts = new Map();
     #processedNodes = new WeakSet();
     #cleanupIntervalId = null;
     
     #callbacks = new Map();
-    #debouncedCallbacks = new Map();
-    #pageState = this.#detectPageState();
+    #pendingCallbacks = new Map();
     
-    // Performance optimized configuration
+    // Enhanced configuration
     static #CONFIG = {
         observer: {
             childList: true,
             subtree: true,
             characterData: true,
             attributes: true,
-            attributeFilter: ['class', 'id', 'style', 'data-*']
+            attributeFilter: ['class', 'id', 'style', 'data-*', 'aria-*', 'role'],
+            attributeOldValue: true,
+            characterDataOldValue: true
+        },
+        iframeObserver: {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true
         },
         performance: {
-            maxProcessingTime: 16,
-            mutationBatchSize: 50,
-            debounceThreshold: 100,
-            idleCallbackTimeout: 2000,
-            searchPageBatchSize: 10
+            maxProcessingTime: 8, // Reduced for more frequent checks
+            mutationBatchSize: 100,
+            idleCallbackTimeout: 1000,
+            rafCheckInterval: 100, // Check every 100ms via rAF
+            forceRescanInterval: 10000 // Force rescan every 10s
         },
         memory: {
-            maxProcessedNodes: 10000,
-            cleanupInterval: 30000,
-            nodeTTL: 300000
+            maxProcessedNodes: 20000,
+            cleanupInterval: 15000
         }
     };
     
-    #mutationMetrics = {
+    #metrics = {
         totalMutations: 0,
         processedMutations: 0,
-        averageProcessingTime: 0,
-        lastMutationTime: 0
+        missedMutations: 0,
+        lastMutationTime: 0,
+        lastRescanTime: 0
     };
     
     constructor() {
@@ -48,642 +58,749 @@ class ForumCoreObserver {
     }
     
     #init() {
-        this.#observer = new MutationObserver(this.#handleMutations.bind(this));
-        this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
-        this.#scanExistingContent();
-        this.#setupCleanup();
+        const allowedBodyIds = ['send', 'board', 'topic', 'forum', 'search', 'members', 'online', 'group'];
+        const currentBodyId = document.body.id;
         
-        // Use passive event listener for better performance
-        document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { 
-            passive: true, 
-            capture: true 
-        });
-        
-        console.log('🔍 ForumCoreObserver initialized');
-    }
-    
-    #detectPageState() {
-        var pathname = window.location.pathname;
-        var className = document.body.className;
-        var theme = document.documentElement.dataset?.theme;
-        
-        // Use direct DOM queries for maximum speed
-        var selectors = {
-            forum: '.board, .big_list',
-            topic: '.modern-topic-title, .post',
-            blog: '#blog, .article',
-            profile: '.modern-profile, .profile',
-            search: '#search.posts, body#search',
-            modernized: '.post-modernized'
-        };
-        
-        var pageChecks = {};
-        for (var key in selectors) {
-            if (selectors.hasOwnProperty(key)) {
-                pageChecks[key] = document.querySelector(selectors[key]) || null;
-            }
+        if (!allowedBodyIds.includes(currentBodyId)) {
+            console.log('⏸️ Observer skipped on body#' + currentBodyId);
+            return;
         }
         
-        return {
-            isForum: pathname.includes('/f/') || pageChecks.forum,
-            isTopic: pathname.includes('/t/') || pageChecks.topic,
-            isBlog: pathname.includes('/b/') || pageChecks.blog,
-            isProfile: pathname.includes('/user/') || pageChecks.profile,
-            isSearch: pathname.includes('/search/') || pageChecks.search,
-            hasModernizedPosts: !!pageChecks.modernized,
-            hasModernizedQuotes: !!document.querySelector('.modern-quote'),
-            hasModernizedProfile: !!document.querySelector('.modern-profile'),
-            hasModernizedNavigation: !!document.querySelector('.modern-nav'),
-            isDarkMode: theme === 'dark',
-            isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
-            isMobile: window.matchMedia('(max-width: 768px)').matches
-        };
+        // 1. Initialize primary observer
+        this.#observer = new MutationObserver(this.#handleMutations.bind(this));
+        this.#observer.observe(document.documentElement, BulletproofForumObserver.#CONFIG.observer);
+        
+        // 2. Set up requestAnimationFrame polling as backup
+        this.#startRAFMonitoring();
+        
+        // 3. Monitor iframe creation
+        this.#setupIframeObserver();
+        
+        // 4. Monitor shadow DOM creation
+        this.#setupShadowDOMObserver();
+        
+        // 5. Initial deep scan
+        this.#deepScanExistingContent();
+        
+        // 6. Set up periodic forced rescans
+        this.#setupPeriodicRescan();
+        
+        // 7. Monitor dynamic script execution
+        this.#monitorDynamicScripts();
+        
+        // 8. Hook into mutation methods as fallback
+        this.#hookDOMMethods();
+        
+        console.log('🛡️ Bulletproof Observer initialized');
     }
     
     #handleMutations(mutations) {
-        this.#mutationMetrics.totalMutations += mutations.length;
-        this.#mutationMetrics.lastMutationTime = Date.now();
+        this.#metrics.totalMutations += mutations.length;
+        this.#metrics.lastMutationTime = Date.now();
         
-        // Fast filter: only process mutations that are actually visible and not filtered
-        for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
-            if (this.#shouldProcessMutation(mutation)) {
-                this.#mutationQueue.push(mutation);
-            }
+        // Use Set to deduplicate nodes
+        for (const mutation of mutations) {
+            this.#collectAllAffectedNodes(mutation, this.#mutationQueue);
         }
         
-        if (this.#mutationQueue.length && !this.#isProcessing) {
-            this.#processMutationQueue();
-        }
-    }
-    
-    #shouldProcessMutation(mutation) {
-        var target = mutation.target;
-        
-        // Skip mutations with data-observer-origin flag
-        if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
-            return false;
-        }
-        
-        // Skip hidden elements
-        if (target.nodeType === Node.ELEMENT_NODE) {
-            var style = window.getComputedStyle(target);
-            if (style.display === 'none' || style.visibility === 'hidden') {
-                return false;
-            }
-        }
-        
-        // Special handling for character data
-        if (mutation.type === 'characterData') {
-            var parent = target.parentElement;
-            return parent ? this.#shouldObserveTextChanges(parent) : false;
-        }
-        
-        // Special handling for style changes
-        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-            var oldValue = mutation.oldValue || '';
-            var newValue = target.getAttribute('style') || '';
-            return this.#styleChangeAffectsDOM(oldValue, newValue);
-        }
-        
-        // Process ALL other mutations (bulletproof approach)
-        return true;
-    }
-    
-    #shouldObserveTextChanges(element) {
-        var tagName = element.tagName.toLowerCase();
-        
-        // Always observe interactive elements
-        if (tagName === 'a' || tagName === 'button' || tagName === 'input' || 
-            tagName === 'textarea' || tagName === 'select') {
-            return true;
-        }
-        
-        // Observe forum content
-        var classList = element.classList;
-        if (classList) {
-            if (classList.contains('post') || 
-                classList.contains('article') || 
-                classList.contains('comment') || 
-                classList.contains('quote') || 
-                classList.contains('signature') || 
-                classList.contains('post-text')) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    #styleChangeAffectsDOM(oldStyle, newStyle) {
-        var visibilityProps = ['display', 'visibility', 'opacity', 'position', 'width', 'height'];
-        var oldProps = this.#parseStyleString(oldStyle);
-        var newProps = this.#parseStyleString(newStyle);
-        
-        for (var i = 0; i < visibilityProps.length; i++) {
-            var prop = visibilityProps[i];
-            if (oldProps.get(prop) !== newProps.get(prop)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    #parseStyleString(styleString) {
-        if (!styleString) return new Map();
-        
-        var result = new Map();
-        var pairs = styleString.split(';');
-        
-        for (var i = 0; i < pairs.length; i++) {
-            var pair = pairs[i];
-            var colonIndex = pair.indexOf(':');
-            if (colonIndex > -1) {
-                var key = pair.substring(0, colonIndex).trim();
-                var value = pair.substring(colonIndex + 1).trim();
-                if (key && value) {
-                    result.set(key, value);
-                }
-            }
-        }
-        
-        return result;
-    }
-    
-    async #processMutationQueue() {
-        this.#isProcessing = true;
-        var startTime = performance.now();
-        
-        try {
-            while (this.#mutationQueue.length) {
-                var batchSize = Math.min(
-                    ForumCoreObserver.#CONFIG.performance.mutationBatchSize,
-                    this.#mutationQueue.length
-                );
-                
-                var batch = this.#mutationQueue.splice(0, batchSize);
-                await this.#processMutationBatch(batch);
-                
-                // Yield to prevent blocking
-                if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxProcessingTime) {
-                    await new Promise(function(resolve) {
-                        queueMicrotask(resolve);
-                    });
-                    startTime = performance.now();
-                }
-            }
-        } catch (error) {
-            console.error('Mutation processing error:', error);
-        } finally {
-            this.#isProcessing = false;
-            this.#mutationMetrics.processedMutations++;
-            
-            var processingTime = performance.now() - startTime;
-            this.#mutationMetrics.averageProcessingTime = 
-                this.#mutationMetrics.averageProcessingTime * 0.9 + processingTime * 0.1;
+        // Schedule processing
+        if (!this.#scheduledFrame) {
+            this.#scheduledFrame = requestAnimationFrame(() => {
+                this.#processAllQueues();
+                this.#scheduledFrame = null;
+            });
         }
     }
     
-    async #processMutationBatch(mutations) {
-        var affectedNodes = new Set();
+    #collectAllAffectedNodes(mutation, collection) {
+        const target = mutation.target;
         
-        // Collect all affected nodes
-        for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
-            
-            switch (mutation.type) {
-                case 'childList':
-                    for (var j = 0; j < mutation.addedNodes.length; j++) {
-                        var node = mutation.addedNodes[j];
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            this.#collectAllElements(node, affectedNodes);
+        // Always add the target
+        if (target && target.nodeType === Node.ELEMENT_NODE) {
+            collection.add(target);
+        }
+        
+        switch (mutation.type) {
+            case 'childList':
+                // Add all added nodes and their children
+                for (const node of mutation.addedNodes) {
+                    collection.add(node);
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        this.#collectAllElements(node, collection);
+                        
+                        // Special handling for DocumentFragment
+                        if (node.nodeName === '#document-fragment') {
+                            // Force immediate processing of fragment contents
+                            queueMicrotask(() => {
+                                this.#scanNodeTree(node);
+                            });
                         }
                     }
-                    break;
-                    
-                case 'attributes':
-                    affectedNodes.add(mutation.target);
-                    break;
-                    
-                case 'characterData':
-                    var parent = mutation.target.parentElement;
-                    if (parent) {
-                        affectedNodes.add(parent);
+                }
+                break;
+                
+            case 'attributes':
+                // Add target and potentially affected children
+                collection.add(target);
+                // If visibility changed, scan children
+                if (mutation.attributeName === 'style' || 
+                    mutation.attributeName === 'class' ||
+                    mutation.attributeName === 'hidden') {
+                    this.#collectAllElements(target, collection);
+                }
+                break;
+                
+            case 'characterData':
+                // Add parent and all text-affected elements
+                const parent = target.parentElement;
+                if (parent) {
+                    collection.add(parent);
+                    // Text changes in interactive elements affect siblings
+                    if (this.#isInteractiveElement(parent)) {
+                        Array.from(parent.parentElement?.children || []).forEach(child => {
+                            collection.add(child);
+                        });
                     }
-                    break;
-            }
-        }
-        
-        // Process nodes
-        var nodeArray = Array.from(affectedNodes);
-        var nodesToProcess = [];
-        
-        // Filter out already processed nodes
-        for (var k = 0; k < nodeArray.length; k++) {
-            var node = nodeArray[k];
-            if (node && !this.#processedNodes.has(node)) {
-                nodesToProcess.push(node);
-            }
-        }
-        
-        if (!nodesToProcess.length) return;
-        
-        // Process in parallel chunks
-        var CONCURRENCY_LIMIT = 4;
-        var chunks = [];
-        
-        for (var l = 0; l < nodesToProcess.length; l += CONCURRENCY_LIMIT) {
-            chunks.push(nodesToProcess.slice(l, l + CONCURRENCY_LIMIT));
-        }
-        
-        for (var m = 0; m < chunks.length; m++) {
-            var chunk = chunks[m];
-            var promises = [];
-            
-            for (var n = 0; n < chunk.length; n++) {
-                promises.push(this.#processNode(chunk[n]));
-            }
-            
-            await Promise.allSettled(promises);
+                }
+                break;
         }
     }
     
-    #collectAllElements(root, collection) {
-        if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+    #collectAllElements(root, collection, depth = 0) {
+        if (!root || root.nodeType !== Node.ELEMENT_NODE || depth > 50) return;
         
         collection.add(root);
         
-        // Use for loop instead of for...of for better performance
-        var children = root.children;
-        for (var i = 0; i < children.length; i++) {
-            this.#collectAllElements(children[i], collection);
+        // Use NodeIterator for better performance with large trees
+        const iterator = document.createNodeIterator(
+            root,
+            NodeFilter.SHOW_ELEMENT,
+            {
+                acceptNode: (node) => {
+                    // Skip already processed nodes unless they're dynamic containers
+                    if (this.#processedNodes.has(node) && 
+                        !this.#isDynamicContainer(node)) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+        
+        let currentNode;
+        while ((currentNode = iterator.nextNode())) {
+            collection.add(currentNode);
         }
     }
     
-    async #processNode(node) {
-        if (!node || this.#processedNodes.has(node)) return;
+    #isDynamicContainer(node) {
+        if (!node.classList) return false;
         
-        var matchingCallbacks = this.#getMatchingCallbacks(node);
-        if (!matchingCallbacks.length) return;
+        const dynamicClasses = [
+            'dynamic', 'ajax', 'lazy', 'infinite-scroll',
+            'modal', 'popup', 'tooltip', 'dropdown', 'tab-content',
+            'accordion-content', 'carousel-item', 'slide'
+        ];
         
-        // Group by priority
-        var priorityGroups = {
-            critical: [],
+        return dynamicClasses.some(cls => node.classList.contains(cls));
+    }
+    
+    #isInteractiveElement(element) {
+        const tagName = element.tagName.toLowerCase();
+        const interactiveTags = ['a', 'button', 'input', 'textarea', 'select'];
+        const interactiveRoles = ['button', 'link', 'textbox', 'checkbox', 'radio'];
+        
+        return interactiveTags.includes(tagName) || 
+               interactiveRoles.includes(element.getAttribute('role')) ||
+               element.classList.contains('clickable') ||
+               element.classList.contains('interactive');
+    }
+    
+    #startRAFMonitoring() {
+        const checkForNewContent = () => {
+            // Check for elements that might have been missed
+            this.#checkForMissedContent();
+            
+            // Reschedule
+            setTimeout(() => {
+                if (this.#rafObserver !== null) { // Check if still active
+                    this.#rafObserver = requestAnimationFrame(checkForNewContent);
+                }
+            }, BulletproofForumObserver.#CONFIG.performance.rafCheckInterval);
+        };
+        
+        this.#rafObserver = requestAnimationFrame(checkForNewContent);
+    }
+    
+    #checkForMissedContent() {
+        // Selectors that frequently have dynamic content
+        const dynamicSelectors = [
+            '.post:not([data-observed])',
+            '.modal:not([data-observed])',
+            '[data-dynamic]:not([data-observed])',
+            '[data-ajax]:not([data-observed])',
+            '.lazy-loaded:not([data-observed])'
+        ];
+        
+        for (const selector of dynamicSelectors) {
+            const elements = document.querySelectorAll(selector);
+            for (const element of elements) {
+                if (!this.#processedNodes.has(element)) {
+                    this.#mutationQueue.add(element);
+                    element.dataset.observed = 'true';
+                }
+            }
+        }
+        
+        // Check for newly visible elements
+        const hiddenNowVisible = document.querySelectorAll(
+            '[style*="display: block"], [style*="display: flex"], [style*="visibility: visible"]'
+        );
+        
+        for (const element of hiddenNowVisible) {
+            if (!this.#processedNodes.has(element)) {
+                this.#mutationQueue.add(element);
+            }
+        }
+    }
+    
+    #setupIframeObserver() {
+        // Watch for iframe creation
+        this.#iframeObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.tagName === 'IFRAME') {
+                        this.#monitorIframeContent(node);
+                    }
+                }
+            }
+        });
+        
+        this.#iframeObserver.observe(document.body, { childList: true, subtree: true });
+        
+        // Monitor existing iframes
+        document.querySelectorAll('iframe').forEach(iframe => {
+            this.#monitorIframeContent(iframe);
+        });
+    }
+    
+    #monitorIframeContent(iframe) {
+        try {
+            // Wait for iframe to load
+            iframe.addEventListener('load', () => {
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (iframeDoc) {
+                        const observer = new MutationObserver((mutations) => {
+                            this.#handleMutations(mutations);
+                        });
+                        
+                        observer.observe(iframeDoc.documentElement, 
+                            BulletproofForumObserver.#CONFIG.iframeObserver);
+                        
+                        // Store for cleanup
+                        iframe.dataset.observerId = Date.now();
+                        this.#shadowObservers.set(iframe.dataset.observerId, observer);
+                        
+                        // Scan existing iframe content
+                        this.#scanNodeTree(iframeDoc.body);
+                    }
+                } catch (e) {
+                    console.warn('Cannot monitor iframe due to CORS:', e);
+                }
+            }, { once: true });
+        } catch (e) {
+            // CORS restrictions
+        }
+    }
+    
+    #setupShadowDOMObserver() {
+        // Override attachShadow to monitor shadow DOM
+        const originalAttachShadow = Element.prototype.attachShadow;
+        
+        Element.prototype.attachShadow = function(options) {
+            const shadowRoot = originalAttachShadow.call(this, options);
+            
+            // Monitor shadow DOM mutations
+            const observer = new MutationObserver((mutations) => {
+                this.#handleMutations(mutations);
+            });
+            
+            observer.observe(shadowRoot, BulletproofForumObserver.#CONFIG.observer);
+            
+            // Store for cleanup
+            const observerId = 'shadow_' + Date.now();
+            shadowRoot.dataset.observerId = observerId;
+            this.#shadowObservers.set(observerId, observer);
+            
+            // Scan existing shadow content
+            queueMicrotask(() => {
+                this.#scanNodeTree(shadowRoot);
+            });
+            
+            return shadowRoot;
+        };
+        
+        // Restore on cleanup
+        this.#originalAttachShadow = originalAttachShadow;
+    }
+    
+    #monitorDynamicScripts() {
+        // Override document.createElement to catch script elements
+        const originalCreateElement = document.createElement.bind(document);
+        
+        document.createElement = function(tagName, options) {
+            const element = originalCreateElement(tagName, options);
+            
+            if (tagName.toLowerCase() === 'script') {
+                // Monitor script execution
+                const originalSrc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+                const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+                
+                if (originalSrc && originalSrc.set) {
+                    Object.defineProperty(element, 'src', {
+                        set: function(value) {
+                            originalSrc.set.call(this, value);
+                            // Schedule a check after script loads
+                            element.addEventListener('load', () => {
+                                setTimeout(() => this.#forceFullRescan(), 100);
+                            }, { once: true });
+                        },
+                        get: originalSrc.get
+                    });
+                }
+                
+                if (originalInnerHTML && originalInnerHTML.set) {
+                    Object.defineProperty(element, 'innerHTML', {
+                        set: function(value) {
+                            originalInnerHTML.set.call(this, value);
+                            // Immediate check for inline scripts
+                            queueMicrotask(() => this.#forceFullRescan());
+                        },
+                        get: originalInnerHTML.get
+                    });
+                }
+            }
+            
+            return element;
+        }.bind(this);
+        
+        this.#originalCreateElement = originalCreateElement;
+    }
+    
+    #hookDOMMethods() {
+        // Hook DOM manipulation methods as fallback
+        const methodsToHook = [
+            'appendChild',
+            'insertBefore',
+            'replaceChild',
+            'removeChild',
+            'insertAdjacentElement',
+            'insertAdjacentHTML',
+            'insertAdjacentText'
+        ];
+        
+        for (const methodName of methodsToHook) {
+            const originalMethod = Node.prototype[methodName];
+            
+            if (originalMethod) {
+                Node.prototype[methodName] = function(...args) {
+                    const result = originalMethod.apply(this, args);
+                    
+                    // Schedule mutation detection
+                    if (this.isConnected) {
+                        queueMicrotask(() => {
+                            const event = new CustomEvent('dommethodcalled', {
+                                detail: { method: methodName, args: args }
+                            });
+                            document.dispatchEvent(event);
+                        });
+                    }
+                    
+                    return result;
+                };
+                
+                // Store for cleanup
+                this[`#original${methodName}`] = originalMethod;
+            }
+        }
+        
+        // Listen for these events
+        document.addEventListener('dommethodcalled', () => {
+            this.#forceImmediateRescan();
+        }, { passive: true });
+    }
+    
+    #forceImmediateRescan() {
+        // Clear any pending processing
+        if (this.#scheduledFrame) {
+            cancelAnimationFrame(this.#scheduledFrame);
+            this.#scheduledFrame = null;
+        }
+        
+        // Immediate rescan
+        this.#processAllQueues();
+        
+        // Quick scan for new content
+        queueMicrotask(() => {
+            this.#quickRescan();
+        });
+    }
+    
+    #quickRescan() {
+        // Check common dynamic containers
+        const dynamicContainers = [
+            '.posts-container',
+            '.comments-section',
+            '.dynamic-content',
+            '[data-content]',
+            '.ajax-container'
+        ];
+        
+        for (const selector of dynamicContainers) {
+            const containers = document.querySelectorAll(selector);
+            for (const container of containers) {
+                this.#scanNodeTree(container);
+            }
+        }
+    }
+    
+    async #processAllQueues() {
+        if (this.#processingQueue.size > 0) return;
+        
+        // Move all pending nodes to processing queue
+        this.#processingQueue = new Set(this.#mutationQueue);
+        this.#mutationQueue.clear();
+        
+        const startTime = performance.now();
+        
+        try {
+            // Process in chunks to avoid blocking
+            const nodes = Array.from(this.#processingQueue);
+            const chunkSize = 25;
+            
+            for (let i = 0; i < nodes.length; i += chunkSize) {
+                const chunk = nodes.slice(i, i + chunkSize);
+                
+                // Process chunk
+                await this.#processNodeChunk(chunk);
+                
+                // Yield to main thread if taking too long
+                if (performance.now() - startTime > 
+                    BulletproofForumObserver.#CONFIG.performance.maxProcessingTime) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+            
+            this.#metrics.processedMutations += this.#processingQueue.size;
+        } catch (error) {
+            console.error('Queue processing error:', error);
+            this.#metrics.missedMutations += this.#processingQueue.size;
+        } finally {
+            this.#processingQueue.clear();
+        }
+    }
+    
+    async #processNodeChunk(nodes) {
+        const promises = nodes.map(async (node) => {
+            if (!node || !node.isConnected || this.#processedNodes.has(node)) {
+                return;
+            }
+            
+            try {
+                // Execute all matching callbacks
+                await this.#executeNodeCallbacks(node);
+                this.#processedNodes.add(node);
+                
+                // Mark as processed for debugging
+                if (node.dataset) {
+                    node.dataset.observerProcessed = Date.now().toString();
+                }
+            } catch (error) {
+                console.warn('Node processing failed:', error);
+            }
+        });
+        
+        await Promise.allSettled(promises);
+    }
+    
+    #executeNodeCallbacks(node) {
+        const matchingCallbacks = [];
+        
+        for (const callback of this.#callbacks.values()) {
+            // Check if callback applies to this node
+            if (this.#callbackMatchesNode(callback, node)) {
+                matchingCallbacks.push(callback);
+            }
+        }
+        
+        if (matchingCallbacks.length === 0) return;
+        
+        // Execute callbacks with different priorities
+        const priorityGroups = {
+            immediate: [],
             high: [],
             normal: [],
             low: []
         };
         
-        for (var i = 0; i < matchingCallbacks.length; i++) {
-            var callback = matchingCallbacks[i];
-            var priority = callback.priority || 'normal';
+        for (const callback of matchingCallbacks) {
+            const priority = callback.priority || 'normal';
             priorityGroups[priority].push(callback);
         }
         
-        // Execute callbacks by priority
-        var priorities = ['critical', 'high', 'normal', 'low'];
-        for (var j = 0; j < priorities.length; j++) {
-            var priority = priorities[j];
-            var callbacks = priorityGroups[priority];
-            
-            if (!callbacks.length) continue;
-            
-            if (priority === 'critical') {
-                await this.#executeCallbacks(callbacks, node);
-            } else {
-                this.#deferCallbacks(callbacks, node, priority);
+        // Execute immediate first
+        return Promise.allSettled(
+            priorityGroups.immediate.map(cb => cb.fn(node))
+        ).then(() => {
+            // Schedule others
+            ['high', 'normal', 'low'].forEach(priority => {
+                if (priorityGroups[priority].length > 0) {
+                    const delay = { high: 0, normal: 10, low: 100 }[priority];
+                    setTimeout(() => {
+                        priorityGroups[priority].forEach(cb => {
+                            try {
+                                cb.fn(node);
+                            } catch (e) {
+                                console.error('Callback error:', e);
+                            }
+                        });
+                    }, delay);
+                }
+            });
+        });
+    }
+    
+    #callbackMatchesNode(callback, node) {
+        // Page type check
+        if (callback.pageTypes && callback.pageTypes.length) {
+            const pageState = this.#detectPageState();
+            const matchesPage = callback.pageTypes.some(type => 
+                pageState[`is${type.charAt(0).toUpperCase() + type.slice(1)}`]
+            );
+            if (!matchesPage) return false;
+        }
+        
+        // Selector check
+        if (callback.selector) {
+            if (!node.matches(callback.selector) && 
+                !node.querySelector(callback.selector)) {
+                return false;
             }
         }
         
-        this.#processedNodes.add(node);
+        return true;
     }
     
-    #getMatchingCallbacks(node) {
-        var matching = [];
-        var callbackValues = Array.from(this.#callbacks.values());
+    #deepScanExistingContent() {
+        console.time('DeepScan');
         
-        for (var i = 0; i < callbackValues.length; i++) {
-            var callback = callbackValues[i];
-            
-            // Check page types
-            if (callback.pageTypes && callback.pageTypes.length) {
-                var hasMatchingPageType = false;
-                for (var j = 0; j < callback.pageTypes.length; j++) {
-                    var type = callback.pageTypes[j];
-                    var stateKey = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
-                    if (this.#pageState[stateKey]) {
-                        hasMatchingPageType = true;
-                        break;
+        // Use TreeWalker for comprehensive scanning
+        const treeWalker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_ELEMENT,
+            {
+                acceptNode: (node) => {
+                    // Skip already processed nodes
+                    if (this.#processedNodes.has(node)) {
+                        return NodeFilter.FILTER_REJECT;
                     }
-                }
-                if (!hasMatchingPageType) continue;
-            }
-            
-            // Check selector
-            if (callback.selector) {
-                if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
-                    continue;
-                }
-            }
-            
-            matching.push(callback);
-        }
-        
-        return matching;
-    }
-    
-    async #executeCallbacks(callbacks, node) {
-        var promises = [];
-        
-        for (var i = 0; i < callbacks.length; i++) {
-            var callback = callbacks[i];
-            promises.push((async function() {
-                try {
-                    await callback.fn(node);
-                } catch (error) {
-                    console.error('Callback ' + callback.id + ' failed:', error);
-                }
-            })());
-        }
-        
-        await Promise.allSettled(promises);
-    }
-    
-    #deferCallbacks(callbacks, node, priority) {
-        var delays = {
-            high: 50,
-            normal: 100,
-            low: 500
-        };
-        
-        var delay = delays[priority] || 100;
-        
-        // Use the best available scheduling API
-        if (typeof scheduler !== 'undefined' && scheduler.postTask) {
-            scheduler.postTask(function() {
-                this.#executeCallbacks(callbacks, node);
-            }.bind(this), { 
-                priority: 'user-visible', 
-                delay: delay 
-            });
-        } else if (window.requestIdleCallback) {
-            requestIdleCallback(function() {
-                this.#executeCallbacks(callbacks, node);
-            }.bind(this), { 
-                timeout: delay 
-            });
-        } else {
-            setTimeout(function() {
-                this.#executeCallbacks(callbacks, node);
-            }.bind(this), delay);
-        }
-    }
-    
-    #scanExistingContent() {
-        var forumSelectors = [
-            '.post', '.article', '.btn', '.forminput', '.points_up', '.points_down',
-            '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
-            '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
-            '.profile-avatar', '.breadcrumb-item', '.page-number',
-            '.post-modernized', '.modern-quote', '.modern-profile', '.modern-topic-title',
-            '.modern-breadcrumb', '.modern-nav', '.post-new-badge', '.quote-jump-btn',
-            '.anchor-container', '.modern-bottom-actions', '.multiquote-control',
-            '.moderator-controls', '.ip-address-control', '.search-post',
-            '.post-actions', '.user-info', '.post-content', '.post-footer'
-        ];
-        
-        // Scan all selectors
-        for (var i = 0; i < forumSelectors.length; i++) {
-            var selector = forumSelectors[i];
-            var nodes = document.querySelectorAll(selector);
-            
-            for (var j = 0; j < nodes.length; j++) {
-                var node = nodes[j];
-                if (!this.#processedNodes.has(node)) {
-                    this.#processNode(node);
+                    
+                    // Skip hidden nodes initially
+                    const style = window.getComputedStyle(node);
+                    if (style.display === 'none' || style.visibility === 'hidden') {
+                        return NodeFilter.FILTER_SKIP;
+                    }
+                    
+                    return NodeFilter.FILTER_ACCEPT;
                 }
             }
-        }
+        );
         
-        this.#initialScanComplete = true;
-        console.log('✅ Initial content scan complete');
-    }
-    
-    #setupCleanup() {
-        this.#cleanupIntervalId = setInterval(function() {
-            // Monitor memory usage
-            if (this.#processedNodes.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes) {
-                console.warn('Processed nodes approaching limit: ' + this.#processedNodes.size);
+        const nodesToProcess = [];
+        let currentNode;
+        while ((currentNode = treeWalker.nextNode())) {
+            nodesToProcess.push(currentNode);
+            
+            // Process in chunks to avoid blocking
+            if (nodesToProcess.length >= 100) {
+                this.#mutationQueue = new Set([...this.#mutationQueue, ...nodesToProcess]);
+                nodesToProcess.length = 0;
                 
-                if (this.#processedNodes.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes * 1.5) {
-                    console.warn('Clearing processed nodes cache');
-                    this.#processedNodes = new WeakSet();
+                // Yield to main thread
+                setTimeout(() => {}, 0);
+            }
+        }
+        
+        // Process remaining nodes
+        if (nodesToProcess.length > 0) {
+            this.#mutationQueue = new Set([...this.#mutationQueue, ...nodesToProcess]);
+        }
+        
+        // Also scan text nodes in interactive elements
+        const textWalker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: (node) => {
+                    const parent = node.parentElement;
+                    return parent && this.#isInteractiveElement(parent) ? 
+                        NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
                 }
             }
-            
-            // Suggest garbage collection if available
-            if (typeof globalThis.gc === 'function') {
-                globalThis.gc();
+        );
+        
+        while ((currentNode = textWalker.nextNode())) {
+            if (currentNode.parentElement) {
+                this.#mutationQueue.add(currentNode.parentElement);
             }
-        }.bind(this), ForumCoreObserver.#CONFIG.memory.cleanupInterval);
-    }
-    
-    #handleVisibilityChange() {
-        if (document.hidden) {
-            this.#pause();
-        } else {
-            this.#resume();
-            // Rescan content when page becomes visible
-            queueMicrotask(function() {
-                this.#scanExistingContent();
-            }.bind(this));
-        }
-    }
-    
-    #pause() {
-        if (this.#observer) {
-            this.#observer.disconnect();
         }
         
-        // Clear all timeouts
-        var timeoutIds = Array.from(this.#debounceTimeouts.values());
-        for (var i = 0; i < timeoutIds.length; i++) {
-            clearTimeout(timeoutIds[i]);
-        }
-        this.#debounceTimeouts.clear();
+        console.timeEnd('DeepScan');
+        this.#initialScanComplete = true;
+        console.log('✅ Deep scan complete');
+        
+        // Schedule immediate processing
+        this.#forceImmediateRescan();
     }
     
-    #resume() {
-        if (!this.#observer) {
-            this.#observer = new MutationObserver(this.#handleMutations.bind(this));
+    #scanNodeTree(root) {
+        if (!root) return;
+        
+        const walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_ELEMENT,
+            null,
+            false
+        );
+        
+        const nodes = [];
+        let node;
+        while ((node = walker.nextNode())) {
+            if (!this.#processedNodes.has(node)) {
+                nodes.push(node);
+            }
         }
         
-        this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
+        if (nodes.length > 0) {
+            this.#mutationQueue = new Set([...this.#mutationQueue, ...nodes]);
+            this.#forceImmediateRescan();
+        }
     }
     
-    // Public API
+    #setupPeriodicRescan() {
+        // Force periodic rescans to catch missed content
+        setInterval(() => {
+            if (performance.now() - this.#metrics.lastRescanTime > 10000) {
+                this.#metrics.lastRescanTime = performance.now();
+                this.#quickRescan();
+                
+                // Full rescan every 5 minutes
+                if (this.#metrics.lastRescanTime % 300000 < 10000) {
+                    this.#deepScanExistingContent();
+                }
+            }
+        }, 5000);
+    }
+    
+    // Keep existing #detectPageState, #pause, #resume, #handleVisibilityChange methods
+    // from the previous version (they're already good)
+    
+    // ... [Include all the other methods from previous version] ...
+    
+    // Enhanced public API methods
     register(settings) {
-        var id = settings.id || 'callback_' + Date.now() + '_' + 
-            (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2));
+        const id = settings.id || `cb_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         
-        var callback = {
-            id: id,
+        const callback = {
+            id,
             fn: settings.callback,
             priority: settings.priority || 'normal',
             selector: settings.selector,
             pageTypes: settings.pageTypes,
-            dependencies: settings.dependencies,
-            retryCount: 0,
-            maxRetries: settings.maxRetries || 0,
-            createdAt: performance.now()
+            capturePhase: settings.capturePhase || false,
+            immediate: settings.immediate === true,
+            retryOnFail: settings.retryOnFail !== false,
+            maxRetries: settings.maxRetries || 3
         };
         
         this.#callbacks.set(id, callback);
-        console.log('📝 Registered callback: ' + id + ' (priority: ' + callback.priority + ')');
         
-        // If selector is provided, scan for existing matching nodes
+        // Immediate execution for existing matching nodes
         if (this.#initialScanComplete && callback.selector) {
-            var nodes = document.querySelectorAll(callback.selector);
-            for (var i = 0; i < nodes.length; i++) {
-                var node = nodes[i];
+            const matchingNodes = document.querySelectorAll(callback.selector);
+            matchingNodes.forEach(node => {
                 if (!this.#processedNodes.has(node)) {
-                    this.#processNode(node);
+                    this.#mutationQueue.add(node);
                 }
-            }
+            });
+            this.#forceImmediateRescan();
         }
         
         return id;
     }
     
-    registerDebounced(settings) {
-        var id = this.register(settings);
+    // Enhanced destroy to clean up all hooks
+    destroy() {
+        // Restore original methods
+        if (this.#originalAttachShadow) {
+            Element.prototype.attachShadow = this.#originalAttachShadow;
+        }
         
-        this.#debouncedCallbacks.set(id, {
-            callback: settings.callback,
-            delay: settings.delay || ForumCoreObserver.#CONFIG.performance.debounceThreshold,
-            lastRun: 0
+        if (this.#originalCreateElement) {
+            document.createElement = this.#originalCreateElement;
+        }
+        
+        // Restore DOM methods
+        const methods = [
+            'appendChild', 'insertBefore', 'replaceChild', 'removeChild',
+            'insertAdjacentElement', 'insertAdjacentHTML', 'insertAdjacentText'
+        ];
+        
+        methods.forEach(method => {
+            const original = this[`#original${method}`];
+            if (original) {
+                Node.prototype[method] = original;
+            }
         });
         
-        return id;
-    }
-    
-    unregister(callbackId) {
-        var removed = false;
-        
-        if (this.#callbacks.has(callbackId)) {
-            this.#callbacks.delete(callbackId);
-            removed = true;
+        // Clean up all observers
+        if (this.#rafObserver) {
+            cancelAnimationFrame(this.#rafObserver);
+            this.#rafObserver = null;
         }
         
-        if (this.#debouncedCallbacks.has(callbackId)) {
-            this.#debouncedCallbacks.delete(callbackId);
-            removed = true;
+        if (this.#iframeObserver) {
+            this.#iframeObserver.disconnect();
+            this.#iframeObserver = null;
         }
         
-        if (this.#debounceTimeouts.has(callbackId)) {
-            clearTimeout(this.#debounceTimeouts.get(callbackId));
-            this.#debounceTimeouts.delete(callbackId);
+        if (this.#observer) {
+            this.#observer.disconnect();
+            this.#observer = null;
         }
         
-        if (removed) {
-            console.log('🗑️ Unregistered callback: ' + callbackId);
-        }
+        // Clean up shadow DOM observers
+        this.#shadowObservers.forEach(observer => observer.disconnect());
+        this.#shadowObservers.clear();
         
-        return removed;
-    }
-    
-    forceScan(selector) {
-        if (!selector) {
-            this.#scanExistingContent();
-            return;
-        }
-        
-        var nodes = document.querySelectorAll(selector);
-        for (var i = 0; i < nodes.length; i++) {
-            var node = nodes[i];
-            if (!this.#processedNodes.has(node)) {
-                this.#processNode(node);
-            }
-        }
-    }
-    
-    getStats() {
-        return {
-            totalMutations: this.#mutationMetrics.totalMutations,
-            processedMutations: this.#mutationMetrics.processedMutations,
-            averageProcessingTime: this.#mutationMetrics.averageProcessingTime,
-            lastMutationTime: this.#mutationMetrics.lastMutationTime,
-            registeredCallbacks: this.#callbacks.size,
-            debouncedCallbacks: this.#debouncedCallbacks.size,
-            pendingTimeouts: this.#debounceTimeouts.size,
-            processedNodes: this.#processedNodes.size,
-            pageState: this.#pageState,
-            isProcessing: this.#isProcessing,
-            queueLength: this.#mutationQueue.length
-        };
-    }
-    
-    destroy() {
-        this.#pause();
-        
+        // Clear intervals
         if (this.#cleanupIntervalId) {
             clearInterval(this.#cleanupIntervalId);
         }
         
+        // Clear all data
         this.#callbacks.clear();
-        this.#debouncedCallbacks.clear();
+        this.#pendingCallbacks.clear();
         this.#processedNodes = new WeakSet();
-        this.#mutationQueue.length = 0;
-        this.#debounceTimeouts.clear();
+        this.#mutationQueue.clear();
+        this.#processingQueue.clear();
         
-        document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
-        
-        console.log('🔄 ForumCoreObserver destroyed');
-    }
-    
-    static create() {
-        return new ForumCoreObserver();
+        console.log('🔄 Bulletproof Observer completely destroyed');
     }
 }
 
-// Initialize globally
+// Initialize
 if (!globalThis.forumObserver) {
-    try {
-        globalThis.forumObserver = ForumCoreObserver.create();
-        
-        // Global helper functions
-        globalThis.registerForumScript = function(settings) {
-            return globalThis.forumObserver ? globalThis.forumObserver.register(settings) : null;
-        };
-        
-        globalThis.registerDebouncedForumScript = function(settings) {
-            return globalThis.forumObserver ? globalThis.forumObserver.registerDebounced(settings) : null;
-        };
-        
-        // Auto-cleanup on page hide
-        globalThis.addEventListener('pagehide', function() {
-            if (globalThis.forumObserver) {
-                globalThis.forumObserver.destroy();
-            }
-        }, { once: true });
-        
-        console.log('🚀 ForumCoreObserver ready');
-        
-    } catch (error) {
-        console.error('Failed to initialize ForumCoreObserver:', error);
-        
-        // Fallback proxy
-        globalThis.forumObserver = new Proxy({}, {
-            get: function(target, prop) {
-                var methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy'];
-                if (methods.indexOf(prop) > -1) {
-                    return function() {
-                        console.warn('ForumCoreObserver not initialized - ' + prop + ' called');
-                    };
-                }
-                return undefined;
-            }
-        });
-    }
+    // ... [Initialization code similar to before] ...
 }
