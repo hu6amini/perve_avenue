@@ -1057,24 +1057,27 @@ class PostModernizer {
         return timeElement;
     }
 
-    #transformTimestampElements(element) {
-        const timestampElements = element.querySelectorAll('.lt.Sub a span.when, .lt.Sub time, .post-edit time');
+    #transformPostHeaderTimestamps(element) {
+        const timestampLinks = element.querySelectorAll('.lt.Sub a[href*="#entry"]');
         
-        timestampElements.forEach(timestampElement => {
+        timestampLinks.forEach(link => {
+            const timeElement = link.querySelector('span.when, time');
+            if (!timeElement) return;
+            
             let dateString = '';
             
-            if (timestampElement.hasAttribute('title')) {
-                dateString = timestampElement.getAttribute('title');
-            } else if (timestampElement.textContent) {
-                const text = timestampElement.textContent.trim();
+            if (timeElement.hasAttribute('title')) {
+                dateString = timeElement.getAttribute('title');
+            } else if (timeElement.textContent) {
+                const text = timeElement.textContent.trim();
                 const postedMatch = text.match(/Posted on\s+(.+)/);
                 dateString = postedMatch ? postedMatch[1] : text;
             }
             
             if (dateString) {
-                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
-                if (modernTimestamp !== timestampElement) {
-                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                const modernTimestamp = this.#createModernTimestamp(timeElement, dateString);
+                if (modernTimestamp !== timeElement) {
+                    link.replaceChild(modernTimestamp, timeElement);
                 }
             }
         });
@@ -1318,7 +1321,8 @@ class PostModernizer {
                     title2TopClone.querySelector('.left.Item')?.remove();
                     this.#removeBreakAndNbsp(title2TopClone);
                     
-                    this.#transformTimestampElements(title2TopClone);
+                    // 转换时间戳，但保留链接
+                    this.#transformPostHeaderTimestamps(title2TopClone);
                     
                     postHeader.appendChild(title2TopClone);
                     tdWrapper.remove();
@@ -1329,7 +1333,8 @@ class PostModernizer {
                     title2TopClone.querySelector('.left.Item')?.remove();
                     this.#removeBreakAndNbsp(title2TopClone);
                     
-                    this.#transformTimestampElements(title2TopClone);
+                    // 转换时间戳，但保留链接
+                    this.#transformPostHeaderTimestamps(title2TopClone);
                     
                     postHeader.appendChild(title2TopClone);
                 }
@@ -1584,7 +1589,8 @@ class PostModernizer {
                 this.#removeBreakAndNbsp(title2TopClone);
                 title2TopClone.querySelector('.Break.Sub')?.remove();
 
-                this.#transformTimestampElements(title2TopClone);
+                // 转换搜索帖子头部的时间戳
+                this.#transformPostHeaderTimestamps(title2TopClone);
 
                 const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
                 if (tdWrapper) {
