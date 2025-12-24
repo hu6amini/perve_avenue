@@ -36,7 +36,7 @@ class MediaDimensionExtractor {
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
     // Preview-specific selectors
-    static #PREVIEW_SELECTORS = [
+    static #PREVIEW_CONTAINERS = [
         '#preview',
         '#ajaxObject',
         '.Item.preview',
@@ -58,11 +58,108 @@ class MediaDimensionExtractor {
         this.#setupObserver();
         this.#cacheContextElements();
         
-        // CRITICAL: Force process all media IMMEDIATELY including previews
-        this.#forceProcessAllMediaImmediate();
+        // Setup global mutation observer for previews (since they're loaded dynamically)
+        this.#setupPreviewMutationObserver();
         
         this.#mark('init-end');
         this.#measure();
+    }
+
+    #setupPreviewMutationObserver() {
+        // Create a direct MutationObserver specifically for preview containers
+        // This catches AJAX-loaded preview content
+        var previewObserver = new MutationObserver(this.#handlePreviewMutations.bind(this));
+        
+        // Observe the entire document for preview container additions
+        previewObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['id', 'class']
+        });
+        
+        // Store reference for cleanup
+        this.#previewObserver = previewObserver;
+    }
+
+    #handlePreviewMutations(mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+            var mutation = mutations[i];
+            
+            // Handle added nodes
+            if (mutation.type === 'childList' && mutation.addedNodes.length) {
+                for (var j = 0; j < mutation.addedNodes.length; j++) {
+                    var node = mutation.addedNodes[j];
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    
+                    // Check if this is a preview container or contains one
+                    if (this.#isPreviewContainer(node)) {
+                        this.#processPreviewContainer(node);
+                    } else {
+                        // Check for preview containers inside this node
+                        for (var k = 0; k < MediaDimensionExtractor.#PREVIEW_CONTAINERS.length; k++) {
+                            var containers = node.querySelectorAll(MediaDimensionExtractor.#PREVIEW_CONTAINERS[k]);
+                            for (var l = 0; l < containers.length; l++) {
+                                this.#processPreviewContainer(containers[l]);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Handle attribute changes (like when #preview becomes visible)
+            if (mutation.type === 'attributes') {
+                var target = mutation.target;
+                if (this.#isPreviewContainer(target)) {
+                    this.#processPreviewContainer(target);
+                }
+            }
+        }
+    }
+
+    #isPreviewContainer(element) {
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+        
+        var id = element.id || '';
+        var className = element.className || '';
+        
+        // Check if it's a known preview container
+        if (id === 'preview' || 
+            id === 'ajaxObject' ||
+            id.includes('preview') ||
+            className.includes('Item') && className.includes('preview') ||
+            className.includes('preview-content') ||
+            className.includes('post-preview')) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    #processPreviewContainer(container) {
+        if (!container || container.dataset.mediaExtractorProcessed) return;
+        
+        // Mark as processed
+        container.dataset.mediaExtractorProcessed = 'true';
+        
+        // Process all media in the container IMMEDIATELY
+        var mediaElements = container.querySelectorAll('img, iframe, video');
+        for (var i = 0; i < mediaElements.length; i++) {
+            var element = mediaElements[i];
+            if (!this.#processedMedia.has(element)) {
+                this.#processSingleMedia(element);
+            }
+        }
+        
+        // Also check container itself
+        if ((container.tagName === 'IMG' || 
+             container.tagName === 'IFRAME' || 
+             container.tagName === 'VIDEO') && 
+            !this.#processedMedia.has(container)) {
+            this.#processSingleMedia(container);
+        }
+        
+        console.log('🔍 Processed preview container: ' + (container.id || container.className));
     }
 
     #mark(name) {
@@ -97,7 +194,7 @@ class MediaDimensionExtractor {
             return;
         }
 
-        // Simple registration - no pageTypes needed since observer is global
+        // Register with forum observer
         this.#observerId = globalThis.forumObserver.register({
             id: 'media-dimension-extractor',
             callback: function(node) {
@@ -105,187 +202,78 @@ class MediaDimensionExtractor {
             }.bind(this),
             selector: 'img, iframe, video',
             priority: 'high'
-            // No pageTypes - runs everywhere thanks to global observer
+            // No pageTypes needed - observer is global
         });
 
-        console.log('✅ Media Dimension Extractor registered globally');
+        // Process all existing media
+        this.#processAllMediaBatched();
+        
+        // Also scan for any existing preview content
+        this.#scanForExistingPreviews();
     }
 
-    #forceProcessAllMediaImmediate() {
-        console.log('🔍 Force processing ALL media immediately...');
-        
-        // Process ALL images in the entire document
-        var allImages = document.querySelectorAll('img');
-        var processedCount = 0;
-        var twemojiCount = 0;
-        
-        for (var i = 0; i < allImages.length; i++) {
-            var img = allImages[i];
-            if (!this.#processedMedia.has(img)) {
-                this.#processImageForce(img);
-                processedCount++;
-                
-                if (img.src.includes('twemoji') || img.classList.contains('twemoji')) {
-                    twemojiCount++;
-                }
+    #scanForExistingPreviews() {
+        // Check for preview containers that already exist
+        for (var i = 0; i < MediaDimensionExtractor.#PREVIEW_CONTAINERS.length; i++) {
+            var containers = document.querySelectorAll(MediaDimensionExtractor.#PREVIEW_CONTAINERS[i]);
+            for (var j = 0; j < containers.length; j++) {
+                this.#processPreviewContainer(containers[j]);
             }
         }
-        
-        // Process ALL iframes
-        var allIframes = document.querySelectorAll('iframe');
-        for (var j = 0; j < allIframes.length; j++) {
-            var iframe = allIframes[j];
-            if (!this.#processedMedia.has(iframe)) {
-                this.#processIframe(iframe);
-                processedCount++;
-            }
-        }
-        
-        // Process ALL videos
-        var allVideos = document.querySelectorAll('video');
-        for (var k = 0; k < allVideos.length; k++) {
-            var video = allVideos[k];
-            if (!this.#processedMedia.has(video)) {
-                this.#processVideo(video);
-                processedCount++;
-            }
-        }
-        
-        console.log('✅ Immediately processed ' + processedCount + ' media elements (' + twemojiCount + ' twemojis)');
-        
-        // Special aggressive preview processing
-        this.#aggressivePreviewProcessing();
     }
 
-    #aggressivePreviewProcessing() {
-        console.log('🔍 Aggressive preview processing...');
+    #processAllMediaBatched() {
+        this.#mark('batch-start');
         
-        // Look for ANY element that might contain preview content
-        var previewIndicators = [
-            'preview', 'ajaxObject', 'Item', 'quote', 'post-preview'
+        var batches = [
+            document.images,
+            document.getElementsByTagName('iframe'),
+            document.getElementsByTagName('video')
         ];
         
-        // Search the entire document for any elements with these indicators
-        for (var p = 0; p < previewIndicators.length; p++) {
-            var indicator = previewIndicators[p];
-            
-            // Search by ID
-            var idElements = document.querySelectorAll('#' + indicator + ', [id*="' + indicator + '"]');
-            for (var i = 0; i < idElements.length; i++) {
-                this.#forceProcessContainer(idElements[i]);
-            }
-            
-            // Search by class
-            var classElements = document.querySelectorAll('.' + indicator + ', [class*="' + indicator + '"]');
-            for (var c = 0; c < classElements.length; c++) {
-                this.#forceProcessContainer(classElements[c]);
-            }
-        }
+        var totalElements = batches.reduce(function(total, batch) {
+            return total + batch.length;
+        }, 0);
         
-        // Also look for any divs that might be preview containers
-        var potentialContainers = document.querySelectorAll('div');
-        for (var d = 0; d < potentialContainers.length; d++) {
-            var container = potentialContainers[d];
-            var id = container.id || '';
-            var className = container.className || '';
-            
-            if (id.includes('preview') || className.includes('preview') || 
-                id.includes('ajax') || className.includes('Item')) {
-                this.#forceProcessContainer(container);
-            }
-        }
+        console.log('✅ Media Dimension Extractor: Processing ' + totalElements + ' media elements');
         
-        // Finally, process ALL twemojis one more time to be sure
-        var allTwemojis = document.querySelectorAll('img[src*="twemoji"], img.twemoji');
-        var fixedTwemojis = 0;
-        for (var t = 0; t < allTwemojis.length; t++) {
-            var twemoji = allTwemojis[t];
-            if (this.#forceFixTwemoji(twemoji)) {
-                fixedTwemojis++;
-            }
-        }
-        
-        if (fixedTwemojis > 0) {
-            console.log('✅ Fixed ' + fixedTwemojis + ' twemojis to correct dimensions');
-        }
+        // Process in batches to avoid blocking
+        requestAnimationFrame(function() {
+            this.#processBatch(batches, 0, 0);
+        }.bind(this));
     }
 
-    #forceProcessContainer(container) {
-        if (!container) return;
+    #processBatch(batches, batchIndex, elementIndex) {
+        var BATCH_SIZE = 50;
+        var processedCount = 0;
+        var startTime = Date.now();
         
-        // Process all media in container
-        var mediaElements = container.querySelectorAll('img, iframe, video');
-        for (var i = 0; i < mediaElements.length; i++) {
-            var element = mediaElements[i];
-            if (!this.#processedMedia.has(element)) {
-                if (element.tagName === 'IMG') {
-                    this.#processImageForce(element);
-                } else if (element.tagName === 'IFRAME') {
-                    this.#processIframe(element);
-                } else if (element.tagName === 'VIDEO') {
-                    this.#processVideo(element);
+        while (batchIndex < batches.length && processedCount < BATCH_SIZE) {
+            var batch = batches[batchIndex];
+            
+            while (elementIndex < batch.length && processedCount < BATCH_SIZE) {
+                var element = batch[elementIndex];
+                if (!this.#processedMedia.has(element)) {
+                    this.#processSingleMedia(element);
+                    processedCount++;
                 }
+                elementIndex++;
+            }
+            
+            if (elementIndex >= batch.length) {
+                batchIndex++;
+                elementIndex = 0;
             }
         }
-    }
-
-    #forceFixTwemoji(img) {
-        if (!img) return false;
         
-        var isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        if (!isTwemoji) return false;
-        
-        // Get current dimensions
-        var currentWidth = img.getAttribute('width');
-        var currentHeight = img.getAttribute('height');
-        var correctSize = this.#isInSmallContext(img) ? 18 : 20;
-        
-        // If dimensions are wrong (not 18 or 20), fix them
-        if (currentWidth !== correctSize.toString() || currentHeight !== correctSize.toString()) {
-            console.log('🔧 Fixing twemoji: ' + currentWidth + 'x' + currentHeight + ' → ' + correctSize + 'x' + correctSize);
-            
-            // Force set correct dimensions
-            img.setAttribute('width', correctSize);
-            img.setAttribute('height', correctSize);
-            img.style.aspectRatio = correctSize + ' / ' + correctSize;
-            img.style.width = '';
-            img.style.height = '';
-            
-            this.#cacheDimension('twemoji_fixed_' + correctSize, correctSize, correctSize);
-            this.#processedMedia.add(img);
-            return true;
+        if (batchIndex < batches.length) {
+            requestAnimationFrame(function() {
+                this.#processBatch(batches, batchIndex, elementIndex);
+            }.bind(this));
+        } else {
+            this.#mark('batch-end');
+            console.log('✅ Media Dimension Extractor: Batch processing complete');
         }
-        
-        return false;
-    }
-
-    #processImageForce(img) {
-        // This is a forced version that always processes, skipping cache checks
-        var isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        
-        if (isTwemoji) {
-            // ALWAYS set twemoji to proper size, OVERRIDE any existing dimensions
-            var size = this.#isInSmallContext(img) ? 18 : 20;
-            
-            // Force set attributes regardless of existing values
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            
-            // Ensure aspect ratio is correct
-            img.style.aspectRatio = size + ' / ' + size;
-            
-            // Remove any inline width/height styles that might override attributes
-            img.style.width = '';
-            img.style.height = '';
-            
-            // Cache emoji dimensions
-            this.#cacheDimension('twemoji_' + size, size, size);
-            this.#processedMedia.add(img);
-            return;
-        }
-        
-        // For non-twemojis, use the regular processing
-        this.#processImage(img);
     }
 
     #processMedia(node) {
@@ -363,20 +351,19 @@ class MediaDimensionExtractor {
             // ALWAYS set twemoji to proper size, OVERRIDE any existing dimensions
             var size = this.#isInSmallContext(img) ? 18 : 20;
             
-            // Force set attributes regardless of existing values
+            // FORCE set attributes - override any existing values
             img.setAttribute('width', size);
             img.setAttribute('height', size);
             
-            // Ensure aspect ratio is correct
-            img.style.aspectRatio = size + ' / ' + size;
-            
-            // Remove any inline width/height styles that might override attributes
+            // Clear inline styles that might override
             img.style.width = '';
             img.style.height = '';
             
-            // Cache emoji dimensions with a special key
-            this.#cacheDimension('twemoji_' + size, size, size);
-            this.#processedMedia.add(img);
+            // Set aspect ratio
+            img.style.aspectRatio = size + ' / ' + size;
+            
+            // Cache with special key
+            this.#cacheDimension('twemoji_force_' + size, size, size);
             return; // Skip all other processing for twemojis
         }
 
@@ -390,7 +377,6 @@ class MediaDimensionExtractor {
                 img.setAttribute('height', cached.height);
                 img.style.aspectRatio = cached.width + ' / ' + cached.height;
             }
-            this.#processedMedia.add(img);
             return;
         }
         this.#cacheMisses++;
@@ -412,13 +398,11 @@ class MediaDimensionExtractor {
                     if (wDiff > width * 0.5 || hDiff > height * 0.5) {
                         // Wrong dimensions - update
                         this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-                        this.#processedMedia.add(img);
                         return;
                     }
                 }
 
                 img.style.aspectRatio = width + ' / ' + height;
-                this.#processedMedia.add(img);
                 return;
             }
         }
@@ -432,25 +416,21 @@ class MediaDimensionExtractor {
             
             // Cache emoji dimensions
             this.#cacheDimension(img.src, size, size);
-            this.#processedMedia.add(img);
             return;
         }
         
         // Handle loading state
         if (img.complete && img.naturalWidth) {
             this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-            this.#processedMedia.add(img);
         } else {
             this.#setupImageLoadListener(img);
-            // Don't add to processedMedia yet - wait for load
         }
     }
 
     #getCacheKey(src) {
         // Optimize cache keys for common patterns
         if (src.includes('twemoji')) {
-            var match = src.match(/(\d+)x\1/);
-            return match ? 'twemoji_' + match[1] : 'twemoji_default';
+            return 'twemoji_force'; // Force cache miss for twemojis to always process them
         }
         
         // For very long URLs, use hash
@@ -524,11 +504,17 @@ class MediaDimensionExtractor {
         } else {
             this.#setImageDimensions(img, 600, 400); // Broken image fallback
         }
-        
-        this.#processedMedia.add(img);
     }
 
     #setImageDimensions(img, width, height) {
+        // Check if it's a twemoji - if so, override with proper size
+        var isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        if (isTwemoji) {
+            var size = this.#isInSmallContext(img) ? 18 : 20;
+            width = size;
+            height = size;
+        }
+        
         // Set attributes and styles
         img.setAttribute('width', width);
         img.setAttribute('height', height);
@@ -599,8 +585,6 @@ class MediaDimensionExtractor {
         if (!iframe.hasAttribute('title')) {
             iframe.setAttribute('title', 'Embedded content');
         }
-        
-        this.#processedMedia.add(iframe);
     }
 
     #processVideo(video) {
@@ -615,14 +599,17 @@ class MediaDimensionExtractor {
             video.style.maxWidth = '800px';
             video.style.height = 'auto';
         }
-        
-        this.#processedMedia.add(video);
     }
 
     #cleanup() {
         // Unregister from forum observer
         if (globalThis.forumObserver && this.#observerId) {
             globalThis.forumObserver.unregister(this.#observerId);
+        }
+        
+        // Disconnect preview observer
+        if (this.#previewObserver) {
+            this.#previewObserver.disconnect();
         }
 
         // Clean up event listeners
@@ -646,6 +633,10 @@ class MediaDimensionExtractor {
         } else {
             this.#processNestedMedia(element);
         }
+    }
+    
+    forceProcessPreviews() {
+        this.#scanForExistingPreviews();
     }
 
     clearCache() {
@@ -683,27 +674,14 @@ if (!globalThis.mediaDimensionExtractor) {
     try {
         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
         
-        // Add a global method to force fix twemojis (for debugging)
-        globalThis.forceFixTwemojis = function() {
-            if (globalThis.mediaDimensionExtractor) {
-                var allTwemojis = document.querySelectorAll('img[src*="twemoji"], img.twemoji');
-                var fixed = 0;
-                for (var i = 0; i < allTwemojis.length; i++) {
-                    var img = allTwemojis[i];
-                    var size = img.closest('.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature') ? 18 : 20;
-                    if (img.getAttribute('width') !== size.toString() || img.getAttribute('height') !== size.toString()) {
-                        img.setAttribute('width', size);
-                        img.setAttribute('height', size);
-                        img.style.aspectRatio = size + ' / ' + size;
-                        img.style.width = '';
-                        img.style.height = '';
-                        fixed++;
-                    }
-                }
-                console.log('Manually fixed ' + fixed + ' twemojis');
-                return fixed;
+        // Add global helper for manual preview processing
+        globalThis.forceProcessPreviewMedia = function() {
+            if (globalThis.mediaDimensionExtractor && 
+                typeof globalThis.mediaDimensionExtractor.forceProcessPreviews === 'function') {
+                globalThis.mediaDimensionExtractor.forceProcessPreviews();
+                return true;
             }
-            return 0;
+            return false;
         };
         
     } catch (error) {
@@ -738,6 +716,39 @@ globalThis.addEventListener('pagehide', function() {
     }
 });
 
+// Hook into common preview triggers
+if (typeof jQuery !== 'undefined') {
+    jQuery(document).on('ajaxComplete', function(event, xhr, settings) {
+        // Check if this is a preview request
+        if (settings.url && (settings.url.includes('preview') || settings.url.includes('ajax.php'))) {
+            // Wait a bit for DOM to update, then process previews
+            setTimeout(function() {
+                if (globalThis.forceProcessPreviewMedia) {
+                    globalThis.forceProcessPreviewMedia();
+                }
+            }, 100);
+        }
+    });
+}
+
+// Also hook into native fetch for previews
+var originalFetch = window.fetch;
+if (originalFetch) {
+    window.fetch = function() {
+        return originalFetch.apply(this, arguments).then(function(response) {
+            var url = arguments[0] && arguments[0].url || '';
+            if (url.includes('preview') || url.includes('ajax.php')) {
+                // Wait for DOM to update
+                setTimeout(function() {
+                    if (globalThis.forceProcessPreviewMedia) {
+                        globalThis.forceProcessPreviewMedia();
+                    }
+                }, 100);
+            }
+            return response;
+        });
+    };
+}
 
 //Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
