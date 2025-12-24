@@ -8,6 +8,7 @@ class MediaDimensionExtractor {
     #dimensionCache = new Map();
     #lruMap = new Map();
     #imageLoadHandler = null;
+    #imageLoadAbortController = new AbortController();
     #cacheHits = 0;
     #cacheMisses = 0;
     #smallContextElements = null;
@@ -28,12 +29,19 @@ class MediaDimensionExtractor {
     ]);
 
     static #EMOJI_PATTERNS = [
-        /twemoji/i,
-        /emoji/i,
-        /smiley/i
+        /twemoji/iu,
+        /emoji/iu,
+        /smiley/iu
     ];
 
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
+    
+    // Precomputed static values
+    static #EMOJI_SIZE_NORMAL = 20;
+    static #EMOJI_SIZE_SMALL = 18;
+    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
+    static #BATCH_SIZE = 50;
+    static #CONCURRENCY_LIMIT = 4;
 
     constructor() {
         this.#imageLoadHandler = this.#handleImageLoad.bind(this);
@@ -60,7 +68,7 @@ class MediaDimensionExtractor {
 
     #measure() {
         if (typeof performance !== 'undefined' && performance.measure) {
-            for (var i = 1; i < this.#perf.marks.length; i++) {
+            for (let i = 1; i < this.#perf.marks.length; i++) {
                 performance.measure(
                     'media-extractor-' + i,
                     'media-extractor-' + this.#perf.marks[i-1],
@@ -79,16 +87,16 @@ class MediaDimensionExtractor {
     #setupObserver() {
         if (!globalThis.forumObserver) {
             // Quick retry for observer availability
-            setTimeout(this.#setupObserver.bind(this), 10);
+            setTimeout(() => this.#setupObserver(), 10);
             return;
         }
 
         // Register with global observer (no page restrictions)
         this.#observerId = globalThis.forumObserver.register({
             id: 'media-dimension-extractor',
-            callback: function(node) {
+            callback: (node) => {
                 this.#processMedia(node);
-            }.bind(this),
+            },
             selector: 'img, iframe, video',
             priority: 'high'
             // No pageTypes needed - observer is global now
@@ -101,34 +109,34 @@ class MediaDimensionExtractor {
     #processAllMediaBatched() {
         this.#mark('batch-start');
         
-        var batches = [
+        const batches = [
             document.images,
             document.getElementsByTagName('iframe'),
             document.getElementsByTagName('video')
         ];
         
-        var totalElements = batches.reduce(function(total, batch) {
+        const totalElements = batches.reduce((total, batch) => {
             return total + batch.length;
         }, 0);
         
         console.log('✅ Media Dimension Extractor: Processing ' + totalElements + ' media elements');
         
         // Process in batches to avoid blocking
-        requestAnimationFrame(function() {
+        requestAnimationFrame(() => {
             this.#processBatch(batches, 0, 0);
-        }.bind(this));
+        });
     }
 
     #processBatch(batches, batchIndex, elementIndex) {
-        var BATCH_SIZE = 50;
-        var processedCount = 0;
-        var startTime = Date.now();
+        const BATCH_SIZE = MediaDimensionExtractor.#BATCH_SIZE;
+        let processedCount = 0;
+        const startTime = performance.now();
         
         while (batchIndex < batches.length && processedCount < BATCH_SIZE) {
-            var batch = batches[batchIndex];
+            const batch = batches[batchIndex];
             
             while (elementIndex < batch.length && processedCount < BATCH_SIZE) {
-                var element = batch[elementIndex];
+                const element = batch[elementIndex];
                 if (!this.#processedMedia.has(element)) {
                     this.#processSingleMedia(element);
                     processedCount++;
@@ -143,9 +151,9 @@ class MediaDimensionExtractor {
         }
         
         if (batchIndex < batches.length) {
-            requestAnimationFrame(function() {
+            requestAnimationFrame(() => {
                 this.#processBatch(batches, batchIndex, elementIndex);
-            }.bind(this));
+            });
         } else {
             this.#mark('batch-end');
             console.log('✅ Media Dimension Extractor: Batch processing complete');
@@ -155,7 +163,7 @@ class MediaDimensionExtractor {
     #processMedia(node) {
         if (this.#processedMedia.has(node)) return;
 
-        var tag = node.tagName;
+        const tag = node.tagName;
 
         // Fast tag detection using switch
         switch(tag) {
@@ -175,25 +183,29 @@ class MediaDimensionExtractor {
     }
 
     #processNestedMedia(node) {
-        var images = node.getElementsByTagName('img');
-        var iframes = node.getElementsByTagName('iframe');
-        var videos = node.getElementsByTagName('video');
+        const images = node.getElementsByTagName('img');
+        const iframes = node.getElementsByTagName('iframe');
+        const videos = node.getElementsByTagName('video');
 
-        var i, len;
-        for (i = 0, len = images.length; i < len; i++) {
-            var img = images[i];
+        // Process images
+        for (let i = 0, len = images.length; i < len; i++) {
+            const img = images[i];
             if (!this.#processedMedia.has(img)) {
                 this.#processImage(img);
             }
         }
-        for (i = 0, len = iframes.length; i < len; i++) {
-            var iframe = iframes[i];
+        
+        // Process iframes
+        for (let i = 0, len = iframes.length; i < len; i++) {
+            const iframe = iframes[i];
             if (!this.#processedMedia.has(iframe)) {
                 this.#processIframe(iframe);
             }
         }
-        for (i = 0, len = videos.length; i < len; i++) {
-            var video = videos[i];
+        
+        // Process videos
+        for (let i = 0, len = videos.length; i < len; i++) {
+            const video = videos[i];
             if (!this.#processedMedia.has(video)) {
                 this.#processVideo(video);
             }
@@ -203,7 +215,7 @@ class MediaDimensionExtractor {
     #processSingleMedia(media) {
         if (this.#processedMedia.has(media)) return;
 
-        var tag = media.tagName;
+        const tag = media.tagName;
         
         switch(tag) {
             case 'IMG':
@@ -222,14 +234,16 @@ class MediaDimensionExtractor {
 
     #processImage(img) {
         // ULTRA-AGGRESSIVE twemoji detection - MUST BE FIRST
-        var isTwemoji = img.src.includes('twemoji') || 
+        const isTwemoji = img.src.includes('twemoji') || 
                         img.classList.contains('twemoji') ||
                         img.classList.contains('emoji') ||
                         (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
         
         if (isTwemoji) {
             // FORCE twemoji dimensions, ignore everything else
-            var size = this.#isInSmallContext(img) ? 18 : 20;
+            const size = this.#isInSmallContext(img) ? 
+                MediaDimensionExtractor.#EMOJI_SIZE_SMALL : 
+                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
             
             // Remove any existing dimension attributes first
             img.removeAttribute('width');
@@ -240,13 +254,14 @@ class MediaDimensionExtractor {
             img.setAttribute('height', size);
             
             // Clear any problematic styles
-            var currentStyle = img.style.cssText || '';
+            let currentStyle = img.style.cssText || '';
             if (currentStyle) {
                 // Remove width/height/max-width/max-height styles
-                currentStyle = currentStyle.replace(/width[^;]*;/g, '')
-                                          .replace(/height[^;]*;/g, '')
-                                          .replace(/max-width[^;]*;/g, '')
-                                          .replace(/max-height[^;]*;/g, '');
+                currentStyle = currentStyle
+                    .replace(/width[^;]*;/g, '')
+                    .replace(/height[^;]*;/g, '')
+                    .replace(/max-width[^;]*;/g, '')
+                    .replace(/max-height[^;]*;/g, '');
                 img.style.cssText = currentStyle;
             }
             
@@ -258,7 +273,7 @@ class MediaDimensionExtractor {
             img.style.verticalAlign = 'middle';
             
             // Nuke from cache to prevent future issues
-            var cacheKey = this.#getCacheKey(img.src);
+            const cacheKey = this.#getCacheKey(img.src);
             this.#dimensionCache.delete(cacheKey);
             this.#lruMap.delete(cacheKey);
             
@@ -270,8 +285,8 @@ class MediaDimensionExtractor {
         }
 
         // Cache check first (hottest path) - but NOT for emojis
-        var cacheKey = this.#getCacheKey(img.src);
-        var cached = this.#dimensionCache.get(cacheKey);
+        const cacheKey = this.#getCacheKey(img.src);
+        const cached = this.#dimensionCache.get(cacheKey);
         if (cached) {
             this.#cacheHits++;
             if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
@@ -284,18 +299,18 @@ class MediaDimensionExtractor {
         this.#cacheMisses++;
 
         // Validate existing attributes
-        var widthAttr = img.getAttribute('width');
-        var heightAttr = img.getAttribute('height');
+        const widthAttr = img.getAttribute('width');
+        const heightAttr = img.getAttribute('height');
 
         if (widthAttr !== null && heightAttr !== null) {
-            var width = widthAttr | 0; // Fast integer conversion
-            var height = heightAttr | 0;
+            const width = widthAttr | 0; // Fast integer conversion
+            const height = heightAttr | 0;
 
             if (width > 0 && height > 0) {
                 // Validate against natural dimensions if available
                 if (img.complete && img.naturalWidth) {
-                    var wDiff = Math.abs(img.naturalWidth - width);
-                    var hDiff = Math.abs(img.naturalHeight - height);
+                    const wDiff = Math.abs(img.naturalWidth - width);
+                    const hDiff = Math.abs(img.naturalHeight - height);
 
                     if (wDiff > width * 0.5 || hDiff > height * 0.5) {
                         // Wrong dimensions - update
@@ -309,9 +324,11 @@ class MediaDimensionExtractor {
             }
         }
 
-        // Other emoji detection (non-twemoji)
+        // Other emoji detection using modern iteration
         if (this.#isLikelyEmoji(img)) {
-            var size = this.#isInSmallContext(img) ? 18 : 20;
+            const size = this.#isInSmallContext(img) ? 
+                MediaDimensionExtractor.#EMOJI_SIZE_SMALL : 
+                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
             img.setAttribute('width', size);
             img.setAttribute('height', size);
             img.style.aspectRatio = size + ' / ' + size;
@@ -332,7 +349,7 @@ class MediaDimensionExtractor {
     #getCacheKey(src) {
         // Optimize cache keys for common patterns
         if (src.includes('twemoji')) {
-            var match = src.match(/(\d+)x\1/);
+            const match = src.match(/(\d+)x\1/);
             return match ? 'emoji:' + match[1] : 'emoji:default';
         }
         
@@ -345,8 +362,8 @@ class MediaDimensionExtractor {
     }
 
     #hashString(str) {
-        var hash = 0;
-        for (var i = 0; i < str.length; i++) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
             hash = ((hash << 5) - hash) + str.charCodeAt(i);
             hash = hash | 0;
         }
@@ -354,19 +371,13 @@ class MediaDimensionExtractor {
     }
 
     #isLikelyEmoji(img) {
-        var src = img.src;
-        var className = img.className;
+        const src = img.src;
+        const className = img.className;
         
-        // Fast path for common patterns using pre-compiled regex
-        for (var i = 0; i < MediaDimensionExtractor.#EMOJI_PATTERNS.length; i++) {
-            var pattern = MediaDimensionExtractor.#EMOJI_PATTERNS[i];
-            if (pattern.test(src) || pattern.test(className)) {
-                return true;
-            }
-        }
-        
-        // Slower checks
-        return (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
+        // Use modern iteration with early exit
+        return MediaDimensionExtractor.#EMOJI_PATTERNS.some((pattern) => {
+            return pattern.test(src) || pattern.test(className);
+        }) || (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
     }
 
     #isInSmallContext(img) {
@@ -375,7 +386,7 @@ class MediaDimensionExtractor {
         }
         
         // Check ancestors in Set (O(1) lookup)
-        var parent = img.parentElement;
+        let parent = img.parentElement;
         while (parent) {
             if (this.#smallContextElements.has(parent)) {
                 return true;
@@ -390,8 +401,11 @@ class MediaDimensionExtractor {
         if (img.__dimensionExtractorHandler) return;
 
         img.__dimensionExtractorHandler = this.#imageLoadHandler;
-        img.addEventListener('load', this.#imageLoadHandler, { once: true });
-        img.addEventListener('error', this.#imageLoadHandler, { once: true });
+        
+        // Use AbortController for modern event management
+        const signal = this.#imageLoadAbortController.signal;
+        img.addEventListener('load', this.#imageLoadHandler, { once: true, signal });
+        img.addEventListener('error', this.#imageLoadHandler, { once: true, signal });
 
         // Prevent layout shift
         img.style.maxWidth = '100%';
@@ -399,13 +413,14 @@ class MediaDimensionExtractor {
     }
 
     #handleImageLoad(e) {
-        var img = e.target;
+        const img = e.target;
         delete img.__dimensionExtractorHandler;
 
         if (img.naturalWidth) {
             this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
         } else {
-            this.#setImageDimensions(img, 600, 400); // Broken image fallback
+            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
+            this.#setImageDimensions(img, brokenSize.width, brokenSize.height);
         }
     }
 
@@ -415,7 +430,7 @@ class MediaDimensionExtractor {
         img.setAttribute('height', height);
         
         // Update aspect ratio without clearing other styles
-        var currentStyle = img.style.cssText || '';
+        const currentStyle = img.style.cssText || '';
         if (!currentStyle.includes('aspect-ratio')) {
             img.style.cssText = currentStyle + (currentStyle ? ';' : '') + 'aspect-ratio:' + width + '/' + height;
         }
@@ -425,52 +440,55 @@ class MediaDimensionExtractor {
     }
 
     #cacheDimension(src, width, height) {
-        var cacheKey = this.#getCacheKey(src);
+        const cacheKey = this.#getCacheKey(src);
         
         if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
             // Remove oldest entry using LRU Map
-            var oldestEntry = this.#lruMap.entries().next().value;
+            const oldestEntry = this.#lruMap.entries().next().value;
             if (oldestEntry) {
                 this.#dimensionCache.delete(oldestEntry[0]);
                 this.#lruMap.delete(oldestEntry[0]);
             }
         }
 
-        this.#dimensionCache.set(cacheKey, { width: width, height: height });
-        this.#lruMap.set(cacheKey, Date.now()); // Update timestamp for LRU
+        this.#dimensionCache.set(cacheKey, { width, height });
+        this.#lruMap.set(cacheKey, performance.now()); // Use performance.now() for more precise timing
     }
 
     #processIframe(iframe) {
-        var src = iframe.src || '';
-        var width = '100%';
-        var height = '400';
+        const src = iframe.src || '';
+        let width = '100%';
+        let height = '400';
 
-        // Fast domain detection using Map
-        for (var entry of MediaDimensionExtractor.#IFRAME_SIZES) {
-            if (src.includes(entry[0])) {
-                width = entry[1][0];
-                height = entry[1][1];
-                break;
+        // Use Map.forEach for cleaner iteration
+        MediaDimensionExtractor.#IFRAME_SIZES.forEach((sizes, domain) => {
+            if (src.includes(domain)) {
+                width = sizes[0];
+                height = sizes[1];
+                return true; // Break equivalent
             }
-        }
+        });
 
         iframe.setAttribute('width', width);
         iframe.setAttribute('height', height);
 
         // Create responsive wrapper for fixed sizes
         if (width !== '100%') {
-            var widthNum = width | 0;
-            var heightNum = height | 0;
+            const widthNum = width | 0;
+            const heightNum = height | 0;
 
             if (widthNum > 0 && heightNum > 0) {
-                var parent = iframe.parentNode;
+                const parent = iframe.parentNode;
                 if (!parent || !parent.classList.contains('iframe-wrapper')) {
-                    var wrapper = document.createElement('div');
+                    // Use documentFragment for batch DOM operations
+                    const fragment = document.createDocumentFragment();
+                    const wrapper = document.createElement('div');
                     wrapper.className = 'iframe-wrapper';
-                    var paddingBottom = (heightNum / widthNum * 100) + '%';
+                    const paddingBottom = (heightNum / widthNum * 100) + '%';
                     wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
 
-                    parent.insertBefore(wrapper, iframe);
+                    fragment.appendChild(wrapper);
+                    parent.insertBefore(fragment, iframe);
                     wrapper.appendChild(iframe);
                     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
                 }
@@ -502,13 +520,14 @@ class MediaDimensionExtractor {
             globalThis.forumObserver.unregister(this.#observerId);
         }
 
+        // Abort all pending event listeners
+        this.#imageLoadAbortController.abort();
+
         // Clean up event listeners
-        var images = document.images;
-        for (var i = 0, len = images.length; i < len; i++) {
-            var img = images[i];
+        const images = document.images;
+        for (let i = 0, len = images.length; i < len; i++) {
+            const img = images[i];
             if (img.__dimensionExtractorHandler) {
-                img.removeEventListener('load', this.#imageLoadHandler);
-                img.removeEventListener('error', this.#imageLoadHandler);
                 delete img.__dimensionExtractorHandler;
             }
         }
@@ -532,7 +551,7 @@ class MediaDimensionExtractor {
         this.#processedMedia.delete(element);
         
         // Remove from cache if it exists
-        var cacheKey = this.#getCacheKey(element.src);
+        const cacheKey = this.#getCacheKey(element.src);
         if (this.#dimensionCache.has(cacheKey)) {
             this.#dimensionCache.delete(cacheKey);
             this.#lruMap.delete(cacheKey);
@@ -550,16 +569,30 @@ class MediaDimensionExtractor {
     }
 
     getPerformanceStats() {
-        var total = this.#cacheHits + this.#cacheMisses;
-        var hitRate = total > 0 ? (this.#cacheHits / total * 100).toFixed(1) : 0;
+        const total = this.#cacheHits + this.#cacheMisses;
+        const hitRate = total > 0 ? ((this.#cacheHits / total) * 100).toFixed(1) : 0;
 
         return {
             cacheHits: this.#cacheHits,
             cacheMisses: this.#cacheMisses,
             cacheHitRate: hitRate + '%',
             cacheSize: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size
+            processedMedia: this.#processedMedia.size,
+            averageCacheAge: this.#calculateAverageCacheAge()
         };
+    }
+
+    #calculateAverageCacheAge() {
+        if (this.#lruMap.size === 0) return 0;
+        
+        let totalAge = 0;
+        const now = performance.now();
+        
+        this.#lruMap.forEach((timestamp) => {
+            totalAge += now - timestamp;
+        });
+        
+        return Math.round(totalAge / this.#lruMap.size);
     }
 
     destroy() {
@@ -579,35 +612,46 @@ if (!globalThis.mediaDimensionExtractor) {
     } catch (error) {
         console.error('MediaDimensionExtractor initialization failed:', error);
 
-        // Single retry after short delay
-        setTimeout(function() {
-            if (!globalThis.mediaDimensionExtractor) {
-                try {
-                    globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                } catch (retryError) {
-                    console.error('MediaDimensionExtractor retry failed:', retryError);
+        // Single retry after short delay using requestIdleCallback
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => {
+                if (!globalThis.mediaDimensionExtractor) {
+                    try {
+                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+                    } catch (retryError) {
+                        console.error('MediaDimensionExtractor retry failed:', retryError);
+                    }
                 }
-            }
-        }, 50);
+            }, { timeout: 50 });
+        } else {
+            setTimeout(() => {
+                if (!globalThis.mediaDimensionExtractor) {
+                    try {
+                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+                    } catch (retryError) {
+                        console.error('MediaDimensionExtractor retry failed:', retryError);
+                    }
+                }
+            }, 50);
+        }
     }
 }
 
 // Optional cleanup (browser handles most cleanup automatically)
-globalThis.addEventListener('pagehide', function() {
+globalThis.addEventListener('pagehide', () => {
     if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
         // Use requestIdleCallback for non-blocking cleanup
         if ('requestIdleCallback' in window) {
-            requestIdleCallback(function() {
+            requestIdleCallback(() => {
                 globalThis.mediaDimensionExtractor.destroy();
             });
         } else {
-            setTimeout(function() {
+            setTimeout(() => {
                 globalThis.mediaDimensionExtractor.destroy();
             }, 0);
         }
     }
 });
-
 
 
 //Twemoji
