@@ -3791,41 +3791,45 @@ class PostModernizer {
         }
     }
 
-    #enhanceSingleEmojiContainer(container) {
-        // Skip if already enhanced
-        if (container.classList.contains('emoji-enhanced')) return;
+   #enhanceSingleEmojiContainer(container) {
+    // Skip if already enhanced
+    if (container.classList.contains('emoji-enhanced')) return;
+    
+    // Check if there's a counter (meaning it has reactions)
+    const hasCounter = container.querySelector('.st-emoji-counter');
+    const emojiPreview = container.querySelector('.st-emoji-preview');
+    
+    // Always check the current state, even if previously enhanced
+    if (!hasCounter && emojiPreview) {
+        // Remove any existing Font Awesome icon first (in case we're re-processing)
+        const existingIcon = emojiPreview.querySelector('i.fa-face-smile');
+        if (existingIcon) {
+            existingIcon.remove();
+        }
         
-        // Check if there's a counter (meaning it has reactions)
-        const hasCounter = container.querySelector('.st-emoji-counter');
-        const emojiPreview = container.querySelector('.st-emoji-preview');
+        // Check if there's still an image that needs replacing
+        const existingImage = emojiPreview.querySelector('img');
         
-        if (!hasCounter && emojiPreview) {
-            // No reactions - replace image with Font Awesome icon
+        // No reactions - replace image with Font Awesome icon (if image exists)
+        if (existingImage) {
             const icon = document.createElement('i');
             icon.className = 'fa-regular fa-face-smile';
             icon.setAttribute('aria-hidden', 'true');
             icon.setAttribute('title', 'Add reaction');
             
             // Copy any existing styles or attributes
-            const originalImg = emojiPreview.querySelector('img');
-            if (originalImg) {
-                // Preserve the style for consistency
-                icon.style.cssText = originalImg.style.cssText;
-                
-                // Copy width/height if needed
-                if (originalImg.hasAttribute('width')) {
-                    icon.style.width = originalImg.getAttribute('width') + 'px';
-                }
-                if (originalImg.hasAttribute('height')) {
-                    icon.style.height = originalImg.getAttribute('height') + 'px';
-                }
-                
-                // Remove the image
-                originalImg.remove();
+            icon.style.cssText = existingImage.style.cssText;
+            
+            // Copy width/height if needed
+            if (existingImage.hasAttribute('width')) {
+                icon.style.width = existingImage.getAttribute('width') + 'px';
+            }
+            if (existingImage.hasAttribute('height')) {
+                icon.style.height = existingImage.getAttribute('height') + 'px';
             }
             
-            // Add the icon
-            emojiPreview.appendChild(icon);
+            // Replace the image with the icon
+            existingImage.replaceWith(icon);
             
             // Add hover effect
             container.style.cursor = 'pointer';
@@ -3846,10 +3850,32 @@ class PostModernizer {
                 }
             });
         }
+    } else if (hasCounter && emojiPreview) {
+        // Has reactions - ensure it's an image (not Font Awesome icon)
+        const existingIcon = emojiPreview.querySelector('i.fa-face-smile');
+        if (existingIcon) {
+            // If there's a Font Awesome icon but now has counter, restore image
+            // This shouldn't normally happen, but just in case
+            existingIcon.remove();
+            
+            // You might want to restore the original image here
+            // For now, we'll just leave it empty - the forum system will add the image
+        }
         
-        // Mark as enhanced
-        container.classList.add('emoji-enhanced');
+        // Remove button behaviors since it now has reactions
+        container.style.cursor = '';
+        container.removeAttribute('role');
+        container.removeAttribute('tabindex');
+        container.removeAttribute('aria-label');
+        
+        // Remove click handlers
+        const newContainer = container.cloneNode(true);
+        container.parentNode.replaceChild(newContainer, container);
     }
+    
+    // Mark as enhanced
+    container.classList.add('emoji-enhanced');
+}
 
     #showReactionPicker(container) {
         // If you have a reaction picker system, trigger it here
