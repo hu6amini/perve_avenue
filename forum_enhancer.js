@@ -229,7 +229,7 @@ class MediaDimensionExtractor {
             
             // Ensure it's visible and properly sized
             img.style.display = 'inline-block';
-            img.style.verticalAlign = 'middle';
+            img.style.verticalAlign = 'text-bottom';
             
             // Nuke from cache to prevent future issues
             const cacheKey = this.#getCacheKey(img.src);
