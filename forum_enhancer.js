@@ -878,6 +878,7 @@ class PostModernizer {
     #searchPostObserverId = null;
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
+    #emojiObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -924,6 +925,7 @@ class PostModernizer {
             this.#setupEnhancedAnchorNavigation();
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
+            this.#enhanceEmojiContainers();
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
@@ -3557,6 +3559,132 @@ class PostModernizer {
         this.#setupCodeBlockObserver();
     }
 
+        // ==============================
+    // EMOJI CONTAINER ENHANCEMENT
+    // ==============================
+
+    #enhanceEmojiContainers() {
+        // Process existing emoji containers
+        this.#processEmojiContainers();
+        
+        // Set up observer for new emoji containers
+        if (globalThis.forumObserver) {
+            this.#emojiObserverId = globalThis.forumObserver.register({
+                id: 'emoji-container-enhancer',
+                callback: (node) => this.#handleEmojiContainerMutations(node),
+                selector: '.st-emoji-container:not(.emoji-enhanced)',
+                priority: 'normal'
+            });
+        } else {
+            // Fallback: check periodically
+            setInterval(() => this.#processEmojiContainers(), 2000);
+        }
+    }
+
+    #processEmojiContainers() {
+        document.querySelectorAll('.st-emoji-container:not(.emoji-enhanced)').forEach(container => {
+            this.#enhanceSingleEmojiContainer(container);
+        });
+    }
+
+    #handleEmojiContainerMutations(node) {
+        if (node.matches('.st-emoji-container:not(.emoji-enhanced)')) {
+            this.#enhanceSingleEmojiContainer(node);
+        } else {
+            node.querySelectorAll('.st-emoji-container:not(.emoji-enhanced)').forEach(container => {
+                this.#enhanceSingleEmojiContainer(container);
+            });
+        }
+    }
+
+    #enhanceSingleEmojiContainer(container) {
+        // Skip if already enhanced
+        if (container.classList.contains('emoji-enhanced')) return;
+        
+        // Check if there's a counter (meaning it has reactions)
+        const hasCounter = container.querySelector('.st-emoji-counter');
+        const emojiPreview = container.querySelector('.st-emoji-preview');
+        
+        if (!hasCounter && emojiPreview) {
+            // No reactions - replace image with Font Awesome icon
+            const icon = document.createElement('i');
+            icon.className = 'fa-regular fa-face-smile';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.setAttribute('title', 'Add reaction');
+            
+            // Copy any existing styles or attributes
+            const originalImg = emojiPreview.querySelector('img');
+            if (originalImg) {
+                // Preserve the style for consistency
+                icon.style.cssText = originalImg.style.cssText;
+                
+                // Copy width/height if needed
+                if (originalImg.hasAttribute('width')) {
+                    icon.style.width = originalImg.getAttribute('width') + 'px';
+                }
+                if (originalImg.hasAttribute('height')) {
+                    icon.style.height = originalImg.getAttribute('height') + 'px';
+                }
+                
+                // Remove the image
+                originalImg.remove();
+            }
+            
+            // Add the icon
+            emojiPreview.appendChild(icon);
+            
+            // Add hover effect
+            container.style.cursor = 'pointer';
+            container.setAttribute('role', 'button');
+            container.setAttribute('tabindex', '0');
+            container.setAttribute('aria-label', 'Add reaction to this post');
+            
+            // Add click handler to show reaction picker (if you have one)
+            container.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.#showReactionPicker(container);
+            });
+            
+            container.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.#showReactionPicker(container);
+                }
+            });
+            
+            // Add hover animation
+            container.addEventListener('mouseenter', () => {
+                icon.style.transform = 'scale(1.1)';
+                icon.style.transition = 'transform 0.2s ease';
+            });
+            
+            container.addEventListener('mouseleave', () => {
+                icon.style.transform = 'scale(1)';
+            });
+        }
+        
+        // Mark as enhanced
+        container.classList.add('emoji-enhanced');
+    }
+
+    #showReactionPicker(container) {
+        // If you have a reaction picker system, trigger it here
+        // For now, just log and restore the original functionality
+        console.log('Show reaction picker for:', container);
+        
+        // Optional: Restore original click behavior if needed
+        const post = container.closest('.post');
+        if (post) {
+            const pointsContainer = post.querySelector('.points');
+            if (pointsContainer && pointsContainer.querySelector('.bullet_delete')) {
+                const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+                if (bulletDelete && bulletDelete.onclick) {
+                    bulletDelete.onclick();
+                }
+            }
+        }
+    }
+
     #processExistingCodeBlocks() {
         document.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
             if (container.classList.contains('code-modernized')) return;
@@ -3781,26 +3909,25 @@ class PostModernizer {
         }
     }
 
-    destroy() {
-        const ids = [this.#postModernizerId, this.#activeStateObserverId,
-        this.#debouncedObserverId, this.#cleanupObserverId,
-        this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId];
+destroy() {
+    const ids = [this.#postModernizerId, this.#activeStateObserverId,
+    this.#debouncedObserverId, this.#cleanupObserverId,
+    this.#searchPostObserverId, this.#quoteLinkObserverId,
+    this.#codeBlockObserverId, this.#emojiObserverId]; // <-- Add this
 
-        ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
+    ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
-        if (this.#retryTimeoutId) {
-            clearTimeout(this.#retryTimeoutId);
-            this.#retryTimeoutId = null;
-        }
-
-        this.#timeUpdateIntervals.forEach(interval => {
-            clearInterval(interval);
-        });
-        this.#timeUpdateIntervals.clear();
-
-        console.log('Post Modernizer destroyed');
+    if (this.#retryTimeoutId) {
+        clearTimeout(this.#retryTimeoutId);
+        this.#retryTimeoutId = null;
     }
+
+    this.#timeUpdateIntervals.forEach(interval => {
+        clearInterval(interval);
+    });
+    this.#timeUpdateIntervals.clear();
+
+    console.log('Post Modernizer destroyed');
 }
 
 // Modern initialization without DOMContentLoaded
