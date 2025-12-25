@@ -3845,16 +3845,6 @@ class PostModernizer {
                     this.#showReactionPicker(container);
                 }
             });
-            
-            // Add hover animation
-            container.addEventListener('mouseenter', () => {
-                icon.style.transform = 'scale(1.1)';
-                icon.style.transition = 'transform 0.2s ease';
-            });
-            
-            container.addEventListener('mouseleave', () => {
-                icon.style.transform = 'scale(1)';
-            });
         }
         
         // Mark as enhanced
