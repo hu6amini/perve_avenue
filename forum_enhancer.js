@@ -1257,32 +1257,41 @@ class PostModernizer {
     }
 
     #handleActiveStateMutations(node) {
-        if (!node) return;
+    if (!node) return;
 
-        let hasEmojiChanges = false;
-        let hasPointsChanges = false;
+    let hasEmojiChanges = false;
+    let hasPointsChanges = false;
 
-        if (node.matches('.st-emoji-container') || node.querySelector('.st-emoji-container')) {
-            hasEmojiChanges = true;
-        }
-
-        if (node.matches('.points') || node.querySelector('.points em')) {
-            hasPointsChanges = true;
-        }
-
-        if (node.matches('.st-emoji-counter') ||
-            (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) {
-            hasEmojiChanges = true;
-        }
-
-        if (hasEmojiChanges) {
-            this.#updateAllEmojiActiveStates();
-        }
-
-        if (hasPointsChanges) {
-            this.#updateAllPointsActiveStates();
-        }
+    if (node.matches('.st-emoji-container') || node.querySelector('.st-emoji-container')) {
+        hasEmojiChanges = true;
     }
+
+    if (node.matches('.points') || node.querySelector('.points em')) {
+        hasPointsChanges = true;
+    }
+
+    if (node.matches('.st-emoji-counter') ||
+        (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) {
+        hasEmojiChanges = true;
+    }
+
+    // Check for counter removal (when someone removes their reaction)
+    if (node.classList && node.classList.contains('st-emoji-container') && 
+        !node.querySelector('.st-emoji-counter') && 
+        node.querySelector('.st-emoji-preview img')) {
+        hasEmojiChanges = true;
+    }
+
+    if (hasEmojiChanges) {
+        this.#updateAllEmojiActiveStates();
+        // Also re-process emoji containers to handle icon/image transitions
+        this.#processEmojiContainers();
+    }
+
+    if (hasPointsChanges) {
+        this.#updateAllPointsActiveStates();
+    }
+}
 
     #updateAllEmojiActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
