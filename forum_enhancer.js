@@ -878,7 +878,6 @@ class PostModernizer {
     #searchPostObserverId = null;
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
-    #emojiObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -925,8 +924,7 @@ class PostModernizer {
             this.#setupEnhancedAnchorNavigation();
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
-            this.#enhanceEmojiContainers();
-            
+
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
@@ -1023,6 +1021,35 @@ class PostModernizer {
             return originalElement;
         }
         
+        // Create the link first to preserve clickability
+        const link = document.createElement('a');
+        
+        // Try to preserve the original href if it exists
+        let originalHref = null;
+        if (originalElement.tagName === 'A') {
+            originalHref = originalElement.getAttribute('href');
+        } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
+            originalHref = originalElement.parentElement.getAttribute('href');
+        }
+        
+        if (originalHref) {
+            link.href = originalHref;
+        } else {
+            // Fallback: try to construct link from post ID
+            const postElement = originalElement.closest('.post');
+            if (postElement && postElement.id) {
+                const postIdMatch = postElement.id.match(/\d+/);
+                if (postIdMatch) {
+                    const postId = postIdMatch[0];
+                    const topicMatch = window.location.href.match(/t=(\d+)/);
+                    if (topicMatch) {
+                        link.href = '#entry' + postId;
+                    }
+                }
+            }
+        }
+        
+        // Create the time element
         const timeElement = document.createElement('time');
         timeElement.className = 'modern-timestamp';
         timeElement.setAttribute('datetime', momentDate.toISOString());
@@ -1033,6 +1060,7 @@ class PostModernizer {
         relativeSpan.textContent = this.#formatTimeAgo(momentDate);
         
         timeElement.appendChild(relativeSpan);
+        link.appendChild(timeElement);
         
         const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         timeElement.setAttribute('data-timestamp-id', timeElementId);
@@ -1048,7 +1076,7 @@ class PostModernizer {
         
         this.#timeUpdateIntervals.set(timeElementId, updateInterval);
         
-        return timeElement;
+        return link;
     }
 
     #extractDateFromElement(element) {
@@ -1257,41 +1285,32 @@ class PostModernizer {
     }
 
     #handleActiveStateMutations(node) {
-    if (!node) return;
+        if (!node) return;
 
-    let hasEmojiChanges = false;
-    let hasPointsChanges = false;
+        let hasEmojiChanges = false;
+        let hasPointsChanges = false;
 
-    if (node.matches('.st-emoji-container') || node.querySelector('.st-emoji-container')) {
-        hasEmojiChanges = true;
+        if (node.matches('.st-emoji-container') || node.querySelector('.st-emoji-container')) {
+            hasEmojiChanges = true;
+        }
+
+        if (node.matches('.points') || node.querySelector('.points em')) {
+            hasPointsChanges = true;
+        }
+
+        if (node.matches('.st-emoji-counter') ||
+            (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) {
+            hasEmojiChanges = true;
+        }
+
+        if (hasEmojiChanges) {
+            this.#updateAllEmojiActiveStates();
+        }
+
+        if (hasPointsChanges) {
+            this.#updateAllPointsActiveStates();
+        }
     }
-
-    if (node.matches('.points') || node.querySelector('.points em')) {
-        hasPointsChanges = true;
-    }
-
-    if (node.matches('.st-emoji-counter') ||
-        (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) {
-        hasEmojiChanges = true;
-    }
-
-    // Check for counter removal (when someone removes their reaction)
-    if (node.classList && node.classList.contains('st-emoji-container') && 
-        !node.querySelector('.st-emoji-counter') && 
-        node.querySelector('.st-emoji-preview img')) {
-        hasEmojiChanges = true;
-    }
-
-    if (hasEmojiChanges) {
-        this.#updateAllEmojiActiveStates();
-        // Also re-process emoji containers to handle icon/image transitions
-        this.#processEmojiContainers();
-    }
-
-    if (hasPointsChanges) {
-        this.#updateAllPointsActiveStates();
-    }
-}
 
     #updateAllEmojiActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
@@ -1412,6 +1431,7 @@ class PostModernizer {
                 postHeader.appendChild(anchorContainer);
             }
 
+            // Post number with hashtag icon
             const postNumber = document.createElement('span');
             postNumber.className = 'post-number';
             
@@ -1670,6 +1690,7 @@ class PostModernizer {
                 postHeader.appendChild(anchorContainer);
             }
 
+            // Search post number with hashtag icon
             const postNumber = document.createElement('span');
             postNumber.className = 'post-number';
             
@@ -2524,44 +2545,44 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-#preserveMediaDimensions(element) {
-    element.querySelectorAll('img').forEach(img => {
-        if (!img.style.maxWidth) {
-            img.style.maxWidth = '100%';
-        }
-        if (!img.style.height) {
-            img.style.height = 'auto';
-        }
-        
-        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                       img.className.includes('emoji');
-        
-        if (isTwemoji || isEmoji) {
-            img.style.display = 'inline-block';
-            img.style.verticalAlign = 'text-bottom';
-            img.style.margin = '0 2px';
-        } else if (!img.style.display || img.style.display === 'inline') {
-            img.style.display = 'block';
-        }
-        
-        if (!img.hasAttribute('alt')) {
-            if (isEmoji) {
-                img.setAttribute('alt', 'Emoji');
-                img.setAttribute('role', 'img');
-            } else {
-                img.setAttribute('alt', 'Forum image');
+    #preserveMediaDimensions(element) {
+        element.querySelectorAll('img').forEach(img => {
+            if (!img.style.maxWidth) {
+                img.style.maxWidth = '100%';
             }
-        }
-    });
-    
-    element.querySelectorAll('iframe, video').forEach(media => {
-        if (globalThis.mediaDimensionExtractor) {
-            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
-        }
-    });
-}
+            if (!img.style.height) {
+                img.style.height = 'auto';
+            }
+            
+            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                           img.className.includes('emoji');
+            
+            if (isTwemoji || isEmoji) {
+                img.style.display = 'inline-block';
+                img.style.verticalAlign = 'text-bottom';
+                img.style.margin = '0 2px';
+            } else if (!img.style.display || img.style.display === 'inline') {
+                img.style.display = 'block';
+            }
+            
+            if (!img.hasAttribute('alt')) {
+                if (isEmoji) {
+                    img.setAttribute('alt', 'Emoji');
+                    img.setAttribute('role', 'img');
+                } else {
+                    img.setAttribute('alt', 'Forum image');
+                }
+            }
+        });
+        
+        element.querySelectorAll('iframe, video').forEach(media => {
+            if (globalThis.mediaDimensionExtractor) {
+                globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+            }
+        });
+    }
 
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
@@ -3130,7 +3151,7 @@ class PostModernizer {
 
     #enhanceReputationSystem() {
         document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
+            const pointsUp = e.target.closest('.points_up);
             const pointsDown = e.target.closest('.points_down');
             const emojiPreview = e.target.closest('.st-emoji-preview');
 
@@ -3762,155 +3783,11 @@ class PostModernizer {
         }
     }
 
-    // ==============================
-    // EMOJI CONTAINER ENHANCEMENT
-    // ==============================
-
-    #enhanceEmojiContainers() {
-        // Process existing emoji containers
-        this.#processEmojiContainers();
-        
-        // Set up observer for new emoji containers
-        if (globalThis.forumObserver) {
-            this.#emojiObserverId = globalThis.forumObserver.register({
-                id: 'emoji-container-enhancer',
-                callback: (node) => this.#handleEmojiContainerMutations(node),
-                selector: '.st-emoji-container:not(.emoji-enhanced)',
-                priority: 'normal'
-            });
-        } else {
-            // Fallback: check periodically
-            setInterval(() => this.#processEmojiContainers(), 2000);
-        }
-    }
-
-#processEmojiContainers() {
-    document.querySelectorAll('.st-emoji-container').forEach(container => {
-        // Remove enhanced flag to force re-processing
-        container.classList.remove('emoji-enhanced');
-        this.#enhanceSingleEmojiContainer(container);
-    });
-}
-
-    #handleEmojiContainerMutations(node) {
-        if (node.matches('.st-emoji-container:not(.emoji-enhanced)')) {
-            this.#enhanceSingleEmojiContainer(node);
-        } else {
-            node.querySelectorAll('.st-emoji-container:not(.emoji-enhanced)').forEach(container => {
-                this.#enhanceSingleEmojiContainer(container);
-            });
-        }
-    }
-
-   #enhanceSingleEmojiContainer(container) {
-    // Skip if already enhanced
-    if (container.classList.contains('emoji-enhanced')) return;
-    
-    // Check if there's a counter (meaning it has reactions)
-    const hasCounter = container.querySelector('.st-emoji-counter');
-    const emojiPreview = container.querySelector('.st-emoji-preview');
-    
-    // Always check the current state, even if previously enhanced
-    if (!hasCounter && emojiPreview) {
-        // Remove any existing Font Awesome icon first (in case we're re-processing)
-        const existingIcon = emojiPreview.querySelector('i.fa-face-smile');
-        if (existingIcon) {
-            existingIcon.remove();
-        }
-        
-        // Check if there's still an image that needs replacing
-        const existingImage = emojiPreview.querySelector('img');
-        
-        // No reactions - replace image with Font Awesome icon (if image exists)
-        if (existingImage) {
-            const icon = document.createElement('i');
-            icon.className = 'fa-regular fa-face-smile';
-            icon.setAttribute('aria-hidden', 'true');
-            icon.setAttribute('title', 'Add reaction');
-            
-            // Copy any existing styles or attributes
-            icon.style.cssText = existingImage.style.cssText;
-            
-            // Copy width/height if needed
-            if (existingImage.hasAttribute('width')) {
-                icon.style.width = existingImage.getAttribute('width') + 'px';
-            }
-            if (existingImage.hasAttribute('height')) {
-                icon.style.height = existingImage.getAttribute('height') + 'px';
-            }
-            
-            // Replace the image with the icon
-            existingImage.replaceWith(icon);
-            
-            // Add hover effect
-            container.style.cursor = 'pointer';
-            container.setAttribute('role', 'button');
-            container.setAttribute('tabindex', '0');
-            container.setAttribute('aria-label', 'Add reaction to this post');
-            
-            // Add click handler to show reaction picker (if you have one)
-            container.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.#showReactionPicker(container);
-            });
-            
-            container.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    this.#showReactionPicker(container);
-                }
-            });
-        }
-    } else if (hasCounter && emojiPreview) {
-        // Has reactions - ensure it's an image (not Font Awesome icon)
-        const existingIcon = emojiPreview.querySelector('i.fa-face-smile');
-        if (existingIcon) {
-            // If there's a Font Awesome icon but now has counter, restore image
-            // This shouldn't normally happen, but just in case
-            existingIcon.remove();
-            
-            // You might want to restore the original image here
-            // For now, we'll just leave it empty - the forum system will add the image
-        }
-        
-        // Remove button behaviors since it now has reactions
-        container.style.cursor = '';
-        container.removeAttribute('role');
-        container.removeAttribute('tabindex');
-        container.removeAttribute('aria-label');
-        
-        // Remove click handlers
-        const newContainer = container.cloneNode(true);
-        container.parentNode.replaceChild(newContainer, container);
-    }
-    
-    // Mark as enhanced
-    container.classList.add('emoji-enhanced');
-}
-
-    #showReactionPicker(container) {
-        // If you have a reaction picker system, trigger it here
-        // For now, just log and restore the original functionality
-        console.log('Show reaction picker for:', container);
-        
-        // Optional: Restore original click behavior if needed
-        const post = container.closest('.post');
-        if (post) {
-            const pointsContainer = post.querySelector('.points');
-            if (pointsContainer && pointsContainer.querySelector('.bullet_delete')) {
-                const bulletDelete = pointsContainer.querySelector('.bullet_delete');
-                if (bulletDelete && bulletDelete.onclick) {
-                    bulletDelete.onclick();
-                }
-            }
-        }
-    }
-
     destroy() {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-        this.#codeBlockObserverId, this.#emojiObserverId];
+            this.#codeBlockObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
