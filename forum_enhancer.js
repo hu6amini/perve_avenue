@@ -3784,11 +3784,13 @@ class PostModernizer {
         }
     }
 
-    #processEmojiContainers() {
-        document.querySelectorAll('.st-emoji-container:not(.emoji-enhanced)').forEach(container => {
-            this.#enhanceSingleEmojiContainer(container);
-        });
-    }
+#processEmojiContainers() {
+    document.querySelectorAll('.st-emoji-container').forEach(container => {
+        // Remove enhanced flag to force re-processing
+        container.classList.remove('emoji-enhanced');
+        this.#enhanceSingleEmojiContainer(container);
+    });
+}
 
     #handleEmojiContainerMutations(node) {
         if (node.matches('.st-emoji-container:not(.emoji-enhanced)')) {
