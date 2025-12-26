@@ -869,7 +869,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
-// enhanced accessibility, modern code blocks, Moment.js timestamps, and smart emoji replacement
+// enhanced accessibility, modern code blocks, and Moment.js timestamps
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -884,7 +884,6 @@ class PostModernizer {
     #domUpdates = new WeakMap();
     #rafPending = false;
     #timeUpdateIntervals = new Map();
-    #emojiObserverId = null;
 
     constructor() {
         this.#initWithRetry();
@@ -925,7 +924,6 @@ class PostModernizer {
             this.#setupEnhancedAnchorNavigation();
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
-            this.#setupEmojiObserver();
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
@@ -940,113 +938,6 @@ class PostModernizer {
                     this.#initWithRetry();
                 }, delay);
             }
-        }
-    }
-
-    // ==============================
-    // EMOJI IMAGE REPLACEMENT SYSTEM
-    // ==============================
-
-    #setupEmojiObserver() {
-        this.#emojiObserverId = globalThis.forumObserver.register({
-            id: 'emoji-image-replacer',
-            callback: (node) => this.#handleEmojiImages(node),
-            selector: '.st-emoji-container',
-            priority: 'normal'
-        });
-
-        // Initial processing
-        this.#processExistingEmojiImages();
-    }
-
-    #processExistingEmojiImages() {
-        document.querySelectorAll('.st-emoji-container').forEach(container => {
-            this.#updateEmojiImage(container);
-        });
-    }
-
-    #handleEmojiImages(node) {
-        if (node.matches('.st-emoji-container')) {
-            this.#updateEmojiImage(node);
-        } else {
-            node.querySelectorAll('.st-emoji-container').forEach(container => {
-                this.#updateEmojiImage(container);
-            });
-        }
-    }
-
-    #updateEmojiImage(emojiContainer) {
-        if (!emojiContainer) return;
-
-        // Find the emoji preview image
-        const emojiPreview = emojiContainer.querySelector('.st-emoji-preview');
-        if (!emojiPreview) return;
-
-        const existingImage = emojiPreview.querySelector('img');
-        const existingIcon = emojiPreview.querySelector('i.fa-regular.fa-face-smile');
-
-        // Check if there's a counter element
-        const counterElement = emojiContainer.querySelector('.st-emoji-counter');
-        
-        // Check the current image source to determine the state
-        const currentImageSrc = existingImage ? existingImage.src : '';
-        const isTwemojiImage = currentImageSrc.includes('twemoji');
-        const isEmojioneImage = currentImageSrc.includes('emojione') || currentImageSrc.includes('1f600.svg');
-        
-        // Determine if we should show icon or image based on counter and image source
-        const shouldShowIcon = !counterElement || 
-                              (isEmojioneImage && !isTwemojiImage) ||
-                              (!counterElement.hasAttribute('data-count') && !counterElement.textContent.trim());
-
-        if (shouldShowIcon) {
-            // If there's no counter or it's an emojione image, show the Font Awesome icon
-            if (existingImage && !existingIcon) {
-                // Replace image with icon
-                existingImage.remove();
-                
-                const icon = document.createElement('i');
-                icon.className = 'fa-regular fa-face-smile';
-                icon.setAttribute('aria-hidden', 'true');
-                icon.style.cssText = "font-size: 20px; vertical-align: text-bottom;";
-                
-                emojiPreview.appendChild(icon);
-            } else if (!existingImage && !existingIcon) {
-                // No image or icon yet, add the icon
-                const icon = document.createElement('i');
-                icon.className = 'fa-regular fa-face-smile';
-                icon.setAttribute('aria-hidden', 'true');
-                icon.style.cssText = "font-size: 20px; vertical-align: text-bottom;";
-                
-                emojiPreview.appendChild(icon);
-            }
-            // If there's already an icon, leave it as is
-        } else {
-            // If there's a counter, ensure we have the twemoji image
-            if (existingIcon) {
-                // Remove the icon
-                existingIcon.remove();
-            }
-            
-            // Ensure we have an image
-            if (!existingImage || !isTwemojiImage) {
-                // Remove existing non-twemoji image if present
-                if (existingImage && !isTwemojiImage) {
-                    existingImage.remove();
-                }
-                
-                // Create the twemoji image
-                const img = document.createElement('img');
-                img.src = "https://twemoji.maxcdn.com/v/latest/svg/1f44d.svg";
-                img.alt = "Agree";
-                img.loading = "lazy";
-                img.decoding = "async";
-                img.style.cssText = "aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;";
-                img.width = 20;
-                img.height = 20;
-                
-                emojiPreview.appendChild(img);
-            }
-            // If there's already a twemoji image, leave it as is
         }
     }
 
@@ -1117,76 +1008,76 @@ class PostModernizer {
         }
     }
 
-    #createModernTimestamp(originalElement, dateString) {
-        if (typeof moment === 'undefined') {
-            console.warn('Moment.js not loaded, skipping timestamp transformation');
-            return originalElement;
-        }
-        
-        const momentDate = this.#parseForumDate(dateString);
-        
-        if (!momentDate) {
-            console.log('Could not parse date:', dateString);
-            return originalElement;
-        }
-        
-        // Create the link first
-        const link = document.createElement('a');
-        
-        // Try to preserve the original href if it exists
-        let originalHref = null;
-        if (originalElement.tagName === 'A') {
-            originalHref = originalElement.getAttribute('href');
-        } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
-            originalHref = originalElement.parentElement.getAttribute('href');
-        }
-        
-        if (originalHref) {
-            link.href = originalHref;
-        } else {
-            // Fallback: try to construct link from post ID
-            const postElement = originalElement.closest('.post');
-            if (postElement && postElement.id) {
-                const postIdMatch = postElement.id.match(/\d+/);
-                if (postIdMatch) {
-                    const postId = postIdMatch[0];
-                    const topicMatch = window.location.href.match(/t=(\d+)/);
-                    if (topicMatch) {
-                        link.href = '#entry' + postId;
-                    }
+  #createModernTimestamp(originalElement, dateString) {
+    if (typeof moment === 'undefined') {
+        console.warn('Moment.js not loaded, skipping timestamp transformation');
+        return originalElement;
+    }
+    
+    const momentDate = this.#parseForumDate(dateString);
+    
+    if (!momentDate) {
+        console.log('Could not parse date:', dateString);
+        return originalElement;
+    }
+    
+    // Create the link first
+    const link = document.createElement('a');
+    
+    // Try to preserve the original href if it exists
+    let originalHref = null;
+    if (originalElement.tagName === 'A') {
+        originalHref = originalElement.getAttribute('href');
+    } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
+        originalHref = originalElement.parentElement.getAttribute('href');
+    }
+    
+    if (originalHref) {
+        link.href = originalHref;
+    } else {
+        // Fallback: try to construct link from post ID
+        const postElement = originalElement.closest('.post');
+        if (postElement && postElement.id) {
+            const postIdMatch = postElement.id.match(/\d+/);
+            if (postIdMatch) {
+                const postId = postIdMatch[0];
+                const topicMatch = window.location.href.match(/t=(\d+)/);
+                if (topicMatch) {
+                    link.href = '#entry' + postId;
                 }
             }
         }
-        
-        // Create the time element
-        const timeElement = document.createElement('time');
-        timeElement.className = 'modern-timestamp';
-        timeElement.setAttribute('datetime', momentDate.toISOString());
-        timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
-        
-        const relativeSpan = document.createElement('span');
-        relativeSpan.className = 'relative-time';
-        relativeSpan.textContent = this.#formatTimeAgo(momentDate);
-        
-        timeElement.appendChild(relativeSpan);
-        link.appendChild(timeElement);
-        
-        const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-        timeElement.setAttribute('data-timestamp-id', timeElementId);
-        
-        const updateInterval = setInterval(() => {
-            if (!document.body.contains(timeElement)) {
-                clearInterval(updateInterval);
-                this.#timeUpdateIntervals.delete(timeElementId);
-                return;
-            }
-            relativeSpan.textContent = this.#formatTimeAgo(momentDate);
-        }, 60000);
-        
-        this.#timeUpdateIntervals.set(timeElementId, updateInterval);
-        
-        return link;
     }
+    
+    // Create the time element
+    const timeElement = document.createElement('time');
+    timeElement.className = 'modern-timestamp';
+    timeElement.setAttribute('datetime', momentDate.toISOString());
+    timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
+    
+    const relativeSpan = document.createElement('span');
+    relativeSpan.className = 'relative-time';
+    relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+    
+    timeElement.appendChild(relativeSpan);
+    link.appendChild(timeElement);
+    
+    const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    timeElement.setAttribute('data-timestamp-id', timeElementId);
+    
+    const updateInterval = setInterval(() => {
+        if (!document.body.contains(timeElement)) {
+            clearInterval(updateInterval);
+            this.#timeUpdateIntervals.delete(timeElementId);
+            return;
+        }
+        relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+    }, 60000);
+    
+    this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+    
+    return link;
+}
 
     #extractDateFromElement(element) {
         // Try title attribute first
@@ -1387,10 +1278,7 @@ class PostModernizer {
 
     #checkInitialActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
-        emojiContainers.forEach(container => {
-            this.#updateEmojiContainerActiveState(container);
-            this.#updateEmojiImage(container);
-        });
+        emojiContainers.forEach(container => this.#updateEmojiContainerActiveState(container));
 
         const pointsContainers = document.querySelectorAll('.mini_buttons.points.Sub .points');
         pointsContainers.forEach(container => this.#updatePointsContainerActiveState(container));
@@ -1426,10 +1314,7 @@ class PostModernizer {
 
     #updateAllEmojiActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
-        emojiContainers.forEach(container => {
-            this.#updateEmojiContainerActiveState(container);
-            this.#updateEmojiImage(container);
-        });
+        emojiContainers.forEach(container => this.#updateEmojiContainerActiveState(container));
     }
 
     #updateAllPointsActiveStates() {
@@ -1503,585 +1388,585 @@ class PostModernizer {
         miniButtons.forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
 
-    #transformPostElements() {
-        const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
-        const urlParams = new URLSearchParams(window.location.search);
-        const startOffset = parseInt(urlParams.get('st') || '0');
+#transformPostElements() {
+    const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
+    const urlParams = new URLSearchParams(window.location.search);
+    const startOffset = parseInt(urlParams.get('st') || '0');
 
-        posts.forEach((post, index) => {
-            if (post.closest('body#search')) return;
+    posts.forEach((post, index) => {
+        if (post.closest('body#search')) return;
 
-            post.classList.add('post-modernized');
+        post.classList.add('post-modernized');
 
-            const fragment = document.createDocumentFragment();
+        const fragment = document.createDocumentFragment();
 
-            const anchorDiv = post.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
-            }
+        const anchorDiv = post.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            anchorDiv.remove();
+        }
 
-            const title2Top = post.querySelector('.title2.top');
-            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
-            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
+        const title2Top = post.querySelector('.title2.top');
+        const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
+        const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
 
-            const postHeader = document.createElement('div');
-            postHeader.className = 'post-header';
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
 
-            const userInfo = document.createElement('div');
-            userInfo.className = 'user-info';
+        const userInfo = document.createElement('div');
+        userInfo.className = 'user-info';
 
-            const postContent = document.createElement('div');
-            postContent.className = 'post-content';
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content';
 
-            const postFooter = document.createElement('div');
-            postFooter.className = 'post-footer';
+        const postFooter = document.createElement('div');
+        postFooter.className = 'post-footer';
 
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                postHeader.appendChild(anchorContainer);
-            }
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            postHeader.appendChild(anchorContainer);
+        }
 
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = startOffset + index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
+        const postNumber = document.createElement('span');
+        postNumber.className = 'post-number';
+        
+        const hashIcon = document.createElement('i');
+        hashIcon.className = 'fa-regular fa-hashtag';
+        hashIcon.setAttribute('aria-hidden', 'true');
+        
+        const numberSpan = document.createElement('span');
+        numberSpan.className = 'post-number-value';
+        numberSpan.textContent = startOffset + index + 1;
+        
+        postNumber.appendChild(hashIcon);
+        postNumber.appendChild(document.createTextNode(' '));
+        postNumber.appendChild(numberSpan);
+        
+        postHeader.appendChild(postNumber);
 
-            this.#addNewPostBadge(post, postHeader);
+        this.#addNewPostBadge(post, postHeader);
 
-            let nickElement = null;
-            let groupValue = '';
+        let nickElement = null;
+        let groupValue = '';
 
-            if (title2Top) {
-                const tdWrapper = title2Top.closest('td.left.Item');
-                nickElement = title2Top.querySelector('.nick');
+        if (title2Top) {
+            const tdWrapper = title2Top.closest('td.left.Item');
+            nickElement = title2Top.querySelector('.nick');
 
-                if (tdWrapper) {
-                    const title2TopClone = title2Top.cloneNode(true);
-                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                    title2TopClone.querySelector('.left.Item')?.remove();
-                    this.#removeBreakAndNbsp(title2TopClone);
-                    
-                    // Transform timestamps in the post header
-                    this.#transformPostHeaderTimestamps(title2TopClone);
-                    this.#transformTimestampElements(title2TopClone);
-                    
-                    postHeader.appendChild(title2TopClone);
-                    tdWrapper.remove();
-                } else {
-                    const title2TopClone = title2Top.cloneNode(true);
-                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                    title2TopClone.querySelector('.left.Item')?.remove();
-                    this.#removeBreakAndNbsp(title2TopClone);
-                    
-                    // Transform timestamps in the post header
-                    this.#transformPostHeaderTimestamps(title2TopClone);
-                    this.#transformTimestampElements(title2TopClone);
-                    
-                    postHeader.appendChild(title2TopClone);
-                }
-            }
-
-            const centerElements = post.querySelectorAll('tr.center');
-            centerElements.forEach(centerElement => {
-                const leftSection = centerElement.querySelector('.left.Item');
-                const rightSection = centerElement.querySelector('.right.Item');
-
-                if (leftSection) {
-                    const details = leftSection.querySelector('.details');
-                    const avatar = leftSection.querySelector('.avatar');
-
-                    if (details && avatar) {
-                        const groupDd = details.querySelector('dl.u_group dd');
-                        groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
-
-                        userInfo.appendChild(avatar.cloneNode(true));
-
-                        const detailsClone = details.cloneNode(true);
-                        detailsClone.querySelector('.avatar')?.remove();
-
-                        if (nickElement) {
-                            const nickClone = nickElement.cloneNode(true);
-                            detailsClone.insertBefore(nickClone, detailsClone.firstChild);
-
-                            if (groupValue) {
-                                const badge = document.createElement('div');
-                                badge.className = 'badge';
-                                badge.textContent = groupValue;
-                                nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                            }
-                        }
-
-                        detailsClone.querySelector('span.u_title')?.remove();
-
-                        let rankHTML = '';
-                        const pWithURank = detailsClone.querySelector('p');
-                        if (pWithURank && pWithURank.querySelector('span.u_rank')) {
-                            rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
-                            pWithURank.remove();
-                        }
-
-                        detailsClone.querySelector('br.br_status')?.remove();
-
-                        const userStats = document.createElement('div');
-                        userStats.className = 'user-stats';
-
-                        const originalDetails = details.cloneNode(true);
-
-                        if (rankHTML) {
-                            const rankStat = document.createElement('div');
-                            rankStat.className = 'stat rank';
-                            rankStat.innerHTML = rankHTML;
-                            userStats.appendChild(rankStat);
-                        }
-
-                        const postsDd = originalDetails.querySelector('dl.u_posts dd');
-                        if (postsDd) {
-                            const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
-                            userStats.appendChild(postsStat);
-                        }
-
-                        const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
-                        if (reputationDd) {
-                            const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
-                            userStats.appendChild(reputationStat);
-                        }
-
-                        const statusDl = originalDetails.querySelector('dl.u_status');
-                        if (statusDl) {
-                            const statusDd = statusDl.querySelector('dd');
-                            const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
-                            const isOnline = statusValue.toLowerCase().includes('online');
-                            const originalStatusIcon = statusDl.querySelector('dd i');
-
-                            let statusIconHTML = '';
-                            if (originalStatusIcon) {
-                                statusIconHTML = originalStatusIcon.outerHTML;
-                                if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
-                                    statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
-                                }
-                            } else {
-                                statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
-                            }
-
-                            const statusStat = document.createElement('div');
-                            statusStat.className = 'stat status' + (isOnline ? ' online' : '');
-                            statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
-                            userStats.appendChild(statusStat);
-                        }
-
-                        detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
-
-                        if (userStats.children.length > 0) {
-                            detailsClone.appendChild(userStats);
-                        }
-
-                        userInfo.appendChild(detailsClone);
-                    } else {
-                        userInfo.appendChild(leftSection.cloneNode(true));
-                    }
-                }
-
-                if (rightSection) {
-                    const contentWrapper = document.createElement('div');
-                    contentWrapper.className = 'post-main-content';
-
-                    const rightSectionClone = rightSection.cloneNode(true);
-                    this.#removeBottomBorderAndBr(rightSectionClone);
-                    this.#preserveMediaDimensions(rightSectionClone);
-
-                    contentWrapper.appendChild(rightSectionClone);
-                    this.#cleanupPostContentStructure(contentWrapper);
-                    postContent.appendChild(contentWrapper);
-                    this.#modernizeQuotes(contentWrapper);
-                    this.#modernizeSpoilers(contentWrapper);
-                    this.#modernizeCodeBlocksInContent(contentWrapper);
-                }
-            });
-
-            const title2Bottom = post.querySelector('.title2.bottom');
-            if (title2Bottom) {
-                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
-                this.#modernizeBottomElements(title2Bottom, postFooter);
-                title2Bottom.remove();
+            if (tdWrapper) {
+                const title2TopClone = title2Top.cloneNode(true);
+                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                title2TopClone.querySelector('.left.Item')?.remove();
+                this.#removeBreakAndNbsp(title2TopClone);
+                
+                // Transform timestamps in the post header
+                this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
+                
+                postHeader.appendChild(title2TopClone);
+                tdWrapper.remove();
             } else {
-                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+                const title2TopClone = title2Top.cloneNode(true);
+                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                title2TopClone.querySelector('.left.Item')?.remove();
+                this.#removeBreakAndNbsp(title2TopClone);
+                
+                // Transform timestamps in the post header
+                this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
+                
+                postHeader.appendChild(title2TopClone);
+            }
+        }
+
+        const centerElements = post.querySelectorAll('tr.center');
+        centerElements.forEach(centerElement => {
+            const leftSection = centerElement.querySelector('.left.Item');
+            const rightSection = centerElement.querySelector('.right.Item');
+
+            if (leftSection) {
+                const details = leftSection.querySelector('.details');
+                const avatar = leftSection.querySelector('.avatar');
+
+                if (details && avatar) {
+                    const groupDd = details.querySelector('dl.u_group dd');
+                    groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
+
+                    userInfo.appendChild(avatar.cloneNode(true));
+
+                    const detailsClone = details.cloneNode(true);
+                    detailsClone.querySelector('.avatar')?.remove();
+
+                    if (nickElement) {
+                        const nickClone = nickElement.cloneNode(true);
+                        detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+
+                        if (groupValue) {
+                            const badge = document.createElement('div');
+                            badge.className = 'badge';
+                            badge.textContent = groupValue;
+                            nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
+                        }
+                    }
+
+                    detailsClone.querySelector('span.u_title')?.remove();
+
+                    let rankHTML = '';
+                    const pWithURank = detailsClone.querySelector('p');
+                    if (pWithURank && pWithURank.querySelector('span.u_rank')) {
+                        rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
+                        pWithURank.remove();
+                    }
+
+                    detailsClone.querySelector('br.br_status')?.remove();
+
+                    const userStats = document.createElement('div');
+                    userStats.className = 'user-stats';
+
+                    const originalDetails = details.cloneNode(true);
+
+                    if (rankHTML) {
+                        const rankStat = document.createElement('div');
+                        rankStat.className = 'stat rank';
+                        rankStat.innerHTML = rankHTML;
+                        userStats.appendChild(rankStat);
+                    }
+
+                    const postsDd = originalDetails.querySelector('dl.u_posts dd');
+                    if (postsDd) {
+                        const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
+                        userStats.appendChild(postsStat);
+                    }
+
+                    const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
+                    if (reputationDd) {
+                        const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
+                        userStats.appendChild(reputationStat);
+                    }
+
+                    const statusDl = originalDetails.querySelector('dl.u_status');
+                    if (statusDl) {
+                        const statusDd = statusDl.querySelector('dd');
+                        const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
+                        const isOnline = statusValue.toLowerCase().includes('online');
+                        const originalStatusIcon = statusDl.querySelector('dd i');
+
+                        let statusIconHTML = '';
+                        if (originalStatusIcon) {
+                            statusIconHTML = originalStatusIcon.outerHTML;
+                            if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
+                                statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
+                            }
+                        } else {
+                            statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
+                        }
+
+                        const statusStat = document.createElement('div');
+                        statusStat.className = 'stat status' + (isOnline ? ' online' : '');
+                        statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
+                        userStats.appendChild(statusStat);
+                    }
+
+                    detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
+
+                    if (userStats.children.length > 0) {
+                        detailsClone.appendChild(userStats);
+                    }
+
+                    userInfo.appendChild(detailsClone);
+                } else {
+                    userInfo.appendChild(leftSection.cloneNode(true));
+                }
             }
 
-            fragment.appendChild(postHeader);
-            fragment.appendChild(userInfo);
-            fragment.appendChild(postContent);
-            fragment.appendChild(postFooter);
+            if (rightSection) {
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'post-main-content';
 
-            post.innerHTML = '';
-            post.appendChild(fragment);
+                const rightSectionClone = rightSection.cloneNode(true);
+                this.#removeBottomBorderAndBr(rightSectionClone);
+                this.#preserveMediaDimensions(rightSectionClone);
 
-            this.#convertMiniButtonsToButtons(post);
-            this.#addShareButton(post);
-            this.#cleanupPostContent(post);
-
-            const postId = post.id;
-            if (postId && postId.startsWith('ee')) {
-                post.setAttribute('data-post-id', postId.replace('ee', ''));
+                contentWrapper.appendChild(rightSectionClone);
+                this.#cleanupPostContentStructure(contentWrapper);
+                postContent.appendChild(contentWrapper);
+                this.#modernizeQuotes(contentWrapper);
+                this.#modernizeSpoilers(contentWrapper);
+                this.#modernizeCodeBlocksInContent(contentWrapper);
             }
         });
-    }
 
-    #transformSearchPostElements() {
-        const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
+        const title2Bottom = post.querySelector('.title2.bottom');
+        if (title2Bottom) {
+            this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+            this.#modernizeBottomElements(title2Bottom, postFooter);
+            title2Bottom.remove();
+        } else {
+            this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+        }
 
-        posts.forEach((post, index) => {
-            post.classList.add('post-modernized', 'search-post');
+        fragment.appendChild(postHeader);
+        fragment.appendChild(userInfo);
+        fragment.appendChild(postContent);
+        fragment.appendChild(postFooter);
 
-            const anchorDiv = post.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
+        post.innerHTML = '';
+        post.appendChild(fragment);
+
+        this.#convertMiniButtonsToButtons(post);
+        this.#addShareButton(post);
+        this.#cleanupPostContent(post);
+
+        const postId = post.id;
+        if (postId && postId.startsWith('ee')) {
+            post.setAttribute('data-post-id', postId.replace('ee', ''));
+        }
+    });
+}
+
+#transformSearchPostElements() {
+    const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
+
+    posts.forEach((post, index) => {
+        post.classList.add('post-modernized', 'search-post');
+
+        const anchorDiv = post.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            anchorDiv.remove();
+        }
+
+        const title2Top = post.querySelector('.title2.top');
+        const pointsElement = post.querySelector('.points');
+
+        let contentHTML = '';
+        const colorTable = post.querySelector('table.color');
+
+        if (colorTable) {
+            const tds = colorTable.querySelectorAll('td');
+            tds.forEach(td => {
+                if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
+                    contentHTML += td.outerHTML;
+                }
+            });
+        }
+
+        if (!contentHTML) {
+            const contentElement = post.querySelector('td.Item table.color td') ||
+                post.querySelector('td.Item td') ||
+                post.querySelector('.color td') ||
+                post.querySelector('td[align]');
+
+            if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
+                contentHTML = contentElement.outerHTML;
+            }
+        }
+
+        const editElement = post.querySelector('span.edit');
+        const rtSub = post.querySelector('.rt.Sub');
+
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
+
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content search-post-content';
+
+        const postFooter = document.createElement('div');
+        postFooter.className = 'post-footer search-post-footer';
+
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            postHeader.appendChild(anchorContainer);
+        }
+
+        const postNumber = document.createElement('span');
+        postNumber.className = 'post-number';
+        
+        const hashIcon = document.createElement('i');
+        hashIcon.className = 'fa-regular fa-hashtag';
+        hashIcon.setAttribute('aria-hidden', 'true');
+        
+        const numberSpan = document.createElement('span');
+        numberSpan.className = 'post-number-value';
+        numberSpan.textContent = index + 1;
+        
+        postNumber.appendChild(hashIcon);
+        postNumber.appendChild(document.createTextNode(' '));
+        postNumber.appendChild(numberSpan);
+        
+        postHeader.appendChild(postNumber);
+
+        this.#addNewPostBadge(post, postHeader);
+
+        if (title2Top) {
+            const title2TopClone = title2Top.cloneNode(true);
+            const pointsInTitle = title2TopClone.querySelector('.points');
+            pointsInTitle?.remove();
+
+            let locationDiv = null;
+            if (rtSub) {
+                const topicLink = rtSub.querySelector('a[href*="?t="]');
+                const forumLink = rtSub.querySelector('a[href*="?f="]');
+
+                if (topicLink || forumLink) {
+                    locationDiv = document.createElement('div');
+                    locationDiv.className = 'post-location';
+
+                    if (topicLink) {
+                        const topicSpan = document.createElement('span');
+                        topicSpan.className = 'topic-link';
+                        topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
+                        locationDiv.appendChild(topicSpan);
+                    }
+
+                    if (forumLink) {
+                        const forumSpan = document.createElement('span');
+                        forumSpan.className = 'forum-link';
+                        forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
+                        if (topicLink) {
+                            locationDiv.appendChild(document.createTextNode(' - '));
+                        }
+                        locationDiv.appendChild(forumSpan);
+                    }
+
+                    title2TopClone.querySelector('.rt.Sub')?.remove();
+                }
             }
 
-            const title2Top = post.querySelector('.title2.top');
-            const pointsElement = post.querySelector('.points');
+            this.#removeBreakAndNbsp(title2TopClone);
+            title2TopClone.querySelector('.Break.Sub')?.remove();
 
-            let contentHTML = '';
-            const colorTable = post.querySelector('table.color');
+            // Transform timestamps in search posts
+            this.#transformPostHeaderTimestamps(title2TopClone);
+            this.#transformTimestampElements(title2TopClone);
 
-            if (colorTable) {
-                const tds = colorTable.querySelectorAll('td');
-                tds.forEach(td => {
-                    if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
-                        contentHTML += td.outerHTML;
+            const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+            if (tdWrapper) {
+                const divs = tdWrapper.querySelectorAll('div');
+                divs.forEach(div => {
+                    postHeader.appendChild(div.cloneNode(true));
+                });
+                tdWrapper.remove();
+
+                if (locationDiv) {
+                    postHeader.appendChild(locationDiv);
+                }
+            } else {
+                if (locationDiv) {
+                    title2TopClone.appendChild(locationDiv);
+                }
+                postHeader.appendChild(title2TopClone);
+            }
+        }
+
+        if (contentHTML) {
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'post-main-content';
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = contentHTML;
+
+            if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
+                const wrapperDiv = tempDiv.firstElementChild;
+                const hasQuote = wrapperDiv.querySelector('.quote_top');
+
+                if (!hasQuote) {
+                    while (wrapperDiv.firstChild) {
+                        tempDiv.appendChild(wrapperDiv.firstChild);
+                    }
+                    wrapperDiv.remove();
+                }
+            }
+
+            while (tempDiv.firstChild) {
+                contentWrapper.appendChild(tempDiv.firstChild);
+            }
+
+            this.#preserveMediaDimensions(contentWrapper);
+
+            const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let node;
+
+            while (node = walker.nextNode()) {
+                if (node.textContent.trim() !== '') {
+                    textNodes.push(node);
+                }
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const searchQuery = urlParams.get('q');
+            if (searchQuery) {
+                textNodes.forEach(textNode => {
+                    const text = textNode.textContent;
+                    const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
+                    const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
+
+                    if (highlightedText !== text) {
+                        const span = document.createElement('span');
+                        span.innerHTML = highlightedText;
+                        textNode.parentNode.replaceChild(span, textNode);
                     }
                 });
             }
 
-            if (!contentHTML) {
-                const contentElement = post.querySelector('td.Item table.color td') ||
-                    post.querySelector('td.Item td') ||
-                    post.querySelector('.color td') ||
-                    post.querySelector('td[align]');
+            this.#processTextAndLineBreaks(contentWrapper);
+            this.#cleanupSearchPostContent(contentWrapper);
 
-                if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
-                    contentHTML = contentElement.outerHTML;
-                }
+            const editSpanInContent = contentWrapper.querySelector('span.edit');
+            if (editSpanInContent) {
+                this.#transformEditTimestamp(editSpanInContent);
             }
 
-            const editElement = post.querySelector('span.edit');
-            const rtSub = post.querySelector('.rt.Sub');
+            this.#modernizeQuotes(contentWrapper);
+            this.#modernizeSpoilers(contentWrapper);
+            this.#modernizeCodeBlocksInContent(contentWrapper);
 
-            const postHeader = document.createElement('div');
-            postHeader.className = 'post-header';
+            postContent.appendChild(contentWrapper);
+        }
 
-            const postContent = document.createElement('div');
-            postContent.className = 'post-content search-post-content';
+        const postFooterActions = document.createElement('div');
+        postFooterActions.className = 'post-actions';
 
-            const postFooter = document.createElement('div');
-            postFooter.className = 'post-footer search-post-footer';
+        let pointsFooter;
+        if (pointsElement && pointsElement.innerHTML.trim() !== '') {
+            const pointsClone = pointsElement.cloneNode(true);
+            pointsFooter = pointsClone;
 
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                postHeader.appendChild(anchorContainer);
+            const emElement = pointsFooter.querySelector('em');
+            const linkElement = pointsFooter.querySelector('a');
+            const href = linkElement ? linkElement.getAttribute('href') : null;
+
+            let pointsValue = '0';
+            let pointsClass = 'points_pos';
+
+            if (emElement) {
+                pointsValue = emElement.textContent.trim();
+                pointsClass = emElement.className;
             }
 
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
+            const newPoints = document.createElement('div');
+            newPoints.className = 'points active';
+            newPoints.id = pointsElement.id || '';
 
-            this.#addNewPostBadge(post, postHeader);
-
-            if (title2Top) {
-                const title2TopClone = title2Top.cloneNode(true);
-                const pointsInTitle = title2TopClone.querySelector('.points');
-                pointsInTitle?.remove();
-
-                let locationDiv = null;
-                if (rtSub) {
-                    const topicLink = rtSub.querySelector('a[href*="?t="]');
-                    const forumLink = rtSub.querySelector('a[href*="?f="]');
-
-                    if (topicLink || forumLink) {
-                        locationDiv = document.createElement('div');
-                        locationDiv.className = 'post-location';
-
-                        if (topicLink) {
-                            const topicSpan = document.createElement('span');
-                            topicSpan.className = 'topic-link';
-                            topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
-                            locationDiv.appendChild(topicSpan);
-                        }
-
-                        if (forumLink) {
-                            const forumSpan = document.createElement('span');
-                            forumSpan.className = 'forum-link';
-                            forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
-                            if (topicLink) {
-                                locationDiv.appendChild(document.createTextNode(' - '));
-                            }
-                            locationDiv.appendChild(forumSpan);
-                        }
-
-                        title2TopClone.querySelector('.rt.Sub')?.remove();
-                    }
+            if (href) {
+                const link = document.createElement('a');
+                link.href = href;
+                link.setAttribute('tabindex', '0');
+                if (linkElement && linkElement.getAttribute('rel')) {
+                    link.setAttribute('rel', linkElement.getAttribute('rel'));
                 }
-
-                this.#removeBreakAndNbsp(title2TopClone);
-                title2TopClone.querySelector('.Break.Sub')?.remove();
-
-                // Transform timestamps in search posts
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-
-                const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
-                if (tdWrapper) {
-                    const divs = tdWrapper.querySelectorAll('div');
-                    divs.forEach(div => {
-                        postHeader.appendChild(div.cloneNode(true));
-                    });
-                    tdWrapper.remove();
-
-                    if (locationDiv) {
-                        postHeader.appendChild(locationDiv);
-                    }
-                } else {
-                    if (locationDiv) {
-                        title2TopClone.appendChild(locationDiv);
-                    }
-                    postHeader.appendChild(title2TopClone);
-                }
-            }
-
-            if (contentHTML) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'post-main-content';
-
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = contentHTML;
-
-                if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
-                    const wrapperDiv = tempDiv.firstElementChild;
-                    const hasQuote = wrapperDiv.querySelector('.quote_top');
-
-                    if (!hasQuote) {
-                        while (wrapperDiv.firstChild) {
-                            tempDiv.appendChild(wrapperDiv.firstChild);
-                        }
-                        wrapperDiv.remove();
-                    }
-                }
-
-                while (tempDiv.firstChild) {
-                    contentWrapper.appendChild(tempDiv.firstChild);
-                }
-
-                this.#preserveMediaDimensions(contentWrapper);
-
-                const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
-                const textNodes = [];
-                let node;
-
-                while (node = walker.nextNode()) {
-                    if (node.textContent.trim() !== '') {
-                        textNodes.push(node);
-                    }
-                }
-
-                const urlParams = new URLSearchParams(window.location.search);
-                const searchQuery = urlParams.get('q');
-                if (searchQuery) {
-                    textNodes.forEach(textNode => {
-                        const text = textNode.textContent;
-                        const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
-                        const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
-
-                        if (highlightedText !== text) {
-                            const span = document.createElement('span');
-                            span.innerHTML = highlightedText;
-                            textNode.parentNode.replaceChild(span, textNode);
-                        }
-                    });
-                }
-
-                this.#processTextAndLineBreaks(contentWrapper);
-                this.#cleanupSearchPostContent(contentWrapper);
-
-                const editSpanInContent = contentWrapper.querySelector('span.edit');
-                if (editSpanInContent) {
-                    this.#transformEditTimestamp(editSpanInContent);
-                }
-
-                this.#modernizeQuotes(contentWrapper);
-                this.#modernizeSpoilers(contentWrapper);
-                this.#modernizeCodeBlocksInContent(contentWrapper);
-
-                postContent.appendChild(contentWrapper);
-            }
-
-            const postFooterActions = document.createElement('div');
-            postFooterActions.className = 'post-actions';
-
-            let pointsFooter;
-            if (pointsElement && pointsElement.innerHTML.trim() !== '') {
-                const pointsClone = pointsElement.cloneNode(true);
-                pointsFooter = pointsClone;
-
-                const emElement = pointsFooter.querySelector('em');
-                const linkElement = pointsFooter.querySelector('a');
-                const href = linkElement ? linkElement.getAttribute('href') : null;
-
-                let pointsValue = '0';
-                let pointsClass = 'points_pos';
-
-                if (emElement) {
-                    pointsValue = emElement.textContent.trim();
-                    pointsClass = emElement.className;
-                }
-
-                const newPoints = document.createElement('div');
-                newPoints.className = 'points active';
-                newPoints.id = pointsElement.id || '';
-
-                if (href) {
-                    const link = document.createElement('a');
-                    link.href = href;
-                    link.setAttribute('tabindex', '0');
-                    if (linkElement && linkElement.getAttribute('rel')) {
-                        link.setAttribute('rel', linkElement.getAttribute('rel'));
-                    }
-
-                    const em = document.createElement('em');
-                    em.className = pointsClass;
-                    em.textContent = pointsValue;
-                    link.appendChild(em);
-                    newPoints.appendChild(link);
-                } else {
-                    const em = document.createElement('em');
-                    em.className = pointsClass;
-                    em.textContent = pointsValue;
-                    newPoints.appendChild(em);
-                }
-
-                const thumbsSpan = document.createElement('span');
-                thumbsSpan.className = 'points_up opacity';
-
-                const icon = document.createElement('i');
-                if (pointsClass === 'points_pos') {
-                    thumbsSpan.classList.add('active');
-                    icon.className = 'fa-regular fa-thumbs-up';
-                } else if (pointsClass === 'points_neg') {
-                    icon.className = 'fa-regular fa-thumbs-down';
-                } else {
-                    icon.className = 'fa-regular fa-thumbs-up';
-                }
-
-                icon.setAttribute('aria-hidden', 'true');
-                thumbsSpan.appendChild(icon);
-                newPoints.appendChild(thumbsSpan);
-
-                pointsFooter = newPoints;
-            } else {
-                const noPoints = document.createElement('div');
-                noPoints.className = 'points no_points';
 
                 const em = document.createElement('em');
-                em.className = 'points_pos';
-                em.textContent = '0';
-                noPoints.appendChild(em);
-
-                const thumbsSpan = document.createElement('span');
-                thumbsSpan.className = 'points_up opacity';
-
-                const icon = document.createElement('i');
-                icon.className = 'fa-regular fa-thumbs-up';
-                icon.setAttribute('aria-hidden', 'true');
-
-                thumbsSpan.appendChild(icon);
-                noPoints.appendChild(thumbsSpan);
-
-                pointsFooter = noPoints;
+                em.className = pointsClass;
+                em.textContent = pointsValue;
+                link.appendChild(em);
+                newPoints.appendChild(link);
+            } else {
+                const em = document.createElement('em');
+                em.className = pointsClass;
+                em.textContent = pointsValue;
+                newPoints.appendChild(em);
             }
 
-            postFooterActions.appendChild(pointsFooter);
-            postFooter.appendChild(postFooterActions);
+            const thumbsSpan = document.createElement('span');
+            thumbsSpan.className = 'points_up opacity';
 
-            const shareContainer = document.createElement('div');
-            shareContainer.className = 'modern-bottom-actions';
+            const icon = document.createElement('i');
+            if (pointsClass === 'points_pos') {
+                thumbsSpan.classList.add('active');
+                icon.className = 'fa-regular fa-thumbs-up';
+            } else if (pointsClass === 'points_neg') {
+                icon.className = 'fa-regular fa-thumbs-down';
+            } else {
+                icon.className = 'fa-regular fa-thumbs-up';
+            }
 
-            const shareButton = document.createElement('button');
-            shareButton.className = 'btn btn-icon btn-share';
-            shareButton.setAttribute('data-action', 'share');
-            shareButton.setAttribute('title', 'Share this post');
-            shareButton.setAttribute('type', 'button');
-            shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+            icon.setAttribute('aria-hidden', 'true');
+            thumbsSpan.appendChild(icon);
+            newPoints.appendChild(thumbsSpan);
 
-            shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
+            pointsFooter = newPoints;
+        } else {
+            const noPoints = document.createElement('div');
+            noPoints.className = 'points no_points';
 
-            shareContainer.appendChild(shareButton);
-            postFooter.appendChild(shareContainer);
+            const em = document.createElement('em');
+            em.className = 'points_pos';
+            em.textContent = '0';
+            noPoints.appendChild(em);
 
-            const newPost = document.createElement('div');
-            newPost.className = 'post post-modernized search-post';
-            newPost.id = post.id;
+            const thumbsSpan = document.createElement('span');
+            thumbsSpan.className = 'points_up opacity';
 
-            Array.from(post.attributes).forEach(attr => {
-                if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
-                    return;
-                }
-                newPost.setAttribute(attr.name, attr.value);
-            });
+            const icon = document.createElement('i');
+            icon.className = 'fa-regular fa-thumbs-up';
+            icon.setAttribute('aria-hidden', 'true');
 
-            Array.from(post.attributes).forEach(attr => {
-                if (attr.name.startsWith('data-')) {
-                    newPost.setAttribute(attr.name, attr.value);
-                }
-            });
+            thumbsSpan.appendChild(icon);
+            noPoints.appendChild(thumbsSpan);
 
-            const originalClasses = post.className.split(' ').filter(cls =>
-                !cls.includes('post-modernized') && !cls.includes('search-post')
-            );
-            newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
+            pointsFooter = noPoints;
+        }
 
-            newPost.appendChild(postHeader);
-            newPost.appendChild(postContent);
-            newPost.appendChild(postFooter);
+        postFooterActions.appendChild(pointsFooter);
+        postFooter.appendChild(postFooterActions);
 
-            post.parentNode.replaceChild(newPost, post);
-            this.#updatePointsContainerActiveState(pointsFooter);
+        const shareContainer = document.createElement('div');
+        shareContainer.className = 'modern-bottom-actions';
+
+        const shareButton = document.createElement('button');
+        shareButton.className = 'btn btn-icon btn-share';
+        shareButton.setAttribute('data-action', 'share');
+        shareButton.setAttribute('title', 'Share this post');
+        shareButton.setAttribute('type', 'button');
+        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+        shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
+
+        shareContainer.appendChild(shareButton);
+        postFooter.appendChild(shareContainer);
+
+        const newPost = document.createElement('div');
+        newPost.className = 'post post-modernized search-post';
+        newPost.id = post.id;
+
+        Array.from(post.attributes).forEach(attr => {
+            if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
+                return;
+            }
+            newPost.setAttribute(attr.name, attr.value);
         });
-    }
+
+        Array.from(post.attributes).forEach(attr => {
+            if (attr.name.startsWith('data-')) {
+                newPost.setAttribute(attr.name, attr.value);
+            }
+        });
+
+        const originalClasses = post.className.split(' ').filter(cls =>
+            !cls.includes('post-modernized') && !cls.includes('search-post')
+        );
+        newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
+
+        newPost.appendChild(postHeader);
+        newPost.appendChild(postContent);
+        newPost.appendChild(postFooter);
+
+        post.parentNode.replaceChild(newPost, post);
+        this.#updatePointsContainerActiveState(pointsFooter);
+    });
+}
 
     #cleanupSearchPostContent(contentWrapper) {
         contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
@@ -2658,44 +2543,44 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-    #preserveMediaDimensions(element) {
-        element.querySelectorAll('img').forEach(img => {
-            if (!img.style.maxWidth) {
-                img.style.maxWidth = '100%';
-            }
-            if (!img.style.height) {
-                img.style.height = 'auto';
-            }
-            
-            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                           img.className.includes('emoji');
-            
-            if (isTwemoji || isEmoji) {
-                img.style.display = 'inline-block';
-                img.style.verticalAlign = 'text-bottom';
-                img.style.margin = '0 2px';
-            } else if (!img.style.display || img.style.display === 'inline') {
-                img.style.display = 'block';
-            }
-            
-            if (!img.hasAttribute('alt')) {
-                if (isEmoji) {
-                    img.setAttribute('alt', 'Emoji');
-                    img.setAttribute('role', 'img');
-                } else {
-                    img.setAttribute('alt', 'Forum image');
-                }
-            }
-        });
+#preserveMediaDimensions(element) {
+    element.querySelectorAll('img').forEach(img => {
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
+        }
+        if (!img.style.height) {
+            img.style.height = 'auto';
+        }
         
-        element.querySelectorAll('iframe, video').forEach(media => {
-            if (globalThis.mediaDimensionExtractor) {
-                globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
+        
+        if (isTwemoji || isEmoji) {
+            img.style.display = 'inline-block';
+            img.style.verticalAlign = 'text-bottom';
+            img.style.margin = '0 2px';
+        } else if (!img.style.display || img.style.display === 'inline') {
+            img.style.display = 'block';
+        }
+        
+        if (!img.hasAttribute('alt')) {
+            if (isEmoji) {
+                img.setAttribute('alt', 'Emoji');
+                img.setAttribute('role', 'img');
+            } else {
+                img.setAttribute('alt', 'Forum image');
             }
-        });
-    }
+        }
+    });
+    
+    element.querySelectorAll('iframe, video').forEach(media => {
+        if (globalThis.mediaDimensionExtractor) {
+            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        }
+    });
+}
 
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
@@ -2788,7 +2673,6 @@ class PostModernizer {
                 const emojiContainer = stEmoji.querySelector('.st-emoji-container');
                 if (emojiContainer) {
                     this.#updateEmojiContainerActiveState(emojiContainer);
-                    this.#updateEmojiImage(emojiContainer);
                 }
                 postActions.appendChild(stEmoji);
             }
@@ -3901,7 +3785,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId, this.#emojiObserverId];
+            this.#codeBlockObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
