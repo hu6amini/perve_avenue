@@ -978,10 +978,6 @@ class PostModernizer {
     #updateEmojiImage(emojiContainer) {
         if (!emojiContainer) return;
 
-        // Check if there's a counter element
-        const counterElement = emojiContainer.querySelector('.st-emoji-counter');
-        const hasCounter = counterElement && this.#hasActiveCounter(counterElement);
-        
         // Find the emoji preview image
         const emojiPreview = emojiContainer.querySelector('.st-emoji-preview');
         if (!emojiPreview) return;
@@ -989,27 +985,21 @@ class PostModernizer {
         const existingImage = emojiPreview.querySelector('img');
         const existingIcon = emojiPreview.querySelector('i.fa-regular.fa-face-smile');
 
-        if (hasCounter) {
-            // If there's a counter, ensure we have the image
-            if (existingIcon) {
-                // Remove the icon and restore the image
-                existingIcon.remove();
-                
-                // Create or restore the image
-                const img = document.createElement('img');
-                img.src = "https://twemoji.maxcdn.com/v/latest/svg/1f44d.svg";
-                img.alt = "emoji preview";
-                img.loading = "lazy";
-                img.decoding = "async";
-                img.style.cssText = "aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;";
-                img.width = 20;
-                img.height = 20;
-                
-                emojiPreview.appendChild(img);
-            }
-            // If there's already an image, leave it as is
-        } else {
-            // If there's no counter, replace image with Font Awesome icon
+        // Check if there's a counter element
+        const counterElement = emojiContainer.querySelector('.st-emoji-counter');
+        
+        // Check the current image source to determine the state
+        const currentImageSrc = existingImage ? existingImage.src : '';
+        const isTwemojiImage = currentImageSrc.includes('twemoji');
+        const isEmojioneImage = currentImageSrc.includes('emojione') || currentImageSrc.includes('1f600.svg');
+        
+        // Determine if we should show icon or image based on counter and image source
+        const shouldShowIcon = !counterElement || 
+                              (isEmojioneImage && !isTwemojiImage) ||
+                              (!counterElement.hasAttribute('data-count') && !counterElement.textContent.trim());
+
+        if (shouldShowIcon) {
+            // If there's no counter or it's an emojione image, show the Font Awesome icon
             if (existingImage && !existingIcon) {
                 // Replace image with icon
                 existingImage.remove();
@@ -1030,26 +1020,34 @@ class PostModernizer {
                 emojiPreview.appendChild(icon);
             }
             // If there's already an icon, leave it as is
+        } else {
+            // If there's a counter, ensure we have the twemoji image
+            if (existingIcon) {
+                // Remove the icon
+                existingIcon.remove();
+            }
+            
+            // Ensure we have an image
+            if (!existingImage || !isTwemojiImage) {
+                // Remove existing non-twemoji image if present
+                if (existingImage && !isTwemojiImage) {
+                    existingImage.remove();
+                }
+                
+                // Create the twemoji image
+                const img = document.createElement('img');
+                img.src = "https://twemoji.maxcdn.com/v/latest/svg/1f44d.svg";
+                img.alt = "Agree";
+                img.loading = "lazy";
+                img.decoding = "async";
+                img.style.cssText = "aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;";
+                img.width = 20;
+                img.height = 20;
+                
+                emojiPreview.appendChild(img);
+            }
+            // If there's already a twemoji image, leave it as is
         }
-    }
-
-    #hasActiveCounter(counterElement) {
-        if (!counterElement) return false;
-        
-        // Check data-count attribute
-        if (counterElement.dataset && counterElement.dataset.count) {
-            const count = parseInt(counterElement.dataset.count);
-            if (!isNaN(count) && count > 0) return true;
-        }
-        
-        // Check text content
-        const text = counterElement.textContent.trim();
-        if (text) {
-            const count = parseInt(text);
-            if (!isNaN(count) && count > 0) return true;
-        }
-        
-        return false;
     }
 
     // ==============================
