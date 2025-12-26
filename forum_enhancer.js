@@ -30,7 +30,7 @@ class MediaDimensionExtractor {
         /smiley/iu
     ];
 
-    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
+    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature, [class*="signature"]';
     
     // Precomputed static values
     static #EMOJI_SIZE_NORMAL = 20;
