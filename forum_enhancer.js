@@ -917,6 +917,7 @@ class PostModernizer {
     #init() {
         try {
             this.#transformPostElements();
+            this.#transformEmojiImages();
             this.#enhanceReputationSystem();
             this.#setupObserverCallbacks();
             this.#setupActiveStateObserver();
@@ -1284,33 +1285,37 @@ class PostModernizer {
         pointsContainers.forEach(container => this.#updatePointsContainerActiveState(container));
     }
 
-    #handleActiveStateMutations(node) {
-        if (!node) return;
+   #handleActiveStateMutations(node) {
+    if (!node) return;
 
-        let hasEmojiChanges = false;
-        let hasPointsChanges = false;
+    let hasEmojiChanges = false;
+    let hasPointsChanges = false;
 
-        if (node.matches('.st-emoji-container') || node.querySelector('.st-emoji-container')) {
-            hasEmojiChanges = true;
-        }
-
-        if (node.matches('.points') || node.querySelector('.points em')) {
-            hasPointsChanges = true;
-        }
-
-        if (node.matches('.st-emoji-counter') ||
-            (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) {
-            hasEmojiChanges = true;
-        }
-
-        if (hasEmojiChanges) {
-            this.#updateAllEmojiActiveStates();
-        }
-
-        if (hasPointsChanges) {
-            this.#updateAllPointsActiveStates();
-        }
+    if (node.matches('.st-emoji-container') || node.querySelector('.st-emoji-container')) {
+        hasEmojiChanges = true;
     }
+
+    if (node.matches('.points') || node.querySelector('.points em')) {
+        hasPointsChanges = true;
+    }
+
+    if (node.matches('.st-emoji-counter') ||
+        (node.textContent && node.textContent.trim && !isNaN(node.textContent.trim()) && node.textContent.trim() !== '0')) {
+        hasEmojiChanges = true;
+    }
+
+    if (hasEmojiChanges) {
+        this.#updateAllEmojiActiveStates();
+        // Also transform emoji images when counter changes
+        setTimeout(() => {
+            this.#transformEmojiImages();
+        }, 50);
+    }
+
+    if (hasPointsChanges) {
+        this.#updateAllPointsActiveStates();
+    }
+}
 
     #updateAllEmojiActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
@@ -1322,18 +1327,56 @@ class PostModernizer {
         pointsContainers.forEach(container => this.#updatePointsContainerActiveState(container));
     }
 
-    #updateEmojiContainerActiveState(emojiContainer) {
-        if (!emojiContainer) return;
+#updateEmojiContainerActiveState(emojiContainer) {
+    if (!emojiContainer) return;
 
-        const emojiCounter = emojiContainer.querySelector('.st-emoji-counter');
-        const hasCount = emojiCounter && (
-            (emojiCounter.dataset && emojiCounter.dataset.count && emojiCounter.dataset.count !== '0') ||
-            (emojiCounter.textContent && emojiCounter.textContent.trim && emojiCounter.textContent.trim() !== '0' &&
-                !isNaN(emojiCounter.textContent.trim()))
-        );
+    const emojiCounter = emojiContainer.querySelector('.st-emoji-counter');
+    const preview = emojiContainer.querySelector('.st-emoji-preview');
+    
+    const hasCount = emojiCounter && (
+        (emojiCounter.dataset && emojiCounter.dataset.count && emojiCounter.dataset.count !== '0') ||
+        (emojiCounter.textContent && emojiCounter.textContent.trim && emojiCounter.textContent.trim() !== '0' &&
+            !isNaN(emojiCounter.textContent.trim()))
+    );
 
-        emojiContainer.classList.toggle('active', !!hasCount);
+    emojiContainer.classList.toggle('active', !!hasCount);
+    
+    // Also update the image/icon based on counter state
+    if (preview) {
+        if (hasCount) {
+            // Counter has value, ensure we have image (not icon)
+            const icon = preview.querySelector('i.fa-regular.fa-face-smile');
+            if (icon) {
+                icon.remove();
+                
+                // Create a placeholder image
+                const img = document.createElement('img');
+                img.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f642.svg';
+                img.alt = 'emoji preview';
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                img.style.cssText = 'aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;';
+                img.width = 20;
+                img.height = 20;
+                
+                preview.appendChild(img);
+            }
+        } else {
+            // No counter or zero counter, ensure we have Font Awesome icon
+            const img = preview.querySelector('img');
+            if (img) {
+                img.remove();
+                
+                const icon = document.createElement('i');
+                icon.className = 'fa-regular fa-face-smile';
+                icon.setAttribute('aria-hidden', 'true');
+                icon.style.cssText = 'font-size: 20px; width: 20px; height: 20px; display: inline-block; vertical-align: text-bottom;';
+                
+                preview.appendChild(icon);
+            }
+        }
     }
+}
 
     #updatePointsContainerActiveState(pointsContainer) {
         if (!pointsContainer) return;
@@ -1626,6 +1669,71 @@ class PostModernizer {
         const postId = post.id;
         if (postId && postId.startsWith('ee')) {
             post.setAttribute('data-post-id', postId.replace('ee', ''));
+        }
+    });
+}
+
+#transformEmojiImages() {
+    document.querySelectorAll('.st-emoji-container').forEach(container => {
+        // Check if there's a counter element
+        const counter = container.querySelector('.st-emoji-counter');
+        const preview = container.querySelector('.st-emoji-preview');
+        
+        if (preview && !counter) {
+            // Only replace if there's no counter
+            const img = preview.querySelector('img');
+            if (img) {
+                // Replace image with Font Awesome icon
+                const icon = document.createElement('i');
+                icon.className = 'fa-regular fa-face-smile';
+                icon.setAttribute('aria-hidden', 'true');
+                icon.style.cssText = 'font-size: 20px; width: 20px; height: 20px; display: inline-block; vertical-align: text-bottom;';
+                
+                img.replaceWith(icon);
+            }
+        } else if (preview && counter) {
+            // If there's a counter, make sure we have the original image
+            const icon = preview.querySelector('i.fa-regular.fa-face-smile');
+            if (icon) {
+                // Check if counter is empty or zero
+                const counterValue = counter.textContent.trim();
+                const dataCount = counter.getAttribute('data-count');
+                const isZero = counterValue === '0' || counterValue === '' || 
+                              (dataCount && (dataCount === '0' || dataCount === ''));
+                
+                if (isZero) {
+                    // Counter is zero or empty, restore Font Awesome icon
+                    const img = preview.querySelector('img');
+                    if (img) {
+                        img.remove();
+                    }
+                    
+                    const newIcon = document.createElement('i');
+                    newIcon.className = 'fa-regular fa-face-smile';
+                    newIcon.setAttribute('aria-hidden', 'true');
+                    newIcon.style.cssText = 'font-size: 20px; width: 20px; height: 20px; display: inline-block; vertical-align: text-bottom;';
+                    
+                    preview.appendChild(newIcon);
+                } else {
+                    // Counter has value, ensure we have image (not icon)
+                    const icon = preview.querySelector('i.fa-regular.fa-face-smile');
+                    if (icon) {
+                        icon.remove();
+                        
+                        // Create a placeholder image (you can adjust the src if needed)
+                        const img = document.createElement('img');
+                        img.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f642.svg'; // Default smile
+                        img.alt = 'emoji preview';
+                        img.loading = 'lazy';
+                        img.decoding = 'async';
+                        img.style.cssText = 'aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;';
+                        img.width = 20;
+                        img.height = 20;
+                        
+                        preview.appendChild(img);
+                    }
+                }
+            }
         }
     });
 }
@@ -3147,41 +3255,49 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const emojiPreview = e.target.closest('.st-emoji-preview');
+  #enhanceReputationSystem() {
+    // Transform existing emoji images
+    this.#transformEmojiImages();
+    
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const emojiPreview = e.target.closest('.st-emoji-preview');
 
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                if (bulletDelete && bulletDelete.onclick &&
-                    (pointsContainer.querySelector('.points_pos') ||
-                        pointsContainer.querySelector('.points_neg'))) {
-                    bulletDelete.onclick();
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
-
-                if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
-                    pointsUp.classList.add('active');
-                }
-
-                if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
-                    pointsDown.classList.add('active');
-                }
+            if (bulletDelete && bulletDelete.onclick &&
+                (pointsContainer.querySelector('.points_pos') ||
+                    pointsContainer.querySelector('.points_neg'))) {
+                bulletDelete.onclick();
+                e.preventDefault();
+                e.stopPropagation();
+                return;
             }
 
-            if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+            if (pointsUp) {
+                pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
+                pointsUp.classList.add('active');
             }
-        });
-    }
+
+            if (pointsDown) {
+                pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
+                pointsDown.classList.add('active');
+            }
+        }
+
+        if (emojiPreview) {
+            emojiPreview.closest('.st-emoji-container') && emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+            
+            // Transform emoji images after interaction
+            setTimeout(() => {
+                this.#transformEmojiImages();
+            }, 100);
+        }
+    });
+}
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
