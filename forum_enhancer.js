@@ -887,6 +887,7 @@ class PostModernizer {
     #domUpdates = new WeakMap();
     #rafPending = false;
     #timeUpdateIntervals = new Map();
+    #periodicCleanupInterval = null;
 
     constructor() {
         this.#initWithRetry();
@@ -950,6 +951,7 @@ class PostModernizer {
     // ==============================
 
     #enhanceEmojiSystem() {
+        this.#cleanupInconsistentEmojiState();
         this.#processAllEmojiReplacements();
         this.#setupEmojiObservers();
         this.#setupCounterChangeMonitoring();
@@ -982,6 +984,7 @@ class PostModernizer {
                         if (node.classList && node.classList.contains('st-emoji-counter')) {
                             const container = mutation.target.closest('.st-emoji-container');
                             if (container) {
+                                this.#cleanupInconsistentEmojiState();
                                 setTimeout(() => this.#processEmojiContainer(container), 100);
                             }
                         }
@@ -989,11 +992,17 @@ class PostModernizer {
                 }
             });
         });
+        
+        // Periodic cleanup every 5 seconds as fallback
+        this.#periodicCleanupInterval = setInterval(() => {
+            this.#cleanupInconsistentEmojiState();
+        }, 5000);
     }
 
     #handleEmojiContainerChange(node) {
         const container = node.matches('.st-emoji-container') ? node : node.closest('.st-emoji-container');
         if (container) {
+            this.#cleanupInconsistentEmojiState();
             this.#processEmojiContainer(container);
         }
     }
@@ -1001,6 +1010,7 @@ class PostModernizer {
     #handleCounterChange(node) {
         const container = node.closest('.st-emoji-container');
         if (container) {
+            this.#cleanupInconsistentEmojiState();
             this.#processEmojiContainer(container);
             if (this.#hasValidCounter(container)) {
                 this.#removeFontAwesomeIfPresent(container);
@@ -1023,13 +1033,49 @@ class PostModernizer {
         const hasImage = !!container.querySelector('.st-emoji-preview img');
         const hasFontAwesome = !!container.querySelector('i.fa-face-smile');
         
-        if (!hasCounter && hasImage && !hasFontAwesome) {
+        // Clean up inconsistent state: If we have an image but still have emoji-replaced class
+        if (hasImage && container.classList.contains('emoji-replaced')) {
+            container.classList.remove('emoji-replaced');
+            if (container.dataset.originalEmoji) {
+                delete container.dataset.originalEmoji;
+            }
+        }
+        
+        // Only replace if no counter and we have an image but no Font Awesome
+        if (!hasCounter && hasImage && !hasFontAwesome && !container.classList.contains('emoji-replaced')) {
             this.#replaceEmojiWithFontAwesome(container);
         }
         
+        // If we have a counter and Font Awesome, restore the image
         if (hasCounter && hasFontAwesome) {
             this.#restoreEmojiImage(container);
         }
+    }
+
+    #cleanupInconsistentEmojiState() {
+        const containers = document.querySelectorAll('.st-emoji-container');
+        containers.forEach(container => {
+            const hasImage = !!container.querySelector('.st-emoji-preview img');
+            const hasFontAwesome = !!container.querySelector('i.fa-face-smile');
+            
+            // If we have both image and Font Awesome, remove Font Awesome
+            if (hasImage && hasFontAwesome) {
+                const faIcon = container.querySelector('i.fa-face-smile');
+                faIcon?.remove();
+                container.classList.remove('emoji-replaced');
+                if (container.dataset.originalEmoji) {
+                    delete container.dataset.originalEmoji;
+                }
+            }
+            
+            // If we have emoji-replaced class but no Font Awesome, remove the class
+            if (container.classList.contains('emoji-replaced') && !hasFontAwesome) {
+                container.classList.remove('emoji-replaced');
+                if (container.dataset.originalEmoji) {
+                    delete container.dataset.originalEmoji;
+                }
+            }
+        });
     }
 
     #hasValidCounter(container) {
@@ -1107,25 +1153,32 @@ class PostModernizer {
         
         faIcon.remove();
         
+        // Check if we should restore the original image
         if (container.dataset.originalEmoji) {
             try {
                 const original = JSON.parse(container.dataset.originalEmoji);
-                const img = document.createElement('img');
-                img.src = original.src;
-                img.alt = original.alt || 'emoji';
-                img.width = original.width || 20;
-                img.height = original.height || 20;
-                img.loading = 'lazy';
-                img.decoding = 'async';
-                img.style.cssText = original.style || 'aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;';
                 
-                preview.appendChild(img);
+                // Only restore if there's no image already
+                if (!preview.querySelector('img')) {
+                    const img = document.createElement('img');
+                    img.src = original.src;
+                    img.alt = original.alt || 'emoji';
+                    img.width = original.width || 20;
+                    img.height = original.height || 20;
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
+                    img.style.cssText = original.style || 'aspect-ratio: 20 / 20; display: inline-block; vertical-align: text-bottom;';
+                    
+                    preview.appendChild(img);
+                }
+                
                 delete container.dataset.originalEmoji;
             } catch (e) {
                 console.log('Could not restore original image, plugin will handle it');
             }
         }
         
+        // Remove the emoji-replaced class
         container.classList.remove('emoji-replaced');
         console.log('🔄 Removed Font Awesome icon (counter present)');
     }
@@ -1145,6 +1198,11 @@ class PostModernizer {
         
         if (this.#counterMutationObserver) {
             this.#counterMutationObserver.disconnect();
+        }
+        
+        if (this.#periodicCleanupInterval) {
+            clearInterval(this.#periodicCleanupInterval);
+            this.#periodicCleanupInterval = null;
         }
     }
 
@@ -1819,6 +1877,7 @@ class PostModernizer {
             }
         });
         
+        this.#cleanupInconsistentEmojiState();
         this.#processAllEmojiReplacements();
     }
 
@@ -3983,6 +4042,11 @@ class PostModernizer {
 
         if (this.#counterMutationObserver) {
             this.#counterMutationObserver.disconnect();
+        }
+
+        if (this.#periodicCleanupInterval) {
+            clearInterval(this.#periodicCleanupInterval);
+            this.#periodicCleanupInterval = null;
         }
 
         if (this.#retryTimeoutId) {
