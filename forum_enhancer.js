@@ -30,7 +30,7 @@ class MediaDimensionExtractor {
         /smiley/iu
     ];
 
-    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature, [class*="signature"]';
+    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
     // Precomputed static values
     static #EMOJI_SIZE_NORMAL = 20;
@@ -38,10 +38,12 @@ class MediaDimensionExtractor {
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
-    constructor() {
-        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-        this.#init();
-    }
+constructor() {
+    this.#imageLoadHandler = this.#handleImageLoad.bind(this);
+    // Cache context elements immediately
+    this.#cacheContextElements();
+    this.#init();
+}
 
     #init() {
         // Immediate initialization - DOM is ready (defer)
@@ -338,20 +340,35 @@ class MediaDimensionExtractor {
     }
 
     #isInSmallContext(img) {
-        if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
-            return false;
-        }
-        
-        // Check ancestors in Set (O(1) lookup)
-        let parent = img.parentElement;
-        while (parent) {
-            if (this.#smallContextElements.has(parent)) {
+    // Quick check: if we don't have the cache yet, build it
+    if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
+        this.#cacheContextElements();
+    }
+    
+    // Check all ancestors
+    let element = img;
+    while (element) {
+        // Check if element has any of the signature-related classes
+        if (element.classList) {
+            const classList = element.classList;
+            if (classList.contains('signature') || 
+                classList.contains('post-signature') ||
+                classList.contains('modern-quote') ||
+                classList.contains('quote-content') ||
+                classList.contains('modern-spoiler') ||
+                classList.contains('spoiler-content')) {
                 return true;
             }
-            parent = parent.parentElement;
+            
+            // Also check if element matches any in our pre-cached Set
+            if (this.#smallContextElements && this.#smallContextElements.has(element)) {
+                return true;
+            }
         }
-        return false;
+        element = element.parentElement;
     }
+    return false;
+}
 
     #setupImageLoadListener(img) {
         // Avoid duplicate listeners
