@@ -883,931 +883,1296 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
 })();
 
 
-// Enhanced Menu Modernizer - HYBRID HAMBURGER APPROACH
+// Enhanced Menu Modernizer - Fixed for proper extraction and no duplicates 
 class EnhancedMenuModernizer { 
  #observerId = null; 
  #mobileState = false; 
  #originalMenu = null; 
  #modernMenuWrap = null; 
  #processedMenus = new Set(); 
- #iconCache = new Map();
-
- // Icon mappings for hamburger menu
- #iconMappings = {
-  // Topics & Discussions
-  'Topics': 'fa-comments',
-  'Active topics': 'fa-bolt',
-  'Popular topics': 'fa-fire',
-  'Subscriptions': 'fa-bookmark',
-  'My topics': 'fa-file',
-  'My posts': 'fa-comment',
-  
-  // Messenger
-  'Messenger': 'fa-message',
-  'Send New PM': 'fa-paper-plane',
-  'Go to Inbox': 'fa-inbox',
-  'Edit Folders': 'fa-folder',
-  'Archive Messages': 'fa-box-archive',
-  'Contact List': 'fa-address-book',
-  'Notepad': 'fa-note-sticky',
-  
-  // Administration
-  'Administration': 'fa-shield-halved',
-  'Website': 'fa-globe',
-  'Users': 'fa-users',
-  'Graphic': 'fa-palette',
-  'Additional features': 'fa-puzzle-piece',
-  
-  // Moderation
-  'Moderation': 'fa-gavel',
-  'Topics selected': 'fa-list-check',
-  'Section': 'fa-folder-open',
-  
-  // User Settings
-  'Edit Profile info': 'fa-user-pen',
-  'Edit Avatar Settings': 'fa-image',
-  'Edit Signature': 'fa-signature',
-  'My album': 'fa-images',
-  'Forum Settings': 'fa-sliders-h',
-  'Email Settings': 'fa-envelope',
-  'Change Password': 'fa-key',
-  'Log Out': 'fa-right-from-bracket',
-  
-  // Tools & Features
-  'Members': 'fa-users',
-  'Help': 'fa-circle-question',
-  'Search': 'fa-magnifying-glass',
-  'Create your forum': 'fa-plus',
-  'Create your blog': 'fa-blog',
-  'Home ForumCommunity': 'fa-house',
-  'Android App': 'fa-android',
-  'ForumCommunity Mobile': 'fa-mobile',
-  'Last posts': 'fa-clock-rotate-left',
-  'News': 'fa-newspaper',
-  'Top Forum': 'fa-trophy',
-  'Top Blog': 'fa-award',
-  'Add to bookmarks': 'fa-bookmark',
-  'set categories': 'fa-tags',
-  'RSS': 'fa-rss',
-  'Notifications from scripts': 'fa-bell'
- };
-
+ #retryCount = 0; 
+ #maxRetries = 10; 
+ 
+ // Better icon mappings 
+ #iconMappings = { 
+ // User menu 
+ 'Notifications from scripts': 'fa-bell', 
+ 'Edit Profile info': 'fa-user-pen', 
+ 'Edit Avatar Settings': 'fa-image', 
+ 'Edit Signature': 'fa-signature', 
+ 'My album': 'fa-images', 
+ 'Forum Settings': 'fa-sliders-h', 
+ 'Email Settings and Notifications': 'fa-envelope', 
+ 'Change Password': 'fa-key', 
+ 'Log Out': 'fa-right-from-bracket', 
+ 
+ // Messenger 
+ 'Messenger': 'fa-message', 
+ 'Send New PM': 'fa-paper-plane', 
+ 'Go to Inbox': 'fa-inbox', 
+ 'Edit Folders': 'fa-folder', 
+ 'Archive Messages': 'fa-box-archive', 
+ 'Contact List': 'fa-address-book', 
+ 'Notepad': 'fa-note-sticky', 
+ 
+ // Topics 
+ 'Topics': 'fa-comments', 
+ 'Active topics': 'fa-bolt', 
+ 'Popular topics': 'fa-fire', 
+ 'Subscriptions': 'fa-bookmark', 
+ 'Notification centre': 'fa-bell', 
+ 'Mark all as read': 'fa-check-double', 
+ 'My topics': 'fa-file', 
+ 'My posts': 'fa-comment', 
+ 'Subscribe to the forum': 'fa-bell', 
+ 'Unsubscribe from this topic': 'fa-bell-slash', 
+ 'Newsletter': 'fa-newspaper', 
+ 
+ // Administration sections 
+ 'Website': 'fa-globe', 
+ 'Users': 'fa-users', 
+ 'Graphic': 'fa-palette', 
+ 'Additional features': 'fa-puzzle-piece', 
+ 
+ // Moderation 
+ 'Moderation': 'fa-gavel', 
+ 'Topics selected': 'fa-list-check', 
+ 'Section': 'fa-folder-open', 
+ 
+ // Tools & Help 
+ 'Members': 'fa-users', 
+ 'Help': 'fa-circle-question', 
+ 'Search': 'fa-magnifying-glass', 
+ 'Create your forum': 'fa-plus', 
+ 'Create your blog': 'fa-blog', 
+ 'Home ForumCommunity': 'fa-house', 
+ 'Android App': 'fa-android', 
+ 'ForumCommunity Mobile': 'fa-mobile', 
+ 'Last posts': 'fa-clock-rotate-left', 
+ 'News': 'fa-newspaper', 
+ 'Top Forum': 'fa-trophy', 
+ 'Top Blog': 'fa-award', 
+ 'Add to bookmarks': 'fa-bookmark', 
+ 'set categories': 'fa-tags' 
+ }; 
+ 
  constructor() { 
-  this.#init(); 
+ this.#init(); 
  } 
-
+ 
  #init() { 
-  if (!this.#shouldModernize()) return; 
-
-  this.#originalMenu = document.querySelector('.menuwrap'); 
-  if (!this.#originalMenu) { 
-   setTimeout(() => this.#init(), 100); 
-   return; 
-  } 
-
-  this.createHybridMenu(); 
-  this.#setupObserver(); 
-  this.setupEventListeners(); 
-  this.#initializeTheme();
-
-  console.log('✅ Hybrid Menu Modernizer initialized'); 
+ if (!this.#shouldModernize()) return; 
+ 
+ this.#originalMenu = document.querySelector('.menuwrap'); 
+ if (!this.#originalMenu) { 
+ // Wait for menu to load 
+ setTimeout(() => this.#init(), 100); 
+ return; 
  } 
-
+ 
+ this.createModernMenu(); 
+ this.#setupObserver(); 
+ this.setupEventListeners(); 
+ 
+ console.log('&#9989; Enhanced Menu Modernizer initialized'); 
+ } 
+ 
  #setupObserver() { 
-  if (!globalThis.forumObserver) { 
-   setTimeout(() => this.#setupObserver(), 100); 
-   return; 
-  } 
-
-  this.#observerId = globalThis.forumObserver.register({ 
-   id: 'hybrid-menu-modernizer', 
-   callback: (node) => this.#handleMenuUpdates(node), 
-   selector: '.menuwrap, .menu em, .st-emoji-notice, a[id^="i"], a[id^="n"]', 
-   priority: 'critical', 
-   pageTypes: ['topic', 'forum', 'blog', 'profile', 'search', 'board'] 
-  }); 
+ if (!globalThis.forumObserver) { 
+ setTimeout(() => this.#setupObserver(), 100); 
+ return; 
  } 
-
+ 
+ this.#observerId = globalThis.forumObserver.register({ 
+ id: 'enhanced-menu-modernizer', 
+ callback: (node) => this.#handleMenuUpdates(node), 
+ selector: '.menuwrap, .menu em, .st-emoji-notice, a[id^="i"], a[id^="n"]', 
+ priority: 'critical', 
+ pageTypes: ['topic', 'forum', 'blog', 'profile', 'search', 'board'] 
+ }); 
+ } 
+ 
  #handleMenuUpdates(node) { 
-  if (!node) return; 
-
-  if (node.matches('.menuwrap') && node.style.display !== 'none') { 
-   node.style.display = 'none'; 
-  } 
-
-  if (node.matches('em') || node.querySelector('em')) { 
-   this.updateNotificationBadges(); 
-  } 
-
-  if (node.matches('.st-emoji-notice') || node.querySelector('.st-emoji-notice')) { 
-   this.updateReactionsMenu(); 
-  } 
+ if (!node) return; 
+ 
+ // Hide original menu if it reappears 
+ if (node.matches('.menuwrap') && node.style.display !== 'none') { 
+ node.style.display = 'none'; 
  } 
-
+ 
+ // Update notification badges 
+ if (node.matches('em') || node.querySelector('em')) { 
+ this.updateNotificationBadges(); 
+ } 
+ 
+ // Update emoji reactions 
+ if (node.matches('.st-emoji-notice') || node.querySelector('.st-emoji-notice')) { 
+ this.updateReactionsMenu(); 
+ } 
+ } 
+ 
  #shouldModernize() { 
-  if (document.body.id === 'login' || document.body.id === 'register') { 
-   return false; 
-  } 
-
-  if (document.querySelector('.hybrid-menu-wrap')) { 
-   return false; 
-  } 
-
-  return true; 
+ if (document.body.id === 'login' || document.body.id === 'register') { 
+ return false; 
  } 
-
- createHybridMenu() { 
-  if (document.querySelector('.hybrid-menu-wrap')) return; 
-
-  this.#originalMenu.style.display = 'none'; 
-
-  const menuWrap = document.createElement('div'); 
-  menuWrap.className = 'hybrid-menu-wrap'; 
-  this.#modernMenuWrap = menuWrap; 
-
-  const menu = document.createElement('nav'); 
-  menu.className = 'hybrid-menu'; 
-
-  // Extract ALWAYS VISIBLE items only (User, Messenger, Notifications)
-  const alwaysVisibleItems = this.#extractAlwaysVisibleItems();
-  
-  // Create hamburger menu for everything else
-  const hamburgerMenu = this.#createHamburgerMenu();
-
-  menu.innerHTML = 
-   '<div class="menu-left">' + 
-    alwaysVisibleItems.join('') + 
-   '</div>' + 
-   '<div class="menu-right">' + 
-    this.#extractSearch() + 
-    hamburgerMenu + 
-   '</div>'; 
-
-  menuWrap.appendChild(menu); 
-
-  // Add mobile toggle (for small screens)
-  const mobileToggle = document.createElement('button'); 
-  mobileToggle.className = 'mobile-menu-toggle'; 
-  mobileToggle.setAttribute('aria-label', 'Open menu'); 
-  mobileToggle.innerHTML = '<i class="fa-regular fa-bars" aria-hidden="true"></i>'; 
-  mobileToggle.addEventListener('click', () => this.openMobileMenu()); 
-  menu.appendChild(mobileToggle); 
-
-  const fixedContainer = document.querySelector('.Fixed'); 
-  if (fixedContainer && fixedContainer.firstChild) { 
-   fixedContainer.insertBefore(menuWrap, fixedContainer.firstChild); 
-  } else { 
-   document.body.insertBefore(menuWrap, document.body.firstChild); 
-  } 
-
-  this.createMobileOverlay(); 
-  this.updateNotificationBadges(); 
-  this.updateReactionsMenu(); 
-  
-  // Apply responsive adjustments
-  setTimeout(() => this.#applyResponsiveAdjustments(), 100);
+ 
+ if (document.querySelector('.modern-menu-wrap')) { 
+ return false; 
  } 
-
- #extractAlwaysVisibleItems() {
-  const leftUl = this.#originalMenu.querySelector('ul.left'); 
-  const rightUl = this.#originalMenu.querySelector('ul.right'); 
-  
-  const allMenus = [];
-  if (leftUl) allMenus.push(...leftUl.querySelectorAll('li.menu'));
-  
-  const visibleItems = []; 
-
-  allMenus.forEach((menu) => { 
-   if (this.#processedMenus.has(menu)) return; 
-   
-   const link = menu.querySelector('a'); 
-   if (!link) return; 
-   
-   // User menu (has avatar) - ALWAYS VISIBLE
-   if (menu.querySelector('.avatar')) { 
-    this.#processedMenus.add(menu); 
-    const menuHTML = this.#extractUserMenu(menu); 
-    if (menuHTML) { 
-     visibleItems.push(menuHTML); 
-    } 
-   }
-   
-   // Messenger menu (has id starting with "i") - ALWAYS VISIBLE
-   else if (link.id && link.id.startsWith('i')) { 
-    this.#processedMenus.add(menu); 
-    const menuHTML = this.#extractMessengerMenu(menu); 
-    if (menuHTML) { 
-     visibleItems.push(menuHTML); 
-    } 
-   }
-   
-   // Notifications menu (has id starting with "n") - ALWAYS VISIBLE
-   else if (link.id && link.id.startsWith('n')) { 
-    this.#processedMenus.add(menu); 
-    const menuHTML = this.#extractNotificationsMenu(menu); 
-    if (menuHTML) { 
-     visibleItems.push(menuHTML); 
-    } 
-   }
-  }); 
-
-  return visibleItems; 
+ 
+ return true; 
  } 
-
- #createHamburgerMenu() {
-  // Extract user info for hamburger header
-  const userMenu = this.#originalMenu.querySelector('.menu .avatar')?.closest('.menu');
-  let userHeaderHTML = '';
-  
-  if (userMenu) {
-   const link = userMenu.querySelector('a');
-   const avatar = link.querySelector('.avatar img');
-   const username = link.querySelector('.nick');
-   const avatarSrc = avatar ? avatar.src : 'https://img.forumfree.net/style_images/default_avatar.png';
-   const usernameText = username ? username.textContent.trim() : 'User';
-   
-   userHeaderHTML = `
-    <div class="hamburger-user-header">
-     <div class="user-avatar">
-      <img src="${this.#escapeHtml(avatarSrc)}" alt="${this.#escapeHtml(usernameText)}">
-     </div>
-     <div class="user-info">
-      <div class="username">${this.#escapeHtml(usernameText)}</div>
-      <div class="user-status">Online</div>
-     </div>
-    </div>
-    <div class="dropdown-divider"></div>`;
-  }
-
-  return `
-   <div class="menu-item hamburger-menu">
-    <button class="menu-trigger hamburger-trigger" aria-label="Main menu">
-     <i class="fa-regular fa-bars" aria-hidden="true"></i>
-     <span class="hamburger-text">Menu</span>
-    </button>
-    <div class="menu-dropdown hamburger-dropdown">
-     ${userHeaderHTML}
-     <div class="hamburger-content">
-      ${this.#buildHamburgerSections()}
-     </div>
-     <div class="hamburger-footer">
-      ${this.#getThemeSwitcherHTML()}
-     </div>
-    </div>
-   </div>`;
- }
-
- #buildHamburgerSections() {
-  const sections = [
-   {
-    title: 'Topics & Discussions',
-    icon: 'fa-comments',
-    items: this.#extractMenuItemsByKeywords(['Topics', 'Active', 'Popular', 'Subscriptions', 'My topics', 'My posts'])
-   },
-   {
-    title: 'Messenger',
-    icon: 'fa-message',
-    items: this.#extractMenuItemsByKeywords(['Messenger', 'Send', 'Inbox', 'Folders', 'Archive', 'Contact', 'Notepad'])
-   },
-   {
-    title: 'Administration',
-    icon: 'fa-shield-halved',
-    items: this.#extractMenuItemsByKeywords(['Administration', 'Website', 'Users', 'Graphic', 'Additional'])
-   },
-   {
-    title: 'Moderation',
-    icon: 'fa-gavel',
-    items: this.#extractMenuItemsByKeywords(['Moderation', 'Topics selected', 'Section'])
-   },
-   {
-    title: 'Tools',
-    icon: 'fa-toolbox',
-    items: this.#extractMenuItemsByKeywords(['Members', 'Help', 'Search', 'Create', 'Home', 'Android', 'Mobile', 'Last posts', 'News', 'Top', 'bookmarks', 'categories', 'RSS'])
-   }
-  ];
-
-  let html = '';
-  
-  sections.forEach(section => {
-   if (section.items.length > 0) {
-    html += `
-     <div class="hamburger-section">
-      <div class="section-header">
-       <i class="fa-regular ${section.icon}" aria-hidden="true"></i>
-       <h4>${section.title}</h4>
-      </div>
-      <div class="section-items">
-       ${section.items.map(item => this.#createHamburgerItem(item)).join('')}
-      </div>
-     </div>`;
-   }
-  });
-
-  return html;
- }
-
- #extractMenuItemsByKeywords(keywords) {
-  const items = [];
-  const allLinks = this.#originalMenu.querySelectorAll('li.menu a');
-  
-  allLinks.forEach(link => {
-   const text = link.textContent.trim();
-   if (!text) return;
-   
-   const lowerText = text.toLowerCase();
-   const hasKeyword = keywords.some(keyword => lowerText.includes(keyword.toLowerCase()));
-   
-   if (hasKeyword && !items.some(item => item.text === text)) {
-    items.push({
-     text: text,
-     href: link.getAttribute('href') || '#',
-     icon: this.#getIconForText(text)
-    });
-   }
-  });
-
-  // Also check dropdown items
-  const allDropdownLinks = this.#originalMenu.querySelectorAll('li.menu ul li a');
-  allDropdownLinks.forEach(link => {
-   const text = link.textContent.trim();
-   if (!text) return;
-   
-   const lowerText = text.toLowerCase();
-   const hasKeyword = keywords.some(keyword => lowerText.includes(keyword.toLowerCase()));
-   
-   if (hasKeyword && !items.some(item => item.text === text)) {
-    items.push({
-     text: text,
-     href: link.getAttribute('href') || '#',
-     icon: this.#getIconForText(text)
-    });
-   }
-  });
-
-  return items;
- }
-
- #createHamburgerItem(item) {
-  const isJsLink = item.href.startsWith('javascript:');
-  
-  if (isJsLink) {
-   const jsCode = item.href.substring(11);
-   return `
-    <button class="hamburger-item" onclick="${this.#escapeHtml(jsCode)}">
-     <i class="fa-regular ${item.icon}" aria-hidden="true"></i>
-     <span>${this.#escapeHtml(item.text)}</span>
-    </button>`;
-  }
-  
-  return `
-   <a href="${this.#escapeHtml(item.href)}" class="hamburger-item">
-    <i class="fa-regular ${item.icon}" aria-hidden="true"></i>
-    <span>${this.#escapeHtml(item.text)}</span>
-   </a>`;
- }
-
- #getIconForText(text) {
-  if (this.#iconCache.has(text)) {
-   return this.#iconCache.get(text);
-  }
-
-  // Check exact matches
-  for (const [key, icon] of Object.entries(this.#iconMappings)) {
-   if (text === key) {
-    this.#iconCache.set(text, icon);
-    return icon;
-   }
-  }
-
-  // Check partial matches
-  const lowerText = text.toLowerCase();
-  for (const [key, icon] of Object.entries(this.#iconMappings)) {
-   if (lowerText.includes(key.toLowerCase())) {
-    this.#iconCache.set(text, icon);
-    return icon;
-   }
-  }
-
-  // Fallback based on common patterns
-  let fallbackIcon = 'fa-circle';
-  
-  if (lowerText.includes('edit') || lowerText.includes('profile')) fallbackIcon = 'fa-user-pen';
-  else if (lowerText.includes('avatar')) fallbackIcon = 'fa-image';
-  else if (lowerText.includes('signature')) fallbackIcon = 'fa-signature';
-  else if (lowerText.includes('setting')) fallbackIcon = 'fa-sliders-h';
-  else if (lowerText.includes('email')) fallbackIcon = 'fa-envelope';
-  else if (lowerText.includes('password')) fallbackIcon = 'fa-key';
-  else if (lowerText.includes('logout')) fallbackIcon = 'fa-right-from-bracket';
-  else if (lowerText.includes('message')) fallbackIcon = 'fa-message';
-  else if (lowerText.includes('topic')) fallbackIcon = 'fa-comments';
-  else if (lowerText.includes('active')) fallbackIcon = 'fa-bolt';
-  else if (lowerText.includes('popular')) fallbackIcon = 'fa-fire';
-  else if (lowerText.includes('subscription')) fallbackIcon = 'fa-bookmark';
-  else if (lowerText.includes('notification')) fallbackIcon = 'fa-bell';
-  else if (lowerText.includes('read')) fallbackIcon = 'fa-check-double';
-  else if (lowerText.includes('post')) fallbackIcon = 'fa-comment';
-  else if (lowerText.includes('admin')) fallbackIcon = 'fa-shield-halved';
-  else if (lowerText.includes('website')) fallbackIcon = 'fa-globe';
-  else if (lowerText.includes('user')) fallbackIcon = 'fa-users';
-  else if (lowerText.includes('graphic')) fallbackIcon = 'fa-palette';
-  else if (lowerText.includes('moderation')) fallbackIcon = 'fa-gavel';
-  else if (lowerText.includes('search')) fallbackIcon = 'fa-magnifying-glass';
-  else if (lowerText.includes('create')) fallbackIcon = 'fa-plus';
-  else if (lowerText.includes('home')) fallbackIcon = 'fa-house';
-  else if (lowerText.includes('android')) fallbackIcon = 'fa-android';
-  else if (lowerText.includes('mobile')) fallbackIcon = 'fa-mobile';
-  else if (lowerText.includes('clock') || lowerText.includes('last')) fallbackIcon = 'fa-clock-rotate-left';
-  else if (lowerText.includes('news')) fallbackIcon = 'fa-newspaper';
-  else if (lowerText.includes('top')) fallbackIcon = 'fa-trophy';
-  else if (lowerText.includes('blog')) fallbackIcon = 'fa-blog';
-  else if (lowerText.includes('member')) fallbackIcon = 'fa-users';
-  else if (lowerText.includes('help')) fallbackIcon = 'fa-circle-question';
-  else if (lowerText.includes('rss')) fallbackIcon = 'fa-rss';
-  else if (lowerText.includes('feed')) fallbackIcon = 'fa-rss';
-
-  this.#iconCache.set(text, fallbackIcon);
-  return fallbackIcon;
- }
-
+ 
+ createModernMenu() { 
+ if (document.querySelector('.modern-menu-wrap')) return; 
+ 
+ // Hide original menu 
+ this.#originalMenu.style.display = 'none'; 
+ 
+ // Create modern menu structure 
+ const menuWrap = document.createElement('div'); 
+ menuWrap.className = 'modern-menu-wrap'; 
+ this.#modernMenuWrap = menuWrap; 
+ 
+ const menu = document.createElement('nav'); 
+ menu.className = 'modern-menu'; 
+ 
+ // Extract all menu items from original 
+ const leftMenus = this.#extractLeftMenus(); 
+ const rightMenus = this.#extractRightMenus(); 
+ 
+ // Build menu structure 
+ menu.innerHTML = '<div class="menu-left">' + 
+ leftMenus.join('') + 
+ '</div>' + 
+ '<div class="menu-right">' + 
+ rightMenus.join('') + 
+ this.#extractSearch() + 
+ '</div>'; 
+ 
+ menuWrap.appendChild(menu); 
+ 
+ // Add mobile toggle 
+ const mobileToggle = document.createElement('button'); 
+ mobileToggle.className = 'mobile-menu-toggle'; 
+ mobileToggle.setAttribute('aria-label', 'Open menu'); 
+ mobileToggle.innerHTML = '<i class="fa-regular fa-bars" aria-hidden="true"></i>'; 
+ mobileToggle.addEventListener('click', () => this.openMobileMenu()); 
+ menu.appendChild(mobileToggle); 
+ 
+ // Insert at the beginning of the Fixed container 
+ const fixedContainer = document.querySelector('.Fixed'); 
+ if (fixedContainer && fixedContainer.firstChild) { 
+ fixedContainer.insertBefore(menuWrap, fixedContainer.firstChild); 
+ } else { 
+ document.body.insertBefore(menuWrap, document.body.firstChild); 
+ } 
+ 
+ // Create mobile overlay 
+ this.createMobileOverlay(); 
+ 
+ // Initial updates 
+ this.updateNotificationBadges(); 
+ this.updateReactionsMenu(); 
+ } 
+ 
+ #extractLeftMenus() { 
+ const leftUl = this.#originalMenu.querySelector('ul.left'); 
+ if (!leftUl) return []; 
+ 
+ const menuItems = []; 
+ const menus = leftUl.querySelectorAll('li.menu'); 
+ 
+ menus.forEach((menu, index) => { 
+ // Skip if already processed 
+ if (this.#processedMenus.has(menu)) return; 
+ this.#processedMenus.add(menu); 
+ 
+ const menuHTML = this.#extractSingleMenu(menu, index); 
+ if (menuHTML) { 
+ menuItems.push(menuHTML); 
+ } 
+ }); 
+ 
+ return menuItems; 
+ } 
+ 
+ #extractRightMenus() { 
+ const rightUl = this.#originalMenu.querySelector('ul.right'); 
+ if (!rightUl) return []; 
+ 
+ const menuItems = []; 
+ const menus = rightUl.querySelectorAll('li.menu'); 
+ 
+ menus.forEach((menu, index) => { 
+ if (this.#processedMenus.has(menu)) return; 
+ this.#processedMenus.add(menu); 
+ 
+ const menuHTML = this.#extractRightMenu(menu, index); 
+ if (menuHTML) { 
+ menuItems.push(menuHTML); 
+ } 
+ }); 
+ 
+ return menuItems; 
+ } 
+ 
+ #extractSingleMenu(menuElement, index) { 
+ const link = menuElement.querySelector('a'); 
+ if (!link) return ''; 
+ 
+ const linkText = link.textContent.trim(); 
+ const linkHref = link.getAttribute('href') || '#'; 
+ 
+ // Check for Reactions menu FIRST (st-emoji-notice class) 
+ if (menuElement.classList.contains('st-emoji-notice')) { 
+ return this.#extractReactionsMenu(menuElement); 
+ } 
+ 
+ // Check for Notifications menu (has id starting with "n") 
+ if (link.id && link.id.startsWith('n')) { 
+ return this.#extractNotificationsMenu(menuElement); 
+ } 
+ 
+ // Check for user menu 
+ if (link.classList.contains('user11517378') || menuElement.querySelector('.avatar')) { 
+ return this.#extractUserMenu(menuElement); 
+ } 
+ 
+ // Check for Messenger menu (has id starting with "i") 
+ if (link.id && link.id.startsWith('i')) { 
+ return this.#extractMessengerMenu(menuElement); 
+ } 
+ 
+ if (linkText === 'Topics' || (linkHref.includes('UserCP') && linkHref.includes('CODE=26'))) { 
+ return this.#extractTopicsMenu(menuElement); 
+ } 
+ 
+ if (linkText === 'Administration' || linkHref.includes('forumcommunity.net/?cid=')) { 
+ return this.#extractAdminMenu(menuElement); 
+ } 
+ 
+ if (linkText === 'Moderation' || !linkHref || linkHref === '#') { 
+ return this.#extractModerationMenu(menuElement); 
+ } 
+ 
+ // Default simple menu 
+ return this.#extractSimpleMenu(menuElement); 
+ } 
+ 
  #extractUserMenu(menuElement) { 
-  const link = menuElement.querySelector('a'); 
-  const avatar = link.querySelector('.avatar img'); 
-  const username = link.querySelector('.nick'); 
-
-  const avatarSrc = avatar ? avatar.src : 'https://img.forumfree.net/style_images/default_avatar.png'; 
-  const usernameText = username ? username.textContent.trim() : 'User'; 
-
-  return '<div class="menu-item user-menu">' + 
-   '<button class="menu-trigger user-trigger">' + 
-   '<div class="user-avatar">' + 
-   '<img src="' + this.#escapeHtml(avatarSrc) + '" alt="' + this.#escapeHtml(usernameText) + '" loading="lazy">' + 
-   '</div>' + 
-   '<span class="username">' + this.#escapeHtml(usernameText) + '</span>' + 
-   '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
-   '</button>' + 
-   '<div class="menu-dropdown user-dropdown">' + 
-   '<div class="dropdown-header">' + 
-   '<div class="user-avatar large">' + 
-   '<img src="' + this.#escapeHtml(avatarSrc) + '" alt="' + this.#escapeHtml(usernameText) + '" loading="lazy">' + 
-   '</div>' + 
-   '<div class="user-info">' + 
-   '<div class="username">' + this.#escapeHtml(usernameText) + '</div>' + 
-   '<div class="user-role">Member</div>' + 
-   '</div>' + 
-   '</div>' + 
-   this.#extractUserDropdownItems(menuElement) + 
-   '</div>' + 
-   '</div>'; 
+ const link = menuElement.querySelector('a'); 
+ const avatar = link.querySelector('.avatar img'); 
+ const username = link.querySelector('.nick'); 
+ const dropdownItems = menuElement.querySelectorAll('ul li a'); 
+ 
+ const avatarSrc = avatar ? (avatar.src || avatar.getAttribute('src')) : 
+ 'https://img.forumfree.net/style_images/default_avatar.png'; 
+ const usernameText = username ? username.textContent.trim() : 'User'; 
+ 
+ // Build dropdown items 
+ let dropdownHTML = ''; 
+ let sectionCount = 0; 
+ 
+ dropdownItems.forEach((item, index) => { 
+ const text = item.textContent.trim(); 
+ if (!text || text === '') return; 
+ 
+ // First item is "Notifications from scripts" 
+ if (index === 0) { 
+ dropdownHTML += '<div class="dropdown-section">' + 
+ '<a href="' + (item.getAttribute('href') || 'javascript:void(0)') + '" class="dropdown-item with-icon sn-open-modal">' + 
+ '<i class="fa-regular fa-bell" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</a>' + 
+ '</div>'; 
+ sectionCount++; 
  } 
-
- #extractUserDropdownItems(menuElement) {
-  const dropdownItems = menuElement.querySelectorAll('ul li a');
-  let html = '';
-  
-  dropdownItems.forEach((item, index) => {
-   const text = item.textContent.trim();
-   if (!text) return;
-   
-   const icon = this.#getIconForText(text);
-   const href = item.getAttribute('href') || '#';
-   
-   if (index === 0) {
-    html += '<div class="dropdown-section">';
-   }
-   
-   if (text.toLowerCase().includes('log out')) {
-    html += '<form name="Logout" action="/" method="post" style="display:none">' + 
-     '<input type="hidden" name="act" value="Login">' + 
-     '<input type="hidden" name="CODE" value="03">' + 
-     '</form>' + 
-     '<button onclick="if(document.forms.Logout)document.forms.Logout.submit()" class="dropdown-item with-icon logout">' + 
-     '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
-     '<span>' + this.#escapeHtml(text) + '</span>' + 
-     '</button>';
-   } else {
-    html += '<a href="' + this.#escapeHtml(href) + '" class="dropdown-item with-icon">' + 
-     '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
-     '<span>' + this.#escapeHtml(text) + '</span>' + 
-     '</a>';
-   }
-   
-   if (index === dropdownItems.length - 1) {
-    html += '</div>';
-   }
-  });
-  
-  return html;
- }
-
+ // Profile settings (items 1-7) 
+ else if (index >= 1 && index <= 7) { 
+ if (index === 1) { 
+ dropdownHTML += '<div class="dropdown-section">'; 
+ } 
+ 
+ const icon = this.#getIconForText(text); 
+ dropdownHTML += '<a href="' + this.#escapeHtml(item.getAttribute('href') || '#') + '" class="dropdown-item with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</a>'; 
+ 
+ if (index === 7) { 
+ dropdownHTML += '</div>'; 
+ sectionCount++; 
+ } 
+ } 
+ // Logout (last item) 
+ else if (index === dropdownItems.length - 1 && text.toLowerCase().includes('log out')) { 
+ dropdownHTML += '<div class="dropdown-section">' + 
+ '<form name="Logout" action="/" method="post" style="display:none">' + 
+ '<input type="hidden" name="act" value="Login">' + 
+ '<input type="hidden" name="CODE" value="03">' + 
+ '</form>' + 
+ '<button onclick="if(document.forms.Logout)document.forms.Logout.*submit()" class="dropdown-item with-icon logout">' + 
+ '<i class="fa-regular fa-right-from-bracket" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</button>' + 
+ '</div>'; 
+ sectionCount++; 
+ } 
+ }); 
+ 
+ // Extract user role 
+ let userRole = 'Member'; 
+ const roleElement = this.#originalMenu.querySelector('.amministratore, .moderatore, .founder'); 
+ if (roleElement) { 
+ userRole = roleElement.textContent.trim(); 
+ } 
+ 
+ return '<div class="menu-item user-menu">' + 
+ '<button class="menu-trigger user-trigger">' + 
+ '<div class="user-avatar">' + 
+ '<img src="' + this.#escapeHtml(avatarSrc) + '" alt="' + this.#escapeHtml(usernameText) + '" loading="lazy">' + 
+ '</div>' + 
+ '<span class="username">' + this.#escapeHtml(usernameText) + '</span>' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown user-dropdown">' + 
+ '<div class="dropdown-header">' + 
+ '<div class="user-avatar large">' + 
+ '<img src="' + this.#escapeHtml(avatarSrc) + '" alt="' + this.#escapeHtml(usernameText) + '" loading="lazy">' + 
+ '</div>' + 
+ '<div class="user-info">' + 
+ '<div class="username">' + this.#escapeHtml(usernameText) + '</div>' + 
+ '<div class="user-role">' + this.#escapeHtml(userRole) + '</div>' + 
+ '</div>' + 
+ '</div>' + 
+ dropdownHTML + 
+ '</div>' + 
+ '</div>'; 
+ } 
+ 
  #extractMessengerMenu(menuElement) { 
-  const link = menuElement.querySelector('a'); 
-  const em = link.querySelector('em'); 
-  const count = em ? em.textContent.trim() : ''; 
-  const text = 'Messages'; // Simplified text
-
-  return '<div class="menu-item messenger-menu">' + 
-   '<a href="' + this.#escapeHtml(link.getAttribute('href') || '#') + '" class="menu-link with-icon">' + 
-   '<i class="fa-regular fa-message" aria-hidden="true"></i>' + 
-   '<span>' + this.#escapeHtml(text) + '</span>' + 
-   (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
-   '</a>' + 
-   '</div>'; 
+ const link = menuElement.querySelector('a'); 
+ const em = link.querySelector('em'); 
+ const count = em ? em.textContent.trim() : ''; 
+ const text = link.textContent.replace(count, '').trim(); 
+ 
+ return '<div class="menu-item">' + 
+ '<a href="' + this.#escapeHtml(link.getAttribute('href') || '#') + '" class="menu-link with-icon" id="modern-messenger">' + 
+ '<i class="fa-regular fa-message" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '</a>' + 
+ '</div>'; 
  } 
-
+ 
+ #extractTopicsMenu(menuElement) { 
+ const link = menuElement.querySelector('a'); 
+ const text = link.textContent.trim(); 
+ const dropdownItems = menuElement.querySelectorAll('ul li a'); 
+ 
+ let dropdownHTML = ''; 
+ let hasDivider = false; 
+ 
+ dropdownItems.forEach((item, index) => { 
+ const itemText = item.textContent.trim(); 
+ if (!itemText || itemText === '' || itemText.toLowerCase().includes('topics planned')) return; 
+ 
+ const icon = this.#getIconForText(itemText); 
+ const href = item.getAttribute('href') || '#'; 
+ 
+ // Add divider before "Notification centre" 
+ if (itemText.toLowerCase().includes('notification centre') && !hasDivider) { 
+ dropdownHTML += '<div class="dropdown-divider"></div>'; 
+ hasDivider = true; 
+ } 
+ // Add another divider before "Mark all as read" 
+ else if (itemText.toLowerCase().includes('mark all as read') && hasDivider) { 
+ dropdownHTML += '<div class="dropdown-divider"></div>'; 
+ } 
+ 
+ // Special handling for JavaScript actions 
+ if (href.startsWith('javascript:')) { 
+ const jsCode = href.substring(11); 
+ dropdownHTML += '<button onclick="' + this.#escapeHtml(jsCode) + '" class="dropdown-item with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(itemText) + '</span>' + 
+ '</button>'; 
+ } else { 
+ dropdownHTML += '<a href="' + this.#escapeHtml(href) + '" class="dropdown-item with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(itemText) + '</span>' + 
+ '</a>'; 
+ } 
+ }); 
+ 
+ return '<div class="menu-item">' + 
+ '<button class="menu-trigger">' + 
+ '<i class="fa-regular fa-comments" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown">' + 
+ dropdownHTML + 
+ '</div>' + 
+ '</div>'; 
+ } 
+ 
+ #extractAdminMenu(menuElement) { 
+ const link = menuElement.querySelector('a'); 
+ const text = link.textContent.trim(); 
+ const submenus = menuElement.querySelectorAll('.submenu'); 
+ 
+ // Check if we have 3+ submenus for mega menu 
+ if (submenus.length >= 3) { 
+ const sectionTitles = ['Website', 'Users', 'Graphic']; 
+ let megaColumns = ''; 
+ 
+ submenus.forEach((submenu, index) => { 
+ if (index >= 3) return; // Only take first 3 
+ 
+ const items = submenu.querySelectorAll('ul li a'); 
+ let columnHTML = '<div class="mega-column"><h4>' + sectionTitles[index] + '</h4>'; 
+ 
+ items.forEach(item => { 
+ const itemText = item.textContent.trim(); 
+ if (itemText && itemText !== '') { 
+ columnHTML += '<a href="' + this.#escapeHtml(item.getAttribute('href') || '#') + '" class="dropdown-item">' + 
+ this.#escapeHtml(itemText) + 
+ '</a>'; 
+ } 
+ }); 
+ 
+ columnHTML += '</div>'; 
+ megaColumns += columnHTML; 
+ }); 
+ 
+ // Add Additional features if exists (4th submenu) 
+ if (submenus[3] && submenus[3].classList.contains('alternative')) { 
+ const additionalItems = submenus[3].querySelectorAll('ul li a'); 
+ let additionalHTML = '<div class="mega-column"><h4>Additional</h4>'; 
+ 
+ additionalItems.forEach(item => { 
+ const itemText = item.textContent.trim(); 
+ if (itemText && itemText !== '') { 
+ additionalHTML += '<a href="' + this.#escapeHtml(item.getAttribute('href') || '#') + '" class="dropdown-item">' + 
+ this.#escapeHtml(itemText) + 
+ '</a>'; 
+ } 
+ }); 
+ 
+ additionalHTML += '</div>'; 
+ megaColumns += additionalHTML; 
+ } 
+ 
+ return '<div class="menu-item">' + 
+ '<button class="menu-trigger admin-trigger">' + 
+ '<i class="fa-regular fa-shield-halved" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown mega-dropdown">' + 
+ '<div class="mega-columns">' + 
+ megaColumns + 
+ '</div>' + 
+ '</div>' + 
+ '</div>'; 
+ } 
+ 
+ // Simple dropdown for fewer sections 
+ let dropdownHTML = ''; 
+ const items = menuElement.querySelectorAll('ul li a, .submenu ul li a'); 
+ 
+ items.forEach(item => { 
+ const itemText = item.textContent.trim(); 
+ if (!itemText || itemText === '') return; 
+ 
+ // Skip section headers that aren't links 
+ if (!item.getAttribute('href')) { 
+ dropdownHTML += '<div class="dropdown-divider"></div><strong>' + this.#escapeHtml(itemText) + '</strong>'; 
+ } else { 
+ dropdownHTML += '<a href="' + this.#escapeHtml(item.getAttribute('href') || '#') + '" class="dropdown-item">' + 
+ this.#escapeHtml(itemText) + 
+ '</a>'; 
+ } 
+ }); 
+ 
+ return '<div class="menu-item">' + 
+ '<button class="menu-trigger">' + 
+ '<i class="fa-regular fa-shield-halved" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown">' + 
+ dropdownHTML + 
+ '</div>' + 
+ '</div>'; 
+ } 
+ 
+ #extractModerationMenu(menuElement) { 
+ const link = menuElement.querySelector('a'); 
+ const text = link ? link.textContent.trim() : 'Moderation'; 
+ const items = menuElement.querySelectorAll('ul li a, ul li strong'); 
+ 
+ let dropdownHTML = ''; 
+ let currentSection = ''; 
+ 
+ items.forEach(item => { 
+ const itemText = item.textContent.trim(); 
+ if (!itemText || itemText === '') return; 
+ 
+ if (item.tagName === 'STRONG') { 
+ if (currentSection !== '') { 
+ dropdownHTML += '</div>'; 
+ } 
+ currentSection = itemText; 
+ dropdownHTML += '<div class="dropdown-section">' + 
+ '<strong>' + this.#escapeHtml(itemText) + '</strong>'; 
+ } else { 
+ const href = item.getAttribute('href') || '#'; 
+ if (href.startsWith('javascript:')) { 
+ dropdownHTML += '<button onclick="' + this.#escapeHtml(href.substring(11)) + '" class="dropdown-item">' + 
+ this.#escapeHtml(itemText) + 
+ '</button>'; 
+ } else { 
+ dropdownHTML += '<a href="' + this.#escapeHtml(href) + '" class="dropdown-item">' + 
+ this.#escapeHtml(itemText) + 
+ '</a>'; 
+ } 
+ } 
+ }); 
+ 
+ if (currentSection !== '') { 
+ dropdownHTML += '</div>'; 
+ } 
+ 
+ return '<div class="menu-item">' + 
+ '<button class="menu-trigger">' + 
+ '<i class="fa-regular fa-gavel" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown">' + 
+ dropdownHTML + 
+ '</div>' + 
+ '</div>'; 
+ } 
+ 
+ #extractReactionsMenu(menuElement) { 
+ const link = menuElement.querySelector('a'); 
+ const text = link ? link.textContent.trim() : 'Reactions'; 
+ const counter = menuElement.querySelector('.st-emoji-notice-counter span'); 
+ const count = counter ? counter.textContent.trim() : ''; 
+ 
+ // Check if it has dropdown 
+ const dropdown = menuElement.querySelector('ul'); 
+ let menuHTML = ''; 
+ 
+ if (dropdown) { 
+ // Has dropdown (subscribe/unsubscribe options) 
+ menuHTML = '<div class="menu-item">' + 
+ '<button class="menu-trigger">' + 
+ '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown">' + 
+ this.#extractReactionsDropdownHTML(menuElement) + 
+ '</div>' + 
+ '</div>'; 
+ } else { 
+ // No dropdown, just a link 
+ menuHTML = '<div class="menu-item">' + 
+ '<a href="javascript:void(0)" class="menu-link with-icon" data-toggle="emoji-notice-modal">' + 
+ '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '</a>' + 
+ '</div>'; 
+ } 
+ 
+ return menuHTML; 
+ } 
+ 
+ #extractReactionsDropdownHTML(menuElement) { 
+ const items = menuElement.querySelectorAll('ul li a'); 
+ let html = ''; 
+ 
+ items.forEach(item => { 
+ const text = item.textContent.trim(); 
+ if (!text || text === '') return; 
+ 
+ const href = item.getAttribute('href') || 'javascript:void(0)'; 
+ 
+ html += '<a href="javascript:void(0)" class="dropdown-item with-icon" data-toggle="' + 
+ (text.toLowerCase().includes('unsubscribe') ? 'emoji-notice-subscription' : 'emoji-notice-modal') + 
+ '" data-subscribed="' + (text.toLowerCase().includes('unsubscribe') ? 'true' : 'false') + '">' + 
+ '<i class="fa-regular ' + (text.toLowerCase().includes('notification') ? 'fa-bell' : 'fa-face-smile') + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</a>'; 
+ }); 
+ 
+ return html; 
+ } 
+ 
  #extractNotificationsMenu(menuElement) { 
-  const link = menuElement.querySelector('a'); 
-  const em = link.querySelector('em'); 
-  const count = em ? em.textContent.trim() : ''; 
-  const text = 'Alerts'; // Simplified text
-
-  return '<div class="menu-item notifications-menu">' + 
-   '<a href="' + this.#escapeHtml(link.getAttribute('href') || '#notifications') + '" class="menu-link with-icon">' + 
-   '<i class="fa-regular fa-bell" aria-hidden="true"></i>' + 
-   '<span>' + this.#escapeHtml(text) + '</span>' + 
-   (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
-   '</a>' + 
-   '</div>'; 
+ const link = menuElement.querySelector('a'); 
+ const em = link.querySelector('em'); 
+ const count = em ? em.textContent.trim() : ''; 
+ const text = link.textContent.replace(count, '').trim(); 
+ 
+ // Check if it's just a link or has dropdown 
+ const dropdown = menuElement.querySelector('ul'); 
+ let menuHTML = ''; 
+ 
+ if (dropdown) { 
+ // Has dropdown 
+ menuHTML = '<div class="menu-item">' + 
+ '<button class="menu-trigger">' + 
+ '<i class="fa-regular fa-bell" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown">' + 
+ this.#extractNotificationsDropdownHTML(menuElement) + 
+ '</div>' + 
+ '</div>'; 
+ } else { 
+ // Just a link 
+ menuHTML = '<div class="menu-item">' + 
+ '<a href="' + this.#escapeHtml(link.getAttribute('href') || '#notifications') + '" class="menu-link with-icon">' + 
+ '<i class="fa-regular fa-bell" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '</a>' + 
+ '</div>'; 
  } 
-
+ 
+ return menuHTML; 
+ } 
+ 
+ #extractNotificationsDropdownHTML(menuElement) { 
+ const items = menuElement.querySelectorAll('ul li a'); 
+ let html = ''; 
+ 
+ items.forEach(item => { 
+ const text = item.textContent.trim(); 
+ if (!text || text === '') return; 
+ 
+ html += '<a href="' + this.#escapeHtml(item.getAttribute('href') || '#') + '" class="dropdown-item with-icon">' + 
+ '<i class="fa-regular fa-bell" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</a>'; 
+ }); 
+ 
+ return html; 
+ } 
+ 
+ #extractRightMenu(menuElement, index) { 
+ const link = menuElement.querySelector('a'); 
+ const iconSpan = link ? link.querySelector('span[style*="background"]') : null; 
+ 
+ if (!link || !iconSpan) { 
+ return this.#extractSimpleMenu(menuElement); 
+ } 
+ 
+ // Check which icon menu this is based on background image 
+ const bgImage = iconSpan.style.backgroundImage || ''; 
+ let iconClass = 'fa-gear'; // default 
+ 
+ if (bgImage.includes('fc-icon.png')) { 
+ iconClass = 'fa-gear'; 
+ } else if (bgImage.includes('icon_rss.png')) { 
+ iconClass = 'fa-rss'; 
+ } else if (bgImage.includes('icon_members.png')) { 
+ iconClass = 'fa-users'; 
+ } else if (bgImage.includes('icon_help.png')) { 
+ iconClass = 'fa-circle-question'; 
+ } 
+ 
+ const dropdownItems = menuElement.querySelectorAll('ul li a'); 
+ let dropdownHTML = ''; 
+ 
+ dropdownItems.forEach((item, itemIndex) => { 
+ const itemText = item.textContent.trim(); 
+ if (!itemText || itemText === '') return; 
+ 
+ // Add dividers at specific positions 
+ if (itemIndex === 0 || itemIndex === 3 || itemIndex === 6 || itemIndex === 10) { 
+ dropdownHTML += '<div class="dropdown-divider"></div>'; 
+ } 
+ 
+ // Special handling for form items 
+ if (item.querySelector('form')) { 
+ const form = item.querySelector('form'); 
+ dropdownHTML += '<form action="' + this.#escapeHtml(form.getAttribute('action') || '#') + 
+ '" method="' + this.#escapeHtml(form.getAttribute('method') || 'post') + 
+ '" class="dropdown-item with-icon">' + 
+ form.innerHTML + 
+ '<i class="fa-regular ' + this.#getIconForText(itemText) + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(itemText) + '</span>' + 
+ '</form>'; 
+ } else { 
+ dropdownHTML += '<a href="' + this.#escapeHtml(item.getAttribute('href') || '#') + '" class="dropdown-item with-icon">' + 
+ '<i class="fa-regular ' + this.#getIconForText(itemText) + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(itemText) + '</span>' + 
+ '</a>'; 
+ } 
+ }); 
+ 
+ return '<div class="menu-item icon-menu">' + 
+ '<button class="menu-trigger icon-trigger">' + 
+ '<i class="fa-regular ' + iconClass + '" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="menu-dropdown">' + 
+ dropdownHTML + 
+ '</div>' + 
+ '</div>'; 
+ } 
+ 
+ #extractSimpleMenu(menuElement) { 
+ const link = menuElement.querySelector('a'); 
+ if (!link) return ''; 
+ 
+ const text = link.textContent.trim(); 
+ const href = link.getAttribute('href') || '#'; 
+ const icon = this.#getIconForText(text); 
+ 
+ return '<div class="menu-item">' + 
+ '<a href="' + this.#escapeHtml(href) + '" class="menu-link with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</a>' + 
+ '</div>'; 
+ } 
+ 
  #extractSearch() { 
-  const searchForm = this.#originalMenu.querySelector('form[name="search"]'); 
-  if (!searchForm) return ''; 
-
-  const searchInput = searchForm.querySelector('input[name="q"]'); 
-  const siteSearch = searchForm.querySelector('input[name="as_sitesearch"]'); 
-
-  const placeholder = searchInput ? (searchInput.value === 'Search' ? 'Search...' : searchInput.value) : 'Search...'; 
-  const siteValue = siteSearch ? siteSearch.value : window.location.hostname; 
-
-  return '<div class="menu-item search-item">' + 
-   '<form class="modern-search" name="search" action="' + this.#escapeHtml(searchForm.getAttribute('action')) + 
-   '" method="' + this.#escapeHtml(searchForm.getAttribute('method') || 'get') + '">' + 
-   '<div class="search-container">' + 
-   '<i class="fa-regular fa-magnifying-glass" aria-hidden="true"></i>' + 
-   '<input type="text" name="q" placeholder="' + this.#escapeHtml(placeholder) + '" class="search-input" value="">' + 
-   '<input type="hidden" name="as_sitesearch" value="' + this.#escapeHtml(siteValue) + '">' + 
-   '</div>' + 
-   '</form>' + 
-   '</div>'; 
+ const searchForm = this.#originalMenu.querySelector('form[name="search"]'); 
+ if (!searchForm) return ''; 
+ 
+ const searchInput = searchForm.querySelector('input[name="q"]'); 
+ const siteSearch = searchForm.querySelector('input[name="as_sitesearch"]'); 
+ 
+ const placeholder = searchInput ? (searchInput.value === 'Search' ? 'Search...' : searchInput.value) : 'Search...'; 
+ const siteValue = siteSearch ? siteSearch.value : window.location.hostname; 
+ 
+ return '<div class="menu-item search-item">' + 
+ '<form class="modern-search" name="search" action="' + this.#escapeHtml(searchForm.getAttribute('action')) + 
+ '" method="' + this.#escapeHtml(searchForm.getAttribute('method') || 'get') + '">' + 
+ '<div class="search-container">' + 
+ '<i class="fa-regular fa-magnifying-glass" aria-hidden="true"></i>' + 
+ '<input type="text" name="q" placeholder="' + this.#escapeHtml(placeholder) + '" class="search-input" value="">' + 
+ '<input type="hidden" name="as_sitesearch" value="' + this.#escapeHtml(siteValue) + '">' + 
+ '</div>' + 
+ '</form>' + 
+ '</div>'; 
  } 
-
- // ============================================
- // THEME SWITCHER
- // ============================================
-
- #getThemeSwitcherHTML() {
-  return `
-   <div class="theme-switcher-header">
-    <i class="fa-regular fa-palette" aria-hidden="true"></i>
-    <span>Theme</span>
-   </div>
-   <div class="theme-switcher-container">
-    <button class="theme-switcher-item" data-theme="auto" type="button">
-     <i class="fa-regular fa-circle-half-stroke" aria-hidden="true"></i>
-     <span>Auto</span>
-    </button>
-    <button class="theme-switcher-item" data-theme="light" type="button">
-     <i class="fa-regular fa-sun" aria-hidden="true"></i>
-     <span>Light</span>
-    </button>
-    <button class="theme-switcher-item" data-theme="dark" type="button">
-     <i class="fa-regular fa-moon" aria-hidden="true"></i>
-     <span>Dark</span>
-    </button>
-   </div>`;
- }
-
- #initializeTheme() {
-  this.#loadTheme();
-  
-  // Listen for system theme changes
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-   const currentTheme = localStorage.getItem('forum-theme');
-   if (!currentTheme || currentTheme === 'auto') {
-    this.#setTheme('auto');
-   }
-  });
-
-  // Set up event listeners for theme switcher
-  document.addEventListener('click', (e) => {
-   const themeItem = e.target.closest('.theme-switcher-item');
-   if (themeItem) {
-    e.preventDefault();
-    const theme = themeItem.getAttribute('data-theme');
-    this.#setTheme(theme);
-   }
-  });
- }
-
- #setTheme(theme) {
-  const html = document.documentElement;
-  const savedTheme = theme === 'auto' ? null : theme;
-
-  if (theme === 'auto') {
-   html.removeAttribute('data-theme');
-   localStorage.removeItem('forum-theme');
-   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-   if (prefersDark) {
-    html.setAttribute('data-theme', 'dark');
-   }
-  } else {
-   html.setAttribute('data-theme', theme);
-   localStorage.setItem('forum-theme', theme);
-  }
-
-  this.#updateActiveTheme(theme);
-  window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
- }
-
- #loadTheme() {
-  const savedTheme = localStorage.getItem('forum-theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  
-  let theme = savedTheme || 'auto';
-  
-  if (theme === 'auto') {
-   document.documentElement.removeAttribute('data-theme');
-   if (prefersDark) {
-    document.documentElement.setAttribute('data-theme', 'dark');
-   }
-  } else {
-   document.documentElement.setAttribute('data-theme', theme);
-  }
-
-  setTimeout(() => {
-   this.#updateActiveTheme(theme);
-  }, 100);
- }
-
- #updateActiveTheme(theme) {
-  document.querySelectorAll('.theme-switcher-item').forEach(item => {
-   item.classList.remove('active');
-   if (item.getAttribute('data-theme') === theme) {
-    item.classList.add('active');
-   }
-  });
- }
-
- // ============================================
- // RESPONSIVE ADJUSTMENTS
- // ============================================
-
- #applyResponsiveAdjustments() {
-  this.#checkScreenWidth();
-  window.addEventListener('resize', () => this.#checkScreenWidth());
- }
-
- #checkScreenWidth() {
-  const width = window.innerWidth;
-  const hamburgerText = document.querySelector('.hamburger-text');
-  
-  if (hamburgerText) {
-   if (width <= 1024) {
-    hamburgerText.style.display = 'none';
-    document.querySelector('.hamburger-trigger').style.padding = '10px';
-    document.querySelector('.hamburger-trigger').style.minWidth = '40px';
-   } else {
-    hamburgerText.style.display = 'inline';
-    document.querySelector('.hamburger-trigger').style.padding = '10px 16px';
-    document.querySelector('.hamburger-trigger').style.minWidth = 'auto';
-   }
-  }
-  
-  // Hide text on smaller screens
-  const menuTexts = document.querySelectorAll('.menu-link span, .menu-trigger.user-trigger .username');
-  menuTexts.forEach(span => {
-   if (width <= 768) {
-    span.style.display = 'none';
-   } else {
-    span.style.display = 'inline';
-   }
-  });
- }
-
- // ============================================
- // MOBILE MENU
- // ============================================
-
+ 
+ #getIconForText(text) { 
+ // Check exact matches first 
+ for (const [key, icon] of Object.entries(this.#iconMappings)) { 
+ if (text === key) { 
+ return icon; 
+ } 
+ } 
+ 
+ // Check partial matches 
+ const lowerText = text.toLowerCase(); 
+ for (const [key, icon] of Object.entries(this.#iconMappings)) { 
+ if (lowerText.includes(key.toLowerCase())) { 
+ return icon; 
+ } 
+ } 
+ 
+ // Fallback based on common patterns 
+ if (lowerText.includes('edit') || lowerText.includes('profile')) return 'fa-user-pen'; 
+ if (lowerText.includes('avatar')) return 'fa-image'; 
+ if (lowerText.includes('signature')) return 'fa-signature'; 
+ if (lowerText.includes('setting')) return 'fa-sliders-h'; 
+ if (lowerText.includes('email')) return 'fa-envelope'; 
+ if (lowerText.includes('password')) return 'fa-key'; 
+ if (lowerText.includes('logout')) return 'fa-right-from-bracket'; 
+ if (lowerText.includes('message')) return 'fa-message'; 
+ if (lowerText.includes('topic')) return 'fa-comments'; 
+ if (lowerText.includes('active')) return 'fa-bolt'; 
+ if (lowerText.includes('popular')) return 'fa-fire'; 
+ if (lowerText.includes('subscription')) return 'fa-bookmark'; 
+ if (lowerText.includes('notification')) return 'fa-bell'; 
+ if (lowerText.includes('read')) return 'fa-check-double'; 
+ if (lowerText.includes('post')) return 'fa-comment'; 
+ if (lowerText.includes('admin')) return 'fa-shield-halved'; 
+ if (lowerText.includes('website')) return 'fa-globe'; 
+ if (lowerText.includes('user')) return 'fa-users'; 
+ if (lowerText.includes('graphic')) return 'fa-palette'; 
+ if (lowerText.includes('moderation')) return 'fa-gavel'; 
+ if (lowerText.includes('search')) return 'fa-magnifying-glass'; 
+ if (lowerText.includes('create')) return 'fa-plus'; 
+ if (lowerText.includes('home')) return 'fa-house'; 
+ if (lowerText.includes('android')) return 'fa-android'; 
+ if (lowerText.includes('mobile')) return 'fa-mobile'; 
+ if (lowerText.includes('clock') || lowerText.includes('last')) return 'fa-clock-rotate-left'; 
+ if (lowerText.includes('news')) return 'fa-newspaper'; 
+ if (lowerText.includes('top')) return 'fa-trophy'; 
+ if (lowerText.includes('blog')) return 'fa-blog'; 
+ if (lowerText.includes('member')) return 'fa-users'; 
+ if (lowerText.includes('help')) return 'fa-circle-question'; 
+ if (lowerText.includes('rss')) return 'fa-rss'; 
+ if (lowerText.includes('feed')) return 'fa-rss'; 
+ 
+ return 'fa-circle'; 
+ } 
+ 
  createMobileOverlay() { 
-  const overlay = document.createElement('div'); 
-  overlay.className = 'mobile-menu-overlay'; 
-
-  const container = document.createElement('div'); 
-  container.className = 'mobile-menu-container'; 
-
-  container.innerHTML = this.#buildMobileMenuHTML(); 
-
-  overlay.appendChild(container); 
-  document.body.appendChild(overlay); 
-
-  this.#setupMobileMenuInteractions(overlay, container); 
+ const overlay = document.createElement('div'); 
+ overlay.className = 'mobile-menu-overlay'; 
+ 
+ const container = document.createElement('div'); 
+ container.className = 'mobile-menu-container'; 
+ 
+ // Build mobile menu from original structure 
+ container.innerHTML = this.#buildMobileMenuHTML(); 
+ 
+ overlay.appendChild(container); 
+ document.body.appendChild(overlay); 
+ 
+ // Setup mobile menu interactions 
+ this.#setupMobileMenuInteractions(overlay, container); 
  } 
-
+ 
  #buildMobileMenuHTML() { 
-  const leftUl = this.#originalMenu.querySelector('ul.left'); 
-  
-  let html = '<div class="mobile-menu-header">' + 
-   '<h3>Menu</h3>' + 
-   '<button class="mobile-menu-close">' + 
-   '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' + 
-   '</button>' + 
-   '</div>'; 
-
-  // User info
-  const userMenu = leftUl ? leftUl.querySelector('.menu:first-child') : null; 
-  if (userMenu) { 
-   const link = userMenu.querySelector('a'); 
-   const avatar = link.querySelector('.avatar img'); 
-   const username = link.querySelector('.nick'); 
-   const avatarSrc = avatar ? avatar.src : 'https://img.forumfree.net/style_images/default_avatar.png'; 
-   const usernameText = username ? username.textContent.trim() : 'User'; 
-
-   html += '<div class="mobile-user-info">' + 
-    '<div class="user-avatar large">' + 
-    '<img src="' + this.#escapeHtml(avatarSrc) + '" alt="' + this.#escapeHtml(usernameText) + '">' + 
-    '</div>' + 
-    '<div class="user-info">' + 
-    '<div class="username">' + this.#escapeHtml(usernameText) + '</div>' + 
-    '<div class="user-role">Member</div>' + 
-    '</div>' + 
-    '</div>'; 
-  } 
-
-  html += '<div class="mobile-menu-content">' + 
-   this.#buildHamburgerSections() + 
-   '</div>'; 
-
-  return html; 
+ const leftUl = this.#originalMenu.querySelector('ul.left'); 
+ const rightUl = this.#originalMenu.querySelector('ul.right'); 
+ 
+ let html = '<div class="mobile-menu-header">' + 
+ '<h3>Menu</h3>' + 
+ '<button class="mobile-menu-close">' + 
+ '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '</div>'; 
+ 
+ // User info section 
+ const userMenu = leftUl ? leftUl.querySelector('.menu:first-child') : null; 
+ if (userMenu) { 
+ const link = userMenu.querySelector('a'); 
+ const avatar = link ? link.querySelector('.avatar img') : null; 
+ const username = link ? link.querySelector('.nick') : null; 
+ 
+ const avatarSrc = avatar ? (avatar.src || avatar.getAttribute('src')) : 
+ 'https://img.forumfree.net/style_images/default_avatar.png'; 
+ const usernameText = username ? username.textContent.trim() : 'User'; 
+ 
+ html += '<div class="mobile-user-info">' + 
+ '<div class="user-avatar large">' + 
+ '<img src="' + this.#escapeHtml(avatarSrc) + '" alt="' + this.#escapeHtml(usernameText) + '" loading="lazy">' + 
+ '</div>' + 
+ '<div class="user-info">' + 
+ '<div class="username">' + this.#escapeHtml(usernameText) + '</div>' + 
+ '<div class="user-role">Member</div>' + 
+ '</div>' + 
+ '</div>'; 
  } 
-
+ 
+ // Search 
+ const searchForm = this.#originalMenu.querySelector('form[name="search"]'); 
+ if (searchForm) { 
+ const searchInput = searchForm.querySelector('input[name="q"]'); 
+ const siteSearch = searchForm.querySelector('input[name="as_sitesearch"]'); 
+ 
+ const placeholder = searchInput ? (searchInput.value === 'Search' ? 'Search...' : searchInput.value) : 'Search...'; 
+ const siteValue = siteSearch ? siteSearch.value : window.location.hostname; 
+ 
+ html += '<div class="mobile-search">' + 
+ '<form class="modern-search" name="search" action="' + this.#escapeHtml(searchForm.getAttribute('action')) + 
+ '" method="' + this.#escapeHtml(searchForm.getAttribute('method') || 'get') + '">' + 
+ '<div class="search-container">' + 
+ '<i class="fa-regular fa-magnifying-glass" aria-hidden="true"></i>' + 
+ '<input type="text" name="q" placeholder="' + this.#escapeHtml(placeholder) + '" class="search-input">' + 
+ '<input type="hidden" name="as_sitesearch" value="' + this.#escapeHtml(siteValue) + '">' + 
+ '</div>' + 
+ '</form>' + 
+ '</div>'; 
+ } 
+ 
+ // Menu content 
+ html += '<div class="mobile-menu-content">'; 
+ 
+ // Extract left menu items 
+ if (leftUl) { 
+ const menus = leftUl.querySelectorAll('li.menu'); 
+ menus.forEach((menu, index) => { 
+ const link = menu.querySelector('a'); 
+ if (!link) return; 
+ 
+ const text = link.textContent.trim(); 
+ const href = link.getAttribute('href') || '#'; 
+ 
+ // Special handling for each menu type 
+ let icon = 'fa-circle'; 
+ let hasDropdown = menu.querySelector('ul') !== null; 
+ let dropdownId = 'mobile-dropdown-' + index; 
+ 
+ // Determine icon and special handling 
+ if (menu.classList.contains('st-emoji-notice')) { 
+ icon = 'fa-face-smile'; 
+ } else if (link.id && link.id.startsWith('n')) { 
+ icon = 'fa-bell'; 
+ } else if (link.id && link.id.startsWith('i')) { 
+ icon = 'fa-message'; 
+ } else if (menu.querySelector('.avatar')) { 
+ icon = 'fa-user'; 
+ } else if (text === 'Topics') { 
+ icon = 'fa-comments'; 
+ } else if (text === 'Administration') { 
+ icon = 'fa-shield-halved'; 
+ } else if (text === 'Moderation') { 
+ icon = 'fa-gavel'; 
+ } 
+ 
+ // Check for notification count 
+ let count = ''; 
+ if (link.id && link.id.startsWith('i')) { 
+ const em = link.querySelector('em'); 
+ count = em ? em.textContent.trim() : ''; 
+ } else if (link.id && link.id.startsWith('n')) { 
+ const em = link.querySelector('em'); 
+ count = em ? em.textContent.trim() : ''; 
+ } else if (menu.classList.contains('st-emoji-notice')) { 
+ const counter = menu.querySelector('.st-emoji-notice-counter span'); 
+ count = counter ? counter.textContent.trim() : ''; 
+ } 
+ 
+ if (hasDropdown) { 
+ html += '<div class="mobile-menu-item">' + 
+ '<button class="mobile-menu-trigger" data-dropdown="' + dropdownId + '">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="mobile-dropdown" id="' + dropdownId + '">' + 
+ this.#extractMobileDropdownHTML(menu) + 
+ '</div>' + 
+ '</div>'; 
+ } else { 
+ html += '<div class="mobile-menu-item">' + 
+ '<a href="' + this.#escapeHtml(href) + '" class="mobile-menu-link with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ (count && count !== '0' ? '<span class="notification-badge">' + count + '</span>' : '') + 
+ '</a>' + 
+ '</div>'; 
+ } 
+ }); 
+ } 
+ 
+ // Extract right menu items (icon menus) 
+ if (rightUl) { 
+ const menus = rightUl.querySelectorAll('li.menu'); 
+ menus.forEach((menu, index) => { 
+ const link = menu.querySelector('a'); 
+ if (!link) return; 
+ 
+ const text = link.textContent.trim(); 
+ const iconSpan = link.querySelector('span[style*="background"]'); 
+ let iconClass = 'fa-gear'; 
+ 
+ if (iconSpan) { 
+ const bgImage = iconSpan.style.backgroundImage || ''; 
+ if (bgImage.includes('fc-icon.png')) iconClass = 'fa-gear'; 
+ else if (bgImage.includes('icon_rss.png')) iconClass = 'fa-rss'; 
+ else if (bgImage.includes('icon_members.png')) iconClass = 'fa-users'; 
+ else if (bgImage.includes('icon_help.png')) iconClass = 'fa-circle-question'; 
+ } 
+ 
+ const dropdownId = 'mobile-dropdown-right-' + index; 
+ const hasDropdown = menu.querySelector('ul') !== null; 
+ 
+ if (hasDropdown) { 
+ html += '<div class="mobile-menu-item">' + 
+ '<button class="mobile-menu-trigger" data-dropdown="' + dropdownId + '">' + 
+ '<i class="fa-regular ' + iconClass + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text || 'Tools') + '</span>' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '<div class="mobile-dropdown" id="' + dropdownId + '">' + 
+ this.#extractMobileDropdownHTML(menu) + 
+ '</div>' + 
+ '</div>'; 
+ } else { 
+ html += '<div class="mobile-menu-item">' + 
+ '<a href="' + this.#escapeHtml(link.getAttribute('href') || '#') + '" class="mobile-menu-link with-icon">' + 
+ '<i class="fa-regular ' + iconClass + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text || 'Tools') + '</span>' + 
+ '</a>' + 
+ '</div>'; 
+ } 
+ }); 
+ } 
+ 
+ html += '</div>'; 
+ return html; 
+ } 
+ 
+ #extractMobileDropdownHTML(menuElement) { 
+ const items = menuElement.querySelectorAll('ul li a'); 
+ let html = ''; 
+ 
+ items.forEach(item => { 
+ const text = item.textContent.trim(); 
+ if (!text || text === '') return; 
+ 
+ const href = item.getAttribute('href') || '#'; 
+ const icon = this.#getIconForText(text); 
+ 
+ if (href.startsWith('javascript:')) { 
+ html += '<button onclick="' + this.#escapeHtml(href.substring(11)) + '" class="mobile-dropdown-item with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</button>'; 
+ } else { 
+ html += '<a href="' + this.#escapeHtml(href) + '" class="mobile-dropdown-item with-icon">' + 
+ '<i class="fa-regular ' + icon + '" aria-hidden="true"></i>' + 
+ '<span>' + this.#escapeHtml(text) + '</span>' + 
+ '</a>'; 
+ } 
+ }); 
+ 
+ return html; 
+ } 
+ 
  #setupMobileMenuInteractions(overlay, container) { 
-  overlay.addEventListener('click', (e) => { 
-   if (e.target === overlay) { 
-    this.closeMobileMenu(); 
-   } 
-  }); 
-
-  const closeBtn = container.querySelector('.mobile-menu-close'); 
-  if (closeBtn) { 
-   closeBtn.addEventListener('click', () => this.closeMobileMenu()); 
-  } 
+ // Close on overlay click 
+ overlay.addEventListener('click', (e) => { 
+ if (e.target === overlay) { 
+ this.closeMobileMenu(); 
  } 
-
+ }); 
+ 
+ // Close button 
+ const closeBtn = container.querySelector('.mobile-menu-close'); 
+ if (closeBtn) { 
+ closeBtn.addEventListener('click', () => this.closeMobileMenu()); 
+ } 
+ 
+ // Mobile dropdown toggles 
+ container.querySelectorAll('.mobile-menu-trigger').forEach(trigger => { 
+ trigger.addEventListener('click', () => { 
+ const dropdownId = trigger.getAttribute('data-dropdown'); 
+ const dropdown = document.getElementById(dropdownId); 
+ const isActive = trigger.classList.contains('active'); 
+ 
+ // Close all other dropdowns 
+ container.querySelectorAll('.mobile-dropdown').forEach(d => { 
+ d.classList.remove('active'); 
+ }); 
+ container.querySelectorAll('.mobile-menu-trigger').forEach(t => { 
+ t.classList.remove('active'); 
+ }); 
+ 
+ // Toggle current 
+ if (!isActive && dropdown) { 
+ trigger.classList.add('active'); 
+ dropdown.classList.add('active'); 
+ } 
+ }); 
+ }); 
+ } 
+ 
  updateNotificationBadges() { 
-  if (!this.#originalMenu) return; 
-
-  // Messenger notifications
-  const messengerLink = this.#originalMenu.querySelector('a[id^="i"]'); 
-  if (messengerLink) { 
-   const messengerEm = messengerLink.querySelector('em'); 
-   if (messengerEm) { 
-    const count = messengerEm.textContent.trim(); 
-    const badge = document.querySelector('.messenger-menu .notification-badge') || 
-     (() => {
-      const span = document.createElement('span');
-      span.className = 'notification-badge';
-      document.querySelector('.messenger-menu .menu-link').appendChild(span);
-      return span;
-     })();
-    
-    badge.textContent = count; 
-    badge.style.display = count && count !== '0' ? 'flex' : 'none'; 
-   } 
-  } 
-
-  // Notification badges
-  const notifyLink = this.#originalMenu.querySelector('a[id^="n"]'); 
-  if (notifyLink) { 
-   const notifyEm = notifyLink.querySelector('em'); 
-   if (notifyEm) { 
-    const count = notifyEm.textContent.trim(); 
-    const badge = document.querySelector('.notifications-menu .notification-badge') || 
-     (() => {
-      const span = document.createElement('span');
-      span.className = 'notification-badge';
-      document.querySelector('.notifications-menu .menu-link').appendChild(span);
-      return span;
-     })();
-    
-    badge.textContent = count; 
-    badge.style.display = count && count !== '0' ? 'flex' : 'none'; 
-   } 
-  } 
+ if (!this.#originalMenu) return; 
+ 
+ // Messenger notifications 
+ const messengerLink = this.#originalMenu.querySelector('a[id^="i"]'); 
+ if (messengerLink) { 
+ const messengerEm = messengerLink.querySelector('em'); 
+ if (messengerEm) { 
+ const count = messengerEm.textContent.trim(); 
+ let badge = document.querySelector('.menu-link#modern-messenger .notification-badge'); 
+ 
+ if (!badge && count && count !== '0') { 
+ badge = document.createElement('span'); 
+ badge.className = 'notification-badge'; 
+ const messengerElement = document.querySelector('.menu-link#modern-messenger'); 
+ if (messengerElement) { 
+ messengerElement.appendChild(badge); 
  } 
-
+ } 
+ 
+ if (badge) { 
+ badge.textContent = count; 
+ badge.style.display = count && count !== '0' ? 'flex' : 'none'; 
+ } 
+ } 
+ } 
+ 
+ // Update mobile menu badges too 
+ const mobileMessenger = document.querySelector('.mobile-menu-link[href*="Msg"]'); 
+ if (mobileMessenger && messengerLink) { 
+ const messengerEm = messengerLink.querySelector('em'); 
+ if (messengerEm) { 
+ const count = messengerEm.textContent.trim(); 
+ let mobileBadge = mobileMessenger.querySelector('.notification-badge'); 
+ 
+ if (!mobileBadge && count && count !== '0') { 
+ mobileBadge = document.createElement('span'); 
+ mobileBadge.className = 'notification-badge'; 
+ mobileMessenger.appendChild(mobileBadge); 
+ } 
+ 
+ if (mobileBadge) { 
+ mobileBadge.textContent = count; 
+ mobileBadge.style.display = count && count !== '0' ? 'flex' : 'none'; 
+ } 
+ } 
+ } 
+ } 
+ 
  updateReactionsMenu() { 
-  const emojiNotice = document.querySelector('.st-emoji-notice'); 
-  if (!emojiNotice) return; 
-
-  const counter = emojiNotice.querySelector('.st-emoji-notice-counter span'); 
-  const count = counter ? counter.textContent.trim() : ''; 
-
-  // Could add reactions badge if needed
+ const emojiNotice = document.querySelector('.st-emoji-notice'); 
+ if (!emojiNotice) return; 
+ 
+ const counter = emojiNotice.querySelector('.st-emoji-notice-counter span'); 
+ const count = counter ? counter.textContent.trim() : ''; 
+ 
+ // Update reactions badge in modern menu 
+ const reactionsLink = document.querySelector('.menu-link[data-toggle="emoji-notice-modal"]'); 
+ if (reactionsLink) { 
+ let badge = reactionsLink.querySelector('.notification-badge'); 
+ 
+ if (!badge && count && count !== '0') { 
+ badge = document.createElement('span'); 
+ badge.className = 'notification-badge'; 
+ reactionsLink.appendChild(badge); 
  } 
-
+ 
+ if (badge) { 
+ badge.textContent = count; 
+ badge.style.display = count && count !== '0' ? 'flex' : 'none'; 
+ } 
+ } 
+ } 
+ 
  setupEventListeners() { 
-  // Close dropdowns when clicking outside
-  document.addEventListener('click', (e) => { 
-   if (!e.target.closest('.menu-item')) { 
-    document.querySelectorAll('.menu-dropdown').forEach(dropdown => { 
-     dropdown.style.opacity = '0'; 
-     dropdown.style.visibility = 'hidden'; 
-    }); 
-   } 
-  }); 
-
-  // Escape key to close mobile menu
-  document.addEventListener('keydown', (e) => { 
-   if (e.key === 'Escape' && this.#mobileState) { 
-    this.closeMobileMenu(); 
-   } 
-  }); 
-
-  // Close mobile menu on resize to desktop
-  window.addEventListener('resize', () => { 
-   if (window.innerWidth > 768 && this.#mobileState) { 
-    this.closeMobileMenu(); 
-   }
-   this.#checkScreenWidth();
-  }); 
+ // Close dropdowns when clicking outside 
+ document.addEventListener('click', (e) => { 
+ if (!e.target.closest('.menu-item')) { 
+ document.querySelectorAll('.menu-dropdown').forEach(dropdown => { 
+ dropdown.style.opacity = '0'; 
+ dropdown.style.visibility = 'hidden'; 
+ }); 
  } 
-
+ }); 
+ 
+ // Escape key to close mobile menu 
+ document.addEventListener('keydown', (e) => { 
+ if (e.key === 'Escape' && this.#mobileState) { 
+ this.closeMobileMenu(); 
+ } 
+ }); 
+ 
+ // Close mobile menu on resize to desktop 
+ window.addEventListener('resize', () => { 
+ if (window.innerWidth > 768 && this.#mobileState) { 
+ this.closeMobileMenu(); 
+ } 
+ }); 
+ } 
+ 
  openMobileMenu() { 
-  this.#mobileState = true; 
-  const overlay = document.querySelector('.mobile-menu-overlay'); 
-  if (overlay) { 
-   overlay.classList.add('active'); 
-  } 
-  document.body.style.overflow = 'hidden'; 
+ this.#mobileState = true; 
+ const overlay = document.querySelector('.mobile-menu-overlay'); 
+ if (overlay) { 
+ overlay.classList.add('active'); 
  } 
-
+ document.body.style.overflow = 'hidden'; 
+ } 
+ 
  closeMobileMenu() { 
-  this.#mobileState = false; 
-  const overlay = document.querySelector('.mobile-menu-overlay'); 
-  if (overlay) { 
-   overlay.classList.remove('active'); 
-  } 
-  document.body.style.overflow = ''; 
+ this.#mobileState = false; 
+ const overlay = document.querySelector('.mobile-menu-overlay'); 
+ if (overlay) { 
+ overlay.classList.remove('active'); 
  } 
-
+ document.body.style.overflow = ''; 
+ 
+ // Close all mobile dropdowns 
+ document.querySelectorAll('.mobile-dropdown').forEach(d => { 
+ d.classList.remove('active'); 
+ }); 
+ document.querySelectorAll('.mobile-menu-trigger').forEach(t => { 
+ t.classList.remove('active'); 
+ }); 
+ } 
+ 
  #escapeHtml(text) { 
-  if (typeof text !== 'string') return text; 
-  const div = document.createElement('div'); 
-  div.textContent = text; 
-  return div.innerHTML; 
+ if (typeof text !== 'string') return text; 
+ const div = document.createElement('div'); 
+ div.textContent = text; 
+ return div.innerHTML; 
  } 
-
+ 
  destroy() { 
-  if (this.#observerId && globalThis.forumObserver) { 
-   globalThis.forumObserver.unregister(this.#observerId); 
-  } 
-
-  if (this.#modernMenuWrap && this.#modernMenuWrap.parentNode) { 
-   this.#modernMenuWrap.parentNode.removeChild(this.#modernMenuWrap); 
-  } 
-
-  const overlay = document.querySelector('.mobile-menu-overlay'); 
-  if (overlay && overlay.parentNode) { 
-   overlay.parentNode.removeChild(overlay); 
-  } 
-
-  if (this.#originalMenu) { 
-   this.#originalMenu.style.display = ''; 
-  } 
+ if (this.#observerId && globalThis.forumObserver) { 
+ globalThis.forumObserver.unregister(this.#observerId); 
+ } 
+ 
+ // Remove modern menu 
+ if (this.#modernMenuWrap && this.#modernMenuWrap.parentNode) { 
+ this.#modernMenuWrap.parentNode.removeChild(this.#modernMenuWrap); 
+ } 
+ 
+ // Remove mobile overlay 
+ const overlay = document.querySelector('.mobile-menu-overlay'); 
+ if (overlay && overlay.parentNode) { 
+ overlay.parentNode.removeChild(overlay); 
+ } 
+ 
+ // Show original menu 
+ if (this.#originalMenu) { 
+ this.#originalMenu.style.display = ''; 
+ } 
+ 
+ console.log('Enhanced Menu Modernizer destroyed'); 
  } 
 } 
-
+ 
 // Initialize 
-(function initHybridMenuModernizer() { 
+(function initEnhancedMenuModernizer() { 
  const init = () => { 
-  try { 
-   if (document.body.id === 'login' || document.body.id === 'register') { 
-    return; 
-   } 
-
-   if (document.querySelector('.hybrid-menu-wrap')) { 
-    return; 
-   } 
-
-   globalThis.hybridMenuModernizer = new EnhancedMenuModernizer(); 
-
-  } catch (error) { 
-   console.error('Failed to create Hybrid Menu Modernizer:', error); 
-  } 
+ try { 
+ // Don't run on login/register pages 
+ if (document.body.id === 'login' || document.body.id === 'register') { 
+ return; 
+ } 
+ 
+ // Check if we should modernize 
+ if (document.querySelector('.modern-menu-wrap')) { 
+ return; 
+ } 
+ 
+ globalThis.enhancedMenuModernizer = new EnhancedMenuModernizer(); 
+ 
+ } catch (error) { 
+ console.error('Failed to create Enhanced Menu Modernizer:', error); 
+ } 
  }; 
-
+ 
  if (document.readyState !== 'loading') { 
-  queueMicrotask(init); 
+ queueMicrotask(init); 
  } else { 
-  document.addEventListener('DOMContentLoaded', init); 
+ document.addEventListener('DOMContentLoaded', init); 
  } 
 })(); 
-
+ 
+// Cleanup on page hide 
 globalThis.addEventListener('pagehide', () => { 
- if (globalThis.hybridMenuModernizer && typeof globalThis.hybridMenuModernizer.destroy === 'function') { 
-  globalThis.hybridMenuModernizer.destroy(); 
+ if (globalThis.enhancedMenuModernizer && typeof globalThis.enhancedMenuModernizer.destroy === 'function') { 
+ globalThis.enhancedMenuModernizer.destroy(); 
  } 
 });
+
 
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
