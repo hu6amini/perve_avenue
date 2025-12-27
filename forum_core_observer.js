@@ -45,6 +45,7 @@ class ForumCoreObserver {
     
     constructor() {
         this.#init();
+        this.#setupThemeListener(); // ADDED: Theme change integration
     }
     
     #init() {
@@ -66,6 +67,7 @@ class ForumCoreObserver {
         var pathname = window.location.pathname;
         var className = document.body.className;
         var theme = document.documentElement.dataset?.theme;
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         
         // Use direct DOM queries for maximum speed
         var selectors = {
@@ -94,13 +96,150 @@ class ForumCoreObserver {
             hasModernizedQuotes: !!document.querySelector('.modern-quote'),
             hasModernizedProfile: !!document.querySelector('.modern-profile'),
             hasModernizedNavigation: !!document.querySelector('.modern-nav'),
-            isDarkMode: theme === 'dark',
+            // ADDED: Theme detection
+            currentTheme: theme || (prefersDark ? 'dark' : 'light'),
+            themeMode: theme ? 'manual' : 'auto',
+            isDarkMode: theme === 'dark' || (!theme && prefersDark),
+            isLightMode: theme === 'light' || (!theme && !prefersDark),
             isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
             isMobile: window.matchMedia('(max-width: 768px)').matches,
             // Add detection for send/preview pages
             isSendPage: document.body.id === 'send' || className.includes('send'),
             hasPreview: !!document.querySelector('#preview, #ajaxObject, .preview, .Item.preview')
         };
+    }
+    
+    #setupThemeListener() {
+        // Listen for theme change events from menu modernizer
+        window.addEventListener('themechange', (e) => {
+            const { theme } = e.detail;
+            
+            console.log(`🎨 Theme change detected: ${theme}`);
+            
+            // Update page state with new theme
+            this.#pageState = this.#detectPageState();
+            
+            // Trigger callbacks that depend on theme
+            this.#notifyThemeDependentCallbacks(theme);
+            
+            // Force re-scan of theme-dependent elements
+            this.#rescanThemeSensitiveElements(theme);
+            
+            // Update theme attribute for all relevant elements
+            this.#updateThemeAttributes(theme);
+        }, { passive: true });
+        
+        // Also listen for system theme changes (for auto mode)
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            // Only respond if we're in auto mode
+            if (!localStorage.getItem('forum-theme')) {
+                const newTheme = e.matches ? 'dark' : 'light';
+                console.log(`🌗 System theme changed to ${newTheme} (auto mode)`);
+                
+                queueMicrotask(() => {
+                    this.#pageState = this.#detectPageState();
+                    this.#rescanThemeSensitiveElements('auto');
+                });
+            }
+        });
+    }
+    
+    #notifyThemeDependentCallbacks(newTheme) {
+        // Find callbacks that have theme dependencies
+        const themeDependentCallbacks = Array.from(this.#callbacks.values()).filter(callback => {
+            return callback.dependencies && (
+                callback.dependencies.includes('theme') ||
+                callback.dependencies.includes('theme-change') ||
+                callback.dependencies.includes('data-theme')
+            );
+        });
+        
+        if (themeDependentCallbacks.length) {
+            console.log(`🎨 Notifying ${themeDependentCallbacks.length} theme-dependent callbacks`);
+            
+            // Execute theme-dependent callbacks with theme info
+            themeDependentCallbacks.forEach(callback => {
+                try {
+                    // Pass theme info to callback
+                    callback.fn(document.documentElement, newTheme);
+                } catch (error) {
+                    console.error(`Theme callback ${callback.id} failed:`, error);
+                }
+            });
+        }
+    }
+    
+    #rescanThemeSensitiveElements(theme) {
+        // Elements that need re-processing on theme change
+        const themeSensitiveSelectors = [
+            '.modern-quote',
+            '.modern-spoiler',
+            '.modern-code',
+            '.post',
+            '.post-modernized',
+            '.st-emoji-container',
+            '.points_up, .points_down',
+            '.btn',
+            '.menu-dropdown',
+            '.cs-fui.st-emoji-pop',
+            '.modern-menu-wrap',
+            '.search-post',
+            '.post-header',
+            '.post-content',
+            '.post-footer',
+            '.modern-topic-title',
+            '.modern-nav',
+            '.modern-breadcrumb'
+        ];
+        
+        // Force rescan of theme-sensitive elements
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => {
+                themeSensitiveSelectors.forEach(selector => {
+                    try {
+                        const elements = document.querySelectorAll(selector);
+                        elements.forEach(element => {
+                            // Clear from processed nodes to force re-processing
+                            this.#processedNodes.delete(element);
+                            this.#processNode(element);
+                        });
+                    } catch (e) {
+                        // Skip invalid selectors
+                    }
+                });
+            }, { timeout: 500 });
+        } else {
+            // Fallback for browsers without requestIdleCallback
+            setTimeout(() => {
+                themeSensitiveSelectors.forEach(selector => {
+                    try {
+                        const elements = document.querySelectorAll(selector);
+                        elements.forEach(element => {
+                            this.#processedNodes.delete(element);
+                            this.#processNode(element);
+                        });
+                    } catch (e) {
+                        // Skip invalid selectors
+                    }
+                });
+            }, 100);
+        }
+    }
+    
+    #updateThemeAttributes(theme) {
+        // Update theme attributes on components that need it
+        const elementsToUpdate = [
+            '.cs-fui.st-emoji-pop',
+            '.st-emoji-container',
+            '.post-modernized',
+            '.post.preview'
+        ];
+        
+        elementsToUpdate.forEach(selector => {
+            document.querySelectorAll(selector).forEach(el => {
+                el.setAttribute('data-theme', theme);
+            });
+        });
     }
     
     #handleMutations(mutations) {
@@ -134,6 +273,12 @@ class ForumCoreObserver {
             if (style.display === 'none' || style.visibility === 'hidden') {
                 return false;
             }
+        }
+        
+        // Special handling for theme attribute changes
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+            // Always process theme attribute changes
+            return true;
         }
         
         // Special handling for character data
@@ -267,6 +412,13 @@ class ForumCoreObserver {
                     
                 case 'attributes':
                     affectedNodes.add(mutation.target);
+                    
+                    // If theme changed, update page state
+                    if (mutation.attributeName === 'data-theme') {
+                        this.#pageState = this.#detectPageState();
+                        const theme = mutation.target.getAttribute('data-theme');
+                        this.#notifyThemeDependentCallbacks(theme);
+                    }
                     break;
                     
                 case 'characterData':
@@ -403,11 +555,16 @@ class ForumCoreObserver {
             var callback = callbacks[i];
             promises.push((async function() {
                 try {
-                    await callback.fn(node);
+                    // Pass theme info to callbacks that need it
+                    if (callback.dependencies && callback.dependencies.includes('theme')) {
+                        await callback.fn(node, this.#pageState.currentTheme);
+                    } else {
+                        await callback.fn(node);
+                    }
                 } catch (error) {
                     console.error('Callback ' + callback.id + ' failed:', error);
                 }
-            })());
+            }).call(this));
         }
         
         await Promise.allSettled(promises);
@@ -537,7 +694,10 @@ class ForumCoreObserver {
         this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
     }
     
-    // Public API
+    // ============================================
+    // PUBLIC API WITH THEME INTEGRATION
+    // ============================================
+    
     register(settings) {
         var id = settings.id || 'callback_' + Date.now() + '_' + 
             (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2));
@@ -583,6 +743,26 @@ class ForumCoreObserver {
         return id;
     }
     
+    // NEW: Theme-aware callback registration
+    registerThemeAware(settings) {
+        const callbackId = this.register({
+            ...settings,
+            dependencies: [...(settings.dependencies || []), 'theme']
+        });
+        
+        // Initial execution with current theme
+        const currentTheme = this.#pageState.currentTheme;
+        queueMicrotask(() => {
+            try {
+                settings.callback(document.documentElement, currentTheme);
+            } catch (error) {
+                console.error(`Theme-aware callback ${callbackId} failed on init:`, error);
+            }
+        });
+        
+        return callbackId;
+    }
+    
     unregister(callbackId) {
         var removed = false;
         
@@ -623,6 +803,11 @@ class ForumCoreObserver {
         }
     }
     
+    // NEW: Force theme update on specific elements
+    updateThemeOnElements(theme) {
+        this.#rescanThemeSensitiveElements(theme);
+    }
+    
     getStats() {
         return {
             totalMutations: this.#mutationMetrics.totalMutations,
@@ -635,7 +820,13 @@ class ForumCoreObserver {
             processedNodes: this.#processedNodes.size,
             pageState: this.#pageState,
             isProcessing: this.#isProcessing,
-            queueLength: this.#mutationQueue.length
+            queueLength: this.#mutationQueue.length,
+            // ADDED: Theme stats
+            currentTheme: this.#pageState.currentTheme,
+            themeMode: this.#pageState.themeMode,
+            themeDependentCallbacks: Array.from(this.#callbacks.values()).filter(c => 
+                c.dependencies && c.dependencies.includes('theme')
+            ).length
         };
     }
     
@@ -667,13 +858,18 @@ if (!globalThis.forumObserver) {
     try {
         globalThis.forumObserver = ForumCoreObserver.create();
         
-        // Global helper functions
+        // Global helper functions with theme support
         globalThis.registerForumScript = function(settings) {
             return globalThis.forumObserver ? globalThis.forumObserver.register(settings) : null;
         };
         
         globalThis.registerDebouncedForumScript = function(settings) {
             return globalThis.forumObserver ? globalThis.forumObserver.registerDebounced(settings) : null;
+        };
+        
+        // NEW: Theme-aware registration helper
+        globalThis.registerThemeAwareScript = function(settings) {
+            return globalThis.forumObserver ? globalThis.forumObserver.registerThemeAware(settings) : null;
         };
         
         // Auto-cleanup on page hide
@@ -683,7 +879,7 @@ if (!globalThis.forumObserver) {
             }
         }, { once: true });
         
-        console.log('🚀 ForumCoreObserver ready (GLOBAL MODE)');
+        console.log('🚀 ForumCoreObserver ready (GLOBAL MODE) with theme integration');
         
     } catch (error) {
         console.error('Failed to initialize ForumCoreObserver:', error);
@@ -691,7 +887,7 @@ if (!globalThis.forumObserver) {
         // Fallback proxy
         globalThis.forumObserver = new Proxy({}, {
             get: function(target, prop) {
-                var methods = ['register', 'registerDebounced', 'unregister', 'forceScan', 'getStats', 'destroy'];
+                var methods = ['register', 'registerDebounced', 'registerThemeAware', 'unregister', 'forceScan', 'updateThemeOnElements', 'getStats', 'destroy'];
                 if (methods.indexOf(prop) > -1) {
                     return function() {
                         console.warn('ForumCoreObserver not initialized - ' + prop + ' called');
