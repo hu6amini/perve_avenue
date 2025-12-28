@@ -2657,81 +2657,96 @@ class PostModernizer {
     return finalElement;
 }
 
-    #extractDateFromElement(element) {
-        // Try multiple strategies to extract date
+#extractDateFromElement(element) {
+    // Try multiple strategies to extract date
+    
+    // Strategy 1: Check title attribute (most reliable)
+    if (element.hasAttribute('title')) {
+        const title = element.getAttribute('title');
+        // Remove any time suffix like ":49" or ":10"
+        const cleanTitle = title.replace(/:\d+$/, '');
+        console.debug('Extracted date from title:', cleanTitle);
+        return cleanTitle;
+    }
+    
+    // Strategy 2: Check text content - look for date patterns
+    if (element.textContent) {
+        const text = element.textContent.trim();
         
-        // Strategy 1: Check title attribute (most reliable)
-        if (element.hasAttribute('title')) {
-            const title = element.getAttribute('title');
-            const dateMatch = title.match(/(?:Posted on\s+)?(.+)/i);
-            if (dateMatch) {
-                console.debug('Extracted date from title:', dateMatch[1].trim());
-                return dateMatch[1].trim();
-            }
-        }
-        
-        // Strategy 2: Check text content
-        if (element.textContent) {
-            const text = element.textContent.trim();
-            
-            // Common patterns in forum timestamps
-            const patterns = [
-                /Posted on\s+(.+)/i,
-                /Posted\s+(.+)/i,
-                /on\s+(.+)/i,
-                /(\d{1,2}\/\d{1,2}\/\d{4}.+)/,            // MM/DD/YYYY pattern
-                /(\d{4}-\d{1,2}-\d{1,2}.+)/,              // YYYY-MM-DD pattern
-                /(\d{1,2}\/\d{1,2}\/\d{2}.+)/,            // MM/DD/YY pattern
-                /(\d{1,2}\.\d{1,2}\.\d{4}.+)/,            // DD.MM.YYYY pattern
-                /(\w+ \d{1,2}, \d{4}.+)/,                 // December 28, 2025 pattern
-                /(\d{1,2} \w+ \d{4}.+)/                   // 28 December 2025 pattern
-            ];
-            
-            for (const pattern of patterns) {
-                const match = text.match(pattern);
-                if (match) {
-                    console.debug('Extracted date from text pattern:', match[1].trim());
-                    return match[1].trim();
-                }
-            }
-            
-            // Last resort: try to find any date-like pattern
-            const dateRegex = /(\b\d{1,4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,4}.+\b)/;
-            const fallbackMatch = text.match(dateRegex);
-            if (fallbackMatch) {
-                console.debug('Extracted date with fallback regex:', fallbackMatch[1].trim());
-                return fallbackMatch[1].trim();
-            }
-        }
-        
-        // Strategy 3: Check parent elements
-        const parentCheckElements = [
-            element.parentElement,
-            element.parentElement?.parentElement,
-            element.closest('a'),
-            element.closest('.lt.Sub'),
-            element.closest('.title2')
+        // Look for date patterns (MM/DD/YYYY or DD/MM/YYYY with time)
+        const datePatterns = [
+            /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i,  // 12/23/2025, 09:30 PM
+            /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}:\d{2}\s*(?:AM|PM)?)/i, // 12/23/2025, 09:30:49 PM
+            /(\d{4}-\d{1,2}-\d{1,2},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i,  // 2025-12-23, 09:30 PM
+            /(\d{1,2}\.\d{1,2}\.\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i  // 23.12.2025, 09:30 PM
         ];
         
-        for (const parent of parentCheckElements) {
-            if (parent && parent.hasAttribute('title')) {
-                const parentTitle = parent.getAttribute('title');
-                const dateMatch = parentTitle.match(/(?:Posted on\s+)?(.+)/i);
-                if (dateMatch) {
-                    console.debug('Extracted date from parent title:', dateMatch[1].trim());
-                    return dateMatch[1].trim();
-                }
+        for (const pattern of datePatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                console.debug('Extracted date from text pattern:', match[1].trim());
+                return match[1].trim();
             }
         }
         
-        console.warn('Could not extract date from element:', element.outerHTML);
-        return null;
+        // Last resort: extract just the date+time part
+        // This handles cases like "<span>Posted on</span> 12/23/2025, 09:30 PM"
+        const dateTimeMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
+        if (dateTimeMatch) {
+            console.debug('Extracted date-time with fallback:', dateTimeMatch[1].trim());
+            return dateTimeMatch[1].trim();
+        }
     }
-
+    
+    // Strategy 3: Check parent elements for title
+    const parentCheckElements = [
+        element.parentElement,
+        element.parentElement?.parentElement,
+        element.closest('a'),
+        element.closest('.lt.Sub'),
+        element.closest('.title2')
+    ];
+    
+    for (const parent of parentCheckElements) {
+        if (parent && parent.hasAttribute('title')) {
+            const parentTitle = parent.getAttribute('title');
+            const cleanTitle = parentTitle.replace(/:\d+$/, '');
+            console.debug('Extracted date from parent title:', cleanTitle);
+            return cleanTitle;
+        }
+    }
+    
+    console.warn('Could not extract date from element:', element.outerHTML);
+    return null;
+}
+    
 #transformEditTimestamp(span) {
-    const timeMatch = span.textContent.match(/Edited by .+? - (.+)/);
-    if (timeMatch) {
-        const editDate = timeMatch[1].trim();
+    // Look for any edit pattern across languages
+    // Examples: 
+    // English: "Edited by Username - 12/28/2025, 07:27 PM"
+    // Italian: "Modificato da Username - 12/28/2025, 07:27 PM"
+    // Spanish: "Editado por Username - 12/28/2025, 07:27 PM"
+    
+    // Pattern: "Edited by/MODIFIED BY/Editado por/Modificato da" followed by username and dash, then date
+    const editPatterns = [
+        /Edited by .+? - (.+)/i,
+        /Modificato da .+? - (.+)/i,
+        /Editado por .+? - (.+)/i,
+        /Bearbeitet von .+? - (.+)/i,
+        /Modifié par .+? - (.+)/i,
+        /(.+ - \d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}.+)/i  // Fallback: anything ending with date pattern
+    ];
+    
+    let editDate = null;
+    for (const pattern of editPatterns) {
+        const timeMatch = span.textContent.match(pattern);
+        if (timeMatch) {
+            editDate = timeMatch[1].trim();
+            break;
+        }
+    }
+    
+    if (editDate) {
         console.debug('Found edit timestamp:', editDate);
         
         // Use the same parsing logic as regular timestamps
@@ -2757,6 +2772,7 @@ class PostModernizer {
             timeElement.setAttribute('data-timestamp-id', timeElementId);
             timeElement.setAttribute('data-utc-date', momentDate.toISOString());
             
+            // Always use "Edited" in English before the time element
             span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited ' + timeElement.outerHTML;
             
             // Set up interval to update relative time
@@ -2792,9 +2808,12 @@ class PostModernizer {
             });
         } else {
             console.warn('Could not parse edit date:', editDate);
-            // Fallback to original text
+            // Fallback: keep original text but add icon
             span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
         }
+    } else {
+        // If no edit pattern found but it's an edit span, just add icon
+        span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
     }
 }
 
