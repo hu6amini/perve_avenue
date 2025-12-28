@@ -2546,11 +2546,14 @@ class PostModernizer {
     // ==============================
 
     #setupObserverCallbacks() {
+        const pageTypes = ['topic', 'blog', 'send'];
+        
         this.#cleanupObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-cleanup',
             callback: (node) => this.#handleCleanupTasks(node),
             selector: '.bullet_delete, .mini_buttons.points.Sub',
-            priority: 'critical'
+            priority: 'critical',
+            pageTypes: pageTypes
         });
 
         this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({
@@ -2559,26 +2562,31 @@ class PostModernizer {
             selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
             delay: 100,
             priority: 'normal',
-            pageTypes: ['topic', 'blog']
+            pageTypes: pageTypes
         });
     }
 
     #setupSearchPostObserver() {
+        const pageTypes = ['search'];
+        
         this.#searchPostObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-search-posts',
             callback: (node) => this.#handleSearchPostTransformation(node),
             selector: 'body#search .post, body#search li.post',
             priority: 'high',
-            pageTypes: ['search']
+            pageTypes: pageTypes
         });
     }
 
     #setupActiveStateObserver() {
+        const pageTypes = ['topic', 'blog', 'send', 'search'];
+        
         this.#activeStateObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-active-states',
             callback: (node) => this.#handleActiveStateMutations(node),
             selector: '.st-emoji-container, .mini_buttons.points.Sub .points',
-            priority: 'normal'
+            priority: 'normal',
+            pageTypes: pageTypes
         });
 
         this.#checkInitialActiveStates();
@@ -4812,7 +4820,8 @@ class PostModernizer {
                 id: 'quote-link-enhancer',
                 callback: (node) => this.#handleNewQuoteLinks(node),
                 selector: '.quote-link, .quote_top a[href*="#entry"]',
-                priority: 'normal'
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'send', 'search']
             });
         } else {
             setInterval(() => this.#processExistingQuoteLinks(), 2000);
@@ -5072,7 +5081,8 @@ class PostModernizer {
                 id: 'code-block-modernizer',
                 callback: (node) => this.#handleNewCodeBlocks(node),
                 selector: 'div[align="center"]:has(.code_top)',
-                priority: 'normal'
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'send', 'search']
             });
         } else {
             setInterval(() => this.#processExistingCodeBlocks(), 2000);
@@ -5111,15 +5121,24 @@ class PostModernizer {
     }
 }
 
-// Modern initialization without DOMContentLoaded
+// Modern initialization without DOMContentLoaded with body ID check
 (function initPostModernizer() {
-    const init = () => {
+    // Check if we are on a page that should have post modernization
+    var bodyId = document.body.id;
+    var shouldModernize = bodyId === 'topic' || bodyId === 'blog' || bodyId === 'send';
+    
+    if (!shouldModernize) {
+        console.log('Post Modernizer skipped for body#' + bodyId);
+        return; // Exit early
+    }
+    
+    var init = function() {
         try {
             globalThis.postModernizer = new PostModernizer();
         } catch (error) {
             console.error('Failed to create Post Modernizer instance:', error);
 
-            setTimeout(() => {
+            setTimeout(function() {
                 if (!globalThis.postModernizer) {
                     try {
                         globalThis.postModernizer = new PostModernizer();
@@ -5139,7 +5158,7 @@ class PostModernizer {
 })();
 
 // Cleanup on page hide
-globalThis.addEventListener('pagehide', () => {
+globalThis.addEventListener('pagehide', function() {
     if (globalThis.postModernizer && typeof globalThis.postModernizer.destroy === 'function') {
         globalThis.postModernizer.destroy();
     }
