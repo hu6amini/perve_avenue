@@ -2728,29 +2728,75 @@ class PostModernizer {
         return null;
     }
 
-    #transformEditTimestamp(span) {
-        const timeMatch = span.textContent.match(/Edited by .+? - (.+)/);
-        if (timeMatch) {
-            const editDate = timeMatch[1].trim();
-            const momentDate = this.#parseForumDate(editDate);
+#transformEditTimestamp(span) {
+    const timeMatch = span.textContent.match(/Edited by .+? - (.+)/);
+    if (timeMatch) {
+        const editDate = timeMatch[1].trim();
+        console.debug('Found edit timestamp:', editDate);
+        
+        // Use the same parsing logic as regular timestamps
+        const momentDate = this.#parseForumDate(editDate);
+        
+        if (momentDate) {
+            const userSettings = this.#getUserLocaleSettings();
             
-            if (momentDate) {
-                const userSettings = this.#getUserLocaleSettings();
-                const userLocalDate = momentDate.tz(userSettings.timezone);
-                const formattedTime = userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
+            // Convert UTC to user's local timezone
+            const userLocalDate = momentDate.tz(userSettings.timezone);
+            
+            // Format for display
+            const formattedTime = userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
+            const timezoneAbbr = userLocalDate.format('z');
+            
+            const timeElement = document.createElement('time');
+            timeElement.setAttribute('datetime', momentDate.toISOString());
+            timeElement.setAttribute('title', `${formattedTime} (${timezoneAbbr})`);
+            timeElement.textContent = this.#formatTimeAgo(momentDate);
+            
+            // Generate unique ID for updates
+            const timeElementId = 'edit-timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            timeElement.setAttribute('data-timestamp-id', timeElementId);
+            timeElement.setAttribute('data-utc-date', momentDate.toISOString());
+            
+            span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited ' + timeElement.outerHTML;
+            
+            // Set up interval to update relative time
+            const updateInterval = setInterval(() => {
+                if (!document.body.contains(timeElement)) {
+                    clearInterval(updateInterval);
+                    this.#timeUpdateIntervals.delete(timeElementId);
+                    return;
+                }
                 
-                const timeElement = document.createElement('time');
-                timeElement.setAttribute('datetime', momentDate.toISOString());
-                timeElement.setAttribute('title', `${formattedTime} (${userLocalDate.format('z')})`);
-                timeElement.textContent = this.#formatTimeAgo(momentDate);
-                
-                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited ' + timeElement.outerHTML;
-            } else {
-                // Fallback to original text
-                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
-            }
+                const storedUTC = moment(timeElement.getAttribute('data-utc-date'));
+                if (storedUTC.isValid()) {
+                    const newRelativeTime = this.#formatTimeAgo(storedUTC);
+                    if (timeElement.textContent !== newRelativeTime) {
+                        timeElement.textContent = newRelativeTime;
+                    }
+                    
+                    // Update title
+                    const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
+                    const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
+                    const currentTimezoneAbbr = currentUserLocalDate.format('z');
+                    timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+                }
+            }, 30000);
+            
+            this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+            
+            console.debug('Created edit timestamp:', {
+                original: editDate,
+                parsedUTC: momentDate.format(),
+                userLocal: userLocalDate.format(),
+                relativeTime: timeElement.textContent
+            });
+        } else {
+            console.warn('Could not parse edit date:', editDate);
+            // Fallback to original text
+            span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
         }
     }
+}
 
     #transformTimestampElements(element) {
     const timestampSelectors = [
