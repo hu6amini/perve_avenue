@@ -6098,7 +6098,7 @@ class PostModernizer {
 (function initPostModernizer() {
     // Check if we are on a page that should have post modernization
     var bodyId = document.body.id;
-    var shouldModernize = bodyId === 'topic' || bodyId === 'blog' || bodyId === 'send';
+    var shouldModernize = bodyId === 'topic' || bodyId === 'blog' || bodyId === 'send' || bodyId === 'search';
     
     if (!shouldModernize) {
         console.log('Post Modernizer skipped for body#' + bodyId);
