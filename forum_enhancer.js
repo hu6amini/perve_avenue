@@ -3796,11 +3796,19 @@ class PostModernizer {
         this.#cleanInvalidAttributes(contentElement);
     }
 
-    #cleanupEditSpans(element) {
-        element.querySelectorAll('span.edit').forEach(span => {
+#cleanupEditSpans(element) {
+    element.querySelectorAll('span.edit').forEach(span => {
+        // Check if already transformed (contains a time element)
+        if (span.querySelector('time[datetime]')) {
+            return;
+        }
+        
+        // Check if it contains "Edited by" text
+        if (span.textContent.includes('Edited by')) {
             this.#transformEditTimestamp(span);
-        });
-    }
+        }
+    });
+}
 
     #cleanUpLineBreaksBetweenBlocks(element) {
         const blockSelectors = [
