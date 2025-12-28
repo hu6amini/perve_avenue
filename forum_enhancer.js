@@ -2209,9 +2209,9 @@ class PostModernizer {
                 const delay = Math.min(100 * Math.pow(1.5, this.#retryCount - 1), 2000);
                 console.log('Forum Observer not available, retry ' + this.#retryCount + '/' + this.#maxRetries + ' in ' + delay + 'ms');
 
-                this.#retryTimeoutId = setTimeout(() => {
+                this.#retryTimeoutId = setTimeout(function() {
                     this.#initWithRetry();
-                }, delay);
+                }.bind(this), delay);
             } else {
                 console.error('Failed to initialize Post Modernizer: Forum Observer not available after maximum retries');
             }
@@ -2225,6 +2225,7 @@ class PostModernizer {
     #init() {
         try {
             this.#transformPostElements();
+            this.#transformArticleElements();
             this.#enhanceReputationSystem();
             this.#setupObserverCallbacks();
             this.#setupActiveStateObserver();
@@ -2233,7 +2234,7 @@ class PostModernizer {
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
 
-            console.log('✅ Post Modernizer with all optimizations initialized');
+            console.log('✅ Post Modernizer with Article support initialized');
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
 
@@ -2242,9 +2243,9 @@ class PostModernizer {
                 const delay = 100 * Math.pow(2, this.#retryCount - 1);
                 console.log('Initialization failed, retrying in ' + delay + 'ms...');
 
-                setTimeout(() => {
+                setTimeout(function() {
                     this.#initWithRetry();
-                }, delay);
+                }.bind(this), delay);
             }
         }
     }
@@ -2255,36 +2256,89 @@ class PostModernizer {
 
     #parseForumDate(dateString) {
         if (!dateString || typeof dateString !== 'string') {
+            console.log('Invalid date string:', dateString);
             return null;
         }
 
+        console.log('Parsing date string:', dateString);
+        
+        let cleanDateString = dateString.trim();
+        
+        cleanDateString = cleanDateString.replace(/^il\s+/i, '');
+        
+        cleanDateString = cleanDateString
+            .replace(/^,\s*/, '')
+            .replace(/\s*:\s*\d+$/, '')
+            .replace(/(\d{1,2}):(\d{2})$/, '$1:$2:00');
+        
         const formats = [
-            'MM/DD/YYYY, h:mm A',
             'MM/DD/YYYY, h:mm:ss A',
-            'MM/DD/YYYY, HH:mm',
+            'MM/DD/YYYY, h:mm A',
+            'MM/DD/YYYY, hh:mm:ss A',
             'MM/DD/YYYY, HH:mm:ss',
+            'MM/DD/YYYY, HH:mm',
+            'MM-DD-YYYY, h:mm:ss A',
             'MM-DD-YYYY, h:mm A',
-            'DD/MM/YYYY, h:mm A'
+            'DD/MM/YYYY, h:mm:ss A',
+            'DD/MM/YYYY, h:mm A',
+            'MM/DD/YYYY',
+            'DD/MM/YYYY',
+            'MM/DD/YY',
+            'DD/MM/YY',
+            'YYYY-MM-DD',
+            'YYYY-MM-DD HH:mm:ss',
+            'YYYY-MM-DD HH:mm',
         ];
+        
+        console.log('Cleaned date string:', cleanDateString);
         
         let momentDate = null;
         
         for (let i = 0; i < formats.length; i++) {
             const format = formats[i];
-            momentDate = moment(dateString, format, true);
+            momentDate = moment(cleanDateString, format, true);
             if (momentDate && momentDate.isValid()) {
+                console.log('Format "' + format + '" succeeded:', momentDate.format());
                 break;
             }
         }
         
         if (!momentDate || !momentDate.isValid()) {
-            const fallbackDate = new Date(dateString);
-            if (!isNaN(fallbackDate)) {
-                momentDate = moment(fallbackDate);
+            console.log('Moment parsing failed, trying manual parsing');
+            
+            const mmddyyyyMatch = cleanDateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (mmddyyyyMatch) {
+                const month = mmddyyyyMatch[1];
+                const day = mmddyyyyMatch[2];
+                const year = mmddyyyyMatch[3];
+                const isoDate = year + '-' + month.padStart(2, '0') + '-' + day.padStart(2, '0');
+                console.log('Manual MM/DD/YYYY parsing:', isoDate);
+                momentDate = moment(isoDate);
+            }
+            
+            const ddmmyyyyMatch = cleanDateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (!momentDate && ddmmyyyyMatch) {
+                const day = ddmmyyyyMatch[1];
+                const month = ddmmyyyyMatch[2];
+                const year = ddmmyyyyMatch[3];
+                const isoDate = year + '-' + month.padStart(2, '0') + '-' + day.padStart(2, '0');
+                console.log('Manual DD/MM/YYYY parsing:', isoDate);
+                momentDate = moment(isoDate);
             }
         }
         
-        return momentDate && momentDate.isValid() ? momentDate : null;
+        if (!momentDate || !momentDate.isValid()) {
+            console.log('Trying fallback Date parsing');
+            const fallbackDate = new Date(cleanDateString);
+            if (!isNaN(fallbackDate)) {
+                momentDate = moment(fallbackDate);
+                console.log('Fallback Date succeeded:', momentDate.format());
+            }
+        }
+        
+        const result = momentDate && momentDate.isValid() ? momentDate : null;
+        console.log('Final parse result:', result ? result.format() : 'null');
+        return result;
     }
 
     #formatTimeAgo(date) {
@@ -2316,86 +2370,140 @@ class PostModernizer {
         }
     }
 
-  #createModernTimestamp(originalElement, dateString) {
-    if (typeof moment === 'undefined') {
-        console.warn('Moment.js not loaded, skipping timestamp transformation');
-        return originalElement;
-    }
-    
-    const momentDate = this.#parseForumDate(dateString);
-    
-    if (!momentDate) {
-        console.log('Could not parse date:', dateString);
-        return originalElement;
-    }
-    
-    // Create the link first
-    const link = document.createElement('a');
-    
-    // Try to preserve the original href if it exists
-    let originalHref = null;
-    if (originalElement.tagName === 'A') {
-        originalHref = originalElement.getAttribute('href');
-    } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
-        originalHref = originalElement.parentElement.getAttribute('href');
-    }
-    
-    if (originalHref) {
-        link.href = originalHref;
-    } else {
-        // Fallback: try to construct link from post ID
-        const postElement = originalElement.closest('.post');
-        if (postElement && postElement.id) {
-            const postIdMatch = postElement.id.match(/\d+/);
-            if (postIdMatch) {
-                const postId = postIdMatch[0];
-                const topicMatch = window.location.href.match(/t=(\d+)/);
-                if (topicMatch) {
-                    link.href = '#entry' + postId;
+    #createModernTimestamp(originalElement, dateString) {
+        if (typeof moment === 'undefined') {
+            console.warn('Moment.js not loaded, skipping timestamp transformation');
+            return originalElement;
+        }
+        
+        const momentDate = this.#parseForumDate(dateString);
+        
+        if (!momentDate) {
+            console.log('Could not parse date:', dateString);
+            return originalElement;
+        }
+        
+        const link = document.createElement('a');
+        
+        let originalHref = null;
+        if (originalElement.tagName === 'A') {
+            originalHref = originalElement.getAttribute('href');
+        } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
+            originalHref = originalElement.parentElement.getAttribute('href');
+        }
+        
+        if (originalHref) {
+            link.href = originalHref;
+        } else {
+            const postElement = originalElement.closest('.post, .article');
+            if (postElement && postElement.id) {
+                const postIdMatch = postElement.id.match(/\d+/);
+                if (postIdMatch) {
+                    const postId = postIdMatch[0];
+                    const topicMatch = window.location.href.match(/t=(\d+)/);
+                    if (topicMatch) {
+                        link.href = '#entry' + postId;
+                    }
                 }
             }
         }
-    }
-    
-    // Create the time element
-    const timeElement = document.createElement('time');
-    timeElement.className = 'modern-timestamp';
-    timeElement.setAttribute('datetime', momentDate.toISOString());
-    timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
-    
-    const relativeSpan = document.createElement('span');
-    relativeSpan.className = 'relative-time';
-    relativeSpan.textContent = this.#formatTimeAgo(momentDate);
-    
-    timeElement.appendChild(relativeSpan);
-    link.appendChild(timeElement);
-    
-    const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-    timeElement.setAttribute('data-timestamp-id', timeElementId);
-    
-    const updateInterval = setInterval(() => {
-        if (!document.body.contains(timeElement)) {
-            clearInterval(updateInterval);
-            this.#timeUpdateIntervals.delete(timeElementId);
-            return;
-        }
+        
+        const timeElement = document.createElement('time');
+        timeElement.className = 'modern-timestamp';
+        timeElement.setAttribute('datetime', momentDate.toISOString());
+        timeElement.setAttribute('title', momentDate.format('MMMM D, YYYY [at] h:mm:ss A'));
+        
+        const relativeSpan = document.createElement('span');
+        relativeSpan.className = 'relative-time';
         relativeSpan.textContent = this.#formatTimeAgo(momentDate);
-    }, 60000);
-    
-    this.#timeUpdateIntervals.set(timeElementId, updateInterval);
-    
-    return link;
-}
+        
+        timeElement.appendChild(relativeSpan);
+        link.appendChild(timeElement);
+        
+        const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        timeElement.setAttribute('data-timestamp-id', timeElementId);
+        
+        const updateInterval = setInterval(function() {
+            if (!document.body.contains(timeElement)) {
+                clearInterval(updateInterval);
+                this.#timeUpdateIntervals.delete(timeElementId);
+                return;
+            }
+            relativeSpan.textContent = this.#formatTimeAgo(momentDate);
+        }.bind(this), 60000);
+        
+        this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+        
+        return link;
+    }
 
     #extractDateFromElement(element) {
-        // Try title attribute first
         if (element.hasAttribute('title')) {
             const title = element.getAttribute('title');
-            const dateMatch = title.match(/(?:Posted on\s+)?(.+)/i);
-            if (dateMatch) return dateMatch[1].trim();
+            console.log('Found title attribute:', title);
+            
+            const titlePatterns = [
+                /(\d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2} (?:AM|PM)(?::\d{2})?)/i,
+                /(\d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2}:\d{2} (?:AM|PM))/i,
+                /(\d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2} (?:AM|PM))/i,
+                /(\d{4}-\d{1,2}-\d{1,2}, \d{1,2}:\d{2}:\d{2})/,
+                /(\d{1,2}-\d{1,2}-\d{4}, \d{1,2}:\d{2}:\d{2})/,
+                /(?:Posted on\s+)?(.+)/i
+            ];
+            
+            for (let i = 0; i < titlePatterns.length; i++) {
+                const pattern = titlePatterns[i];
+                const match = title.match(pattern);
+                if (match) {
+                    console.log('Title pattern matched:', match[1]);
+                    return match[1].trim();
+                }
+            }
         }
         
-        // Try parent link's title
+        if (element.matches('.when') || element.closest('.when')) {
+            const whenElement = element.matches('.when') ? element : element.closest('.when');
+            console.log('Processing .when element:', whenElement);
+            
+            const dayElement = whenElement.querySelector('.d_day');
+            const monthElement = whenElement.querySelector('.d_month');
+            const yearElement = whenElement.querySelector('.d_year');
+            
+            if (dayElement && yearElement) {
+                const day = dayElement.textContent.trim();
+                const year = yearElement.textContent.trim();
+                
+                let month = '01';
+                if (monthElement) {
+                    const monthText = monthElement.textContent.trim().toLowerCase();
+                    const monthMap = {
+                        'gen': '01', 'jan': '01', 'january': '01',
+                        'feb': '02', 'february': '02',
+                        'mar': '03', 'march': '03',
+                        'apr': '04', 'april': '04',
+                        'mag': '05', 'may': '05',
+                        'giu': '06', 'jun': '06', 'june': '06',
+                        'lug': '07', 'jul': '07', 'july': '07',
+                        'ago': '08', 'aug': '08', 'august': '08',
+                        'set': '09', 'sep': '09', 'september': '09',
+                        'ott': '10', 'oct': '10', 'october': '10',
+                        'nov': '11', 'november': '11',
+                        'dic': '12', 'dec': '12', 'december': '12'
+                    };
+                    
+                    if (monthText in monthMap) {
+                        month = monthMap[monthText];
+                    } else if (/^\d+$/.test(monthText)) {
+                        month = monthText.padStart(2, '0');
+                    }
+                }
+                
+                const reconstructedDate = month + '/' + day + '/' + year;
+                console.log('Reconstructed date from parts:', reconstructedDate);
+                return reconstructedDate;
+            }
+        }
+        
         if (element.parentElement && element.parentElement.tagName === 'A') {
             const parentTitle = element.parentElement.getAttribute('title');
             if (parentTitle) {
@@ -2404,7 +2512,6 @@ class PostModernizer {
             }
         }
         
-        // Try grandparent link's title
         if (element.parentElement && element.parentElement.parentElement && 
             element.parentElement.parentElement.tagName === 'A') {
             const grandparentTitle = element.parentElement.parentElement.getAttribute('title');
@@ -2414,83 +2521,39 @@ class PostModernizer {
             }
         }
         
-        // Try text content
         if (element.textContent) {
             const text = element.textContent.trim();
+            console.log('Trying text content:', text);
             
-            // Common patterns
             const patterns = [
                 /Posted on\s+(.+)/i,
                 /Posted\s+(.+)/i,
                 /on\s+(.+)/i,
-                /(\d{1,2}\/\d{1,2}\/\d{4}.+)/, // MM/DD/YYYY pattern
-                /(\d{4}-\d{1,2}-\d{1,2}.+)/    // YYYY-MM-DD pattern
+                /(\d{1,2}\/\d{1,2}\/\d{4}.+)/,
+                /(\d{4}-\d{1,2}-\d{1,2}.+)/,
+                /(\d{1,2} \w+ \d{4}.+)/,
+                /il\s+(\d{1,2}.+)/i
             ];
             
-            for (const pattern of patterns) {
+            for (let i = 0; i < patterns.length; i++) {
+                const pattern = patterns[i];
                 const match = text.match(pattern);
-                if (match) return match[1].trim();
+                if (match) {
+                    console.log('Text pattern matched:', match[1]);
+                    return match[1].trim();
+                }
             }
             
-            // Last resort: return the whole text
             return text;
         }
         
+        console.log('No date found for element:', element);
         return null;
-    }
-
-    #transformTimestampElements(element) {
-        const timestampSelectors = [
-            '.lt.Sub a span.when',
-            '.lt.Sub time',
-            '.post-edit time',
-            '.lt.Sub span',
-            '.lt.Sub a',
-            '.title2.top time',
-            '.title2.top span',
-            '.title2.top a',
-            'span.when',
-            'a[href*="#entry"]',
-            'a[title*="/"]'
-        ];
-        
-        const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
-        
-        timestampElements.forEach(timestampElement => {
-            // Skip if already modernized
-            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
-                return;
-            }
-            
-            const dateString = this.#extractDateFromElement(timestampElement);
-            
-            if (dateString) {
-                console.log('Found timestamp element:', {
-                    element: timestampElement,
-                    dateString: dateString,
-                    html: timestampElement.outerHTML
-                });
-                
-                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
-                
-                if (modernTimestamp !== timestampElement) {
-                    // Try to replace intelligently
-                    const parent = timestampElement.parentNode;
-                    if (parent && parent.tagName === 'A' && parent.children.length === 1 && parent.children[0] === timestampElement) {
-                        // Replace the entire link if it only contains the timestamp
-                        parent.parentNode.replaceChild(modernTimestamp, parent);
-                    } else {
-                        timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
-                    }
-                }
-            }
-        });
     }
 
     #transformPostHeaderTimestamps(postHeader) {
         if (!postHeader) return;
         
-        // Look for common timestamp patterns in post headers
         const timestampPatterns = [
             'a[href*="#entry"]',
             'span.when',
@@ -2499,11 +2562,12 @@ class PostModernizer {
             '.lt.Sub span'
         ];
         
-        timestampPatterns.forEach(pattern => {
+        for (let i = 0; i < timestampPatterns.length; i++) {
+            const pattern = timestampPatterns[i];
             const elements = postHeader.querySelectorAll(pattern);
-            elements.forEach(el => {
-                // Skip if already modernized
-                if (el.classList && el.classList.contains('modern-timestamp')) return;
+            for (let j = 0; j < elements.length; j++) {
+                const el = elements[j];
+                if (el.classList && el.classList.contains('modern-timestamp')) continue;
                 
                 const dateString = this.#extractDateFromElement(el);
                 if (dateString) {
@@ -2518,8 +2582,8 @@ class PostModernizer {
                         el.parentNode.replaceChild(modernTimestamp, el);
                     }
                 }
-            });
-        });
+            }
+        }
     }
 
     #transformEditTimestamp(span) {
@@ -2542,6 +2606,458 @@ class PostModernizer {
     }
 
     // ==============================
+    // ARTICLE TRANSFORMATION METHODS
+    // ==============================
+
+    #transformArticleElements() {
+        const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
+        
+        for (let i = 0; i < articles.length; i++) {
+            const article = articles[i];
+            article.classList.add('article-modernized');
+            
+            const fragment = document.createDocumentFragment();
+            
+            const anchorDiv = article.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
+            }
+            
+            const btitle = article.querySelector('.btitle');
+            const mainbg = article.querySelector('.mainbg');
+            const title2Top = mainbg ? mainbg.querySelector('.title2.top') : null;
+            const title2Bottom = mainbg ? mainbg.querySelector('.title2.bottom') : null;
+            const centerContent = mainbg ? mainbg.querySelector('.center .color') : null;
+            
+            const articleHeader = document.createElement('div');
+            articleHeader.className = 'article-header';
+            
+            const articleContent = document.createElement('div');
+            articleContent.className = 'article-content';
+            
+            const articleFooter = document.createElement('div');
+            articleFooter.className = 'article-footer';
+            
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                articleHeader.appendChild(anchorContainer);
+            }
+            
+            if (btitle) {
+                const btitleClone = btitle.cloneNode(true);
+                btitleClone.classList.add('modern-article-title');
+                
+                const titleIcon = document.createElement('i');
+                titleIcon.className = 'fa-regular fa-newspaper';
+                titleIcon.setAttribute('aria-hidden', 'true');
+                
+                const titleLink = btitleClone.querySelector('a');
+                if (titleLink) {
+                    titleLink.insertBefore(titleIcon, titleLink.firstChild);
+                    titleLink.insertBefore(document.createTextNode(' '), titleIcon.nextSibling);
+                }
+                
+                articleHeader.appendChild(btitleClone);
+            }
+            
+            if (title2Top) {
+                const leftSection = title2Top.querySelector('.left.Sub');
+                const rightSection = title2Top.querySelector('.right.Sub');
+                
+                const articleMeta = document.createElement('div');
+                articleMeta.className = 'article-meta';
+                
+                if (leftSection) {
+                    const authorInfo = document.createElement('div');
+                    authorInfo.className = 'article-author';
+                    
+                    const avatar = leftSection.querySelector('.avatar');
+                    if (avatar) {
+                        authorInfo.appendChild(avatar.cloneNode(true));
+                    }
+                    
+                    const who = leftSection.querySelector('.who');
+                    const when = leftSection.querySelector('.when');
+                    
+                    if (who || when) {
+                        const authorMeta = document.createElement('div');
+                        authorMeta.className = 'article-author-meta';
+                        
+                        if (who) {
+                            const whoClone = who.cloneNode(true);
+                            whoClone.querySelector('.when')?.remove();
+                            authorMeta.appendChild(whoClone);
+                        }
+                        
+                        if (when) {
+                            console.log('Processing article timestamp element:', when);
+                            
+                            let dateString = null;
+                            if (when.hasAttribute('title')) {
+                                dateString = when.getAttribute('title');
+                                console.log('Found title attribute on .when:', dateString);
+                            }
+                            
+                            if (!dateString) {
+                                const dayElement = when.querySelector('.d_day');
+                                const monthElement = when.querySelector('.d_month');
+                                const yearElement = when.querySelector('.d_year');
+                                
+                                if (dayElement && yearElement) {
+                                    const day = dayElement.textContent.trim();
+                                    const year = yearElement.textContent.trim();
+                                    
+                                    let month = '01';
+                                    if (monthElement) {
+                                        const monthText = monthElement.textContent.trim().toLowerCase();
+                                        const monthMap = {
+                                            'gen': '01', 'jan': '01', 'january': '01',
+                                            'feb': '02', 'february': '02',
+                                            'mar': '03', 'march': '03',
+                                            'apr': '04', 'april': '04',
+                                            'mag': '05', 'may': '05',
+                                            'giu': '06', 'jun': '06', 'june': '06',
+                                            'lug': '07', 'jul': '07', 'july': '07',
+                                            'ago': '08', 'aug': '08', 'august': '08',
+                                            'set': '09', 'sep': '09', 'september': '09',
+                                            'ott': '10', 'oct': '10', 'october': '10',
+                                            'nov': '11', 'november': '11',
+                                            'dic': '12', 'dec': '12', 'december': '12'
+                                        };
+                                        
+                                        if (monthText in monthMap) {
+                                            month = monthMap[monthText];
+                                        } else if (/^\d+$/.test(monthText)) {
+                                            month = monthText.padStart(2, '0');
+                                        }
+                                    }
+                                    
+                                    dateString = month + '/' + day + '/' + year;
+                                    console.log('Reconstructed date from parts:', dateString);
+                                }
+                            }
+                            
+                            if (dateString) {
+                                const modernTimestamp = this.#createModernTimestamp(when, dateString);
+                                authorMeta.appendChild(modernTimestamp);
+                            } else {
+                                authorMeta.appendChild(when.cloneNode(true));
+                            }
+                        }
+                        
+                        authorInfo.appendChild(authorMeta);
+                    }
+                    
+                    articleMeta.appendChild(authorInfo);
+                }
+                
+                if (rightSection) {
+                    const statsInfo = document.createElement('div');
+                    statsInfo.className = 'article-stats';
+                    
+                    const stEmoji = rightSection.querySelector('.st-emoji');
+                    if (stEmoji) {
+                        const emojiContainer = stEmoji.querySelector('.st-emoji-container');
+                        if (emojiContainer) {
+                            this.#updateEmojiContainerActiveState(emojiContainer);
+                        }
+                        statsInfo.appendChild(stEmoji.cloneNode(true));
+                    }
+                    
+                    const pointsElement = rightSection.querySelector('.points');
+                    if (pointsElement) {
+                        const pointsClone = pointsElement.cloneNode(true);
+                        this.#cleanupMiniButtons(pointsClone);
+                        this.#setInitialPointsState({ querySelector: function() { return pointsClone; } });
+                        statsInfo.appendChild(pointsClone);
+                    }
+                    
+                    const repliesElement = rightSection.querySelector('.replies');
+                    const viewsElement = rightSection.querySelector('.views');
+                    
+                    const statsContainer = document.createElement('div');
+                    statsContainer.className = 'article-meta-stats';
+                    
+                    if (repliesElement) {
+                        const repliesClone = repliesElement.cloneNode(true);
+                        const commentIcon = document.createElement('i');
+                        commentIcon.className = 'fa-regular fa-comment-dots';
+                        commentIcon.setAttribute('aria-hidden', 'true');
+                        
+                        const link = repliesClone.querySelector('a');
+                        if (link) {
+                            link.insertBefore(commentIcon, link.firstChild);
+                            link.insertBefore(document.createTextNode(' '), commentIcon.nextSibling);
+                        }
+                        statsContainer.appendChild(repliesClone);
+                    }
+                    
+                    if (viewsElement) {
+                        const viewsClone = viewsElement.cloneNode(true);
+                        const eyeIcon = document.createElement('i');
+                        eyeIcon.className = 'fa-regular fa-eye';
+                        eyeIcon.setAttribute('aria-hidden', 'true');
+                        
+                        const em = viewsClone.querySelector('em');
+                        if (em) {
+                            viewsClone.insertBefore(eyeIcon, em);
+                            viewsClone.insertBefore(document.createTextNode(' '), eyeIcon.nextSibling);
+                        }
+                        statsContainer.appendChild(viewsClone);
+                    }
+                    
+                    if (statsContainer.children.length > 0) {
+                        statsInfo.appendChild(statsContainer);
+                    }
+                    
+                    articleMeta.appendChild(statsInfo);
+                }
+                
+                articleHeader.appendChild(articleMeta);
+            }
+            
+            if (centerContent) {
+                const contentClone = centerContent.cloneNode(true);
+                
+                const emojiWidget = contentClone.querySelector('.st-emoji-widget');
+                if (emojiWidget) {
+                    emojiWidget.remove();
+                }
+                
+                this.#preserveMediaDimensions(contentClone);
+                this.#cleanupArticleContentStructure(contentClone);
+                this.#modernizeQuotes(contentClone);
+                this.#modernizeSpoilers(contentClone);
+                this.#modernizeCodeBlocksInContent(contentClone);
+                
+                articleContent.appendChild(contentClone);
+            }
+            
+            if (title2Bottom) {
+                const leftSection = title2Bottom.querySelector('.left.Sub');
+                const rightSection = title2Bottom.querySelector('.right.Sub');
+                
+                if (leftSection) {
+                    const actionsContainer = document.createElement('div');
+                    actionsContainer.className = 'article-actions';
+                    
+                    const shareContainer = leftSection.querySelector('.a2a_kit');
+                    if (shareContainer) {
+                        const shareButtons = document.createElement('div');
+                        shareButtons.className = 'article-share-buttons';
+                        
+                        const shareButton = document.createElement('button');
+                        shareButton.className = 'btn btn-icon btn-share';
+                        shareButton.setAttribute('data-action', 'share-article');
+                        shareButton.setAttribute('title', 'Share this article');
+                        shareButton.setAttribute('type', 'button');
+                        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i> Share';
+                        
+                        shareButton.addEventListener('click', function() {
+                            this.#handleShareArticle(article);
+                        }.bind(this));
+                        shareButtons.appendChild(shareButton);
+                        
+                        const trackLink = leftSection.querySelector('.track');
+                        if (trackLink) {
+                            trackLink.classList.add('btn', 'btn-icon', 'btn-subscription');
+                            const trackIcon = document.createElement('i');
+                            trackIcon.className = 'fa-regular fa-bell';
+                            trackIcon.setAttribute('aria-hidden', 'true');
+                            trackLink.insertBefore(trackIcon, trackLink.firstChild);
+                            trackLink.insertBefore(document.createTextNode(' '), trackIcon.nextSibling);
+                            shareButtons.appendChild(trackLink);
+                        }
+                        
+                        actionsContainer.appendChild(shareButtons);
+                    }
+                    
+                    const lastPostInfo = leftSection.innerHTML.match(/Last Post.*?</);
+                    if (lastPostInfo) {
+                        const lastPostDiv = document.createElement('div');
+                        lastPostDiv.className = 'article-lastpost';
+                        
+                        const lastPostIcon = document.createElement('i');
+                        lastPostIcon.className = 'fa-regular fa-comment-lines';
+                        lastPostIcon.setAttribute('aria-hidden', 'true');
+                        lastPostDiv.appendChild(lastPostIcon);
+                        
+                        const whenElement = leftSection.querySelector('.when');
+                        if (whenElement) {
+                            const dateString = this.#extractDateFromElement(whenElement);
+                            if (dateString) {
+                                const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
+                                lastPostDiv.appendChild(modernTimestamp);
+                            } else {
+                                const lastPostText = leftSection.textContent
+                                    .replace(/Last Post.*by/, '')
+                                    .replace(/\s+/g, ' ')
+                                    .trim();
+                                if (lastPostText) {
+                                    const lastPostSpan = document.createElement('span');
+                                    lastPostSpan.textContent = lastPostText;
+                                    lastPostDiv.appendChild(lastPostSpan);
+                                }
+                            }
+                        }
+                        
+                        actionsContainer.appendChild(lastPostDiv);
+                    }
+                    
+                    articleFooter.appendChild(actionsContainer);
+                }
+                
+                if (rightSection) {
+                    const controlsContainer = document.createElement('div');
+                    controlsContainer.className = 'article-controls';
+                    
+                    const miniButtons = rightSection.querySelector('.mini_buttons');
+                    if (miniButtons) {
+                        this.#convertArticleMiniButtonsToButtons(miniButtons, article);
+                        controlsContainer.appendChild(miniButtons);
+                    }
+                    
+                    articleFooter.appendChild(controlsContainer);
+                }
+            }
+            
+            fragment.appendChild(articleHeader);
+            fragment.appendChild(articleContent);
+            fragment.appendChild(articleFooter);
+            
+            article.innerHTML = '';
+            article.appendChild(fragment);
+            
+            this.#updateAllEmojiActiveStates();
+            this.#updateAllPointsActiveStates();
+            
+            console.log('Article modernized:', article);
+        }
+    }
+
+    #cleanupArticleContentStructure(contentElement) {
+        const brElements = contentElement.querySelectorAll('br');
+        for (let i = 0; i < brElements.length; i++) {
+            const br = brElements[i];
+            const prevSibling = br.previousElementSibling;
+            const nextSibling = br.nextElementSibling;
+            
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote')) {
+                continue;
+            }
+            
+            if (prevSibling && nextSibling) {
+                const prevIsBlock = prevSibling.matches('p, div, h1, h2, h3, h4, h5, h6, ul, ol, blockquote');
+                const nextIsBlock = nextSibling.matches('p, div, h1, h2, h3, h4, h5, h6, ul, ol, blockquote');
+                
+                if (prevIsBlock && nextIsBlock) {
+                    prevSibling.classList.add('paragraph-end');
+                    br.remove();
+                } else {
+                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                }
+            } else {
+                br.remove();
+            }
+        }
+        
+        const walker = document.createTreeWalker(contentElement, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+        let node;
+        
+        while (node = walker.nextNode()) {
+            if (node.textContent.trim() !== '') {
+                textNodes.push(node);
+            }
+        }
+        
+        for (let i = 0; i < textNodes.length; i++) {
+            const textNode = textNodes[i];
+            if (textNode.parentNode && (!textNode.parentNode.classList || 
+                !textNode.parentNode.classList.contains('post-text') &&
+                !textNode.parentNode.closest('.modern-quote, .modern-spoiler, .modern-code'))) {
+                const span = document.createElement('span');
+                span.className = 'post-text article-text';
+                span.textContent = textNode.textContent;
+                textNode.parentNode.replaceChild(span, textNode);
+            }
+        }
+    }
+
+    #convertArticleMiniButtonsToButtons(miniButtons, article) {
+        const links = miniButtons.querySelectorAll('a');
+        for (let i = 0; i < links.length; i++) {
+            const link = links[i];
+            const href = link.getAttribute('href');
+            
+            if (href) {
+                if (href.includes('CODE=08')) {
+                    link.classList.add('btn', 'btn-icon', 'btn-edit');
+                    link.setAttribute('data-action', 'edit-article');
+                    link.setAttribute('title', 'Edit article');
+                    link.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edit';
+                } else if (href.includes('CODE=02')) {
+                    link.classList.add('btn', 'btn-icon', 'btn-quote');
+                    link.setAttribute('data-action', 'quote-article');
+                    link.setAttribute('title', 'Quote article');
+                    link.innerHTML = '<i class="fa-regular fa-quote-left" aria-hidden="true"></i> Quote';
+                } else {
+                    link.classList.add('btn', 'btn-icon');
+                }
+                
+                const icons = link.querySelectorAll('i');
+                for (let j = 0; j < icons.length; j++) {
+                    const icon = icons[j];
+                    if (!icon.hasAttribute('aria-hidden')) {
+                        icon.setAttribute('aria-hidden', 'true');
+                    }
+                }
+            }
+        }
+        
+        const checkbox = miniButtons.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            const checkboxContainer = document.createElement('div');
+            checkboxContainer.className = 'article-multiquote-control';
+            
+            const label = document.createElement('label');
+            label.className = 'multiquote-label';
+            label.setAttribute('for', checkbox.id);
+            label.innerHTML = '<i class="fa-regular fa-quote-right" aria-hidden="true"></i> Multiquote';
+            
+            checkboxContainer.appendChild(checkbox);
+            checkboxContainer.appendChild(label);
+            
+            checkbox.parentNode.insertBefore(checkboxContainer, checkbox);
+            checkbox.remove();
+        }
+    }
+
+    #handleShareArticle(article) {
+        let articleLink = null;
+        
+        const titleLink = article.querySelector('.btitle a');
+        if (titleLink) {
+            articleLink = titleLink.href;
+        }
+        
+        if (!articleLink && window.location.href.includes('?t=')) {
+            articleLink = window.location.href;
+        }
+        
+        if (articleLink) {
+            this.#copyPostLinkToClipboard(articleLink);
+        } else {
+            this.#showCopyNotification('Could not find article link');
+        }
+    }
+
+    // ==============================
     // OBSERVER SETUP
     // ==============================
 
@@ -2550,7 +3066,9 @@ class PostModernizer {
         
         this.#cleanupObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-cleanup',
-            callback: (node) => this.#handleCleanupTasks(node),
+            callback: function(node) {
+                this.#handleCleanupTasks(node);
+            }.bind(this),
             selector: '.bullet_delete, .mini_buttons.points.Sub',
             priority: 'critical',
             pageTypes: pageTypes
@@ -2558,8 +3076,10 @@ class PostModernizer {
 
         this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({
             id: 'post-modernizer-transform',
-            callback: (node) => this.#handlePostTransformation(node),
-            selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
+            callback: function(node) {
+                this.#handlePostTransformation(node);
+            }.bind(this),
+            selector: '.post, .article, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
             delay: 100,
             priority: 'normal',
             pageTypes: pageTypes
@@ -2571,7 +3091,9 @@ class PostModernizer {
         
         this.#searchPostObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-search-posts',
-            callback: (node) => this.#handleSearchPostTransformation(node),
+            callback: function(node) {
+                this.#handleSearchPostTransformation(node);
+            }.bind(this),
             selector: 'body#search .post, body#search li.post',
             priority: 'high',
             pageTypes: pageTypes
@@ -2583,7 +3105,9 @@ class PostModernizer {
         
         this.#activeStateObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-active-states',
-            callback: (node) => this.#handleActiveStateMutations(node),
+            callback: function(node) {
+                this.#handleActiveStateMutations(node);
+            }.bind(this),
             selector: '.st-emoji-container, .mini_buttons.points.Sub .points',
             priority: 'normal',
             pageTypes: pageTypes
@@ -2594,10 +3118,14 @@ class PostModernizer {
 
     #checkInitialActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
-        emojiContainers.forEach(container => this.#updateEmojiContainerActiveState(container));
+        for (let i = 0; i < emojiContainers.length; i++) {
+            this.#updateEmojiContainerActiveState(emojiContainers[i]);
+        }
 
         const pointsContainers = document.querySelectorAll('.mini_buttons.points.Sub .points');
-        pointsContainers.forEach(container => this.#updatePointsContainerActiveState(container));
+        for (let i = 0; i < pointsContainers.length; i++) {
+            this.#updatePointsContainerActiveState(pointsContainers[i]);
+        }
     }
 
     #handleActiveStateMutations(node) {
@@ -2630,12 +3158,16 @@ class PostModernizer {
 
     #updateAllEmojiActiveStates() {
         const emojiContainers = document.querySelectorAll('.st-emoji-container');
-        emojiContainers.forEach(container => this.#updateEmojiContainerActiveState(container));
+        for (let i = 0; i < emojiContainers.length; i++) {
+            this.#updateEmojiContainerActiveState(emojiContainers[i]);
+        }
     }
 
     #updateAllPointsActiveStates() {
         const pointsContainers = document.querySelectorAll('.mini_buttons.points.Sub .points');
-        pointsContainers.forEach(container => this.#updatePointsContainerActiveState(container));
+        for (let i = 0; i < pointsContainers.length; i++) {
+            this.#updatePointsContainerActiveState(pointsContainers[i]);
+        }
     }
 
     #updateEmojiContainerActiveState(emojiContainer) {
@@ -2674,7 +3206,9 @@ class PostModernizer {
         if (!node) return;
 
         const needsTransformation = node.matches('.post') ||
+            node.matches('.article') ||
             node.querySelector('.post') ||
+            node.querySelector('.article') ||
             node.querySelector('.st-emoji') ||
             node.querySelector('.title2.bottom') ||
             node.querySelector('div[align="center"]:has(.quote_top)') ||
@@ -2683,6 +3217,7 @@ class PostModernizer {
 
         if (needsTransformation) {
             this.#transformPostElements();
+            this.#transformArticleElements();
         }
     }
 
@@ -2701,591 +3236,604 @@ class PostModernizer {
 
     #cleanupAllMiniButtons() {
         const miniButtons = document.querySelectorAll('.mini_buttons.points.Sub');
-        miniButtons.forEach(buttons => this.#cleanupMiniButtons(buttons));
+        for (let i = 0; i < miniButtons.length; i++) {
+            this.#cleanupMiniButtons(miniButtons[i]);
+        }
     }
 
-#transformPostElements() {
-    const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
-    const urlParams = new URLSearchParams(window.location.search);
-    const startOffset = parseInt(urlParams.get('st') || '0');
+    #transformPostElements() {
+        const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
+        const urlParams = new URLSearchParams(window.location.search);
+        const startOffset = parseInt(urlParams.get('st') || '0');
 
-    posts.forEach((post, index) => {
-        if (post.closest('body#search')) return;
+        for (let index = 0; index < posts.length; index++) {
+            const post = posts[index];
+            if (post.closest('body#search')) continue;
 
-        post.classList.add('post-modernized');
+            post.classList.add('post-modernized');
 
-        const fragment = document.createDocumentFragment();
+            const fragment = document.createDocumentFragment();
 
-        const anchorDiv = post.querySelector('.anchor');
-        let anchorElements = null;
-        if (anchorDiv) {
-            anchorElements = anchorDiv.cloneNode(true);
-            anchorDiv.remove();
-        }
-
-        const title2Top = post.querySelector('.title2.top');
-        const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
-        const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
-
-        const postHeader = document.createElement('div');
-        postHeader.className = 'post-header';
-
-        const userInfo = document.createElement('div');
-        userInfo.className = 'user-info';
-
-        const postContent = document.createElement('div');
-        postContent.className = 'post-content';
-
-        const postFooter = document.createElement('div');
-        postFooter.className = 'post-footer';
-
-        if (anchorElements) {
-            const anchorContainer = document.createElement('div');
-            anchorContainer.className = 'anchor-container';
-            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-            anchorContainer.appendChild(anchorElements);
-            postHeader.appendChild(anchorContainer);
-        }
-
-        const postNumber = document.createElement('span');
-        postNumber.className = 'post-number';
-        
-        const hashIcon = document.createElement('i');
-        hashIcon.className = 'fa-regular fa-hashtag';
-        hashIcon.setAttribute('aria-hidden', 'true');
-        
-        const numberSpan = document.createElement('span');
-        numberSpan.className = 'post-number-value';
-        numberSpan.textContent = startOffset + index + 1;
-        
-        postNumber.appendChild(hashIcon);
-        postNumber.appendChild(document.createTextNode(' '));
-        postNumber.appendChild(numberSpan);
-        
-        postHeader.appendChild(postNumber);
-
-        this.#addNewPostBadge(post, postHeader);
-
-        let nickElement = null;
-        let groupValue = '';
-
-        if (title2Top) {
-            const tdWrapper = title2Top.closest('td.left.Item');
-            nickElement = title2Top.querySelector('.nick');
-
-            if (tdWrapper) {
-                const title2TopClone = title2Top.cloneNode(true);
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                title2TopClone.querySelector('.left.Item')?.remove();
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                // Transform timestamps in the post header
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-                
-                postHeader.appendChild(title2TopClone);
-                tdWrapper.remove();
-            } else {
-                const title2TopClone = title2Top.cloneNode(true);
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                title2TopClone.querySelector('.left.Item')?.remove();
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                // Transform timestamps in the post header
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-                
-                postHeader.appendChild(title2TopClone);
+            const anchorDiv = post.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
             }
-        }
 
-        const centerElements = post.querySelectorAll('tr.center');
-        centerElements.forEach(centerElement => {
-            const leftSection = centerElement.querySelector('.left.Item');
-            const rightSection = centerElement.querySelector('.right.Item');
+            const title2Top = post.querySelector('.title2.top');
+            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
+            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
 
-            if (leftSection) {
-                const details = leftSection.querySelector('.details');
-                const avatar = leftSection.querySelector('.avatar');
+            const postHeader = document.createElement('div');
+            postHeader.className = 'post-header';
 
-                if (details && avatar) {
-                    const groupDd = details.querySelector('dl.u_group dd');
-                    groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
+            const userInfo = document.createElement('div');
+            userInfo.className = 'user-info';
 
-                    userInfo.appendChild(avatar.cloneNode(true));
+            const postContent = document.createElement('div');
+            postContent.className = 'post-content';
 
-                    const detailsClone = details.cloneNode(true);
-                    detailsClone.querySelector('.avatar')?.remove();
+            const postFooter = document.createElement('div');
+            postFooter.className = 'post-footer';
 
-                    if (nickElement) {
-                        const nickClone = nickElement.cloneNode(true);
-                        detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                postHeader.appendChild(anchorContainer);
+            }
 
-                        if (groupValue) {
-                            const badge = document.createElement('div');
-                            badge.className = 'badge';
-                            badge.textContent = groupValue;
-                            nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                        }
-                    }
+            const postNumber = document.createElement('span');
+            postNumber.className = 'post-number';
+            
+            const hashIcon = document.createElement('i');
+            hashIcon.className = 'fa-regular fa-hashtag';
+            hashIcon.setAttribute('aria-hidden', 'true');
+            
+            const numberSpan = document.createElement('span');
+            numberSpan.className = 'post-number-value';
+            numberSpan.textContent = startOffset + index + 1;
+            
+            postNumber.appendChild(hashIcon);
+            postNumber.appendChild(document.createTextNode(' '));
+            postNumber.appendChild(numberSpan);
+            
+            postHeader.appendChild(postNumber);
 
-                    detailsClone.querySelector('span.u_title')?.remove();
+            this.#addNewPostBadge(post, postHeader);
 
-                    let rankHTML = '';
-                    const pWithURank = detailsClone.querySelector('p');
-                    if (pWithURank && pWithURank.querySelector('span.u_rank')) {
-                        rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
-                        pWithURank.remove();
-                    }
+            let nickElement = null;
+            let groupValue = '';
 
-                    detailsClone.querySelector('br.br_status')?.remove();
+            if (title2Top) {
+                const tdWrapper = title2Top.closest('td.left.Item');
+                nickElement = title2Top.querySelector('.nick');
 
-                    const userStats = document.createElement('div');
-                    userStats.className = 'user-stats';
-
-                    const originalDetails = details.cloneNode(true);
-
-                    if (rankHTML) {
-                        const rankStat = document.createElement('div');
-                        rankStat.className = 'stat rank';
-                        rankStat.innerHTML = rankHTML;
-                        userStats.appendChild(rankStat);
-                    }
-
-                    const postsDd = originalDetails.querySelector('dl.u_posts dd');
-                    if (postsDd) {
-                        const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
-                        userStats.appendChild(postsStat);
-                    }
-
-                    const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
-                    if (reputationDd) {
-                        const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
-                        userStats.appendChild(reputationStat);
-                    }
-
-                    const statusDl = originalDetails.querySelector('dl.u_status');
-                    if (statusDl) {
-                        const statusDd = statusDl.querySelector('dd');
-                        const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
-                        const isOnline = statusValue.toLowerCase().includes('online');
-                        const originalStatusIcon = statusDl.querySelector('dd i');
-
-                        let statusIconHTML = '';
-                        if (originalStatusIcon) {
-                            statusIconHTML = originalStatusIcon.outerHTML;
-                            if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
-                                statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
-                            }
-                        } else {
-                            statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
-                        }
-
-                        const statusStat = document.createElement('div');
-                        statusStat.className = 'stat status' + (isOnline ? ' online' : '');
-                        statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
-                        userStats.appendChild(statusStat);
-                    }
-
-                    detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
-
-                    if (userStats.children.length > 0) {
-                        detailsClone.appendChild(userStats);
-                    }
-
-                    userInfo.appendChild(detailsClone);
+                if (tdWrapper) {
+                    const title2TopClone = title2Top.cloneNode(true);
+                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                    title2TopClone.querySelector('.left.Item')?.remove();
+                    this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
+                    
+                    postHeader.appendChild(title2TopClone);
+                    tdWrapper.remove();
                 } else {
-                    userInfo.appendChild(leftSection.cloneNode(true));
+                    const title2TopClone = title2Top.cloneNode(true);
+                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                    title2TopClone.querySelector('.left.Item')?.remove();
+                    this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
+                    
+                    postHeader.appendChild(title2TopClone);
                 }
             }
 
-            if (rightSection) {
+            const centerElements = post.querySelectorAll('tr.center');
+            for (let i = 0; i < centerElements.length; i++) {
+                const centerElement = centerElements[i];
+                const leftSection = centerElement.querySelector('.left.Item');
+                const rightSection = centerElement.querySelector('.right.Item');
+
+                if (leftSection) {
+                    const details = leftSection.querySelector('.details');
+                    const avatar = leftSection.querySelector('.avatar');
+
+                    if (details && avatar) {
+                        const groupDd = details.querySelector('dl.u_group dd');
+                        groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
+
+                        userInfo.appendChild(avatar.cloneNode(true));
+
+                        const detailsClone = details.cloneNode(true);
+                        detailsClone.querySelector('.avatar')?.remove();
+
+                        if (nickElement) {
+                            const nickClone = nickElement.cloneNode(true);
+                            detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+
+                            if (groupValue) {
+                                const badge = document.createElement('div');
+                                badge.className = 'badge';
+                                badge.textContent = groupValue;
+                                nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
+                            }
+                        }
+
+                        detailsClone.querySelector('span.u_title')?.remove();
+
+                        let rankHTML = '';
+                        const pWithURank = detailsClone.querySelector('p');
+                        if (pWithURank && pWithURank.querySelector('span.u_rank')) {
+                            rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
+                            pWithURank.remove();
+                        }
+
+                        detailsClone.querySelector('br.br_status')?.remove();
+
+                        const userStats = document.createElement('div');
+                        userStats.className = 'user-stats';
+
+                        const originalDetails = details.cloneNode(true);
+
+                        if (rankHTML) {
+                            const rankStat = document.createElement('div');
+                            rankStat.className = 'stat rank';
+                            rankStat.innerHTML = rankHTML;
+                            userStats.appendChild(rankStat);
+                        }
+
+                        const postsDd = originalDetails.querySelector('dl.u_posts dd');
+                        if (postsDd) {
+                            const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
+                            userStats.appendChild(postsStat);
+                        }
+
+                        const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
+                        if (reputationDd) {
+                            const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
+                            userStats.appendChild(reputationStat);
+                        }
+
+                        const statusDl = originalDetails.querySelector('dl.u_status');
+                        if (statusDl) {
+                            const statusDd = statusDl.querySelector('dd');
+                            const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
+                            const isOnline = statusValue.toLowerCase().includes('online');
+                            const originalStatusIcon = statusDl.querySelector('dd i');
+
+                            let statusIconHTML = '';
+                            if (originalStatusIcon) {
+                                statusIconHTML = originalStatusIcon.outerHTML;
+                                if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
+                                    statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
+                                }
+                            } else {
+                                statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
+                            }
+
+                            const statusStat = document.createElement('div');
+                            statusStat.className = 'stat status' + (isOnline ? ' online' : '');
+                            statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
+                            userStats.appendChild(statusStat);
+                        }
+
+                        detailsClone.querySelectorAll('dl').forEach(function(dl) {
+                            dl.remove();
+                        });
+
+                        if (userStats.children.length > 0) {
+                            detailsClone.appendChild(userStats);
+                        }
+
+                        userInfo.appendChild(detailsClone);
+                    } else {
+                        userInfo.appendChild(leftSection.cloneNode(true));
+                    }
+                }
+
+                if (rightSection) {
+                    const contentWrapper = document.createElement('div');
+                    contentWrapper.className = 'post-main-content';
+
+                    const rightSectionClone = rightSection.cloneNode(true);
+                    this.#removeBottomBorderAndBr(rightSectionClone);
+                    this.#preserveMediaDimensions(rightSectionClone);
+
+                    contentWrapper.appendChild(rightSectionClone);
+                    this.#cleanupPostContentStructure(contentWrapper);
+                    postContent.appendChild(contentWrapper);
+                    this.#modernizeQuotes(contentWrapper);
+                    this.#modernizeSpoilers(contentWrapper);
+                    this.#modernizeCodeBlocksInContent(contentWrapper);
+                }
+            }
+
+            const title2Bottom = post.querySelector('.title2.bottom');
+            if (title2Bottom) {
+                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+                this.#modernizeBottomElements(title2Bottom, postFooter);
+                title2Bottom.remove();
+            } else {
+                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+            }
+
+            fragment.appendChild(postHeader);
+            fragment.appendChild(userInfo);
+            fragment.appendChild(postContent);
+            fragment.appendChild(postFooter);
+
+            post.innerHTML = '';
+            post.appendChild(fragment);
+
+            this.#convertMiniButtonsToButtons(post);
+            this.#addShareButton(post);
+            this.#cleanupPostContent(post);
+
+            const postId = post.id;
+            if (postId && postId.startsWith('ee')) {
+                post.setAttribute('data-post-id', postId.replace('ee', ''));
+            }
+        }
+    }
+
+    #transformSearchPostElements() {
+        const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
+
+        for (let index = 0; index < posts.length; index++) {
+            const post = posts[index];
+            post.classList.add('post-modernized', 'search-post');
+
+            const anchorDiv = post.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
+            }
+
+            const title2Top = post.querySelector('.title2.top');
+            const pointsElement = post.querySelector('.points');
+
+            let contentHTML = '';
+            const colorTable = post.querySelector('table.color');
+
+            if (colorTable) {
+                const tds = colorTable.querySelectorAll('td');
+                for (let i = 0; i < tds.length; i++) {
+                    const td = tds[i];
+                    if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
+                        contentHTML += td.outerHTML;
+                    }
+                }
+            }
+
+            if (!contentHTML) {
+                const contentElement = post.querySelector('td.Item table.color td') ||
+                    post.querySelector('td.Item td') ||
+                    post.querySelector('.color td') ||
+                    post.querySelector('td[align]');
+
+                if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
+                    contentHTML = contentElement.outerHTML;
+                }
+            }
+
+            const editElement = post.querySelector('span.edit');
+            const rtSub = post.querySelector('.rt.Sub');
+
+            const postHeader = document.createElement('div');
+            postHeader.className = 'post-header';
+
+            const postContent = document.createElement('div');
+            postContent.className = 'post-content search-post-content';
+
+            const postFooter = document.createElement('div');
+            postFooter.className = 'post-footer search-post-footer';
+
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                postHeader.appendChild(anchorContainer);
+            }
+
+            const postNumber = document.createElement('span');
+            postNumber.className = 'post-number';
+            
+            const hashIcon = document.createElement('i');
+            hashIcon.className = 'fa-regular fa-hashtag';
+            hashIcon.setAttribute('aria-hidden', 'true');
+            
+            const numberSpan = document.createElement('span');
+            numberSpan.className = 'post-number-value';
+            numberSpan.textContent = index + 1;
+            
+            postNumber.appendChild(hashIcon);
+            postNumber.appendChild(document.createTextNode(' '));
+            postNumber.appendChild(numberSpan);
+            
+            postHeader.appendChild(postNumber);
+
+            this.#addNewPostBadge(post, postHeader);
+
+            if (title2Top) {
+                const title2TopClone = title2Top.cloneNode(true);
+                const pointsInTitle = title2TopClone.querySelector('.points');
+                pointsInTitle?.remove();
+
+                let locationDiv = null;
+                if (rtSub) {
+                    const topicLink = rtSub.querySelector('a[href*="?t="]');
+                    const forumLink = rtSub.querySelector('a[href*="?f="]');
+
+                    if (topicLink || forumLink) {
+                        locationDiv = document.createElement('div');
+                        locationDiv.className = 'post-location';
+
+                        if (topicLink) {
+                            const topicSpan = document.createElement('span');
+                            topicSpan.className = 'topic-link';
+                            topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
+                            locationDiv.appendChild(topicSpan);
+                        }
+
+                        if (forumLink) {
+                            const forumSpan = document.createElement('span');
+                            forumSpan.className = 'forum-link';
+                            forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
+                            if (topicLink) {
+                                locationDiv.appendChild(document.createTextNode(' - '));
+                            }
+                            locationDiv.appendChild(forumSpan);
+                        }
+
+                        title2TopClone.querySelector('.rt.Sub')?.remove();
+                    }
+                }
+
+                this.#removeBreakAndNbsp(title2TopClone);
+                title2TopClone.querySelector('.Break.Sub')?.remove();
+
+                this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
+
+                const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+                if (tdWrapper) {
+                    const divs = tdWrapper.querySelectorAll('div');
+                    for (let i = 0; i < divs.length; i++) {
+                        postHeader.appendChild(divs[i].cloneNode(true));
+                    }
+                    tdWrapper.remove();
+
+                    if (locationDiv) {
+                        postHeader.appendChild(locationDiv);
+                    }
+                } else {
+                    if (locationDiv) {
+                        title2TopClone.appendChild(locationDiv);
+                    }
+                    postHeader.appendChild(title2TopClone);
+                }
+            }
+
+            if (contentHTML) {
                 const contentWrapper = document.createElement('div');
                 contentWrapper.className = 'post-main-content';
 
-                const rightSectionClone = rightSection.cloneNode(true);
-                this.#removeBottomBorderAndBr(rightSectionClone);
-                this.#preserveMediaDimensions(rightSectionClone);
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = contentHTML;
 
-                contentWrapper.appendChild(rightSectionClone);
-                this.#cleanupPostContentStructure(contentWrapper);
-                postContent.appendChild(contentWrapper);
+                if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
+                    const wrapperDiv = tempDiv.firstElementChild;
+                    const hasQuote = wrapperDiv.querySelector('.quote_top');
+
+                    if (!hasQuote) {
+                        while (wrapperDiv.firstChild) {
+                            tempDiv.appendChild(wrapperDiv.firstChild);
+                        }
+                        wrapperDiv.remove();
+                    }
+                }
+
+                while (tempDiv.firstChild) {
+                    contentWrapper.appendChild(tempDiv.firstChild);
+                }
+
+                this.#preserveMediaDimensions(contentWrapper);
+
+                const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
+                const textNodes = [];
+                let node;
+
+                while (node = walker.nextNode()) {
+                    if (node.textContent.trim() !== '') {
+                        textNodes.push(node);
+                    }
+                }
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const searchQuery = urlParams.get('q');
+                if (searchQuery) {
+                    for (let i = 0; i < textNodes.length; i++) {
+                        const textNode = textNodes[i];
+                        const text = textNode.textContent;
+                        const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
+                        const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
+
+                        if (highlightedText !== text) {
+                            const span = document.createElement('span');
+                            span.innerHTML = highlightedText;
+                            textNode.parentNode.replaceChild(span, textNode);
+                        }
+                    }
+                }
+
+                this.#processTextAndLineBreaks(contentWrapper);
+                this.#cleanupSearchPostContent(contentWrapper);
+
+                const editSpanInContent = contentWrapper.querySelector('span.edit');
+                if (editSpanInContent) {
+                    this.#transformEditTimestamp(editSpanInContent);
+                }
+
                 this.#modernizeQuotes(contentWrapper);
                 this.#modernizeSpoilers(contentWrapper);
                 this.#modernizeCodeBlocksInContent(contentWrapper);
+
+                postContent.appendChild(contentWrapper);
             }
-        });
 
-        const title2Bottom = post.querySelector('.title2.bottom');
-        if (title2Bottom) {
-            this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
-            this.#modernizeBottomElements(title2Bottom, postFooter);
-            title2Bottom.remove();
-        } else {
-            this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
-        }
+            const postFooterActions = document.createElement('div');
+            postFooterActions.className = 'post-actions';
 
-        fragment.appendChild(postHeader);
-        fragment.appendChild(userInfo);
-        fragment.appendChild(postContent);
-        fragment.appendChild(postFooter);
+            let pointsFooter;
+            if (pointsElement && pointsElement.innerHTML.trim() !== '') {
+                const pointsClone = pointsElement.cloneNode(true);
+                pointsFooter = pointsClone;
 
-        post.innerHTML = '';
-        post.appendChild(fragment);
+                const emElement = pointsFooter.querySelector('em');
+                const linkElement = pointsFooter.querySelector('a');
+                const href = linkElement ? linkElement.getAttribute('href') : null;
 
-        this.#convertMiniButtonsToButtons(post);
-        this.#addShareButton(post);
-        this.#cleanupPostContent(post);
+                let pointsValue = '0';
+                let pointsClass = 'points_pos';
 
-        const postId = post.id;
-        if (postId && postId.startsWith('ee')) {
-            post.setAttribute('data-post-id', postId.replace('ee', ''));
-        }
-    });
-}
-
-#transformSearchPostElements() {
-    const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
-
-    posts.forEach((post, index) => {
-        post.classList.add('post-modernized', 'search-post');
-
-        const anchorDiv = post.querySelector('.anchor');
-        let anchorElements = null;
-        if (anchorDiv) {
-            anchorElements = anchorDiv.cloneNode(true);
-            anchorDiv.remove();
-        }
-
-        const title2Top = post.querySelector('.title2.top');
-        const pointsElement = post.querySelector('.points');
-
-        let contentHTML = '';
-        const colorTable = post.querySelector('table.color');
-
-        if (colorTable) {
-            const tds = colorTable.querySelectorAll('td');
-            tds.forEach(td => {
-                if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
-                    contentHTML += td.outerHTML;
+                if (emElement) {
+                    pointsValue = emElement.textContent.trim();
+                    pointsClass = emElement.className;
                 }
-            });
-        }
 
-        if (!contentHTML) {
-            const contentElement = post.querySelector('td.Item table.color td') ||
-                post.querySelector('td.Item td') ||
-                post.querySelector('.color td') ||
-                post.querySelector('td[align]');
+                const newPoints = document.createElement('div');
+                newPoints.className = 'points active';
+                newPoints.id = pointsElement.id || '';
 
-            if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
-                contentHTML = contentElement.outerHTML;
-            }
-        }
-
-        const editElement = post.querySelector('span.edit');
-        const rtSub = post.querySelector('.rt.Sub');
-
-        const postHeader = document.createElement('div');
-        postHeader.className = 'post-header';
-
-        const postContent = document.createElement('div');
-        postContent.className = 'post-content search-post-content';
-
-        const postFooter = document.createElement('div');
-        postFooter.className = 'post-footer search-post-footer';
-
-        if (anchorElements) {
-            const anchorContainer = document.createElement('div');
-            anchorContainer.className = 'anchor-container';
-            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-            anchorContainer.appendChild(anchorElements);
-            postHeader.appendChild(anchorContainer);
-        }
-
-        const postNumber = document.createElement('span');
-        postNumber.className = 'post-number';
-        
-        const hashIcon = document.createElement('i');
-        hashIcon.className = 'fa-regular fa-hashtag';
-        hashIcon.setAttribute('aria-hidden', 'true');
-        
-        const numberSpan = document.createElement('span');
-        numberSpan.className = 'post-number-value';
-        numberSpan.textContent = index + 1;
-        
-        postNumber.appendChild(hashIcon);
-        postNumber.appendChild(document.createTextNode(' '));
-        postNumber.appendChild(numberSpan);
-        
-        postHeader.appendChild(postNumber);
-
-        this.#addNewPostBadge(post, postHeader);
-
-        if (title2Top) {
-            const title2TopClone = title2Top.cloneNode(true);
-            const pointsInTitle = title2TopClone.querySelector('.points');
-            pointsInTitle?.remove();
-
-            let locationDiv = null;
-            if (rtSub) {
-                const topicLink = rtSub.querySelector('a[href*="?t="]');
-                const forumLink = rtSub.querySelector('a[href*="?f="]');
-
-                if (topicLink || forumLink) {
-                    locationDiv = document.createElement('div');
-                    locationDiv.className = 'post-location';
-
-                    if (topicLink) {
-                        const topicSpan = document.createElement('span');
-                        topicSpan.className = 'topic-link';
-                        topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
-                        locationDiv.appendChild(topicSpan);
+                if (href) {
+                    const link = document.createElement('a');
+                    link.href = href;
+                    link.setAttribute('tabindex', '0');
+                    if (linkElement && linkElement.getAttribute('rel')) {
+                        link.setAttribute('rel', linkElement.getAttribute('rel'));
                     }
 
-                    if (forumLink) {
-                        const forumSpan = document.createElement('span');
-                        forumSpan.className = 'forum-link';
-                        forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
-                        if (topicLink) {
-                            locationDiv.appendChild(document.createTextNode(' - '));
-                        }
-                        locationDiv.appendChild(forumSpan);
-                    }
-
-                    title2TopClone.querySelector('.rt.Sub')?.remove();
+                    const em = document.createElement('em');
+                    em.className = pointsClass;
+                    em.textContent = pointsValue;
+                    link.appendChild(em);
+                    newPoints.appendChild(link);
+                } else {
+                    const em = document.createElement('em');
+                    em.className = pointsClass;
+                    em.textContent = pointsValue;
+                    newPoints.appendChild(em);
                 }
-            }
 
-            this.#removeBreakAndNbsp(title2TopClone);
-            title2TopClone.querySelector('.Break.Sub')?.remove();
+                const thumbsSpan = document.createElement('span');
+                thumbsSpan.className = 'points_up opacity';
 
-            // Transform timestamps in search posts
-            this.#transformPostHeaderTimestamps(title2TopClone);
-            this.#transformTimestampElements(title2TopClone);
-
-            const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
-            if (tdWrapper) {
-                const divs = tdWrapper.querySelectorAll('div');
-                divs.forEach(div => {
-                    postHeader.appendChild(div.cloneNode(true));
-                });
-                tdWrapper.remove();
-
-                if (locationDiv) {
-                    postHeader.appendChild(locationDiv);
+                const icon = document.createElement('i');
+                if (pointsClass === 'points_pos') {
+                    thumbsSpan.classList.add('active');
+                    icon.className = 'fa-regular fa-thumbs-up';
+                } else if (pointsClass === 'points_neg') {
+                    icon.className = 'fa-regular fa-thumbs-down';
+                } else {
+                    icon.className = 'fa-regular fa-thumbs-up';
                 }
+
+                icon.setAttribute('aria-hidden', 'true');
+                thumbsSpan.appendChild(icon);
+                newPoints.appendChild(thumbsSpan);
+
+                pointsFooter = newPoints;
             } else {
-                if (locationDiv) {
-                    title2TopClone.appendChild(locationDiv);
-                }
-                postHeader.appendChild(title2TopClone);
-            }
-        }
-
-        if (contentHTML) {
-            const contentWrapper = document.createElement('div');
-            contentWrapper.className = 'post-main-content';
-
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = contentHTML;
-
-            if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
-                const wrapperDiv = tempDiv.firstElementChild;
-                const hasQuote = wrapperDiv.querySelector('.quote_top');
-
-                if (!hasQuote) {
-                    while (wrapperDiv.firstChild) {
-                        tempDiv.appendChild(wrapperDiv.firstChild);
-                    }
-                    wrapperDiv.remove();
-                }
-            }
-
-            while (tempDiv.firstChild) {
-                contentWrapper.appendChild(tempDiv.firstChild);
-            }
-
-            this.#preserveMediaDimensions(contentWrapper);
-
-            const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            let node;
-
-            while (node = walker.nextNode()) {
-                if (node.textContent.trim() !== '') {
-                    textNodes.push(node);
-                }
-            }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const searchQuery = urlParams.get('q');
-            if (searchQuery) {
-                textNodes.forEach(textNode => {
-                    const text = textNode.textContent;
-                    const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
-                    const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
-
-                    if (highlightedText !== text) {
-                        const span = document.createElement('span');
-                        span.innerHTML = highlightedText;
-                        textNode.parentNode.replaceChild(span, textNode);
-                    }
-                });
-            }
-
-            this.#processTextAndLineBreaks(contentWrapper);
-            this.#cleanupSearchPostContent(contentWrapper);
-
-            const editSpanInContent = contentWrapper.querySelector('span.edit');
-            if (editSpanInContent) {
-                this.#transformEditTimestamp(editSpanInContent);
-            }
-
-            this.#modernizeQuotes(contentWrapper);
-            this.#modernizeSpoilers(contentWrapper);
-            this.#modernizeCodeBlocksInContent(contentWrapper);
-
-            postContent.appendChild(contentWrapper);
-        }
-
-        const postFooterActions = document.createElement('div');
-        postFooterActions.className = 'post-actions';
-
-        let pointsFooter;
-        if (pointsElement && pointsElement.innerHTML.trim() !== '') {
-            const pointsClone = pointsElement.cloneNode(true);
-            pointsFooter = pointsClone;
-
-            const emElement = pointsFooter.querySelector('em');
-            const linkElement = pointsFooter.querySelector('a');
-            const href = linkElement ? linkElement.getAttribute('href') : null;
-
-            let pointsValue = '0';
-            let pointsClass = 'points_pos';
-
-            if (emElement) {
-                pointsValue = emElement.textContent.trim();
-                pointsClass = emElement.className;
-            }
-
-            const newPoints = document.createElement('div');
-            newPoints.className = 'points active';
-            newPoints.id = pointsElement.id || '';
-
-            if (href) {
-                const link = document.createElement('a');
-                link.href = href;
-                link.setAttribute('tabindex', '0');
-                if (linkElement && linkElement.getAttribute('rel')) {
-                    link.setAttribute('rel', linkElement.getAttribute('rel'));
-                }
+                const noPoints = document.createElement('div');
+                noPoints.className = 'points no_points';
 
                 const em = document.createElement('em');
-                em.className = pointsClass;
-                em.textContent = pointsValue;
-                link.appendChild(em);
-                newPoints.appendChild(link);
-            } else {
-                const em = document.createElement('em');
-                em.className = pointsClass;
-                em.textContent = pointsValue;
-                newPoints.appendChild(em);
-            }
+                em.className = 'points_pos';
+                em.textContent = '0';
+                noPoints.appendChild(em);
 
-            const thumbsSpan = document.createElement('span');
-            thumbsSpan.className = 'points_up opacity';
+                const thumbsSpan = document.createElement('span');
+                thumbsSpan.className = 'points_up opacity';
 
-            const icon = document.createElement('i');
-            if (pointsClass === 'points_pos') {
-                thumbsSpan.classList.add('active');
+                const icon = document.createElement('i');
                 icon.className = 'fa-regular fa-thumbs-up';
-            } else if (pointsClass === 'points_neg') {
-                icon.className = 'fa-regular fa-thumbs-down';
-            } else {
-                icon.className = 'fa-regular fa-thumbs-up';
+                icon.setAttribute('aria-hidden', 'true');
+
+                thumbsSpan.appendChild(icon);
+                noPoints.appendChild(thumbsSpan);
+
+                pointsFooter = noPoints;
             }
 
-            icon.setAttribute('aria-hidden', 'true');
-            thumbsSpan.appendChild(icon);
-            newPoints.appendChild(thumbsSpan);
+            postFooterActions.appendChild(pointsFooter);
+            postFooter.appendChild(postFooterActions);
 
-            pointsFooter = newPoints;
-        } else {
-            const noPoints = document.createElement('div');
-            noPoints.className = 'points no_points';
+            const shareContainer = document.createElement('div');
+            shareContainer.className = 'modern-bottom-actions';
 
-            const em = document.createElement('em');
-            em.className = 'points_pos';
-            em.textContent = '0';
-            noPoints.appendChild(em);
+            const shareButton = document.createElement('button');
+            shareButton.className = 'btn btn-icon btn-share';
+            shareButton.setAttribute('data-action', 'share');
+            shareButton.setAttribute('title', 'Share this post');
+            shareButton.setAttribute('type', 'button');
+            shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
 
-            const thumbsSpan = document.createElement('span');
-            thumbsSpan.className = 'points_up opacity';
+            shareButton.addEventListener('click', function() {
+                this.#handleShareSearchPost(post);
+            }.bind(this));
 
-            const icon = document.createElement('i');
-            icon.className = 'fa-regular fa-thumbs-up';
-            icon.setAttribute('aria-hidden', 'true');
+            shareContainer.appendChild(shareButton);
+            postFooter.appendChild(shareContainer);
 
-            thumbsSpan.appendChild(icon);
-            noPoints.appendChild(thumbsSpan);
+            const newPost = document.createElement('div');
+            newPost.className = 'post post-modernized search-post';
+            newPost.id = post.id;
 
-            pointsFooter = noPoints;
-        }
-
-        postFooterActions.appendChild(pointsFooter);
-        postFooter.appendChild(postFooterActions);
-
-        const shareContainer = document.createElement('div');
-        shareContainer.className = 'modern-bottom-actions';
-
-        const shareButton = document.createElement('button');
-        shareButton.className = 'btn btn-icon btn-share';
-        shareButton.setAttribute('data-action', 'share');
-        shareButton.setAttribute('title', 'Share this post');
-        shareButton.setAttribute('type', 'button');
-        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
-
-        shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
-
-        shareContainer.appendChild(shareButton);
-        postFooter.appendChild(shareContainer);
-
-        const newPost = document.createElement('div');
-        newPost.className = 'post post-modernized search-post';
-        newPost.id = post.id;
-
-        Array.from(post.attributes).forEach(attr => {
-            if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
-                return;
-            }
-            newPost.setAttribute(attr.name, attr.value);
-        });
-
-        Array.from(post.attributes).forEach(attr => {
-            if (attr.name.startsWith('data-')) {
+            const attributes = Array.from(post.attributes);
+            for (let i = 0; i < attributes.length; i++) {
+                const attr = attributes[i];
+                if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
+                    continue;
+                }
                 newPost.setAttribute(attr.name, attr.value);
             }
-        });
 
-        const originalClasses = post.className.split(' ').filter(cls =>
-            !cls.includes('post-modernized') && !cls.includes('search-post')
-        );
-        newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
+            for (let i = 0; i < attributes.length; i++) {
+                const attr = attributes[i];
+                if (attr.name.startsWith('data-')) {
+                    newPost.setAttribute(attr.name, attr.value);
+                }
+            }
 
-        newPost.appendChild(postHeader);
-        newPost.appendChild(postContent);
-        newPost.appendChild(postFooter);
+            const originalClasses = post.className.split(' ').filter(function(cls) {
+                return !cls.includes('post-modernized') && !cls.includes('search-post');
+            });
+            newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
 
-        post.parentNode.replaceChild(newPost, post);
-        this.#updatePointsContainerActiveState(pointsFooter);
-    });
-}
+            newPost.appendChild(postHeader);
+            newPost.appendChild(postContent);
+            newPost.appendChild(postFooter);
+
+            post.parentNode.replaceChild(newPost, post);
+            this.#updatePointsContainerActiveState(pointsFooter);
+        }
+    }
 
     #cleanupSearchPostContent(contentWrapper) {
-        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
+        const elements = contentWrapper.querySelectorAll('table, tbody, tr, td');
+        for (let i = 0; i < elements.length; i++) {
+            const el = elements[i];
             if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
                 el.remove();
             } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
@@ -3297,25 +3845,31 @@ class PostModernizer {
                     el.remove();
                 }
             }
-        });
+        }
 
-        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
-            if (container.classList.contains('quote-modernized')) return;
+        const quoteContainers = contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)');
+        for (let i = 0; i < quoteContainers.length; i++) {
+            const container = quoteContainers[i];
+            if (container.classList.contains('quote-modernized')) continue;
             this.#transformQuote(container);
             container.classList.add('quote-modernized');
-        });
+        }
 
-        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
-            if (container.classList.contains('spoiler-modernized')) return;
+        const spoilerContainers = contentWrapper.querySelectorAll('div[align="center"].spoiler');
+        for (let i = 0; i < spoilerContainers.length; i++) {
+            const container = spoilerContainers[i];
+            if (container.classList.contains('spoiler-modernized')) continue;
             this.#transformSpoiler(container);
             container.classList.add('spoiler-modernized');
-        });
+        }
 
-        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
-            if (container.classList.contains('code-modernized')) return;
+        const codeContainers = contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)');
+        for (let i = 0; i < codeContainers.length; i++) {
+            const container = codeContainers[i];
+            if (container.classList.contains('code-modernized')) continue;
             this.#transformCodeBlock(container);
             container.classList.add('code-modernized');
-        });
+        }
     }
 
     #escapeRegex(string) {
@@ -3352,25 +3906,34 @@ class PostModernizer {
     }
 
     #removeInvalidTableStructure(element) {
-        element.querySelectorAll('td.right.Item').forEach(td => {
+        const tdElements = element.querySelectorAll('td.right.Item');
+        for (let i = 0; i < tdElements.length; i++) {
+            const td = tdElements[i];
             while (td.firstChild) {
                 td.parentNode.insertBefore(td.firstChild, td);
             }
             td.remove();
-        });
+        }
 
-        element.querySelectorAll('table.color:empty').forEach(table => table.remove());
+        const emptyTables = element.querySelectorAll('table.color:empty');
+        for (let i = 0; i < emptyTables.length; i++) {
+            emptyTables[i].remove();
+        }
     }
 
     #cleanupPostContentStructure(contentElement) {
-        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+        const tdElements = contentElement.querySelectorAll('.post-main-content > td');
+        for (let i = 0; i < tdElements.length; i++) {
+            const td = tdElements[i];
             while (td.firstChild) {
                 contentElement.appendChild(td.firstChild);
             }
             td.remove();
-        });
+        }
 
-        contentElement.querySelectorAll('td').forEach(td => {
+        const allTds = contentElement.querySelectorAll('td');
+        for (let i = 0; i < allTds.length; i++) {
+            const td = allTds[i];
             const parent = td.parentNode;
             if (parent) {
                 while (td.firstChild) {
@@ -3378,9 +3941,11 @@ class PostModernizer {
                 }
                 td.remove();
             }
-        });
+        }
 
-        contentElement.querySelectorAll('tr').forEach(tr => {
+        const trElements = contentElement.querySelectorAll('tr');
+        for (let i = 0; i < trElements.length; i++) {
+            const tr = trElements[i];
             const parent = tr.parentNode;
             if (parent) {
                 while (tr.firstChild) {
@@ -3388,9 +3953,11 @@ class PostModernizer {
                 }
                 tr.remove();
             }
-        });
+        }
 
-        contentElement.querySelectorAll('tbody').forEach(tbody => {
+        const tbodyElements = contentElement.querySelectorAll('tbody');
+        for (let i = 0; i < tbodyElements.length; i++) {
+            const tbody = tbodyElements[i];
             const parent = tbody.parentNode;
             if (parent) {
                 while (tbody.firstChild) {
@@ -3398,9 +3965,11 @@ class PostModernizer {
                 }
                 tbody.remove();
             }
-        });
+        }
 
-        contentElement.querySelectorAll('table').forEach(table => {
+        const tableElements = contentElement.querySelectorAll('table');
+        for (let i = 0; i < tableElements.length; i++) {
+            const table = tableElements[i];
             const parent = table.parentNode;
             if (parent) {
                 while (table.firstChild) {
@@ -3408,7 +3977,7 @@ class PostModernizer {
                 }
                 table.remove();
             }
-        });
+        }
 
         this.#cleanUpLineBreaksBetweenBlocks(contentElement);
         this.#cleanEmptyElements(contentElement);
@@ -3419,9 +3988,10 @@ class PostModernizer {
     }
 
     #cleanupEditSpans(element) {
-        element.querySelectorAll('span.edit').forEach(span => {
-            this.#transformEditTimestamp(span);
-        });
+        const editSpans = element.querySelectorAll('span.edit');
+        for (let i = 0; i < editSpans.length; i++) {
+            this.#transformEditTimestamp(editSpans[i]);
+        }
     }
 
     #cleanUpLineBreaksBetweenBlocks(element) {
@@ -3435,12 +4005,13 @@ class PostModernizer {
         ];
 
         const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
-        blocks.sort((a, b) => {
+        blocks.sort(function(a, b) {
             const position = a.compareDocumentPosition(b);
             return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
         });
 
-        blocks.forEach(block => {
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
             let nextSibling = block.nextSibling;
             while (nextSibling) {
                 if (nextSibling.nodeType === Node.ELEMENT_NODE &&
@@ -3457,9 +4028,10 @@ class PostModernizer {
                     break;
                 }
             }
-        });
+        }
 
-        blocks.forEach(block => {
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
             let prevSibling = block.previousSibling;
             while (prevSibling) {
                 if (prevSibling.nodeType === Node.ELEMENT_NODE &&
@@ -3476,15 +4048,17 @@ class PostModernizer {
                     break;
                 }
             }
-        });
+        }
     }
 
     #cleanEmptyElements(element) {
-        element.querySelectorAll(':empty').forEach(emptyEl => {
+        const emptyElements = element.querySelectorAll(':empty');
+        for (let i = 0; i < emptyElements.length; i++) {
+            const emptyEl = emptyElements[i];
             if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
                 emptyEl.remove();
             }
-        });
+        }
 
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
         const nodesToRemove = [];
@@ -3496,22 +4070,31 @@ class PostModernizer {
             }
         }
 
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+        for (let i = 0; i < nodesToRemove.length; i++) {
+            const node = nodesToRemove[i];
+            if (node.parentNode) {
+                node.parentNode.removeChild(node);
+            }
+        }
     }
 
     #cleanInvalidAttributes(element) {
-        element.querySelectorAll('[width]').forEach(el => {
+        const widthElements = element.querySelectorAll('[width]');
+        for (let i = 0; i < widthElements.length; i++) {
+            const el = widthElements[i];
             if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
                 el.removeAttribute('width');
             }
-        });
+        }
 
-        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
+        const tableElements = element.querySelectorAll('[cellpadding], [cellspacing]');
+        for (let i = 0; i < tableElements.length; i++) {
+            const el = tableElements[i];
             if (el.tagName !== 'TABLE') {
                 el.removeAttribute('cellpadding');
                 el.removeAttribute('cellspacing');
             }
-        });
+        }
     }
 
     #processTextAndLineBreaks(element) {
@@ -3525,21 +4108,24 @@ class PostModernizer {
             }
         }
 
-        textNodes.forEach(textNode => {
+        for (let i = 0; i < textNodes.length; i++) {
+            const textNode = textNodes[i];
             if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
                 const span = document.createElement('span');
                 span.className = 'post-text';
                 span.textContent = textNode.textContent;
                 textNode.parentNode.replaceChild(span, textNode);
             }
-        });
+        }
 
-        element.querySelectorAll('br').forEach(br => {
+        const brElements = element.querySelectorAll('br');
+        for (let i = 0; i < brElements.length; i++) {
+            const br = brElements[i];
             const prevSibling = br.previousElementSibling;
             const nextSibling = br.nextElementSibling;
 
             if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header')) {
-                return;
+                continue;
             }
 
             if (prevSibling && nextSibling) {
@@ -3562,7 +4148,7 @@ class PostModernizer {
             } else {
                 br.remove();
             }
-        });
+        }
 
         const postTextElements = element.querySelectorAll('.post-text');
         for (let i = 0; i < postTextElements.length - 1; i++) {
@@ -3587,34 +4173,44 @@ class PostModernizer {
     }
 
     #processSignature(element) {
-        element.querySelectorAll('.signature').forEach(sig => {
+        const signatures = element.querySelectorAll('.signature');
+        for (let i = 0; i < signatures.length; i++) {
+            const sig = signatures[i];
             sig.classList.add('post-signature');
-            sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
-        });
+            if (sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR') {
+                sig.previousElementSibling.remove();
+            }
+        }
     }
 
     #modernizeQuotes(contentWrapper) {
-        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
-            if (container.classList.contains('quote-modernized')) return;
+        const quoteContainers = contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)');
+        for (let i = 0; i < quoteContainers.length; i++) {
+            const container = quoteContainers[i];
+            if (container.classList.contains('quote-modernized')) continue;
             this.#transformQuote(container);
             container.classList.add('quote-modernized');
-        });
+        }
     }
 
     #modernizeSpoilers(contentWrapper) {
-        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
-            if (container.classList.contains('spoiler-modernized')) return;
+        const spoilerContainers = contentWrapper.querySelectorAll('div[align="center"].spoiler');
+        for (let i = 0; i < spoilerContainers.length; i++) {
+            const container = spoilerContainers[i];
+            if (container.classList.contains('spoiler-modernized')) continue;
             this.#transformSpoiler(container);
             container.classList.add('spoiler-modernized');
-        });
+        }
     }
 
     #modernizeCodeBlocksInContent(contentWrapper) {
-        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
-            if (container.classList.contains('code-modernized')) return;
+        const codeContainers = contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)');
+        for (let i = 0; i < codeContainers.length; i++) {
+            const container = codeContainers[i];
+            if (container.classList.contains('code-modernized')) continue;
             this.#transformCodeBlock(container);
             container.classList.add('code-modernized');
-        });
+        }
     }
 
     #transformQuote(container) {
@@ -3665,12 +4261,12 @@ class PostModernizer {
             this.#addQuoteEventListeners(modernQuote);
         }
 
-        setTimeout(() => {
+        setTimeout(function() {
             const quoteLink = modernQuote.querySelector('.quote-link');
             if (quoteLink) {
                 this.#enhanceSingleQuoteLink(quoteLink);
             }
-        }, 10);
+        }.bind(this), 10);
     }
 
     #transformSpoiler(container) {
@@ -3714,7 +4310,7 @@ class PostModernizer {
         this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
     }
 
-    #addSpoilerEventListeners(spoilerElement, isLongContent = false) {
+    #addSpoilerEventListeners(spoilerElement, isLongContent) {
         const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
         const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
         const expandBtn = spoilerElement.querySelector('.spoiler-expand-btn');
@@ -3733,7 +4329,7 @@ class PostModernizer {
             expandBtn.style.display = 'flex';
         }
 
-        const toggleSpoiler = (shouldExpand = null) => {
+        const toggleSpoiler = function(shouldExpand) {
             const isExpanded = shouldExpand !== null ? shouldExpand : !spoilerElement.classList.contains('expanded');
 
             if (isExpanded) {
@@ -3754,7 +4350,7 @@ class PostModernizer {
                 } else {
                     spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
                     spoilerContent.style.padding = '16px';
-                    setTimeout(() => {
+                    setTimeout(function() {
                         spoilerContent.style.maxHeight = 'none';
                     }, 300);
                 }
@@ -3779,22 +4375,24 @@ class PostModernizer {
                 }
 
                 if (isLongContent && expandBtn) {
-                    setTimeout(() => {
+                    setTimeout(function() {
                         expandBtn.style.display = 'flex';
                     }, 300);
                 }
             }
         };
 
-        spoilerHeader.addEventListener('click', () => toggleSpoiler());
+        spoilerHeader.addEventListener('click', function() {
+            toggleSpoiler();
+        });
         if (spoilerToggle) {
-            spoilerToggle.addEventListener('click', (e) => {
+            spoilerToggle.addEventListener('click', function(e) {
                 e.stopPropagation();
                 toggleSpoiler();
             });
         }
 
-        spoilerHeader.addEventListener('keydown', (e) => {
+        spoilerHeader.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 toggleSpoiler();
@@ -3802,12 +4400,12 @@ class PostModernizer {
         });
 
         if (expandBtn) {
-            expandBtn.addEventListener('click', () => {
+            expandBtn.addEventListener('click', function() {
                 toggleSpoiler(true);
 
                 if (isLongContent && spoilerContent.scrollHeight > 250) {
                     spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px';
-                    setTimeout(() => {
+                    setTimeout(function() {
                         spoilerContent.style.maxHeight = 'none';
                     }, 300);
                 }
@@ -3841,11 +4439,12 @@ class PostModernizer {
         const images = clone.querySelectorAll('img');
         if (images.length >= 2) {
             let totalPixelArea = 0;
-            images.forEach(img => {
+            for (let i = 0; i < images.length; i++) {
+                const img = images[i];
                 const width = parseInt(img.getAttribute('width')) || 0;
                 const height = parseInt(img.getAttribute('height')) || 0;
                 totalPixelArea += width * height;
-            });
+            }
             if (totalPixelArea > 500000) contentScore += 2;
         }
 
@@ -3859,47 +4458,53 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-#preserveMediaDimensions(element) {
-    element.querySelectorAll('img').forEach(img => {
-        if (!img.style.maxWidth) {
-            img.style.maxWidth = '100%';
-        }
-        if (!img.style.height) {
-            img.style.height = 'auto';
-        }
-        
-        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                       img.className.includes('emoji');
-        
-        if (isTwemoji || isEmoji) {
-            img.style.display = 'inline-block';
-            img.style.verticalAlign = 'text-bottom';
-            img.style.margin = '0 2px';
-        } else if (!img.style.display || img.style.display === 'inline') {
-            img.style.display = 'block';
-        }
-        
-        if (!img.hasAttribute('alt')) {
-            if (isEmoji) {
-                img.setAttribute('alt', 'Emoji');
-                img.setAttribute('role', 'img');
-            } else {
-                img.setAttribute('alt', 'Forum image');
+    #preserveMediaDimensions(element) {
+        const images = element.querySelectorAll('img');
+        for (let i = 0; i < images.length; i++) {
+            const img = images[i];
+            if (!img.style.maxWidth) {
+                img.style.maxWidth = '100%';
+            }
+            if (!img.style.height) {
+                img.style.height = 'auto';
+            }
+            
+            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                           img.className.includes('emoji');
+            
+            if (isTwemoji || isEmoji) {
+                img.style.display = 'inline-block';
+                img.style.verticalAlign = 'text-bottom';
+                img.style.margin = '0 2px';
+            } else if (!img.style.display || img.style.display === 'inline') {
+                img.style.display = 'block';
+            }
+            
+            if (!img.hasAttribute('alt')) {
+                if (isEmoji) {
+                    img.setAttribute('alt', 'Emoji');
+                    img.setAttribute('role', 'img');
+                } else {
+                    img.setAttribute('alt', 'Forum image');
+                }
             }
         }
-    });
-    
-    element.querySelectorAll('iframe, video').forEach(media => {
-        if (globalThis.mediaDimensionExtractor) {
-            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        
+        const mediaElements = element.querySelectorAll('iframe, video');
+        for (let i = 0; i < mediaElements.length; i++) {
+            const media = mediaElements[i];
+            if (globalThis.mediaDimensionExtractor) {
+                globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+            }
         }
-    });
-}
+    }
 
     #enhanceIframesInElement(element) {
-        element.querySelectorAll('iframe').forEach(iframe => {
+        const iframes = element.querySelectorAll('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+            const iframe = iframes[i];
             const originalWidth = iframe.getAttribute('width');
             const originalHeight = iframe.getAttribute('height');
 
@@ -3952,7 +4557,7 @@ class PostModernizer {
             if (!iframe.hasAttribute('title')) {
                 iframe.setAttribute('title', 'Embedded content');
             }
-        });
+        }
     }
 
     #addQuoteEventListeners(quoteElement) {
@@ -3960,10 +4565,10 @@ class PostModernizer {
         const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
 
         if (expandBtn && quoteContent) {
-            expandBtn.addEventListener('click', () => {
+            expandBtn.addEventListener('click', function() {
                 quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
                 expandBtn.style.display = 'none';
-                setTimeout(() => {
+                setTimeout(function() {
                     quoteContent.style.maxHeight = 'none';
                 }, 300);
             });
@@ -3998,7 +4603,9 @@ class PostModernizer {
     }
 
     #modernizeBottomElements(title2Bottom, postFooter) {
-        title2Bottom.querySelectorAll('.rt.Sub').forEach(rtSub => {
+        const rtSubs = title2Bottom.querySelectorAll('.rt.Sub');
+        for (let i = 0; i < rtSubs.length; i++) {
+            const rtSub = rtSubs[i];
             const label = rtSub.querySelector('label');
             const checkbox = rtSub.querySelector('input[type="checkbox"]');
             const ipAddress = rtSub.querySelector('.ip_address');
@@ -4024,11 +4631,14 @@ class PostModernizer {
                 modernContainer.innerHTML = html;
                 postFooter.appendChild(modernContainer);
             }
-        });
+        }
     }
 
     #removeBreakAndNbsp(element) {
-        element.querySelectorAll('.Break.Sub').forEach(el => el.remove());
+        const breakElements = element.querySelectorAll('.Break.Sub');
+        for (let i = 0; i < breakElements.length; i++) {
+            breakElements[i].remove();
+        }
 
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
         const nodesToRemove = [];
@@ -4040,26 +4650,37 @@ class PostModernizer {
             }
         }
 
-        nodesToRemove.forEach(node => {
+        for (let i = 0; i < nodesToRemove.length; i++) {
+            const node = nodesToRemove[i];
             if (node.parentNode) {
                 node.parentNode.removeChild(node);
             }
-        });
+        }
     }
 
     #removeBottomBorderAndBr(element) {
-        element.querySelectorAll('.bottomborder').forEach(bottomBorder => {
+        const bottomBorders = element.querySelectorAll('.bottomborder');
+        for (let i = 0; i < bottomBorders.length; i++) {
+            const bottomBorder = bottomBorders[i];
             bottomBorder.remove();
-            bottomBorder.nextElementSibling && bottomBorder.nextElementSibling.tagName === 'BR' && bottomBorder.nextElementSibling.remove();
-        });
+            if (bottomBorder.nextElementSibling && bottomBorder.nextElementSibling.tagName === 'BR') {
+                bottomBorder.nextElementSibling.remove();
+            }
+        }
     }
 
     #cleanupPostContent(post) {
-        post.querySelectorAll('.bottomborder').forEach(bottomBorder => {
-            bottomBorder.parentNode && bottomBorder.parentNode.removeChild(bottomBorder);
-            bottomBorder.nextElementSibling && bottomBorder.nextElementSibling.tagName === 'BR' &&
-                bottomBorder.parentNode && bottomBorder.parentNode.removeChild(bottomBorder.nextElementSibling);
-        });
+        const bottomBorders = post.querySelectorAll('.bottomborder');
+        for (let i = 0; i < bottomBorders.length; i++) {
+            const bottomBorder = bottomBorders[i];
+            if (bottomBorder.parentNode) {
+                bottomBorder.parentNode.removeChild(bottomBorder);
+                if (bottomBorder.nextElementSibling && bottomBorder.nextElementSibling.tagName === 'BR' &&
+                    bottomBorder.parentNode) {
+                    bottomBorder.parentNode.removeChild(bottomBorder.nextElementSibling);
+                }
+            }
+        }
     }
 
     #createStatElement(iconClass, value, additionalClass) {
@@ -4090,14 +4711,21 @@ class PostModernizer {
             }
         }
 
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+        for (let i = 0; i < nodesToRemove.length; i++) {
+            const node = nodesToRemove[i];
+            if (node.parentNode) {
+                node.parentNode.removeChild(node);
+            }
+        }
 
-        Array.from(miniButtons.childNodes).forEach(child => {
+        const childNodes = Array.from(miniButtons.childNodes);
+        for (let i = 0; i < childNodes.length; i++) {
+            const child = childNodes[i];
             if (child.nodeType === Node.TEXT_NODE &&
                 (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
                 miniButtons.removeChild(child);
             }
-        });
+        }
     }
 
     #setInitialPointsState(miniButtons) {
@@ -4112,23 +4740,23 @@ class PostModernizer {
 
         if (bulletDelete) {
             if (pointsPos) {
-                pointsUp && pointsUp.classList.add('active');
-                pointsDown && pointsDown.classList.remove('active');
+                if (pointsUp) pointsUp.classList.add('active');
+                if (pointsDown) pointsDown.classList.remove('active');
             } else if (pointsNeg) {
                 const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
                 const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
 
                 if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
-                    pointsUp && pointsUp.classList.add('active');
+                    if (pointsUp) pointsUp.classList.add('active');
                 }
                 if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
-                    pointsDown && pointsDown.classList.add('active');
+                    if (pointsDown) pointsDown.classList.add('active');
                 }
 
                 if (pointsUp && pointsUp.classList.contains('active')) {
-                    pointsDown && pointsDown.classList.remove('active');
+                    if (pointsDown) pointsDown.classList.remove('active');
                 } else if (pointsDown && pointsDown.classList.contains('active')) {
-                    pointsUp && pointsUp.classList.remove('active');
+                    if (pointsUp) pointsUp.classList.remove('active');
                 }
             }
         }
@@ -4245,7 +4873,9 @@ class PostModernizer {
         const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
         if (!miniButtonsContainer) return;
 
-        miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
+        const links = miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a');
+        for (let i = 0; i < links.length; i++) {
+            const link = links[i];
             const href = link.getAttribute('href');
 
             if (href && href.startsWith('javascript:')) {
@@ -4270,22 +4900,32 @@ class PostModernizer {
                 link.setAttribute('title', 'Edit');
 
                 const icon = link.querySelector('i');
-                icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                if (icon && !icon.hasAttribute('aria-hidden')) {
+                    icon.setAttribute('aria-hidden', 'true');
+                }
             } else if (href && href.includes('CODE=02')) {
                 link.classList.add('btn', 'btn-icon', 'btn-quote');
                 link.setAttribute('data-action', 'quote');
                 link.setAttribute('title', 'Quote');
-                link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+                if (link.getAttribute('rel')) {
+                    link.setAttribute('rel', link.getAttribute('rel'));
+                }
 
                 const icon = link.querySelector('i');
-                icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                if (icon && !icon.hasAttribute('aria-hidden')) {
+                    icon.setAttribute('aria-hidden', 'true');
+                }
             } else if (href) {
                 link.classList.add('btn', 'btn-icon');
-                link.querySelectorAll('i').forEach(icon => {
-                    !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-                });
+                const icons = link.querySelectorAll('i');
+                for (let j = 0; j < icons.length; j++) {
+                    const icon = icons[j];
+                    if (!icon.hasAttribute('aria-hidden')) {
+                        icon.setAttribute('aria-hidden', 'true');
+                    }
+                }
             }
-        });
+        }
 
         this.#reorderPostButtons(miniButtonsContainer);
     }
@@ -4308,15 +4948,17 @@ class PostModernizer {
             miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild);
         }
 
-        shareButton.addEventListener('click', () => this.#handleSharePost(post));
+        shareButton.addEventListener('click', function() {
+            this.#handleSharePost(post);
+        }.bind(this));
     }
 
     #reorderPostButtons(container) {
         const elements = Array.from(container.children);
         const order = ['share', 'quote', 'edit', 'delete'];
 
-        elements.sort((a, b) => {
-            const getAction = (element) => {
+        elements.sort(function(a, b) {
+            const getAction = function(element) {
                 const dataAction = element.getAttribute('data-action');
                 if (dataAction && order.includes(dataAction)) return dataAction;
 
@@ -4347,7 +4989,9 @@ class PostModernizer {
         });
 
         container.innerHTML = '';
-        elements.forEach(el => container.appendChild(el));
+        for (let i = 0; i < elements.length; i++) {
+            container.appendChild(elements[i]);
+        }
     }
 
     #handleSharePost(post) {
@@ -4385,11 +5029,11 @@ class PostModernizer {
 
     #copyPostLinkToClipboard(link) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(link).then(() => {
+            navigator.clipboard.writeText(link).then(function() {
                 this.#showCopyNotification('Post link copied to clipboard!');
-            }).catch(() => {
+            }.bind(this)).catch(function() {
                 this.#fallbackCopyPostLink(link);
-            });
+            }.bind(this));
         } else {
             this.#fallbackCopyPostLink(link);
         }
@@ -4430,18 +5074,18 @@ class PostModernizer {
 
         document.body.appendChild(notification);
 
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
                 notification.style.transform = 'translateX(0)';
                 notification.style.opacity = '1';
             });
         });
 
-        const dismissTimer = setTimeout(() => {
+        const dismissTimer = setTimeout(function() {
             notification.style.transform = 'translateX(calc(100% + 20px))';
             notification.style.opacity = '0';
 
-            notification.addEventListener('transitionend', () => {
+            notification.addEventListener('transitionend', function() {
                 if (notification.parentNode) {
                     notification.parentNode.removeChild(notification);
                 }
@@ -4450,12 +5094,12 @@ class PostModernizer {
 
         notification.style.pointerEvents = 'auto';
         notification.style.cursor = 'pointer';
-        notification.addEventListener('click', () => {
+        notification.addEventListener('click', function() {
             clearTimeout(dismissTimer);
             notification.style.transform = 'translateX(calc(100% + 20px))';
             notification.style.opacity = '0';
 
-            notification.addEventListener('transitionend', () => {
+            notification.addEventListener('transitionend', function() {
                 if (notification.parentNode) {
                     notification.parentNode.removeChild(notification);
                 }
@@ -4464,7 +5108,7 @@ class PostModernizer {
     }
 
     #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', function(e) {
             const pointsUp = e.target.closest('.points_up');
             const pointsDown = e.target.closest('.points_down');
             const emojiPreview = e.target.closest('.st-emoji-preview');
@@ -4483,18 +5127,25 @@ class PostModernizer {
                 }
 
                 if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
+                    if (pointsContainer && pointsContainer.querySelector('.points_down')) {
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                    }
                     pointsUp.classList.add('active');
                 }
 
                 if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
+                    if (pointsContainer && pointsContainer.querySelector('.points_up')) {
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                    }
                     pointsDown.classList.add('active');
                 }
             }
 
             if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+                const container = emojiPreview.closest('.st-emoji-container');
+                if (container) {
+                    container.classList.toggle('active');
+                }
             }
         });
     }
@@ -4514,7 +5165,7 @@ class PostModernizer {
     // ==============================
 
     #setupEnhancedAnchorNavigation() {
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', function(e) {
             const link = e.target.closest('a[href*="#"]');
             if (!link) return;
 
@@ -4536,24 +5187,28 @@ class PostModernizer {
                     this.#scrollToAnchorWithPrecision(anchorId, link);
                 }
             }
-        });
+        }.bind(this));
 
-        window.addEventListener('hashchange', () => {
+        window.addEventListener('hashchange', function() {
             const hash = window.location.hash.substring(1);
             if (hash && (hash === 'lastpost' || hash === 'newpost' || hash.startsWith('entry'))) {
-                setTimeout(() => this.#scrollToAnchorWithPrecision(hash), 100);
+                setTimeout(function() {
+                    this.#scrollToAnchorWithPrecision(hash);
+                }.bind(this), 100);
             }
-        });
+        }.bind(this));
 
         if (window.location.hash) {
             const hash = window.location.hash.substring(1);
             if (hash && (hash === 'lastpost' || hash === 'newpost' || hash.startsWith('entry'))) {
-                setTimeout(() => this.#scrollToAnchorWithPrecision(hash), 500);
+                setTimeout(function() {
+                    this.#scrollToAnchorWithPrecision(hash);
+                }.bind(this), 500);
             }
         }
     }
 
-    #scrollToAnchorWithPrecision(anchorId, triggerElement = null) {
+    #scrollToAnchorWithPrecision(anchorId, triggerElement) {
         console.log('Navigating to anchor: ' + anchorId);
 
         const anchorElement = document.getElementById(anchorId);
@@ -4565,16 +5220,16 @@ class PostModernizer {
             return;
         }
 
-        const postElement = anchorElement.closest('.post');
+        const postElement = anchorElement.closest('.post, .article');
         if (!postElement) {
-            console.warn('Post containing anchor #' + anchorId + ' not found');
+            console.warn('Post/Article containing anchor #' + anchorId + ' not found');
             this.#scrollToElementWithOffset(anchorElement);
             return;
         }
 
         this.#focusPost(postElement);
 
-        const postHeader = postElement.querySelector('.post-header');
+        const postHeader = postElement.querySelector('.post-header, .article-header');
         if (postHeader) {
             this.#scrollToElementWithOffset(postHeader, 20);
         } else {
@@ -4588,13 +5243,14 @@ class PostModernizer {
     }
 
     #focusPost(postElement) {
-        document.querySelectorAll('.post.focus').forEach(post => {
-            post.classList.remove('focus');
-        });
+        const focusedElements = document.querySelectorAll('.post.focus, .article.focus');
+        for (let i = 0; i < focusedElements.length; i++) {
+            focusedElements[i].classList.remove('focus');
+        }
 
         postElement.classList.add('focus');
 
-        const removeFocusHandler = (e) => {
+        const removeFocusHandler = function(e) {
             if (!postElement.contains(e.target)) {
                 postElement.classList.remove('focus');
                 document.removeEventListener('click', removeFocusHandler);
@@ -4602,7 +5258,7 @@ class PostModernizer {
             }
         };
 
-        const escapeHandler = (e) => {
+        const escapeHandler = function(e) {
             if (e.key === 'Escape') {
                 postElement.classList.remove('focus');
                 document.removeEventListener('click', removeFocusHandler);
@@ -4613,18 +5269,18 @@ class PostModernizer {
         document.addEventListener('click', removeFocusHandler);
         document.addEventListener('keydown', escapeHandler);
 
-        setTimeout(() => {
+        setTimeout(function() {
             postElement.classList.remove('focus');
             document.removeEventListener('click', removeFocusHandler);
             document.removeEventListener('keydown', escapeHandler);
         }, 10000);
     }
 
-    #scrollToElementWithOffset(element, additionalOffset = 0) {
+    #scrollToElementWithOffset(element, additionalOffset) {
         const elementRect = element.getBoundingClientRect();
         const offsetTop = elementRect.top + window.pageYOffset;
         const headerHeight = this.#getFixedHeaderHeight();
-        const targetScroll = offsetTop - headerHeight - additionalOffset;
+        const targetScroll = offsetTop - headerHeight - (additionalOffset || 0);
 
         if ('scrollBehavior' in document.documentElement.style) {
             window.scrollTo({
@@ -4647,9 +5303,11 @@ class PostModernizer {
             '[style*="sticky"]'
         ];
 
-        headerSelectors.forEach(selector => {
+        for (let i = 0; i < headerSelectors.length; i++) {
+            const selector = headerSelectors[i];
             const elements = document.querySelectorAll(selector);
-            elements.forEach(el => {
+            for (let j = 0; j < elements.length; j++) {
+                const el = elements[j];
                 const rect = el.getBoundingClientRect();
                 const style = window.getComputedStyle(el);
                 const position = style.position;
@@ -4657,8 +5315,8 @@ class PostModernizer {
                 if (position === 'fixed' || position === 'sticky') {
                     totalHeight += rect.height;
                 }
-            });
-        });
+            }
+        }
 
         return Math.max(totalHeight, 80);
     }
@@ -4694,13 +5352,15 @@ class PostModernizer {
     }
 
     #processExistingQuoteLinks() {
-        document.querySelectorAll('.quote-link').forEach(link => {
-            this.#enhanceSingleQuoteLink(link);
-        });
+        const quoteLinks = document.querySelectorAll('.quote-link');
+        for (let i = 0; i < quoteLinks.length; i++) {
+            this.#enhanceSingleQuoteLink(quoteLinks[i]);
+        }
 
-        document.querySelectorAll('.quote_top a[href*="#entry"]').forEach(link => {
-            this.#enhanceSingleQuoteLink(link);
-        });
+        const quoteTopLinks = document.querySelectorAll('.quote_top a[href*="#entry"]');
+        for (let i = 0; i < quoteTopLinks.length; i++) {
+            this.#enhanceSingleQuoteLink(quoteTopLinks[i]);
+        }
     }
 
     #enhanceSingleQuoteLink(link) {
@@ -4738,11 +5398,11 @@ class PostModernizer {
 
         button.appendChild(icon);
 
-        button.addEventListener('click', (e) => {
+        button.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
             this.#handleQuoteJumpClick(button);
-        });
+        }.bind(this));
 
         link.parentNode.replaceChild(button, link);
     }
@@ -4771,7 +5431,7 @@ class PostModernizer {
             return;
         }
 
-        const postElement = anchorElement.closest('.post');
+        const postElement = anchorElement.closest('.post, .article');
 
         if (!postElement) {
             this.#scrollToElementWithOffset(anchorElement);
@@ -4781,7 +5441,7 @@ class PostModernizer {
 
         this.#focusPost(postElement);
 
-        const postHeader = postElement.querySelector('.post-header');
+        const postHeader = postElement.querySelector('.post-header, .article-header');
         if (postHeader) {
             this.#scrollToElementWithOffset(postHeader, 20);
         } else {
@@ -4791,9 +5451,9 @@ class PostModernizer {
         postElement.setAttribute('tabindex', '-1');
         postElement.focus({ preventScroll: true });
 
-        setTimeout(() => {
+        setTimeout(function() {
             this.#setButtonLoading(button, false);
-        }, 500);
+        }.bind(this), 500);
     }
 
     #setButtonLoading(button, isLoading) {
@@ -4818,13 +5478,17 @@ class PostModernizer {
         if (globalThis.forumObserver) {
             this.#quoteLinkObserverId = globalThis.forumObserver.register({
                 id: 'quote-link-enhancer',
-                callback: (node) => this.#handleNewQuoteLinks(node),
+                callback: function(node) {
+                    this.#handleNewQuoteLinks(node);
+                }.bind(this),
                 selector: '.quote-link, .quote_top a[href*="#entry"]',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
             });
         } else {
-            setInterval(() => this.#processExistingQuoteLinks(), 2000);
+            setInterval(function() {
+                this.#processExistingQuoteLinks();
+            }.bind(this), 2000);
         }
     }
 
@@ -4832,9 +5496,10 @@ class PostModernizer {
         if (node.matches('.quote-link') || node.matches('.quote_top a[href*="#entry"]')) {
             this.#enhanceSingleQuoteLink(node);
         } else {
-            node.querySelectorAll('.quote-link, .quote_top a[href*="#entry"]').forEach(link => {
-                this.#enhanceSingleQuoteLink(link);
-            });
+            const links = node.querySelectorAll('.quote-link, .quote_top a[href*="#entry"]');
+            for (let i = 0; i < links.length; i++) {
+                this.#enhanceSingleQuoteLink(links[i]);
+            }
         }
     }
 
@@ -4875,11 +5540,13 @@ class PostModernizer {
     }
 
     #processExistingCodeBlocks() {
-        document.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
-            if (container.classList.contains('code-modernized')) return;
+        const codeBlocks = document.querySelectorAll('div[align="center"]:has(.code_top)');
+        for (let i = 0; i < codeBlocks.length; i++) {
+            const container = codeBlocks[i];
+            if (container.classList.contains('code-modernized')) continue;
             this.#transformCodeBlock(container);
             container.classList.add('code-modernized');
-        });
+        }
     }
 
     #transformCodeBlock(container) {
@@ -4925,7 +5592,7 @@ class PostModernizer {
         this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
     }
 
-    #addCodeEventListeners(codeElement, codeText, isLongContent = false) {
+    #addCodeEventListeners(codeElement, codeText, isLongContent) {
         const codeHeader = codeElement.querySelector('.code-header');
         const copyBtn = codeElement.querySelector('.code-copy-btn');
         const expandBtn = codeElement.querySelector('.code-expand-btn');
@@ -4934,22 +5601,22 @@ class PostModernizer {
         codeHeader.style.cursor = 'default';
 
         if (copyBtn) {
-            copyBtn.addEventListener('click', (e) => {
+            copyBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 this.#copyCodeToClipboard(codeText, 'code');
-            });
+            }.bind(this));
         }
 
         if (expandBtn) {
-            expandBtn.addEventListener('click', () => {
+            expandBtn.addEventListener('click', function() {
                 this.#toggleCodeExpansion(codeElement, true);
-            });
+            }.bind(this));
         }
 
         this.#applySyntaxHighlighting(codeElement);
     }
 
-    #toggleCodeExpansion(codeElement, forceExpand = null) {
+    #toggleCodeExpansion(codeElement, forceExpand) {
         const codeContent = codeElement.querySelector('.code-content');
         const expandBtn = codeElement.querySelector('.code-expand-btn');
         const isExpanded = forceExpand !== null ? forceExpand : !codeElement.classList.contains('expanded');
@@ -4961,7 +5628,7 @@ class PostModernizer {
                 expandBtn.style.display = 'none';
             }
 
-            setTimeout(() => {
+            setTimeout(function() {
                 codeContent.style.maxHeight = 'none';
             }, 300);
         } else {
@@ -4972,7 +5639,7 @@ class PostModernizer {
 
             codeContent.style.maxHeight = '0';
             if (expandBtn) {
-                setTimeout(() => {
+                setTimeout(function() {
                     expandBtn.style.display = 'flex';
                 }, 300);
             }
@@ -4981,11 +5648,11 @@ class PostModernizer {
 
     #copyCodeToClipboard(codeText, codeType) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(codeText).then(() => {
+            navigator.clipboard.writeText(codeText).then(function() {
                 this.#showCopyNotification('Copied ' + codeType + ' to clipboard!');
-            }).catch(() => {
+            }.bind(this)).catch(function() {
                 this.#fallbackCopyCode(codeText, codeType);
-            });
+            }.bind(this));
         } else {
             this.#fallbackCopyCode(codeText, codeType);
         }
@@ -5067,9 +5734,9 @@ class PostModernizer {
 
         if (lines.length > 1) {
             let numberedHTML = '';
-            lines.forEach((line, index) => {
-                numberedHTML += '<span class="line-number">' + (index + 1) + '</span>' + line + '\n';
-            });
+            for (let i = 0; i < lines.length; i++) {
+                numberedHTML += '<span class="line-number">' + (i + 1) + '</span>' + lines[i] + '\n';
+            }
             codeContent.innerHTML = numberedHTML;
             codeElement.classList.add('has-line-numbers');
         }
@@ -5079,13 +5746,17 @@ class PostModernizer {
         if (globalThis.forumObserver) {
             this.#codeBlockObserverId = globalThis.forumObserver.register({
                 id: 'code-block-modernizer',
-                callback: (node) => this.#handleNewCodeBlocks(node),
+                callback: function(node) {
+                    this.#handleNewCodeBlocks(node);
+                }.bind(this),
                 selector: 'div[align="center"]:has(.code_top)',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
             });
         } else {
-            setInterval(() => this.#processExistingCodeBlocks(), 2000);
+            setInterval(function() {
+                this.#processExistingCodeBlocks();
+            }.bind(this), 2000);
         }
     }
 
@@ -5093,9 +5764,56 @@ class PostModernizer {
         if (node.matches('div[align="center"]:has(.code_top)')) {
             this.#transformCodeBlock(node);
         } else {
-            node.querySelectorAll('div[align="center"]:has(.code_top)').forEach(block => {
-                this.#transformCodeBlock(block);
-            });
+            const blocks = node.querySelectorAll('div[align="center"]:has(.code_top)');
+            for (let i = 0; i < blocks.length; i++) {
+                this.#transformCodeBlock(blocks[i]);
+            }
+        }
+    }
+
+    #transformTimestampElements(element) {
+        const timestampSelectors = [
+            '.lt.Sub a span.when',
+            '.lt.Sub time',
+            '.post-edit time',
+            '.lt.Sub span',
+            '.lt.Sub a',
+            '.title2.top time',
+            '.title2.top span',
+            '.title2.top a',
+            'span.when',
+            'a[href*="#entry"]',
+            'a[title*="/"]'
+        ];
+        
+        const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
+        
+        for (let i = 0; i < timestampElements.length; i++) {
+            const timestampElement = timestampElements[i];
+            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
+                continue;
+            }
+            
+            const dateString = this.#extractDateFromElement(timestampElement);
+            
+            if (dateString) {
+                console.log('Found timestamp element:', {
+                    element: timestampElement,
+                    dateString: dateString,
+                    html: timestampElement.outerHTML
+                });
+                
+                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
+                
+                if (modernTimestamp !== timestampElement) {
+                    const parent = timestampElement.parentNode;
+                    if (parent && parent.tagName === 'A' && parent.children.length === 1 && parent.children[0] === timestampElement) {
+                        parent.parentNode.replaceChild(modernTimestamp, parent);
+                    } else {
+                        timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                    }
+                }
+            }
         }
     }
 
@@ -5105,31 +5823,36 @@ class PostModernizer {
         this.#searchPostObserverId, this.#quoteLinkObserverId,
             this.#codeBlockObserverId];
 
-        ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            if (id && globalThis.forumObserver) {
+                globalThis.forumObserver.unregister(id);
+            }
+        }
 
         if (this.#retryTimeoutId) {
             clearTimeout(this.#retryTimeoutId);
             this.#retryTimeoutId = null;
         }
 
-        this.#timeUpdateIntervals.forEach(interval => {
-            clearInterval(interval);
-        });
+        const intervals = Array.from(this.#timeUpdateIntervals.values());
+        for (let i = 0; i < intervals.length; i++) {
+            clearInterval(intervals[i]);
+        }
         this.#timeUpdateIntervals.clear();
 
-        console.log('Post Modernizer destroyed');
+        console.log('Post Modernizer with Article support destroyed');
     }
 }
 
 // Modern initialization without DOMContentLoaded with body ID check
 (function initPostModernizer() {
-    // Check if we are on a page that should have post modernization
     var bodyId = document.body.id;
     var shouldModernize = bodyId === 'topic' || bodyId === 'blog' || bodyId === 'send';
     
     if (!shouldModernize) {
         console.log('Post Modernizer skipped for body#' + bodyId);
-        return; // Exit early
+        return;
     }
     
     var init = function() {
