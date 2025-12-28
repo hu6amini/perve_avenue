@@ -2224,10 +2224,10 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
+       #init() {
         try {
             this.#transformPostElements();
-            this.#transformArticleElements(); // NEW: Transform articles
+            this.#transformArticleElements();
             this.#enhanceReputationSystem();
             this.#setupObserverCallbacks();
             this.#setupActiveStateObserver();
@@ -2235,6 +2235,11 @@ class PostModernizer {
             this.#setupEnhancedAnchorNavigation();
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
+
+            // Transform search posts if we're on search page
+            if (document.body.id === 'search') {
+                this.#transformSearchPostElements();
+            }
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
