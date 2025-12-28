@@ -3822,10 +3822,8 @@ class PostModernizer {
             return;
         }
         
-        // Check if it contains "Edited by" text
-        if (span.textContent.includes('Edited by')) {
-            this.#transformEditTimestamp(span);
-        }
+        // Always transform edit spans regardless of language
+        this.#transformEditTimestamp(span);
     });
 }
 
