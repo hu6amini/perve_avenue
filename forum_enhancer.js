@@ -2253,7 +2253,7 @@ class PostModernizer {
     // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
     // ==============================
 
-    #parseForumDate(dateString) {
+#parseForumDate(dateString) {
     if (!dateString || typeof dateString !== 'string') {
         return null;
     }
@@ -2267,26 +2267,27 @@ class PostModernizer {
 
     console.debug('Parsing date string:', dateString, '->', cleanDateString);
 
-    // Common forum date formats - IMPORTANT: Forum times are in SERVER TIMEZONE
+    // IMPORTANT DISCOVERY: Forum dates are ALREADY in USER'S timezone!
+    // "12/28/2025, 05:53 PM" is already in Europe/Sofia (EET) for you
+    
+    // Common forum date formats
     const formats = [
-        'MM/DD/YYYY, h:mm A',      // 12/28/2025, 01:29 PM (forum server time)
-        'MM/DD/YYYY, h:mm:ss A',   // 12/28/2025, 01:29:10 PM
-        'MM/DD/YYYY, HH:mm',       // 12/28/2025, 13:29
-        'MM/DD/YYYY, HH:mm:ss',    // 12/28/2025, 13:29:10
-        'MM-DD-YYYY, h:mm A',      // 12-28-2025, 01:29 PM
-        'DD/MM/YYYY, h:mm A',      // 28/12/2025, 01:29 PM
-        'DD/MM/YYYY, HH:mm',       // 28/12/2025, 13:29
-        'YYYY-MM-DD HH:mm:ss',     // 2025-12-28 13:29:10
-        'YYYY-MM-DDTHH:mm:ss',     // 2025-12-28T13:29:10
-        'dddd, MMMM D, YYYY h:mm A', // Sunday, December 28, 2025 7:53 PM
+        'MM/DD/YYYY, h:mm A',      // 12/28/2025, 05:53 PM (already in user timezone!)
+        'MM/DD/YYYY, h:mm:ss A',   // 12/28/2025, 05:53:10 PM
+        'MM/DD/YYYY, HH:mm',       // 12/28/2025, 17:53
+        'MM/DD/YYYY, HH:mm:ss',    // 12/28/2025, 17:53:10
+        'MM-DD-YYYY, h:mm A',      // 12-28-2025, 05:53 PM
+        'DD/MM/YYYY, h:mm A',      // 28/12/2025, 05:53 PM
+        'DD/MM/YYYY, HH:mm',       // 28/12/2025, 17:53
+        'YYYY-MM-DD HH:mm:ss',     // 2025-12-28 17:53:10
+        'YYYY-MM-DDTHH:mm:ss',     // 2025-12-28T17:53:10
+        'dddd, MMMM D, YYYY h:mm A', // Sunday, December 28, 2025 5:53 PM
+        'dddd, MMMM D, YYYY h:mm A (z)', // Sunday, December 28, 2025 5:53 PM (EET)
     ];
     
     let momentDate = null;
     
-    // CRITICAL: Forum dates are displayed in SERVER timezone (not UTC)
-    // We need to parse them in the SERVER timezone, then convert to UTC
-    
-    // Strategy 1: Try parsing as local time first (forum server time)
+    // Strategy 1: Parse as LOCAL time (already in user's timezone!)
     for (let i = 0; i < formats.length; i++) {
         momentDate = moment(cleanDateString, formats[i], true);
         if (momentDate && momentDate.isValid()) {
@@ -2295,32 +2296,23 @@ class PostModernizer {
         }
     }
     
-    // Strategy 2: If we have a timezone in the string, parse with moment-timezone
+    // Strategy 2: If format with timezone like "Sunday, December 28, 2025 5:53 PM (EET)"
     if ((!momentDate || !momentDate.isValid()) && cleanDateString.includes('(')) {
-        try {
-            // Extract timezone abbreviation from string like "Sunday, December 28, 2025 7:53 PM (EET)"
-            const timezoneMatch = cleanDateString.match(/\(([A-Z]{2,})\)$/);
-            if (timezoneMatch) {
-                const tzAbbr = timezoneMatch[1];
-                // Remove timezone from string for parsing
-                const dateWithoutTz = cleanDateString.replace(/\s*\([A-Z]{2,}\)$/, '');
-                
-                for (let i = 0; i < formats.length; i++) {
-                    const parsed = moment(dateWithoutTz, formats[i], true);
-                    if (parsed && parsed.isValid()) {
-                        // Try to convert abbreviation to timezone
-                        const possibleZones = this.#getTimezoneFromAbbr(tzAbbr);
-                        if (possibleZones.length > 0) {
-                            momentDate = parsed.tz(possibleZones[0]);
-                        } else {
-                            momentDate = parsed;
-                        }
-                        break;
-                    }
+        // Extract timezone from parentheses
+        const tzMatch = cleanDateString.match(/\(([^)]+)\)$/);
+        if (tzMatch) {
+            const tzPart = tzMatch[1];
+            const dateWithoutTz = cleanDateString.replace(/\s*\([^)]+\)$/, '').trim();
+            
+            // Try parsing without timezone
+            for (let i = 0; i < formats.length; i++) {
+                momentDate = moment(dateWithoutTz, formats[i], true);
+                if (momentDate && momentDate.isValid()) {
+                    console.debug('Parsed date without timezone:', momentDate.format());
+                    // The date is already in the displayed timezone
+                    break;
                 }
             }
-        } catch (e) {
-            console.debug('Timezone parsing failed:', e.message);
         }
     }
     
@@ -2335,66 +2327,21 @@ class PostModernizer {
     
     // Final validation
     if (momentDate && momentDate.isValid()) {
-        // IMPORTANT: Forum server time is likely US/Eastern (EST/EDT) for most forums
-        // But we should try to detect or assume based on evidence
-        const forumTimezone = this.#detectForumTimezone();
-        
-        console.debug('Forum timezone detected as:', forumTimezone);
-        console.debug('Original parsed:', momentDate.format(), 'Local offset:', momentDate.utcOffset());
-        
-        // Apply forum timezone offset to get correct UTC time
-        const forumTime = momentDate.tz(forumTimezone);
-        const utcTime = forumTime.clone().utc();
-        
-        console.debug('After timezone adjustment:', {
-            forumTime: forumTime.format(),
-            utcTime: utcTime.format(),
-            userLocal: utcTime.clone().local().format()
+        console.debug('Final parsed date:', {
+            original: cleanDateString,
+            parsedLocal: momentDate.format(),
+            parsedUTC: momentDate.utc().format(),
+            userTimezone: moment.tz.guess(),
+            offset: momentDate.utcOffset()
         });
         
-        return utcTime;
+        // CRITICAL: The parsed date is already in the viewer's local timezone
+        // Convert to UTC for storage
+        return momentDate.utc();
     }
     
     console.warn('Could not parse date:', dateString, '->', cleanDateString);
     return null;
-}
-
-    #detectForumTimezone() {
-    // Try to detect forum timezone from the page
-    // Common forum timezones: US/Eastern (EST/EDT), UTC, Europe/London
-    
-    // Check for timezone hints in the page
-    const timezoneElements = document.querySelectorAll('.timezone, [data-timezone], .footer, .copyright');
-    let detectedZone = null;
-    
-    timezoneElements.forEach(el => {
-        const text = el.textContent || '';
-        if (text.includes('EST') || text.includes('EDT') || text.includes('Eastern')) {
-            detectedZone = 'America/New_York';
-        } else if (text.includes('PST') || text.includes('PDT') || text.includes('Pacific')) {
-            detectedZone = 'America/Los_Angeles';
-        } else if (text.includes('GMT') || text.includes('UTC')) {
-            detectedZone = 'UTC';
-        } else if (text.includes('CET') || text.includes('CEST') || text.includes('Central European')) {
-            detectedZone = 'Europe/Paris';
-        } else if (text.includes('EET') || text.includes('EEST') || text.includes('Eastern European')) {
-            detectedZone = 'Europe/Sofia';
-        }
-    });
-    
-    // Check URL or other indicators
-    const currentUrl = window.location.href;
-    if (currentUrl.includes('.com') && !detectedZone) {
-        // .com domains often use US/Eastern
-        detectedZone = 'America/New_York';
-    } else if (currentUrl.includes('.co.uk') || currentUrl.includes('.uk')) {
-        detectedZone = 'Europe/London';
-    } else if (currentUrl.includes('.au')) {
-        detectedZone = 'Australia/Sydney';
-    }
-    
-    // Default to US/Eastern (most common for forums)
-    return detectedZone || 'America/New_York';
 }
 
 #getTimezoneFromAbbr(abbr) {
@@ -2474,7 +2421,7 @@ class PostModernizer {
     }
 }
 
-   #getUserLocaleSettings() {
+#getUserLocaleSettings() {
     try {
         // Detect user's locale preferences
         const locale = navigator.language || 'en-US';
@@ -2516,7 +2463,7 @@ class PostModernizer {
     }
 }
 
-   #createModernTimestamp(originalElement, dateString) {
+#createModernTimestamp(originalElement, dateString) {
     if (typeof moment === 'undefined' || typeof moment.tz === 'undefined') {
         console.warn('Moment.js libraries not loaded, skipping timestamp transformation');
         return originalElement;
@@ -2530,13 +2477,6 @@ class PostModernizer {
         console.log('Could not parse date:', dateString);
         return originalElement;
     }
-    
-    // Log for debugging
-    console.debug('Timestamp creation:', {
-        originalDateString: dateString,
-        parsedUTC: momentDate.format(),
-        parsedLocal: momentDate.local().format()
-    });
     
     // Get user's locale settings
     const userSettings = this.#getUserLocaleSettings();
@@ -2577,7 +2517,7 @@ class PostModernizer {
     const utcISOString = momentDate.toISOString();
     timeElement.setAttribute('datetime', utcISOString);
     
-    // Convert to user's local timezone for display
+    // Convert UTC back to user's local timezone for display
     const userLocalDate = momentDate.tz(userSettings.timezone);
     
     // Create title with full localized date-time
@@ -2595,7 +2535,7 @@ class PostModernizer {
     const relativeTime = this.#formatTimeAgo(momentDate);
     relativeSpan.textContent = relativeTime;
     
-    // Add absolute time as data attribute for debugging
+    // Add absolute time as data attribute
     timeElement.setAttribute('data-absolute-time', userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime));
     
     timeElement.appendChild(relativeSpan);
@@ -2627,7 +2567,7 @@ class PostModernizer {
                 relativeSpan.textContent = newRelativeTime;
             }
             
-            // Update title periodically to ensure accuracy
+            // Update title periodically
             const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
             const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
             const currentTimezoneAbbr = currentUserLocalDate.format('z');
@@ -2647,7 +2587,9 @@ class PostModernizer {
         element: timeElement.outerHTML,
         utc: utcISOString,
         userLocal: userLocalDate.format(),
-        relativeTime: relativeTime
+        relativeTime: relativeTime,
+        currentTime: moment().format(),
+        diff: moment().diff(momentDate, 'minutes')
     });
     
     return link;
