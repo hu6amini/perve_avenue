@@ -2522,20 +2522,43 @@ class PostModernizer {
         return originalElement;
     }
     
-    console.debug('Creating timestamp for:', dateString);
+    // Prevent recursive transformation
+    if (originalElement.classList && originalElement.classList.contains('modern-timestamp')) {
+        console.debug('Element already modernized:', originalElement);
+        return originalElement;
+    }
+    
+    // Check if element contains a modern timestamp
+    if (originalElement.querySelector && originalElement.querySelector('.modern-timestamp')) {
+        console.debug('Element contains modern timestamp:', originalElement);
+        return originalElement;
+    }
+    
+    // Check if we're inside a modern timestamp
+    if (originalElement.closest && originalElement.closest('.modern-timestamp')) {
+        console.debug('Inside modern timestamp:', originalElement);
+        return originalElement;
+    }
+    
+    console.debug('Creating modern timestamp for:', {
+        element: originalElement.tagName,
+        classes: originalElement.className,
+        dateString: dateString
+    });
     
     const momentDate = this.#parseForumDate(dateString);
     
     if (!momentDate) {
-        console.log('Could not parse date:', dateString);
+        console.warn('Could not parse date:', dateString);
         return originalElement;
     }
     
     // Log for debugging
-    console.debug('Timestamp creation:', {
+    console.debug('Timestamp creation details:', {
         originalDateString: dateString,
         parsedUTC: momentDate.format(),
-        parsedLocal: momentDate.local().format()
+        parsedLocal: momentDate.local().format(),
+        forumTimezone: this.#detectForumTimezone()
     });
     
     // Get user's locale settings
@@ -2544,18 +2567,20 @@ class PostModernizer {
     // Create the link
     const link = document.createElement('a');
     
-    // Try to preserve the original href if it exists
-    let originalHref = null;
-    if (originalElement.tagName === 'A') {
-        originalHref = originalElement.getAttribute('href');
-    } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A') {
-        originalHref = originalElement.parentElement.getAttribute('href');
-    }
+    // Determine the href - try multiple sources
+    let href = null;
     
-    if (originalHref) {
-        link.href = originalHref;
-    } else {
-        // Fallback: try to construct link from post ID
+    // 1. Check if original element is an anchor
+    if (originalElement.tagName === 'A' && originalElement.hasAttribute('href')) {
+        href = originalElement.getAttribute('href');
+    } 
+    // 2. Check if parent is an anchor
+    else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
+             originalElement.parentElement.hasAttribute('href')) {
+        href = originalElement.parentElement.getAttribute('href');
+    }
+    // 3. Construct from post ID
+    else {
         const postElement = originalElement.closest('.post');
         if (postElement && postElement.id) {
             const postIdMatch = postElement.id.match(/\d+/);
@@ -2563,9 +2588,24 @@ class PostModernizer {
                 const postId = postIdMatch[0];
                 const topicMatch = window.location.href.match(/t=(\d+)/);
                 if (topicMatch) {
-                    link.href = '#entry' + postId;
+                    href = '#entry' + postId;
+                } else {
+                    // Fallback to current page with anchor
+                    href = '#entry' + postId;
                 }
             }
+        }
+    }
+    
+    if (href) {
+        link.href = href;
+        
+        // Copy rel attribute if exists
+        if (originalElement.hasAttribute('rel')) {
+            link.setAttribute('rel', originalElement.getAttribute('rel'));
+        } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
+                  originalElement.parentElement.hasAttribute('rel')) {
+            link.setAttribute('rel', originalElement.parentElement.getAttribute('rel'));
         }
     }
     
@@ -2599,7 +2639,15 @@ class PostModernizer {
     timeElement.setAttribute('data-absolute-time', userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime));
     
     timeElement.appendChild(relativeSpan);
-    link.appendChild(timeElement);
+    
+    // Only wrap with link if we have a valid href
+    let finalElement;
+    if (href) {
+        link.appendChild(timeElement);
+        finalElement = link;
+    } else {
+        finalElement = timeElement;
+    }
     
     // Generate unique ID for this timestamp
     const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
@@ -2643,14 +2691,15 @@ class PostModernizer {
     timeElement.setAttribute('data-user-locale', userSettings.locale);
     timeElement.setAttribute('data-parsed-utc', utcISOString);
     
-    console.debug('Created timestamp:', {
-        element: timeElement.outerHTML,
+    console.debug('Created timestamp element:', {
+        href: href,
         utc: utcISOString,
         userLocal: userLocalDate.format(),
-        relativeTime: relativeTime
+        relativeTime: relativeTime,
+        elementHTML: finalElement.outerHTML.substring(0, 200)
     });
     
-    return link;
+    return finalElement;
 }
 
     #extractDateFromElement(element) {
@@ -2749,52 +2798,90 @@ class PostModernizer {
     }
 
     #transformTimestampElements(element) {
-        const timestampSelectors = [
-            '.lt.Sub a span.when',
-            '.lt.Sub time',
-            '.post-edit time',
-            '.lt.Sub span',
-            '.lt.Sub a',
-            '.title2.top time',
-            '.title2.top span',
-            '.title2.top a',
-            'span.when',
-            'a[href*="#entry"]',
-            'a[title*="/"]'
-        ];
+    const timestampSelectors = [
+        '.lt.Sub a span.when',
+        '.lt.Sub time',
+        '.post-edit time',
+        '.lt.Sub span',
+        '.lt.Sub a',
+        '.title2.top time',
+        '.title2.top span',
+        '.title2.top a',
+        'span.when',
+        'a[href*="#entry"]',
+        'a[title*="/"]'
+    ];
+    
+    const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
+    
+    timestampElements.forEach(timestampElement => {
+        // Skip if the element itself is already a modern timestamp
+        if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
+            return;
+        }
         
-        const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
+        // Skip if any ancestor is already a modern timestamp
+        if (timestampElement.closest('.modern-timestamp')) {
+            return;
+        }
         
-        timestampElements.forEach(timestampElement => {
-            // Skip if already modernized
-            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
-                return;
-            }
+        // Skip if this is an anchor that contains a modern timestamp
+        if (timestampElement.tagName === 'A' && timestampElement.querySelector('.modern-timestamp')) {
+            return;
+        }
+        
+        // Skip if this is a time element that contains a modern timestamp
+        if (timestampElement.tagName === 'TIME' && timestampElement.querySelector('.modern-timestamp')) {
+            return;
+        }
+        
+        // Skip if we're trying to transform something inside an already transformed timestamp
+        if (timestampElement.closest('time.modern-timestamp, a .modern-timestamp')) {
+            return;
+        }
+        
+        const dateString = this.#extractDateFromElement(timestampElement);
+        
+        if (dateString) {
+            console.debug('Found timestamp element for transformation:', {
+                element: timestampElement.tagName,
+                classes: timestampElement.className,
+                dateString: dateString
+            });
             
-            const dateString = this.#extractDateFromElement(timestampElement);
+            const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
             
-            if (dateString) {
-                console.log('Found timestamp element:', {
-                    element: timestampElement,
-                    dateString: dateString,
-                    html: timestampElement.outerHTML
-                });
+            if (modernTimestamp && modernTimestamp !== timestampElement) {
+                // Check if we're replacing an anchor that contains our timestamp
+                const parent = timestampElement.parentNode;
                 
-                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
-                
-                if (modernTimestamp !== timestampElement) {
-                    // Try to replace intelligently
-                    const parent = timestampElement.parentNode;
-                    if (parent && parent.tagName === 'A' && parent.children.length === 1 && parent.children[0] === timestampElement) {
-                        // Replace the entire link if it only contains the timestamp
-                        parent.parentNode.replaceChild(modernTimestamp, parent);
-                    } else {
-                        timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
-                    }
+                // If the parent is an anchor and we're replacing its only child
+                if (parent && parent.tagName === 'A' && parent.children.length === 1 && 
+                    parent.children[0] === timestampElement && parent.href && parent.href.includes('#entry')) {
+                    // Replace the entire anchor with our new timestamp link
+                    parent.parentNode.replaceChild(modernTimestamp, parent);
+                } 
+                // If the element itself is an anchor with href
+                else if (timestampElement.tagName === 'A' && timestampElement.href && 
+                         timestampElement.href.includes('#entry') && 
+                         timestampElement.children.length === 0) {
+                    // Replace the anchor directly
+                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                }
+                // If we're replacing a span inside an anchor
+                else if (timestampElement.tagName === 'SPAN' && parent && parent.tagName === 'A' && 
+                         parent.href && parent.href.includes('#entry')) {
+                    // Replace the span, but keep the anchor
+                    parent.replaceChild(modernTimestamp, timestampElement);
+                }
+                // Default replacement
+                else {
+                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
                 }
             }
-        });
-    }
+        }
+    });
+}
 
     #transformPostHeaderTimestamps(postHeader) {
         if (!postHeader) return;
