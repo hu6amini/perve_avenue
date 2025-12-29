@@ -2224,7 +2224,7 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
+       #init() {
         try {
             this.#transformPostElements();
             this.#transformArticleElements();
@@ -3130,265 +3130,262 @@ class PostModernizer {
     }
 
     // ==============================
-    // ARTICLE TRANSFORMATION - FIXED
+    // ARTICLE TRANSFORMATION
     // ==============================
 
     #transformArticleElements() {
-        const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
+    const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
 
-        articles.forEach((article) => {
-            if (article.closest('body#search')) return;
+    articles.forEach((article) => {
+        if (article.closest('body#search')) return;
 
-            article.classList.add('article-modernized');
+        article.classList.add('article-modernized');
 
-            const fragment = document.createDocumentFragment();
+        const fragment = document.createDocumentFragment();
 
-            const anchorDiv = article.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
+        const anchorDiv = article.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            anchorDiv.remove();
+        }
+
+        const title2Top = article.querySelector('.title2.top');
+        const pointsElement = title2Top ? title2Top.querySelector('.points') : null;
+        
+        // FIXED: Extract st-emoji from title2 top BEFORE processing
+        let stEmoji = null;
+        if (title2Top) {
+            const rightSub = title2Top.querySelector('.right.Sub');
+            if (rightSub) {
+                stEmoji = rightSub.querySelector('.st-emoji.st-emoji-article');
+                if (stEmoji) {
+                    // Clone it so we can remove it from the original
+                    stEmoji = stEmoji.cloneNode(true);
+                    // Remove from original to avoid duplication
+                    rightSub.querySelector('.st-emoji.st-emoji-article')?.remove();
+                }
+            }
+        }
+        
+        const repliesElement = title2Top ? title2Top.querySelector('.replies') : null;
+        const viewsElement = title2Top ? title2Top.querySelector('.views') : null;
+
+        const articleHeader = document.createElement('div');
+        articleHeader.className = 'article-header';
+
+        const userInfo = document.createElement('div');
+        userInfo.className = 'user-info';
+
+        const articleContent = document.createElement('div');
+        articleContent.className = 'article-content';
+
+        const articleFooter = document.createElement('div');
+        articleFooter.className = 'article-footer';
+
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            articleHeader.appendChild(anchorContainer);
+        }
+
+        // Add NEW badge if applicable
+        this.#addNewArticleBadge(article, articleHeader);
+
+        if (title2Top) {
+            // Process left section (user info and timestamp)
+            const leftSection = title2Top.querySelector('.left.Sub');
+            if (leftSection) {
+                const avatar = leftSection.querySelector('.avatar img');
+                const whoElement = leftSection.querySelector('.who');
+                const whenElement = leftSection.querySelector('.when');
+
+                if (avatar) {
+                    const avatarContainer = document.createElement('div');
+                    avatarContainer.className = 'avatar-container';
+                    
+                    const avatarImg = avatar.cloneNode(true);
+                    avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
+                    avatarContainer.appendChild(avatarImg);
+                    userInfo.appendChild(avatarContainer);
+                }
+
+                if (whoElement) {
+                    const authorSpan = document.createElement('span');
+                    authorSpan.className = 'article-author';
+                    
+                    const authorLink = whoElement.querySelector('a');
+                    if (authorLink) {
+                        const link = authorLink.cloneNode(true);
+                        link.className = 'article-author-link';
+                        authorSpan.appendChild(document.createTextNode('By '));
+                        authorSpan.appendChild(link);
+                    } else {
+                        authorSpan.textContent = 'By ' + whoElement.textContent.replace('By', '').trim();
+                    }
+                    articleHeader.appendChild(authorSpan);
+                }
+
+                // Transform timestamp
+                if (whenElement) {
+                    this.#transformArticleTimestamp(whenElement, articleHeader);
+                }
             }
 
-            const title2Top = article.querySelector('.title2.top');
+            // Process right section (stats and reactions) - BUT st-emoji already extracted
+            const rightSection = title2Top.querySelector('.right.Sub');
+            if (rightSection) {
+                // Extract stats (but skip st-emoji which we already extracted)
+                if (repliesElement) {
+                    const repliesLink = repliesElement.querySelector('a');
+                    const repliesCount = repliesElement.querySelector('em');
+                    
+                    if (repliesLink && repliesCount) {
+                        const repliesStat = document.createElement('div');
+                        repliesStat.className = 'article-stat';
+                        
+                        const icon = document.createElement('i');
+                        icon.className = 'fa-regular fa-comments';
+                        icon.setAttribute('aria-hidden', 'true');
+                        
+                        const countSpan = document.createElement('span');
+                        countSpan.className = 'stat-count';
+                        countSpan.textContent = repliesCount.textContent;
+                        
+                        const labelSpan = document.createElement('span');
+                        labelSpan.className = 'stat-label';
+                        labelSpan.textContent = ' Comments';
+                        
+                        repliesStat.appendChild(icon);
+                        repliesStat.appendChild(countSpan);
+                        repliesStat.appendChild(labelSpan);
+                        
+                        articleHeader.appendChild(repliesStat);
+                    }
+                }
+
+                if (viewsElement) {
+                    const viewsCount = viewsElement.querySelector('em');
+                    
+                    if (viewsCount) {
+                        const viewsStat = document.createElement('div');
+                        viewsStat.className = 'article-stat';
+                        
+                        const icon = document.createElement('i');
+                        icon.className = 'fa-regular fa-eye';
+                        icon.setAttribute('aria-hidden', 'true');
+                        
+                        const countSpan = document.createElement('span');
+                        countSpan.className = 'stat-count';
+                        countSpan.textContent = viewsCount.textContent;
+                        
+                        const labelSpan = document.createElement('span');
+                        labelSpan.className = 'stat-label';
+                        labelSpan.textContent = ' Views';
+                        
+                        viewsStat.appendChild(icon);
+                        viewsStat.appendChild(countSpan);
+                        viewsStat.appendChild(labelSpan);
+                        
+                        articleHeader.appendChild(viewsStat);
+                    }
+                }
+            }
+        }
+
+        // Process main content
+        const centerSection = article.querySelector('.center.Item');
+        if (centerSection) {
+            const colorSection = centerSection.querySelector('.color');
+            if (colorSection) {
+                // Clone content but preserve media dimensions
+                const contentClone = colorSection.cloneNode(true);
+                this.#preserveMediaDimensions(contentClone);
+                
+                // Remove emoji widget from content (will be moved to footer)
+                const emojiWidget = contentClone.querySelector('.st-emoji-widget');
+                emojiWidget?.remove();
+                
+                articleContent.appendChild(contentClone);
+                
+                // Clean up content structure
+                this.#cleanupArticleContentStructure(articleContent);
+                this.#modernizeQuotes(articleContent);
+                this.#modernizeSpoilers(articleContent);
+                this.#modernizeCodeBlocksInContent(articleContent);
+            }
+        }
+
+        // Create article title from h2.btitle
+        const articleTitle = article.querySelector('h2.btitle');
+        if (articleTitle) {
+            const titleLink = articleTitle.querySelector('a');
+            const descElement = articleTitle.querySelector('.bdesc');
             
-            // CRITICAL FIX: Store reaction elements BEFORE modifying the DOM
-            const rightSubElement = title2Top ? title2Top.querySelector('.right.Sub') : null;
-            const stEmoji = rightSubElement ? rightSubElement.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
-            const pointsElement = rightSubElement ? rightSubElement.querySelector('.points') : null;
-            const repliesElement = rightSubElement ? rightSubElement.querySelector('.replies') : null;
-            const viewsElement = rightSubElement ? rightSubElement.querySelector('.views') : null;
-
-            const articleHeader = document.createElement('div');
-            articleHeader.className = 'article-header';
-
-            const userInfo = document.createElement('div');
-            userInfo.className = 'user-info';
-
-            const articleContent = document.createElement('div');
-            articleContent.className = 'article-content';
-
-            const articleFooter = document.createElement('div');
-            articleFooter.className = 'article-footer';
-
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                articleHeader.appendChild(anchorContainer);
-            }
-
-            // Add NEW badge if applicable
-            this.#addNewArticleBadge(article, articleHeader);
-
-            if (title2Top) {
-                // Process left section (user info and timestamp)
-                const leftSection = title2Top.querySelector('.left.Sub');
-                if (leftSection) {
-                    const avatar = leftSection.querySelector('.avatar img');
-                    const whoElement = leftSection.querySelector('.who');
-                    const whenElement = leftSection.querySelector('.when');
-
-                    if (avatar) {
-                        const avatarContainer = document.createElement('div');
-                        avatarContainer.className = 'avatar-container';
-                        
-                        const avatarImg = avatar.cloneNode(true);
-                        avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
-                        avatarContainer.appendChild(avatarImg);
-                        userInfo.appendChild(avatarContainer);
-                    }
-
-                    if (whoElement) {
-                        const authorSpan = document.createElement('span');
-                        authorSpan.className = 'article-author';
-                        
-                        const authorLink = whoElement.querySelector('a');
-                        if (authorLink) {
-                            const link = authorLink.cloneNode(true);
-                            link.className = 'article-author-link';
-                            authorSpan.appendChild(document.createTextNode('By '));
-                            authorSpan.appendChild(link);
-                        } else {
-                            authorSpan.textContent = 'By ' + whoElement.textContent.replace('By', '').trim();
-                        }
-                        articleHeader.appendChild(authorSpan);
-                    }
-
-                    // Transform timestamp
-                    if (whenElement) {
-                        this.#transformArticleTimestamp(whenElement, articleHeader);
-                    }
-                }
-
-                // CRITICAL FIX: Preserve the right section in the header for the reaction plugin
-                if (rightSubElement) {
-                    const rightSectionClone = rightSubElement.cloneNode(true);
-                    
-                    // Remove emoji widget if it exists (we'll handle it separately)
-                    const emojiWidget = rightSectionClone.querySelector('.st-emoji-widget');
-                    emojiWidget?.remove();
-                    
-                    // Clean up the clone
-                    this.#removeBreakAndNbsp(rightSectionClone);
-                    
-                    // Add stats to header
-                    if (repliesElement) {
-                        const repliesLink = repliesElement.querySelector('a');
-                        const repliesCount = repliesElement.querySelector('em');
-                        
-                        if (repliesLink && repliesCount) {
-                            const repliesStat = document.createElement('div');
-                            repliesStat.className = 'article-stat';
-                            
-                            const icon = document.createElement('i');
-                            icon.className = 'fa-regular fa-comments';
-                            icon.setAttribute('aria-hidden', 'true');
-                            
-                            const countSpan = document.createElement('span');
-                            countSpan.className = 'stat-count';
-                            countSpan.textContent = repliesCount.textContent;
-                            
-                            const labelSpan = document.createElement('span');
-                            labelSpan.className = 'stat-label';
-                            labelSpan.textContent = ' Comments';
-                            
-                            repliesStat.appendChild(icon);
-                            repliesStat.appendChild(countSpan);
-                            repliesStat.appendChild(labelSpan);
-                            
-                            articleHeader.appendChild(repliesStat);
-                        }
-                    }
-
-                    if (viewsElement) {
-                        const viewsCount = viewsElement.querySelector('em');
-                        
-                        if (viewsCount) {
-                            const viewsStat = document.createElement('div');
-                            viewsStat.className = 'article-stat';
-                            
-                            const icon = document.createElement('i');
-                            icon.className = 'fa-regular fa-eye';
-                            icon.setAttribute('aria-hidden', 'true');
-                            
-                            const countSpan = document.createElement('span');
-                            countSpan.className = 'stat-count';
-                            countSpan.textContent = viewsCount.textContent;
-                            
-                            const labelSpan = document.createElement('span');
-                            labelSpan.className = 'stat-label';
-                            labelSpan.textContent = ' Views';
-                            
-                            viewsStat.appendChild(icon);
-                            viewsStat.appendChild(countSpan);
-                            viewsStat.appendChild(labelSpan);
-                            
-                            articleHeader.appendChild(viewsStat);
-                        }
-                    }
-
-                    // Remove the original right section to avoid duplication
-                    rightSubElement.remove();
-                }
-            }
-
-            // Process main content
-            const centerSection = article.querySelector('.center.Item');
-            if (centerSection) {
-                const colorSection = centerSection.querySelector('.color');
-                if (colorSection) {
-                    // Clone content but preserve media dimensions
-                    const contentClone = colorSection.cloneNode(true);
-                    this.#preserveMediaDimensions(contentClone);
-                    
-                    // Remove emoji widget from content (will be moved to footer)
-                    const emojiWidget = contentClone.querySelector('.st-emoji-widget');
-                    emojiWidget?.remove();
-                    
-                    articleContent.appendChild(contentClone);
-                    
-                    // Clean up content structure
-                    this.#cleanupArticleContentStructure(articleContent);
-                    this.#modernizeQuotes(articleContent);
-                    this.#modernizeSpoilers(articleContent);
-                    this.#modernizeCodeBlocksInContent(articleContent);
-                }
-            }
-
-            // Create article title from h2.btitle
-            const articleTitle = article.querySelector('h2.btitle');
-            if (articleTitle) {
-                const titleLink = articleTitle.querySelector('a');
-                const descElement = articleTitle.querySelector('.bdesc');
+            const titleContainer = document.createElement('div');
+            titleContainer.className = 'article-title-container';
+            
+            if (titleLink) {
+                const title = document.createElement('h2');
+                title.className = 'article-title';
                 
-                const titleContainer = document.createElement('div');
-                titleContainer.className = 'article-title-container';
-                
-                if (titleLink) {
-                    const title = document.createElement('h2');
-                    title.className = 'article-title';
-                    
-                    const link = titleLink.cloneNode(true);
-                    link.className = 'article-title-link';
-                    title.appendChild(link);
-                    titleContainer.appendChild(title);
-                }
-                
-                if (descElement) {
-                    const desc = document.createElement('div');
-                    desc.className = 'article-description';
-                    desc.textContent = descElement.textContent;
-                    titleContainer.appendChild(desc);
-                }
-                
-                articleHeader.insertBefore(titleContainer, articleHeader.firstChild);
+                const link = titleLink.cloneNode(true);
+                link.className = 'article-title-link';
+                title.appendChild(link);
+                titleContainer.appendChild(title);
             }
-
-            // Process footer (bottom section)
-            const title2Bottom = article.querySelector('.title2.bottom');
-            if (title2Bottom) {
-                // CRITICAL FIX: Add reaction elements to footer after preserving them
-                this.#addArticleReputationToFooter(pointsElement, stEmoji, articleFooter);
-                this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
-                title2Bottom.remove();
-            } else {
-                // CRITICAL FIX: Still add reactions even if no bottom section
-                this.#addArticleReputationToFooter(pointsElement, stEmoji, articleFooter);
+            
+            if (descElement) {
+                const desc = document.createElement('div');
+                desc.className = 'article-description';
+                desc.textContent = descElement.textContent;
+                titleContainer.appendChild(desc);
             }
+            
+            articleHeader.insertBefore(titleContainer, articleHeader.firstChild);
+        }
 
-            // Add emoji widget to footer if it exists
-            const emojiWidget = article.querySelector('.st-emoji-widget');
-            if (emojiWidget) {
-                const emojiContainer = document.createElement('div');
-                emojiContainer.className = 'article-emoji-widget';
-                emojiContainer.appendChild(emojiWidget.cloneNode(true));
-                articleFooter.appendChild(emojiContainer);
-            }
+        // Process footer (bottom section)
+        const title2Bottom = article.querySelector('.title2.bottom');
+        if (title2Bottom) {
+            this.#addArticleReputationToFooter(pointsElement, stEmoji, articleFooter);
+            this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
+            title2Bottom.remove();
+        } else {
+            this.#addArticleReputationToFooter(pointsElement, stEmoji, articleFooter);
+        }
 
-            fragment.appendChild(articleHeader);
-            fragment.appendChild(userInfo);
-            fragment.appendChild(articleContent);
-            fragment.appendChild(articleFooter);
+        // Add emoji widget to footer if it exists
+        const emojiWidget = article.querySelector('.st-emoji-widget');
+        if (emojiWidget) {
+            const emojiContainer = document.createElement('div');
+            emojiContainer.className = 'article-emoji-widget';
+            emojiContainer.appendChild(emojiWidget.cloneNode(true));
+            articleFooter.appendChild(emojiContainer);
+        }
 
-            // Clear and rebuild article
-            article.innerHTML = '';
-            article.appendChild(fragment);
+        fragment.appendChild(articleHeader);
+        fragment.appendChild(userInfo);
+        fragment.appendChild(articleContent);
+        fragment.appendChild(articleFooter);
 
-            this.#convertArticleButtons(article);
-            this.#addShareButtonToArticle(article);
-            this.#cleanupArticleContent(article);
+        // Clear and rebuild article
+        article.innerHTML = '';
+        article.appendChild(fragment);
 
-            const articleId = article.id;
-            if (articleId && articleId.startsWith('ee')) {
-                article.setAttribute('data-article-id', articleId.replace('ee', ''));
-            }
+        this.#convertArticleButtons(article);
+        this.#addShareButtonToArticle(article);
+        this.#cleanupArticleContent(article);
 
-            console.log('✅ Article modernized with preserved reactions:', article.id);
-        });
-    }
-
+        const articleId = article.id;
+        if (articleId && articleId.startsWith('ee')) {
+            article.setAttribute('data-article-id', articleId.replace('ee', ''));
+        }
+    });
+}
+    
     #transformArticleTimestamp(whenElement, articleHeader) {
         const dateString = this.#extractDateFromElement(whenElement);
         
@@ -3447,39 +3444,39 @@ class PostModernizer {
     }
 
     #addArticleReputationToFooter(pointsElement, stEmoji, articleFooter) {
-        if (pointsElement || stEmoji) {
-            const articleActions = document.createElement('div');
-            articleActions.className = 'article-actions';
+    if (pointsElement || stEmoji) {
+        const articleActions = document.createElement('div');
+        articleActions.className = 'article-actions';
 
-            if (pointsElement) {
-                // CRITICAL FIX: Clone and clean the points element
-                const pointsContainer = pointsElement.cloneNode(true);
-                this.#cleanupMiniButtons(pointsContainer);
-                this.#setInitialPointsState(pointsContainer);
-                
-                // Update active state
-                const pointsDiv = pointsContainer.querySelector('.points');
-                if (pointsDiv) {
-                    this.#updatePointsContainerActiveState(pointsDiv);
-                }
-                
-                articleActions.appendChild(pointsContainer);
+        if (pointsElement) {
+            const pointsContainer = pointsElement.cloneNode(true);
+            this.#cleanupMiniButtons(pointsContainer);
+            this.#setInitialPointsState(pointsContainer);
+            
+            // FIXED: Update points container active state
+            const pointsElementInContainer = pointsContainer.querySelector('.points');
+            if (pointsElementInContainer) {
+                this.#updatePointsContainerActiveState(pointsElementInContainer);
             }
-
-            if (stEmoji) {
-                // CRITICAL FIX: Clone the emoji element and update its state
-                const emojiContainer = stEmoji.cloneNode(true);
-                const emojiDiv = emojiContainer.querySelector('.st-emoji-container');
-                if (emojiDiv) {
-                    this.#updateEmojiContainerActiveState(emojiDiv);
-                }
-                articleActions.appendChild(emojiContainer);
-            }
-
-            articleFooter.insertBefore(articleActions, articleFooter.firstChild);
+            
+            articleActions.appendChild(pointsContainer);
         }
-    }
 
+        if (stEmoji) {
+            const emojiContainer = stEmoji.cloneNode(true);
+            
+            // FIXED: Update emoji container active state
+            const stEmojiContainer = emojiContainer.querySelector('.st-emoji-container');
+            if (stEmojiContainer) {
+                this.#updateEmojiContainerActiveState(stEmojiContainer);
+            }
+            
+            articleActions.appendChild(emojiContainer);
+        }
+
+        articleFooter.insertBefore(articleActions, articleFooter.firstChild);
+    }
+}
     #modernizeArticleBottomElements(title2Bottom, articleFooter) {
         title2Bottom.querySelectorAll('.mini_buttons.right.Sub').forEach(rightSub => {
             const buttonsContainer = document.createElement('div');
@@ -3701,10 +3698,6 @@ class PostModernizer {
             }
         });
     }
-
-    // ==============================
-    // POST TRANSFORMATION (UNCHANGED)
-    // ==============================
 
     #transformPostElements() {
         const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
