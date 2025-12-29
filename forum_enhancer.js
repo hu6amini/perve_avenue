@@ -2177,8 +2177,8 @@ globalThis.addEventListener('pagehide', () => {
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes blog article support, CSS-first image dimension handling, 
-// optimized DOM updates, enhanced accessibility, modern code blocks,
-// and robust Moment.js timestamps - WITH FIXED ARTICLE REACTIONS
+// optimized DOM updates, enhanced accessibility, modern code blocks, 
+// and robust Moment.js timestamps
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -2187,7 +2187,7 @@ class PostModernizer {
     #searchPostObserverId = null;
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
-    #articleObserverId = null;
+    #articleObserverId = null; // NEW: Article observer
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -2970,11 +2970,11 @@ class PostModernizer {
             pageTypes: pageTypes
         });
 
-        // NEW: Article observer with fixed selector
+        // NEW: Article observer
         this.#articleObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-article',
             callback: (node) => this.#handleArticleTransformation(node),
-            selector: '.article:not(.article-modernized), .title2.top.Item.Justify, .st-emoji.st-emoji-article',
+            selector: '.article:not(.article-modernized)',
             priority: 'high',
             pageTypes: ['blog']
         });
@@ -3104,11 +3104,7 @@ class PostModernizer {
         if (!node) return;
 
         const needsTransformation = node.matches('.article') ||
-            node.querySelector('.article') ||
-            node.matches('.title2.top.Item.Justify') ||
-            node.querySelector('.title2.top.Item.Justify') ||
-            node.matches('.st-emoji.st-emoji-article') ||
-            node.querySelector('.st-emoji.st-emoji-article');
+            node.querySelector('.article');
 
         if (needsTransformation) {
             this.#transformArticleElements();
@@ -3134,7 +3130,7 @@ class PostModernizer {
     }
 
     // ==============================
-    // ARTICLE TRANSFORMATION - FIXED VERSION
+    // ARTICLE TRANSFORMATION - FIXED
     // ==============================
 
     #transformArticleElements() {
@@ -3147,15 +3143,22 @@ class PostModernizer {
 
             const fragment = document.createDocumentFragment();
 
-            // Get all necessary elements BEFORE we start modifying the DOM
             const anchorDiv = article.querySelector('.anchor');
-            const title2Top = article.querySelector('.title2.top.Item.Justify');
-            const pointsElement = title2Top ? title2Top.querySelector('.points') : null;
-            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-article') : null;
-            const repliesElement = title2Top ? title2Top.querySelector('.replies') : null;
-            const viewsElement = title2Top ? title2Top.querySelector('.views') : null;
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
+            }
 
-            // Create new structure elements
+            const title2Top = article.querySelector('.title2.top');
+            
+            // CRITICAL FIX: Store reaction elements BEFORE modifying the DOM
+            const rightSubElement = title2Top ? title2Top.querySelector('.right.Sub') : null;
+            const stEmoji = rightSubElement ? rightSubElement.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
+            const pointsElement = rightSubElement ? rightSubElement.querySelector('.points') : null;
+            const repliesElement = rightSubElement ? rightSubElement.querySelector('.replies') : null;
+            const viewsElement = rightSubElement ? rightSubElement.querySelector('.views') : null;
+
             const articleHeader = document.createElement('div');
             articleHeader.className = 'article-header';
 
@@ -3168,9 +3171,7 @@ class PostModernizer {
             const articleFooter = document.createElement('div');
             articleFooter.className = 'article-footer';
 
-            // Preserve anchor
-            if (anchorDiv) {
-                const anchorElements = anchorDiv.cloneNode(true);
+            if (anchorElements) {
                 const anchorContainer = document.createElement('div');
                 anchorContainer.className = 'anchor-container';
                 anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
@@ -3181,49 +3182,14 @@ class PostModernizer {
             // Add NEW badge if applicable
             this.#addNewArticleBadge(article, articleHeader);
 
-            // Process title first
-            const articleTitle = article.querySelector('h2.btitle');
-            if (articleTitle) {
-                const titleLink = articleTitle.querySelector('a');
-                const descElement = articleTitle.querySelector('.bdesc');
-                
-                const titleContainer = document.createElement('div');
-                titleContainer.className = 'article-title-container';
-                
-                if (titleLink) {
-                    const title = document.createElement('h2');
-                    title.className = 'article-title';
-                    
-                    const link = titleLink.cloneNode(true);
-                    link.className = 'article-title-link';
-                    title.appendChild(link);
-                    titleContainer.appendChild(title);
-                }
-                
-                if (descElement) {
-                    const desc = document.createElement('div');
-                    desc.className = 'article-description';
-                    desc.textContent = descElement.textContent;
-                    titleContainer.appendChild(desc);
-                }
-                
-                articleHeader.appendChild(titleContainer);
-            }
-
-            // Process the .title2.top section - CRITICAL FIX: Preserve reaction elements
             if (title2Top) {
-                // FIRST: Clone the entire .title2.top section for reference
-                const title2TopClone = title2Top.cloneNode(true);
-                
                 // Process left section (user info and timestamp)
-                const leftSection = title2TopClone.querySelector('.left.Sub');
+                const leftSection = title2Top.querySelector('.left.Sub');
                 if (leftSection) {
-                    // Create user info container
-                    const userInfoContainer = document.createElement('div');
-                    userInfoContainer.className = 'article-user-info';
-                    
-                    // Avatar
                     const avatar = leftSection.querySelector('.avatar img');
+                    const whoElement = leftSection.querySelector('.who');
+                    const whenElement = leftSection.querySelector('.when');
+
                     if (avatar) {
                         const avatarContainer = document.createElement('div');
                         avatarContainer.className = 'avatar-container';
@@ -3231,11 +3197,9 @@ class PostModernizer {
                         const avatarImg = avatar.cloneNode(true);
                         avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
                         avatarContainer.appendChild(avatarImg);
-                        userInfoContainer.appendChild(avatarContainer);
+                        userInfo.appendChild(avatarContainer);
                     }
 
-                    // Author
-                    const whoElement = leftSection.querySelector('.who');
                     if (whoElement) {
                         const authorSpan = document.createElement('span');
                         authorSpan.className = 'article-author';
@@ -3249,38 +3213,27 @@ class PostModernizer {
                         } else {
                             authorSpan.textContent = 'By ' + whoElement.textContent.replace('By', '').trim();
                         }
-                        userInfoContainer.appendChild(authorSpan);
+                        articleHeader.appendChild(authorSpan);
                     }
 
-                    // Timestamp - CRITICAL: Use the original element from the clone
-                    const whenElement = leftSection.querySelector('.when');
+                    // Transform timestamp
                     if (whenElement) {
-                        const timestampContainer = document.createElement('div');
-                        timestampContainer.className = 'article-timestamp';
-                        
-                        // Use the clone for extraction
-                        const dateString = this.#extractDateFromElement(whenElement);
-                        if (dateString) {
-                            console.debug('Found article timestamp:', dateString);
-                            
-                            const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
-                            if (modernTimestamp && modernTimestamp !== whenElement) {
-                                timestampContainer.appendChild(modernTimestamp);
-                                userInfoContainer.appendChild(timestampContainer);
-                            }
-                        }
+                        this.#transformArticleTimestamp(whenElement, articleHeader);
                     }
-                    
-                    userInfo.appendChild(userInfoContainer);
                 }
 
-                // Process right section (stats and reactions) - CRITICAL FIX
-                const rightSection = title2TopClone.querySelector('.right.Sub');
-                if (rightSection) {
-                    const statsContainer = document.createElement('div');
-                    statsContainer.className = 'article-stats-container';
+                // CRITICAL FIX: Preserve the right section in the header for the reaction plugin
+                if (rightSubElement) {
+                    const rightSectionClone = rightSubElement.cloneNode(true);
                     
-                    // Extract stats
+                    // Remove emoji widget if it exists (we'll handle it separately)
+                    const emojiWidget = rightSectionClone.querySelector('.st-emoji-widget');
+                    emojiWidget?.remove();
+                    
+                    // Clean up the clone
+                    this.#removeBreakAndNbsp(rightSectionClone);
+                    
+                    // Add stats to header
                     if (repliesElement) {
                         const repliesLink = repliesElement.querySelector('a');
                         const repliesCount = repliesElement.querySelector('em');
@@ -3305,7 +3258,7 @@ class PostModernizer {
                             repliesStat.appendChild(countSpan);
                             repliesStat.appendChild(labelSpan);
                             
-                            statsContainer.appendChild(repliesStat);
+                            articleHeader.appendChild(repliesStat);
                         }
                     }
 
@@ -3332,14 +3285,12 @@ class PostModernizer {
                             viewsStat.appendChild(countSpan);
                             viewsStat.appendChild(labelSpan);
                             
-                            statsContainer.appendChild(viewsStat);
+                            articleHeader.appendChild(viewsStat);
                         }
                     }
-                    
-                    // IMPORTANT: Add stats container to header
-                    if (statsContainer.children.length > 0) {
-                        articleHeader.appendChild(statsContainer);
-                    }
+
+                    // Remove the original right section to avoid duplication
+                    rightSubElement.remove();
                 }
             }
 
@@ -3366,14 +3317,44 @@ class PostModernizer {
                 }
             }
 
+            // Create article title from h2.btitle
+            const articleTitle = article.querySelector('h2.btitle');
+            if (articleTitle) {
+                const titleLink = articleTitle.querySelector('a');
+                const descElement = articleTitle.querySelector('.bdesc');
+                
+                const titleContainer = document.createElement('div');
+                titleContainer.className = 'article-title-container';
+                
+                if (titleLink) {
+                    const title = document.createElement('h2');
+                    title.className = 'article-title';
+                    
+                    const link = titleLink.cloneNode(true);
+                    link.className = 'article-title-link';
+                    title.appendChild(link);
+                    titleContainer.appendChild(title);
+                }
+                
+                if (descElement) {
+                    const desc = document.createElement('div');
+                    desc.className = 'article-description';
+                    desc.textContent = descElement.textContent;
+                    titleContainer.appendChild(desc);
+                }
+                
+                articleHeader.insertBefore(titleContainer, articleHeader.firstChild);
+            }
+
             // Process footer (bottom section)
             const title2Bottom = article.querySelector('.title2.bottom');
             if (title2Bottom) {
-                // Add reactions to footer - USE THE ORIGINAL ELEMENTS, NOT CLONES
+                // CRITICAL FIX: Add reaction elements to footer after preserving them
                 this.#addArticleReputationToFooter(pointsElement, stEmoji, articleFooter);
                 this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
                 title2Bottom.remove();
             } else {
+                // CRITICAL FIX: Still add reactions even if no bottom section
                 this.#addArticleReputationToFooter(pointsElement, stEmoji, articleFooter);
             }
 
@@ -3386,7 +3367,6 @@ class PostModernizer {
                 articleFooter.appendChild(emojiContainer);
             }
 
-            // Assemble the article
             fragment.appendChild(articleHeader);
             fragment.appendChild(userInfo);
             fragment.appendChild(articleContent);
@@ -3404,20 +3384,26 @@ class PostModernizer {
             if (articleId && articleId.startsWith('ee')) {
                 article.setAttribute('data-article-id', articleId.replace('ee', ''));
             }
-            
-            // IMPORTANT: Update active states for the newly added elements
-            setTimeout(() => {
-                const emojiContainer = article.querySelector('.st-emoji-container');
-                if (emojiContainer) {
-                    this.#updateEmojiContainerActiveState(emojiContainer);
-                }
-                
-                const pointsContainer = article.querySelector('.points');
-                if (pointsContainer) {
-                    this.#updatePointsContainerActiveState(pointsContainer);
-                }
-            }, 50);
+
+            console.log('✅ Article modernized with preserved reactions:', article.id);
         });
+    }
+
+    #transformArticleTimestamp(whenElement, articleHeader) {
+        const dateString = this.#extractDateFromElement(whenElement);
+        
+        if (dateString) {
+            console.debug('Found article timestamp:', dateString);
+            
+            const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
+            
+            if (modernTimestamp && modernTimestamp !== whenElement) {
+                const timestampContainer = document.createElement('div');
+                timestampContainer.className = 'article-timestamp';
+                timestampContainer.appendChild(modernTimestamp);
+                articleHeader.appendChild(timestampContainer);
+            }
+        }
     }
 
     #addNewArticleBadge(article, articleHeader) {
@@ -3465,19 +3451,28 @@ class PostModernizer {
             const articleActions = document.createElement('div');
             articleActions.className = 'article-actions';
 
-            // Add points element if it exists
             if (pointsElement) {
-                // Clone the element but keep the original structure intact
+                // CRITICAL FIX: Clone and clean the points element
                 const pointsContainer = pointsElement.cloneNode(true);
                 this.#cleanupMiniButtons(pointsContainer);
                 this.#setInitialPointsState(pointsContainer);
+                
+                // Update active state
+                const pointsDiv = pointsContainer.querySelector('.points');
+                if (pointsDiv) {
+                    this.#updatePointsContainerActiveState(pointsDiv);
+                }
+                
                 articleActions.appendChild(pointsContainer);
             }
 
-            // Add st-emoji if it exists - CRITICAL FIX: Use original element
             if (stEmoji) {
-                // Clone the st-emoji element with all its children
+                // CRITICAL FIX: Clone the emoji element and update its state
                 const emojiContainer = stEmoji.cloneNode(true);
+                const emojiDiv = emojiContainer.querySelector('.st-emoji-container');
+                if (emojiDiv) {
+                    this.#updateEmojiContainerActiveState(emojiDiv);
+                }
                 articleActions.appendChild(emojiContainer);
             }
 
@@ -3708,7 +3703,7 @@ class PostModernizer {
     }
 
     // ==============================
-    // POST TRANSFORMATION (for reference/comparison)
+    // POST TRANSFORMATION (UNCHANGED)
     // ==============================
 
     #transformPostElements() {
@@ -3952,10 +3947,6 @@ class PostModernizer {
             }
         });
     }
-
-    // ==============================
-    // SEARCH POST TRANSFORMATION
-    // ==============================
 
     #transformSearchPostElements() {
         const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
@@ -4294,10 +4285,6 @@ class PostModernizer {
             this.#updatePointsContainerActiveState(pointsFooter);
         });
     }
-
-    // ==============================
-    // HELPER METHODS (keep from original)
-    // ==============================
 
     #cleanupSearchPostContent(contentWrapper) {
         contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
