@@ -2953,7 +2953,7 @@ class PostModernizer {
     // ==============================
 
     #setupObserverCallbacks() {
-        const pageTypes = ['topic', 'blog', 'send'];
+        const pageTypes = ['topic', 'blog', 'send', 'search'];
         
         this.#cleanupObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-cleanup',
