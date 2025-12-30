@@ -2222,33 +2222,43 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
-        try {
+   #init() {
+    try {
+        const bodyId = document.body.id;
+        
+        if (bodyId === 'search') {
+            // Handle search pages specially
+            this.#transformSearchPostElements();
+            this.#setupSearchPostObserver();
+        } else {
+            // Handle topic/blog/send pages
             this.#transformPostElements();
-            this.#enhanceReputationSystem();
             this.#setupObserverCallbacks();
             this.#setupActiveStateObserver();
-            this.#setupSearchPostObserver();
-            this.#setupEnhancedAnchorNavigation();
-            this.#enhanceQuoteLinks();
-            this.#modernizeCodeBlocks();
+        }
+        
+        // These run on all page types
+        this.#enhanceReputationSystem();
+        this.#setupEnhancedAnchorNavigation();
+        this.#enhanceQuoteLinks();
+        this.#modernizeCodeBlocks();
 
-            console.log('✅ Post Modernizer with all optimizations initialized');
-        } catch (error) {
-            console.error('Post Modernizer initialization failed:', error);
+        console.log('✅ Post Modernizer with all optimizations initialized');
+    } catch (error) {
+        console.error('Post Modernizer initialization failed:', error);
 
-            if (this.#retryCount < this.#maxRetries) {
-                this.#retryCount++;
-                const delay = 100 * Math.pow(2, this.#retryCount - 1);
-                console.log('Initialization failed, retrying in ' + delay + 'ms...');
+        if (this.#retryCount < this.#maxRetries) {
+            this.#retryCount++;
+            const delay = 100 * Math.pow(2, this.#retryCount - 1);
+            console.log('Initialization failed, retrying in ' + delay + 'ms...');
 
-                setTimeout(() => {
-                    this.#initWithRetry();
-                }, delay);
-            }
+            setTimeout(() => {
+                this.#initWithRetry();
+            }, delay);
         }
     }
-
+}
+    
     // ==============================
     // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
     // ==============================
