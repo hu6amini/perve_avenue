@@ -2178,7 +2178,7 @@ globalThis.addEventListener('pagehide', () => {
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
-// and Article Modernization for blog pages
+// and article/blog post modernization
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -2233,9 +2233,9 @@ class PostModernizer {
                 this.#transformSearchPostElements();
                 this.#setupSearchPostObserver();
             } else if (bodyId === 'blog') {
-                // Handle blog pages with articles and posts
-                this.#transformArticleElements();
+                // Handle blog pages with articles
                 this.#transformPostElements();
+                this.#transformArticleElements();
                 this.#setupObserverCallbacks();
                 this.#setupActiveStateObserver();
                 this.#setupArticleObserver();
@@ -2252,7 +2252,7 @@ class PostModernizer {
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
 
-            console.log('✅ Post Modernizer with Article support initialized');
+            console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
 
@@ -2268,6 +2268,442 @@ class PostModernizer {
         }
     }
     
+    // ==============================
+    // ARTICLE/BLOG POST MODERNIZATION
+    // ==============================
+
+    #setupArticleObserver() {
+        const pageTypes = ['blog'];
+        
+        this.#articleObserverId = globalThis.forumObserver.register({
+            id: 'post-modernizer-articles',
+            callback: (node) => this.#handleArticleTransformation(node),
+            selector: '.article:not(.article-modernized), body#blog .article',
+            priority: 'high',
+            pageTypes: pageTypes
+        });
+    }
+
+    #handleArticleTransformation(node) {
+        if (!node) return;
+
+        const needsTransformation = node.matches('.article:not(.article-modernized)') ||
+                                   node.matches('body#blog .article') ||
+                                   node.querySelector('.article:not(.article-modernized)');
+
+        if (needsTransformation) {
+            this.#transformArticleElements();
+        }
+    }
+
+    #transformArticleElements() {
+        const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
+
+        articles.forEach((article, index) => {
+            article.classList.add('article-modernized');
+
+            const fragment = document.createDocumentFragment();
+
+            // Extract anchor elements
+            const anchorDiv = article.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
+            }
+
+            // Extract title2.top section
+            const title2Top = article.querySelector('.title2.top');
+            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
+            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
+
+            // Create modern article structure
+            const articleHeader = document.createElement('div');
+            articleHeader.className = 'article-header';
+
+            const articleContent = document.createElement('div');
+            articleContent.className = 'article-content';
+
+            const articleFooter = document.createElement('div');
+            articleFooter.className = 'article-footer';
+
+            // Add anchor container
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                articleHeader.appendChild(anchorContainer);
+            }
+
+            // Add article title (h2.btitle)
+            const articleTitle = article.querySelector('h2.btitle');
+            if (articleTitle) {
+                const titleClone = articleTitle.cloneNode(true);
+                
+                // Clean up the title clone
+                const bdesc = titleClone.querySelector('.bdesc');
+                if (bdesc) {
+                    bdesc.style.cssText = 'font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px; font-weight: normal;';
+                }
+                
+                articleHeader.appendChild(titleClone);
+            }
+
+            // Process title2.top section
+            if (title2Top) {
+                const title2TopClone = title2Top.cloneNode(true);
+                
+                // Remove elements that will be moved to footer
+                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-article')?.remove();
+                
+                // Clean up the cloned title2.top
+                this.#removeBreakAndNbsp(title2TopClone);
+                
+                // Transform timestamps in the article header
+                this.#transformArticleTimestamps(title2TopClone);
+                
+                // Extract user info from left section
+                const leftSection = title2TopClone.querySelector('.left.Sub');
+                if (leftSection) {
+                    // Create user info section
+                    const userInfo = document.createElement('div');
+                    userInfo.className = 'article-user-info';
+                    
+                    // Extract avatar
+                    const avatar = leftSection.querySelector('.avatar.thumbs img');
+                    if (avatar) {
+                        const avatarContainer = document.createElement('div');
+                        avatarContainer.className = 'article-avatar';
+                        
+                        const avatarImg = avatar.cloneNode(true);
+                        avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
+                        
+                        // Add link if parent has one
+                        const avatarLink = leftSection.querySelector('.avatar.thumbs a');
+                        if (avatarLink) {
+                            const link = document.createElement('a');
+                            link.href = avatarLink.href;
+                            link.rel = 'nofollow';
+                            link.appendChild(avatarImg);
+                            avatarContainer.appendChild(link);
+                        } else {
+                            avatarContainer.appendChild(avatarImg);
+                        }
+                        
+                        userInfo.appendChild(avatarContainer);
+                    }
+                    
+                    // Extract username
+                    const nickElement = leftSection.querySelector('.nick');
+                    if (nickElement) {
+                        const userContainer = document.createElement('div');
+                        userContainer.className = 'article-user-details';
+                        
+                        const userName = document.createElement('div');
+                        userName.className = 'article-username';
+                        userName.innerHTML = nickElement.outerHTML;
+                        
+                        userContainer.appendChild(userName);
+                        
+                        // Add timestamp next to username
+                        const whenElement = leftSection.querySelector('.when');
+                        if (whenElement) {
+                            const dateString = this.#extractDateFromElement(whenElement);
+                            if (dateString) {
+                                const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
+                                const timeContainer = document.createElement('div');
+                                timeContainer.className = 'article-timestamp';
+                                timeContainer.appendChild(modernTimestamp);
+                                userContainer.appendChild(timeContainer);
+                            }
+                        }
+                        
+                        userInfo.appendChild(userContainer);
+                    }
+                    
+                    // Add stats from right section
+                    const rightSection = title2Top.querySelector('.right.Sub');
+                    if (rightSection) {
+                        const statsContainer = document.createElement('div');
+                        statsContainer.className = 'article-stats';
+                        
+                        // Extract replies
+                        const replies = rightSection.querySelector('.replies');
+                        if (replies) {
+                            const repliesClone = replies.cloneNode(true);
+                            statsContainer.appendChild(repliesClone);
+                        }
+                        
+                        // Extract views
+                        const views = rightSection.querySelector('.views');
+                        if (views) {
+                            const viewsClone = views.cloneNode(true);
+                            statsContainer.appendChild(viewsClone);
+                        }
+                        
+                        userInfo.appendChild(statsContainer);
+                    }
+                    
+                    articleHeader.appendChild(userInfo);
+                }
+            }
+
+            // Extract and process main content
+            const centerItem = article.querySelector('.center.Item');
+            if (centerItem) {
+                const colorDiv = centerItem.querySelector('.color');
+                if (colorDiv) {
+                    const contentClone = colorDiv.cloneNode(true);
+                    
+                    // Remove the st-emoji-widget that we don't need
+                    contentClone.querySelector('.st-emoji-widget')?.remove();
+                    
+                    // Transform edit timestamps
+                    contentClone.querySelectorAll('span.edit').forEach(span => {
+                        if (!span.querySelector('time[datetime]')) {
+                            this.#transformEditTimestamp(span);
+                        }
+                    });
+                    
+                    // Preserve media dimensions
+                    this.#preserveMediaDimensions(contentClone);
+                    
+                    // Process text and line breaks
+                    this.#processTextAndLineBreaks(contentClone);
+                    
+                    // Modernize quotes, spoilers, and code blocks
+                    this.#modernizeQuotes(contentClone);
+                    this.#modernizeSpoilers(contentClone);
+                    this.#modernizeCodeBlocksInContent(contentClone);
+                    
+                    // Clean up empty elements
+                    this.#cleanEmptyElements(contentClone);
+                    
+                    articleContent.appendChild(contentClone);
+                }
+            }
+
+            // Process footer (title2.bottom)
+            const title2Bottom = article.querySelector('.title2.bottom');
+            if (title2Bottom) {
+                // Add reputation system to footer
+                this.#addReputationToArticleFooter(miniButtons, stEmoji, articleFooter);
+                
+                // Modernize bottom elements
+                this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
+                
+                // Remove original
+                title2Bottom.remove();
+            } else {
+                // Still add reputation even without bottom section
+                this.#addReputationToArticleFooter(miniButtons, stEmoji, articleFooter);
+            }
+
+            // Add share button
+            this.#addArticleShareButton(articleFooter, article);
+
+            // Clear original article and add new structure
+            article.innerHTML = '';
+            article.appendChild(articleHeader);
+            article.appendChild(articleContent);
+            article.appendChild(articleFooter);
+
+            // Add styling classes
+            article.classList.add('modern-article');
+            
+            // Add focus handling for anchor navigation
+            const articleId = article.id;
+            if (articleId && articleId.startsWith('ee')) {
+                article.setAttribute('data-article-id', articleId.replace('ee', ''));
+            }
+        });
+    }
+
+    #transformArticleTimestamps(element) {
+        const timestampElements = element.querySelectorAll('.when');
+        
+        timestampElements.forEach(timestampElement => {
+            // Skip if already modernized
+            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) return;
+            
+            const dateString = this.#extractDateFromElement(timestampElement);
+            
+            if (dateString) {
+                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
+                if (modernTimestamp && modernTimestamp !== timestampElement) {
+                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                }
+            }
+        });
+    }
+
+    #addReputationToArticleFooter(miniButtons, stEmoji, articleFooter) {
+        if (miniButtons || stEmoji) {
+            const articleActions = document.createElement('div');
+            articleActions.className = 'article-actions';
+
+            if (miniButtons) {
+                this.#cleanupMiniButtons(miniButtons);
+                this.#setInitialPointsState(miniButtons);
+                const pointsContainer = miniButtons.querySelector('.points');
+                if (pointsContainer) {
+                    this.#updatePointsContainerActiveState(pointsContainer);
+                }
+                articleActions.appendChild(miniButtons);
+            }
+
+            if (stEmoji) {
+                const emojiContainer = stEmoji.querySelector('.st-emoji-container');
+                if (emojiContainer) {
+                    this.#updateEmojiContainerActiveState(emojiContainer);
+                }
+                articleActions.appendChild(stEmoji);
+            }
+
+            articleFooter.insertBefore(articleActions, articleFooter.firstChild);
+        }
+    }
+
+    #modernizeArticleBottomElements(title2Bottom, articleFooter) {
+        title2Bottom.querySelectorAll('.rt.Sub').forEach(rtSub => {
+            const modernContainer = document.createElement('div');
+            modernContainer.className = 'modern-article-actions';
+
+            // Extract social sharing buttons (a2a kit)
+            const a2aKit = title2Bottom.querySelector('.a2a_kit');
+            if (a2aKit) {
+                const shareContainer = document.createElement('div');
+                shareContainer.className = 'article-share-container';
+                shareContainer.appendChild(a2aKit.cloneNode(true));
+                modernContainer.appendChild(shareContainer);
+            }
+
+            // Extract other links (track, share, etc.)
+            const leftSub = title2Bottom.querySelector('.left.Sub');
+            if (leftSub) {
+                const links = leftSub.querySelectorAll('a:not(.a2a_button):not(.track)');
+                if (links.length > 0) {
+                    const linksContainer = document.createElement('div');
+                    linksContainer.className = 'article-links';
+                    links.forEach(link => {
+                        linksContainer.appendChild(link.cloneNode(true));
+                    });
+                    modernContainer.appendChild(linksContainer);
+                }
+            }
+
+            // Extract mini buttons (edit, quote, checkbox)
+            const miniButtons = title2Bottom.querySelector('.mini_buttons.right.Sub');
+            if (miniButtons) {
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.className = 'article-buttons';
+                
+                // Convert anchor buttons to modern buttons
+                miniButtons.querySelectorAll('a').forEach(link => {
+                    const href = link.getAttribute('href');
+                    
+                    if (href && href.includes('CODE=08')) {
+                        link.classList.add('btn', 'btn-icon', 'btn-edit');
+                        link.setAttribute('data-action', 'edit');
+                        link.setAttribute('title', 'Edit article');
+                        
+                        const icon = link.querySelector('i');
+                        icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                    } else if (href && href.includes('CODE=02')) {
+                        link.classList.add('btn', 'btn-icon', 'btn-quote');
+                        link.setAttribute('data-action', 'quote');
+                        link.setAttribute('title', 'Quote article');
+                        link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+                        
+                        const icon = link.querySelector('i');
+                        icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                    }
+                });
+                
+                // Handle multiquote checkbox
+                const checkbox = miniButtons.querySelector('input[type="checkbox"]');
+                if (checkbox) {
+                    const checkboxContainer = document.createElement('div');
+                    checkboxContainer.className = 'multiquote-control';
+                    
+                    const postId = checkbox.id.replace('p', '');
+                    const originalOnClick = `document.getElementById('${checkbox.id}').checked=!document.getElementById('${checkbox.id}').checked;post('${postId}')`;
+                    
+                    const quoteButton = document.createElement('button');
+                    quoteButton.className = 'btn btn-icon multiquote-btn';
+                    quoteButton.setAttribute('onclick', originalOnClick);
+                    quoteButton.setAttribute('title', 'Select article for multiquote');
+                    quoteButton.setAttribute('type', 'button');
+                    quoteButton.innerHTML = '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
+                    
+                    const label = document.createElement('label');
+                    label.className = 'multiquote-label';
+                    label.textContent = 'Quote +';
+                    
+                    checkboxContainer.appendChild(quoteButton);
+                    checkboxContainer.appendChild(label);
+                    checkboxContainer.appendChild(checkbox.cloneNode(true));
+                    
+                    buttonsContainer.appendChild(checkboxContainer);
+                }
+                
+                buttonsContainer.appendChild(miniButtons.cloneNode(true));
+                modernContainer.appendChild(buttonsContainer);
+            }
+
+            if (modernContainer.children.length > 0) {
+                articleFooter.appendChild(modernContainer);
+            }
+        });
+    }
+
+    #addArticleShareButton(articleFooter, article) {
+        const shareButton = document.createElement('button');
+        shareButton.className = 'btn btn-icon btn-share';
+        shareButton.setAttribute('data-action', 'share');
+        shareButton.setAttribute('title', 'Share this article');
+        shareButton.setAttribute('type', 'button');
+        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+        shareButton.addEventListener('click', () => this.#handleShareArticle(article));
+
+        // Add to article actions if exists, otherwise create new container
+        let actionsContainer = articleFooter.querySelector('.article-actions');
+        if (!actionsContainer) {
+            actionsContainer = document.createElement('div');
+            actionsContainer.className = 'article-actions';
+            articleFooter.insertBefore(actionsContainer, articleFooter.firstChild);
+        }
+        
+        actionsContainer.appendChild(shareButton);
+    }
+
+    #handleShareArticle(article) {
+        let articleLink = null;
+
+        // Try to extract link from article title
+        const articleTitleLink = article.querySelector('h2.btitle a');
+        if (articleTitleLink && articleTitleLink.href) {
+            articleLink = articleTitleLink.href;
+        }
+
+        if (!articleLink) {
+            const articleIdMatch = article.id.match(/\d+/);
+            if (articleIdMatch) {
+                const articleId = articleIdMatch[0];
+                articleLink = window.location.origin + '/?t=' + articleId;
+            }
+        }
+
+        if (articleLink) {
+            this.#copyPostLinkToClipboard(articleLink);
+        } else {
+            this.#showCopyNotification('Could not find article link');
+        }
+    }
+
     // ==============================
     // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
     // ==============================
@@ -2386,8 +2822,8 @@ class PostModernizer {
             'MDT': ['America/Denver'],
             'GMT': ['UTC', 'Europe/London'],
             'BST': ['Europe/London'],
-            'CET': ['Europe/Paris', 'Europe/Berlin', 'Europe/Rome'],
-            'CEST': ['Europe/Paris', 'Europe/Berlin', 'Europe/Rome'],
+            'CET': ['Europe/Paris', 'Europe/Bern', 'Europe/Rome'],
+            'CEST': ['Europe/Paris', 'Europe/Bern', 'Europe/Rome'],
             'EET': ['Europe/Sofia', 'Europe/Athens', 'Europe/Helsinki'],
             'EEST': ['Europe/Sofia', 'Europe/Athens', 'Europe/Helsinki'],
             'AEST': ['Australia/Sydney', 'Australia/Melbourne'],
@@ -2723,9 +3159,7 @@ class PostModernizer {
             element.parentElement?.parentElement,
             element.closest('a'),
             element.closest('.lt.Sub'),
-            element.closest('.title2'),
-            element.closest('.title2.top'),
-            element.closest('.left.Sub')
+            element.closest('.title2')
         ];
         
         for (const parent of parentCheckElements) {
@@ -2850,11 +3284,7 @@ class PostModernizer {
             '.title2.top a',
             'span.when',
             'a[href*="#entry"]',
-            'a[title*="/"]',
-            // Article specific selectors
-            '.title2.top .left.Sub .when',
-            '.article .when',
-            '.left.Sub .when'
+            'a[title*="/"]'
         ];
         
         const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
@@ -2937,10 +3367,7 @@ class PostModernizer {
             'span.when',
             'time',
             '.lt.Sub a',
-            '.lt.Sub span',
-            // Article specific
-            '.left.Sub .when',
-            '.title2.top .when'
+            '.lt.Sub span'
         ];
         
         timestampPatterns.forEach(pattern => {
@@ -2983,11 +3410,8 @@ class PostModernizer {
 
         this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({
             id: 'post-modernizer-transform',
-            callback: (node) => {
-                this.#handlePostTransformation(node);
-                this.#handleArticleTransformation(node);
-            },
-            selector: '.post, .article, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
+            callback: (node) => this.#handlePostTransformation(node),
+            selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
             delay: 100,
             priority: 'normal',
             pageTypes: pageTypes
@@ -3001,18 +3425,6 @@ class PostModernizer {
             id: 'post-modernizer-search-posts',
             callback: (node) => this.#handleSearchPostTransformation(node),
             selector: 'body#search .post, body#search li.post',
-            priority: 'high',
-            pageTypes: pageTypes
-        });
-    }
-
-    #setupArticleObserver() {
-        const pageTypes = ['blog'];
-        
-        this.#articleObserverId = globalThis.forumObserver.register({
-            id: 'post-modernizer-articles',
-            callback: (node) => this.#handleArticleTransformation(node),
-            selector: '.article, .st-emoji.st-emoji-article, .title2.bottom',
             priority: 'high',
             pageTypes: pageTypes
         });
@@ -3126,18 +3538,6 @@ class PostModernizer {
         }
     }
 
-    #handleArticleTransformation(node) {
-        if (!node) return;
-
-        const needsTransformation = node.matches('.article') ||
-            node.querySelector('.article') ||
-            node.querySelector('.st-emoji.st-emoji-article');
-
-        if (needsTransformation) {
-            this.#transformArticleElements();
-        }
-    }
-
     #handleSearchPostTransformation(node) {
         if (!node) return;
 
@@ -3155,336 +3555,6 @@ class PostModernizer {
         const miniButtons = document.querySelectorAll('.mini_buttons.points.Sub');
         miniButtons.forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
-
-    // ==============================
-    // ARTICLE MODERNIZATION
-    // ==============================
-
-    #transformArticleElements() {
-        const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
-
-        articles.forEach((article, index) => {
-            article.classList.add('article-modernized');
-
-            const fragment = document.createDocumentFragment();
-
-            // Extract anchor element
-            const anchorDiv = article.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
-            }
-
-            // Extract main elements
-            const title2Top = article.querySelector('.title2.top');
-            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
-            const pointsElement = title2Top ? title2Top.querySelector('.points') : null;
-            const btitle = article.querySelector('.btitle');
-            const bdesc = article.querySelector('.bdesc');
-            const content = article.querySelector('.color');
-            const title2Bottom = article.querySelector('.title2.bottom');
-
-            // Create new structure
-            const articleHeader = document.createElement('div');
-            articleHeader.className = 'article-header';
-
-            const articleContent = document.createElement('div');
-            articleContent.className = 'article-content';
-
-            const articleFooter = document.createElement('div');
-            articleFooter.className = 'article-footer';
-
-            const userInfo = document.createElement('div');
-            userInfo.className = 'article-user-info';
-
-            // Add anchor if exists
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                articleHeader.appendChild(anchorContainer);
-            }
-
-            // Process title and description
-            if (btitle) {
-                const titleClone = btitle.cloneNode(true);
-                const titleLink = titleClone.querySelector('a');
-                const titleText = titleClone.textContent.replace('test', '').trim();
-                
-                const titleElement = document.createElement('h1');
-                titleElement.className = 'article-title';
-                
-                if (titleLink) {
-                    titleElement.appendChild(titleLink.cloneNode(true));
-                } else {
-                    titleElement.textContent = titleText;
-                }
-                
-                articleHeader.appendChild(titleElement);
-                btitle.remove();
-            }
-
-            if (bdesc) {
-                const descElement = document.createElement('div');
-                descElement.className = 'article-description';
-                descElement.textContent = bdesc.textContent;
-                articleHeader.appendChild(descElement);
-                bdesc.remove();
-            }
-
-            // Process top section timestamps and user info
-            if (title2Top) {
-                const leftSection = title2Top.querySelector('.left.Sub');
-                
-                if (leftSection) {
-                    // Extract user information
-                    const avatar = leftSection.querySelector('.avatar');
-                    const whoElement = leftSection.querySelector('.who');
-                    const whenElement = leftSection.querySelector('.when');
-                    
-                    // Create user info container
-                    const userInfoContainer = document.createElement('div');
-                    userInfoContainer.className = 'article-author-info';
-                    
-                    // Add avatar if exists
-                    if (avatar) {
-                        const avatarClone = avatar.cloneNode(true);
-                        userInfo.appendChild(avatarClone);
-                    }
-                    
-                    // Add author name
-                    if (whoElement) {
-                        const authorName = whoElement.querySelector('a')?.textContent || whoElement.textContent.replace('By', '').trim();
-                        const authorElement = document.createElement('div');
-                        authorElement.className = 'article-author';
-                        authorElement.textContent = authorName;
-                        userInfoContainer.appendChild(authorElement);
-                    }
-                    
-                    // Transform timestamp
-                    if (whenElement) {
-                        const dateString = this.#extractDateFromElement(whenElement);
-                        if (dateString) {
-                            const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
-                            userInfoContainer.appendChild(modernTimestamp);
-                        }
-                    }
-                    
-                    userInfo.appendChild(userInfoContainer);
-                }
-            }
-
-            // Process content
-            if (content) {
-                const contentClone = content.cloneNode(true);
-                
-                // Remove unwanted elements from content
-                const widgetEmoji = contentClone.querySelector('.st-emoji-widget');
-                widgetEmoji?.remove();
-                
-                const editSpan = contentClone.querySelector('.edit');
-                if (editSpan) {
-                    this.#transformEditTimestamp(editSpan);
-                }
-                
-                // Preserve media dimensions
-                this.#preserveMediaDimensions(contentClone);
-                
-                // Process text and line breaks
-                this.#processTextAndLineBreaks(contentClone);
-                
-                // Modernize quotes, spoilers, code blocks
-                this.#modernizeQuotes(contentClone);
-                this.#modernizeSpoilers(contentClone);
-                this.#modernizeCodeBlocksInContent(contentClone);
-                
-                articleContent.appendChild(contentClone);
-            }
-
-            // Process footer
-            if (title2Bottom) {
-                const leftSection = title2Bottom.querySelector('.left.Sub');
-                const rightSection = title2Bottom.querySelector('.right.Sub');
-                
-                // Create footer actions container
-                const footerActions = document.createElement('div');
-                footerActions.className = 'article-footer-actions';
-                
-                // Process points and emojis (move from top to footer)
-                const postActions = document.createElement('div');
-                postActions.className = 'post-actions';
-                
-                if (pointsElement) {
-                    const pointsClone = pointsElement.cloneNode(true);
-                    this.#cleanupMiniButtons(pointsClone.parentElement);
-                    postActions.appendChild(pointsClone);
-                }
-                
-                if (stEmoji) {
-                    const emojiClone = stEmoji.cloneNode(true);
-                    postActions.appendChild(emojiClone);
-                }
-                
-                footerActions.appendChild(postActions);
-                
-                // Process left section (social sharing, track links)
-                if (leftSection) {
-                    const socialContainer = document.createElement('div');
-                    socialContainer.className = 'article-social-actions';
-                    
-                    // Extract track link
-                    const trackLink = leftSection.querySelector('a.track');
-                    if (trackLink) {
-                        const trackBtn = document.createElement('button');
-                        trackBtn.className = 'btn btn-icon';
-                        trackBtn.innerHTML = '<i class="fa-regular fa-bell" aria-hidden="true"></i>';
-                        trackBtn.setAttribute('title', trackLink.textContent.includes('Unsubscription') ? 'Unsubscribe' : 'Subscribe');
-                        trackBtn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            window.location.href = trackLink.href;
-                        });
-                        socialContainer.appendChild(trackBtn);
-                    }
-                    
-                    // Extract share link
-                    const shareLink = leftSection.querySelector('a[class*="a2a_dd"]');
-                    if (shareLink) {
-                        const shareBtn = document.createElement('button');
-                        shareBtn.className = 'btn btn-icon btn-share';
-                        shareBtn.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
-                        shareBtn.setAttribute('title', 'Share article');
-                        shareBtn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            this.#handleShareArticle(article);
-                        });
-                        socialContainer.appendChild(shareBtn);
-                    }
-                    
-                    footerActions.appendChild(socialContainer);
-                }
-                
-                // Process right section (edit, quote, checkbox)
-                if (rightSection) {
-                    const actionsContainer = document.createElement('div');
-                    actionsContainer.className = 'article-action-buttons';
-                    
-                    // Convert links to buttons
-                    rightSection.querySelectorAll('a').forEach(link => {
-                        const href = link.getAttribute('href');
-                        const icon = link.querySelector('i')?.className || '';
-                        
-                        if (href && icon.includes('fa-pen-to-square')) {
-                            const editBtn = document.createElement('button');
-                            editBtn.className = 'btn btn-icon btn-edit';
-                            editBtn.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>';
-                            editBtn.setAttribute('title', 'Edit article');
-                            editBtn.addEventListener('click', () => {
-                                window.location.href = href;
-                            });
-                            actionsContainer.appendChild(editBtn);
-                        } else if (href && icon.includes('fa-quote-left')) {
-                            const quoteBtn = document.createElement('button');
-                            quoteBtn.className = 'btn btn-icon btn-quote';
-                            quoteBtn.innerHTML = '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>';
-                            quoteBtn.setAttribute('title', 'Quote article');
-                            quoteBtn.addEventListener('click', () => {
-                                window.location.href = href;
-                            });
-                            actionsContainer.appendChild(quoteBtn);
-                        }
-                    });
-                    
-                    // Handle checkbox
-                    const checkbox = rightSection.querySelector('input[type="checkbox"]');
-                    if (checkbox) {
-                        const checkboxContainer = document.createElement('div');
-                        checkboxContainer.className = 'user-checkbox-container';
-                        checkboxContainer.appendChild(checkbox.cloneNode(true));
-                        actionsContainer.appendChild(checkboxContainer);
-                    }
-                    
-                    footerActions.appendChild(actionsContainer);
-                }
-                
-                articleFooter.appendChild(footerActions);
-                
-                // Remove original elements
-                title2Bottom.remove();
-            }
-
-            // Add views and replies info
-            if (title2Top) {
-                const rightSection = title2Top.querySelector('.right.Sub');
-                if (rightSection) {
-                    const replies = rightSection.querySelector('.replies');
-                    const views = rightSection.querySelector('.views');
-                    
-                    if (replies || views) {
-                        const statsContainer = document.createElement('div');
-                        statsContainer.className = 'article-stats';
-                        
-                        if (replies) {
-                            const repliesClone = replies.cloneNode(true);
-                            statsContainer.appendChild(repliesClone);
-                        }
-                        
-                        if (views) {
-                            const viewsClone = views.cloneNode(true);
-                            statsContainer.appendChild(viewsClone);
-                        }
-                        
-                        userInfo.appendChild(statsContainer);
-                    }
-                }
-            }
-
-            // Assemble the article
-            fragment.appendChild(articleHeader);
-            fragment.appendChild(userInfo);
-            fragment.appendChild(articleContent);
-            fragment.appendChild(articleFooter);
-
-            // Clear and rebuild article
-            const mainbg = article.querySelector('.mainbg');
-            if (mainbg) {
-                mainbg.innerHTML = '';
-                mainbg.appendChild(fragment);
-            } else {
-                article.innerHTML = '';
-                article.appendChild(fragment);
-            }
-
-            // Apply CSS classes for styling
-            article.classList.add('modern-article');
-        });
-    }
-
-    #handleShareArticle(article) {
-        let articleLink = null;
-        
-        // Try to extract article link from various sources
-        const titleLink = article.querySelector('.article-title a');
-        if (titleLink) {
-            articleLink = titleLink.href;
-        }
-        
-        const entryAnchor = article.querySelector('.anchor a[id^="entry"]');
-        if (entryAnchor && !articleLink) {
-            articleLink = window.location.origin + entryAnchor.getAttribute('id');
-        }
-        
-        if (articleLink) {
-            this.#copyPostLinkToClipboard(articleLink);
-        } else {
-            this.#showCopyNotification('Could not find article link');
-        }
-    }
-
-    // ==============================
-    // POST MODERNIZATION (Original)
-    // ==============================
 
     #transformPostElements() {
         const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
@@ -5891,7 +5961,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-        this.#codeBlockObserverId, this.#articleObserverId];
+            this.#codeBlockObserverId, this.#articleObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
