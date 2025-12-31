@@ -2296,230 +2296,147 @@ class PostModernizer {
         }
     }
 
-    #transformArticleElements() {
-        const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
+   #transformArticleElements() {
+    const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
 
-        articles.forEach((article, index) => {
-            article.classList.add('article-modernized');
+    articles.forEach((article, index) => {
+        article.classList.add('article-modernized');
 
-            const fragment = document.createDocumentFragment();
+        // Preserve ALL existing structure - don't break the DOM that plugins rely on
+        const fragment = document.createDocumentFragment();
 
-            // Extract anchor elements
-            const anchorDiv = article.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
-            }
+        // Extract anchor elements (preserve for navigation)
+        const anchorDiv = article.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            // Keep the original anchor in place for plugins
+        }
 
-            // Extract title2.top section
-            const title2Top = article.querySelector('.title2.top');
-            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
-            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
+        // Extract title2.top section - PRESERVE THIS FOR PLUGINS
+        const title2Top = article.querySelector('.title2.top');
+        
+        // Extract main content
+        const centerItem = article.querySelector('.center.Item');
+        
+        // Extract bottom section
+        const title2Bottom = article.querySelector('.title2.bottom');
 
-            // Create modern article structure
-            const articleHeader = document.createElement('div');
-            articleHeader.className = 'article-header';
+        // Create modern article structure while preserving plugin structure
+        const articleHeader = document.createElement('div');
+        articleHeader.className = 'article-header';
 
-            const articleContent = document.createElement('div');
-            articleContent.className = 'article-content';
+        const articleContent = document.createElement('div');
+        articleContent.className = 'article-content';
 
-            const articleFooter = document.createElement('div');
-            articleFooter.className = 'article-footer';
+        const articleFooter = document.createElement('div');
+        articleFooter.className = 'article-footer';
 
-            // Add anchor container
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                articleHeader.appendChild(anchorContainer);
-            }
+        // Add anchor container
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            articleHeader.appendChild(anchorContainer);
+        }
 
-            // Add article title (h2.btitle)
-            const articleTitle = article.querySelector('h2.btitle');
-            if (articleTitle) {
-                const titleClone = articleTitle.cloneNode(true);
-                
-                // Clean up the title clone
-                const bdesc = titleClone.querySelector('.bdesc');
-                if (bdesc) {
-                    bdesc.style.cssText = 'font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px; font-weight: normal;';
-                }
-                
-                articleHeader.appendChild(titleClone);
-            }
-
-            // Process title2.top section
-            if (title2Top) {
-                const title2TopClone = title2Top.cloneNode(true);
-                
-                // Remove elements that will be moved to footer
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-article')?.remove();
-                
-                // Clean up the cloned title2.top
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                // Transform timestamps in the article header
-                this.#transformArticleTimestamps(title2TopClone);
-                
-                // Extract user info from left section
-                const leftSection = title2TopClone.querySelector('.left.Sub');
-                if (leftSection) {
-                    // Create user info section
-                    const userInfo = document.createElement('div');
-                    userInfo.className = 'article-user-info';
-                    
-                    // Extract avatar
-                    const avatar = leftSection.querySelector('.avatar.thumbs img');
-                    if (avatar) {
-                        const avatarContainer = document.createElement('div');
-                        avatarContainer.className = 'article-avatar';
-                        
-                        const avatarImg = avatar.cloneNode(true);
-                        avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
-                        
-                        // Add link if parent has one
-                        const avatarLink = leftSection.querySelector('.avatar.thumbs a');
-                        if (avatarLink) {
-                            const link = document.createElement('a');
-                            link.href = avatarLink.href;
-                            link.rel = 'nofollow';
-                            link.appendChild(avatarImg);
-                            avatarContainer.appendChild(link);
-                        } else {
-                            avatarContainer.appendChild(avatarImg);
-                        }
-                        
-                        userInfo.appendChild(avatarContainer);
-                    }
-                    
-                    // Extract username
-                    const nickElement = leftSection.querySelector('.nick');
-                    if (nickElement) {
-                        const userContainer = document.createElement('div');
-                        userContainer.className = 'article-user-details';
-                        
-                        const userName = document.createElement('div');
-                        userName.className = 'article-username';
-                        userName.innerHTML = nickElement.outerHTML;
-                        
-                        userContainer.appendChild(userName);
-                        
-                        // Add timestamp next to username
-                        const whenElement = leftSection.querySelector('.when');
-                        if (whenElement) {
-                            const dateString = this.#extractDateFromElement(whenElement);
-                            if (dateString) {
-                                const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
-                                const timeContainer = document.createElement('div');
-                                timeContainer.className = 'article-timestamp';
-                                timeContainer.appendChild(modernTimestamp);
-                                userContainer.appendChild(timeContainer);
-                            }
-                        }
-                        
-                        userInfo.appendChild(userContainer);
-                    }
-                    
-                    // Add stats from right section
-                    const rightSection = title2Top.querySelector('.right.Sub');
-                    if (rightSection) {
-                        const statsContainer = document.createElement('div');
-                        statsContainer.className = 'article-stats';
-                        
-                        // Extract replies
-                        const replies = rightSection.querySelector('.replies');
-                        if (replies) {
-                            const repliesClone = replies.cloneNode(true);
-                            statsContainer.appendChild(repliesClone);
-                        }
-                        
-                        // Extract views
-                        const views = rightSection.querySelector('.views');
-                        if (views) {
-                            const viewsClone = views.cloneNode(true);
-                            statsContainer.appendChild(viewsClone);
-                        }
-                        
-                        userInfo.appendChild(statsContainer);
-                    }
-                    
-                    articleHeader.appendChild(userInfo);
-                }
-            }
-
-            // Extract and process main content
-            const centerItem = article.querySelector('.center.Item');
-            if (centerItem) {
-                const colorDiv = centerItem.querySelector('.color');
-                if (colorDiv) {
-                    const contentClone = colorDiv.cloneNode(true);
-                    
-                    // Remove the st-emoji-widget that we don't need
-                    contentClone.querySelector('.st-emoji-widget')?.remove();
-                    
-                    // Transform edit timestamps
-                    contentClone.querySelectorAll('span.edit').forEach(span => {
-                        if (!span.querySelector('time[datetime]')) {
-                            this.#transformEditTimestamp(span);
-                        }
-                    });
-                    
-                    // Preserve media dimensions
-                    this.#preserveMediaDimensions(contentClone);
-                    
-                    // Process text and line breaks
-                    this.#processTextAndLineBreaks(contentClone);
-                    
-                    // Modernize quotes, spoilers, and code blocks
-                    this.#modernizeQuotes(contentClone);
-                    this.#modernizeSpoilers(contentClone);
-                    this.#modernizeCodeBlocksInContent(contentClone);
-                    
-                    // Clean up empty elements
-                    this.#cleanEmptyElements(contentClone);
-                    
-                    articleContent.appendChild(contentClone);
-                }
-            }
-
-            // Process footer (title2.bottom)
-            const title2Bottom = article.querySelector('.title2.bottom');
-            if (title2Bottom) {
-                // Add reputation system to footer
-                this.#addReputationToArticleFooter(miniButtons, stEmoji, articleFooter);
-                
-                // Modernize bottom elements
-                this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
-                
-                // Remove original
-                title2Bottom.remove();
-            } else {
-                // Still add reputation even without bottom section
-                this.#addReputationToArticleFooter(miniButtons, stEmoji, articleFooter);
-            }
-
-            // Add share button
-            this.#addArticleShareButton(articleFooter, article);
-
-            // Clear original article and add new structure
-            article.innerHTML = '';
-            article.appendChild(articleHeader);
-            article.appendChild(articleContent);
-            article.appendChild(articleFooter);
-
-            // Add styling classes
-            article.classList.add('modern-article');
+        // Add article title (h2.btitle)
+        const articleTitle = article.querySelector('h2.btitle');
+        if (articleTitle) {
+            const titleClone = articleTitle.cloneNode(true);
             
-            // Add focus handling for anchor navigation
-            const articleId = article.id;
-            if (articleId && articleId.startsWith('ee')) {
-                article.setAttribute('data-article-id', articleId.replace('ee', ''));
+            // Clean up the title clone
+            const bdesc = titleClone.querySelector('.bdesc');
+            if (bdesc) {
+                bdesc.style.cssText = 'font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px; font-weight: normal;';
             }
-        });
-    }
+            
+            articleHeader.appendChild(titleClone);
+        }
+
+        // CRITICAL: Preserve the original title2.top structure but make it invisible
+        // This allows st-emoji plugin to continue working
+        if (title2Top) {
+            const pluginContainer = document.createElement('div');
+            pluginContainer.className = 'plugin-preservation-container';
+            pluginContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;';
+            
+            // Clone the original title2.top with ALL its children
+            const title2TopClone = title2Top.cloneNode(true);
+            pluginContainer.appendChild(title2TopClone);
+            articleHeader.appendChild(pluginContainer);
+            
+            // Now create visible modern version for users
+            this.#createVisibleArticleHeader(title2Top, articleHeader);
+        }
+
+        // Extract and process main content
+        if (centerItem) {
+            const colorDiv = centerItem.querySelector('.color');
+            if (colorDiv) {
+                const contentClone = colorDiv.cloneNode(true);
+                
+                // Remove the st-emoji-widget that we don't need
+                contentClone.querySelector('.st-emoji-widget')?.remove();
+                
+                // Transform edit timestamps
+                contentClone.querySelectorAll('span.edit').forEach(span => {
+                    if (!span.querySelector('time[datetime]')) {
+                        this.#transformEditTimestamp(span);
+                    }
+                });
+                
+                // Preserve media dimensions
+                this.#preserveMediaDimensions(contentClone);
+                
+                // Process text and line breaks
+                this.#processTextAndLineBreaks(contentClone);
+                
+                // Modernize quotes, spoilers, and code blocks
+                this.#modernizeQuotes(contentClone);
+                this.#modernizeSpoilers(contentClone);
+                this.#modernizeCodeBlocksInContent(contentClone);
+                
+                // Clean up empty elements
+                this.#cleanEmptyElements(contentClone);
+                
+                articleContent.appendChild(contentClone);
+            }
+        }
+
+        // Process footer (title2.bottom)
+        if (title2Bottom) {
+            // Create a preserved container for bottom plugins too
+            const bottomPluginContainer = document.createElement('div');
+            bottomPluginContainer.className = 'plugin-preservation-container';
+            bottomPluginContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none;';
+            
+            const title2BottomClone = title2Bottom.cloneNode(true);
+            bottomPluginContainer.appendChild(title2BottomClone);
+            articleFooter.appendChild(bottomPluginContainer);
+            
+            // Create visible modern footer
+            this.#createVisibleArticleFooter(title2Bottom, articleFooter, article);
+        }
+
+        // Clear original article and add new structure
+        // But keep the original elements that plugins might be monitoring
+        article.innerHTML = '';
+        article.appendChild(articleHeader);
+        article.appendChild(articleContent);
+        article.appendChild(articleFooter);
+
+        // Add styling classes
+        article.classList.add('modern-article');
+        
+        // Add focus handling for anchor navigation
+        const articleId = article.id;
+        if (articleId && articleId.startsWith('ee')) {
+            article.setAttribute('data-article-id', articleId.replace('ee', ''));
+        }
+    });
+}
 
     #transformArticleTimestamps(element) {
         const timestampElements = element.querySelectorAll('.when');
