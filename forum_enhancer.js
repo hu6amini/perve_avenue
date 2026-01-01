@@ -2312,10 +2312,11 @@ class PostModernizer {
                 anchorDiv.remove();
             }
 
-            // Extract title2.top section
+            // Extract title2.top section - preserve original structure
             const title2Top = article.querySelector('.title2.top');
             const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
             const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
+            const pointsElement = title2Top ? title2Top.querySelector('.points') : null;
 
             // Create modern article structure
             const articleHeader = document.createElement('div');
@@ -2350,27 +2351,15 @@ class PostModernizer {
                 articleHeader.appendChild(titleClone);
             }
 
-            // Process title2.top section
+            // Process title2.top section - preserve original structure but move elements
             if (title2Top) {
-                const title2TopClone = title2Top.cloneNode(true);
-                
-                // Remove elements that will be moved to footer
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-article')?.remove();
-                
-                // Clean up the cloned title2.top
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                // Transform timestamps in the article header
-                this.#transformArticleTimestamps(title2TopClone);
-                
+                // Create user info section
+                const userInfo = document.createElement('div');
+                userInfo.className = 'article-user-info';
+
                 // Extract user info from left section
-                const leftSection = title2TopClone.querySelector('.left.Sub');
+                const leftSection = title2Top.querySelector('.left.Sub');
                 if (leftSection) {
-                    // Create user info section
-                    const userInfo = document.createElement('div');
-                    userInfo.className = 'article-user-info';
-                    
                     // Extract avatar
                     const avatar = leftSection.querySelector('.avatar.thumbs img');
                     if (avatar) {
@@ -2395,58 +2384,98 @@ class PostModernizer {
                         userInfo.appendChild(avatarContainer);
                     }
                     
-                    // Extract username
-                    const nickElement = leftSection.querySelector('.nick');
-                    if (nickElement) {
-                        const userContainer = document.createElement('div');
-                        userContainer.className = 'article-user-details';
+                    // Extract username and create user details
+                    const userDetails = document.createElement('div');
+                    userDetails.className = 'article-user-details';
+                    
+                    // Extract username from .who element
+                    const whoElement = leftSection.querySelector('.who');
+                    if (whoElement) {
+                        const nickElement = whoElement.querySelector('.nick');
+                        if (nickElement) {
+                            const userName = document.createElement('div');
+                            userName.className = 'article-username';
+                            userName.innerHTML = nickElement.outerHTML;
+                            userDetails.appendChild(userName);
+                        }
                         
-                        const userName = document.createElement('div');
-                        userName.className = 'article-username';
-                        userName.innerHTML = nickElement.outerHTML;
-                        
-                        userContainer.appendChild(userName);
-                        
-                        // Add timestamp next to username
+                        // Extract timestamp and transform it
                         const whenElement = leftSection.querySelector('.when');
                         if (whenElement) {
-                            const dateString = this.#extractDateFromElement(whenElement);
+                            const dateString = this.#extractArticleDateFromElement(whenElement);
                             if (dateString) {
                                 const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
                                 const timeContainer = document.createElement('div');
                                 timeContainer.className = 'article-timestamp';
                                 timeContainer.appendChild(modernTimestamp);
-                                userContainer.appendChild(timeContainer);
+                                userDetails.appendChild(timeContainer);
                             }
                         }
-                        
-                        userInfo.appendChild(userContainer);
                     }
                     
-                    // Add stats from right section
-                    const rightSection = title2Top.querySelector('.right.Sub');
-                    if (rightSection) {
-                        const statsContainer = document.createElement('div');
-                        statsContainer.className = 'article-stats';
-                        
-                        // Extract replies
-                        const replies = rightSection.querySelector('.replies');
-                        if (replies) {
-                            const repliesClone = replies.cloneNode(true);
-                            statsContainer.appendChild(repliesClone);
+                    userInfo.appendChild(userDetails);
+                }
+
+                // Extract stats from right section
+                const rightSection = title2Top.querySelector('.right.Sub');
+                if (rightSection) {
+                    const statsContainer = document.createElement('div');
+                    statsContainer.className = 'article-stats';
+                    
+                    // Extract replies
+                    const replies = rightSection.querySelector('.replies');
+                    if (replies) {
+                        const repliesClone = replies.cloneNode(true);
+                        // Clean up replies clone
+                        const repliesEm = repliesClone.querySelector('em');
+                        if (repliesEm) {
+                            repliesEm.style.cssText = 'font-weight: 600; color: var(--primary-color);';
                         }
-                        
-                        // Extract views
-                        const views = rightSection.querySelector('.views');
-                        if (views) {
-                            const viewsClone = views.cloneNode(true);
-                            statsContainer.appendChild(viewsClone);
-                        }
-                        
-                        userInfo.appendChild(statsContainer);
+                        statsContainer.appendChild(repliesClone);
                     }
                     
-                    articleHeader.appendChild(userInfo);
+                    // Extract views
+                    const views = rightSection.querySelector('.views');
+                    if (views) {
+                        const viewsClone = views.cloneNode(true);
+                        // Clean up views clone
+                        const viewsEm = viewsClone.querySelector('em');
+                        if (viewsEm) {
+                            viewsEm.style.cssText = 'font-weight: 600; color: var(--primary-color);';
+                        }
+                        statsContainer.appendChild(viewsClone);
+                    }
+                    
+                    userInfo.appendChild(statsContainer);
+                }
+                
+                articleHeader.appendChild(userInfo);
+                
+                // Move st-emoji and points to footer (preserving original structure)
+                if (stEmoji || pointsElement) {
+                    const articleActions = document.createElement('div');
+                    articleActions.className = 'article-actions';
+
+                    if (stEmoji) {
+                        const emojiClone = stEmoji.cloneNode(true);
+                        const emojiContainer = emojiClone.querySelector('.st-emoji-container');
+                        if (emojiContainer) {
+                            this.#updateEmojiContainerActiveState(emojiContainer);
+                        }
+                        articleActions.appendChild(emojiClone);
+                    }
+
+                    if (pointsElement) {
+                        const pointsClone = pointsElement.cloneNode(true);
+                        this.#cleanupMiniButtons(pointsClone);
+                        const pointsContainer = pointsClone.querySelector('.points');
+                        if (pointsContainer) {
+                            this.#updatePointsContainerActiveState(pointsContainer);
+                        }
+                        articleActions.appendChild(pointsClone);
+                    }
+
+                    articleFooter.insertBefore(articleActions, articleFooter.firstChild);
                 }
             }
 
@@ -2457,7 +2486,7 @@ class PostModernizer {
                 if (colorDiv) {
                     const contentClone = colorDiv.cloneNode(true);
                     
-                    // Remove the st-emoji-widget that we don't need
+                    // Remove the st-emoji-widget that we don't need in the main content
                     contentClone.querySelector('.st-emoji-widget')?.remove();
                     
                     // Transform edit timestamps
@@ -2488,17 +2517,11 @@ class PostModernizer {
             // Process footer (title2.bottom)
             const title2Bottom = article.querySelector('.title2.bottom');
             if (title2Bottom) {
-                // Add reputation system to footer
-                this.#addReputationToArticleFooter(miniButtons, stEmoji, articleFooter);
-                
                 // Modernize bottom elements
                 this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
                 
                 // Remove original
                 title2Bottom.remove();
-            } else {
-                // Still add reputation even without bottom section
-                this.#addReputationToArticleFooter(miniButtons, stEmoji, articleFooter);
             }
 
             // Add share button
@@ -2521,142 +2544,166 @@ class PostModernizer {
         });
     }
 
-    #transformArticleTimestamps(element) {
-        const timestampElements = element.querySelectorAll('.when');
+    #extractArticleDateFromElement(element) {
+        // Special handling for article dates which have different structure
+        if (!element || !element.textContent) return null;
         
-        timestampElements.forEach(timestampElement => {
-            // Skip if already modernized
-            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) return;
+        const text = element.textContent.trim();
+        
+        // Article date format: "il 12 2025" or similar
+        // We need to construct a proper date string
+        const dayMatch = text.match(/\d+/);
+        const yearMatch = text.match(/\d{4}/);
+        
+        if (dayMatch && yearMatch) {
+            const day = dayMatch[0];
+            const year = yearMatch[0];
             
-            const dateString = this.#extractDateFromElement(timestampElement);
+            // Try to find month - look for month name or number
+            const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                              'july', 'august', 'september', 'october', 'november', 'december'];
+            let month = '01';
             
-            if (dateString) {
-                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
-                if (modernTimestamp && modernTimestamp !== timestampElement) {
-                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+            for (let i = 0; i < monthNames.length; i++) {
+                if (text.toLowerCase().includes(monthNames[i])) {
+                    month = String(i + 1).padStart(2, '0');
+                    break;
                 }
             }
-        });
-    }
-
-    #addReputationToArticleFooter(miniButtons, stEmoji, articleFooter) {
-        if (miniButtons || stEmoji) {
-            const articleActions = document.createElement('div');
-            articleActions.className = 'article-actions';
-
-            if (miniButtons) {
-                this.#cleanupMiniButtons(miniButtons);
-                this.#setInitialPointsState(miniButtons);
-                const pointsContainer = miniButtons.querySelector('.points');
-                if (pointsContainer) {
-                    this.#updatePointsContainerActiveState(pointsContainer);
-                }
-                articleActions.appendChild(miniButtons);
+            
+            // If no month name found, use current month as fallback
+            if (month === '01') {
+                month = String(new Date().getMonth() + 1).padStart(2, '0');
             }
-
-            if (stEmoji) {
-                const emojiContainer = stEmoji.querySelector('.st-emoji-container');
-                if (emojiContainer) {
-                    this.#updateEmojiContainerActiveState(emojiContainer);
-                }
-                articleActions.appendChild(stEmoji);
-            }
-
-            articleFooter.insertBefore(articleActions, articleFooter.firstChild);
+            
+            // Construct date string in format: MM/DD/YYYY
+            const dateString = month + '/' + day.padStart(2, '0') + '/' + year + ', 12:00 PM';
+            
+            console.debug('Extracted article date:', dateString);
+            return dateString;
         }
+        
+        // Fallback: check for any date-like patterns
+        const datePatterns = [
+            /(\d{1,2}\/\d{1,2}\/\d{4})/,
+            /(\d{1,2}-\d{1,2}-\d{4})/,
+            /(\d{4}-\d{1,2}-\d{1,2})/
+        ];
+        
+        for (const pattern of datePatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                return match[1] + ', 12:00 PM';
+            }
+        }
+        
+        // Last resort: check parent for date info
+        const parentElement = element.parentElement;
+        if (parentElement && parentElement.textContent) {
+            for (const pattern of datePatterns) {
+                const match = parentElement.textContent.match(pattern);
+                if (match) {
+                    return match[1] + ', 12:00 PM';
+                }
+            }
+        }
+        
+        console.warn('Could not extract article date from element:', element.outerHTML);
+        return null;
     }
 
     #modernizeArticleBottomElements(title2Bottom, articleFooter) {
-        title2Bottom.querySelectorAll('.rt.Sub').forEach(rtSub => {
-            const modernContainer = document.createElement('div');
-            modernContainer.className = 'modern-article-actions';
+        const rtSub = title2Bottom.querySelector('.rt.Sub');
+        if (!rtSub) return;
 
-            // Extract social sharing buttons (a2a kit)
-            const a2aKit = title2Bottom.querySelector('.a2a_kit');
-            if (a2aKit) {
-                const shareContainer = document.createElement('div');
-                shareContainer.className = 'article-share-container';
-                shareContainer.appendChild(a2aKit.cloneNode(true));
-                modernContainer.appendChild(shareContainer);
-            }
+        const modernContainer = document.createElement('div');
+        modernContainer.className = 'modern-article-actions';
 
-            // Extract other links (track, share, etc.)
-            const leftSub = title2Bottom.querySelector('.left.Sub');
-            if (leftSub) {
-                const links = leftSub.querySelectorAll('a:not(.a2a_button):not(.track)');
-                if (links.length > 0) {
-                    const linksContainer = document.createElement('div');
-                    linksContainer.className = 'article-links';
-                    links.forEach(link => {
-                        linksContainer.appendChild(link.cloneNode(true));
-                    });
-                    modernContainer.appendChild(linksContainer);
-                }
-            }
+        // Extract social sharing buttons (a2a kit)
+        const a2aKit = title2Bottom.querySelector('.a2a_kit');
+        if (a2aKit) {
+            const shareContainer = document.createElement('div');
+            shareContainer.className = 'article-share-container';
+            shareContainer.appendChild(a2aKit.cloneNode(true));
+            modernContainer.appendChild(shareContainer);
+        }
 
-            // Extract mini buttons (edit, quote, checkbox)
-            const miniButtons = title2Bottom.querySelector('.mini_buttons.right.Sub');
-            if (miniButtons) {
-                const buttonsContainer = document.createElement('div');
-                buttonsContainer.className = 'article-buttons';
-                
-                // Convert anchor buttons to modern buttons
-                miniButtons.querySelectorAll('a').forEach(link => {
-                    const href = link.getAttribute('href');
-                    
-                    if (href && href.includes('CODE=08')) {
-                        link.classList.add('btn', 'btn-icon', 'btn-edit');
-                        link.setAttribute('data-action', 'edit');
-                        link.setAttribute('title', 'Edit article');
-                        
-                        const icon = link.querySelector('i');
-                        icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-                    } else if (href && href.includes('CODE=02')) {
-                        link.classList.add('btn', 'btn-icon', 'btn-quote');
-                        link.setAttribute('data-action', 'quote');
-                        link.setAttribute('title', 'Quote article');
-                        link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
-                        
-                        const icon = link.querySelector('i');
-                        icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-                    }
+        // Extract other links (track, share, etc.)
+        const leftSub = title2Bottom.querySelector('.left.Sub');
+        if (leftSub) {
+            const links = leftSub.querySelectorAll('a:not(.a2a_button):not(.track)');
+            if (links.length > 0) {
+                const linksContainer = document.createElement('div');
+                linksContainer.className = 'article-links';
+                links.forEach(link => {
+                    linksContainer.appendChild(link.cloneNode(true));
                 });
-                
-                // Handle multiquote checkbox
-                const checkbox = miniButtons.querySelector('input[type="checkbox"]');
-                if (checkbox) {
-                    const checkboxContainer = document.createElement('div');
-                    checkboxContainer.className = 'multiquote-control';
-                    
-                    const postId = checkbox.id.replace('p', '');
-                    const originalOnClick = `document.getElementById('${checkbox.id}').checked=!document.getElementById('${checkbox.id}').checked;post('${postId}')`;
-                    
-                    const quoteButton = document.createElement('button');
-                    quoteButton.className = 'btn btn-icon multiquote-btn';
-                    quoteButton.setAttribute('onclick', originalOnClick);
-                    quoteButton.setAttribute('title', 'Select article for multiquote');
-                    quoteButton.setAttribute('type', 'button');
-                    quoteButton.innerHTML = '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
-                    
-                    const label = document.createElement('label');
-                    label.className = 'multiquote-label';
-                    label.textContent = 'Quote +';
-                    
-                    checkboxContainer.appendChild(quoteButton);
-                    checkboxContainer.appendChild(label);
-                    checkboxContainer.appendChild(checkbox.cloneNode(true));
-                    
-                    buttonsContainer.appendChild(checkboxContainer);
-                }
-                
-                buttonsContainer.appendChild(miniButtons.cloneNode(true));
-                modernContainer.appendChild(buttonsContainer);
+                modernContainer.appendChild(linksContainer);
             }
+        }
 
-            if (modernContainer.children.length > 0) {
-                articleFooter.appendChild(modernContainer);
+        // Extract mini buttons (edit, quote, checkbox)
+        const miniButtons = title2Bottom.querySelector('.mini_buttons.right.Sub');
+        if (miniButtons) {
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.className = 'article-buttons';
+            
+            // Convert anchor buttons to modern buttons
+            miniButtons.querySelectorAll('a').forEach(link => {
+                const href = link.getAttribute('href');
+                
+                if (href && href.includes('CODE=08')) {
+                    link.classList.add('btn', 'btn-icon', 'btn-edit');
+                    link.setAttribute('data-action', 'edit');
+                    link.setAttribute('title', 'Edit article');
+                    
+                    const icon = link.querySelector('i');
+                    icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                } else if (href && href.includes('CODE=02')) {
+                    link.classList.add('btn', 'btn-icon', 'btn-quote');
+                    link.setAttribute('data-action', 'quote');
+                    link.setAttribute('title', 'Quote article');
+                    link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+                    
+                    const icon = link.querySelector('i');
+                    icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                }
+            });
+            
+            // Handle multiquote checkbox
+            const checkbox = miniButtons.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                const checkboxContainer = document.createElement('div');
+                checkboxContainer.className = 'multiquote-control';
+                
+                const postId = checkbox.id.replace('p', '');
+                const originalOnClick = 'document.getElementById(\'' + checkbox.id + '\').checked=!document.getElementById(\'' + checkbox.id + '\').checked;post(\'' + postId + '\')';
+                
+                const quoteButton = document.createElement('button');
+                quoteButton.className = 'btn btn-icon multiquote-btn';
+                quoteButton.setAttribute('onclick', originalOnClick);
+                quoteButton.setAttribute('title', 'Select article for multiquote');
+                quoteButton.setAttribute('type', 'button');
+                quoteButton.innerHTML = '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
+                
+                const label = document.createElement('label');
+                label.className = 'multiquote-label';
+                label.textContent = 'Quote +';
+                
+                checkboxContainer.appendChild(quoteButton);
+                checkboxContainer.appendChild(label);
+                checkboxContainer.appendChild(checkbox.cloneNode(true));
+                
+                buttonsContainer.appendChild(checkboxContainer);
             }
-        });
+            
+            buttonsContainer.appendChild(miniButtons.cloneNode(true));
+            modernContainer.appendChild(buttonsContainer);
+        }
+
+        if (modernContainer.children.length > 0) {
+            articleFooter.appendChild(modernContainer);
+        }
     }
 
     #addArticleShareButton(articleFooter, article) {
@@ -3035,7 +3082,7 @@ class PostModernizer {
         const localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat);
         const timezoneAbbr = userLocalDate.format('z');
         
-        timeElement.setAttribute('title', `${localizedTitle} (${timezoneAbbr})`);
+        timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
         
         // Create relative time display
         const relativeSpan = document.createElement('span');
@@ -3089,7 +3136,7 @@ class PostModernizer {
                 const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
                 const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
                 const currentTimezoneAbbr = currentUserLocalDate.format('z');
-                timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+                timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
             }
         }, 30000);
         
@@ -3219,7 +3266,7 @@ class PostModernizer {
                 
                 const timeElement = document.createElement('time');
                 timeElement.setAttribute('datetime', momentDate.toISOString());
-                timeElement.setAttribute('title', `${formattedTime} (${timezoneAbbr})`);
+                timeElement.setAttribute('title', formattedTime + ' (' + timezoneAbbr + ')');
                 timeElement.textContent = this.#formatTimeAgo(momentDate);
                 
                 // Generate unique ID for updates
@@ -3249,7 +3296,7 @@ class PostModernizer {
                         const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
                         const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
                         const currentTimezoneAbbr = currentUserLocalDate.format('z');
-                        timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+                        timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
                     }
                 }, 30000);
                 
