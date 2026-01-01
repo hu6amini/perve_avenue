@@ -2296,7 +2296,7 @@ class PostModernizer {
         }
     }
 
-       #transformArticleElements() {
+         #transformArticleElements() {
         const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
 
         articles.forEach((article, index) => {
@@ -2399,19 +2399,33 @@ class PostModernizer {
                             userDetails.appendChild(userName);
                         }
                         
-                        // Extract timestamp ONLY if we have a title attribute with complete date
+                        // Extract timestamp and transform it if we have a title
                         const whenElement = leftSection.querySelector('.when');
-                        if (whenElement && whenElement.hasAttribute('title')) {
-                            const dateString = this.#extractArticleDateFromElement(whenElement);
-                            if (dateString) {
-                                const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
-                                const timeContainer = document.createElement('div');
-                                timeContainer.className = 'article-timestamp';
-                                timeContainer.appendChild(modernTimestamp);
-                                userDetails.appendChild(timeContainer);
+                        if (whenElement) {
+                            // Check if this element has a title attribute with date
+                            if (whenElement.hasAttribute('title')) {
+                                // Extract date from the title attribute
+                                const dateString = this.#extractArticleDateFromElement(whenElement);
+                                if (dateString) {
+                                    // Create modern timestamp using the element with title
+                                    const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
+                                    const timeContainer = document.createElement('div');
+                                    timeContainer.className = 'article-timestamp';
+                                    timeContainer.appendChild(modernTimestamp);
+                                    userDetails.appendChild(timeContainer);
+                                } else {
+                                    // Has title but couldn't parse it - keep original element
+                                    const timeContainer = document.createElement('div');
+                                    timeContainer.className = 'article-timestamp';
+                                    timeContainer.appendChild(whenElement.cloneNode(true));
+                                    userDetails.appendChild(timeContainer);
+                                }
+                            } else {
+                                // No title attribute - skip timestamp transformation
+                                // Don't add any timestamp container at all
+                                console.debug('Article timestamp skipped - no title attribute');
                             }
                         }
-                        // No timestamp added if no title attribute
                     }
                     
                     userInfo.appendChild(userDetails);
