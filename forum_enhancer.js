@@ -2296,13 +2296,11 @@ class PostModernizer {
         }
     }
 
-#transformArticleElements() {
+  #transformArticleElements() {
         const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
 
         articles.forEach((article, index) => {
             article.classList.add('article-modernized');
-
-            const fragment = document.createDocumentFragment();
 
             // Extract anchor elements
             const anchorDiv = article.querySelector('.anchor');
@@ -2342,7 +2340,6 @@ class PostModernizer {
             if (articleTitle) {
                 const titleClone = articleTitle.cloneNode(true);
                 
-                // Clean up the title clone
                 const bdesc = titleClone.querySelector('.bdesc');
                 if (bdesc) {
                     bdesc.style.cssText = 'font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px; font-weight: normal;';
@@ -2360,11 +2357,8 @@ class PostModernizer {
                 // Extract user info from left section
                 const leftSection = title2Top.querySelector('.left.Sub');
                 if (leftSection) {
-                    // Clone the entire left section so we can modify it
-                    const leftSectionClone = leftSection.cloneNode(true);
-                    
-                    // Extract avatar from clone
-                    const avatar = leftSectionClone.querySelector('.avatar.thumbs img');
+                    // Extract avatar
+                    const avatar = leftSection.querySelector('.avatar.thumbs img');
                     if (avatar) {
                         const avatarContainer = document.createElement('div');
                         avatarContainer.className = 'article-avatar';
@@ -2372,8 +2366,7 @@ class PostModernizer {
                         const avatarImg = avatar.cloneNode(true);
                         avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
                         
-                        // Add link if parent has one
-                        const avatarLink = leftSectionClone.querySelector('.avatar.thumbs a');
+                        const avatarLink = leftSection.querySelector('.avatar.thumbs a');
                         if (avatarLink) {
                             const link = document.createElement('a');
                             link.href = avatarLink.href;
@@ -2387,12 +2380,12 @@ class PostModernizer {
                         userInfo.appendChild(avatarContainer);
                     }
                     
-                    // Extract username and create user details
+                    // Create user details
                     const userDetails = document.createElement('div');
                     userDetails.className = 'article-user-details';
                     
-                    // Extract username from .who element in clone
-                    const whoElement = leftSectionClone.querySelector('.who');
+                    // Extract username
+                    const whoElement = leftSection.querySelector('.who');
                     if (whoElement) {
                         const nickElement = whoElement.querySelector('.nick');
                         if (nickElement) {
@@ -2402,38 +2395,45 @@ class PostModernizer {
                             userDetails.appendChild(userName);
                         }
                         
-                        // Transform timestamp in the cloned when element
-                        const whenElement = leftSectionClone.querySelector('.when');
-                        if (whenElement) {
-                            // Check if this is an opened article (has title attribute)
-                            if (whenElement.hasAttribute('title')) {
-                                const dateString = this.#extractArticleDateFromElement(whenElement);
-                                if (dateString) {
-                                    // Create modern timestamp
+                        // Handle timestamp - SIMPLIFIED APPROACH
+                        const whenElement = leftSection.querySelector('.when');
+                        if (whenElement && whenElement.hasAttribute('title')) {
+                            const dateString = this.#extractArticleDateFromElement(whenElement);
+                            if (dateString) {
+                                // Try to create modern timestamp
+                                try {
                                     const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
-                                    console.log('Modern timestamp result:', modernTimestamp);
-                                    console.log('Original when element:', whenElement);
                                     
-                                    if (modernTimestamp && modernTimestamp !== whenElement) {
-                                        // Add the modern timestamp to user details
+                                    // Check if we got a proper modern timestamp
+                                    const isModernTimestamp = modernTimestamp && 
+                                                              (modernTimestamp.classList && modernTimestamp.classList.contains('modern-timestamp')) ||
+                                                              (modernTimestamp.querySelector && modernTimestamp.querySelector('.modern-timestamp'));
+                                    
+                                    if (isModernTimestamp) {
                                         const timeContainer = document.createElement('div');
                                         timeContainer.className = 'article-timestamp';
                                         timeContainer.appendChild(modernTimestamp);
                                         userDetails.appendChild(timeContainer);
-                                        
-                                        // Remove the original when element from the clone
-                                        whenElement.remove();
                                     } else {
-                                        // If transformation failed, don't add anything
-                                        console.warn('Article timestamp transformation failed');
+                                        // If not a modern timestamp, keep the original with title
+                                        const timeContainer = document.createElement('div');
+                                        timeContainer.className = 'article-timestamp';
+                                        timeContainer.innerHTML = '<span class="original-time" title="' + this.#escapeHtml(whenElement.getAttribute('title')) + '">' + 
+                                                                 this.#escapeHtml(whenElement.textContent.trim()) + '</span>';
+                                        userDetails.appendChild(timeContainer);
                                     }
+                                } catch (error) {
+                                    console.error('Error creating article timestamp:', error);
+                                    // Fallback: keep original
+                                    const timeContainer = document.createElement('div');
+                                    timeContainer.className = 'article-timestamp';
+                                    timeContainer.innerHTML = '<span class="original-time" title="' + this.#escapeHtml(whenElement.getAttribute('title')) + '">' + 
+                                                             this.#escapeHtml(whenElement.textContent.trim()) + '</span>';
+                                    userDetails.appendChild(timeContainer);
                                 }
                             }
-                            // If no title, remove the when element
-                            else {
-                                whenElement.remove();
-                            }
                         }
+                        // If no title, no timestamp is added
                     }
                     
                     userInfo.appendChild(userDetails);
@@ -2445,7 +2445,6 @@ class PostModernizer {
                     const statsContainer = document.createElement('div');
                     statsContainer.className = 'article-stats';
                     
-                    // Extract replies
                     const replies = rightSection.querySelector('.replies');
                     if (replies) {
                         const repliesClone = replies.cloneNode(true);
@@ -2456,7 +2455,6 @@ class PostModernizer {
                         statsContainer.appendChild(repliesClone);
                     }
                     
-                    // Extract views
                     const views = rightSection.querySelector('.views');
                     if (views) {
                         const viewsClone = views.cloneNode(true);
@@ -2507,28 +2505,19 @@ class PostModernizer {
                 if (colorDiv) {
                     const contentClone = colorDiv.cloneNode(true);
                     
-                    // Remove the st-emoji-widget
                     contentClone.querySelector('.st-emoji-widget')?.remove();
                     
-                    // Transform edit timestamps (these have proper dates)
                     contentClone.querySelectorAll('span.edit').forEach(span => {
                         if (!span.querySelector('time[datetime]')) {
                             this.#transformEditTimestamp(span);
                         }
                     });
                     
-                    // Preserve media dimensions
                     this.#preserveMediaDimensions(contentClone);
-                    
-                    // Process text and line breaks
                     this.#processTextAndLineBreaks(contentClone);
-                    
-                    // Modernize quotes, spoilers, and code blocks
                     this.#modernizeQuotes(contentClone);
                     this.#modernizeSpoilers(contentClone);
                     this.#modernizeCodeBlocksInContent(contentClone);
-                    
-                    // Clean up empty elements
                     this.#cleanEmptyElements(contentClone);
                     
                     articleContent.appendChild(contentClone);
@@ -2551,10 +2540,8 @@ class PostModernizer {
             article.appendChild(articleContent);
             article.appendChild(articleFooter);
 
-            // Add styling classes
             article.classList.add('modern-article');
             
-            // Add focus handling for anchor navigation
             const articleId = article.id;
             if (articleId && articleId.startsWith('ee')) {
                 article.setAttribute('data-article-id', articleId.replace('ee', ''));
@@ -2562,30 +2549,23 @@ class PostModernizer {
         });
     }
 
- #extractArticleDateFromElement(element) {
+    #extractArticleDateFromElement(element) {
         // Special handling for article dates
         // ONLY process if we have a title attribute with complete date information
         if (!element || !element.hasAttribute('title')) {
-            console.debug('Article timestamp skipped - no title attribute');
-            return null; // Skip entirely if no title
+            return null;
         }
         
         const title = element.getAttribute('title');
-        console.log('Article title attribute:', title);
         
         // Extract just the date part (before the colon/time suffix)
         // Format: "12/28/2025, 01:33 PM:39"
         const dateMatch = title.match(/^([^:]+):/);
-        console.log('Date match result:', dateMatch);
-        
         if (!dateMatch) {
-            console.debug('Article timestamp skipped - invalid date format in title');
-            return null; // Skip if title doesn't have expected format
+            return null;
         }
         
-        const cleanDate = dateMatch[1].trim();
-        console.debug('Extracted article date from title:', cleanDate);
-        return cleanDate;
+        return dateMatch[1].trim();
     }
     
     #modernizeArticleBottomElements(title2Bottom, articleFooter) {
