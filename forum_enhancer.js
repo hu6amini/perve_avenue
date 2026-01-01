@@ -2296,7 +2296,7 @@ class PostModernizer {
         }
     }
 
-         #transformArticleElements() {
+#transformArticleElements() {
         const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
 
         articles.forEach((article, index) => {
@@ -2360,8 +2360,11 @@ class PostModernizer {
                 // Extract user info from left section
                 const leftSection = title2Top.querySelector('.left.Sub');
                 if (leftSection) {
-                    // Extract avatar
-                    const avatar = leftSection.querySelector('.avatar.thumbs img');
+                    // Clone the entire left section so we can modify it
+                    const leftSectionClone = leftSection.cloneNode(true);
+                    
+                    // Extract avatar from clone
+                    const avatar = leftSectionClone.querySelector('.avatar.thumbs img');
                     if (avatar) {
                         const avatarContainer = document.createElement('div');
                         avatarContainer.className = 'article-avatar';
@@ -2370,7 +2373,7 @@ class PostModernizer {
                         avatarImg.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--primary-color); object-fit: cover;';
                         
                         // Add link if parent has one
-                        const avatarLink = leftSection.querySelector('.avatar.thumbs a');
+                        const avatarLink = leftSectionClone.querySelector('.avatar.thumbs a');
                         if (avatarLink) {
                             const link = document.createElement('a');
                             link.href = avatarLink.href;
@@ -2388,8 +2391,8 @@ class PostModernizer {
                     const userDetails = document.createElement('div');
                     userDetails.className = 'article-user-details';
                     
-                    // Extract username from .who element
-                    const whoElement = leftSection.querySelector('.who');
+                    // Extract username from .who element in clone
+                    const whoElement = leftSectionClone.querySelector('.who');
                     if (whoElement) {
                         const nickElement = whoElement.querySelector('.nick');
                         if (nickElement) {
@@ -2399,31 +2402,36 @@ class PostModernizer {
                             userDetails.appendChild(userName);
                         }
                         
-                        // Extract timestamp and transform it if we have a title
-                        const whenElement = leftSection.querySelector('.when');
+                        // Transform timestamp in the cloned when element
+                        const whenElement = leftSectionClone.querySelector('.when');
                         if (whenElement) {
-                            // Check if this element has a title attribute with date
+                            // Check if this is an opened article (has title attribute)
                             if (whenElement.hasAttribute('title')) {
-                                // Extract date from the title attribute
                                 const dateString = this.#extractArticleDateFromElement(whenElement);
                                 if (dateString) {
-                                    // Create modern timestamp using the element with title
+                                    // Create modern timestamp
                                     const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
-                                    const timeContainer = document.createElement('div');
-                                    timeContainer.className = 'article-timestamp';
-                                    timeContainer.appendChild(modernTimestamp);
-                                    userDetails.appendChild(timeContainer);
-                                } else {
-                                    // Has title but couldn't parse it - keep original element
-                                    const timeContainer = document.createElement('div');
-                                    timeContainer.className = 'article-timestamp';
-                                    timeContainer.appendChild(whenElement.cloneNode(true));
-                                    userDetails.appendChild(timeContainer);
+                                    console.log('Modern timestamp result:', modernTimestamp);
+                                    console.log('Original when element:', whenElement);
+                                    
+                                    if (modernTimestamp && modernTimestamp !== whenElement) {
+                                        // Add the modern timestamp to user details
+                                        const timeContainer = document.createElement('div');
+                                        timeContainer.className = 'article-timestamp';
+                                        timeContainer.appendChild(modernTimestamp);
+                                        userDetails.appendChild(timeContainer);
+                                        
+                                        // Remove the original when element from the clone
+                                        whenElement.remove();
+                                    } else {
+                                        // If transformation failed, don't add anything
+                                        console.warn('Article timestamp transformation failed');
+                                    }
                                 }
-                            } else {
-                                // No title attribute - skip timestamp transformation
-                                // Don't add any timestamp container at all
-                                console.debug('Article timestamp skipped - no title attribute');
+                            }
+                            // If no title, remove the when element
+                            else {
+                                whenElement.remove();
                             }
                         }
                     }
@@ -2554,7 +2562,7 @@ class PostModernizer {
         });
     }
 
-      #extractArticleDateFromElement(element) {
+ #extractArticleDateFromElement(element) {
         // Special handling for article dates
         // ONLY process if we have a title attribute with complete date information
         if (!element || !element.hasAttribute('title')) {
@@ -2563,10 +2571,13 @@ class PostModernizer {
         }
         
         const title = element.getAttribute('title');
+        console.log('Article title attribute:', title);
         
         // Extract just the date part (before the colon/time suffix)
         // Format: "12/28/2025, 01:33 PM:39"
         const dateMatch = title.match(/^([^:]+):/);
+        console.log('Date match result:', dateMatch);
+        
         if (!dateMatch) {
             console.debug('Article timestamp skipped - invalid date format in title');
             return null; // Skip if title doesn't have expected format
