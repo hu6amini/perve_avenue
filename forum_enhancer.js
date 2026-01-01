@@ -2173,6 +2173,1074 @@ globalThis.addEventListener('pagehide', () => {
  } 
 });
 
+//Enhanced Profile Transformation
+// User Profile Modernization Script - Complete Modernization with Observer Integration 
+class ProfileModernizer { 
+ #profileObserverId = null; 
+ #retryCount = 0; 
+ #maxRetries = 5; 
+ 
+ constructor() { 
+ this.#initWithObserver(); 
+ } 
+ 
+ #initWithObserver() { 
+ if (document.body.id !== 'profile') return; 
+ 
+ // Check if observer is available 
+ if (!globalThis.forumObserver) { 
+ if (this.#retryCount < this.#maxRetries) { 
+ this.#retryCount++; 
+ const delay = Math.min(100 * Math.pow(2, this.#retryCount - 1), 1000); 
+ console.log(`Forum Observer not available, retry ${this.#retryCount}/${this.#maxRetries} in ${delay}ms`); 
+ 
+ setTimeout(() => this.#initWithObserver(), delay); 
+ return; 
+ } else { 
+ console.error('Profile Modernizer: Forum Observer not available after maximum retries, using fallback'); 
+ this.#initWithFallback(); 
+ return; 
+ } 
+ } 
+ 
+ // Reset retry counter on success 
+ this.#retryCount = 0; 
+ 
+ try { 
+ // Initial transformation 
+ this.modernizeProfileLayout(); 
+ this.setupEventListeners(); 
+ 
+ // Register observer for dynamic changes 
+ this.#profileObserverId = globalThis.forumObserver.register({ 
+ id: 'profile-modernizer', 
+ callback: (node) => this.#handleProfileMutations(node), 
+ selector: '.profile:not([data-modernized]), .modern-profile, .profile-tab, .avatar-container, .profile-avatar', 
+ priority: 'high', 
+ pageTypes: ['profile'], 
+ dependencies: ['body#profile'] 
+ }); 
+ 
+ console.log('&#9989; Profile Modernizer initialized with observer'); 
+ } catch (error) { 
+ console.error('Profile Modernizer initialization failed:', error); 
+ this.#initWithFallback(); 
+ } 
+ } 
+ 
+ #initWithFallback() { 
+ // Fallback to DOMContentLoaded initialization 
+ if (document.readyState === 'loading') { 
+ document.addEventListener('DOMContentLoaded', () => { 
+ this.modernizeProfileLayout(); 
+ this.setupEventListeners(); 
+ }); 
+ } else { 
+ this.modernizeProfileLayout(); 
+ this.setupEventListeners(); 
+ } 
+ } 
+ 
+ #handleProfileMutations(node) { 
+ if (!node) return; 
+ 
+ const needsModernization = node.matches('.profile:not([data-modernized])') || 
+ node.closest('.profile:not([data-modernized])') || 
+ node.matches('.profile-tab') || 
+ node.closest('.profile-tab') || 
+ node.matches('.avatar-container') || 
+ node.matches('.profile-avatar'); 
+ 
+ if (needsModernization) { 
+ this.modernizeProfileLayout(); 
+ } 
+ } 
+ 
+ init() { 
+ if (document.body.id !== 'profile') return; 
+ this.modernizeProfileLayout(); 
+ this.setupEventListeners(); 
+ } 
+ 
+ modernizeProfileLayout() { 
+ const oldProfile = document.querySelector('.profile'); 
+ if (!oldProfile || oldProfile.dataset.modernized) return; 
+ 
+ try { 
+ const profileData = this.extractProfileData(oldProfile); 
+ const modernProfile = this.buildModernProfile(profileData); 
+ if (!modernProfile) return; 
+ 
+ oldProfile.style.display = 'none'; 
+ oldProfile.dataset.modernized = 'true'; 
+ 
+ const parent = oldProfile.parentNode; 
+ if (parent) { 
+ parent.insertBefore(modernProfile, oldProfile.nextSibling); 
+ } 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ extractProfileData(oldProfile) { 
+ try { 
+ // Extract avatar - can be img, div with icon, or any element 
+ const avatarContainer = oldProfile.querySelector('.avatar'); 
+ let avatarHtml = ''; 
+ let avatarType = 'image'; // 'image', 'icon', or 'custom' 
+ 
+ if (avatarContainer) { 
+ // Clone the entire avatar container 
+ const avatarClone = avatarContainer.cloneNode(true); 
+ 
+ // Remove any onerror handlers that would set default image 
+ const avatarImg = avatarClone.querySelector('img'); 
+ if (avatarImg) { 
+ avatarImg.removeAttribute('onerror'); 
+ avatarType = 'image'; 
+ } else if (avatarClone.querySelector('i') || avatarClone.querySelector('.default-avatar')) { 
+ // Check for Font Awesome icons or our default avatar div 
+ avatarType = 'icon'; 
+ } 
+ 
+ avatarHtml = avatarClone.innerHTML; 
+ } 
+ 
+ const username = oldProfile.querySelector('.nick'); 
+ const status = oldProfile.querySelector('.u_status dd'); 
+ 
+ // Extract posts link from member_posts 
+ const postsLink = oldProfile.querySelector('.member_posts'); 
+ 
+ // Extract tabs data 
+ const tabs = Array.from(oldProfile.querySelectorAll('.tabs li')).map(tab => ({ 
+ id: tab.id.replace('t', ''), 
+ text: tab.textContent.trim(), 
+ href: tab.querySelector('a')?.getAttribute('href') || '', 
+ isActive: tab.classList.contains('current') 
+ })); 
+ 
+ // Extract and modernize tab content 
+ const tabContents = {}; 
+ tabs.forEach(tab => { 
+ const contentEl = document.getElementById('tab' + tab.id); 
+ if (contentEl) { 
+ tabContents[tab.id] = this.modernizeTabContent(contentEl.innerHTML, tab.id); 
+ } 
+ }); 
+ 
+ return { 
+ avatarHtml: avatarHtml || '', 
+ avatarType: avatarType, 
+ username: username?.textContent || '', 
+ status: status?.textContent || '', 
+ statusTitle: oldProfile.querySelector('.u_status')?.getAttribute('title') || '', 
+ postsUrl: postsLink?.getAttribute('href') || '', 
+ postsText: postsLink?.textContent?.trim() || 'Posts', 
+ tabs: tabs, 
+ tabContents: tabContents 
+ }; 
+ } catch (error) { 
+ return { 
+ avatarHtml: '', 
+ avatarType: 'icon', 
+ username: '', 
+ status: '', 
+ statusTitle: '', 
+ postsUrl: '', 
+ postsText: 'Posts', 
+ tabs: [], 
+ tabContents: {} 
+ }; 
+ } 
+ } 
+ 
+ modernizeTabContent(content, tabId) { 
+ try { 
+ let modernContent = content; 
+ 
+ // Replace all definition lists with modern grid 
+ modernContent = modernContent.replace( 
+ /<dl class="profile-([^"]*)">\s*<dt[^>]*>([^<]*)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>\s*<\/dl>/g, 
+ '<div class="profile-field profile-$1"><div class="field-label">$2</div><div class="field-value">$3</div></div>' 
+ ); 
+ 
+ // Modernize friend avatars - KEEP existing avatars as-is 
+ modernContent = modernContent.replace( 
+ /<a[^>]*>\s*<img[^>]*>\s*<\/a>/g, 
+ (match) => { 
+ const temp = document.createElement('div'); 
+ temp.innerHTML = match; 
+ const link = temp.querySelector('a'); 
+ const img = temp.querySelector('img'); 
+ if (link && img) { 
+ // Preserve the original image, remove any onerror handlers 
+ const imgClone = img.cloneNode(true); 
+ imgClone.removeAttribute('onerror'); 
+ return '<a href="' + link.getAttribute('href') + '" class="friend-avatar" title="' + (img.getAttribute('title') || '') + '">' + 
+ imgClone.outerHTML + 
+ '</a>'; 
+ } 
+ return match; 
+ } 
+ ); 
+ 
+ // Modernize interest images 
+ modernContent = modernContent.replace( 
+ /<a[^>]*>\s*<img[^>]*class="color_img"[^>]*>\s*<\/a>/g, 
+ (match) => { 
+ const temp = document.createElement('div'); 
+ temp.innerHTML = match; 
+ const link = temp.querySelector('a'); 
+ const img = temp.querySelector('img'); 
+ if (link && img) { 
+ return '<a href="' + link.getAttribute('href') + '" target="_blank" class="interest-image">' + 
+ '<img src="' + img.getAttribute('src') + '" alt="Interest">' + 
+ '</a>'; 
+ } 
+ return match; 
+ } 
+ ); 
+ 
+ // Modernize action buttons 
+ modernContent = modernContent.replace( 
+ /<div class="mini_buttons">([\s\S]*?)<\/div>/g, 
+ '<div class="modern-actions">$1</div>' 
+ ); 
+ 
+ modernContent = modernContent.replace( 
+ /<a[^>]*class="mini_buttons[^>]*>([\s\S]*?)<\/a>/g, 
+ '<a href="$1" class="modern-btn">$2</a>' 
+ ); 
+ 
+ // Remove old table structures 
+ modernContent = modernContent.replace(/<table[^>]*>|<\/table>|<tbody>|<\/tbody>|<tr>|<\/tr>|<td>|<\/td>/g, ''); 
+ 
+ // Remove old class attributes 
+ modernContent = modernContent.replace(/class="[^"]*Sub[^"]*"|class="[^"]*Item[^"]*"/g, ''); 
+ 
+ // Modernize specific field types 
+ modernContent = this.modernizeSpecificFields(modernContent, tabId); 
+ 
+ return modernContent; 
+ } catch (error) { 
+ return content; 
+ } 
+ } 
+ 
+ modernizeSpecificFields(content, tabId) { 
+ let modernContent = content; 
+ 
+ // Modernize member group (Administrator/Founder) 
+ modernContent = modernContent.replace( 
+ /<span class="amministratore founder">([^<]*)<\/span>/, 
+ '<span class="user-badge admin-badge">$1</span>' 
+ ); 
+ 
+ // Modernize gender display 
+ modernContent = modernContent.replace( 
+ /<span class="male">([^<]*)<\/span>/, 
+ '<span class="gender-badge male"><i class="fa-regular fa-mars"></i>$1</span>' 
+ ); 
+ 
+ // Modernize status indicators 
+ modernContent = modernContent.replace( 
+ /<span class="when">([^<]*)<\/span>/g, 
+ '<span class="modern-date">$1</span>' 
+ ); 
+ 
+ // Modernize post count with icon 
+ modernContent = modernContent.replace( 
+ /<b>([\d,]+)<\/b>\s*<small>([^<]*)<\/small>/, 
+ '<div class="stat-with-icon"><i class="fa-regular fa-comments"></i><div><span class="stat-number">$1</span><span class="stat-detail">$2</span></div></div>' 
+ ); 
+ 
+ return modernContent; 
+ } 
+ 
+ buildModernProfile(profileData) { 
+ try { 
+ const profileContainer = document.createElement('div'); 
+ profileContainer.className = 'modern-profile'; 
+ 
+ let html = '<div class="profile-header">' + 
+ '<div class="profile-avatar-section">' + 
+ '<div class="avatar-container">'; 
+ 
+ // Add the avatar HTML as-is (could be img, div with icon, etc.) 
+ if (profileData.avatarHtml) { 
+ html += profileData.avatarHtml; 
+ } else { 
+ // Fallback: create a default avatar using our new Font Awesome icon 
+ html += '<div class="default-avatar mysterious" aria-hidden="true">' + 
+ '<i class="fa-solid fa-user-secret"></i>' + 
+ '</div>'; 
+ } 
+ 
+ html += '</div>' + 
+ '<div class="profile-basic-info">' + 
+ '<h1 class="profile-username">' + this.escapeHtml(profileData.username) + '</h1>' + 
+ '<div class="profile-status" title="' + this.escapeHtml(profileData.statusTitle) + '">' + 
+ '<i class="fa-regular fa-circle"></i>' + 
+ '<span>' + this.escapeHtml(profileData.status) + '</span>' + 
+ '</div>' + 
+ '</div>' + 
+ '</div>' + 
+ '<div class="profile-actions">' + 
+ '<a href="https://msg.forumcommunity.net/?act=Msg&amp;CODE=4&amp;MID=11517378&amp;c=668113" class="btn btn-primary">' + 
+ '<i class="fa-regular fa-envelope"></i>' + 
+ '<span>Send Message</span>' + 
+ '</a>'; 
+ 
+ // Add posts button if URL exists 
+ if (profileData.postsUrl) { 
+ html += '<a href="' + this.escapeHtml(profileData.postsUrl) + '" class="btn btn-posts" rel="nofollow">' + 
+ '<i class="fa-regular fa-comments"></i>' + 
+ '<span>' + this.escapeHtml(profileData.postsText) + '</span>' + 
+ '</a>'; 
+ } 
+ 
+ html += '</div>' + 
+ '</div>'; 
+ 
+ // Tabs navigation 
+ html += '<nav class="profile-tabs">'; 
+ profileData.tabs.forEach(tab => { 
+ html += '<a href="' + this.escapeHtml(tab.href) + '" class="profile-tab ' + (tab.isActive ? 'active' : '') + '" data-tab="' + tab.id + '" onclick="tab(' + tab.id + ');return false">' + 
+ this.escapeHtml(tab.text) + 
+ '</a>'; 
+ }); 
+ html += '</nav>'; 
+ 
+ // Tab content 
+ html += '<div class="profile-content">'; 
+ profileData.tabs.forEach(tab => { 
+ if (tab.isActive && profileData.tabContents[tab.id]) { 
+ html += '<div id="modern-tab' + tab.id + '" class="profile-tab-content active">' + 
+ profileData.tabContents[tab.id] + 
+ '</div>'; 
+ } else if (profileData.tabContents[tab.id]) { 
+ html += '<div id="modern-tab' + tab.id + '" class="profile-tab-content">' + 
+ profileData.tabContents[tab.id] + 
+ '</div>'; 
+ } 
+ }); 
+ html += '</div>'; 
+ 
+ profileContainer.innerHTML = html; 
+ 
+ // Ensure profile avatar gets proper styling 
+ this.enhanceProfileAvatar(profileContainer); 
+ 
+ return profileContainer; 
+ } catch (error) { 
+ return null; 
+ } 
+ } 
+ 
+ enhanceProfileAvatar(profileContainer) { 
+ const avatarContainer = profileContainer.querySelector('.avatar-container'); 
+ if (!avatarContainer) return; 
+ 
+ // Check what type of avatar we have 
+ const avatar = avatarContainer.children[0]; 
+ if (!avatar) return; 
+ 
+ // If it's an img element, ensure it has proper classes 
+ if (avatar.tagName === 'IMG') { 
+ avatar.classList.add('profile-avatar'); 
+ 
+ // Add basic styling if missing 
+ if (!avatar.hasAttribute('style')) { 
+ avatar.style.cssText = 'border: 3px solid var(--primary-color); border-radius: 50%; object-fit: cover;'; 
+ } 
+ 
+ // Ensure dimensions 
+ if (!avatar.hasAttribute('width') && !avatar.hasAttribute('height')) { 
+ avatar.setAttribute('width', '80'); 
+ avatar.setAttribute('height', '80'); 
+ avatar.style.width = '80px'; 
+ avatar.style.height = '80px'; 
+ } 
+ } 
+ // If it's our default avatar div, ensure it has profile size 
+ else if (avatar.classList.contains('default-avatar')) { 
+ avatar.classList.add('profile-avatar'); 
+ 
+ // Ensure proper sizing for profile 
+ avatar.style.cssText += 'width: 80px; height: 80px; font-size: 2rem;'; 
+ } 
+ // If it's an icon, wrap it in our default avatar 
+ else if (avatar.tagName === 'I' && avatar.className.includes('fa-')) { 
+ const wrapper = document.createElement('div'); 
+ wrapper.className = 'default-avatar profile-avatar mysterious'; 
+ wrapper.style.cssText = 'width: 80px; height: 80px; font-size: 2rem; display: flex; align-items: center; justify-content: center;'; 
+ wrapper.appendChild(avatar.cloneNode(true)); 
+ avatarContainer.innerHTML = ''; 
+ avatarContainer.appendChild(wrapper); 
+ } 
+ } 
+ 
+ setupEventListeners() { 
+ // Handle tab clicks 
+ document.addEventListener('click', (e) => { 
+ const tab = e.target.closest('.profile-tab'); 
+ if (tab) { 
+ e.preventDefault(); 
+ this.switchTab(tab.dataset.tab); 
+ } 
+ }); 
+ } 
+ 
+ switchTab(tabId) { 
+ try { 
+ // Update tab active states 
+ document.querySelectorAll('.profile-tab').forEach(tab => { 
+ tab.classList.toggle('active', tab.dataset.tab === tabId); 
+ }); 
+ 
+ // Update tab content visibility 
+ document.querySelectorAll('.profile-tab-content').forEach(content => { 
+ content.classList.toggle('active', content.id === 'modern-tab' + tabId); 
+ }); 
+ 
+ // Call original tab function if it exists 
+ if (typeof tab === 'function') { 
+ tab(tabId); 
+ } 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ escapeHtml(unsafe) { 
+ if (typeof unsafe !== 'string') return unsafe; 
+ try { 
+ const div = document.createElement('div'); 
+ div.textContent = unsafe; 
+ return div.innerHTML; 
+ } catch (error) { 
+ return unsafe; 
+ } 
+ } 
+ 
+ destroy() { 
+ if (this.#profileObserverId) { 
+ globalThis.forumObserver?.unregister(this.#profileObserverId); 
+ this.#profileObserverId = null; 
+ } 
+ console.log('Profile Modernizer destroyed'); 
+ } 
+} 
+ 
+// Initialize on profile pages with observer integration 
+(function initProfileModernizer() { 
+ const init = () => { 
+ try { 
+ if (document.body.id === 'profile') { 
+ globalThis.profileModernizer = new ProfileModernizer(); 
+ } 
+ } catch (error) { 
+ console.error('Failed to create Profile Modernizer:', error); 
+ } 
+ }; 
+ 
+ // If already ready, initialize immediately 
+ if (document.readyState !== 'loading') { 
+ queueMicrotask(init); 
+ } else { 
+ // Start immediately even if still loading 
+ init(); 
+ } 
+})(); 
+ 
+// Cleanup on page hide 
+globalThis.addEventListener('pagehide', () => { 
+ if (globalThis.profileModernizer && typeof globalThis.profileModernizer.destroy === 'function') { 
+ globalThis.profileModernizer.destroy(); 
+ } 
+}); 
+
+
+//Enhanced Navigation Modernizer
+ 
+// Forum Navigation Modernization Script - Fully Error-Proof with Proper Observer Integration 
+class NavigationModernizer { 
+ #navObserverId = null; 
+ #breadcrumbObserverId = null; 
+ #retryCount = 0; 
+ #maxRetries = 5; 
+ 
+ constructor() { 
+ this.#initWithObserver(); 
+ } 
+ 
+ #initWithObserver() { 
+ // Check if observer is available 
+ if (!globalThis.forumObserver) { 
+ if (this.#retryCount < this.#maxRetries) { 
+ this.#retryCount++; 
+ const delay = Math.min(100 * Math.pow(2, this.#retryCount - 1), 1000); 
+ console.log(`Navigation Modernizer: Forum Observer not available, retry ${this.#retryCount}/${this.#maxRetries} in ${delay}ms`); 
+ 
+ setTimeout(() => this.#initWithObserver(), delay); 
+ return; 
+ } else { 
+ console.error('Navigation Modernizer: Forum Observer not available after maximum retries, using fallback'); 
+ this.#initWithFallback(); 
+ return; 
+ } 
+ } 
+ 
+ // Reset retry counter on success 
+ this.#retryCount = 0; 
+ 
+ try { 
+ // Always run breadcrumb (except board pages) 
+ if (document.body.id !== 'board') { 
+ this.modernizeBreadcrumb(); 
+ 
+ // Watch for breadcrumb changes 
+ this.#breadcrumbObserverId = globalThis.forumObserver.register({ 
+ id: 'nav-breadcrumb-modernizer', 
+ callback: (node) => this.#handleBreadcrumbMutations(node), 
+ selector: 'ul.nav:not([data-modernized]), .modern-breadcrumb', 
+ priority: 'normal', 
+ pageTypes: ['forum', 'topic', 'blog', 'profile', 'search'] // All except board 
+ }); 
+ } 
+ 
+ // Only run these on topic pages 
+ if (document.body.id === 'topic') { 
+ this.modernizeTopicTitle(); 
+ this.modernizeNavigationElements(); 
+ this.setupEventListeners(); 
+ 
+ // Watch for navigation changes on topic pages 
+ this.#navObserverId = globalThis.forumObserver.register({ 
+ id: 'nav-modernizer', 
+ callback: (node) => this.#handleNavigationMutations(node), 
+ selector: 'table.mback:not([data-modernized]), .navsub:not([data-modernized]), .modern-topic-title, .modern-nav', 
+ priority: 'high', 
+ pageTypes: ['topic'] 
+ }); 
+ } 
+ 
+ console.log('&#9989; Navigation Modernizer initialized with observer'); 
+ } catch (error) { 
+ console.error('Navigation Modernizer initialization failed:', error); 
+ this.#initWithFallback(); 
+ } 
+ } 
+ 
+ #initWithFallback() { 
+ // Fallback to original initialization 
+ if (document.readyState === 'loading') { 
+ document.addEventListener('DOMContentLoaded', () => { 
+ this.#runFallbackInitialization(); 
+ }); 
+ } else { 
+ this.#runFallbackInitialization(); 
+ } 
+ } 
+ 
+ #runFallbackInitialization() { 
+ this.modernizeBreadcrumb(); 
+ 
+ // Only run these on topic pages 
+ if (document.body.id === 'topic') { 
+ this.modernizeTopicTitle(); 
+ this.modernizeNavigationElements(); 
+ this.setupEventListeners(); 
+ } 
+ } 
+ 
+ #handleBreadcrumbMutations(node) { 
+ if (!node) return; 
+ 
+ const needsUpdate = node.matches('ul.nav:not([data-modernized])') || 
+ node.closest('ul.nav:not([data-modernized])') || 
+ node.matches('.modern-breadcrumb') || 
+ node.querySelector('ul.nav:not([data-modernized])'); 
+ 
+ if (needsUpdate) { 
+ this.modernizeBreadcrumb(); 
+ } 
+ } 
+ 
+ #handleNavigationMutations(node) { 
+ if (!node) return; 
+ 
+ const needsUpdate = node.matches('table.mback:not([data-modernized])') || 
+ node.closest('table.mback:not([data-modernized])') || 
+ node.matches('.navsub:not([data-modernized])') || 
+ node.closest('.navsub:not([data-modernized])') || 
+ node.matches('.modern-topic-title') || 
+ node.matches('.modern-nav') || 
+ node.querySelector('table.mback:not([data-modernized])') || 
+ node.querySelector('.navsub:not([data-modernized])'); 
+ 
+ if (needsUpdate) { 
+ this.modernizeTopicTitle(); 
+ this.modernizeNavigationElements(); 
+ } 
+ } 
+ 
+ init() { 
+ // Run breadcrumb on all pages except board, run other features only on topic pages 
+ this.modernizeBreadcrumb(); 
+ 
+ // Only run these on topic pages 
+ if (document.body.id === 'topic') { 
+ this.modernizeTopicTitle(); 
+ this.modernizeNavigationElements(); 
+ this.setupEventListeners(); 
+ } 
+ } 
+ 
+ modernizeBreadcrumb() { 
+ // Don't run on board pages 
+ if (document.body.id === 'board') return; 
+ 
+ const oldBreadcrumb = document.querySelector('ul.nav'); 
+ if (!oldBreadcrumb || oldBreadcrumb.dataset.modernized) return; 
+ 
+ try { 
+ const breadcrumbItems = Array.from(oldBreadcrumb.querySelectorAll('li')); 
+ if (breadcrumbItems.length === 0) return; 
+ 
+ const modernBreadcrumb = this.buildModernBreadcrumb(breadcrumbItems); 
+ if (!modernBreadcrumb) return; 
+ 
+ oldBreadcrumb.style.display = 'none'; 
+ oldBreadcrumb.dataset.modernized = 'true'; 
+ 
+ const parent = oldBreadcrumb.parentNode; 
+ if (parent) { 
+ parent.insertBefore(modernBreadcrumb, oldBreadcrumb.nextSibling); 
+ } 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ buildModernBreadcrumb(breadcrumbItems) { 
+ try { 
+ const breadcrumbContainer = document.createElement('nav'); 
+ breadcrumbContainer.className = 'modern-breadcrumb'; 
+ 
+ let html = '<div class="breadcrumb-content">'; 
+ 
+ breadcrumbItems.forEach((item, index) => { 
+ const link = item.querySelector('a'); 
+ const icon = item.querySelector('i'); 
+ 
+ if (link) { 
+ const href = link.getAttribute('href') || '#'; 
+ const text = link.textContent.trim() || ''; 
+ const iconHtml = icon ? icon.outerHTML : ''; 
+ 
+ // Determine if this is the home item 
+ const isHome = href === '/' || index === 0; 
+ 
+ html += '<a href="' + this.escapeHtml(href) + '" class="breadcrumb-item ' + (isHome ? 'home' : '') + '">' + 
+ iconHtml + 
+ '<span class="breadcrumb-text">' + this.escapeHtml(text) + '</span>' + 
+ '</a>'; 
+ 
+ // No separator added - removed as requested 
+ } 
+ }); 
+ 
+ html += '</div>'; 
+ breadcrumbContainer.innerHTML = html; 
+ return breadcrumbContainer; 
+ } catch (error) { 
+ return null; 
+ } 
+ } 
+ 
+ modernizeTopicTitle() { 
+ const mbackTable = document.querySelector('table.mback'); 
+ if (!mbackTable || mbackTable.dataset.modernized) return; 
+ 
+ try { 
+ const titleElement = mbackTable.querySelector('.mtitle h1') || mbackTable.querySelector('.mtitle'); 
+ if (!titleElement) return; 
+ 
+ const titleText = titleElement.innerHTML || titleElement.textContent || ''; 
+ const { replies, views } = this.extractTopicStats(); 
+ 
+ const modernTitle = this.buildModernTopicTitle(titleText, replies, views); 
+ if (!modernTitle) return; 
+ 
+ mbackTable.style.display = 'none'; 
+ mbackTable.dataset.modernized = 'true'; 
+ 
+ const parent = mbackTable.parentNode; 
+ if (parent) { 
+ parent.insertBefore(modernTitle, mbackTable.nextSibling); 
+ } 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ extractTopicStats() { 
+ try { 
+ const statsElement = document.querySelector('.title.bottom.Item.Justify'); 
+ if (!statsElement) return { replies: 0, views: 0 }; 
+ 
+ const text = statsElement.textContent || ''; 
+ const repliesMatch = text.match(/(\d+)\s*replies?/); 
+ const viewsMatch = text.match(/(\d+)\s*views?/); 
+ 
+ return { 
+ replies: repliesMatch ? parseInt(repliesMatch[1]) || 0 : 0, 
+ views: viewsMatch ? parseInt(viewsMatch[1]) || 0 : 0 
+ }; 
+ } catch (error) { 
+ return { replies: 0, views: 0 }; 
+ } 
+ } 
+ 
+ buildModernTopicTitle(titleText, replies, views) { 
+ try { 
+ const titleContainer = document.createElement('div'); 
+ titleContainer.className = 'modern-topic-title'; 
+ 
+ titleContainer.innerHTML = 
+ '<div class="topic-header">' + 
+ '<div class="topic-title-content">' + 
+ '<h1 class="topic-title">' + this.escapeHtml(titleText) + '</h1>' + 
+ '<div class="topic-meta">' + 
+ '<span class="topic-stats">' + 
+ '<i class="fa-regular fa-eye"></i>' + 
+ '<span>Views: ' + views + '</span>' + 
+ '</span>' + 
+ '<span class="topic-stats">' + 
+ '<i class="fa-regular fa-comment"></i>' + 
+ '<span>Replies: ' + replies + '</span>' + 
+ '</span>' + 
+ '</div>' + 
+ '</div>' + 
+ '<div class="topic-actions">' + 
+ '<button class="btn btn-icon" data-action="watch" title="Watch Topic">' + 
+ '<i class="fa-regular fa-bookmark"></i>' + 
+ '</button>' + 
+ '<button class="btn btn-icon" data-action="share-topic" title="Share Topic">' + 
+ '<i class="fa-regular fa-share-nodes"></i>' + 
+ '</button>' + 
+ '</div>' + 
+ '</div>'; 
+ 
+ return titleContainer; 
+ } catch (error) { 
+ return null; 
+ } 
+ } 
+ 
+ modernizeNavigationElements() { 
+ try { 
+ const topNav = document.querySelector('.navsub.top:not([data-modernized])'); 
+ const bottomNav = document.querySelector('.navsub.bottom:not([data-modernized])'); 
+ 
+ topNav && this.createModernNavigation(topNav, 'top'); 
+ bottomNav && this.createModernNavigation(bottomNav, 'bottom'); 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ createModernNavigation(originalNav, position) { 
+ try { 
+ const pagesData = this.extractPagesData(originalNav); 
+ const buttonsData = this.extractButtonsData(originalNav); 
+ const modernNav = this.buildModernNavigation(pagesData, buttonsData, position); 
+ 
+ if (!modernNav) return; 
+ 
+ originalNav.style.display = 'none'; 
+ originalNav.dataset.modernized = 'true'; 
+ 
+ const parent = originalNav.parentNode; 
+ if (!parent) return; 
+ 
+ if (position === 'top') { 
+ parent.insertBefore(modernNav, originalNav.nextSibling); 
+ } else { 
+ const replyForm = document.querySelector('.modern-reply'); 
+ if (replyForm && replyForm.parentNode) { 
+ replyForm.parentNode.insertBefore(modernNav, replyForm); 
+ } else { 
+ parent.insertBefore(modernNav, originalNav.nextSibling); 
+ } 
+ } 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ extractPagesData(navElement) { 
+ try { 
+ const jumpLink = navElement.querySelector('.jump a'); 
+ const lastPostLink = navElement.querySelector('.lastpost a'); 
+ const currentPage = navElement.querySelector('.current'); 
+ 
+ // Extract all page links including their actual hrefs 
+ const pageLinks = Array.from(navElement.querySelectorAll('li:not(.jump):not(.lastpost):not(.break) a')); 
+ const pageData = pageLinks.map(link => ({ 
+ number: parseInt(link.textContent) || 0, 
+ href: link.getAttribute('href') || '' 
+ })); 
+ 
+ // Also get the current page number 
+ const currentPageNumber = parseInt(currentPage?.textContent) || 1; 
+ 
+ return { 
+ pages: pageData, 
+ currentPage: currentPageNumber, 
+ hasJump: !!jumpLink, 
+ jumpFunction: jumpLink?.getAttribute('href') || '', 
+ hasLastPost: !!lastPostLink, 
+ lastPostUrl: lastPostLink?.getAttribute('href') || '', 
+ totalPages: pageData.length + 1 // +1 for current page 
+ }; 
+ } catch (error) { 
+ return { 
+ pages: [], 
+ currentPage: 1, 
+ hasJump: false, 
+ jumpFunction: '', 
+ hasLastPost: false, 
+ lastPostUrl: '', 
+ totalPages: 1 
+ }; 
+ } 
+ } 
+ 
+ extractButtonsData(navElement) { 
+ try { 
+ const replyLink = navElement.querySelector('.reply')?.closest('a'); 
+ const newTopicLink = navElement.querySelector('.newpost')?.closest('a'); 
+ 
+ // Extract forum link from bottom nav 
+ const forumLink = navElement.querySelector('.current_forum'); 
+ 
+ return { 
+ replyUrl: replyLink?.getAttribute('href') || '', 
+ newTopicUrl: newTopicLink?.getAttribute('href') || '', 
+ forumUrl: forumLink?.getAttribute('href') || '', 
+ forumText: forumLink?.textContent || '', 
+ hasReply: !!replyLink, 
+ hasNewTopic: !!newTopicLink, 
+ hasForumLink: !!forumLink 
+ }; 
+ } catch (error) { 
+ return { 
+ replyUrl: '', 
+ newTopicUrl: '', 
+ forumUrl: '', 
+ forumText: '', 
+ hasReply: false, 
+ hasNewTopic: false, 
+ hasForumLink: false 
+ }; 
+ } 
+ } 
+ 
+ buildModernNavigation(pagesData, buttonsData, position) { 
+ try { 
+ const navContainer = document.createElement('div'); 
+ navContainer.className = `modern-nav ${position}-nav`; 
+ 
+ let html = '<div class="nav-content"><div class="nav-section pages-section"><div class="pagination">'; 
+ 
+ // Page jump 
+ if (pagesData.hasJump && pagesData.jumpFunction) { 
+ html += '<button class="page-jump btn btn-secondary" onclick="' + this.escapeHtml(pagesData.jumpFunction) + '">' + 
+ '<i class="fa-regular fa-ellipsis"></i>' + 
+ '<span>' + (pagesData.totalPages || 1) + ' Pages</span>' + 
+ '</button>'; 
+ } 
+ 
+ // Current page (always show as span) 
+ html += '<span class="page-number current">' + pagesData.currentPage + '</span>'; 
+ 
+ // Other page numbers with extracted hrefs 
+ pagesData.pages.forEach(page => { 
+ if (page.number && page.href) { 
+ html += '<a href="' + this.escapeHtml(page.href) + '" class="page-number">' + page.number + '</a>'; 
+ } 
+ }); 
+ 
+ // Last post link 
+ if (pagesData.hasLastPost && pagesData.lastPostUrl) { 
+ html += '<a href="' + this.escapeHtml(pagesData.lastPostUrl) + '" class="last-post btn btn-secondary">' + 
+ '<i class="fa-regular fa-arrow-right-to-bracket"></i>' + 
+ '<span>First Unread</span>' + 
+ '</a>'; 
+ } 
+ 
+ html += '</div></div><div class="nav-section actions-section"><div class="action-buttons">'; 
+ 
+ // Reply button 
+ if (buttonsData.hasReply && buttonsData.replyUrl) { 
+ html += '<a href="' + this.escapeHtml(buttonsData.replyUrl) + '" class="btn btn-primary reply-btn">' + 
+ '<i class="fa-regular fa-reply"></i>' + 
+ '<span>Reply</span>' + 
+ '</a>'; 
+ } 
+ 
+ // New topic button 
+ if (buttonsData.hasNewTopic && buttonsData.newTopicUrl) { 
+ html += '<a href="' + this.escapeHtml(buttonsData.newTopicUrl) + '" class="btn btn-secondary new-topic-btn">' + 
+ '<i class="fa-regular fa-plus"></i>' + 
+ '<span>New Topic</span>' + 
+ '</a>'; 
+ } 
+ 
+ // Forum link for bottom nav - use extracted text and URL 
+ if (position === 'bottom' && buttonsData.hasForumLink) { 
+ const forumText = buttonsData.forumText || 'Forum'; 
+ html += '<a href="' + this.escapeHtml(buttonsData.forumUrl) + '" class="btn btn-icon forum-home" title="' + this.escapeHtml(forumText) + '">' + 
+ '<i class="fa-regular fa-house"></i>' + 
+ '</a>'; 
+ } 
+ 
+ html += '</div></div></div>'; 
+ navContainer.innerHTML = html; 
+ return navContainer; 
+ } catch (error) { 
+ return null; 
+ } 
+ } 
+ 
+ setupEventListeners() { 
+ document.addEventListener('click', (e) => { 
+ try { 
+ const watchBtn = e.target.closest('[data-action="watch"]'); 
+ const shareBtn = e.target.closest('[data-action="share-topic"]'); 
+ 
+ watchBtn && this.handleWatchTopic(); 
+ shareBtn && this.handleShareTopic(); 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ }); 
+ } 
+ 
+ handleWatchTopic() { 
+ // Watch topic implementation - no errors possible 
+ } 
+ 
+ async handleShareTopic() { 
+ try { 
+ const topicUrl = window.location.href; 
+ 
+ if (navigator.share) { 
+ await navigator.share({ 
+ title: document.title, 
+ url: topicUrl 
+ }); 
+ } else if (navigator.clipboard?.writeText) { 
+ await navigator.clipboard.writeText(topicUrl); 
+ this.showToast('Topic link copied to clipboard!'); 
+ } else { 
+ prompt('Copy this topic link:', topicUrl); 
+ } 
+ } catch (error) { 
+ if (error.name !== 'AbortError') { 
+ prompt('Copy this topic link:', window.location.href); 
+ } 
+ } 
+ } 
+ 
+ showToast(message) { 
+ try { 
+ const toast = document.createElement('div'); 
+ Object.assign(toast.style, { 
+ position: 'fixed', 
+ bottom: '20px', 
+ left: '50%', 
+ transform: 'translateX(-50%)', 
+ background: 'var(--success-color)', 
+ color: 'white', 
+ padding: '12px 20px', 
+ borderRadius: 'var(--radius)', 
+ zIndex: '1000', 
+ fontWeight: '500', 
+ boxShadow: 'var(--shadow)' 
+ }); 
+ toast.textContent = message; 
+ document.body.appendChild(toast); 
+ 
+ setTimeout(() => { 
+ try { 
+ toast.remove(); 
+ } catch (e) { 
+ // Silent cleanup fail 
+ } 
+ }, 3000); 
+ } catch (error) { 
+ // Silent fail 
+ } 
+ } 
+ 
+ escapeHtml(unsafe) { 
+ if (typeof unsafe !== 'string') return unsafe; 
+ try { 
+ const div = document.createElement('div'); 
+ div.textContent = unsafe; 
+ return div.innerHTML; 
+ } catch (error) { 
+ return unsafe; 
+ } 
+ } 
+ 
+ destroy() { 
+ if (this.#navObserverId) { 
+ globalThis.forumObserver?.unregister(this.#navObserverId); 
+ this.#navObserverId = null; 
+ } 
+ if (this.#breadcrumbObserverId) { 
+ globalThis.forumObserver?.unregister(this.#breadcrumbObserverId); 
+ this.#breadcrumbObserverId = null; 
+ } 
+ console.log('Navigation Modernizer destroyed'); 
+ } 
+} 
+ 
+// Initialize on all pages with observer integration 
+(function initNavigationModernizer() { 
+ const init = () => { 
+ try { 
+ // Don't run on board pages 
+ if (document.body.id !== 'board') { 
+ globalThis.navigationModernizer = new NavigationModernizer(); 
+ } 
+ } catch (error) { 
+ console.error('Failed to create Navigation Modernizer:', error); 
+ } 
+ }; 
+ 
+ // If already ready, initialize immediately 
+ if (document.readyState !== 'loading') { 
+ queueMicrotask(init); 
+ } else { 
+ // Start immediately even if still loading 
+ init(); 
+ } 
+})(); 
+ 
+// Cleanup on page hide 
+globalThis.addEventListener('pagehide', () => { 
+ if (globalThis.navigationModernizer && typeof globalThis.navigationModernizer.destroy === 'function') { 
+ globalThis.navigationModernizer.destroy(); 
+ } 
+}); 
+
 
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
