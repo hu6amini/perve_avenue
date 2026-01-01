@@ -2296,7 +2296,7 @@ class PostModernizer {
         }
     }
 
-    #transformArticleElements() {
+       #transformArticleElements() {
         const articles = document.querySelectorAll('body#blog .article:not(.article-modernized)');
 
         articles.forEach((article, index) => {
@@ -2312,7 +2312,7 @@ class PostModernizer {
                 anchorDiv.remove();
             }
 
-            // Extract title2.top section - preserve original structure
+            // Extract title2.top section
             const title2Top = article.querySelector('.title2.top');
             const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
             const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-article') : null;
@@ -2351,7 +2351,7 @@ class PostModernizer {
                 articleHeader.appendChild(titleClone);
             }
 
-            // Process title2.top section - preserve original structure but move elements
+            // Process title2.top section
             if (title2Top) {
                 // Create user info section
                 const userInfo = document.createElement('div');
@@ -2399,9 +2399,9 @@ class PostModernizer {
                             userDetails.appendChild(userName);
                         }
                         
-                        // Extract timestamp and transform it
+                        // Extract timestamp ONLY if we have a title attribute with complete date
                         const whenElement = leftSection.querySelector('.when');
-                        if (whenElement) {
+                        if (whenElement && whenElement.hasAttribute('title')) {
                             const dateString = this.#extractArticleDateFromElement(whenElement);
                             if (dateString) {
                                 const modernTimestamp = this.#createModernTimestamp(whenElement, dateString);
@@ -2411,6 +2411,7 @@ class PostModernizer {
                                 userDetails.appendChild(timeContainer);
                             }
                         }
+                        // No timestamp added if no title attribute
                     }
                     
                     userInfo.appendChild(userDetails);
@@ -2426,7 +2427,6 @@ class PostModernizer {
                     const replies = rightSection.querySelector('.replies');
                     if (replies) {
                         const repliesClone = replies.cloneNode(true);
-                        // Clean up replies clone
                         const repliesEm = repliesClone.querySelector('em');
                         if (repliesEm) {
                             repliesEm.style.cssText = 'font-weight: 600; color: var(--primary-color);';
@@ -2438,7 +2438,6 @@ class PostModernizer {
                     const views = rightSection.querySelector('.views');
                     if (views) {
                         const viewsClone = views.cloneNode(true);
-                        // Clean up views clone
                         const viewsEm = viewsClone.querySelector('em');
                         if (viewsEm) {
                             viewsEm.style.cssText = 'font-weight: 600; color: var(--primary-color);';
@@ -2451,7 +2450,7 @@ class PostModernizer {
                 
                 articleHeader.appendChild(userInfo);
                 
-                // Move st-emoji and points to footer (preserving original structure)
+                // Move st-emoji and points to footer
                 if (stEmoji || pointsElement) {
                     const articleActions = document.createElement('div');
                     articleActions.className = 'article-actions';
@@ -2486,10 +2485,10 @@ class PostModernizer {
                 if (colorDiv) {
                     const contentClone = colorDiv.cloneNode(true);
                     
-                    // Remove the st-emoji-widget that we don't need in the main content
+                    // Remove the st-emoji-widget
                     contentClone.querySelector('.st-emoji-widget')?.remove();
                     
-                    // Transform edit timestamps
+                    // Transform edit timestamps (these have proper dates)
                     contentClone.querySelectorAll('span.edit').forEach(span => {
                         if (!span.querySelector('time[datetime]')) {
                             this.#transformEditTimestamp(span);
@@ -2517,10 +2516,7 @@ class PostModernizer {
             // Process footer (title2.bottom)
             const title2Bottom = article.querySelector('.title2.bottom');
             if (title2Bottom) {
-                // Modernize bottom elements
                 this.#modernizeArticleBottomElements(title2Bottom, articleFooter);
-                
-                // Remove original
                 title2Bottom.remove();
             }
 
@@ -2544,74 +2540,29 @@ class PostModernizer {
         });
     }
 
-    #extractArticleDateFromElement(element) {
-        // Special handling for article dates which have different structure
-        if (!element || !element.textContent) return null;
-        
-        const text = element.textContent.trim();
-        
-        // Article date format: "il 12 2025" or similar
-        // We need to construct a proper date string
-        const dayMatch = text.match(/\d+/);
-        const yearMatch = text.match(/\d{4}/);
-        
-        if (dayMatch && yearMatch) {
-            const day = dayMatch[0];
-            const year = yearMatch[0];
-            
-            // Try to find month - look for month name or number
-            const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
-                              'july', 'august', 'september', 'october', 'november', 'december'];
-            let month = '01';
-            
-            for (let i = 0; i < monthNames.length; i++) {
-                if (text.toLowerCase().includes(monthNames[i])) {
-                    month = String(i + 1).padStart(2, '0');
-                    break;
-                }
-            }
-            
-            // If no month name found, use current month as fallback
-            if (month === '01') {
-                month = String(new Date().getMonth() + 1).padStart(2, '0');
-            }
-            
-            // Construct date string in format: MM/DD/YYYY
-            const dateString = month + '/' + day.padStart(2, '0') + '/' + year + ', 12:00 PM';
-            
-            console.debug('Extracted article date:', dateString);
-            return dateString;
+      #extractArticleDateFromElement(element) {
+        // Special handling for article dates
+        // ONLY process if we have a title attribute with complete date information
+        if (!element || !element.hasAttribute('title')) {
+            console.debug('Article timestamp skipped - no title attribute');
+            return null; // Skip entirely if no title
         }
         
-        // Fallback: check for any date-like patterns
-        const datePatterns = [
-            /(\d{1,2}\/\d{1,2}\/\d{4})/,
-            /(\d{1,2}-\d{1,2}-\d{4})/,
-            /(\d{4}-\d{1,2}-\d{1,2})/
-        ];
+        const title = element.getAttribute('title');
         
-        for (const pattern of datePatterns) {
-            const match = text.match(pattern);
-            if (match) {
-                return match[1] + ', 12:00 PM';
-            }
+        // Extract just the date part (before the colon/time suffix)
+        // Format: "12/28/2025, 01:33 PM:39"
+        const dateMatch = title.match(/^([^:]+):/);
+        if (!dateMatch) {
+            console.debug('Article timestamp skipped - invalid date format in title');
+            return null; // Skip if title doesn't have expected format
         }
         
-        // Last resort: check parent for date info
-        const parentElement = element.parentElement;
-        if (parentElement && parentElement.textContent) {
-            for (const pattern of datePatterns) {
-                const match = parentElement.textContent.match(pattern);
-                if (match) {
-                    return match[1] + ', 12:00 PM';
-                }
-            }
-        }
-        
-        console.warn('Could not extract article date from element:', element.outerHTML);
-        return null;
+        const cleanDate = dateMatch[1].trim();
+        console.debug('Extracted article date from title:', cleanDate);
+        return cleanDate;
     }
-
+    
     #modernizeArticleBottomElements(title2Bottom, articleFooter) {
         const rtSub = title2Bottom.querySelector('.rt.Sub');
         if (!rtSub) return;
