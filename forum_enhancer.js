@@ -2177,7 +2177,8 @@ globalThis.addEventListener('pagehide', () => {
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
-// enhanced accessibility, modern code blocks, and robust Moment.js timestamps
+// enhanced accessibility, modern code blocks, robust Moment.js timestamps,
+// and BLOG ARTICLE SUPPORT with two-state handling
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -2186,6 +2187,7 @@ class PostModernizer {
     #searchPostObserverId = null;
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
+    #articleObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -2230,6 +2232,12 @@ class PostModernizer {
             // Handle search pages specially
             this.#transformSearchPostElements();
             this.#setupSearchPostObserver();
+        } else if (bodyId === 'blog') {
+            // Handle blog pages
+            this.#transformArticleElements();
+            this.#setupArticleObserver();
+            this.#setupObserverCallbacks();
+            this.#setupActiveStateObserver();
         } else {
             // Handle topic/blog/send pages
             this.#transformPostElements();
@@ -2258,10 +2266,949 @@ class PostModernizer {
         }
     }
 }
+
+// ==============================
+// BLOG ARTICLE SUPPORT
+// ==============================
+
+#setupArticleObserver() {
+    const pageTypes = ['blog'];
     
-    // ==============================
-    // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
-    // ==============================
+    this.#articleObserverId = globalThis.forumObserver.register({
+        id: 'article-modernizer',
+        callback: (node) => this.#handleArticleTransformation(node),
+        selector: '.article:not(.article-modernized), body.state_open .article',
+        priority: 'high',
+        pageTypes: pageTypes
+    });
+}
+
+#handleArticleTransformation(node) {
+    if (!node) return;
+
+    const needsTransformation = node.matches('.article:not(.article-modernized)') ||
+        node.matches('body.state_open .article') ||
+        node.querySelector('.article:not(.article-modernized)');
+
+    if (needsTransformation) {
+        this.#transformArticleElements();
+    }
+}
+
+#transformArticleElements() {
+    const articles = document.querySelectorAll('.article:not(.article-modernized)');
+    
+    articles.forEach((article, index) => {
+        article.classList.add('article-modernized');
+        
+        // Check if we're in open state (body has state_open class)
+        const isOpenState = document.body.classList.contains('state_open');
+        
+        if (isOpenState) {
+            this.#transformOpenArticle(article, index);
+        } else {
+            this.#transformClosedArticle(article, index);
+        }
+    });
+}
+
+#transformClosedArticle(article, index) {
+    // Extract article data
+    const articleId = article.id.replace('ee', '');
+    const btitle = article.querySelector('.btitle');
+    const bdesc = btitle ? btitle.querySelector('.bdesc') : null;
+    const mainbg = article.querySelector('.mainbg');
+    const title2Top = mainbg ? mainbg.querySelector('.title2.top') : null;
+    const title2Bottom = mainbg ? mainbg.querySelector('.title2.bottom') : null;
+    const color = mainbg ? mainbg.querySelector('.center .color') : null;
+    
+    // Create modern article structure
+    const modernArticle = document.createElement('div');
+    modernArticle.className = 'article-modern article-closed';
+    modernArticle.id = article.id;
+    modernArticle.setAttribute('data-article-id', articleId);
+    
+    // Store original attributes
+    Array.from(article.attributes).forEach(attr => {
+        if (attr.name !== 'id' && attr.name !== 'class') {
+            modernArticle.setAttribute(attr.name, attr.value);
+        }
+    });
+    
+    // Create header
+    const articleHeader = document.createElement('div');
+    articleHeader.className = 'article-header';
+    
+    // Article number
+    const articleNumber = document.createElement('span');
+    articleNumber.className = 'article-number';
+    articleNumber.innerHTML = '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> <span class="article-number-value">' + (index + 1) + '</span>';
+    articleHeader.appendChild(articleNumber);
+    
+    // Process title
+    if (btitle) {
+        const titleLink = btitle.querySelector('a');
+        const titleText = titleLink ? titleLink.innerHTML : btitle.textContent;
+        
+        const titleContainer = document.createElement('div');
+        titleContainer.className = 'article-title-container';
+        
+        const titleElement = document.createElement('h2');
+        titleElement.className = 'article-title';
+        
+        if (titleLink) {
+            const newLink = document.createElement('a');
+            newLink.href = titleLink.href;
+            newLink.innerHTML = titleText;
+            titleElement.appendChild(newLink);
+        } else {
+            titleElement.innerHTML = titleText;
+        }
+        
+        titleContainer.appendChild(titleElement);
+        
+        // Add description if exists
+        if (bdesc) {
+            const descElement = document.createElement('p');
+            descElement.className = 'article-desc';
+            descElement.textContent = bdesc.textContent;
+            titleContainer.appendChild(descElement);
+        }
+        
+        articleHeader.appendChild(titleContainer);
+    }
+    
+    // Process title2.top for metadata
+    if (title2Top) {
+        const metaContainer = document.createElement('div');
+        metaContainer.className = 'article-meta';
+        
+        const leftSub = title2Top.querySelector('.left.Sub');
+        const rightSub = title2Top.querySelector('.right.Sub');
+        
+        if (leftSub) {
+            // Extract author and date
+            const whoSpan = leftSub.querySelector('.who');
+            const whenSpan = leftSub.querySelector('.when');
+            
+            if (whoSpan) {
+                const authorDiv = document.createElement('div');
+                authorDiv.className = 'article-author';
+                
+                const avatar = leftSub.querySelector('.avatar.thumbs img');
+                if (avatar) {
+                    const avatarImg = document.createElement('img');
+                    avatarImg.src = avatar.src;
+                    avatarImg.alt = avatar.alt || 'Author avatar';
+                    avatarImg.className = 'article-author-avatar';
+                    avatarImg.style.cssText = 'width:24px;height:24px;border-radius:50%;margin-right:6px;';
+                    authorDiv.appendChild(avatarImg);
+                }
+                
+                const authorLink = whoSpan.querySelector('a.nick');
+                if (authorLink) {
+                    const authorElement = document.createElement('a');
+                    authorElement.href = authorLink.href;
+                    authorElement.className = 'article-author-name';
+                    authorElement.textContent = authorLink.textContent;
+                    authorDiv.appendChild(authorElement);
+                } else {
+                    const authorText = whoSpan.textContent.replace('By', '').trim();
+                    const authorElement = document.createElement('span');
+                    authorElement.className = 'article-author-name';
+                    authorElement.textContent = authorText;
+                    authorDiv.appendChild(authorElement);
+                }
+                
+                metaContainer.appendChild(authorDiv);
+            }
+            
+            // Transform timestamp
+            if (whenSpan) {
+                const dateString = this.#extractDateFromElement(whenSpan);
+                if (dateString) {
+                    const timestamp = this.#createModernTimestamp(whenSpan, dateString);
+                    if (timestamp) {
+                        const timeContainer = document.createElement('div');
+                        timeContainer.className = 'article-time';
+                        timeContainer.appendChild(timestamp);
+                        metaContainer.appendChild(timeContainer);
+                    }
+                }
+            }
+        }
+        
+        // Extract stats from right side
+        if (rightSub) {
+            const statsContainer = document.createElement('div');
+            statsContainer.className = 'article-stats';
+            
+            // Extract reactions (st-emoji)
+            const stEmoji = rightSub.querySelector('.st-emoji.st-emoji-rep');
+            if (stEmoji) {
+                const reactionsContainer = document.createElement('div');
+                reactionsContainer.className = 'article-reactions';
+                reactionsContainer.appendChild(stEmoji.cloneNode(true));
+                statsContainer.appendChild(reactionsContainer);
+            }
+            
+            // Extract points
+            const points = rightSub.querySelector('.points');
+            if (points) {
+                const pointsContainer = document.createElement('div');
+                pointsContainer.className = 'article-points';
+                this.#cleanupMiniButtonsForArticle(points);
+                pointsContainer.appendChild(points.cloneNode(true));
+                statsContainer.appendChild(pointsContainer);
+            }
+            
+            // Extract replies and views
+            const replies = rightSub.querySelector('.replies');
+            const views = rightSub.querySelector('.views');
+            
+            if (replies || views) {
+                const countContainer = document.createElement('div');
+                countContainer.className = 'article-counts';
+                
+                if (replies) {
+                    const repliesSpan = document.createElement('span');
+                    repliesSpan.className = 'article-replies';
+                    repliesSpan.innerHTML = '<i class="fa-regular fa-comment" aria-hidden="true"></i> ' + 
+                        (replies.querySelector('em') ? replies.querySelector('em').textContent : '0');
+                    countContainer.appendChild(repliesSpan);
+                }
+                
+                if (views) {
+                    const viewsSpan = document.createElement('span');
+                    viewsSpan.className = 'article-views';
+                    viewsSpan.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i> ' + 
+                        (views.querySelector('em') ? views.querySelector('em').textContent : '0');
+                    countContainer.appendChild(viewsSpan);
+                }
+                
+                statsContainer.appendChild(countContainer);
+            }
+            
+            metaContainer.appendChild(statsContainer);
+        }
+        
+        articleHeader.appendChild(metaContainer);
+    }
+    
+    // Process color content (excerpt)
+    if (color) {
+        const contentExcerpt = document.createElement('div');
+        contentExcerpt.className = 'article-excerpt';
+        
+        // Clone content but remove edit span and st-emoji-widget
+        const colorClone = color.cloneNode(true);
+        const editSpan = colorClone.querySelector('.edit');
+        if (editSpan) editSpan.remove();
+        
+        const stEmojiWidget = colorClone.querySelector('.st-emoji-widget');
+        if (stEmojiWidget) stEmojiWidget.remove();
+        
+        // Limit excerpt length
+        let textContent = colorClone.textContent.trim();
+        if (textContent.length > 300) {
+            textContent = textContent.substring(0, 300) + '...';
+        }
+        
+        const excerptText = document.createElement('p');
+        excerptText.textContent = textContent;
+        contentExcerpt.appendChild(excerptText);
+        
+        // Add read more link
+        const readMoreLink = btitle ? btitle.querySelector('a') : null;
+        if (readMoreLink) {
+            const readMore = document.createElement('a');
+            readMore.href = readMoreLink.href;
+            readMore.className = 'article-read-more';
+            readMore.textContent = 'Read more →';
+            contentExcerpt.appendChild(readMore);
+        }
+        
+        articleHeader.appendChild(contentExcerpt);
+    }
+    
+    // Process title2.bottom for footer
+    const articleFooter = document.createElement('div');
+    articleFooter.className = 'article-footer';
+    
+    if (title2Bottom) {
+        const leftSub = title2Bottom.querySelector('.left.Sub');
+        const rightSub = title2Bottom.querySelector('.right.Sub');
+        
+        if (leftSub) {
+            const lastPostDiv = document.createElement('div');
+            lastPostDiv.className = 'article-last-post';
+            
+            const lastPostLink = leftSub.querySelector('a');
+            const lastPostAuthor = leftSub.querySelector('.who a');
+            const lastPostWhen = leftSub.querySelector('.when');
+            
+            if (lastPostLink) {
+                lastPostDiv.innerHTML = '<i class="fa-regular fa-comment-dots" aria-hidden="true"></i> ';
+                const link = document.createElement('a');
+                link.href = lastPostLink.href;
+                link.textContent = 'Latest comment';
+                lastPostDiv.appendChild(link);
+                
+                if (lastPostAuthor) {
+                    lastPostDiv.appendChild(document.createTextNode(' by '));
+                    const authorLink = document.createElement('a');
+                    authorLink.href = lastPostAuthor.href;
+                    authorLink.textContent = lastPostAuthor.textContent;
+                    lastPostDiv.appendChild(authorLink);
+                }
+                
+                if (lastPostWhen) {
+                    const dateString = this.#extractDateFromElement(lastPostWhen);
+                    if (dateString) {
+                        const timestamp = this.#createModernTimestamp(lastPostWhen, dateString);
+                        if (timestamp) {
+                            lastPostDiv.appendChild(document.createTextNode(' '));
+                            lastPostDiv.appendChild(timestamp);
+                        }
+                    }
+                }
+            }
+            
+            articleFooter.appendChild(lastPostDiv);
+        }
+        
+        if (rightSub) {
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'article-actions';
+            
+            // Convert mini buttons to modern buttons
+            const miniButtons = rightSub.cloneNode(true);
+            this.#convertArticleMiniButtons(miniButtons, articleId);
+            actionsDiv.appendChild(miniButtons);
+            
+            articleFooter.appendChild(actionsDiv);
+        }
+    }
+    
+    // Assemble article
+    modernArticle.appendChild(articleHeader);
+    modernArticle.appendChild(articleFooter);
+    
+    // Replace original article
+    article.parentNode.replaceChild(modernArticle, article);
+    
+    // Update active states
+    this.#updateArticleActiveStates(modernArticle);
+}
+
+#transformOpenArticle(article, index) {
+    // For open state, we need to preserve more of the original structure
+    // but apply modern styling and organization
+    
+    const articleId = article.id.replace('ee', '');
+    const anchorDiv = article.querySelector('.anchor');
+    const btitle = article.querySelector('.btitle');
+    const mainbg = article.querySelector('.mainbg');
+    const title2Top = mainbg ? mainbg.querySelector('.title2.top') : null;
+    const centerItem = mainbg ? mainbg.querySelector('.center.Item') : null;
+    const color = centerItem ? centerItem.querySelector('.color') : null;
+    const title2Bottom = mainbg ? mainbg.querySelector('.title2.bottom') : null;
+    
+    // Create modern article container
+    const modernArticle = document.createElement('div');
+    modernArticle.className = 'article-modern article-open';
+    modernArticle.id = article.id;
+    modernArticle.setAttribute('data-article-id', articleId);
+    
+    // Store original attributes
+    Array.from(article.attributes).forEach(attr => {
+        if (attr.name !== 'id' && attr.name !== 'class') {
+            modernArticle.setAttribute(attr.name, attr.value);
+        }
+    });
+    
+    // Process anchor
+    let anchorElements = null;
+    if (anchorDiv) {
+        anchorElements = anchorDiv.cloneNode(true);
+    }
+    
+    // Create header
+    const articleHeader = document.createElement('div');
+    articleHeader.className = 'article-header';
+    
+    // Article number
+    const articleNumber = document.createElement('span');
+    articleNumber.className = 'article-number';
+    articleNumber.innerHTML = '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> <span class="article-number-value">' + (index + 1) + '</span>';
+    articleHeader.appendChild(articleNumber);
+    
+    // Process title
+    if (btitle) {
+        const titleContainer = document.createElement('div');
+        titleContainer.className = 'article-title-container';
+        
+        const titleElement = document.createElement('h1');
+        titleElement.className = 'article-title-main';
+        
+        const titleLink = btitle.querySelector('a');
+        if (titleLink) {
+            const titleText = titleLink.innerHTML;
+            const newLink = document.createElement('a');
+            newLink.href = titleLink.href;
+            newLink.innerHTML = titleText;
+            titleElement.appendChild(newLink);
+        } else {
+            titleElement.textContent = btitle.textContent;
+        }
+        
+        titleContainer.appendChild(titleElement);
+        
+        // Add description if exists
+        const bdesc = btitle.querySelector('.bdesc');
+        if (bdesc) {
+            const descElement = document.createElement('div');
+            descElement.className = 'article-desc-main';
+            descElement.textContent = bdesc.textContent;
+            titleContainer.appendChild(descElement);
+        }
+        
+        articleHeader.appendChild(titleContainer);
+    }
+    
+    // Process title2.top for metadata
+    if (title2Top) {
+        const metaContainer = document.createElement('div');
+        metaContainer.className = 'article-meta-open';
+        
+        const leftSub = title2Top.querySelector('.left.Sub');
+        
+        if (leftSub) {
+            // Create author section with avatar
+            const authorSection = document.createElement('div');
+            authorSection.className = 'article-author-section';
+            
+            const avatar = leftSub.querySelector('.avatar.thumbs img');
+            if (avatar) {
+                const avatarContainer = document.createElement('div');
+                avatarContainer.className = 'article-author-avatar-container';
+                
+                const avatarImg = document.createElement('img');
+                avatarImg.src = avatar.src;
+                avatarImg.alt = avatar.alt || 'Author avatar';
+                avatarImg.className = 'article-author-avatar-large';
+                avatarContainer.appendChild(avatarImg);
+                
+                authorSection.appendChild(avatarContainer);
+            }
+            
+            const authorInfo = document.createElement('div');
+            authorInfo.className = 'article-author-info';
+            
+            const whoSpan = leftSub.querySelector('.who');
+            if (whoSpan) {
+                const authorLabel = document.createElement('div');
+                authorLabel.className = 'article-author-label';
+                authorLabel.textContent = 'By';
+                authorInfo.appendChild(authorLabel);
+                
+                const authorLink = whoSpan.querySelector('a');
+                if (authorLink) {
+                    const authorName = document.createElement('div');
+                    authorName.className = 'article-author-name-large';
+                    
+                    const authorNameLink = document.createElement('a');
+                    authorNameLink.href = authorLink.href;
+                    authorNameLink.textContent = authorLink.textContent;
+                    authorName.appendChild(authorNameLink);
+                    authorInfo.appendChild(authorName);
+                }
+            }
+            
+            // Transform timestamp
+            const whenSpan = leftSub.querySelector('.when');
+            if (whenSpan) {
+                const dateString = this.#extractDateFromElement(whenSpan);
+                if (dateString) {
+                    const timestamp = this.#createModernTimestamp(whenSpan, dateString);
+                    if (timestamp) {
+                        const timeContainer = document.createElement('div');
+                        timeContainer.className = 'article-time-open';
+                        timeContainer.appendChild(timestamp);
+                        authorInfo.appendChild(timeContainer);
+                    }
+                }
+            }
+            
+            authorSection.appendChild(authorInfo);
+            metaContainer.appendChild(authorSection);
+        }
+        
+        articleHeader.appendChild(metaContainer);
+    }
+    
+    // Add anchor container if exists
+    if (anchorElements) {
+        const anchorContainer = document.createElement('div');
+        anchorContainer.className = 'anchor-container';
+        anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+        anchorContainer.appendChild(anchorElements);
+        articleHeader.appendChild(anchorContainer);
+    }
+    
+    modernArticle.appendChild(articleHeader);
+    
+    // Create content area
+    const articleContent = document.createElement('div');
+    articleContent.className = 'article-content-open';
+    
+    // Process main content
+    if (color) {
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'article-main-content';
+        
+        // Clone content but remove edit span and st-emoji-widget
+        const colorClone = color.cloneNode(true);
+        const editSpan = colorClone.querySelector('.edit');
+        if (editSpan) {
+            this.#transformEditTimestamp(editSpan);
+        }
+        
+        const stEmojiWidget = colorClone.querySelector('.st-emoji-widget');
+        if (stEmojiWidget) {
+            stEmojiWidget.remove();
+        }
+        
+        this.#preserveMediaDimensions(colorClone);
+        this.#cleanupArticleContentStructure(colorClone);
+        
+        contentWrapper.appendChild(colorClone);
+        articleContent.appendChild(contentWrapper);
+    }
+    
+    modernArticle.appendChild(articleContent);
+    
+    // Create footer with actions and stats
+    const articleFooter = document.createElement('div');
+    articleFooter.className = 'article-footer-open';
+    
+    // Stats section (reactions, points, etc.)
+    const statsSection = document.createElement('div');
+    statsSection.className = 'article-stats-section';
+    
+    if (title2Top) {
+        const rightSub = title2Top.querySelector('.right.Sub');
+        
+        if (rightSub) {
+            // Extract reactions (st-emoji-rep)
+            const stEmoji = rightSub.querySelector('.st-emoji.st-emoji-rep');
+            if (stEmoji) {
+                const reactionsDiv = document.createElement('div');
+                reactionsDiv.className = 'article-reactions-section';
+                reactionsDiv.appendChild(stEmoji.cloneNode(true));
+                statsSection.appendChild(reactionsDiv);
+            }
+            
+            // Extract points
+            const points = rightSub.querySelector('.points');
+            if (points) {
+                const pointsDiv = document.createElement('div');
+                pointsDiv.className = 'article-points-section';
+                this.#cleanupMiniButtonsForArticle(points);
+                this.#setInitialPointsStateForArticle(points);
+                pointsDiv.appendChild(points.cloneNode(true));
+                statsSection.appendChild(pointsDiv);
+            }
+            
+            // Extract replies and views
+            const replies = rightSub.querySelector('.replies');
+            const views = rightSub.querySelector('.views');
+            
+            if (replies || views) {
+                const countsDiv = document.createElement('div');
+                countsDiv.className = 'article-counts-section';
+                
+                if (replies) {
+                    const repliesSpan = document.createElement('span');
+                    repliesSpan.className = 'article-replies-open';
+                    repliesSpan.innerHTML = '<i class="fa-regular fa-comment" aria-hidden="true"></i> ' + 
+                        (replies.querySelector('em') ? replies.querySelector('em').textContent : '0') + ' comments';
+                    countsDiv.appendChild(repliesSpan);
+                }
+                
+                if (views) {
+                    const viewsSpan = document.createElement('span');
+                    viewsSpan.className = 'article-views-open';
+                    viewsSpan.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i> ' + 
+                        (views.querySelector('em') ? views.querySelector('em').textContent : '0') + ' views';
+                    countsDiv.appendChild(viewsSpan);
+                }
+                
+                statsSection.appendChild(countsDiv);
+            }
+        }
+    }
+    
+    articleFooter.appendChild(statsSection);
+    
+    // Actions section (share, edit, quote, etc.)
+    const actionsSection = document.createElement('div');
+    actionsSection.className = 'article-actions-section';
+    
+    if (title2Bottom) {
+        const leftSub = title2Bottom.querySelector('.left.Sub');
+        const rightSub = title2Bottom.querySelector('.right.Sub');
+        
+        // Share buttons from left sub
+        if (leftSub) {
+            const shareContainer = document.createElement('div');
+            shareContainer.className = 'article-share-container';
+            
+            // Extract AddToAny widget if present
+            const a2aContainer = leftSub.querySelector('.a2a_kit');
+            if (a2aContainer) {
+                shareContainer.appendChild(a2aContainer.cloneNode(true));
+            }
+            
+            const shareLink = leftSub.querySelector('a[href*="addtoany.com"]');
+            if (shareLink) {
+                const shareBtn = document.createElement('button');
+                shareBtn.className = 'btn btn-icon btn-share-article';
+                shareBtn.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i> Share';
+                shareBtn.onclick = function() {
+                    if (shareLink.click) shareLink.click();
+                    else if (shareLink.onclick) shareLink.onclick();
+                };
+                shareContainer.appendChild(shareBtn);
+            }
+            
+            actionsSection.appendChild(shareContainer);
+        }
+        
+        // Action buttons from right sub
+        if (rightSub) {
+            const buttonsContainer = document.createElement('div');
+            buttonsContainer.className = 'article-buttons-container';
+            
+            const miniButtons = rightSub.cloneNode(true);
+            this.#convertArticleMiniButtons(miniButtons, articleId);
+            this.#addShareButtonToArticle(miniButtons, article);
+            
+            buttonsContainer.appendChild(miniButtons);
+            actionsSection.appendChild(buttonsContainer);
+        }
+    }
+    
+    articleFooter.appendChild(actionsSection);
+    
+    // Edit timestamp
+    if (color) {
+        const editSpan = color.querySelector('.edit');
+        if (editSpan) {
+            const editContainer = document.createElement('div');
+            editContainer.className = 'article-edit-container';
+            editContainer.appendChild(editSpan.cloneNode(true));
+            articleFooter.appendChild(editContainer);
+        }
+    }
+    
+    modernArticle.appendChild(articleFooter);
+    
+    // Replace original article
+    article.parentNode.replaceChild(modernArticle, article);
+    
+    // Update active states
+    this.#updateArticleActiveStates(modernArticle);
+    
+    // Modernize any quotes, spoilers, or code blocks in content
+    this.#modernizeQuotes(articleContent);
+    this.#modernizeSpoilers(articleContent);
+    this.#modernizeCodeBlocksInContent(articleContent);
+}
+
+#cleanupMiniButtonsForArticle(element) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    const nodesToRemove = [];
+    let node;
+
+    while (node = walker.nextNode()) {
+        if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) {
+            nodesToRemove.push(node);
+        }
+    }
+
+    nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+
+    Array.from(element.childNodes).forEach(child => {
+        if (child.nodeType === Node.TEXT_NODE &&
+            (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
+            element.removeChild(child);
+        }
+    });
+}
+
+#setInitialPointsStateForArticle(element) {
+    const pointsPos = element.querySelector('.points_pos');
+    const pointsNeg = element.querySelector('.points_neg');
+    const pointsUp = element.querySelector('.points_up');
+    const pointsDown = element.querySelector('.points_down');
+
+    if (pointsPos) {
+        pointsUp && pointsUp.classList.add('active');
+        pointsDown && pointsDown.classList.remove('active');
+    } else if (pointsNeg) {
+        const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
+        const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
+
+        if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
+            pointsUp && pointsUp.classList.add('active');
+        }
+        if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
+            pointsDown && pointsDown.classList.add('active');
+        }
+
+        if (pointsUp && pointsUp.classList.contains('active')) {
+            pointsDown && pointsDown.classList.remove('active');
+        } else if (pointsDown && pointsDown.classList.contains('active')) {
+            pointsUp && pointsUp.classList.remove('active');
+        }
+    }
+}
+
+#convertArticleMiniButtons(container, articleId) {
+    if (!container) return;
+
+    container.querySelectorAll('a').forEach(link => {
+        const href = link.getAttribute('href');
+
+        if (href && href.startsWith('javascript:')) {
+            const jsCode = href.replace('javascript:', '');
+            // Handle any javascript actions if needed
+        } else if (href && href.includes('CODE=08')) {
+            link.classList.add('btn', 'btn-icon', 'btn-edit');
+            link.setAttribute('data-action', 'edit');
+            link.setAttribute('title', 'Edit article');
+
+            const icon = link.querySelector('i');
+            icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+        } else if (href && href.includes('CODE=02')) {
+            link.classList.add('btn', 'btn-icon', 'btn-quote');
+            link.setAttribute('data-action', 'quote');
+            link.setAttribute('title', 'Quote article');
+            link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+
+            const icon = link.querySelector('i');
+            icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+        } else if (href && href.includes('act=Track')) {
+            link.classList.add('btn', 'btn-icon', 'btn-subscribe');
+            link.setAttribute('data-action', 'subscribe');
+            link.setAttribute('title', link.textContent.includes('Unsubscription') ? 'Unsubscribe' : 'Subscribe');
+
+            const icon = link.querySelector('i');
+            if (!icon) {
+                const newIcon = document.createElement('i');
+                newIcon.className = 'fa-regular fa-bell';
+                newIcon.setAttribute('aria-hidden', 'true');
+                link.innerHTML = '';
+                link.appendChild(newIcon);
+            } else {
+                !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+            }
+        } else if (href) {
+            link.classList.add('btn', 'btn-icon');
+            link.querySelectorAll('i').forEach(icon => {
+                !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+            });
+        }
+    });
+
+    // Handle checkboxes for multiquote
+    const checkbox = container.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+        const checkboxContainer = document.createElement('div');
+        checkboxContainer.className = 'article-checkbox-container';
+        
+        const label = document.createElement('label');
+        label.setAttribute('for', checkbox.id);
+        label.innerHTML = '<i class="fa-regular fa-quote-right" aria-hidden="true"></i> Select for multiquote';
+        
+        checkboxContainer.appendChild(checkbox);
+        checkboxContainer.appendChild(label);
+        
+        // Replace original checkbox with container
+        checkbox.parentNode.replaceChild(checkboxContainer, checkbox);
+    }
+
+    this.#reorderArticleButtons(container);
+}
+
+#addShareButtonToArticle(container, article) {
+    if (!container || container.querySelector('.btn-share-article')) return;
+
+    const shareButton = document.createElement('button');
+    shareButton.className = 'btn btn-icon btn-share-article';
+    shareButton.setAttribute('data-action', 'share');
+    shareButton.setAttribute('title', 'Share this article');
+    shareButton.setAttribute('type', 'button');
+    shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+    shareButton.addEventListener('click', () => this.#handleShareArticle(article));
+
+    const editButton = container.querySelector('.btn-edit');
+    if (editButton) {
+        container.insertBefore(shareButton, editButton);
+    } else {
+        container.appendChild(shareButton);
+    }
+}
+
+#reorderArticleButtons(container) {
+    const elements = Array.from(container.children);
+    const order = ['share', 'subscribe', 'quote', 'edit'];
+
+    elements.sort((a, b) => {
+        const getAction = (element) => {
+            const dataAction = element.getAttribute('data-action');
+            if (dataAction && order.includes(dataAction)) return dataAction;
+
+            if (element.classList.contains('btn-share-article')) return 'share';
+            if (element.classList.contains('btn-subscribe')) return 'subscribe';
+            if (element.classList.contains('btn-quote')) return 'quote';
+            if (element.classList.contains('btn-edit')) return 'edit';
+
+            if (element.tagName === 'A' && element.href) {
+                if (element.href.includes('CODE=02')) return 'quote';
+                if (element.href.includes('CODE=08')) return 'edit';
+                if (element.href.includes('act=Track')) return 'subscribe';
+            }
+
+            return 'other';
+        };
+
+        const actionA = getAction(a);
+        const actionB = getAction(b);
+        const indexA = order.indexOf(actionA);
+        const indexB = order.indexOf(actionB);
+
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return 0;
+    });
+
+    container.innerHTML = '';
+    elements.forEach(el => container.appendChild(el));
+}
+
+#handleShareArticle(article) {
+    let articleLink = null;
+
+    // Try to get link from article title
+    const titleLink = article.querySelector('.btitle a');
+    if (titleLink) {
+        articleLink = titleLink.href;
+    }
+
+    if (!articleLink) {
+        // Try to get link from anchor
+        const anchor = article.querySelector('.anchor a');
+        if (anchor) {
+            articleLink = window.location.origin + anchor.getAttribute('href');
+        }
+    }
+
+    if (!articleLink) {
+        // Construct link from article ID
+        const articleId = article.id.replace('ee', '');
+        const topicMatch = window.location.href.match(/t=(\d+)/);
+        if (topicMatch) {
+            articleLink = window.location.origin + '/?t=' + topicMatch[1] + '#entry' + articleId;
+        } else {
+            articleLink = window.location.href;
+        }
+    }
+
+    if (articleLink) {
+        this.#copyPostLinkToClipboard(articleLink);
+    } else {
+        this.#showCopyNotification('Could not find article link');
+    }
+}
+
+#cleanupArticleContentStructure(contentElement) {
+    // Similar to post content cleanup but for articles
+    contentElement.querySelectorAll('table.color:empty').forEach(table => table.remove());
+
+    contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+        while (td.firstChild) {
+            contentElement.appendChild(td.firstChild);
+        }
+        td.remove();
+    });
+
+    contentElement.querySelectorAll('td').forEach(td => {
+        const parent = td.parentNode;
+        if (parent) {
+            while (td.firstChild) {
+                parent.insertBefore(td.firstChild, td);
+            }
+            td.remove();
+        }
+    });
+
+    contentElement.querySelectorAll('tr').forEach(tr => {
+        const parent = tr.parentNode;
+        if (parent) {
+            while (tr.firstChild) {
+                parent.insertBefore(tr.firstChild, tr);
+            }
+            tr.remove();
+        }
+    });
+
+    contentElement.querySelectorAll('tbody').forEach(tbody => {
+        const parent = tbody.parentNode;
+        if (parent) {
+            while (tbody.firstChild) {
+                parent.insertBefore(tbody.firstChild, tbody);
+            }
+            tbody.remove();
+        }
+    });
+
+    contentElement.querySelectorAll('table').forEach(table => {
+        const parent = table.parentNode;
+        if (parent) {
+            while (table.firstChild) {
+                parent.insertBefore(table.firstChild, table);
+            }
+            table.remove();
+        }
+    });
+
+    this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+    this.#cleanEmptyElements(contentElement);
+    this.#processTextAndLineBreaks(contentElement);
+    this.#cleanInvalidAttributes(contentElement);
+}
+
+#updateArticleActiveStates(articleElement) {
+    // Update points active state
+    const pointsContainer = articleElement.querySelector('.points');
+    if (pointsContainer) {
+        this.#updatePointsContainerActiveState(pointsContainer);
+    }
+
+    // Update st-emoji active state
+    const emojiContainer = articleElement.querySelector('.st-emoji-container');
+    if (emojiContainer) {
+        this.#updateEmojiContainerActiveState(emojiContainer);
+    }
+}
+
+// ==============================
+// MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
+// ==============================
 
 #parseForumDate(dateString) {
     if (!dateString || typeof dateString !== 'string') {
@@ -2546,7 +3493,7 @@ class PostModernizer {
     }
     // 3. Construct from post ID
     else {
-        const postElement = originalElement.closest('.post');
+        const postElement = originalElement.closest('.post, .article');
         if (postElement && postElement.id) {
             const postIdMatch = postElement.id.match(/\d+/);
             if (postIdMatch) {
@@ -2590,7 +3537,7 @@ class PostModernizer {
     const localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat);
     const timezoneAbbr = userLocalDate.format('z');
     
-    timeElement.setAttribute('title', `${localizedTitle} (${timezoneAbbr})`);
+    timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
     
     // Create relative time display
     const relativeSpan = document.createElement('span');
@@ -2644,7 +3591,7 @@ class PostModernizer {
             const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
             const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
             const currentTimezoneAbbr = currentUserLocalDate.format('z');
-            timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+            timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
         }
     }, 30000);
     
@@ -2774,7 +3721,7 @@ class PostModernizer {
             
             const timeElement = document.createElement('time');
             timeElement.setAttribute('datetime', momentDate.toISOString());
-            timeElement.setAttribute('title', `${formattedTime} (${timezoneAbbr})`);
+            timeElement.setAttribute('title', formattedTime + ' (' + timezoneAbbr + ')');
             timeElement.textContent = this.#formatTimeAgo(momentDate);
             
             // Generate unique ID for updates
@@ -2804,7 +3751,7 @@ class PostModernizer {
                     const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
                     const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
                     const currentTimezoneAbbr = currentUserLocalDate.format('z');
-                    timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+                    timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
                 }
             }, 30000);
             
@@ -5516,7 +6463,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId];
+            this.#codeBlockObserverId, this.#articleObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
