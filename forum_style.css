@@ -1,0 +1,29 @@
+/*Checkboxes*/
+
+input[type="checkbox"]
+{
+  appearance:none;
+  background:none;
+  border:none;
+  font-size:1rem;
+  height:1rem;
+  line-height:1rem;
+  margin:0;
+  outline-style:none;
+  padding:0;
+  width:1rem;
+}
+
+input[type="checkbox"]::before
+{
+  color:var(--border-color);
+  content:'\f0c8';
+  font-family:"Font Awesome 6 Pro";
+}
+
+input[type="checkbox"]:checked::before
+{
+  color:#fff;
+  content:'\f14a';
+  font-family:"Font Awesome 6 Pro";
+}
