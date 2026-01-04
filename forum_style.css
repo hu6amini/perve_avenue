@@ -2,28 +2,31 @@
 
 input[type="checkbox"]
 {
+  align-items:center;
   appearance:none;
   background:none;
-  border:none;
-  font-size:1rem;
+  border:1px solid var(--border-color);
+  border-radius:3px;
+  display:flex;
+  font-size:.75rem;
   height:1rem;
-  line-height:1rem;
+  justify-content:center;
+  line-height:.75rem;
   margin:0;
   outline-style:none;
   padding:0;
   width:1rem;
 }
 
-input[type="checkbox"]::before
+input[type="checkbox"]:checked
 {
-  color:var(--border-color);
-  content:'\f0c8';
-  font-family:"Font Awesome 6 Pro";
+  background:var(--primary-color);
+  border-color:var(--primary-color);
 }
 
 input[type="checkbox"]:checked::before
 {
   color:#fff;
-  content:'\f14a';
+  content:'\f00c';
   font-family:"Font Awesome 6 Pro";
 }
