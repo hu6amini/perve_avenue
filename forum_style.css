@@ -1,47 +1,57 @@
 /*Checkboxes*/
 
-/* ===== BASE STYLES (all checkboxes) ===== */
+/* Base checkbox styles */
 input[type="checkbox"] {
-  align-items: center;
-  appearance: none;
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 3px;
-  display: flex;
-  font-size: .75rem;
-  height: 1rem;
-  justify-content: center;
-  margin: 0;
-  outline-style: none;
-  padding: 0;
-  text-align: center;
-  width: 1rem;
+  align-items:center;
+  appearance:none;
+  background:none;
+  border:1px solid var(--border-color);
+  border-radius:3px;
+  display:flex;
+  font-size:.75rem;
+  height:1rem;
+  justify-content:center;
+  margin:0;
+  outline-style:none;
+  padding:0;
+  text-align:center;
+  width:1rem;
 }
 
-/* ===== NORMAL POSTS ===== */
-/* Checked state with icon */
-.post:not(.focus) input[type="checkbox"]:checked {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+/* DEFAULT: All checkboxes show checked state normally */
+input[type="checkbox"]:checked {
+  background:var(--primary-color);
+  border-color:var(--primary-color);
 }
 
-.post:not(.focus) input[type="checkbox"]:checked::before {
-  color: #fff;
-  content: '\f00c';
-  font-family: "Font Awesome 6 Pro";
+input[type="checkbox"]:checked::before {
+  color:#fff;
+  content:'\f00c';
+  font-family:"Font Awesome 6 Pro";
   font-weight: 900;
 }
 
-/* ===== FOCUSED POSTS ===== */
-/* Different checked state WITHOUT icon */
-.post.focus input[type="checkbox"] {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+/* OVERRIDE: .post checkboxes NEVER show checked state */
+.post input[type="checkbox"]:checked {
+  background:none !important;
+  border-color:var(--border-color) !important;
 }
 
-/* Explicitly remove icon for focused posts */
+.post input[type="checkbox"]:checked::before {
+  content:'' !important; /* No icon */
+}
+
+/* EXCEPTION: .post.focus checkboxes ALWAYS show checked state */
+.post.focus input[type="checkbox"] {
+  background:var(--primary-color) !important;
+  border-color:var(--primary-color) !important;
+}
+
 .post.focus input[type="checkbox"]::before {
-  content: '' !important;
+  color:#fff !important;
+  content:'\f00c' !important;
+  font-family:"Font Awesome 6 Pro" !important;
+  font-weight: 900 !important;
 }
 
 input[type="radio"]
