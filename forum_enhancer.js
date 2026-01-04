@@ -194,24 +194,21 @@ class MediaDimensionExtractor {
     }
 
     #processImage(img) {
-        // Validate image src before processing
-        const src = img.src;
-        
-        // Skip if src is empty, malformed, or just contains "http" without proper URL
-        if (!src || 
-            src.trim() === '' || 
-            src === 'http' || 
-            src === 'https' ||
-            src === 'javascript:' ||
-            src.indexOf('://') === -1) {
+        // Skip processing images with invalid URLs immediately
+        const src = img.src || '';
+        if (!src || src.trim() === '' || src === 'http' || src === 'https') {
+            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
+            img.setAttribute('width', brokenSize.width);
+            img.setAttribute('height', brokenSize.height);
+            img.style.aspectRatio = brokenSize.width + ' / ' + brokenSize.height;
             return;
         }
 
         // ULTRA-AGGRESSIVE twemoji detection - MUST BE FIRST
-        const isTwemoji = src.indexOf('twemoji') !== -1 || 
+        const isTwemoji = img.src.includes('twemoji') || 
                         img.classList.contains('twemoji') ||
                         img.classList.contains('emoji') ||
-                        (img.alt && (img.alt.indexOf(':)') !== -1 || img.alt.indexOf(':(') !== -1 || img.alt.indexOf('emoji') !== -1));
+                        (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
         
         if (isTwemoji) {
             // FORCE twemoji dimensions, ignore everything else
@@ -247,17 +244,17 @@ class MediaDimensionExtractor {
             img.style.verticalAlign = 'text-bottom';
             
             // Nuke from cache to prevent future issues
-            const cacheKey = this.#getCacheKey(src);
+            const cacheKey = this.#getCacheKey(img.src);
             this.#dimensionCache.delete(cacheKey);
             this.#lruMap.delete(cacheKey);
             
             // Cache correct dimensions
-            this.#cacheDimension(src, size, size);
+            this.#cacheDimension(img.src, size, size);
             return;
         }
 
         // Cache check first (hottest path) - but NOT for emojis
-        const cacheKey = this.#getCacheKey(src);
+        const cacheKey = this.#getCacheKey(img.src);
         const cached = this.#dimensionCache.get(cacheKey);
         if (cached) {
             this.#cacheHits++;
@@ -306,7 +303,7 @@ class MediaDimensionExtractor {
             img.style.aspectRatio = size + ' / ' + size;
             
             // Cache emoji dimensions
-            this.#cacheDimension(src, size, size);
+            this.#cacheDimension(img.src, size, size);
             return;
         }
         
@@ -319,8 +316,13 @@ class MediaDimensionExtractor {
     }
 
     #getCacheKey(src) {
+        // CRITICAL: Validate URL first to prevent caching invalid requests
+        if (!src || src.trim() === '' || src === 'http' || src === 'https') {
+            return 'invalid:' + (src || 'empty');
+        }
+        
         // Optimize cache keys for common patterns
-        if (src.indexOf('twemoji') !== -1) {
+        if (src.includes('twemoji')) {
             const match = src.match(/(\d+)x\1/);
             return match ? 'emoji:' + match[1] : 'emoji:default';
         }
@@ -347,14 +349,9 @@ class MediaDimensionExtractor {
         const className = img.className;
         
         // Use modern iteration with early exit
-        for (let i = 0; i < MediaDimensionExtractor.#EMOJI_PATTERNS.length; i++) {
-            const pattern = MediaDimensionExtractor.#EMOJI_PATTERNS[i];
-            if (pattern.test(src) || pattern.test(className)) {
-                return true;
-            }
-        }
-        
-        return (src.indexOf('imgbox') !== -1 && img.alt && img.alt.indexOf('emoji') !== -1);
+        return MediaDimensionExtractor.#EMOJI_PATTERNS.some((pattern) => {
+            return pattern.test(src) || pattern.test(className);
+        }) || (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
     }
 
     #isInSmallContext(img) {
@@ -389,9 +386,12 @@ class MediaDimensionExtractor {
     }
 
     #setupImageLoadListener(img) {
-        // Validate src first
-        const src = img.src;
-        if (!src || src.trim() === '' || src === 'http' || src === 'https' || src === 'javascript:' || src.indexOf('://') === -1) {
+        // Skip invalid images to prevent network errors
+        const src = img.src || '';
+        if (!src || src.trim() === '' || src === 'http' || src === 'https') {
+            // Set broken image dimensions immediately without attempting to load
+            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
+            this.#setImageDimensions(img, brokenSize.width, brokenSize.height);
             return;
         }
         
@@ -429,12 +429,15 @@ class MediaDimensionExtractor {
         
         // Update aspect ratio without clearing other styles
         const currentStyle = img.style.cssText || '';
-        if (currentStyle.indexOf('aspect-ratio') === -1) {
+        if (!currentStyle.includes('aspect-ratio')) {
             img.style.cssText = currentStyle + (currentStyle ? ';' : '') + 'aspect-ratio:' + width + '/' + height;
         }
 
-        // Cache with LRU management
-        this.#cacheDimension(img.src, width, height);
+        // Skip caching for invalid URLs
+        const src = img.src || '';
+        if (src && src.trim() !== '' && src !== 'http' && src !== 'https') {
+            this.#cacheDimension(img.src, width, height);
+        }
     }
 
     #cacheDimension(src, width, height) {
@@ -460,7 +463,7 @@ class MediaDimensionExtractor {
 
         // Use Map.forEach for cleaner iteration
         MediaDimensionExtractor.#IFRAME_SIZES.forEach((sizes, domain) => {
-            if (src.indexOf(domain) !== -1) {
+            if (src.includes(domain)) {
                 width = sizes[0];
                 height = sizes[1];
                 return true;
@@ -595,7 +598,7 @@ if (!globalThis.mediaDimensionExtractor) {
     } catch (error) {
         // Single retry after short delay using requestIdleCallback
         if ('requestIdleCallback' in window) {
-            requestIdleCallback(function() {
+            requestIdleCallback(() => {
                 if (!globalThis.mediaDimensionExtractor) {
                     try {
                         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
@@ -605,7 +608,7 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }, { timeout: 50 });
         } else {
-            setTimeout(function() {
+            setTimeout(() => {
                 if (!globalThis.mediaDimensionExtractor) {
                     try {
                         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
@@ -619,15 +622,15 @@ if (!globalThis.mediaDimensionExtractor) {
 }
 
 // Optional cleanup (browser handles most cleanup automatically)
-globalThis.addEventListener('pagehide', function() {
+globalThis.addEventListener('pagehide', () => {
     if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
         // Use requestIdleCallback for non-blocking cleanup
         if ('requestIdleCallback' in window) {
-            requestIdleCallback(function() {
+            requestIdleCallback(() => {
                 globalThis.mediaDimensionExtractor.destroy();
             });
         } else {
-            setTimeout(function() {
+            setTimeout(() => {
                 globalThis.mediaDimensionExtractor.destroy();
             }, 0);
         }
