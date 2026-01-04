@@ -38,12 +38,12 @@ class MediaDimensionExtractor {
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
-constructor() {
-    this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-    // Cache context elements immediately
-    this.#cacheContextElements();
-    this.#init();
-}
+    constructor() {
+        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
+        // Cache context elements immediately
+        this.#cacheContextElements();
+        this.#init();
+    }
 
     #init() {
         // Immediate initialization - DOM is ready (defer)
@@ -194,11 +194,24 @@ constructor() {
     }
 
     #processImage(img) {
+        // Validate image src before processing
+        const src = img.src;
+        
+        // Skip if src is empty, malformed, or just contains "http" without proper URL
+        if (!src || 
+            src.trim() === '' || 
+            src === 'http' || 
+            src === 'https' ||
+            src === 'javascript:' ||
+            src.indexOf('://') === -1) {
+            return;
+        }
+
         // ULTRA-AGGRESSIVE twemoji detection - MUST BE FIRST
-        const isTwemoji = img.src.includes('twemoji') || 
+        const isTwemoji = src.indexOf('twemoji') !== -1 || 
                         img.classList.contains('twemoji') ||
                         img.classList.contains('emoji') ||
-                        (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
+                        (img.alt && (img.alt.indexOf(':)') !== -1 || img.alt.indexOf(':(') !== -1 || img.alt.indexOf('emoji') !== -1));
         
         if (isTwemoji) {
             // FORCE twemoji dimensions, ignore everything else
@@ -234,17 +247,17 @@ constructor() {
             img.style.verticalAlign = 'text-bottom';
             
             // Nuke from cache to prevent future issues
-            const cacheKey = this.#getCacheKey(img.src);
+            const cacheKey = this.#getCacheKey(src);
             this.#dimensionCache.delete(cacheKey);
             this.#lruMap.delete(cacheKey);
             
             // Cache correct dimensions
-            this.#cacheDimension(img.src, size, size);
+            this.#cacheDimension(src, size, size);
             return;
         }
 
         // Cache check first (hottest path) - but NOT for emojis
-        const cacheKey = this.#getCacheKey(img.src);
+        const cacheKey = this.#getCacheKey(src);
         const cached = this.#dimensionCache.get(cacheKey);
         if (cached) {
             this.#cacheHits++;
@@ -293,7 +306,7 @@ constructor() {
             img.style.aspectRatio = size + ' / ' + size;
             
             // Cache emoji dimensions
-            this.#cacheDimension(img.src, size, size);
+            this.#cacheDimension(src, size, size);
             return;
         }
         
@@ -307,7 +320,7 @@ constructor() {
 
     #getCacheKey(src) {
         // Optimize cache keys for common patterns
-        if (src.includes('twemoji')) {
+        if (src.indexOf('twemoji') !== -1) {
             const match = src.match(/(\d+)x\1/);
             return match ? 'emoji:' + match[1] : 'emoji:default';
         }
@@ -334,43 +347,54 @@ constructor() {
         const className = img.className;
         
         // Use modern iteration with early exit
-        return MediaDimensionExtractor.#EMOJI_PATTERNS.some((pattern) => {
-            return pattern.test(src) || pattern.test(className);
-        }) || (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
-    }
-
-    #isInSmallContext(img) {
-    // Quick check: if we don't have the cache yet, build it
-    if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
-        this.#cacheContextElements();
-    }
-    
-    // Check all ancestors
-    let element = img;
-    while (element) {
-        // Check if element has any of the signature-related classes
-        if (element.classList) {
-            const classList = element.classList;
-            if (classList.contains('signature') || 
-                classList.contains('post-signature') ||
-                classList.contains('modern-quote') ||
-                classList.contains('quote-content') ||
-                classList.contains('modern-spoiler') ||
-                classList.contains('spoiler-content')) {
-                return true;
-            }
-            
-            // Also check if element matches any in our pre-cached Set
-            if (this.#smallContextElements && this.#smallContextElements.has(element)) {
+        for (let i = 0; i < MediaDimensionExtractor.#EMOJI_PATTERNS.length; i++) {
+            const pattern = MediaDimensionExtractor.#EMOJI_PATTERNS[i];
+            if (pattern.test(src) || pattern.test(className)) {
                 return true;
             }
         }
-        element = element.parentElement;
+        
+        return (src.indexOf('imgbox') !== -1 && img.alt && img.alt.indexOf('emoji') !== -1);
     }
-    return false;
-}
+
+    #isInSmallContext(img) {
+        // Quick check: if we don't have the cache yet, build it
+        if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
+            this.#cacheContextElements();
+        }
+        
+        // Check all ancestors
+        let element = img;
+        while (element) {
+            // Check if element has any of the signature-related classes
+            if (element.classList) {
+                const classList = element.classList;
+                if (classList.contains('signature') || 
+                    classList.contains('post-signature') ||
+                    classList.contains('modern-quote') ||
+                    classList.contains('quote-content') ||
+                    classList.contains('modern-spoiler') ||
+                    classList.contains('spoiler-content')) {
+                    return true;
+                }
+                
+                // Also check if element matches any in our pre-cached Set
+                if (this.#smallContextElements && this.#smallContextElements.has(element)) {
+                    return true;
+                }
+            }
+            element = element.parentElement;
+        }
+        return false;
+    }
 
     #setupImageLoadListener(img) {
+        // Validate src first
+        const src = img.src;
+        if (!src || src.trim() === '' || src === 'http' || src === 'https' || src === 'javascript:' || src.indexOf('://') === -1) {
+            return;
+        }
+        
         // Avoid duplicate listeners
         if (img.__dimensionExtractorHandler) return;
 
@@ -405,7 +429,7 @@ constructor() {
         
         // Update aspect ratio without clearing other styles
         const currentStyle = img.style.cssText || '';
-        if (!currentStyle.includes('aspect-ratio')) {
+        if (currentStyle.indexOf('aspect-ratio') === -1) {
             img.style.cssText = currentStyle + (currentStyle ? ';' : '') + 'aspect-ratio:' + width + '/' + height;
         }
 
@@ -436,7 +460,7 @@ constructor() {
 
         // Use Map.forEach for cleaner iteration
         MediaDimensionExtractor.#IFRAME_SIZES.forEach((sizes, domain) => {
-            if (src.includes(domain)) {
+            if (src.indexOf(domain) !== -1) {
                 width = sizes[0];
                 height = sizes[1];
                 return true;
@@ -571,7 +595,7 @@ if (!globalThis.mediaDimensionExtractor) {
     } catch (error) {
         // Single retry after short delay using requestIdleCallback
         if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
+            requestIdleCallback(function() {
                 if (!globalThis.mediaDimensionExtractor) {
                     try {
                         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
@@ -581,7 +605,7 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }, { timeout: 50 });
         } else {
-            setTimeout(() => {
+            setTimeout(function() {
                 if (!globalThis.mediaDimensionExtractor) {
                     try {
                         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
@@ -595,15 +619,15 @@ if (!globalThis.mediaDimensionExtractor) {
 }
 
 // Optional cleanup (browser handles most cleanup automatically)
-globalThis.addEventListener('pagehide', () => {
+globalThis.addEventListener('pagehide', function() {
     if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
         // Use requestIdleCallback for non-blocking cleanup
         if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
+            requestIdleCallback(function() {
                 globalThis.mediaDimensionExtractor.destroy();
             });
         } else {
-            setTimeout(() => {
+            setTimeout(function() {
                 globalThis.mediaDimensionExtractor.destroy();
             }, 0);
         }
