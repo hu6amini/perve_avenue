@@ -1,34 +1,47 @@
 /*Checkboxes*/
 
-input[type="checkbox"],.post:not(.focus) input[type="checkbox"]:checked
-{
-  align-items:center;
-  appearance:none;
-  background:none;
-  border:1px solid var(--border-color);
-  border-radius:3px;
-  display:flex;
-  font-size:.75rem;
-  height:1rem;
-  justify-content:center;
-  margin:0;
-  outline-style:none;
-  padding:0;
-  text-align:center;
-  width:1rem;
+/* ===== BASE STYLES (all checkboxes) ===== */
+input[type="checkbox"] {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  display: flex;
+  font-size: .75rem;
+  height: 1rem;
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  text-align: center;
+  width: 1rem;
 }
 
-input[type="checkbox"]:checked,.post.focus input[type="checkbox"]
-{
-  background:var(--primary-color);
-  border-color:var(--primary-color);
+/* ===== NORMAL POSTS ===== */
+/* Checked state with icon */
+.post:not(.focus) input[type="checkbox"]:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-input[type="checkbox"]:checked::before,.post.focus input[type="checkbox"]::before
-{
-  color:#fff;
-  content:'\f00c';
-  font-family:"Font Awesome 6 Pro";
+.post:not(.focus) input[type="checkbox"]:checked::before {
+  color: #fff;
+  content: '\f00c';
+  font-family: "Font Awesome 6 Pro";
+  font-weight: 900;
+}
+
+/* ===== FOCUSED POSTS ===== */
+/* Different checked state WITHOUT icon */
+.post.focus input[type="checkbox"] {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* Explicitly remove icon for focused posts */
+.post.focus input[type="checkbox"]::before {
+  content: '' !important;
 }
 
 input[type="radio"]
