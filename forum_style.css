@@ -18,13 +18,13 @@ input[type="checkbox"]
   width:1rem;
 }
 
-input[type="checkbox"]:checked
+input[type="checkbox"]:checked,.post.focus input[type="checkbox"]
 {
   background:var(--primary-color);
   border-color:var(--primary-color);
 }
 
-input[type="checkbox"]:checked::before
+input[type="checkbox"]:checked::before,.post.focus input[type="checkbox"]::before
 {
   color:#fff;
   content:'\f00c';
