@@ -1,6 +1,6 @@
 /*Checkboxes*/
 
-input[type="checkbox"],.post input[type="checkbox"]:checked:not(.focus)
+input[type="checkbox"],.post:not(.focus) input[type="checkbox"]:checked
 {
   align-items:center;
   appearance:none;
