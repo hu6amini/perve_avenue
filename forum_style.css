@@ -29,3 +29,34 @@ input[type="checkbox"]:checked::before
   content:'\f00c';
   font-family:"Font Awesome 6 Pro";
 }
+
+input[type="radio"]
+{
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  font-size: .75rem;
+  height: 1rem;
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  width: 1rem;
+}
+
+input[type="radio"]:checked
+{
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+input[type="radio"]:checked::before
+{
+  color: #fff;
+  content: '\f111';
+  font-family: "Font Awesome 6 Pro";
+  font-weight:900;
+}
