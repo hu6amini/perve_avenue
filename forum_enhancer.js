@@ -13,6 +13,7 @@ class MediaDimensionExtractor {
     #cacheMisses = 0;
     #smallContextElements = null;
     #MAX_CACHE_SIZE = 500;
+    #processingBlocked = false;
 
     // Static configurations for better performance
     static #IFRAME_SIZES = new Map([
@@ -49,6 +50,11 @@ class MediaDimensionExtractor {
         // Immediate initialization - DOM is ready (defer)
         this.#setupObserver();
         this.#cacheContextElements();
+        
+        // Block initial processing for invalid images
+        setTimeout(() => {
+            this.#processingBlocked = false;
+        }, 100);
     }
 
     #cacheContextElements() {
@@ -123,6 +129,9 @@ class MediaDimensionExtractor {
 
     #processMedia(node) {
         if (this.#processedMedia.has(node)) return;
+        
+        // Skip processing if blocked (during initial load)
+        if (this.#processingBlocked) return;
 
         const tag = node.tagName;
 
@@ -175,6 +184,9 @@ class MediaDimensionExtractor {
 
     #processSingleMedia(media) {
         if (this.#processedMedia.has(media)) return;
+        
+        // Skip processing if blocked (during initial load)
+        if (this.#processingBlocked) return;
 
         const tag = media.tagName;
         
@@ -194,13 +206,20 @@ class MediaDimensionExtractor {
     }
 
     #processImage(img) {
-        // Skip processing images with invalid URLs immediately
+        // Skip processing if blocked (during initial load)
+        if (this.#processingBlocked) return;
+        
+        // ULTRA-AGGRESSIVE validation - check for invalid URLs immediately
         const src = img.src || '';
-        if (!src || src.trim() === '' || src === 'http' || src === 'https') {
-            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
-            img.setAttribute('width', brokenSize.width);
-            img.setAttribute('height', brokenSize.height);
-            img.style.aspectRatio = brokenSize.width + ' / ' + brokenSize.height;
+        const trimmedSrc = src.trim();
+        
+        // Block processing for obviously invalid images
+        if (!src || trimmedSrc === '' || trimmedSrc === 'http' || trimmedSrc === 'https' || 
+            src.startsWith('http://http') || src.startsWith('https://http') ||
+            src.includes('://http') || src.includes('://https')) {
+            
+            // Mark as processed but don't do anything else
+            this.#processedMedia.add(img);
             return;
         }
 
@@ -317,8 +336,13 @@ class MediaDimensionExtractor {
 
     #getCacheKey(src) {
         // CRITICAL: Validate URL first to prevent caching invalid requests
-        if (!src || src.trim() === '' || src === 'http' || src === 'https') {
-            return 'invalid:' + (src || 'empty');
+        if (!src) return 'invalid:null';
+        
+        const trimmedSrc = src.trim();
+        if (trimmedSrc === '' || trimmedSrc === 'http' || trimmedSrc === 'https' || 
+            src.startsWith('http://http') || src.startsWith('https://http') ||
+            src.includes('://http') || src.includes('://https')) {
+            return 'invalid:' + trimmedSrc;
         }
         
         // Optimize cache keys for common patterns
@@ -388,10 +412,17 @@ class MediaDimensionExtractor {
     #setupImageLoadListener(img) {
         // Skip invalid images to prevent network errors
         const src = img.src || '';
-        if (!src || src.trim() === '' || src === 'http' || src === 'https') {
+        const trimmedSrc = src.trim();
+        
+        if (!src || trimmedSrc === '' || trimmedSrc === 'http' || trimmedSrc === 'https' ||
+            src.startsWith('http://http') || src.startsWith('https://http') ||
+            src.includes('://http') || src.includes('://https')) {
+            
             // Set broken image dimensions immediately without attempting to load
             const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
-            this.#setImageDimensions(img, brokenSize.width, brokenSize.height);
+            img.setAttribute('width', brokenSize.width);
+            img.setAttribute('height', brokenSize.height);
+            img.style.aspectRatio = brokenSize.width + ' / ' + brokenSize.height;
             return;
         }
         
@@ -412,7 +443,11 @@ class MediaDimensionExtractor {
 
     #handleImageLoad(e) {
         const img = e.target;
-        delete img.__dimensionExtractorHandler;
+        
+        // Clean up handler reference
+        if (img.__dimensionExtractorHandler) {
+            delete img.__dimensionExtractorHandler;
+        }
 
         if (img.naturalWidth) {
             this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
@@ -435,13 +470,21 @@ class MediaDimensionExtractor {
 
         // Skip caching for invalid URLs
         const src = img.src || '';
-        if (src && src.trim() !== '' && src !== 'http' && src !== 'https') {
+        const trimmedSrc = src.trim();
+        if (src && trimmedSrc !== '' && trimmedSrc !== 'http' && trimmedSrc !== 'https' &&
+            !src.startsWith('http://http') && !src.startsWith('https://http') &&
+            !src.includes('://http') && !src.includes('://https')) {
             this.#cacheDimension(img.src, width, height);
         }
     }
 
     #cacheDimension(src, width, height) {
         const cacheKey = this.#getCacheKey(src);
+        
+        // Don't cache invalid URLs
+        if (cacheKey.startsWith('invalid:')) {
+            return;
+        }
         
         if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
             // Remove oldest entry using LRU Map
