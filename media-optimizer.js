@@ -191,10 +191,10 @@
             });
             e.observe(document.documentElement, { childList: true });
         }
+        // Single report 1 second after page load
         window.addEventListener("load", function () {
-            setTimeout(p, 1e3);
+            setTimeout(p, 1000);
         });
-        setTimeout(p, 5e3);
     };
     if (typeof Promise !== "undefined") {
         Promise.resolve().then(h);
