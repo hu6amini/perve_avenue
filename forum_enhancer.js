@@ -1,614 +1,208 @@
-// Ultra-Optimized Media Dimension Extractor for deferred loading
-// DOM is guaranteed to be ready when this executes (defer attribute)
-'use strict';
-
-class MediaDimensionExtractor {
-    #observerId = null;
-    #processedMedia = new WeakSet();
-    #dimensionCache = new Map();
-    #lruMap = new Map();
-    #imageLoadHandler = null;
-    #imageLoadAbortController = new AbortController();
-    #cacheHits = 0;
-    #cacheMisses = 0;
-    #smallContextElements = null;
-    #MAX_CACHE_SIZE = 500;
-
-    // Static configurations for better performance
-    static #IFRAME_SIZES = new Map([
-        ['youtube', ['560', '315']],
-        ['youtu', ['560', '315']],
-        ['vimeo', ['640', '360']],
-        ['soundcloud', ['100%', '166']],
-        ['twitter', ['550', '400']],
-        ['x.com', ['550', '400']]
-    ]);
-
-    static #EMOJI_PATTERNS = [
-        /twemoji/iu,
-        /emoji/iu,
-        /smiley/iu
-    ];
-
-    static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
-    
-    // Precomputed static values
-    static #EMOJI_SIZE_NORMAL = 20;
-    static #EMOJI_SIZE_SMALL = 18;
-    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
-    static #BATCH_SIZE = 50;
-
-constructor() {
-    this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-    // Cache context elements immediately
-    this.#cacheContextElements();
-    this.#init();
-}
-
-    #init() {
-        // Immediate initialization - DOM is ready (defer)
-        this.#setupObserver();
-        this.#cacheContextElements();
-    }
-
-    #cacheContextElements() {
-        this.#smallContextElements = new Set(
-            document.querySelectorAll(MediaDimensionExtractor.#SMALL_CONTEXT_SELECTORS)
-        );
-    }
-
-    #setupObserver() {
-        if (!globalThis.forumObserver) {
-            // Quick retry for observer availability
-            setTimeout(() => this.#setupObserver(), 10);
-            return;
-        }
-
-        // Register with global observer (no page restrictions)
-        this.#observerId = globalThis.forumObserver.register({
-            id: 'media-dimension-extractor',
-            callback: (node) => {
-                this.#processMedia(node);
-            },
-            selector: 'img, iframe, video',
-            priority: 'high'
-        });
-
-        // Process all existing media using batched approach
-        this.#processAllMediaBatched();
-    }
-
-    #processAllMediaBatched() {
-        const batches = [
-            document.images,
-            document.getElementsByTagName('iframe'),
-            document.getElementsByTagName('video')
-        ];
-        
-        // Process in batches to avoid blocking
-        requestAnimationFrame(() => {
-            this.#processBatch(batches, 0, 0);
-        });
-    }
-
-    #processBatch(batches, batchIndex, elementIndex) {
-        const BATCH_SIZE = MediaDimensionExtractor.#BATCH_SIZE;
-        let processedCount = 0;
-        const startTime = performance.now();
-        
-        while (batchIndex < batches.length && processedCount < BATCH_SIZE) {
-            const batch = batches[batchIndex];
-            
-            while (elementIndex < batch.length && processedCount < BATCH_SIZE) {
-                const element = batch[elementIndex];
-                if (!this.#processedMedia.has(element)) {
-                    this.#processSingleMedia(element);
-                    processedCount++;
+(() => {
+    "use strict";
+    const e = "lazy";
+    const t = "async";
+    let o = [];
+    let n = 0;
+    let i = 0;
+    const s = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function (r, l, d) {
+        if ((r === "load" || r === "error") && c(this)) {
+            i++;
+            const c = this;
+            const a = performance.now();
+            const g = c.getAttribute("loading");
+            const u = c.getAttribute("decoding");
+            const m = {
+                element: c.tagName,
+                src: c.src || c.getAttribute("src") || "[no-src]",
+                initialLoading: g,
+                initialDecoding: u,
+                startTime: a,
+                loadEventAttached: true
+            };
+            o.push(m);
+            if (g === e && (c.tagName !== "IMG" || u === t)) {
+                n++;
+                m.success = true;
+                m.timing = "before";
+            } else {
+                m.success = false;
+            }
+            const f = function (o) {
+                const i = c.getAttribute("loading");
+                const s = c.getAttribute("decoding");
+                const r = performance.now();
+                m.finalLoading = i;
+                m.finalDecoding = s;
+                m.loadTime = r;
+                m.loaded = true;
+                if (!m.success && i === e && (c.tagName !== "IMG" || s === t)) {
+                    n++;
+                    m.success = true;
+                    m.timing = "during";
                 }
-                elementIndex++;
-            }
-            
-            if (elementIndex >= batch.length) {
-                batchIndex++;
-                elementIndex = 0;
-            }
+                if (l && typeof l == "function") {
+                    l.call(this, o);
+                }
+            };
+            return s.call(this, r, f, d);
         }
-        
-        if (batchIndex < batches.length) {
-            requestAnimationFrame(() => {
-                this.#processBatch(batches, batchIndex, elementIndex);
+        return s.call(this, r, l, d);
+    };
+    const c = (e) => e && (e.tagName === "IMG" || e.tagName === "IFRAME");
+    const r = (e) => !e.hasAttribute("loading") || e.getAttribute("loading") === "";
+    const l = (e) => e.tagName === "IMG" && (!e.hasAttribute("decoding") || e.getAttribute("decoding") === "");
+    const d = (o) => {
+        if (!c(o)) return o;
+        if (r(o)) {
+            o.setAttribute("loading", e);
+        }
+        if (l(o)) {
+            o.setAttribute("decoding", t);
+        }
+        return o;
+    };
+    const a = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (e, t) {
+        if ((e === "src" || e === "srcset") && c(this)) {
+            d(this);
+        }
+        return a.call(this, e, t);
+    };
+    const g = (e, t) => {
+        if (!e) return;
+        const o = Object.getOwnPropertyDescriptor(e, t);
+        if (o && o.set) {
+            Object.defineProperty(e, t, {
+                set: function (value) {
+                    try {
+                        d(this);
+                    } catch (err) {
+                        // If optimization fails, continue anyway
+                    }
+                    try {
+                        o.set.call(this, value);
+                    } catch (err) {
+                        // If setter fails, try to set the property directly
+                        try {
+                            Object.defineProperty(this, t, { value: value, writable: true });
+                        } catch (err2) {
+                            // Last resort - ignore
+                        }
+                    }
+                },
+                get: o.get,
+                configurable: true
             });
         }
-    }
-
-    #processMedia(node) {
-        if (this.#processedMedia.has(node)) return;
-
-        const tag = node.tagName;
-
-        // Fast tag detection using switch
-        switch(tag) {
-            case 'IMG':
-                this.#processImage(node);
-                break;
-            case 'IFRAME':
-                this.#processIframe(node);
-                break;
-            case 'VIDEO':
-                this.#processVideo(node);
-                break;
-            default:
-                // Handle nested media
-                this.#processNestedMedia(node);
-        }
-    }
-
-    #processNestedMedia(node) {
-        const images = node.getElementsByTagName('img');
-        const iframes = node.getElementsByTagName('iframe');
-        const videos = node.getElementsByTagName('video');
-
-        // Process images
-        for (let i = 0, len = images.length; i < len; i++) {
-            const img = images[i];
-            if (!this.#processedMedia.has(img)) {
-                this.#processImage(img);
-            }
-        }
-        
-        // Process iframes
-        for (let i = 0, len = iframes.length; i < len; i++) {
-            const iframe = iframes[i];
-            if (!this.#processedMedia.has(iframe)) {
-                this.#processIframe(iframe);
-            }
-        }
-        
-        // Process videos
-        for (let i = 0, len = videos.length; i < len; i++) {
-            const video = videos[i];
-            if (!this.#processedMedia.has(video)) {
-                this.#processVideo(video);
-            }
-        }
-    }
-
-    #processSingleMedia(media) {
-        if (this.#processedMedia.has(media)) return;
-
-        const tag = media.tagName;
-        
-        switch(tag) {
-            case 'IMG':
-                this.#processImage(media);
-                break;
-            case 'IFRAME':
-                this.#processIframe(media);
-                break;
-            case 'VIDEO':
-                this.#processVideo(media);
-                break;
-        }
-
-        this.#processedMedia.add(media);
-    }
-
-    #processImage(img) {
-        // ULTRA-AGGRESSIVE twemoji detection - MUST BE FIRST
-        const isTwemoji = img.src.includes('twemoji') || 
-                        img.classList.contains('twemoji') ||
-                        img.classList.contains('emoji') ||
-                        (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
-        
-        if (isTwemoji) {
-            // FORCE twemoji dimensions, ignore everything else
-            const size = this.#isInSmallContext(img) ? 
-                MediaDimensionExtractor.#EMOJI_SIZE_SMALL : 
-                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
-            
-            // Remove any existing dimension attributes first
-            img.removeAttribute('width');
-            img.removeAttribute('height');
-            
-            // Set correct dimensions
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            
-            // Clear any problematic styles
-            let currentStyle = img.style.cssText || '';
-            if (currentStyle) {
-                // Remove width/height/max-width/max-height styles
-                currentStyle = currentStyle
-                    .replace(/width[^;]*;/g, '')
-                    .replace(/height[^;]*;/g, '')
-                    .replace(/max-width[^;]*;/g, '')
-                    .replace(/max-height[^;]*;/g, '');
-                img.style.cssText = currentStyle;
-            }
-            
-            // Add aspect ratio
-            img.style.aspectRatio = size + ' / ' + size;
-            
-            // Ensure it's visible and properly sized
-            img.style.display = 'inline-block';
-            img.style.verticalAlign = 'text-bottom';
-            
-            // Nuke from cache to prevent future issues
-            const cacheKey = this.#getCacheKey(img.src);
-            this.#dimensionCache.delete(cacheKey);
-            this.#lruMap.delete(cacheKey);
-            
-            // Cache correct dimensions
-            this.#cacheDimension(img.src, size, size);
-            return;
-        }
-
-        // Cache check first (hottest path) - but NOT for emojis
-        const cacheKey = this.#getCacheKey(img.src);
-        const cached = this.#dimensionCache.get(cacheKey);
-        if (cached) {
-            this.#cacheHits++;
-            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-                img.setAttribute('width', cached.width);
-                img.setAttribute('height', cached.height);
-                img.style.aspectRatio = cached.width + ' / ' + cached.height;
-            }
-            return;
-        }
-        this.#cacheMisses++;
-
-        // Validate existing attributes
-        const widthAttr = img.getAttribute('width');
-        const heightAttr = img.getAttribute('height');
-
-        if (widthAttr !== null && heightAttr !== null) {
-            const width = widthAttr | 0;
-            const height = heightAttr | 0;
-
-            if (width > 0 && height > 0) {
-                // Validate against natural dimensions if available
-                if (img.complete && img.naturalWidth) {
-                    const wDiff = Math.abs(img.naturalWidth - width);
-                    const hDiff = Math.abs(img.naturalHeight - height);
-
-                    if (wDiff > width * 0.5 || hDiff > height * 0.5) {
-                        // Wrong dimensions - update
-                        this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-                        return;
-                    }
-                }
-
-                img.style.aspectRatio = width + ' / ' + height;
-                return;
-            }
-        }
-
-        // Other emoji detection using modern iteration
-        if (this.#isLikelyEmoji(img)) {
-            const size = this.#isInSmallContext(img) ? 
-                MediaDimensionExtractor.#EMOJI_SIZE_SMALL : 
-                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
-            img.setAttribute('width', size);
-            img.setAttribute('height', size);
-            img.style.aspectRatio = size + ' / ' + size;
-            
-            // Cache emoji dimensions
-            this.#cacheDimension(img.src, size, size);
-            return;
-        }
-        
-        // Handle loading state
-        if (img.complete && img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-        } else {
-            this.#setupImageLoadListener(img);
-        }
-    }
-
-    #getCacheKey(src) {
-        // Optimize cache keys for common patterns
-        if (src.includes('twemoji')) {
-            const match = src.match(/(\d+)x\1/);
-            return match ? 'emoji:' + match[1] : 'emoji:default';
-        }
-        
-        // For very long URLs, use hash
-        if (src.length > 100) {
-            return 'h' + this.#hashString(src);
-        }
-        
-        return src;
-    }
-
-    #hashString(str) {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = ((hash << 5) - hash) + str.charCodeAt(i);
-            hash = hash | 0;
-        }
-        return hash;
-    }
-
-    #isLikelyEmoji(img) {
-        const src = img.src;
-        const className = img.className;
-        
-        // Use modern iteration with early exit
-        return MediaDimensionExtractor.#EMOJI_PATTERNS.some((pattern) => {
-            return pattern.test(src) || pattern.test(className);
-        }) || (src.includes('imgbox') && img.alt && img.alt.includes('emoji'));
-    }
-
-    #isInSmallContext(img) {
-    // Quick check: if we don't have the cache yet, build it
-    if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
-        this.#cacheContextElements();
-    }
-    
-    // Check all ancestors
-    let element = img;
-    while (element) {
-        // Check if element has any of the signature-related classes
-        if (element.classList) {
-            const classList = element.classList;
-            if (classList.contains('signature') || 
-                classList.contains('post-signature') ||
-                classList.contains('modern-quote') ||
-                classList.contains('quote-content') ||
-                classList.contains('modern-spoiler') ||
-                classList.contains('spoiler-content')) {
-                return true;
-            }
-            
-            // Also check if element matches any in our pre-cached Set
-            if (this.#smallContextElements && this.#smallContextElements.has(element)) {
-                return true;
-            }
-        }
-        element = element.parentElement;
-    }
-    return false;
-}
-
-    #setupImageLoadListener(img) {
-        // Avoid duplicate listeners
-        if (img.__dimensionExtractorHandler) return;
-
-        img.__dimensionExtractorHandler = this.#imageLoadHandler;
-        
-        // Use AbortController for modern event management
-        const signal = this.#imageLoadAbortController.signal;
-        img.addEventListener('load', this.#imageLoadHandler, { once: true, signal });
-        img.addEventListener('error', this.#imageLoadHandler, { once: true, signal });
-
-        // Prevent layout shift
-        img.style.maxWidth = '100%';
-        img.style.height = 'auto';
-    }
-
-    #handleImageLoad(e) {
-        const img = e.target;
-        delete img.__dimensionExtractorHandler;
-
-        if (img.naturalWidth) {
-            this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
-        } else {
-            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
-            this.#setImageDimensions(img, brokenSize.width, brokenSize.height);
-        }
-    }
-
-    #setImageDimensions(img, width, height) {
-        // Set attributes and styles
-        img.setAttribute('width', width);
-        img.setAttribute('height', height);
-        
-        // Update aspect ratio without clearing other styles
-        const currentStyle = img.style.cssText || '';
-        if (!currentStyle.includes('aspect-ratio')) {
-            img.style.cssText = currentStyle + (currentStyle ? ';' : '') + 'aspect-ratio:' + width + '/' + height;
-        }
-
-        // Cache with LRU management
-        this.#cacheDimension(img.src, width, height);
-    }
-
-    #cacheDimension(src, width, height) {
-        const cacheKey = this.#getCacheKey(src);
-        
-        if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
-            // Remove oldest entry using LRU Map
-            const oldestEntry = this.#lruMap.entries().next().value;
-            if (oldestEntry) {
-                this.#dimensionCache.delete(oldestEntry[0]);
-                this.#lruMap.delete(oldestEntry[0]);
-            }
-        }
-
-        this.#dimensionCache.set(cacheKey, { width, height });
-        this.#lruMap.set(cacheKey, performance.now());
-    }
-
-    #processIframe(iframe) {
-        const src = iframe.src || '';
-        let width = '100%';
-        let height = '400';
-
-        // Use Map.forEach for cleaner iteration
-        MediaDimensionExtractor.#IFRAME_SIZES.forEach((sizes, domain) => {
-            if (src.includes(domain)) {
-                width = sizes[0];
-                height = sizes[1];
-                return true;
-            }
-        });
-
-        iframe.setAttribute('width', width);
-        iframe.setAttribute('height', height);
-
-        // Create responsive wrapper for fixed sizes
-        if (width !== '100%') {
-            const widthNum = width | 0;
-            const heightNum = height | 0;
-
-            if (widthNum > 0 && heightNum > 0) {
-                const parent = iframe.parentNode;
-                if (!parent || !parent.classList.contains('iframe-wrapper')) {
-                    // Use documentFragment for batch DOM operations
-                    const fragment = document.createDocumentFragment();
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'iframe-wrapper';
-                    const paddingBottom = (heightNum / widthNum * 100) + '%';
-                    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
-
-                    fragment.appendChild(wrapper);
-                    parent.insertBefore(fragment, iframe);
-                    wrapper.appendChild(iframe);
-                    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
-                }
-            }
-        }
-
-        if (!iframe.hasAttribute('title')) {
-            iframe.setAttribute('title', 'Embedded content');
-        }
-    }
-
-    #processVideo(video) {
-        // Add controls if missing
-        if (!video.hasAttribute('controls')) {
-            video.setAttribute('controls', '');
-        }
-
-        // Set default dimensions if not already set
-        if (!video.style.width) {
-            video.style.width = '100%';
-            video.style.maxWidth = '800px';
-            video.style.height = 'auto';
-        }
-    }
-
-    #cleanup() {
-        // Unregister from forum observer
-        if (globalThis.forumObserver && this.#observerId) {
-            globalThis.forumObserver.unregister(this.#observerId);
-        }
-
-        // Abort all pending event listeners
-        this.#imageLoadAbortController.abort();
-
-        // Clean up event handlers
-        const images = document.images;
-        for (let i = 0, len = images.length; i < len; i++) {
-            const img = images[i];
-            if (img.__dimensionExtractorHandler) {
-                delete img.__dimensionExtractorHandler;
-            }
-        }
-    }
-
-    // Public API methods
-    extractDimensionsForElement(element) {
-        if (!element) return;
-
-        if (element.matches('img, iframe, video')) {
-            this.#processSingleMedia(element);
-        } else {
-            this.#processNestedMedia(element);
-        }
-    }
-
-    forceReprocessElement(element) {
-        if (!element) return;
-        
-        // Remove from processed set
-        this.#processedMedia.delete(element);
-        
-        // Remove from cache if it exists
-        const cacheKey = this.#getCacheKey(element.src);
-        if (this.#dimensionCache.has(cacheKey)) {
-            this.#dimensionCache.delete(cacheKey);
-            this.#lruMap.delete(cacheKey);
-        }
-        
-        // Reprocess the element
-        this.#processSingleMedia(element);
-    }
-
-    clearCache() {
-        this.#dimensionCache.clear();
-        this.#lruMap.clear();
-        this.#cacheHits = 0;
-        this.#cacheMisses = 0;
-    }
-
-    getPerformanceStats() {
-        const total = this.#cacheHits + this.#cacheMisses;
-        const hitRate = total > 0 ? ((this.#cacheHits / total) * 100).toFixed(1) : 0;
-
-        return {
-            cacheHits: this.#cacheHits,
-            cacheMisses: this.#cacheMisses,
-            cacheHitRate: hitRate + '%',
-            cacheSize: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size
+    };
+    g(HTMLImageElement && HTMLImageElement.prototype, "src");
+    g(HTMLIFrameElement && HTMLIFrameElement.prototype, "src");
+    const u = document.createElement;
+    document.createElement = function (e, t) {
+        const o = u.call(this, e, t);
+        return d(o);
+    };
+    const m = window.Image;
+    if (m) {
+        window.Image = function (o, n) {
+            const i = new m(o, n);
+            i.setAttribute("loading", e);
+            i.setAttribute("decoding", t);
+            return i;
         };
+        window.Image.prototype = m.prototype;
     }
-
-    destroy() {
-        this.#cleanup();
-    }
-}
-
-// ============================================
-// INITIALIZATION - Optimized for defer loading
-// ============================================
-
-// Deferred scripts execute after DOM is ready, no need for DOMContentLoaded
-if (!globalThis.mediaDimensionExtractor) {
-    try {
-        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-    } catch (error) {
-        // Single retry after short delay using requestIdleCallback
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
-                if (!globalThis.mediaDimensionExtractor) {
-                    try {
-                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                    } catch (retryError) {
-                        // Silent fail
-                    }
-                }
-            }, { timeout: 50 });
-        } else {
-            setTimeout(() => {
-                if (!globalThis.mediaDimensionExtractor) {
-                    try {
-                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                    } catch (retryError) {
-                        // Silent fail
-                    }
-                }
-            }, 50);
+    const f = () => {
+        const e = ['img:not([loading]), img[loading=""]', 'iframe:not([loading]), iframe[loading=""]', 'img:not([decoding]), img[decoding=""]'];
+        const t = document.querySelectorAll(e.join(", "));
+        for (let e = 0; e < t.length; e++) {
+            d(t[e]);
         }
-    }
-}
-
-// Optional cleanup (browser handles most cleanup automatically)
-globalThis.addEventListener('pagehide', () => {
-    if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
-        // Use requestIdleCallback for non-blocking cleanup
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
-                globalThis.mediaDimensionExtractor.destroy();
+    };
+    const b = new MutationObserver((e) => {
+        for (let t = 0; t < e.length; t++) {
+            const o = e[t];
+            if (o.type !== "childList") continue;
+            for (let e = 0; e < o.addedNodes.length; e++) {
+                const t = o.addedNodes[e];
+                if (t.nodeType !== 1) continue;
+                d(t);
+                if (t.querySelectorAll) {
+                    const e = t.querySelectorAll("img, iframe");
+                    for (let t = 0; t < e.length; t++) {
+                        d(e[t]);
+                    }
+                }
+            }
+        }
+    });
+    const p = () => {
+        console.log("=== MEDIA OPTIMIZER REPORT ===");
+        const s = document.createElement("img");
+        console.log("createElement: loading=" + s.getAttribute("loading") + ", decoding=" + s.getAttribute("decoding"));
+        if (window.Image) {
+            const e = new Image();
+            console.log("imageConstructor: loading=" + e.getAttribute("loading") + ", decoding=" + e.getAttribute("decoding"));
+        }
+        const c = document.querySelectorAll("img");
+        let r = 0;
+        let l = 0;
+        for (let o = 0; o < c.length; o++) {
+            if (c[o].getAttribute("loading") === e) r++;
+            if (c[o].getAttribute("decoding") === t) l++;
+        }
+        console.log("Existing images: " + r + "/" + c.length + " lazy, " + l + "/" + c.length + " async");
+        console.log("Total elements monitored: " + i);
+        if (i > 0) {
+            const e = Math.round((n / i) * 100);
+            console.log("Successfully optimized before load: " + n + "/" + i + " (" + e + "%)");
+            if (n === i) {
+                console.log("✅ All attributes set BEFORE element load");
+            } else {
+                console.log("⚠️ " + (i - n) + " elements loaded before optimization");
+                for (let e = 0; e < o.length; e++) {
+                    const t = o[e];
+                    if (!t.success || t.timing === "during") {
+                        console.warn("Late optimization #" + e + ": " + t.element + " - " + t.src);
+                    }
+                }
+            }
+        } else {
+            console.log("No load events monitored (static page or no new images)");
+        }
+        console.log("=== REPORT COMPLETE ===");
+    };
+    const h = () => {
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", f);
+        } else {
+            f();
+        }
+        if (document.body) {
+            b.observe(document.body, { childList: true, subtree: true });
+        } else {
+            const e = new MutationObserver(function (e, t) {
+                if (document.body) {
+                    b.observe(document.body, { childList: true, subtree: true });
+                    t.disconnect();
+                }
             });
-        } else {
-            setTimeout(() => {
-                globalThis.mediaDimensionExtractor.destroy();
-            }, 0);
+            e.observe(document.documentElement, { childList: true });
         }
+        window.addEventListener("load", function () {
+            setTimeout(p, 1e3);
+        });
+        setTimeout(p, 5e3);
+    };
+    if (typeof Promise !== "undefined") {
+        Promise.resolve().then(h);
+    } else {
+        setTimeout(h, 0);
     }
-});
+})();
+
 
 //Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
