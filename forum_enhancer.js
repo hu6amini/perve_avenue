@@ -13,7 +13,6 @@ class MediaDimensionExtractor {
     #cacheMisses = 0;
     #smallContextElements = null;
     #MAX_CACHE_SIZE = 500;
-    #processingBlocked = false;
 
     // Static configurations for better performance
     static #IFRAME_SIZES = new Map([
@@ -39,22 +38,17 @@ class MediaDimensionExtractor {
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
-    constructor() {
-        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-        // Cache context elements immediately
-        this.#cacheContextElements();
-        this.#init();
-    }
+constructor() {
+    this.#imageLoadHandler = this.#handleImageLoad.bind(this);
+    // Cache context elements immediately
+    this.#cacheContextElements();
+    this.#init();
+}
 
     #init() {
         // Immediate initialization - DOM is ready (defer)
         this.#setupObserver();
         this.#cacheContextElements();
-        
-        // Block initial processing for invalid images
-        setTimeout(() => {
-            this.#processingBlocked = false;
-        }, 100);
     }
 
     #cacheContextElements() {
@@ -129,9 +123,6 @@ class MediaDimensionExtractor {
 
     #processMedia(node) {
         if (this.#processedMedia.has(node)) return;
-        
-        // Skip processing if blocked (during initial load)
-        if (this.#processingBlocked) return;
 
         const tag = node.tagName;
 
@@ -184,9 +175,6 @@ class MediaDimensionExtractor {
 
     #processSingleMedia(media) {
         if (this.#processedMedia.has(media)) return;
-        
-        // Skip processing if blocked (during initial load)
-        if (this.#processingBlocked) return;
 
         const tag = media.tagName;
         
@@ -206,23 +194,6 @@ class MediaDimensionExtractor {
     }
 
     #processImage(img) {
-        // Skip processing if blocked (during initial load)
-        if (this.#processingBlocked) return;
-        
-        // ULTRA-AGGRESSIVE validation - check for invalid URLs immediately
-        const src = img.src || '';
-        const trimmedSrc = src.trim();
-        
-        // Block processing for obviously invalid images
-        if (!src || trimmedSrc === '' || trimmedSrc === 'http' || trimmedSrc === 'https' || 
-            src.startsWith('http://http') || src.startsWith('https://http') ||
-            src.includes('://http') || src.includes('://https')) {
-            
-            // Mark as processed but don't do anything else
-            this.#processedMedia.add(img);
-            return;
-        }
-
         // ULTRA-AGGRESSIVE twemoji detection - MUST BE FIRST
         const isTwemoji = img.src.includes('twemoji') || 
                         img.classList.contains('twemoji') ||
@@ -335,16 +306,6 @@ class MediaDimensionExtractor {
     }
 
     #getCacheKey(src) {
-        // CRITICAL: Validate URL first to prevent caching invalid requests
-        if (!src) return 'invalid:null';
-        
-        const trimmedSrc = src.trim();
-        if (trimmedSrc === '' || trimmedSrc === 'http' || trimmedSrc === 'https' || 
-            src.startsWith('http://http') || src.startsWith('https://http') ||
-            src.includes('://http') || src.includes('://https')) {
-            return 'invalid:' + trimmedSrc;
-        }
-        
         // Optimize cache keys for common patterns
         if (src.includes('twemoji')) {
             const match = src.match(/(\d+)x\1/);
@@ -379,53 +340,37 @@ class MediaDimensionExtractor {
     }
 
     #isInSmallContext(img) {
-        // Quick check: if we don't have the cache yet, build it
-        if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
-            this.#cacheContextElements();
-        }
-        
-        // Check all ancestors
-        let element = img;
-        while (element) {
-            // Check if element has any of the signature-related classes
-            if (element.classList) {
-                const classList = element.classList;
-                if (classList.contains('signature') || 
-                    classList.contains('post-signature') ||
-                    classList.contains('modern-quote') ||
-                    classList.contains('quote-content') ||
-                    classList.contains('modern-spoiler') ||
-                    classList.contains('spoiler-content')) {
-                    return true;
-                }
-                
-                // Also check if element matches any in our pre-cached Set
-                if (this.#smallContextElements && this.#smallContextElements.has(element)) {
-                    return true;
-                }
-            }
-            element = element.parentElement;
-        }
-        return false;
+    // Quick check: if we don't have the cache yet, build it
+    if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
+        this.#cacheContextElements();
     }
+    
+    // Check all ancestors
+    let element = img;
+    while (element) {
+        // Check if element has any of the signature-related classes
+        if (element.classList) {
+            const classList = element.classList;
+            if (classList.contains('signature') || 
+                classList.contains('post-signature') ||
+                classList.contains('modern-quote') ||
+                classList.contains('quote-content') ||
+                classList.contains('modern-spoiler') ||
+                classList.contains('spoiler-content')) {
+                return true;
+            }
+            
+            // Also check if element matches any in our pre-cached Set
+            if (this.#smallContextElements && this.#smallContextElements.has(element)) {
+                return true;
+            }
+        }
+        element = element.parentElement;
+    }
+    return false;
+}
 
     #setupImageLoadListener(img) {
-        // Skip invalid images to prevent network errors
-        const src = img.src || '';
-        const trimmedSrc = src.trim();
-        
-        if (!src || trimmedSrc === '' || trimmedSrc === 'http' || trimmedSrc === 'https' ||
-            src.startsWith('http://http') || src.startsWith('https://http') ||
-            src.includes('://http') || src.includes('://https')) {
-            
-            // Set broken image dimensions immediately without attempting to load
-            const brokenSize = MediaDimensionExtractor.#BROKEN_IMAGE_SIZE;
-            img.setAttribute('width', brokenSize.width);
-            img.setAttribute('height', brokenSize.height);
-            img.style.aspectRatio = brokenSize.width + ' / ' + brokenSize.height;
-            return;
-        }
-        
         // Avoid duplicate listeners
         if (img.__dimensionExtractorHandler) return;
 
@@ -443,11 +388,7 @@ class MediaDimensionExtractor {
 
     #handleImageLoad(e) {
         const img = e.target;
-        
-        // Clean up handler reference
-        if (img.__dimensionExtractorHandler) {
-            delete img.__dimensionExtractorHandler;
-        }
+        delete img.__dimensionExtractorHandler;
 
         if (img.naturalWidth) {
             this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
@@ -468,23 +409,12 @@ class MediaDimensionExtractor {
             img.style.cssText = currentStyle + (currentStyle ? ';' : '') + 'aspect-ratio:' + width + '/' + height;
         }
 
-        // Skip caching for invalid URLs
-        const src = img.src || '';
-        const trimmedSrc = src.trim();
-        if (src && trimmedSrc !== '' && trimmedSrc !== 'http' && trimmedSrc !== 'https' &&
-            !src.startsWith('http://http') && !src.startsWith('https://http') &&
-            !src.includes('://http') && !src.includes('://https')) {
-            this.#cacheDimension(img.src, width, height);
-        }
+        // Cache with LRU management
+        this.#cacheDimension(img.src, width, height);
     }
 
     #cacheDimension(src, width, height) {
         const cacheKey = this.#getCacheKey(src);
-        
-        // Don't cache invalid URLs
-        if (cacheKey.startsWith('invalid:')) {
-            return;
-        }
         
         if (this.#dimensionCache.size >= this.#MAX_CACHE_SIZE) {
             // Remove oldest entry using LRU Map
@@ -679,7 +609,6 @@ globalThis.addEventListener('pagehide', () => {
         }
     }
 });
-
 
 //Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
