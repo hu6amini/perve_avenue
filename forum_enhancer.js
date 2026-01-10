@@ -6644,3 +6644,2130 @@ globalThis.addEventListener('pagehide', function() {
         globalThis.postModernizer.destroy();
     }
 });
+
+
+
+//Article Modernizer
+
+// Blog Article Modernization System with Title2 Top Preservation 
+// FIXED VERSION: Preserves emoji click functionality with optimal performance
+class ArticleModernizer { 
+ #articleModernizerId = null; 
+ #debouncedArticleObserverId = null; 
+ #retryTimeoutId = null; 
+ #maxRetries = 10; 
+ #retryCount = 0; 
+ #emojiObserverId = null; 
+ #emojiEventDelegationSetup = false;
+ #processedEmojiArticles = new WeakSet();
+ #emojiTemplate = null;
+ 
+ constructor() { 
+ this.#initWithRetry(); 
+ } 
+ 
+ #initWithRetry() { 
+ if (this.#retryTimeoutId) { 
+ clearTimeout(this.#retryTimeoutId); 
+ this.#retryTimeoutId = null; 
+ } 
+ 
+ if (!globalThis.forumObserver) { 
+ if (this.#retryCount < this.#maxRetries) { 
+ this.#retryCount++; 
+ var delay = Math.min(100 * Math.pow(1.5, this.#retryCount - 1), 2000); 
+ console.log('Forum Observer not available, retry ' + this.#retryCount + '/' + this.#maxRetries + ' in ' + delay + 'ms'); 
+ 
+ this.#retryTimeoutId = setTimeout(function() { 
+ this.#initWithRetry(); 
+ }.bind(this), delay); 
+ } else { 
+ console.error('Failed to initialize Article Modernizer: Forum Observer not available after maximum retries'); 
+ } 
+ return; 
+ } 
+ 
+ this.#retryCount = 0; 
+ this.#init(); 
+ } 
+ 
+ #init() { 
+ try { 
+ // Setup global event delegation FIRST for instant functionality
+ if (!this.#emojiEventDelegationSetup) {
+ this.#setupGlobalEmojiEventDelegation();
+ this.#emojiEventDelegationSetup = true;
+ }
+ 
+ this.#transformArticleElements(); 
+ this.#setupArticleObserver(); 
+ this.#setupEmojiObserver(); 
+ 
+ console.log('✅ Article Modernizer initialized (Title2 Top preserved, emoji clickable)'); 
+ } catch (error) { 
+ console.error('Article Modernizer initialization failed:', error); 
+ 
+ if (this.#retryCount < this.#maxRetries) { 
+ this.#retryCount++; 
+ var delay = 100 * Math.pow(2, this.#retryCount - 1); 
+ console.log('Initialization failed, retrying in ' + delay + 'ms...'); 
+ 
+ setTimeout(function() { 
+ this.#initWithRetry(); 
+ }.bind(this), delay); 
+ } 
+ } 
+ } 
+ 
+ #setupGlobalEmojiEventDelegation() {
+ // Single event listener for ALL emoji clicks - works immediately
+ document.addEventListener('click', (e) => {
+ const emojiElement = e.target.closest('.st-emoji-container, .st-emoji-preview, .st-emoji-rep');
+ if (emojiElement) {
+ // Check if it's in an article (not a post)
+ const article = emojiElement.closest('.post-article-modernized');
+ const post = emojiElement.closest('.post-modernized');
+ 
+ // Only handle articles (posts have their own event delegation)
+ if (article && !post) {
+ e.preventDefault();
+ e.stopPropagation();
+ this.#handleEmojiClick(emojiElement);
+ }
+ }
+ }, true); // Use capture phase for reliability
+ }
+ 
+ #handleEmojiClick(emojiElement) {
+ // Find the actual st-emoji container
+ const stEmoji = emojiElement.closest('.st-emoji-rep');
+ if (!stEmoji) return;
+ 
+ // Toggle active state
+ const container = stEmoji.querySelector('.st-emoji-container');
+ if (container) {
+ container.classList.toggle('active');
+ }
+ 
+ // Try to trigger the forum's emoji modal
+ this.#triggerForumEmojiModal(stEmoji);
+ 
+ console.log('🎯 Emoji clicked (delegated handler)');
+ }
+ 
+ #triggerForumEmojiModal(stEmoji) {
+ // Method 1: Look for forum's emoji trigger
+ if (typeof window.showEmojiModal === 'function') {
+ const postId = this.#extractPostIdFromElement(stEmoji);
+ if (postId) {
+ window.showEmojiModal(postId);
+ return;
+ }
+ }
+ 
+ // Method 2: Look for hidden triggers
+ const hiddenTriggers = document.querySelectorAll('[data-emoji-trigger], .emoji-trigger, [onclick*="emoji"]');
+ hiddenTriggers.forEach(trigger => {
+ if (trigger.style.display === 'none' || trigger.classList.contains('hidden')) {
+ trigger.click();
+ return;
+ }
+ });
+ 
+ // Method 3: Simulate the forum's expected behavior
+ this.#simulateEmojiModal(stEmoji);
+ }
+ 
+ #extractPostIdFromElement(element) {
+ const article = element.closest('.article, .post-article-modernized');
+ if (article && article.id) {
+ const idMatch = article.id.match(/\d+/);
+ return idMatch ? idMatch[0] : null;
+ }
+ return null;
+ }
+ 
+ #simulateEmojiModal(stEmoji) {
+ // Fallback: Show a simple notification
+ console.log('Emoji modal would open for:', stEmoji);
+ 
+ // You could implement your own modal here if needed
+ // For now, just ensure the UI feedback works
+ const container = stEmoji.querySelector('.st-emoji-container');
+ if (container) {
+ // Add visual feedback
+ container.style.transform = 'scale(1.1)';
+ setTimeout(() => {
+ container.style.transform = '';
+ }, 200);
+ }
+ }
+ 
+ #setupArticleObserver() { 
+ var pageTypes = ['blog']; 
+ 
+ this.#debouncedArticleObserverId = globalThis.forumObserver.registerDebounced({ 
+ id: 'article-modernizer-transform', 
+ callback: function(node) { 
+ this.#handleArticleTransformation(node); 
+ }.bind(this), 
+ selector: '.article:not(.post-article-modernized), .comments .post:not(.post-article-modernized), .post-article-modernized .title2.top', 
+ delay: 100, 
+ priority: 'normal', 
+ pageTypes: pageTypes 
+ }); 
+ } 
+ 
+ #setupEmojiObserver() { 
+ this.#emojiObserverId = globalThis.forumObserver.registerDebounced({ 
+ id: 'article-modernizer-emoji-mover', 
+ callback: function(node) { 
+ // Check if we've already processed this article
+ const article = node.closest('.post-article-modernized');
+ if (article && !this.#processedEmojiArticles.has(article)) {
+ this.#checkAndMoveEmojiElements(); 
+ }
+ }.bind(this), 
+ selector: '.st-emoji-rep, .article-title2-top, .article-stats, .post-article-modernized .title2.top', 
+ delay: 150, // Increased delay to avoid interference
+ priority: 'normal', // Changed from high to normal
+ pageTypes: ['blog'] 
+ }); 
+ } 
+ 
+ #checkAndMoveEmojiElements() { 
+ var articles = document.querySelectorAll('.post-article-modernized'); 
+ const batchSize = 3;
+ 
+ // Process in batches for better performance
+ for (let i = 0; i < articles.length; i += batchSize) {
+ const batch = Array.from(articles).slice(i, i + batchSize);
+ 
+ // Use microtask for smooth processing
+ queueMicrotask(() => {
+ batch.forEach(article => {
+ if (!this.#processedEmojiArticles.has(article)) {
+ this.#moveEmojiToFooterOptimized(article);
+ this.#processedEmojiArticles.add(article);
+ }
+ });
+ });
+ }
+ } 
+ 
+ #moveEmojiToFooterOptimized(article) {
+ var statsSection = article.querySelector('.article-stats'); 
+ if (!statsSection) return; 
+ 
+ var existingEmoji = statsSection.querySelector('.st-emoji-rep'); 
+ if (existingEmoji) return; 
+ 
+ var title2TopContainer = article.querySelector('.article-title2-top'); 
+ if (!title2TopContainer) return; 
+ 
+ var rightSub = title2TopContainer.querySelector('.right.Sub'); 
+ if (!rightSub) return; 
+ 
+ var stEmoji = rightSub.querySelector('.st-emoji-rep'); 
+ if (!stEmoji) return; 
+ 
+ // Store original data before moving
+ const originalOnClick = stEmoji.getAttribute('onclick');
+ const originalClass = stEmoji.className;
+ const originalHTML = stEmoji.innerHTML;
+ 
+ // Create optimized clone
+ const clonedEmoji = document.createElement('div');
+ clonedEmoji.className = originalClass;
+ clonedEmoji.innerHTML = originalHTML;
+ 
+ // Preserve onclick if it exists
+ if (originalOnClick) {
+ clonedEmoji.setAttribute('onclick', originalOnClick);
+ }
+ 
+ // Preserve all data attributes
+ Array.from(stEmoji.attributes).forEach(attr => {
+ if (attr.name.startsWith('data-')) {
+ clonedEmoji.setAttribute(attr.name, attr.value);
+ }
+ });
+ 
+ // Ensure the emoji has the right classes for our event delegation
+ const container = clonedEmoji.querySelector('.st-emoji-container');
+ if (container && !container.classList.contains('clickable')) {
+ container.classList.add('clickable');
+ }
+ 
+ var pointsElement = statsSection.querySelector('.points'); 
+ 
+ if (pointsElement) { 
+ pointsElement.parentNode.insertBefore(clonedEmoji, pointsElement.nextSibling); 
+ } else { 
+ statsSection.appendChild(clonedEmoji); 
+ } 
+ 
+ // Remove the original only after successful clone
+ if (stEmoji.parentNode) {
+ stEmoji.parentNode.removeChild(stEmoji);
+ }
+ 
+ if (rightSub.children.length === 0) { 
+ rightSub.style.display = 'none'; 
+ } 
+ 
+ // Fix counter display if needed
+ this.#checkAndFixEmojiCounter(clonedEmoji);
+ 
+ // Mark as processed
+ article.dataset.emojiMoved = 'true';
+ }
+ 
+ #checkAndFixEmojiCounter(stEmoji) { 
+ var counter = stEmoji.querySelector('.st-emoji-counter'); 
+ if (!counter) return; 
+ 
+ var dataCount = counter.getAttribute('data-count'); 
+ var displayCount = counter.textContent.trim(); 
+ 
+ if (dataCount && dataCount !== '0' && displayCount === '0') { 
+ console.log('Fixing counter display: data-count=' + dataCount + ' but shows ' + displayCount); 
+ counter.textContent = dataCount; 
+ 
+ var container = stEmoji.querySelector('.st-emoji-container'); 
+ if (container) { 
+ container.classList.add('active'); 
+ } 
+ } 
+ 
+ setTimeout(function() { 
+ var updatedCounter = stEmoji.querySelector('.st-emoji-counter'); 
+ if (updatedCounter && updatedCounter.textContent.trim() === '0') { 
+ var updatedDataCount = updatedCounter.getAttribute('data-count'); 
+ if (updatedDataCount && updatedDataCount !== '0') { 
+ console.log('Post-delay fix: updating counter from 0 to ' + updatedDataCount); 
+ updatedCounter.textContent = updatedDataCount; 
+ } 
+ } 
+ }.bind(this), 300); 
+ } 
+ 
+ #handleArticleTransformation(node) { 
+ if (!node) return; 
+ 
+ var needsTransformation = node.matches('.article:not(.post-article-modernized)') || 
+ node.querySelector('.article:not(.post-article-modernized)') || 
+ node.matches('.comments .post:not(.post-article-modernized)') || 
+ (node.matches('.title2.top') && node.closest('.post-article-modernized')); 
+ 
+ if (needsTransformation) { 
+ this.#transformArticleElements(); 
+ } 
+ } 
+ 
+ #transformArticleElements() { 
+ var articles = document.querySelectorAll('#blog .article:not(.post-article-modernized)'); 
+ for (var i = 0; i < articles.length; i++) { 
+ this.#transformMainArticle(articles[i], i); 
+ } 
+ 
+ var comments = document.querySelectorAll('#blog .comments .post:not(.post-article-modernized)'); 
+ for (var j = 0; j < comments.length; j++) { 
+ this.#transformCommentPost(comments[j], j); 
+ } 
+ } 
+ 
+ #extractElements(article) { 
+ return { 
+ anchor: article.querySelector('.anchor'), 
+ articleTitle: article.querySelector('h2.btitle'), 
+ title2Top: article.querySelector('.title2.top'), 
+ center: article.querySelector('.center.Item'), 
+ title2Bottom: article.querySelector('.title2.bottom'), 
+ mainBg: article.querySelector('.mainbg') 
+ }; 
+ } 
+ 
+ #transformMainArticle(article, index) { 
+ article.classList.add('post-article-modernized'); 
+ 
+ var elements = this.#extractElements(article); 
+ var fragment = document.createDocumentFragment(); 
+ 
+ var articleHeader = document.createElement('div'); 
+ articleHeader.className = 'article-header'; 
+ 
+ if (elements.anchor) { 
+ var anchorContainer = document.createElement('div'); 
+ anchorContainer.className = 'anchor-container'; 
+ anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;'; 
+ anchorContainer.appendChild(elements.anchor.cloneNode(true)); 
+ articleHeader.appendChild(anchorContainer); 
+ } 
+ 
+ // Create action buttons container like PostModernizer does 
+ var headerActions = document.createElement('div'); 
+ headerActions.className = 'article-header-actions'; 
+ 
+ // Extract and transform timestamps from title2Top - but work on a clone 
+ if (elements.title2Top) { 
+ // Create a working copy for timestamp extraction 
+ var title2TopWorkingCopy = elements.title2Top.cloneNode(true); 
+ this.#transformTimestampElements(title2TopWorkingCopy); 
+ 
+ // Extract the modern timestamp that was created 
+ var modernTimestamp = title2TopWorkingCopy.querySelector('.modern-timestamp'); 
+ if (modernTimestamp) { 
+ // Get the parent link if it exists 
+ var timestampLink = modernTimestamp.closest('a'); 
+ if (timestampLink) { 
+ headerActions.appendChild(timestampLink.cloneNode(true)); 
+ } else { 
+ headerActions.appendChild(modernTimestamp.cloneNode(true)); 
+ } 
+ } 
+ } 
+ 
+ // Add share button from bottom actions (will be populated later) 
+var shareButton = document.createElement('a'); 
+shareButton.className = 'btn btn-icon btn-share'; 
+shareButton.setAttribute('title', 'Share'); 
+shareButton.setAttribute('data-action', 'share'); 
+shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>'; 
+ 
+// Get the article URL 
+var articleUrl = window.location.href.split('#')[0]; 
+var articleIdMatch = article.id.match(/\d+/); 
+if (articleIdMatch) { 
+ articleUrl += '#entry' + articleIdMatch[0]; 
+} 
+ 
+// Make the share button copy the URL to clipboard 
+shareButton.addEventListener('click', function(e) { 
+ e.preventDefault(); 
+ e.stopPropagation(); 
+ 
+ if (navigator.clipboard && navigator.clipboard.writeText) { 
+ navigator.clipboard.writeText(articleUrl).then(function() { 
+ // Show a notification 
+ var notification = document.createElement('div'); 
+ notification.className = 'copy-notification'; 
+ notification.textContent = 'Link copied to clipboard!'; 
+ notification.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;background:var(--success-color);color:white;border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index: 9;font-weight:500;display:flex;align-items:center;gap:8px;transform:translateX(calc(100% + 20px));opacity:0;transition:transform 0.3s ease-out,opacity 0.3s ease-out;pointer-events:none;white-space:nowrap;'; 
+ 
+ var icon = document.createElement('i'); 
+ icon.className = 'fa-regular fa-check-circle'; 
+ icon.setAttribute('aria-hidden', 'true'); 
+ notification.prepend(icon); 
+ 
+ document.body.appendChild(notification); 
+ 
+ requestAnimationFrame(function() { 
+ requestAnimationFrame(function() { 
+ notification.style.transform = 'translateX(0)'; 
+ notification.style.opacity = '1'; 
+ }); 
+ }); 
+ 
+ setTimeout(function() { 
+ notification.style.transform = 'translateX(calc(100% + 20px))'; 
+ notification.style.opacity = '0'; 
+ 
+ notification.addEventListener('transitionend', function() { 
+ if (notification.parentNode) { 
+ notification.parentNode.removeChild(notification); 
+ } 
+ }); 
+ }, 2000); 
+ }).catch(function(err) { 
+ console.error('Failed to copy: ', err); 
+ // Fallback: open in new tab 
+ window.open(articleUrl, '_blank'); 
+ }); 
+ } else { 
+ // Fallback for older browsers 
+ window.open(articleUrl, '_blank'); 
+ } 
+}); 
+ 
+headerActions.appendChild(shareButton); 
+ 
+ // Add edit button 
+ var editButton = document.createElement('a'); 
+ editButton.className = 'btn btn-icon btn-edit'; 
+ editButton.setAttribute('title', 'Edit'); 
+ editButton.setAttribute('data-action', 'edit'); 
+ editButton.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>'; 
+ 
+ // Find the actual edit URL from bottom elements 
+ if (elements.title2Bottom) { 
+ var rtSub = elements.title2Bottom.querySelector('.mini_buttons.right.Sub'); 
+ if (rtSub) { 
+ var editLink = rtSub.querySelector('a[href*="CODE=08"]'); 
+ if (editLink) { 
+ editButton.href = editLink.getAttribute('href'); 
+ } 
+ } 
+ } 
+ headerActions.appendChild(editButton); 
+ 
+ // Add quote button 
+ var quoteButton = document.createElement('a'); 
+ quoteButton.className = 'btn btn-icon btn-quote'; 
+ quoteButton.setAttribute('title', 'Quote'); 
+ quoteButton.setAttribute('data-action', 'quote'); 
+ quoteButton.innerHTML = '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>'; 
+ 
+ // Find the actual quote URL from bottom elements 
+ if (elements.title2Bottom) { 
+ var rtSub = elements.title2Bottom.querySelector('.mini_buttons.right.Sub'); 
+ if (rtSub) { 
+ var quoteLink = rtSub.querySelector('a[href*="CODE=02"]'); 
+ if (quoteLink) { 
+ quoteButton.href = quoteLink.getAttribute('href'); 
+ if (quoteLink.getAttribute('rel')) { 
+ quoteButton.setAttribute('rel', quoteLink.getAttribute('rel')); 
+ } 
+ } 
+ } 
+ } 
+ headerActions.appendChild(quoteButton); 
+ 
+ // Add header actions to the beginning of article header 
+ articleHeader.appendChild(headerActions); 
+ 
+ this.#addNewArticleBadge(elements.articleTitle, articleHeader); 
+ 
+ var titleSection = document.createElement('div'); 
+ titleSection.className = 'article-title-section'; 
+ 
+ if (elements.articleTitle) { 
+ var titleLink = elements.articleTitle.querySelector('a'); 
+ var modernTitle = document.createElement('h2'); 
+ modernTitle.className = 'article-title'; 
+ 
+ if (titleLink) { 
+ var modernTitleLink = document.createElement('a'); 
+ modernTitleLink.href = titleLink.href; 
+ modernTitleLink.innerHTML = titleLink.innerHTML; 
+ modernTitle.appendChild(modernTitleLink); 
+ } else { 
+ modernTitle.textContent = elements.articleTitle.textContent.trim(); 
+ } 
+ 
+ titleSection.appendChild(modernTitle); 
+ 
+ var bdesc = elements.articleTitle.querySelector('.bdesc'); 
+ if (bdesc) { 
+ var descElement = document.createElement('div'); 
+ descElement.className = 'article-description'; 
+ descElement.textContent = bdesc.textContent.trim(); 
+ titleSection.appendChild(descElement); 
+ } 
+ } 
+ 
+ articleHeader.appendChild(titleSection); 
+ 
+ var title2TopContainer = document.createElement('div'); 
+ title2TopContainer.className = 'article-title2-top'; 
+ 
+ if (elements.title2Top) { 
+ // Now transform the actual title2Top for display (remove .when but keep everything else) 
+ var title2TopForDisplay = elements.title2Top.cloneNode(true); 
+ 
+ // Remove the .when element since we've already moved it to the header 
+ var whenElement = title2TopForDisplay.querySelector('.when'); 
+ if (whenElement) { 
+ whenElement.remove(); 
+ } 
+ 
+ // Also remove any empty left.Sub if it only contained the .when 
+ var leftSub = title2TopForDisplay.querySelector('.left.Sub'); 
+ if (leftSub && leftSub.children.length === 0) { 
+ leftSub.remove(); 
+ } 
+ 
+ var breakElement = title2TopForDisplay.querySelector('.Break.Sub'); 
+ if (breakElement) breakElement.remove(); 
+ 
+ this.#cleanupTextNodes(title2TopForDisplay); 
+ this.#removeStatsFromTitle2Top(title2TopForDisplay); 
+ 
+ title2TopContainer.appendChild(title2TopForDisplay); 
+ } 
+ 
+ var articleContent = document.createElement('div'); 
+ articleContent.className = 'article-content'; 
+ 
+ if (elements.center) { 
+ var colorElement = elements.center.querySelector('.color'); 
+ if (colorElement) { 
+ var emojiWidget = colorElement.querySelector('.st-emoji-widget'); 
+ if (emojiWidget) emojiWidget.remove(); 
+ 
+ var contentClone = colorElement.cloneNode(true); 
+ this.#preserveMediaDimensions(contentClone); 
+ this.#cleanupArticleContentStructure(contentClone); 
+ this.#modernizeQuotes(contentClone); 
+ this.#modernizeSpoilers(contentClone); 
+ this.#modernizeCodeBlocksInContent(contentClone); 
+ 
+ articleContent.appendChild(contentClone); 
+ } 
+ } 
+ 
+ var articleFooter = document.createElement('div'); 
+ articleFooter.className = 'article-footer'; 
+ 
+ var statsSection = document.createElement('div'); 
+ statsSection.className = 'article-stats'; 
+ 
+ // Use the ORIGINAL elements.title2Top (not the display copy) for stats 
+ if (elements.title2Top) { 
+ // Create a fresh copy for stats extraction 
+ var title2TopForStats = elements.title2Top.cloneNode(true); 
+ this.#moveBasicStatsToFooter(title2TopForStats, statsSection); 
+ } 
+ 
+ articleFooter.appendChild(statsSection); 
+ 
+ if (elements.title2Bottom) { 
+ var bottomActions = this.#modernizeArticleBottomActions(elements.title2Bottom); 
+ if (bottomActions) { 
+ articleFooter.appendChild(bottomActions); 
+ } 
+ } 
+ 
+ fragment.appendChild(articleHeader); 
+ fragment.appendChild(title2TopContainer); 
+ fragment.appendChild(articleContent); 
+ fragment.appendChild(articleFooter); 
+ 
+ if (elements.mainBg) { 
+ elements.mainBg.innerHTML = ''; 
+ elements.mainBg.appendChild(fragment); 
+ } else { 
+ article.innerHTML = ''; 
+ article.appendChild(fragment); 
+ } 
+ 
+ if (elements.articleTitle) { 
+ elements.articleTitle.remove(); 
+ } 
+ 
+ // Schedule emoji movement for later (non-blocking)
+ queueMicrotask(() => {
+ if (!this.#processedEmojiArticles.has(article)) {
+ this.#moveEmojiToFooterOptimized(article);
+ this.#processedEmojiArticles.add(article);
+ }
+ });
+ } 
+ 
+ #removeStatsFromTitle2Top(title2TopClone) { 
+ var pointsElement = title2TopClone.querySelector('.points'); 
+ if (pointsElement) pointsElement.remove(); 
+ 
+ var repliesElement = title2TopClone.querySelector('.replies'); 
+ if (repliesElement) repliesElement.remove(); 
+ 
+ var viewsElement = title2TopClone.querySelector('.views'); 
+ if (viewsElement) viewsElement.remove(); 
+ 
+ var leftSub = title2TopClone.querySelector('.left.Sub'); 
+ if (leftSub && leftSub.children.length === 0) { 
+ leftSub.style.display = 'none'; 
+ } 
+ } 
+ 
+ #moveBasicStatsToFooter(title2Top, statsSection) { 
+ // 1. Points (always first) 
+ var pointsElement = title2Top.querySelector('.points'); 
+ if (pointsElement) { 
+ var pointsClone = pointsElement.cloneNode(true); 
+ this.#cleanupMiniButtons(pointsClone); 
+ this.#setInitialPointsState(pointsClone); 
+ this.#updatePointsContainerActiveState(pointsClone); 
+ statsSection.appendChild(pointsClone); 
+ } 
+ 
+ // 2. st-emoji will be moved later by #moveEmojiToFooter 
+ 
+ // 3. Views with icon only 
+ var viewsElement = title2Top.querySelector('.views'); 
+ if (viewsElement) { 
+ var viewsClone = viewsElement.cloneNode(true); 
+ this.#transformMetricToIconOnly(viewsClone, 'eye'); 
+ 
+ // Optional: Highlight high view counts 
+ var viewCount = this.#extractNumberFromMetric(viewsClone); 
+ if (viewCount > 1000) { 
+ viewsClone.classList.add('highlight'); 
+ } 
+ 
+ statsSection.appendChild(viewsClone); 
+ } 
+ 
+ // 4. Replies with icon only 
+ var repliesElement = title2Top.querySelector('.replies'); 
+ if (repliesElement) { 
+ var repliesClone = repliesElement.cloneNode(true); 
+ this.#transformMetricToIconOnly(repliesClone, 'message-dots'); 
+ 
+ // Optional: Highlight high reply counts 
+ var replyCount = this.#extractNumberFromMetric(repliesClone); 
+ if (replyCount > 20) { 
+ repliesClone.classList.add('highlight'); 
+ } 
+ 
+ statsSection.appendChild(repliesClone); 
+ } 
+ 
+ var leftSub = title2Top.querySelector('.left.Sub'); 
+ if (leftSub && leftSub.children.length === 0) { 
+ leftSub.style.display = 'none'; 
+ } 
+ } 
+ 
+ #transformMetricToIconOnly(element, iconType) { 
+ // Extract the number from the element 
+ var number = this.#extractNumberFromElement(element); 
+ 
+ // Find if there's a link in the original 
+ var originalLink = element.querySelector('a'); 
+ var hasLink = originalLink && originalLink.href; 
+ 
+ // Clear the element 
+ element.innerHTML = ''; 
+ 
+ // Create icon 
+ var icon = document.createElement('i'); 
+ icon.className = 'fa-regular fa-' + iconType; 
+ icon.setAttribute('aria-hidden', 'true'); 
+ 
+ // Create number span 
+ var numberSpan = document.createElement('span'); 
+ numberSpan.className = 'metric-count'; 
+ numberSpan.textContent = number; 
+ 
+ // If original had a link, wrap everything in a link 
+ if (hasLink) { 
+ var link = document.createElement('a'); 
+ link.href = originalLink.href; 
+ link.appendChild(icon); 
+ link.appendChild(numberSpan); 
+ element.appendChild(link); 
+ } else { 
+ // No link, just add icon and number 
+ element.appendChild(icon); 
+ element.appendChild(numberSpan); 
+ } 
+ 
+ // Add accessibility title based on icon type 
+ var title = iconType === 'eye' ? 'Total views' : 'Total replies'; 
+ element.setAttribute('title', title); 
+ element.setAttribute('aria-label', title + ': ' + number); 
+ } 
+ 
+ #extractNumberFromElement(element) { 
+ // Try to extract number from text content 
+ var text = element.textContent || ''; 
+ 
+ // Remove any non-numeric characters except for numbers 
+ var numberMatch = text.match(/\d+/); 
+ if (numberMatch) { 
+ return numberMatch[0]; 
+ } 
+ 
+ // Check for <em> tag (often used for reply counts) 
+ var emTag = element.querySelector('em'); 
+ if (emTag) { 
+ var emText = emTag.textContent || ''; 
+ var emMatch = emText.match(/\d+/); 
+ if (emMatch) { 
+ return emMatch[0]; 
+ } 
+ } 
+ 
+ // Check for any span with number 
+ var spans = element.querySelectorAll('span'); 
+ for (var i = 0; i < spans.length; i++) { 
+ var spanText = spans[i].textContent || ''; 
+ var spanMatch = spanText.match(/\d+/); 
+ if (spanMatch) { 
+ return spanMatch[0]; 
+ } 
+ } 
+ 
+ return '0'; 
+ } 
+ 
+ #extractNumberFromMetric(metricElement) { 
+ // Get the text content and extract number 
+ var text = metricElement.textContent || ''; 
+ var match = text.match(/\d+/); 
+ return match ? parseInt(match[0], 10) : 0; 
+ } 
+ 
+ #addNewArticleBadge(articleTitle, articleHeader) { 
+ if (!articleTitle) return; 
+ var hasNewPostAnchor = articleTitle.querySelector('a#newpost'); 
+ if (!hasNewPostAnchor) return; 
+ 
+ var newBadge = document.createElement('span'); 
+ newBadge.className = 'article-new-badge'; 
+ newBadge.textContent = 'NEW'; 
+ newBadge.setAttribute('aria-label', 'New article since your last visit'); 
+ 
+ var articleTitleSection = articleHeader.querySelector('.article-title-section'); 
+ if (articleTitleSection) { 
+ var badgeContainer = articleHeader.querySelector('.article-badges'); 
+ if (!badgeContainer) { 
+ badgeContainer = document.createElement('div'); 
+ badgeContainer.className = 'article-badges'; 
+ articleHeader.insertBefore(badgeContainer, articleTitleSection); 
+ } 
+ badgeContainer.appendChild(newBadge); 
+ } else { 
+ articleHeader.insertBefore(newBadge, articleHeader.firstChild); 
+ } 
+ } 
+ 
+ #transformCommentPost(comment, index) { 
+ comment.classList.add('post-article-modernized', 'comment-post'); 
+ 
+ var fragment = document.createDocumentFragment(); 
+ var elements = this.#extractElements(comment); 
+ 
+ var commentHeader = document.createElement('div'); 
+ commentHeader.className = 'comment-header'; 
+ 
+ // Create header actions for comments too 
+ var headerActions = document.createElement('div'); 
+ headerActions.className = 'article-header-actions'; 
+ 
+ // Extract and transform timestamps from title2Top for comments 
+ if (elements.title2Top) { 
+ // Create a working copy for timestamp extraction 
+ var title2TopWorkingCopy = elements.title2Top.cloneNode(true); 
+ this.#transformTimestampElements(title2TopWorkingCopy); 
+ 
+ var modernTimestamp = title2TopWorkingCopy.querySelector('.modern-timestamp'); 
+ if (modernTimestamp) { 
+ var timestampLink = modernTimestamp.closest('a'); 
+ if (timestampLink) { 
+ headerActions.appendChild(timestampLink.cloneNode(true)); 
+ } else { 
+ headerActions.appendChild(modernTimestamp.cloneNode(true)); 
+ } 
+ } 
+ } 
+ 
+ commentHeader.appendChild(headerActions); 
+ 
+ var commentContent = document.createElement('div'); 
+ commentContent.className = 'comment-content'; 
+ 
+ var commentFooter = document.createElement('div'); 
+ commentFooter.className = 'comment-footer'; 
+ 
+ if (elements.anchor) { 
+ var anchorContainer = document.createElement('div'); 
+ anchorContainer.className = 'anchor-container'; 
+ anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;'; 
+ anchorContainer.appendChild(elements.anchor.cloneNode(true)); 
+ commentHeader.appendChild(anchorContainer); 
+ } 
+ 
+ if (elements.title2Top) { 
+ // Now transform the actual title2Top for display (remove .when but keep everything else) 
+ var title2TopForDisplay = elements.title2Top.cloneNode(true); 
+ 
+ // Remove the .when element since we've already moved it to the header 
+ var whenElement = title2TopForDisplay.querySelector('.when'); 
+ if (whenElement) { 
+ whenElement.remove(); 
+ } 
+ 
+ // Also remove any empty left.Sub if it only contained the .when 
+ var leftSub = title2TopForDisplay.querySelector('.left.Sub'); 
+ if (leftSub && leftSub.children.length === 0) { 
+ leftSub.remove(); 
+ } 
+ 
+ var breakElement = title2TopForDisplay.querySelector('.Break.Sub'); 
+ if (breakElement) breakElement.remove(); 
+ 
+ commentHeader.appendChild(title2TopForDisplay); 
+ } 
+ 
+ if (elements.center) { 
+ var colorElement = elements.center.querySelector('.color'); 
+ if (colorElement) { 
+ var contentClone = colorElement.cloneNode(true); 
+ 
+ this.#preserveMediaDimensions(contentClone); 
+ this.#cleanupArticleContentStructure(contentClone); 
+ this.#modernizeQuotes(contentClone); 
+ this.#modernizeSpoilers(contentClone); 
+ this.#modernizeCodeBlocksInContent(contentClone); 
+ 
+ commentContent.appendChild(contentClone); 
+ } 
+ } 
+ 
+ var statsDiv = document.createElement('div'); 
+ statsDiv.className = 'comment-stats'; 
+ 
+ var pointsElement = comment.querySelector('.points'); 
+ if (pointsElement) { 
+ var pointsClone = pointsElement.cloneNode(true); 
+ this.#cleanupMiniButtons(pointsClone); 
+ this.#setInitialPointsState(pointsClone); 
+ statsDiv.appendChild(pointsClone); 
+ } 
+ 
+ // Add views and replies to comments if they exist (icon only) 
+ var viewsElement = comment.querySelector('.views'); 
+ if (viewsElement) { 
+ var viewsClone = viewsElement.cloneNode(true); 
+ this.#transformMetricToIconOnly(viewsClone, 'eye'); 
+ statsDiv.appendChild(viewsClone); 
+ } 
+ 
+ var repliesElement = comment.querySelector('.replies'); 
+ if (repliesElement) { 
+ var repliesClone = repliesElement.cloneNode(true); 
+ this.#transformMetricToIconOnly(repliesClone, 'message-dots'); 
+ statsDiv.appendChild(repliesClone); 
+ } 
+ 
+ commentFooter.appendChild(statsDiv); 
+ 
+ if (elements.title2Bottom) { 
+ var modernActions = this.#modernizeArticleBottomActions(elements.title2Bottom); 
+ if (modernActions) { 
+ commentFooter.appendChild(modernActions); 
+ } 
+ } 
+ 
+ fragment.appendChild(commentHeader); 
+ fragment.appendChild(commentContent); 
+ fragment.appendChild(commentFooter); 
+ 
+ comment.innerHTML = ''; 
+ comment.appendChild(fragment); 
+ } 
+ 
+ #modernizeArticleBottomActions(bottomElement) { 
+ var rtSub = bottomElement.querySelector('.mini_buttons.right.Sub'); 
+ var leftSub = bottomElement.querySelector('.left.Sub'); 
+ 
+ if (!rtSub && !leftSub) return null; 
+ 
+ var actionsContainer = document.createElement('div'); 
+ actionsContainer.className = 'article-bottom-actions'; 
+ 
+ if (leftSub) { 
+ // Renamed from article-share-buttons to article-tools-buttons 
+ var toolsContainer = document.createElement('div'); 
+ toolsContainer.className = 'article-tools-buttons'; 
+ 
+ // Keep the track/unsubscribe button in the footer 
+ var trackLink = leftSub.querySelector('a.track'); 
+ if (trackLink && !trackLink.classList.contains('a2a_button')) { 
+ var trackBtn = document.createElement('a'); 
+ trackBtn.href = trackLink.href; 
+ trackBtn.className = 'btn btn-icon btn-track'; 
+ 
+ // Determine if it's Subscribe or Unsubscribe based on link text 
+ var linkText = trackLink.textContent || ''; 
+ var isUnsubscribe = linkText.includes('Unsubscription') || linkText.includes('Unsubscribe'); 
+ var title = isUnsubscribe ? 'Unsubscribe' : 'Subscribe'; 
+ var iconClass = isUnsubscribe ? 'fa-regular fa-bell-slash' : 'fa-regular fa-bell'; 
+ 
+ trackBtn.setAttribute('title', title); 
+ trackBtn.innerHTML = '<i class="' + iconClass + '" aria-hidden="true"></i>'; 
+ toolsContainer.appendChild(trackBtn); 
+ } 
+ 
+ // Share button is now in header, so skip it here 
+ 
+ if (toolsContainer.children.length > 0) { 
+ actionsContainer.appendChild(toolsContainer); 
+ } 
+ } 
+ 
+ if (rtSub) { 
+ var actionButtons = document.createElement('div'); 
+ actionButtons.className = 'article-action-buttons'; 
+ 
+ // Edit and quote buttons are now in header, so skip them here 
+ 
+ var checkbox = rtSub.querySelector('input[type="checkbox"]'); 
+ if (checkbox) { 
+ // For articles, we only keep the checkbox for moderator/admin selection 
+ // Remove the multiquote button and label since you can't multiquote articles 
+ var checkboxContainer = document.createElement('div'); 
+ checkboxContainer.className = 'article-checkbox-container'; 
+ checkboxContainer.appendChild(checkbox.cloneNode(true)); 
+ actionButtons.appendChild(checkboxContainer); 
+ } 
+ 
+ if (actionButtons.children.length > 0) { 
+ actionsContainer.appendChild(actionButtons); 
+ } 
+ } 
+ 
+ return actionsContainer.children.length > 0 ? actionsContainer : null; 
+ } 
+ 
+ #cleanupTextNodes(element) { 
+ var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false); 
+ var nodesToRemove = []; 
+ var node; 
+ 
+ while (node = walker.nextNode()) { 
+ if (node.textContent.includes('&nbsp;') || node.textContent.trim() === '') { 
+ nodesToRemove.push(node); 
+ } 
+ } 
+ 
+ for (var i = 0; i < nodesToRemove.length; i++) { 
+ var textNode = nodesToRemove[i]; 
+ if (textNode.parentNode) { 
+ textNode.parentNode.removeChild(textNode); 
+ } 
+ } 
+ } 
+ 
+ #cleanupArticleContentStructure(contentElement) { 
+ contentElement.querySelectorAll('.st-emoji-widget').forEach(function(el) { 
+ el.remove(); 
+ }); 
+ 
+ contentElement.querySelectorAll(':empty').forEach(function(emptyEl) { 
+ if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) { 
+ emptyEl.remove(); 
+ } 
+ }); 
+ 
+ this.#processTextAndLineBreaks(contentElement); 
+ } 
+ 
+ #processTextAndLineBreaks(element) { 
+ var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false); 
+ var textNodes = []; 
+ var node; 
+ 
+ while (node = walker.nextNode()) { 
+ if (node.textContent.trim() !== '') { 
+ textNodes.push(node); 
+ } 
+ } 
+ 
+ for (var i = 0; i < textNodes.length; i++) { 
+ var textNode = textNodes[i]; 
+ if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) { 
+ var span = document.createElement('span'); 
+ span.className = 'post-text'; 
+ span.textContent = textNode.textContent; 
+ textNode.parentNode.replaceChild(span, textNode); 
+ } 
+ } 
+ 
+ var brElements = element.querySelectorAll('br'); 
+ for (var j = 0; j < brElements.length; j++) { 
+ var br = brElements[j]; 
+ 
+ if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header')) { 
+ continue; 
+ } 
+ 
+ var prevSibling = br.previousElementSibling; 
+ var nextSibling = br.nextElementSibling; 
+ 
+ if (prevSibling && nextSibling) { 
+ var prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text'); 
+ var nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text'); 
+ 
+ if (prevIsPostText && nextIsPostText) { 
+ prevSibling.classList.add('paragraph-end'); 
+ br.remove(); 
+ } else { 
+ br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em'; 
+ } 
+ } else { 
+ br.remove(); 
+ } 
+ } 
+ } 
+ 
+ #preserveMediaDimensions(element) { 
+ var images = element.querySelectorAll('img'); 
+ for (var i = 0; i < images.length; i++) { 
+ var img = images[i]; 
+ if (!img.style.maxWidth) { 
+ img.style.maxWidth = '100%'; 
+ } 
+ if (!img.style.height) { 
+ img.style.height = 'auto'; 
+ } 
+ 
+ var isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji'); 
+ var isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+ (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) || 
+ img.className.includes('emoji'); 
+ 
+ if (isTwemoji || isEmoji) { 
+ img.style.display = 'inline-block'; 
+ img.style.verticalAlign = 'text-bottom'; 
+ img.style.margin = '0 2px'; 
+ } else if (!img.style.display || img.style.display === 'inline') { 
+ img.style.display = 'block'; 
+ } 
+ 
+ if (!img.hasAttribute('alt')) { 
+ if (isEmoji) { 
+ img.setAttribute('alt', 'Emoji'); 
+ img.setAttribute('role', 'img'); 
+ } else { 
+ img.setAttribute('alt', 'Forum image'); 
+ } 
+ } 
+ } 
+ } 
+ 
+ // Import timestamp transformation methods from PostModernizer 
+ #transformTimestampElements(element) { 
+ var timestampSelectors = [ 
+ '.lt.Sub a span.when', 
+ '.lt.Sub time', 
+ '.lt.Sub span', 
+ '.lt.Sub a', 
+ '.title2.top time', 
+ '.title2.top span', 
+ '.title2.top a', 
+ 'span.when', 
+ 'a[href*="#entry"]', 
+ 'a[title*="/"]' 
+ ]; 
+ 
+ var timestampElements = element.querySelectorAll(timestampSelectors.join(', ')); 
+ 
+ for (var i = 0; i < timestampElements.length; i++) { 
+ var timestampElement = timestampElements[i]; 
+ 
+ // Skip if the element itself is already a modern timestamp 
+ if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) { 
+ continue; 
+ } 
+ 
+ // Skip if any ancestor is already a modern timestamp 
+ if (timestampElement.closest('.modern-timestamp')) { 
+ continue; 
+ } 
+ 
+ // Skip if this is an anchor that contains a modern timestamp 
+ if (timestampElement.tagName === 'A' && timestampElement.querySelector('.modern-timestamp')) { 
+ continue; 
+ } 
+ 
+ // Skip if this is a time element that contains a modern timestamp 
+ if (timestampElement.tagName === 'TIME' && timestampElement.querySelector('.modern-timestamp')) { 
+ continue; 
+ } 
+ 
+ // Skip if we're trying to transform something inside an already transformed timestamp 
+ if (timestampElement.closest('time.modern-timestamp, a .modern-timestamp')) { 
+ continue; 
+ } 
+ 
+ // Check if this is a .when element without a title attribute 
+ var isWhenWithoutTitle = timestampElement.classList && timestampElement.classList.contains('when') && !timestampElement.hasAttribute('title'); 
+ 
+ if (isWhenWithoutTitle) { 
+ // For .when elements without title, use static month/year display 
+ var staticDate = this.#extractStaticMonthYearFromWhen(timestampElement); 
+ if (staticDate) { 
+ var staticTimestamp = this.#createStaticMonthYearTimestamp(timestampElement, staticDate); 
+ if (staticTimestamp) { 
+ timestampElement.parentNode.replaceChild(staticTimestamp, timestampElement); 
+ } 
+ } 
+ continue; // Skip regular timestamp processing for these elements 
+ } 
+ 
+ var dateString = this.#extractDateFromElement(timestampElement); 
+ 
+ if (dateString) { 
+ var modernTimestamp = this.#createModernTimestamp(timestampElement, dateString); 
+ 
+ if (modernTimestamp && modernTimestamp !== timestampElement) { 
+ // Check if we're replacing an anchor that contains our timestamp 
+ var parent = timestampElement.parentNode; 
+ 
+ // If the parent is an anchor and we're replacing its only child 
+ if (parent && parent.tagName === 'A' && parent.children.length === 1 && 
+ parent.children[0] === timestampElement && parent.href && parent.href.includes('#entry')) { 
+ // Replace the entire anchor with our new timestamp link 
+ parent.parentNode.replaceChild(modernTimestamp, parent); 
+ } 
+ // If the element itself is an anchor with href 
+ else if (timestampElement.tagName === 'A' && timestampElement.href && 
+ timestampElement.href.includes('#entry') && 
+ timestampElement.children.length === 0) { 
+ // Replace the anchor directly 
+ timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement); 
+ } 
+ // If we're replacing a span inside an anchor 
+ else if (timestampElement.tagName === 'SPAN' && parent && parent.tagName === 'A' && 
+ parent.href && parent.href.includes('#entry')) { 
+ // Replace the span, but keep the anchor 
+ parent.replaceChild(modernTimestamp, timestampElement); 
+ } 
+ // Default replacement 
+ else { 
+ timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement); 
+ } 
+ } 
+ } 
+ } 
+ } 
+ 
+ #extractStaticMonthYearFromWhen(whenElement) { 
+ // Extract month and year from .when element structure 
+ var dayElement = whenElement.querySelector('.d_day'); 
+ var yearElement = whenElement.querySelector('.d_year'); 
+ 
+ if (!dayElement || !yearElement) { 
+ return null; 
+ } 
+ 
+ // Decode HTML entities from text content 
+ var monthText = this.#decodeHtmlEntities(dayElement.textContent || ''); 
+ var yearText = this.#decodeHtmlEntities(yearElement.textContent || ''); 
+ 
+ // Remove non-digit characters 
+ var monthNumber = parseInt(monthText.replace(/[^\d]/g, ''), 10); 
+ var yearNumber = parseInt(yearText.replace(/[^\d]/g, ''), 10); 
+ 
+ // Validate month (1-12) and year (reasonable range) 
+ if (monthNumber < 1 || monthNumber > 12 || yearNumber < 2000 || yearNumber > 2100) { 
+ return null; 
+ } 
+ 
+ // Month names for display 
+ var monthNames = [ 
+ 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+ 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' 
+ ]; 
+ 
+ var monthName = monthNames[monthNumber - 1]; 
+ 
+ // Return formatted string like "Dec, 2025" 
+ return monthName + ', ' + yearNumber; 
+ } 
+ 
+ #createStaticMonthYearTimestamp(originalElement, monthYearString) { 
+ // Create a simple static display for month/year dates 
+ var timeElement = document.createElement('time'); 
+ timeElement.className = 'modern-timestamp static-month-year'; 
+ 
+ // Generate unique ID for the timestamp 
+ var timestampId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9); 
+ 
+ // Clean the monthYearString by decoding any HTML entities 
+ var cleanMonthYearString = this.#decodeHtmlEntities(monthYearString); 
+ 
+ // Create a date object for the middle of the month for machine readability 
+ var monthYearMatch = cleanMonthYearString.match(/([A-Za-z]{3}), (\d{4})/); 
+ if (monthYearMatch) { 
+ var monthName = monthYearMatch[1]; 
+ var year = parseInt(monthYearMatch[2], 10); 
+ 
+ var monthNames = { 
+ 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 
+ 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 
+ }; 
+ 
+ if (monthNames.hasOwnProperty(monthName)) { 
+ var monthNumber = monthNames[monthName]; 
+ var jsDate = new Date(year, monthNumber, 15, 12, 0, 0); 
+ var utcISOString = jsDate.toISOString(); 
+ 
+ timeElement.setAttribute('datetime', utcISOString); 
+ timeElement.setAttribute('title', cleanMonthYearString); 
+ timeElement.setAttribute('data-timestamp-id', timestampId); 
+ timeElement.setAttribute('data-static-month-year', cleanMonthYearString); 
+ timeElement.setAttribute('data-original-element', 'when-without-title'); 
+ } 
+ } else { 
+ timeElement.setAttribute('title', cleanMonthYearString); 
+ timeElement.setAttribute('data-static-month-year', cleanMonthYearString); 
+ timeElement.setAttribute('data-original-element', 'when-without-title'); 
+ } 
+ 
+ // Create static month/year display (NO relative time) 
+ var staticSpan = document.createElement('span'); 
+ staticSpan.className = 'static-month-year-display'; 
+ staticSpan.textContent = cleanMonthYearString; 
+ 
+ timeElement.appendChild(staticSpan); 
+ 
+ // Try to preserve any link that might be around the original element 
+ var parent = originalElement.parentNode; 
+ if (parent && parent.tagName === 'A' && parent.href && parent.href.includes('#entry')) { 
+ var link = document.createElement('a'); 
+ link.href = parent.href; 
+ 
+ // Copy rel attribute if exists 
+ if (parent.hasAttribute('rel')) { 
+ link.setAttribute('rel', parent.getAttribute('rel')); 
+ } 
+ 
+ link.appendChild(timeElement); 
+ return link; 
+ } 
+ 
+ return timeElement; 
+ } 
+ 
+ #decodeHtmlEntities(text) { 
+ // Create a temporary textarea element to decode HTML entities 
+ var textarea = document.createElement('textarea'); 
+ textarea.innerHTML = text; 
+ return textarea.value; 
+ } 
+ 
+#extractDateFromElement(element) { 
+ // Strategy 1: Check title attribute (most reliable) 
+ if (element.hasAttribute('title')) { 
+ var title = element.getAttribute('title'); 
+ // Remove any time suffix like ":39" or ":10" but keep the time 
+ var cleanTitle = title.replace(/:(\d{2})$/, ''); 
+ return cleanTitle; 
+ } 
+ 
+ // Strategy 2: For .when elements without title, construct date from child elements 
+ if (element.classList && element.classList.contains('when')) { 
+ return this.#constructDateFromWhenElement(element); 
+ } 
+ 
+ // Strategy 3: Check parent elements for title 
+ var parentCheckElements = [ 
+ element.parentElement, 
+ element.parentElement ? element.parentElement.parentElement : null, 
+ element.closest('a'), 
+ element.closest('.lt.Sub'), 
+ element.closest('.title2') 
+ ]; 
+ 
+ for (var j = 0; j < parentCheckElements.length; j++) { 
+ var parent = parentCheckElements[j]; 
+ if (parent && parent.hasAttribute('title')) { 
+ var parentTitle = parent.getAttribute('title'); 
+ var cleanTitle = parentTitle.replace(/:(\d{2})$/, ''); 
+ return cleanTitle; 
+ } 
+ } 
+ 
+ // Strategy 4: Check text content - look for date patterns 
+ if (element.textContent) { 
+ var text = element.textContent.trim(); 
+ 
+ // Look for date patterns 
+ var datePatterns = [ 
+ /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i, 
+ /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}:\d{2}\s*(?:AM|PM)?)/i, 
+ /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2})/i, 
+ /(\d{1,2}\/\d{1,2}\/\d{4})/i 
+ ]; 
+ 
+ for (var k = 0; k < datePatterns.length; k++) { 
+ var pattern = datePatterns[k]; 
+ var match = text.match(pattern); 
+ if (match) { 
+ return match[1].trim(); 
+ } 
+ } 
+ } 
+ 
+ return null; 
+} 
+ 
+#constructDateFromWhenElement(whenElement) { 
+ // Extract day, month, and year from the .when element structure 
+ var dayElement = whenElement.querySelector('.d_day'); 
+ var monthElement = whenElement.querySelector('.d_month'); 
+ var yearElement = whenElement.querySelector('.d_year'); 
+ 
+ if (!dayElement || !yearElement) { 
+ return null; 
+ } 
+ 
+ // IMPORTANT: When there's no title, .d_day contains the MONTH, not the day 
+ // .d_month is usually empty or contains nothing useful 
+ // Example: <span class="d_day">12</span> means December 
+ 
+ // Get text and decode HTML entities 
+ var dayText = this.#decodeHtmlEntities(dayElement.textContent || ''); 
+ var monthNumber = parseInt(dayText.replace(/[^\d]/g, ''), 10); // Remove non-digits 
+ 
+ var yearText = this.#decodeHtmlEntities(yearElement.textContent || ''); 
+ var year = parseInt(yearText.replace(/[^\d]/g, ''), 10); // Remove non-digits 
+ 
+ // Validate month number (1-12) 
+ if (monthNumber < 1 || monthNumber > 12) { 
+ return null; 
+ } 
+ 
+ // Validate year (should be reasonable) 
+ if (year < 2000 || year > 2100) { 
+ return null; 
+ } 
+ 
+ // Month names for display 
+ var monthNames = [ 
+ 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+ 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' 
+ ]; 
+ 
+ var monthName = monthNames[monthNumber - 1]; 
+ 
+ // Return formatted string like "Dec, 2025" 
+ return monthName + ', ' + year; 
+} 
+ 
+#createModernTimestamp(originalElement, dateString) { 
+ if (typeof moment === 'undefined' || typeof moment.tz === 'undefined') { 
+ console.warn('Moment.js libraries not loaded, skipping timestamp transformation'); 
+ return originalElement; 
+ } 
+ 
+ // Prevent recursive transformation 
+ if (originalElement.classList && originalElement.classList.contains('modern-timestamp')) { 
+ return originalElement; 
+ } 
+ 
+ // Check if element contains a modern timestamp 
+ if (originalElement.querySelector && originalElement.querySelector('.modern-timestamp')) { 
+ return originalElement; 
+ } 
+ 
+ // Check if we're inside a modern timestamp 
+ if (originalElement.closest && originalElement.closest('.modern-timestamp')) { 
+ return originalElement; 
+ } 
+ 
+ var momentDate = this.#parseForumDate(dateString); 
+ 
+ if (!momentDate) { 
+ return originalElement; 
+ } 
+ 
+ // Get user's locale settings 
+ var userSettings = this.#getUserLocaleSettings(); 
+ 
+ // Create the link 
+ var link = document.createElement('a'); 
+ 
+ // Determine the href - try multiple sources 
+ var href = null; 
+ 
+ // 1. Check if original element is an anchor 
+ if (originalElement.tagName === 'A' && originalElement.hasAttribute('href')) { 
+ href = originalElement.getAttribute('href'); 
+ } 
+ // 2. Check if parent is an anchor 
+ else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
+ originalElement.parentElement.hasAttribute('href')) { 
+ href = originalElement.parentElement.getAttribute('href'); 
+ } 
+ // 3. Construct from post ID 
+ else { 
+ var articleElement = originalElement.closest('.article'); 
+ if (articleElement && articleElement.id) { 
+ var articleIdMatch = articleElement.id.match(/\d+/); 
+ if (articleIdMatch) { 
+ href = '#entry' + articleIdMatch[0]; 
+ } 
+ } 
+ } 
+ 
+ if (href) { 
+ link.href = href; 
+ 
+ // Copy rel attribute if exists 
+ if (originalElement.hasAttribute('rel')) { 
+ link.setAttribute('rel', originalElement.getAttribute('rel')); 
+ } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
+ originalElement.parentElement.hasAttribute('rel')) { 
+ link.setAttribute('rel', originalElement.parentElement.getAttribute('rel')); 
+ } 
+ } 
+ 
+ // Create the time element 
+ var timeElement = document.createElement('time'); 
+ timeElement.className = 'modern-timestamp'; 
+ 
+ // Generate unique ID for the timestamp 
+ var timestampId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9); 
+ 
+ // Store UTC ISO string for machine readability 
+ var utcISOString = momentDate.toISOString(); 
+ timeElement.setAttribute('datetime', utcISOString); 
+ 
+ // Convert to user's local timezone for display 
+ var userLocalDate = momentDate.tz(userSettings.timezone); 
+ 
+ // Create title with full localized date-time 
+ var titleFormat = userSettings.formats.longDateTime; 
+ var localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat); 
+ var timezoneAbbr = userLocalDate.format('z'); 
+ 
+ timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')'); 
+ 
+ // Store additional metadata 
+ timeElement.setAttribute('data-absolute-time', userLocalDate.locale(userSettings.locale).format('ddd, MMM D, YYYY h:mm A')); 
+ timeElement.setAttribute('data-timestamp-id', timestampId); 
+ timeElement.setAttribute('data-utc-date', utcISOString); 
+ timeElement.setAttribute('data-original-date', dateString); 
+ timeElement.setAttribute('data-parsed-date', dateString); 
+ timeElement.setAttribute('data-user-timezone', userSettings.timezone); 
+ timeElement.setAttribute('data-user-locale', userSettings.locale); 
+ timeElement.setAttribute('data-parsed-utc', utcISOString); 
+ 
+ // Create relative time display 
+ var relativeSpan = document.createElement('span'); 
+ relativeSpan.className = 'relative-time'; 
+ 
+ // Calculate relative time from UTC date 
+ var relativeTime = this.#formatTimeAgo(momentDate); 
+ relativeSpan.textContent = relativeTime; 
+ 
+ timeElement.appendChild(relativeSpan); 
+ 
+ // Only wrap with link if we have a valid href 
+ var finalElement; 
+ if (href) { 
+ link.appendChild(timeElement); 
+ finalElement = link; 
+ } else { 
+ finalElement = timeElement; 
+ } 
+ 
+ return finalElement; 
+} 
+ 
+#parseForumDate(dateString) { 
+ if (!dateString || typeof dateString !== 'string') { 
+ return null; 
+ } 
+ 
+ // Clean the date string - remove HTML entities and special characters 
+ var cleanDateString = this.#decodeHtmlEntities(dateString) 
+ .replace(/^Posted on\s*/i, '') 
+ .replace(/^on\s*/i, '') 
+ .replace(/^Posted\s*/i, '') 
+ .replace(/:(\d{2})$/, '') // Remove trailing seconds like ":39" 
+ .trim(); 
+ 
+ // Check if it's a "Month, Year" format (e.g., "Dec, 2025") 
+ var monthYearPattern = /^([A-Za-z]{3,}),?\s+(\d{4})$/; 
+ var monthYearMatch = cleanDateString.match(monthYearPattern); 
+ 
+ if (monthYearMatch) { 
+ var monthName = monthYearMatch[1]; 
+ var year = parseInt(monthYearMatch[2], 10); 
+ 
+ // Map month names to numbers 
+ var monthNames = { 
+ 'jan': 0, 'january': 0, 
+ 'feb': 1, 'february': 1, 
+ 'mar': 2, 'march': 2, 
+ 'apr': 3, 'april': 3, 
+ 'may': 4, 
+ 'jun': 5, 'june': 5, 
+ 'jul': 6, 'july': 6, 
+ 'aug': 7, 'august': 7, 
+ 'sep': 8, 'september': 8, 
+ 'oct': 9, 'october': 9, 
+ 'nov': 10, 'november': 10, 
+ 'dec': 11, 'december': 11 
+ }; 
+ 
+ var monthKey = monthName.toLowerCase(); 
+ if (monthNames.hasOwnProperty(monthKey)) { 
+ // Create date for the middle of the month (15th) 
+ var monthNumber = monthNames[monthKey]; 
+ var jsDate = new Date(year, monthNumber, 15, 12, 0, 0); 
+ if (!isNaN(jsDate)) { 
+ var momentDate = moment(jsDate); 
+ return momentDate.utc(); 
+ } 
+ } 
+ } 
+ 
+ // Common forum date formats 
+ var formats = [ 
+ 'MM/DD/YYYY, h:mm A', // 12/28/2025, 01:33 PM 
+ 'MM/DD/YYYY, h:mm:ss A', // 12/28/2025, 01:33:39 PM 
+ 'MM/DD/YYYY, HH:mm', // 12/28/2025, 13:33 
+ 'MM/DD/YYYY, HH:mm:ss', // 12/28/2025, 13:33:39 
+ 'MM-DD-YYYY, h:mm A', // 12-28-2025, 01:33 PM 
+ 'DD/MM/YYYY, h:mm A', // 28/12/2025, 01:33 PM 
+ 'DD/MM/YYYY, HH:mm', // 28/12/2025, 13:33 
+ 'YYYY-MM-DD HH:mm:ss', // 2025-12-28 13:33:39 
+ 'YYYY-MM-DDTHH:mm:ss', // 2025-12-28T13:33:39 
+ 'MMMM D, YYYY', // December 28, 2025 
+ 'MM/DD/YYYY', // 12/28/2025 
+ 'M/D/YYYY', // 12/28/2025 
+ 'DD MMMM YYYY', // 28 December 2025 
+ 'MMM D, YYYY', // Dec 28, 2025 
+ 'MMM, YYYY', // Dec, 2025 
+ 'MMMM, YYYY', // December, 2025 
+ ]; 
+ 
+ var momentDate = null; 
+ 
+ // Try parsing with each format 
+ for (var i = 0; i < formats.length; i++) { 
+ momentDate = moment(cleanDateString, formats[i], true); 
+ if (momentDate && momentDate.isValid()) { 
+ break; 
+ } 
+ } 
+ 
+ // If no format worked, try to parse the components manually 
+ if (!momentDate || !momentDate.isValid()) { 
+ // Try to parse "12/28/2025, 01:33 PM" pattern 
+ var pattern = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i; 
+ var match = cleanDateString.match(pattern); 
+ 
+ if (match) { 
+ var month = parseInt(match[1], 10) - 1; 
+ var day = parseInt(match[2], 10); 
+ var year = parseInt(match[3], 10); 
+ var hour = parseInt(match[4], 10); 
+ var minute = parseInt(match[5], 10); 
+ var second = match[6] ? parseInt(match[6], 10) : 0; 
+ var ampm = match[7] ? match[7].toUpperCase() : null; 
+ 
+ // Convert 12-hour format to 24-hour if needed 
+ if (ampm === 'PM' && hour < 12) { 
+ hour += 12; 
+ } else if (ampm === 'AM' && hour === 12) { 
+ hour = 0; 
+ } 
+ 
+ var jsDate = new Date(year, month, day, hour, minute, second); 
+ if (!isNaN(jsDate)) { 
+ momentDate = moment(jsDate); 
+ } 
+ } 
+ } 
+ 
+ // Fallback to JavaScript Date for simple month/day/year 
+ if (!momentDate || !momentDate.isValid()) { 
+ // Try to parse simple date like "12/28/2025" 
+ var simpleMatch = cleanDateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/); 
+ if (simpleMatch) { 
+ var month = parseInt(simpleMatch[1], 10) - 1; 
+ var day = parseInt(simpleMatch[2], 10); 
+ var year = parseInt(simpleMatch[3], 10); 
+ 
+ var jsDate = new Date(year, month, day, 12, 0, 0); 
+ if (!isNaN(jsDate)) { 
+ momentDate = moment(jsDate); 
+ } 
+ } 
+ } 
+ 
+ // Final fallback 
+ if (!momentDate || !momentDate.isValid()) { 
+ var jsDate = new Date(cleanDateString); 
+ if (!isNaN(jsDate)) { 
+ momentDate = moment(jsDate); 
+ } 
+ } 
+ 
+ if (momentDate && momentDate.isValid()) { 
+ // IMPORTANT: The forum shows times in USER'S LOCAL TIMEZONE 
+ // So we need to interpret it as local time, then convert to UTC 
+ return momentDate.utc(); 
+ } 
+ 
+ return null; 
+} 
+ 
+#formatTimeAgo(date) { 
+ if (!date || !date.isValid()) { 
+ return 'Unknown time'; 
+ } 
+ 
+ // Convert UTC date to user's local timezone for display 
+ var now = moment(); 
+ var userDate = moment(date).local(); 
+ 
+ var diffInSeconds = now.diff(userDate, 'seconds'); 
+ var diffInMinutes = now.diff(userDate, 'minutes'); 
+ var diffInHours = now.diff(userDate, 'hours'); 
+ var diffInDays = now.diff(userDate, 'days'); 
+ var diffInMonths = now.diff(userDate, 'months'); 
+ var diffInYears = now.diff(userDate, 'years'); 
+ 
+ // Check if this is a month/year only date (no specific day) 
+ // If the day is the 15th (default for month/year dates), use month/year format 
+ if (userDate.date() === 15) { 
+ // It's likely a month/year only date 
+ // Format as "Dec, 2025" 
+ return userDate.format('MMM, YYYY'); 
+ } 
+ 
+ // Smart time ago display with precision for full dates 
+ if (diffInSeconds < 0) { 
+ return 'Just now'; 
+ } else if (diffInSeconds < 45) { 
+ return 'Just now'; 
+ } else if (diffInSeconds < 90) { 
+ return 'A minute ago'; 
+ } else if (diffInMinutes < 45) { 
+ return diffInMinutes + ' minutes ago'; 
+ } else if (diffInMinutes < 90) { 
+ return 'An hour ago'; 
+ } else if (diffInHours < 24) { 
+ return diffInHours + ' hours ago'; 
+ } else if (diffInDays === 1) { 
+ return 'Yesterday'; 
+ } else if (diffInDays < 7) { 
+ return diffInDays + ' days ago'; 
+ } else if (diffInDays < 30) { 
+ var weeks = Math.floor(diffInDays / 7); 
+ return weeks + (weeks === 1 ? ' week ago' : ' weeks ago'); 
+ } else if (diffInDays < 365) { 
+ var months = Math.floor(diffInDays / 30); 
+ return months + (months === 1 ? ' month ago' : ' months ago'); 
+ } else { 
+ var years = Math.floor(diffInDays / 365); 
+ return years + (years === 1 ? ' year ago' : ' years ago'); 
+ } 
+} 
+ 
+#getUserLocaleSettings() { 
+ try { 
+ var locale = navigator.language || 'en-US'; 
+ 
+ // Detect time format preference 
+ var testTime = moment().locale(locale).format('LT'); 
+ var uses24Hour = !testTime.includes('AM') && !testTime.includes('PM'); 
+ 
+ // Get user's timezone from browser 
+ var timezone = moment.tz.guess() || 'UTC'; 
+ 
+ return { 
+ locale: locale, 
+ timezone: timezone, 
+ uses24Hour: uses24Hour, 
+ formats: { 
+ longDateTime: 'LLLL', 
+ mediumDateTime: 'llll', 
+ shortDateTime: 'lll', 
+ timeOnly: uses24Hour ? 'HH:mm' : 'h:mm A', 
+ dateOnly: 'll' 
+ } 
+ }; 
+ } catch (error) { 
+ return { 
+ locale: 'en-US', 
+ timezone: 'UTC', 
+ uses24Hour: false, 
+ formats: { 
+ longDateTime: 'LLLL', 
+ mediumDateTime: 'llll', 
+ shortDateTime: 'lll', 
+ timeOnly: 'h:mm A', 
+ dateOnly: 'll' 
+ } 
+ }; 
+ } 
+} 
+ 
+ #modernizeQuotes(contentWrapper) { 
+ var quotes = contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)'); 
+ for (var i = 0; i < quotes.length; i++) { 
+ var container = quotes[i]; 
+ if (container.classList.contains('quote-modernized')) continue; 
+ this.#transformQuote(container); 
+ container.classList.add('quote-modernized'); 
+ } 
+ } 
+ 
+ #modernizeSpoilers(contentWrapper) { 
+ var spoilers = contentWrapper.querySelectorAll('div[align="center"].spoiler'); 
+ for (var i = 0; i < spoilers.length; i++) { 
+ var container = spoilers[i]; 
+ if (container.classList.contains('spoiler-modernized')) continue; 
+ this.#transformSpoiler(container); 
+ container.classList.add('spoiler-modernized'); 
+ } 
+ } 
+ 
+ #modernizeCodeBlocksInContent(contentWrapper) { 
+ var codeBlocks = contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)'); 
+ for (var i = 0; i < codeBlocks.length; i++) { 
+ var container = codeBlocks[i]; 
+ if (container.classList.contains('code-modernized')) continue; 
+ this.#transformCodeBlock(container); 
+ container.classList.add('code-modernized'); 
+ } 
+ } 
+ 
+ #transformQuote(container) { 
+ var quoteTop = container.querySelector('.quote_top'); 
+ var quoteContent = container.querySelector('.quote'); 
+ 
+ if (!quoteTop || !quoteContent) return; 
+ 
+ var quoteText = quoteTop.textContent.trim(); 
+ var match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/); 
+ var author = match ? match[1].trim() : 'Unknown'; 
+ var quoteLink = quoteTop.querySelector('a'); 
+ var linkHref = quoteLink ? quoteLink.href : '#'; 
+ 
+ var modernQuote = document.createElement('div'); 
+ modernQuote.className = 'modern-quote'; 
+ 
+ var html = '<div class="quote-header">' + 
+ '<div class="quote-meta">' + 
+ '<div class="quote-icon">' + 
+ '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' + 
+ '</div>' + 
+ '<div class="quote-info">' + 
+ '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' + 
+ '</div>' + 
+ '</div>' + 
+ '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">' + 
+ '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' + 
+ '</a>' + 
+ '</div>'; 
+ 
+ html += '<div class="quote-content">' + quoteContent.innerHTML + '</div>'; 
+ 
+ modernQuote.innerHTML = html; 
+ this.#preserveMediaDimensions(modernQuote.querySelector('.quote-content')); 
+ container.replaceWith(modernQuote); 
+ } 
+ 
+ #transformSpoiler(container) { 
+ var spoilerTop = container.querySelector('.code_top'); 
+ var spoilerContent = container.querySelector('.code[align="left"]'); 
+ 
+ if (!spoilerTop || !spoilerContent) return; 
+ 
+ var modernSpoiler = document.createElement('div'); 
+ modernSpoiler.className = 'modern-spoiler'; 
+ 
+ var html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' + 
+ '<div class="spoiler-icon">' + 
+ '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' + 
+ '</div>' + 
+ '<div class="spoiler-info">' + 
+ '<span class="spoiler-title">SPOILER</span>' + 
+ '</div>' + 
+ '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' + 
+ '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '</div>'; 
+ 
+ html += '<div class="spoiler-content">' + spoilerContent.innerHTML + '</div>'; 
+ 
+ modernSpoiler.innerHTML = html; 
+ this.#preserveMediaDimensions(modernSpoiler.querySelector('.spoiler-content')); 
+ container.replaceWith(modernSpoiler); 
+ 
+ this.#addSpoilerEventListeners(modernSpoiler); 
+ } 
+ 
+ #addSpoilerEventListeners(spoilerElement) { 
+ var spoilerHeader = spoilerElement.querySelector('.spoiler-header'); 
+ var spoilerToggle = spoilerElement.querySelector('.spoiler-toggle'); 
+ var spoilerContent = spoilerElement.querySelector('.spoiler-content'); 
+ 
+ spoilerContent.style.maxHeight = '0'; 
+ spoilerContent.style.padding = '0 16px'; 
+ spoilerHeader.setAttribute('aria-expanded', 'false'); 
+ 
+ var toggleSpoiler = function() { 
+ var isExpanded = !spoilerElement.classList.contains('expanded'); 
+ 
+ if (isExpanded) { 
+ spoilerElement.classList.add('expanded'); 
+ spoilerHeader.setAttribute('aria-expanded', 'true'); 
+ spoilerContent.style.maxHeight = spoilerContent.scrollHeight + 'px'; 
+ spoilerContent.style.padding = '16px'; 
+ } else { 
+ spoilerElement.classList.remove('expanded'); 
+ spoilerHeader.setAttribute('aria-expanded', 'false'); 
+ spoilerContent.style.maxHeight = '0'; 
+ spoilerContent.style.padding = '0 16px'; 
+ } 
+ }; 
+ 
+ spoilerHeader.addEventListener('click', toggleSpoiler); 
+ if (spoilerToggle) { 
+ spoilerToggle.addEventListener('click', function(e) { 
+ e.stopPropagation(); 
+ toggleSpoiler(); 
+ }); 
+ } 
+ } 
+ 
+ #transformCodeBlock(container) { 
+ var codeTop = container.querySelector('.code_top'); 
+ var codeContent = container.querySelector('.code'); 
+ 
+ if (!codeTop || !codeContent) return; 
+ 
+ var codeText = codeTop.textContent.trim(); 
+ var codeType = codeText.toUpperCase(); 
+ 
+ var modernCode = document.createElement('div'); 
+ modernCode.className = 'modern-code'; 
+ 
+ var html = '<div class="code-header">' + 
+ '<div class="code-icon">' + 
+ '<i class="fa-regular fa-code" aria-hidden="true"></i>' + 
+ '</div>' + 
+ '<div class="code-info">' + 
+ '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' + 
+ '</div>' + 
+ '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' + 
+ '<i class="fa-regular fa-copy" aria-hidden="true"></i>' + 
+ '</button>' + 
+ '</div>'; 
+ 
+ html += '<div class="code-content">' + 
+ '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' + 
+ '</div>'; 
+ 
+ modernCode.innerHTML = html; 
+ container.replaceWith(modernCode); 
+ 
+ this.#addCodeEventListeners(modernCode, codeContent.textContent); 
+ } 
+ 
+ #addCodeEventListeners(codeElement, codeText) { 
+ var copyBtn = codeElement.querySelector('.code-copy-btn'); 
+ 
+ if (copyBtn) { 
+ copyBtn.addEventListener('click', function(e) { 
+ e.stopPropagation(); 
+ this.#copyCodeToClipboard(codeText, 'code'); 
+ }.bind(this)); 
+ } 
+ } 
+ 
+ #copyCodeToClipboard(codeText, codeType) { 
+ if (navigator.clipboard && navigator.clipboard.writeText) { 
+ navigator.clipboard.writeText(codeText).then(function() { 
+ this.#showCopyNotification('Copied ' + codeType + ' to clipboard!'); 
+ }.bind(this)).catch(function() { 
+ this.#fallbackCopyCode(codeText, codeType); 
+ }.bind(this)); 
+ } else { 
+ this.#fallbackCopyCode(codeText, codeType); 
+ } 
+ } 
+ 
+ #fallbackCopyCode(text, codeType) { 
+ var textArea = document.createElement('textarea'); 
+ textArea.value = text; 
+ textArea.style.cssText = 'position:fixed;opacity:0'; 
+ document.body.appendChild(textArea); 
+ textArea.focus(); 
+ textArea.select(); 
+ 
+ try { 
+ if (document.execCommand('copy')) { 
+ this.#showCopyNotification('Copied ' + codeType + ' to clipboard!'); 
+ } else { 
+ this.#showCopyNotification('Failed to copy ' + codeType); 
+ } 
+ } catch { 
+ this.#showCopyNotification('Failed to copy ' + codeType); 
+ } finally { 
+ document.body.removeChild(textArea); 
+ } 
+ } 
+ 
+ #showCopyNotification(message) { 
+ var notification = document.createElement('div'); 
+ notification.className = 'copy-notification'; 
+ notification.textContent = message; 
+ 
+ notification.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;background:var(--success-color);color:white;border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index: 9;font-weight:500;display:flex;align-items:center;gap:8px;transform:translateX(calc(100% + 20px));opacity:0;transition:transform 0.3s ease-out,opacity 0.3s ease-out;pointer-events:none;white-space:nowrap;'; 
+ 
+ var icon = document.createElement('i'); 
+ icon.className = 'fa-regular fa-check-circle'; 
+ icon.setAttribute('aria-hidden', 'true'); 
+ notification.prepend(icon); 
+ 
+ document.body.appendChild(notification); 
+ 
+ requestAnimationFrame(function() { 
+ requestAnimationFrame(function() { 
+ notification.style.transform = 'translateX(0)'; 
+ notification.style.opacity = '1'; 
+ }); 
+ }); 
+ 
+ var dismissTimer = setTimeout(function() { 
+ notification.style.transform = 'translateX(calc(100% + 20px))'; 
+ notification.style.opacity = '0'; 
+ 
+ notification.addEventListener('transitionend', function() { 
+ if (notification.parentNode) { 
+ notification.parentNode.removeChild(notification); 
+ } 
+ }, { once: true }); 
+ }, 2000); 
+ 
+ notification.style.pointerEvents = 'auto'; 
+ notification.style.cursor = 'pointer'; 
+ notification.addEventListener('click', function() { 
+ clearTimeout(dismissTimer); 
+ notification.style.transform = 'translateX(calc(100% + 20px))'; 
+ notification.style.opacity = '0'; 
+ 
+ notification.addEventListener('transitionend', function() { 
+ if (notification.parentNode) { 
+ notification.parentNode.removeChild(notification); 
+ } 
+ }, { once: true }); 
+ }); 
+ } 
+ 
+ #cleanupMiniButtons(element) { 
+ var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false); 
+ var nodesToRemove = []; 
+ var node; 
+ 
+ while (node = walker.nextNode()) { 
+ if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) { 
+ nodesToRemove.push(node); 
+ } 
+ } 
+ 
+ for (var i = 0; i < nodesToRemove.length; i++) { 
+ var textNode = nodesToRemove[i]; 
+ if (textNode.parentNode) { 
+ textNode.parentNode.removeChild(textNode); 
+ } 
+ } 
+ } 
+ 
+ #setInitialPointsState(pointsContainer) { 
+ var pointsPos = pointsContainer.querySelector('.points_pos'); 
+ var pointsNeg = pointsContainer.querySelector('.points_neg'); 
+ var pointsUp = pointsContainer.querySelector('.points_up'); 
+ var pointsDown = pointsContainer.querySelector('.points_down'); 
+ 
+ if (pointsPos) { 
+ if (pointsUp) pointsUp.classList.add('active'); 
+ if (pointsDown) pointsDown.classList.remove('active'); 
+ } else if (pointsNeg) { 
+ var pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null; 
+ var pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null; 
+ 
+ if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) { 
+ if (pointsUp) pointsUp.classList.add('active'); 
+ } 
+ if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) { 
+ if (pointsDown) pointsDown.classList.add('active'); 
+ } 
+ 
+ if (pointsUp && pointsUp.classList.contains('active')) { 
+ if (pointsDown) pointsDown.classList.remove('active'); 
+ } else if (pointsDown && pointsDown.classList.contains('active')) { 
+ if (pointsUp) pointsUp.classList.remove('active'); 
+ } 
+ } 
+ } 
+ 
+ #updatePointsContainerActiveState(pointsContainer) { 
+ if (!pointsContainer) return; 
+ 
+ var hasEm = pointsContainer.querySelector('em'); 
+ pointsContainer.classList.toggle('active', !!hasEm); 
+ } 
+ 
+ #escapeHtml(unsafe) { 
+ if (typeof unsafe !== 'string') return unsafe; 
+ return unsafe 
+ .replace(/&/g, '&amp;') 
+ .replace(/</g, '&lt;') 
+ .replace(/>/g, '&gt;') 
+ .replace(/"/g, '&quot;') 
+ .replace(/'/g, '&#039;'); 
+ } 
+ 
+ destroy() { 
+ var ids = [this.#articleModernizerId, this.#debouncedArticleObserverId, this.#emojiObserverId]; 
+ 
+ for (var i = 0; i < ids.length; i++) { 
+ if (ids[i] && globalThis.forumObserver) { 
+ globalThis.forumObserver.unregister(ids[i]); 
+ } 
+ } 
+ 
+ if (this.#retryTimeoutId) { 
+ clearTimeout(this.#retryTimeoutId); 
+ this.#retryTimeoutId = null; 
+ } 
+ 
+ console.log('Article Modernizer destroyed'); 
+ } 
+} 
+ 
+// Initialize Article Modernizer 
+(function initArticleModernizer() { 
+ var bodyId = document.body.id; 
+ var shouldModernize = bodyId === 'blog'; 
+ 
+ if (!shouldModernize) { 
+ console.log('Article Modernizer skipped for body#' + bodyId); 
+ return; 
+ } 
+ 
+ var init = function() { 
+ try { 
+ globalThis.articleModernizer = new ArticleModernizer(); 
+ } catch (error) { 
+ console.error('Failed to create Article Modernizer instance:', error); 
+ 
+ setTimeout(function() { 
+ if (!globalThis.articleModernizer) { 
+ try { 
+ globalThis.articleModernizer = new ArticleModernizer(); 
+ } catch (retryError) { 
+ console.error('Article Modernizer failed on retry:', retryError); 
+ } 
+ } 
+ }, 100); 
+ } 
+ }; 
+ 
+ if (document.readyState !== 'loading') { 
+ queueMicrotask(init); 
+ } else { 
+ init(); 
+ } 
+})(); 
+ 
+// Cleanup on page hide 
+globalThis.addEventListener('pagehide', function() { 
+ if (globalThis.articleModernizer && typeof globalThis.articleModernizer.destroy === 'function') { 
+ globalThis.articleModernizer.destroy(); 
+ } 
+}); 
