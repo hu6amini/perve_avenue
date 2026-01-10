@@ -32,18 +32,24 @@ class MediaDimensionExtractor {
 
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
-    // Precomputed static values
-    static #EMOJI_SIZE_NORMAL = 20;
-    static #EMOJI_SIZE_SMALL = 18;
+    // UPDATED CONSTANTS TO MATCH NEW CSS HEADING SIZES:
+    static #EMOJI_SIZE_NORMAL = 20;      // Body text (16px × 1.25 = 20px)
+    static #EMOJI_SIZE_SMALL = 16;       // Signatures/quotes/spoilers
+    static #EMOJI_SIZE_H1 = 35;          // h1: 32px × 1.1 = 35px
+    static #EMOJI_SIZE_H2 = 29;          // h2: 25px × 1.15 = 29px
+    static #EMOJI_SIZE_H3 = 24;          // h3: 20px × 1.2 = 24px
+    static #EMOJI_SIZE_H4 = 20;          // h4: 16px × 1.25 = 20px
+    static #EMOJI_SIZE_H5 = 18;          // h5: 14px × 1.3 = 18px
+    static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
-constructor() {
-    this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-    // Cache context elements immediately
-    this.#cacheContextElements();
-    this.#init();
-}
+    constructor() {
+        this.#imageLoadHandler = this.#handleImageLoad.bind(this);
+        // Cache context elements immediately
+        this.#cacheContextElements();
+        this.#init();
+    }
 
     #init() {
         // Immediate initialization - DOM is ready (defer)
@@ -201,10 +207,27 @@ constructor() {
                         (img.alt && (img.alt.includes(':)') || img.alt.includes(':(') || img.alt.includes('emoji')));
         
         if (isTwemoji) {
-            // FORCE twemoji dimensions, ignore everything else
-            const size = this.#isInSmallContext(img) ? 
-                MediaDimensionExtractor.#EMOJI_SIZE_SMALL : 
-                MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
+            // Determine which size to use based on context
+            let size = MediaDimensionExtractor.#EMOJI_SIZE_NORMAL;
+            
+            // Check for small contexts first (signatures, quotes, spoilers)
+            if (this.#isInSmallContext(img)) {
+                size = MediaDimensionExtractor.#EMOJI_SIZE_SMALL;
+            } 
+            // Check for headings
+            else {
+                const heading = img.closest('h1, h2, h3, h4, h5, h6');
+                if (heading) {
+                    switch(heading.tagName) {
+                        case 'H1': size = MediaDimensionExtractor.#EMOJI_SIZE_H1; break;
+                        case 'H2': size = MediaDimensionExtractor.#EMOJI_SIZE_H2; break;
+                        case 'H3': size = MediaDimensionExtractor.#EMOJI_SIZE_H3; break;
+                        case 'H4': size = MediaDimensionExtractor.#EMOJI_SIZE_H4; break;
+                        case 'H5': size = MediaDimensionExtractor.#EMOJI_SIZE_H5; break;
+                        case 'H6': size = MediaDimensionExtractor.#EMOJI_SIZE_H6; break;
+                    }
+                }
+            }
             
             // Remove any existing dimension attributes first
             img.removeAttribute('width');
