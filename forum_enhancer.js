@@ -33,14 +33,14 @@ class MediaDimensionExtractor {
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
     // UPDATED CONSTANTS TO MATCH NEW CSS HEADING SIZES:
-    static #EMOJI_SIZE_NORMAL = 20;      // Body text (16px × 1.25 = 20px)
-    static #EMOJI_SIZE_SMALL = 16;       // Signatures/quotes/spoilers
-    static #EMOJI_SIZE_H1 = 35;          // h1: 32px × 1.1 = 35px
-    static #EMOJI_SIZE_H2 = 29;          // h2: 25px × 1.15 = 29px
-    static #EMOJI_SIZE_H3 = 24;          // h3: 20px × 1.2 = 24px
-    static #EMOJI_SIZE_H4 = 20;          // h4: 16px × 1.25 = 20px
-    static #EMOJI_SIZE_H5 = 18;          // h5: 14px × 1.3 = 18px
-    static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
+static #EMOJI_SIZE_NORMAL = 20;      // Body text: 16px × 1.25 = 20px
+static #EMOJI_SIZE_SMALL = 18;       // Signatures/quotes: 14px × 1.25 ≈ 18px
+static #EMOJI_SIZE_H1 = 35;          // h1: 32px × 1.1 = 35px
+static #EMOJI_SIZE_H2 = 29;          // h2: 25px × 1.15 = 29px
+static #EMOJI_SIZE_H3 = 24;          // h3: 20px × 1.2 = 24px
+static #EMOJI_SIZE_H4 = 20;          // h4: 16px × 1.25 = 20px
+static #EMOJI_SIZE_H5 = 18;          // h5: 14px × 1.3 = 18px
+static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
