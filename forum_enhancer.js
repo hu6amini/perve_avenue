@@ -3268,7 +3268,8 @@ globalThis.addEventListener('pagehide', () => {
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
-// enhanced accessibility, modern code blocks, and robust Moment.js timestamps
+// enhanced accessibility, modern code blocks, robust Moment.js timestamps,
+// and modern attachment styling
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -3277,6 +3278,7 @@ class PostModernizer {
     #searchPostObserverId = null;
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
+    #attachmentObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -3333,6 +3335,7 @@ class PostModernizer {
         this.#setupEnhancedAnchorNavigation();
         this.#enhanceQuoteLinks();
         this.#modernizeCodeBlocks();
+        this.#modernizeAttachments();
 
         console.log('✅ Post Modernizer with all optimizations initialized');
     } catch (error) {
@@ -3681,7 +3684,7 @@ class PostModernizer {
     const localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat);
     const timezoneAbbr = userLocalDate.format('z');
     
-    timeElement.setAttribute('title', `${localizedTitle} (${timezoneAbbr})`);
+    timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
     
     // Create relative time display
     const relativeSpan = document.createElement('span');
@@ -3735,7 +3738,7 @@ class PostModernizer {
             const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
             const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
             const currentTimezoneAbbr = currentUserLocalDate.format('z');
-            timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+            timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
         }
     }, 30000);
     
@@ -3940,7 +3943,7 @@ class PostModernizer {
             
             const timeElement = document.createElement('time');
             timeElement.setAttribute('datetime', momentDate.toISOString());
-            timeElement.setAttribute('title', `${formattedTime} (${timezoneAbbr})`);
+            timeElement.setAttribute('title', formattedTime + ' (' + timezoneAbbr + ')');
             timeElement.textContent = this.#formatTimeAgo(momentDate);
             
             // Generate unique ID for updates
@@ -3970,7 +3973,7 @@ class PostModernizer {
                     const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
                     const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
                     const currentTimezoneAbbr = currentUserLocalDate.format('z');
-                    timeElement.setAttribute('title', `${currentTitle} (${currentTimezoneAbbr})`);
+                    timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
                 }
             }, 30000);
             
@@ -4185,6 +4188,350 @@ class PostModernizer {
         });
     });
 }
+
+    // ==============================
+    // ATTACHMENT TRANSFORMATION
+    // ==============================
+
+    #modernizeAttachments() {
+        this.#processExistingAttachments();
+        this.#setupAttachmentObserver();
+    }
+
+    #processExistingAttachments() {
+        document.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
+            if (container.classList.contains('attachment-modernized')) return;
+            this.#transformAttachment(container);
+            container.classList.add('attachment-modernized');
+        });
+    }
+
+    #transformAttachment(container) {
+        // Get the fancytop element (attachment header)
+        const fancyTop = container.previousElementSibling;
+        if (!fancyTop || !fancyTop.classList.contains('fancytop')) {
+            return;
+        }
+
+        // Check what type of attachment we have
+        const isImageAttachment = container.querySelector('a[href*="image.forumcommunity.it"]') || 
+                                  container.querySelector('img[src*="image.forumcommunity.it"]');
+        
+        const isFileAttachment = container.querySelector('img[src*="mime_types/"]') || 
+                                container.querySelector('a[onclick*="act=Attach"]');
+
+        if (!isImageAttachment && !isFileAttachment) {
+            return;
+        }
+
+        // Remove the fancytop header (we'll replace it with modern header)
+        fancyTop.remove();
+
+        // Create modern attachment container
+        const modernAttachment = document.createElement('div');
+        modernAttachment.className = 'modern-attachment';
+
+        let html = '';
+
+        if (isImageAttachment) {
+            html = this.#createImageAttachmentHTML(container);
+        } else if (isFileAttachment) {
+            html = this.#createFileAttachmentHTML(container);
+        }
+
+        if (html) {
+            modernAttachment.innerHTML = html;
+            container.replaceWith(modernAttachment);
+            
+            // Add event listeners for image attachments
+            if (isImageAttachment) {
+                this.#addImageAttachmentListeners(modernAttachment);
+            }
+            
+            // Add event listeners for file attachments
+            if (isFileAttachment) {
+                this.#addFileAttachmentListeners(modernAttachment);
+            }
+        }
+    }
+
+    #createImageAttachmentHTML(container) {
+        // Extract image link and image element
+        const imageLink = container.querySelector('a[href*="image.forumcommunity.it"]');
+        const imageElement = container.querySelector('img[src*="image.forumcommunity.it"]');
+        
+        if (!imageLink || !imageElement) {
+            return '';
+        }
+
+        const imageUrl = imageLink.getAttribute('href') || imageElement.getAttribute('src');
+        const imageAlt = imageElement.getAttribute('alt') || 'Attached image';
+        const imageTitle = imageLink.getAttribute('title') || imageAlt;
+        
+        // Extract dimensions if available
+        const width = imageElement.getAttribute('width') || '';
+        const height = imageElement.getAttribute('height') || '';
+        
+        // Create download URL (same as image URL)
+        const downloadUrl = imageUrl;
+        
+        // Get file name from URL
+        const fileName = this.#extractFileNameFromUrl(imageUrl) || 'image.jpg';
+        const fileSize = this.#estimateImageSize(width, height);
+        
+        let html = '<div class="attachment-header">' +
+            '<div class="attachment-icon">' +
+            '<i class="fa-regular fa-image" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="attachment-info">' +
+            '<span class="attachment-title">Attached Image</span>' +
+            '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileSize + '</span>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+            '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download image" target="_blank" rel="nofollow">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '</a>' +
+            '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-view-btn" title="View full size" target="_blank" rel="nofollow">' +
+            '<i class="fa-regular fa-expand" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>' +
+            '</div>';
+        
+        html += '<div class="attachment-preview">' +
+            '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-image-link" title="' + this.#escapeHtml(imageTitle) + '" target="_blank" rel="nofollow">' +
+            '<img src="' + this.#escapeHtml(imageElement.getAttribute('src')) + '" alt="' + this.#escapeHtml(imageAlt) + '" loading="lazy" decoding="async" style="max-width: 100%; height: auto; display: block;">' +
+            '</a>' +
+            '</div>';
+        
+        return html;
+    }
+
+    #createFileAttachmentHTML(container) {
+        // Extract file information
+        const fileLink = container.querySelector('a[onclick*="act=Attach"]');
+        const mimeIcon = container.querySelector('img[src*="mime_types/"]');
+        const fileNameElement = fileLink ? fileLink.querySelector('span.post-text') : null;
+        const downloadCountElement = container.querySelector('small');
+        
+        if (!fileLink) {
+            return '';
+        }
+
+        // Extract file information
+        const fileName = fileNameElement ? fileNameElement.textContent.trim() : 'Unknown file';
+        const downloadCount = downloadCountElement ? downloadCountElement.textContent.replace(/[^\d]/g, '') : '0';
+        const fileType = this.#getFileTypeFromName(fileName);
+        const fileIcon = this.#getFileIcon(fileType);
+        
+        // Extract download URL from onclick handler
+        let downloadUrl = '#';
+        const onclickAttr = fileLink.getAttribute('onclick');
+        if (onclickAttr) {
+            const urlMatch = onclickAttr.match(/window\.open\('([^']+)'/);
+            if (urlMatch && urlMatch[1]) {
+                downloadUrl = urlMatch[1];
+            }
+        }
+        
+        let html = '<div class="attachment-header">' +
+            '<div class="attachment-icon">' +
+            '<i class="' + fileIcon + '" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="attachment-info">' +
+            '<span class="attachment-title">Attached File</span>' +
+            '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileType.toUpperCase() + '</span>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+            '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download file" target="_blank" rel="nofollow" onclick="' + this.#escapeHtml(onclickAttr || '') + '">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>' +
+            '</div>';
+        
+        html += '<div class="attachment-stats">' +
+            '<div class="stat-item">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '<span>' + downloadCount + ' download' + (downloadCount !== '1' ? 's' : '') + '</span>' +
+            '</div>' +
+            '<div class="stat-item">' +
+            '<i class="fa-regular fa-file" aria-hidden="true"></i>' +
+            '<span>' + fileType.toUpperCase() + ' file</span>' +
+            '</div>' +
+            '</div>';
+        
+        return html;
+    }
+
+    #extractFileNameFromUrl(url) {
+        if (!url) return '';
+        const parts = url.split('/');
+        return parts[parts.length - 1] || 'image.jpg';
+    }
+
+    #estimateImageSize(width, height) {
+        if (!width || !height) return 'Unknown size';
+        
+        const widthNum = parseInt(width);
+        const heightNum = parseInt(height);
+        
+        if (isNaN(widthNum) || isNaN(heightNum)) {
+            return 'Unknown size';
+        }
+        
+        // Calculate megapixels
+        const megapixels = (widthNum * heightNum) / 1000000;
+        
+        if (megapixels < 1) {
+            return Math.round(megapixels * 1000) + 'K pixels';
+        } else {
+            return megapixels.toFixed(1) + ' MP';
+        }
+    }
+
+    #getFileTypeFromName(fileName) {
+        if (!fileName) return 'file';
+        
+        const extension = fileName.split('.').pop().toLowerCase();
+        
+        const typeMap = {
+            // Documents
+            'pdf': 'PDF',
+            'doc': 'Word',
+            'docx': 'Word',
+            'txt': 'Text',
+            'rtf': 'Rich Text',
+            
+            // Archives
+            'zip': 'ZIP Archive',
+            'rar': 'RAR Archive',
+            '7z': '7-Zip Archive',
+            'tar': 'TAR Archive',
+            'gz': 'GZIP Archive',
+            
+            // Images
+            'jpg': 'Image',
+            'jpeg': 'Image',
+            'png': 'Image',
+            'gif': 'Image',
+            'bmp': 'Image',
+            'svg': 'SVG Image',
+            
+            // Audio
+            'mp3': 'Audio',
+            'wav': 'Audio',
+            'flac': 'Audio',
+            'm4a': 'Audio',
+            
+            // Video
+            'mp4': 'Video',
+            'avi': 'Video',
+            'mkv': 'Video',
+            'mov': 'Video',
+            'wmv': 'Video',
+            
+            // Code
+            'js': 'JavaScript',
+            'html': 'HTML',
+            'css': 'CSS',
+            'php': 'PHP',
+            'py': 'Python',
+            'java': 'Java',
+            'cpp': 'C++',
+            'c': 'C',
+            'json': 'JSON',
+            'xml': 'XML'
+        };
+        
+        return typeMap[extension] || 'File';
+    }
+
+    #getFileIcon(fileType) {
+        const iconMap = {
+            'PDF': 'fa-regular fa-file-pdf',
+            'Word': 'fa-regular fa-file-word',
+            'Text': 'fa-regular fa-file-lines',
+            'Rich Text': 'fa-regular fa-file-lines',
+            'ZIP Archive': 'fa-regular fa-file-zipper',
+            'RAR Archive': 'fa-regular fa-file-zipper',
+            '7-Zip Archive': 'fa-regular fa-file-zipper',
+            'TAR Archive': 'fa-regular fa-file-zipper',
+            'GZIP Archive': 'fa-regular fa-file-zipper',
+            'Image': 'fa-regular fa-image',
+            'SVG Image': 'fa-regular fa-image',
+            'Audio': 'fa-regular fa-file-audio',
+            'Video': 'fa-regular fa-file-video',
+            'JavaScript': 'fa-regular fa-file-code',
+            'HTML': 'fa-regular fa-file-code',
+            'CSS': 'fa-regular fa-file-code',
+            'PHP': 'fa-regular fa-file-code',
+            'Python': 'fa-regular fa-file-code',
+            'Java': 'fa-regular fa-file-code',
+            'C++': 'fa-regular fa-file-code',
+            'C': 'fa-regular fa-file-code',
+            'JSON': 'fa-regular fa-file-code',
+            'XML': 'fa-regular fa-file-code'
+        };
+        
+        return iconMap[fileType] || 'fa-regular fa-file';
+    }
+
+    #addImageAttachmentListeners(attachmentElement) {
+        const imageLink = attachmentElement.querySelector('.attachment-image-link');
+        const viewBtn = attachmentElement.querySelector('.attachment-view-btn');
+        const downloadBtn = attachmentElement.querySelector('.attachment-download-btn');
+        
+        if (imageLink && viewBtn) {
+            // Make both links open the same image
+            viewBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                window.open(imageLink.href, '_blank', 'noopener,noreferrer');
+            });
+        }
+        
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', (e) => {
+                // Let the default download behavior happen
+                // We could add tracking here if needed
+                console.log('Downloading image attachment');
+            });
+        }
+    }
+
+    #addFileAttachmentListeners(attachmentElement) {
+        const downloadBtn = attachmentElement.querySelector('.attachment-download-btn');
+        
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', (e) => {
+                // The onclick handler from the original element is preserved in the HTML
+                // Let it execute, but we can add our own tracking
+                console.log('Downloading file attachment');
+            });
+        }
+    }
+
+    #setupAttachmentObserver() {
+        if (globalThis.forumObserver) {
+            this.#attachmentObserverId = globalThis.forumObserver.register({
+                id: 'attachment-modernizer',
+                callback: (node) => this.#handleNewAttachments(node),
+                selector: '.fancytop + div[align="center"], .fancytop + .fancyborder',
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'send', 'search']
+            });
+        } else {
+            setInterval(() => this.#processExistingAttachments(), 2000);
+        }
+    }
+
+    #handleNewAttachments(node) {
+        if (node.matches('.fancytop + div[align="center"]') || node.matches('.fancytop + .fancyborder')) {
+            this.#transformAttachment(node);
+        } else {
+            node.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(attachment => {
+                this.#transformAttachment(attachment);
+            });
+        }
+    }
 
     // ==============================
     // OBSERVER SETUP
@@ -4560,6 +4907,8 @@ class PostModernizer {
                     this.#modernizeQuotes(contentWrapper);
                     this.#modernizeSpoilers(contentWrapper);
                     this.#modernizeCodeBlocksInContent(contentWrapper);
+                    // Modernize attachments in post content
+                    this.#modernizeAttachmentsInContent(contentWrapper);
                 }
             });
 
@@ -4588,6 +4937,14 @@ class PostModernizer {
             if (postId && postId.startsWith('ee')) {
                 post.setAttribute('data-post-id', postId.replace('ee', ''));
             }
+        });
+    }
+
+    #modernizeAttachmentsInContent(contentWrapper) {
+        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
+            if (container.classList.contains('attachment-modernized')) return;
+            this.#transformAttachment(container);
+            container.classList.add('attachment-modernized');
         });
     }
 
@@ -4792,6 +5149,8 @@ class PostModernizer {
                 this.#modernizeQuotes(contentWrapper);
                 this.#modernizeSpoilers(contentWrapper);
                 this.#modernizeCodeBlocksInContent(contentWrapper);
+                // Modernize attachments in search posts
+                this.#modernizeAttachmentsInContent(contentWrapper);
 
                 postContent.appendChild(contentWrapper);
             }
@@ -4961,6 +5320,13 @@ class PostModernizer {
             this.#transformCodeBlock(container);
             container.classList.add('code-modernized');
         });
+
+        // Modernize attachments in search posts
+        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
+            if (container.classList.contains('attachment-modernized')) return;
+            this.#transformAttachment(container);
+            container.classList.add('attachment-modernized');
+        });
     }
 
     #escapeRegex(string) {
@@ -5082,7 +5448,8 @@ class PostModernizer {
             '.modern-quote',
             'div[align="center"]:has(.code_top)',
             'div[align="center"].spoiler',
-            'div[align="center"]:has(.quote_top)'
+            'div[align="center"]:has(.quote_top)',
+            '.modern-attachment'
         ];
 
         const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
@@ -5189,7 +5556,7 @@ class PostModernizer {
             const prevSibling = br.previousElementSibling;
             const nextSibling = br.nextElementSibling;
 
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header')) {
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header')) {
                 return;
             }
 
@@ -5201,8 +5568,8 @@ class PostModernizer {
                     prevSibling.classList.add('paragraph-end');
                     br.remove();
                 } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote');
+                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
+                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
 
                     if (prevIsModern && nextIsModern) {
                         br.remove();
@@ -6754,7 +7121,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId];
+            this.#codeBlockObserverId, this.#attachmentObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
