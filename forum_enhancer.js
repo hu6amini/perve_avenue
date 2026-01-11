@@ -3266,11 +3266,10 @@ globalThis.addEventListener('pagehide', () => {
 
 
 
-// Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
+// Enhanced Post Transformation and Modernization System with Table Preservation
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
-// modern attachment styling, Media Dimension Extractor integration,
-// and modern table styling
+// modern attachment styling, Media Dimension Extractor integration, and Table Modernization
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -3280,7 +3279,6 @@ class PostModernizer {
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
-    #tableObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -3317,47 +3315,47 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
-        try {
-            const bodyId = document.body.id;
-            
-            if (bodyId === 'search') {
-                // Handle search pages specially
-                this.#transformSearchPostElements();
-                this.#setupSearchPostObserver();
-            } else {
-                // Handle topic/blog/send pages
-                this.#transformPostElements();
-                this.#setupObserverCallbacks();
-                this.#setupActiveStateObserver();
-            }
-            
-            // These run on all page types
-            this.#enhanceReputationSystem();
-            this.#setupEnhancedAnchorNavigation();
-            this.#enhanceQuoteLinks();
-            this.#modernizeCodeBlocks();
-            this.#modernizeAttachments();
-            this.#modernizeTables(); // New: Modernize tables
+   #init() {
+    try {
+        const bodyId = document.body.id;
+        
+        if (bodyId === 'search') {
+            // Handle search pages specially
+            this.#transformSearchPostElements();
+            this.#setupSearchPostObserver();
+        } else {
+            // Handle topic/blog/send pages
+            this.#transformPostElements();
+            this.#setupObserverCallbacks();
+            this.#setupActiveStateObserver();
+        }
+        
+        // These run on all page types
+        this.#enhanceReputationSystem();
+        this.#setupEnhancedAnchorNavigation();
+        this.#enhanceQuoteLinks();
+        this.#modernizeCodeBlocks();
+        this.#modernizeAttachments();
+        this.#modernizeTables(); // Add table modernization
 
-            console.log('✅ Post Modernizer with all optimizations initialized');
-        } catch (error) {
-            console.error('Post Modernizer initialization failed:', error);
+        console.log('✅ Post Modernizer with all optimizations initialized');
+    } catch (error) {
+        console.error('Post Modernizer initialization failed:', error);
 
-            if (this.#retryCount < this.#maxRetries) {
-                this.#retryCount++;
-                const delay = 100 * Math.pow(2, this.#retryCount - 1);
-                console.log('Initialization failed, retrying in ' + delay + 'ms...');
+        if (this.#retryCount < this.#maxRetries) {
+            this.#retryCount++;
+            const delay = 100 * Math.pow(2, this.#retryCount - 1);
+            console.log('Initialization failed, retrying in ' + delay + 'ms...');
 
-                setTimeout(() => {
-                    this.#initWithRetry();
-                }, delay);
-            }
+            setTimeout(() => {
+                this.#initWithRetry();
+            }, delay);
         }
     }
-    
+}
+
     // ==============================
-    // TABLE MODERNIZATION FUNCTIONS
+    // TABLE TRANSFORMATION SYSTEM
     // ==============================
 
     #modernizeTables() {
@@ -3366,405 +3364,524 @@ class PostModernizer {
     }
 
     #processExistingTables() {
-        // Target both user-generated tables and forum default tables
-        const tableSelectors = [
-            '.post-content table',
-            '.post-main-content table',
-            '.modern-quote table',
-            '.modern-spoiler table',
-            '.modern-code table',
-            '.quote-content table',
-            '.spoiler-content table',
-            '.attachment-preview table'
-        ];
-
-        tableSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(table => {
-                if (table.classList.contains('modern-table')) return;
+        // Process tables in regular posts
+        document.querySelectorAll('.post:not(.post-modernized) table').forEach(table => {
+            this.#transformTable(table);
+        });
+        
+        // Process tables in already modernized posts
+        document.querySelectorAll('.post.post-modernized table').forEach(table => {
+            if (!table.classList.contains('modern-table-processed')) {
                 this.#transformTable(table);
-                table.classList.add('modern-table');
-            });
+            }
+        });
+        
+        // Process tables in post content
+        document.querySelectorAll('.post-main-content table').forEach(table => {
+            if (!table.classList.contains('modern-table-processed')) {
+                this.#transformTable(table);
+            }
         });
     }
 
     #transformTable(table) {
-        // Check if this is a simple table (not nested in another table)
-        if (table.closest('table')) return;
-        
-        // Check if table already has modern styling
-        if (table.classList.contains('modern-table')) return;
-
-        // Create a modern table wrapper
-        const tableWrapper = document.createElement('div');
-        tableWrapper.className = 'modern-table-container';
-        
-        // Apply modern table classes
-        table.classList.add('modern-table');
-        
-        // Add responsive wrapper for horizontal scrolling on mobile
-        const scrollWrapper = document.createElement('div');
-        scrollWrapper.className = 'table-scroll-wrapper';
-        
-        // Wrap the table
-        table.parentNode.insertBefore(scrollWrapper, table);
-        scrollWrapper.appendChild(table);
-        
-        // Add wrapper for styling
-        scrollWrapper.parentNode.insertBefore(tableWrapper, scrollWrapper);
-        tableWrapper.appendChild(scrollWrapper);
-        
-        // Style table elements
-        this.#applyModernTableStyles(table);
-        
-        // Add column count detection for styling
-        const columnCount = this.#countTableColumns(table);
-        if (columnCount > 5) {
-            table.classList.add('wide-table');
+        if (!table || table.classList.contains('modern-table-processed')) {
+            return;
         }
         
-        console.debug('Modernized table with ' + columnCount + ' columns');
-    }
-
-    #applyModernTableStyles(table) {
-        // Apply base table styles
-        table.style.borderCollapse = 'collapse';
-        table.style.width = '100%';
+        // Check if this is a valid table to transform (not empty, has rows)
+        const hasValidStructure = table.querySelector('tr') && 
+                                 (table.querySelector('th') || table.querySelector('td'));
         
-        // Style table headers (th)
-        Array.from(table.querySelectorAll('th')).forEach(th => {
-            th.style.backgroundColor = 'var(--surface-color)';
-            th.style.border = '1px solid var(--border-color)';
-            th.style.padding = 'var(--pad-4) var(--pad-5)';
-            th.style.textAlign = 'center';
-            th.style.fontWeight = '600';
-            th.style.color = 'var(--text-primary)';
-            th.style.fontSize = 'var(--text-sm)';
-            th.style.position = 'sticky';
-            th.style.top = '0';
-            th.style.zIndex = '1';
+        if (!hasValidStructure) {
+            // Mark as processed to avoid reprocessing
+            table.classList.add('modern-table-processed');
+            return;
+        }
+        
+        console.debug('Transforming table:', {
+            rows: table.rows.length,
+            cols: table.rows[0] ? table.rows[0].cells.length : 0,
+            hasHeaders: !!table.querySelector('th')
         });
         
-        // Style table cells (td)
-        Array.from(table.querySelectorAll('td')).forEach((td, index) => {
-            const rowIndex = Math.floor(index / this.#countTableColumns(table));
-            td.style.border = '1px solid var(--border-color)';
-            td.style.padding = 'var(--pad-3) var(--pad-4)';
-            td.style.fontSize = 'var(--text-sm)';
-            
-            // Alternate row colors for better readability
-            if (rowIndex % 2 === 0) {
-                td.style.backgroundColor = 'var(--bg-color)';
-            } else {
-                td.style.backgroundColor = 'var(--surface-color)';
-            }
-            
-            // Remove any inline styles that might interfere
-            td.removeAttribute('style');
-            
-            // Preserve alignment if specified
-            const align = td.getAttribute('align') || td.style.textAlign;
-            if (align) {
-                td.style.textAlign = align;
-            }
-            
-            // Handle text content - preserve existing spans but don't add new ones
-            this.#preserveTableTextContent(td);
-        });
+        // Create modern table container
+        const modernTable = document.createElement('div');
+        modernTable.className = 'modern-table-container';
         
-        // Style the table itself
-        table.style.border = '1px solid var(--border-color)';
-        table.style.borderRadius = 'var(--radius)';
-        table.style.overflow = 'hidden';
-        table.style.boxShadow = 'var(--shadow-sm)';
+        // Add responsive wrapper
+        const responsiveWrapper = document.createElement('div');
+        responsiveWrapper.className = 'table-responsive';
+        
+        // Create the modern table structure
+        const tableHtml = this.#createModernTableHTML(table);
+        
+        // Build the complete structure
+        responsiveWrapper.innerHTML = tableHtml;
+        modernTable.appendChild(responsiveWrapper);
+        
+        // Add controls for wide tables
+        this.#addTableControls(modernTable, table);
+        
+        // Replace the original table with our modern version
+        table.parentNode.replaceChild(modernTable, table);
+        
+        // Mark as processed
+        modernTable.classList.add('modern-table-processed');
+        
+        // Apply any additional styling or enhancements
+        setTimeout(() => {
+            this.#enhanceTableAccessibility(modernTable);
+            this.#addTableInteraction(modernTable);
+        }, 10);
     }
 
-    #preserveTableTextContent(td) {
-        // If the cell already has content (including spans), leave it as is
-        if (td.children.length > 0) {
-            // Check if it already has post-text spans
-            const hasPostText = td.querySelector('.post-text');
-            if (!hasPostText) {
-                // Wrap text nodes in spans but preserve existing HTML structure
-                const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT, null, false);
-                const textNodes = [];
-                let node;
+    #createModernTableHTML(originalTable) {
+        const rows = originalTable.querySelectorAll('tr');
+        if (rows.length === 0) {
+            return '<div class="table-empty">Empty table</div>';
+        }
+        
+        // Detect if table has headers (th elements in first row or any row)
+        const hasHeaders = originalTable.querySelector('th') !== null;
+        const firstRow = rows[0];
+        const isFirstRowHeader = firstRow.querySelector('th') !== null;
+        
+        let html = '<div class="modern-table">';
+        
+        // Process each row
+        rows.forEach((row, rowIndex) => {
+            const cells = row.querySelectorAll('th, td');
+            
+            // Determine row type
+            const isHeaderRow = isFirstRowHeader && rowIndex === 0;
+            const rowType = isHeaderRow ? 'header' : 'data';
+            
+            html += '<div class="table-row table-row-' + rowType + '">';
+            
+            cells.forEach((cell, cellIndex) => {
+                const cellType = cell.tagName.toLowerCase();
+                const isHeaderCell = cellType === 'th';
+                const cellContent = cell.innerHTML.trim();
                 
-                while (node = walker.nextNode()) {
-                    if (node.textContent.trim() !== '') {
-                        textNodes.push(node);
-                    }
+                // Get cell attributes
+                const rowspan = cell.getAttribute('rowspan') || '1';
+                const colspan = cell.getAttribute('colspan') || '1';
+                
+                // Build cell attributes string
+                let attrs = '';
+                if (parseInt(rowspan) > 1) {
+                    attrs += ' data-rowspan="' + rowspan + '"';
+                }
+                if (parseInt(colspan) > 1) {
+                    attrs += ' data-colspan="' + colspan + '"';
                 }
                 
-                textNodes.forEach(textNode => {
-                    const span = document.createElement('span');
-                    span.className = 'post-text';
-                    span.textContent = textNode.textContent;
-                    textNode.parentNode.replaceChild(span, textNode);
-                });
+                // Get alignment if specified
+                const align = cell.getAttribute('align') || cell.style.textAlign || '';
+                if (align) {
+                    attrs += ' data-align="' + align + '"';
+                }
+                
+                // Get width if specified
+                const width = cell.getAttribute('width') || cell.style.width || '';
+                if (width) {
+                    attrs += ' data-width="' + width + '"';
+                }
+                
+                // Create cell class based on type
+                const cellClass = isHeaderCell ? 'table-header-cell' : 'table-data-cell';
+                const additionalClasses = [];
+                
+                if (parseInt(colspan) > 1) additionalClasses.push('colspan-' + colspan);
+                if (parseInt(rowspan) > 1) additionalClasses.push('rowspan-' + rowspan);
+                if (align) additionalClasses.push('align-' + align);
+                
+                html += '<div class="' + cellClass + (additionalClasses.length ? ' ' + additionalClasses.join(' ') : '') + '"' + attrs + '>';
+                html += '<div class="table-cell-content">' + cellContent + '</div>';
+                html += '</div>';
+            });
+            
+            html += '</div>';
+        });
+        
+        html += '</div>';
+        return html;
+    }
+
+    #addTableControls(modernTable, originalTable) {
+        const tableContent = modernTable.querySelector('.modern-table');
+        if (!tableContent) return;
+        
+        // Check if table is wide (has many columns or long content)
+        const estimatedWidth = this.#estimateTableWidth(originalTable);
+        const viewportWidth = window.innerWidth;
+        
+        if (estimatedWidth > viewportWidth * 0.8) {
+            // Add scroll indicator
+            const scrollIndicator = document.createElement('div');
+            scrollIndicator.className = 'table-scroll-indicator';
+            scrollIndicator.innerHTML = '<i class="fa-regular fa-arrows-left-right" aria-hidden="true"></i> Scroll horizontally';
+            modernTable.appendChild(scrollIndicator);
+            
+            // Add scroll controls for mobile
+            const scrollControls = document.createElement('div');
+            scrollControls.className = 'table-scroll-controls';
+            scrollControls.innerHTML = 
+                '<button class="table-scroll-btn scroll-left" aria-label="Scroll left">' +
+                '<i class="fa-regular fa-chevron-left" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button class="table-scroll-btn scroll-right" aria-label="Scroll right">' +
+                '<i class="fa-regular fa-chevron-right" aria-hidden="true"></i>' +
+                '</button>';
+            
+            modernTable.appendChild(scrollControls);
+            
+            // Add scroll functionality
+            this.#addTableScrollControls(tableContent, scrollControls);
+        }
+        
+        // Add table info badge
+        const tableInfo = document.createElement('div');
+        tableInfo.className = 'table-info-badge';
+        
+        const rowCount = originalTable.rows.length;
+        const colCount = originalTable.rows[0] ? originalTable.rows[0].cells.length : 0;
+        
+        tableInfo.innerHTML = 
+            '<i class="fa-regular fa-table" aria-hidden="true"></i> ' +
+            rowCount + ' row' + (rowCount !== 1 ? 's' : '') + ' × ' +
+            colCount + ' column' + (colCount !== 1 ? 's' : '');
+        
+        modernTable.insertBefore(tableInfo, modernTable.firstChild);
+    }
+
+    #estimateTableWidth(table) {
+        let width = 0;
+        const rows = table.rows;
+        
+        if (rows.length === 0) return 300; // Default width
+        
+        // Estimate based on first row
+        const firstRow = rows[0];
+        for (let cell of firstRow.cells) {
+            const cellWidth = cell.getAttribute('width') || 
+                             cell.style.width || 
+                             (cell.textContent.length * 8) + 20; // Rough estimate
+            width += parseInt(cellWidth) || 100;
+        }
+        
+        return Math.max(width, 300);
+    }
+
+    #addTableScrollControls(tableElement, controls) {
+        const scrollLeftBtn = controls.querySelector('.scroll-left');
+        const scrollRightBtn = controls.querySelector('.scroll-right');
+        
+        if (!scrollLeftBtn || !scrollRightBtn) return;
+        
+        const scrollAmount = 200;
+        
+        scrollLeftBtn.addEventListener('click', () => {
+            tableElement.scrollBy({
+                left: -scrollAmount,
+                behavior: 'smooth'
+            });
+        });
+        
+        scrollRightBtn.addEventListener('click', () => {
+            tableElement.scrollBy({
+                left: scrollAmount,
+                behavior: 'smooth'
+            });
+        });
+        
+        // Update button states based on scroll position
+        const updateScrollButtons = () => {
+            const { scrollLeft, scrollWidth, clientWidth } = tableElement;
+            scrollLeftBtn.disabled = scrollLeft <= 0;
+            scrollRightBtn.disabled = scrollLeft >= scrollWidth - clientWidth - 10;
+        };
+        
+        tableElement.addEventListener('scroll', updateScrollButtons);
+        updateScrollButtons(); // Initial update
+        
+        // Also handle keyboard navigation
+        tableElement.setAttribute('tabindex', '0');
+        tableElement.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                tableElement.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+                e.preventDefault();
+            } else if (e.key === 'ArrowRight') {
+                tableElement.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+                e.preventDefault();
             }
-        } else if (td.textContent.trim() !== '') {
-            // Cell only has text content, wrap it
-            const span = document.createElement('span');
-            span.className = 'post-text';
-            span.textContent = td.textContent;
-            td.textContent = '';
-            td.appendChild(span);
+        });
+    }
+
+    #enhanceTableAccessibility(tableElement) {
+        // Add ARIA attributes
+        const table = tableElement.querySelector('.modern-table');
+        if (table) {
+            table.setAttribute('role', 'table');
+            table.setAttribute('aria-label', 'Data table');
+            
+            // Add role to rows and cells
+            const rows = table.querySelectorAll('.table-row');
+            rows.forEach((row, rowIndex) => {
+                row.setAttribute('role', 'row');
+                if (row.classList.contains('table-row-header')) {
+                    row.setAttribute('aria-rowindex', rowIndex + 1);
+                }
+                
+                const cells = row.querySelectorAll('.table-header-cell, .table-data-cell');
+                cells.forEach((cell, cellIndex) => {
+                    const isHeader = cell.classList.contains('table-header-cell');
+                    cell.setAttribute('role', isHeader ? 'columnheader' : 'cell');
+                    cell.setAttribute('aria-colindex', cellIndex + 1);
+                    
+                    // Add scope for headers
+                    if (isHeader) {
+                        cell.setAttribute('scope', 'col');
+                    }
+                });
+            });
         }
     }
 
-    #countTableColumns(table) {
-        // Count the maximum number of columns in the table
-        let maxCols = 0;
-        const rows = table.querySelectorAll('tr');
+    #addTableInteraction(tableElement) {
+        const rows = tableElement.querySelectorAll('.table-row-data');
         
+        // Add hover effects
         rows.forEach(row => {
-            const cells = row.querySelectorAll('th, td');
-            let colCount = 0;
-            
-            cells.forEach(cell => {
-                const colspan = parseInt(cell.getAttribute('colspan') || '1');
-                colCount += colspan;
+            row.addEventListener('mouseenter', () => {
+                row.classList.add('row-hover');
             });
             
-            maxCols = Math.max(maxCols, colCount);
+            row.addEventListener('mouseleave', () => {
+                row.classList.remove('row-hover');
+            });
+            
+            // Make rows clickable for selection if needed
+            row.addEventListener('click', (e) => {
+                if (!e.target.closest('.table-header-cell') && 
+                    !e.target.closest('a') && 
+                    !e.target.closest('button')) {
+                    rows.forEach(r => r.classList.remove('row-selected'));
+                    row.classList.add('row-selected');
+                }
+            });
         });
         
-        return maxCols;
+        // Add column highlighting on header hover
+        const headers = tableElement.querySelectorAll('.table-header-cell');
+        headers.forEach((header, colIndex) => {
+            header.addEventListener('mouseenter', () => {
+                const allRows = tableElement.querySelectorAll('.table-row');
+                allRows.forEach(row => {
+                    const cell = row.children[colIndex];
+                    if (cell) {
+                        cell.classList.add('col-highlight');
+                    }
+                });
+            });
+            
+            header.addEventListener('mouseleave', () => {
+                const allCells = tableElement.querySelectorAll('.table-header-cell, .table-data-cell');
+                allCells.forEach(cell => {
+                    cell.classList.remove('col-highlight');
+                });
+            });
+        });
     }
 
     #setupTableObserver() {
         if (globalThis.forumObserver) {
-            this.#tableObserverId = globalThis.forumObserver.register({
-                id: 'table-modernizer',
-                callback: (node) => this.#handleNewTables(node),
-                selector: '.post-content table, .post-main-content table, .modern-quote table, .modern-spoiler table, .modern-code table',
-                priority: 'normal',
-                pageTypes: ['topic', 'blog', 'send', 'search']
-            });
+            // We'll use the existing debounced observer to handle tables
+            // since they're part of post content
         } else {
+            // Fallback periodic check
             setInterval(() => this.#processExistingTables(), 2000);
         }
     }
 
     #handleNewTables(node) {
-        if (node.matches && node.matches('table')) {
-            if (!node.classList.contains('modern-table')) {
-                this.#transformTable(node);
-                node.classList.add('modern-table');
-            }
+        if (node.matches('table') && !node.closest('.modern-table-container')) {
+            this.#transformTable(node);
         } else {
-            node.querySelectorAll('table').forEach(table => {
-                if (!table.classList.contains('modern-table')) {
+            node.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
+                if (!table.closest('.modern-table-container')) {
                     this.#transformTable(table);
-                    table.classList.add('modern-table');
                 }
             });
         }
     }
 
     // ==============================
-    // UPDATED POST CONTENT CLEANUP - PRESERVES TABLES
+    // UPDATED CLEANUP METHODS TO PRESERVE MODERN TABLES
     // ==============================
 
     #cleanupPostContentStructure(contentElement) {
-        // First, process and preserve tables
-        const tables = contentElement.querySelectorAll('table');
-        tables.forEach(table => {
-            // Mark tables so they won't be broken down
-            table.setAttribute('data-preserve-table', 'true');
+        // FIRST: Transform any tables before they get destroyed
+        contentElement.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
+            if (!table.closest('.modern-table-container')) {
+                this.#transformTable(table);
+            }
         });
-
-        // Remove invalid table structure but preserve actual tables
-        this.#removeInvalidTableStructure(contentElement);
         
-        // Clean up post content while preserving tables
-        this.#cleanupPostContentStructurePreservingTables(contentElement);
-    }
-
-    #cleanupPostContentStructurePreservingTables(contentElement) {
-        // Process all child nodes, but skip tables
-        const processNode = (node) => {
-            // Skip tables that should be preserved
-            if (node.nodeType === Node.ELEMENT_NODE && 
-                (node.tagName === 'TABLE' || node.hasAttribute('data-preserve-table'))) {
+        // Now proceed with original cleanup, but skip modern tables
+        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+            // Skip if inside a modern table
+            if (td.closest('.modern-table-container')) {
                 return;
             }
             
-            // Process non-table elements
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                // Clean up table cells that might be direct children
-                if (node.tagName === 'TD' || node.tagName === 'TH') {
-                    const parent = node.parentNode;
-                    if (parent && parent.tagName !== 'TR' && parent.tagName !== 'TABLE') {
-                        // Move td/th up the DOM
-                        while (node.firstChild) {
-                            parent.insertBefore(node.firstChild, node);
-                        }
-                        node.remove();
-                        return;
-                    }
-                }
-                
-                // Clean up table rows that might be direct children
-                if (node.tagName === 'TR') {
-                    const parent = node.parentNode;
-                    if (parent && parent.tagName !== 'TBODY' && parent.tagName !== 'THEAD' && parent.tagName !== 'TABLE') {
-                        while (node.firstChild) {
-                            parent.insertBefore(node.firstChild, node);
-                        }
-                        node.remove();
-                        return;
-                    }
-                }
-                
-                // Clean up tbody/thead that might be direct children
-                if (node.tagName === 'TBODY' || node.tagName === 'THEAD') {
-                    const parent = node.parentNode;
-                    if (parent && parent.tagName !== 'TABLE') {
-                        while (node.firstChild) {
-                            parent.insertBefore(node.firstChild, node);
-                        }
-                        node.remove();
-                        return;
-                    }
-                }
-                
-                // Process children recursively
-                Array.from(node.childNodes).forEach(child => {
-                    processNode(child);
-                });
+            while (td.firstChild) {
+                contentElement.appendChild(td.firstChild);
             }
-        };
-
-        // Start processing from content element
-        Array.from(contentElement.childNodes).forEach(child => {
-            processNode(child);
+            td.remove();
         });
 
-        // Clean up line breaks between blocks (preserving tables)
+        contentElement.querySelectorAll('td').forEach(td => {
+            // Skip if inside a modern table
+            if (td.closest('.modern-table-container')) {
+                return;
+            }
+            
+            const parent = td.parentNode;
+            if (parent) {
+                while (td.firstChild) {
+                    parent.insertBefore(td.firstChild, td);
+                }
+                td.remove();
+            }
+        });
+
+        contentElement.querySelectorAll('tr').forEach(tr => {
+            // Skip if inside a modern table
+            if (tr.closest('.modern-table-container')) {
+                return;
+            }
+            
+            const parent = tr.parentNode;
+            if (parent) {
+                while (tr.firstChild) {
+                    parent.insertBefore(tr.firstChild, tr);
+                }
+                tr.remove();
+            }
+        });
+
+        contentElement.querySelectorAll('tbody').forEach(tbody => {
+            // Skip if inside a modern table
+            if (tbody.closest('.modern-table-container')) {
+                return;
+            }
+            
+            const parent = tbody.parentNode;
+            if (parent) {
+                while (tbody.firstChild) {
+                    parent.insertBefore(tbody.firstChild, tbody);
+                }
+                tbody.remove();
+            }
+        });
+
+        contentElement.querySelectorAll('table').forEach(table => {
+            // Skip if already transformed or inside a modern table
+            if (table.classList.contains('modern-table-processed') || 
+                table.closest('.modern-table-container')) {
+                return;
+            }
+            
+            const parent = table.parentNode;
+            if (parent) {
+                while (table.firstChild) {
+                    parent.insertBefore(table.firstChild, table);
+                }
+                table.remove();
+            }
+        });
+
         this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-        
-        // Clean empty elements
         this.#cleanEmptyElements(contentElement);
-        
-        // Process text and line breaks (skipping table cells)
-        this.#processTextAndLineBreaksPreservingTables(contentElement);
-        
-        // Clean up edit spans
+        this.#processTextAndLineBreaks(contentElement);
         this.#cleanupEditSpans(contentElement);
-        
-        // Process signature
         this.#processSignature(contentElement);
-        
-        // Clean invalid attributes (preserving table attributes)
-        this.#cleanInvalidAttributesPreservingTables(contentElement);
-        
-        // Remove table preservation markers
-        contentElement.querySelectorAll('[data-preserve-table]').forEach(el => {
-            el.removeAttribute('data-preserve-table');
-        });
+        this.#cleanInvalidAttributes(contentElement);
     }
 
-    #processTextAndLineBreaksPreservingTables(element) {
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const textNodes = [];
-        let node;
-
-        while (node = walker.nextNode()) {
-            // Skip text nodes inside tables
-            if (node.closest('table, th, td')) {
-                continue;
-            }
-            
-            if (node.textContent.trim() !== '') {
-                textNodes.push(node);
-            }
-        }
-
-        textNodes.forEach(textNode => {
-            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
+    #cleanupSearchPostContent(contentWrapper) {
+        // Transform tables first
+        contentWrapper.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
+            if (!table.closest('.modern-table-container')) {
+                this.#transformTable(table);
             }
         });
-
-        // Process line breaks, skipping those inside tables
-        element.querySelectorAll('br').forEach(br => {
-            if (br.closest('table, th, td')) {
+        
+        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
+            // Skip modern tables
+            if (el.closest('.modern-table-container')) {
                 return;
             }
             
-            const prevSibling = br.previousElementSibling;
-            const nextSibling = br.nextElementSibling;
-
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header')) {
-                return;
-            }
-
-            if (prevSibling && nextSibling) {
-                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
-                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
-
-                if (prevIsPostText && nextIsPostText) {
-                    prevSibling.classList.add('paragraph-end');
-                    br.remove();
-                } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
-
-                    if (prevIsModern && nextIsModern) {
-                        br.remove();
-                    } else {
-                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+            if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
+                el.remove();
+            } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
+                const parent = el.parentNode;
+                if (parent) {
+                    while (el.firstChild) {
+                        parent.insertBefore(el.firstChild, el);
                     }
+                    el.remove();
                 }
-            } else {
-                br.remove();
             }
         });
 
-        // Add paragraph-end class to consecutive post-text elements (outside tables)
-        const postTextElements = Array.from(element.querySelectorAll('.post-text')).filter(el => !el.closest('table, th, td'));
-        
-        for (let i = 0; i < postTextElements.length - 1; i++) {
-            const current = postTextElements[i];
-            const next = postTextElements[i + 1];
+        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
+            if (container.classList.contains('quote-modernized')) return;
+            this.#transformQuote(container);
+            container.classList.add('quote-modernized');
+        });
 
-            let nodeBetween = current.nextSibling;
-            let onlyWhitespace = true;
+        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
+            if (container.classList.contains('spoiler-modernized')) return;
+            this.#transformSpoiler(container);
+            container.classList.add('spoiler-modernized');
+        });
 
-            while (nodeBetween && nodeBetween !== next) {
-                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                    onlyWhitespace = false;
-                    break;
-                }
-                nodeBetween = nodeBetween.nextSibling;
-            }
+        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
+            if (container.classList.contains('code-modernized')) return;
+            this.#transformCodeBlock(container);
+            container.classList.add('code-modernized');
+        });
 
-            if (onlyWhitespace) {
-                current.classList.add('paragraph-end');
-            }
-        }
+        // Modernize attachments in search posts
+        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
+            if (container.classList.contains('attachment-modernized')) return;
+            this.#transformAttachment(container);
+            container.classList.add('attachment-modernized');
+        });
     }
 
-    #cleanInvalidAttributesPreservingTables(element) {
-        // Preserve width/height on table elements
+    #cleanInvalidAttributes(element) {
         element.querySelectorAll('[width]').forEach(el => {
+            // Skip elements inside modern tables
+            if (el.closest('.modern-table-container')) {
+                return;
+            }
+            
             if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
                 el.removeAttribute('width');
             }
         });
 
-        element.querySelectorAll('[height]').forEach(el => {
-            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
-                el.removeAttribute('height');
-            }
-        });
-
-        // Preserve cellpadding/cellspacing on tables
         element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
+            // Skip modern tables
+            if (el.closest('.modern-table-container')) {
+                return;
+            }
+            
             if (el.tagName !== 'TABLE') {
                 el.removeAttribute('cellpadding');
                 el.removeAttribute('cellspacing');
@@ -3772,939 +3889,955 @@ class PostModernizer {
         });
     }
 
-    #removeInvalidTableStructure(element) {
-        // Remove td.right.Item but preserve table structure
-        element.querySelectorAll('td.right.Item').forEach(td => {
-            // Only remove if it's not inside a valid table
-            if (!td.closest('table[data-preserve-table]')) {
-                while (td.firstChild) {
-                    td.parentNode.insertBefore(td.firstChild, td);
-                }
-                td.remove();
-            }
-        });
-
-        // Remove empty tables that shouldn't be preserved
-        element.querySelectorAll('table.color:empty').forEach(table => {
-            if (!table.hasAttribute('data-preserve-table')) {
-                table.remove();
-            }
-        });
-    }
-
     // ==============================
-    // CSS FOR MODERN TABLES (to be added to skin)
+    // PRESERVE TABLES IN QUOTES AND SPOILERS
     // ==============================
-    /*
-    Add this CSS to your skin:
-    
-    .modern-table-container {
-        margin: var(--space-md) 0;
-        overflow: hidden;
-    }
-    
-    .table-scroll-wrapper {
-        overflow-x: auto;
-        border-radius: var(--radius);
-        margin: 0;
-        -webkit-overflow-scrolling: touch;
-    }
-    
-    .modern-table {
-        border-collapse: collapse;
-        width: 100%;
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius);
-        overflow: hidden;
-        box-shadow: var(--shadow-sm);
-        background: var(--surface-color);
-    }
-    
-    .modern-table th {
-        background: var(--surface-color);
-        border: 1px solid var(--border-color);
-        padding: var(--pad-4) var(--pad-5);
-        text-align: center;
-        font-weight: 600;
-        color: var(--text-primary);
-        font-size: var(--text-sm);
-        position: sticky;
-        top: 0;
-        z-index: 1;
-    }
-    
-    .modern-table td {
-        border: 1px solid var(--border-color);
-        padding: var(--pad-3) var(--pad-4);
-        font-size: var(--text-sm);
-    }
-    
-    .modern-table tr:nth-child(even) td {
-        background: var(--bg-color);
-    }
-    
-    .modern-table tr:nth-child(odd) td {
-        background: var(--surface-color);
-    }
-    
-    .modern-table .post-text {
-        margin: 0;
-        padding: 0;
-        display: inline;
-    }
-    
-    .modern-table.wide-table {
-        min-width: 600px;
-    }
-    
-    @media (max-width: 768px) {
-        .modern-table th,
-        .modern-table td {
-            padding: var(--pad-3) var(--pad-4);
-            font-size: var(--text-xs);
-        }
+
+    #preserveMediaDimensionsInHTML(html) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
         
-        .modern-table.wide-table {
-            min-width: 800px;
-        }
+        // Transform tables in the HTML before processing
+        tempDiv.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
+            this.#transformTable(table);
+        });
+        
+        this.#preserveMediaDimensions(tempDiv);
+        return tempDiv.innerHTML;
     }
-    */
+
+    #transformQuote(container) {
+        const quoteTop = container.querySelector('.quote_top');
+        const quoteContent = container.querySelector('.quote');
+
+        if (!quoteTop || !quoteContent) return;
+
+        const quoteText = quoteTop.textContent.trim();
+        const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/);
+        const author = match ? match[1].trim() : 'Unknown';
+        const quoteLink = quoteTop.querySelector('a');
+        const linkHref = quoteLink ? quoteLink.href : '#';
+        const isLongContent = this.#isLongContent(quoteContent);
+
+        const modernQuote = document.createElement('div');
+        modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : '');
+
+        let html = '<div class="quote-header">' +
+            '<div class="quote-meta">' +
+            '<div class="quote-icon">' +
+            '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="quote-info">' +
+            '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' +
+            '</div>' +
+            '</div>' +
+            '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">' +
+            '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>';
+
+        html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) +
+            '</div>';
+
+        if (isLongContent) {
+            html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
+        }
+
+        modernQuote.innerHTML = html;
+        container.replaceWith(modernQuote);
+
+        if (isLongContent) {
+            this.#addQuoteEventListeners(modernQuote);
+        }
+
+        setTimeout(() => {
+            const quoteLink = modernQuote.querySelector('.quote-link');
+            if (quoteLink) {
+                this.#enhanceSingleQuoteLink(quoteLink);
+            }
+        }, 10);
+    }
+
+    #transformSpoiler(container) {
+        const spoilerTop = container.querySelector('.code_top');
+        const spoilerContent = container.querySelector('.code[align="left"]');
+
+        if (!spoilerTop || !spoilerContent) return;
+
+        const isLongContent = this.#isLongContent(spoilerContent);
+
+        const modernSpoiler = document.createElement('div');
+        modernSpoiler.className = 'modern-spoiler';
+
+        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
+            '<div class="spoiler-icon">' +
+            '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="spoiler-info">' +
+            '<span class="spoiler-title">SPOILER</span>' +
+            '</div>' +
+            '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
+            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
+
+        html += '<div class="spoiler-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
+            '</div>';
+
+        if (isLongContent) {
+            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
+        }
+
+        modernSpoiler.innerHTML = html;
+        container.replaceWith(modernSpoiler);
+
+        this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
+    }
 
     // ==============================
     // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
     // ==============================
 
-    #parseForumDate(dateString) {
-        if (!dateString || typeof dateString !== 'string') {
+#parseForumDate(dateString) {
+    if (!dateString || typeof dateString !== 'string') {
+        return null;
+    }
+
+    // Clean the date string
+    let cleanDateString = dateString
+        .replace(/^Posted on\s*/i, '')
+        .replace(/^on\s*/i, '')
+        .replace(/^Posted\s*/i, '')
+        .trim();
+
+    console.debug('Parsing date string:', dateString, '->', cleanDateString);
+
+    // Common forum date formats - IMPORTANT: These are already in USER'S local timezone
+    const formats = [
+        'MM/DD/YYYY, h:mm A',      // 12/28/2025, 06:50 PM (user local)
+        'MM/DD/YYYY, h:mm:ss A',   // 12/28/2025, 06:50:10 PM
+        'MM/DD/YYYY, HH:mm',       // 12/28/2025, 18:50
+        'MM/DD/YYYY, HH:mm:ss',    // 12/28/2025, 18:50:10
+        'MM-DD-YYYY, h:mm A',      // 12-28-2025, 06:50 PM
+        'DD/MM/YYYY, h:mm A',      // 28/12/2025, 06:50 PM
+        'DD/MM/YYYY, HH:mm',       // 28/12/2025, 18:50
+        'YYYY-MM-DD HH:mm:ss',     // 2025-12-28 18:50:10
+        'YYYY-MM-DDTHH:mm:ss',     // 2025-12-28T18:50:10
+        'dddd, MMMM D, YYYY h:mm A', // Sunday, December 28, 2025 6:50 PM
+    ];
+    
+    let momentDate = null;
+    
+    // STRATEGY: Parse as LOCAL time (forum already shows user's local time)
+    for (let i = 0; i < formats.length; i++) {
+        momentDate = moment(cleanDateString, formats[i], true);
+        if (momentDate && momentDate.isValid()) {
+            console.debug('Parsed with format', formats[i], 'as local time:', momentDate.format());
+            break;
+        }
+    }
+    
+    // If we have timezone in string like "(EET)", handle it
+    if ((!momentDate || !momentDate.isValid()) && cleanDateString.includes('(')) {
+        try {
+            const timezoneMatch = cleanDateString.match(/\(([A-Z]{2,})\)$/);
+            if (timezoneMatch) {
+                const tzAbbr = timezoneMatch[1];
+                const dateWithoutTz = cleanDateString.replace(/\s*\([A-Z]{2,}\)$/, '');
+                
+                for (let i = 0; i < formats.length; i++) {
+                    const parsed = moment(dateWithoutTz, formats[i], true);
+                    if (parsed && parsed.isValid()) {
+                        const possibleZones = this.#getTimezoneFromAbbr(tzAbbr);
+                        if (possibleZones.length > 0) {
+                            momentDate = parsed.tz(possibleZones[0]);
+                        } else {
+                            momentDate = parsed;
+                        }
+                        console.debug('Parsed with timezone', tzAbbr, ':', momentDate.format());
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            console.debug('Timezone parsing failed:', e.message);
+        }
+    }
+    
+    // Fallback to JavaScript Date
+    if (!momentDate || !momentDate.isValid()) {
+        const jsDate = new Date(cleanDateString);
+        if (!isNaN(jsDate)) {
+            momentDate = moment(jsDate);
+            console.debug('Parsed with JS Date:', momentDate.format());
+        }
+    }
+    
+    if (momentDate && momentDate.isValid()) {
+        // Convert local time to UTC for consistent storage
+        const utcTime = momentDate.utc();
+        
+        console.debug('Final conversion:', {
+            original: cleanDateString,
+            parsedLocal: momentDate.format(),
+            parsedUTC: utcTime.format(),
+            localOffset: momentDate.utcOffset(),
+            isUTC: momentDate.isUTC()
+        });
+        
+        return utcTime;
+    }
+    
+    console.warn('Could not parse date:', dateString, '->', cleanDateString);
+    return null;
+}
+
+  #detectForumTimezone() {
+    // Since the forum already displays times in user's local timezone,
+    // we don't need to detect a forum server timezone.
+    // Return null to indicate we're using local parsing.
+    return null;
+}
+
+#getTimezoneFromAbbr(abbr) {
+    // Map common timezone abbreviations to IANA timezones
+    const abbrMap = {
+        'EST': ['America/New_York', 'America/Toronto', 'America/Montreal'],
+        'EDT': ['America/New_York', 'America/Toronto', 'America/Montreal'],
+        'PST': ['America/Los_Angeles', 'America/Vancouver'],
+        'PDT': ['America/Los_Angeles', 'America/Vancouver'],
+        'CST': ['America/Chicago', 'America/Winnipeg'],
+        'CDT': ['America/Chicago', 'America/Winnipeg'],
+        'MST': ['America/Denver', 'America/Phoenix'],
+        'MDT': ['America/Denver'],
+        'GMT': ['UTC', 'Europe/London'],
+        'BST': ['Europe/London'],
+        'CET': ['Europe/Paris', 'Europe/Berlin', 'Europe/Rome'],
+        'CEST': ['Europe/Paris', 'Europe/Berlin', 'Europe/Rome'],
+        'EET': ['Europe/Sofia', 'Europe/Athens', 'Europe/Helsinki'],
+        'EEST': ['Europe/Sofia', 'Europe/Athens', 'Europe/Helsinki'],
+        'AEST': ['Australia/Sydney', 'Australia/Melbourne'],
+        'AEDT': ['Australia/Sydney', 'Australia/Melbourne'],
+        'UTC': ['UTC']
+    };
+    
+    return abbrMap[abbr] || [];
+}
+
+   #formatTimeAgo(date) {
+    if (!date || !date.isValid()) {
+        return 'Unknown time';
+    }
+
+    // Convert UTC date to user's local timezone for display
+    const now = moment();
+    const userDate = moment(date).local();
+    
+    console.debug('Time ago calculation:', {
+        utcDate: date.format(),
+        userLocalDate: userDate.format(),
+        now: now.format(),
+        diffSeconds: now.diff(userDate, 'seconds')
+    });
+    
+    const diffInSeconds = now.diff(userDate, 'seconds');
+    const diffInMinutes = now.diff(userDate, 'minutes');
+    const diffInHours = now.diff(userDate, 'hours');
+    const diffInDays = now.diff(userDate, 'days');
+    
+    // Smart time ago display with precision
+    if (diffInSeconds < 0) {
+        // This shouldn't happen if parsing is correct
+        console.warn('Negative time diff:', diffInSeconds, 'for date:', userDate.format());
+        return 'Just now'; // Fallback
+    } else if (diffInSeconds < 45) {
+        return 'Just now';
+    } else if (diffInSeconds < 90) {
+        return 'A minute ago';
+    } else if (diffInMinutes < 45) {
+        return diffInMinutes + ' minutes ago';
+    } else if (diffInMinutes < 90) {
+        return 'An hour ago';
+    } else if (diffInHours < 24) {
+        return diffInHours + ' hours ago';
+    } else if (diffInDays === 1) {
+        return 'Yesterday';
+    } else if (diffInDays < 7) {
+        return diffInDays + ' days ago';
+    } else if (diffInDays < 30) {
+        const weeks = Math.floor(diffInDays / 7);
+        return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
+    } else if (diffInDays < 365) {
+        const months = Math.floor(diffInDays / 30);
+        return months + (months === 1 ? ' month ago' : ' months ago');
+    } else {
+        const years = Math.floor(diffInDays / 365);
+        return years + (years === 1 ? ' year ago' : ' years ago');
+    }
+}
+
+#getUserLocaleSettings() {
+    try {
+        const locale = navigator.language || 'en-US';
+        
+        // Detect time format preference
+        const testTime = moment().locale(locale).format('LT');
+        const uses24Hour = !testTime.includes('AM') && !testTime.includes('PM');
+        
+        // Get user's timezone from browser
+        const timezone = moment.tz.guess() || 'UTC';
+        
+        return {
+            locale: locale,
+            timezone: timezone,
+            uses24Hour: uses24Hour,
+            formats: {
+                longDateTime: 'LLLL',
+                mediumDateTime: 'llll',
+                shortDateTime: 'lll',
+                timeOnly: uses24Hour ? 'HH:mm' : 'h:mm A',
+                dateOnly: 'll'
+            }
+        };
+    } catch (error) {
+        console.debug('Locale detection failed:', error);
+        return {
+            locale: 'en-US',
+            timezone: 'UTC',
+            uses24Hour: false,
+            formats: {
+                longDateTime: 'LLLL',
+                mediumDateTime: 'llll',
+                shortDateTime: 'lll',
+                timeOnly: 'h:mm A',
+                dateOnly: 'll'
+            }
+        };
+    }
+}
+
+#createModernTimestamp(originalElement, dateString) {
+    if (typeof moment === 'undefined' || typeof moment.tz === 'undefined') {
+        console.warn('Moment.js libraries not loaded, skipping timestamp transformation');
+        return originalElement;
+    }
+    
+    // Prevent recursive transformation
+    if (originalElement.classList && originalElement.classList.contains('modern-timestamp')) {
+        console.debug('Element already modernized:', originalElement);
+        return originalElement;
+    }
+    
+    // Check if element contains a modern timestamp
+    if (originalElement.querySelector && originalElement.querySelector('.modern-timestamp')) {
+        console.debug('Element contains modern timestamp:', originalElement);
+        return originalElement;
+    }
+    
+    // Check if we're inside a modern timestamp
+    if (originalElement.closest && originalElement.closest('.modern-timestamp')) {
+        console.debug('Inside modern timestamp:', originalElement);
+        return originalElement;
+    }
+    
+    console.debug('Creating modern timestamp for:', {
+        element: originalElement.tagName,
+        classes: originalElement.className,
+        dateString: dateString
+    });
+    
+    const momentDate = this.#parseForumDate(dateString);
+    
+    if (!momentDate) {
+        console.warn('Could not parse date:', dateString);
+        return originalElement;
+    }
+    
+    // Log for debugging
+    console.debug('Timestamp creation details:', {
+        originalDateString: dateString,
+        parsedUTC: momentDate.format(),
+        parsedLocal: momentDate.local().format(),
+        forumTimezone: this.#detectForumTimezone()
+    });
+    
+    // Get user's locale settings
+    const userSettings = this.#getUserLocaleSettings();
+    
+    // Create the link
+    const link = document.createElement('a');
+    
+    // Determine the href - try multiple sources
+    let href = null;
+    
+    // 1. Check if original element is an anchor
+    if (originalElement.tagName === 'A' && originalElement.hasAttribute('href')) {
+        href = originalElement.getAttribute('href');
+    } 
+    // 2. Check if parent is an anchor
+    else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
+             originalElement.parentElement.hasAttribute('href')) {
+        href = originalElement.parentElement.getAttribute('href');
+    }
+    // 3. Construct from post ID
+    else {
+        const postElement = originalElement.closest('.post');
+        if (postElement && postElement.id) {
+            const postIdMatch = postElement.id.match(/\d+/);
+            if (postIdMatch) {
+                const postId = postIdMatch[0];
+                const topicMatch = window.location.href.match(/t=(\d+)/);
+                if (topicMatch) {
+                    href = '#entry' + postId;
+                } else {
+                    // Fallback to current page with anchor
+                    href = '#entry' + postId;
+                }
+            }
+        }
+    }
+    
+    if (href) {
+        link.href = href;
+        
+        // Copy rel attribute if exists
+        if (originalElement.hasAttribute('rel')) {
+            link.setAttribute('rel', originalElement.getAttribute('rel'));
+        } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
+                  originalElement.parentElement.hasAttribute('rel')) {
+            link.setAttribute('rel', originalElement.parentElement.getAttribute('rel'));
+        }
+    }
+    
+    // Create the time element
+    const timeElement = document.createElement('time');
+    timeElement.className = 'modern-timestamp';
+    
+    // Store UTC ISO string for machine readability
+    const utcISOString = momentDate.toISOString();
+    timeElement.setAttribute('datetime', utcISOString);
+    
+    // Convert to user's local timezone for display
+    const userLocalDate = momentDate.tz(userSettings.timezone);
+    
+    // Create title with full localized date-time
+    const titleFormat = userSettings.formats.longDateTime;
+    const localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat);
+    const timezoneAbbr = userLocalDate.format('z');
+    
+    timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
+    
+    // Create relative time display
+    const relativeSpan = document.createElement('span');
+    relativeSpan.className = 'relative-time';
+    
+    // Calculate relative time from UTC date
+    const relativeTime = this.#formatTimeAgo(momentDate);
+    relativeSpan.textContent = relativeTime;
+    
+    // Add absolute time as data attribute for debugging
+    timeElement.setAttribute('data-absolute-time', userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime));
+    
+    timeElement.appendChild(relativeSpan);
+    
+    // Only wrap with link if we have a valid href
+    let finalElement;
+    if (href) {
+        link.appendChild(timeElement);
+        finalElement = link;
+    } else {
+        finalElement = timeElement;
+    }
+    
+    // Generate unique ID for this timestamp
+    const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    timeElement.setAttribute('data-timestamp-id', timeElementId);
+    
+    // Store the original UTC date for updates
+    timeElement.setAttribute('data-utc-date', utcISOString);
+    
+    // Store original date string for debugging
+    timeElement.setAttribute('data-original-date', dateString);
+    
+    // Set up interval to update relative time
+    const updateInterval = setInterval(() => {
+        if (!document.body.contains(timeElement)) {
+            clearInterval(updateInterval);
+            this.#timeUpdateIntervals.delete(timeElementId);
+            return;
+        }
+        
+        // Re-parse the stored UTC date to ensure accuracy
+        const storedUTC = moment(timeElement.getAttribute('data-utc-date'));
+        if (storedUTC.isValid()) {
+            const newRelativeTime = this.#formatTimeAgo(storedUTC);
+            if (relativeSpan.textContent !== newRelativeTime) {
+                relativeSpan.textContent = newRelativeTime;
+            }
+            
+            // Update title periodically to ensure accuracy
+            const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
+            const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
+            const currentTimezoneAbbr = currentUserLocalDate.format('z');
+            timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
+        }
+    }, 30000);
+    
+    this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+    
+    // Add data attributes for debugging
+    timeElement.setAttribute('data-parsed-date', dateString);
+    timeElement.setAttribute('data-user-timezone', userSettings.timezone);
+    timeElement.setAttribute('data-user-locale', userSettings.locale);
+    timeElement.setAttribute('data-parsed-utc', utcISOString);
+    
+    console.debug('Created timestamp element:', {
+        href: href,
+        utc: utcISOString,
+        userLocal: userLocalDate.format(),
+        relativeTime: relativeTime,
+        elementHTML: finalElement.outerHTML.substring(0, 200)
+    });
+    
+    return finalElement;
+}
+
+#extractDateFromElement(element) {
+    // ===========================================
+    // CRITICAL: Skip elements that should NOT have dates
+    // ===========================================
+    
+    // Skip already modernized timestamps
+    if (element.classList && element.classList.contains('modern-timestamp')) {
+        return null;
+    }
+    
+    // Skip if inside a modern timestamp
+    if (element.closest && element.closest('.modern-timestamp')) {
+        return null;
+    }
+    
+    // Skip action links (edit, quote, delete, share, file links)
+    if (element.tagName === 'A') {
+        const href = element.getAttribute('href') || '';
+        const rel = element.getAttribute('rel') || '';
+        
+        // Skip these types of links:
+        // 1. Post number links (with p= parameter)
+        if (href.includes('&p=') || href.includes('?p=')) {
             return null;
         }
-
-        // Clean the date string
-        let cleanDateString = dateString
-            .replace(/^Posted on\s*/i, '')
-            .replace(/^on\s*/i, '')
-            .replace(/^Posted\s*/i, '')
-            .trim();
-
-        console.debug('Parsing date string:', dateString, '->', cleanDateString);
-
-        // Common forum date formats - IMPORTANT: These are already in USER'S local timezone
-        const formats = [
-            'MM/DD/YYYY, h:mm A',      // 12/28/2025, 06:50 PM (user local)
-            'MM/DD/YYYY, h:mm:ss A',   // 12/28/2025, 06:50:10 PM
-            'MM/DD/YYYY, HH:mm',       // 12/28/2025, 18:50
-            'MM/DD/YYYY, HH:mm:ss',    // 12/28/2025, 18:50:10
-            'MM-DD-YYYY, h:mm A',      // 12-28-2025, 06:50 PM
-            'DD/MM/YYYY, h:mm A',      // 28/12/2025, 06:50 PM
-            'DD/MM/YYYY, HH:mm',       // 28/12/2025, 18:50
-            'YYYY-MM-DD HH:mm:ss',     // 2025-12-28 18:50:10
-            'YYYY-MM-DDTHH:mm:ss',     // 2025-12-28T18:50:10
-            'dddd, MMMM D, YYYY h:mm A', // Sunday, December 28, 2025 6:50 PM
+        // 2. Action links (edit, quote, delete)
+        if (href.includes('CODE=08') || href.includes('CODE=02') || 
+            href.includes('delete_post') || href.includes('javascript:')) {
+            return null;
+        }
+        // 3. File/folder icons (fa-file-o)
+        if (element.querySelector('.fa-file-o, .fa-folder')) {
+            return null;
+        }
+        // 4. Nofollow action links
+        if (rel === 'nofollow' && (href.includes('act=Post') || href.includes('CODE='))) {
+            return null;
+        }
+        // 5. Share buttons
+        if (element.closest('.btn-share') || element.getAttribute('data-action') === 'share') {
+            return null;
+        }
+    }
+    
+    // Skip buttons
+    if (element.tagName === 'BUTTON') {
+        return null;
+    }
+    
+    // Skip action icons
+    if (element.tagName === 'I' && (
+        element.classList.contains('fa-pen-to-square') ||
+        element.classList.contains('fa-quote-left') ||
+        element.classList.contains('fa-eraser') ||
+        element.classList.contains('fa-share-nodes') ||
+        element.classList.contains('fa-file-o') ||
+        element.classList.contains('fa-folder')
+    )) {
+        return null;
+    }
+    
+    // ===========================================
+    // Now proceed with date extraction for valid elements
+    // ===========================================
+    
+    // Strategy 1: Check title attribute (most reliable)
+    if (element.hasAttribute('title')) {
+        const title = element.getAttribute('title');
+        // Remove any time suffix like ":49" or ":10"
+        const cleanTitle = title.replace(/:\d+$/, '');
+        console.debug('Extracted date from title:', cleanTitle);
+        return cleanTitle;
+    }
+    
+    // Strategy 2: Check text content - look for date patterns
+    if (element.textContent) {
+        const text = element.textContent.trim();
+        
+        // Look for date patterns (MM/DD/YYYY or DD/MM/YYYY with time)
+        const datePatterns = [
+            /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i,  // 12/23/2025, 09:30 PM
+            /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}:\d{2}\s*(?:AM|PM)?)/i, // 12/23/2025, 09:30:49 PM
+            /(\d{4}-\d{1,2}-\d{1,2},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i,  // 2025-12-23, 09:30 PM
+            /(\d{1,2}\.\d{1,2}\.\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i  // 23.12.2025, 09:30 PM
         ];
         
-        let momentDate = null;
-        
-        // STRATEGY: Parse as LOCAL time (forum already shows user's local time)
-        for (let i = 0; i < formats.length; i++) {
-            momentDate = moment(cleanDateString, formats[i], true);
-            if (momentDate && momentDate.isValid()) {
-                console.debug('Parsed with format', formats[i], 'as local time:', momentDate.format());
-                break;
+        for (const pattern of datePatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                console.debug('Extracted date from text pattern:', match[1].trim());
+                return match[1].trim();
             }
         }
         
-        // If we have timezone in string like "(EET)", handle it
-        if ((!momentDate || !momentDate.isValid()) && cleanDateString.includes('(')) {
-            try {
-                const timezoneMatch = cleanDateString.match(/\(([A-Z]{2,})\)$/);
-                if (timezoneMatch) {
-                    const tzAbbr = timezoneMatch[1];
-                    const dateWithoutTz = cleanDateString.replace(/\s*\([A-Z]{2,}\)$/, '');
-                    
-                    for (let i = 0; i < formats.length; i++) {
-                        const parsed = moment(dateWithoutTz, formats[i], true);
-                        if (parsed && parsed.isValid()) {
-                            const possibleZones = this.#getTimezoneFromAbbr(tzAbbr);
-                            if (possibleZones.length > 0) {
-                                momentDate = parsed.tz(possibleZones[0]);
-                            } else {
-                                momentDate = parsed;
-                            }
-                            console.debug('Parsed with timezone', tzAbbr, ':', momentDate.format());
-                            break;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.debug('Timezone parsing failed:', e.message);
-            }
-        }
-        
-        // Fallback to JavaScript Date
-        if (!momentDate || !momentDate.isValid()) {
-            const jsDate = new Date(cleanDateString);
-            if (!isNaN(jsDate)) {
-                momentDate = moment(jsDate);
-                console.debug('Parsed with JS Date:', momentDate.format());
-            }
-        }
-        
-        if (momentDate && momentDate.isValid()) {
-            // Convert local time to UTC for consistent storage
-            const utcTime = momentDate.utc();
-            
-            console.debug('Final conversion:', {
-                original: cleanDateString,
-                parsedLocal: momentDate.format(),
-                parsedUTC: utcTime.format(),
-                localOffset: momentDate.utcOffset(),
-                isUTC: momentDate.isUTC()
-            });
-            
-            return utcTime;
-        }
-        
-        console.warn('Could not parse date:', dateString, '->', cleanDateString);
-        return null;
-    }
-
-    #detectForumTimezone() {
-        // Since the forum already displays times in user's local timezone,
-        // we don't need to detect a forum server timezone.
-        // Return null to indicate we're using local parsing.
-        return null;
-    }
-
-    #getTimezoneFromAbbr(abbr) {
-        // Map common timezone abbreviations to IANA timezones
-        const abbrMap = {
-            'EST': ['America/New_York', 'America/Toronto', 'America/Montreal'],
-            'EDT': ['America/New_York', 'America/Toronto', 'America/Montreal'],
-            'PST': ['America/Los_Angeles', 'America/Vancouver'],
-            'PDT': ['America/Los_Angeles', 'America/Vancouver'],
-            'CST': ['America/Chicago', 'America/Winnipeg'],
-            'CDT': ['America/Chicago', 'America/Winnipeg'],
-            'MST': ['America/Denver', 'America/Phoenix'],
-            'MDT': ['America/Denver'],
-            'GMT': ['UTC', 'Europe/London'],
-            'BST': ['Europe/London'],
-            'CET': ['Europe/Paris', 'Europe/Berlin', 'Europe/Rome'],
-            'CEST': ['Europe/Paris', 'Europe/Berlin', 'Europe/Rome'],
-            'EET': ['Europe/Sofia', 'Europe/Athens', 'Europe/Helsinki'],
-            'EEST': ['Europe/Sofia', 'Europe/Athens', 'Europe/Helsinki'],
-            'AEST': ['Australia/Sydney', 'Australia/Melbourne'],
-            'AEDT': ['Australia/Sydney', 'Australia/Melbourne'],
-            'UTC': ['UTC']
-        };
-        
-        return abbrMap[abbr] || [];
-    }
-
-    #formatTimeAgo(date) {
-        if (!date || !date.isValid()) {
-            return 'Unknown time';
-        }
-
-        // Convert UTC date to user's local timezone for display
-        const now = moment();
-        const userDate = moment(date).local();
-        
-        console.debug('Time ago calculation:', {
-            utcDate: date.format(),
-            userLocalDate: userDate.format(),
-            now: now.format(),
-            diffSeconds: now.diff(userDate, 'seconds')
-        });
-        
-        const diffInSeconds = now.diff(userDate, 'seconds');
-        const diffInMinutes = now.diff(userDate, 'minutes');
-        const diffInHours = now.diff(userDate, 'hours');
-        const diffInDays = now.diff(userDate, 'days');
-        
-        // Smart time ago display with precision
-        if (diffInSeconds < 0) {
-            // This shouldn't happen if parsing is correct
-            console.warn('Negative time diff:', diffInSeconds, 'for date:', userDate.format());
-            return 'Just now'; // Fallback
-        } else if (diffInSeconds < 45) {
-            return 'Just now';
-        } else if (diffInSeconds < 90) {
-            return 'A minute ago';
-        } else if (diffInMinutes < 45) {
-            return diffInMinutes + ' minutes ago';
-        } else if (diffInMinutes < 90) {
-            return 'An hour ago';
-        } else if (diffInHours < 24) {
-            return diffInHours + ' hours ago';
-        } else if (diffInDays === 1) {
-            return 'Yesterday';
-        } else if (diffInDays < 7) {
-            return diffInDays + ' days ago';
-        } else if (diffInDays < 30) {
-            const weeks = Math.floor(diffInDays / 7);
-            return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
-        } else if (diffInDays < 365) {
-            const months = Math.floor(diffInDays / 30);
-            return months + (months === 1 ? ' month ago' : ' months ago');
-        } else {
-            const years = Math.floor(diffInDays / 365);
-            return years + (years === 1 ? ' year ago' : ' years ago');
+        // Last resort: extract just the date+time part
+        const dateTimeMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
+        if (dateTimeMatch) {
+            console.debug('Extracted date-time with fallback:', dateTimeMatch[1].trim());
+            return dateTimeMatch[1].trim();
         }
     }
-
-    #getUserLocaleSettings() {
-        try {
-            const locale = navigator.language || 'en-US';
-            
-            // Detect time format preference
-            const testTime = moment().locale(locale).format('LT');
-            const uses24Hour = !testTime.includes('AM') && !testTime.includes('PM');
-            
-            // Get user's timezone from browser
-            const timezone = moment.tz.guess() || 'UTC';
-            
-            return {
-                locale: locale,
-                timezone: timezone,
-                uses24Hour: uses24Hour,
-                formats: {
-                    longDateTime: 'LLLL',
-                    mediumDateTime: 'llll',
-                    shortDateTime: 'lll',
-                    timeOnly: uses24Hour ? 'HH:mm' : 'h:mm A',
-                    dateOnly: 'll'
-                }
-            };
-        } catch (error) {
-            console.debug('Locale detection failed:', error);
-            return {
-                locale: 'en-US',
-                timezone: 'UTC',
-                uses24Hour: false,
-                formats: {
-                    longDateTime: 'LLLL',
-                    mediumDateTime: 'llll',
-                    shortDateTime: 'lll',
-                    timeOnly: 'h:mm A',
-                    dateOnly: 'll'
-                }
-            };
-        }
-    }
-
-    #createModernTimestamp(originalElement, dateString) {
-        if (typeof moment === 'undefined' || typeof moment.tz === 'undefined') {
-            console.warn('Moment.js libraries not loaded, skipping timestamp transformation');
-            return originalElement;
-        }
-        
-        // Prevent recursive transformation
-        if (originalElement.classList && originalElement.classList.contains('modern-timestamp')) {
-            console.debug('Element already modernized:', originalElement);
-            return originalElement;
-        }
-        
-        // Check if element contains a modern timestamp
-        if (originalElement.querySelector && originalElement.querySelector('.modern-timestamp')) {
-            console.debug('Element contains modern timestamp:', originalElement);
-            return originalElement;
-        }
-        
-        // Check if we're inside a modern timestamp
-        if (originalElement.closest && originalElement.closest('.modern-timestamp')) {
-            console.debug('Inside modern timestamp:', originalElement);
-            return originalElement;
-        }
-        
-        console.debug('Creating modern timestamp for:', {
-            element: originalElement.tagName,
-            classes: originalElement.className,
-            dateString: dateString
-        });
-        
-        const momentDate = this.#parseForumDate(dateString);
-        
-        if (!momentDate) {
-            console.warn('Could not parse date:', dateString);
-            return originalElement;
-        }
-        
-        // Log for debugging
-        console.debug('Timestamp creation details:', {
-            originalDateString: dateString,
-            parsedUTC: momentDate.format(),
-            parsedLocal: momentDate.local().format(),
-            forumTimezone: this.#detectForumTimezone()
-        });
-        
-        // Get user's locale settings
-        const userSettings = this.#getUserLocaleSettings();
-        
-        // Create the link
-        const link = document.createElement('a');
-        
-        // Determine the href - try multiple sources
-        let href = null;
-        
-        // 1. Check if original element is an anchor
-        if (originalElement.tagName === 'A' && originalElement.hasAttribute('href')) {
-            href = originalElement.getAttribute('href');
-        } 
-        // 2. Check if parent is an anchor
-        else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
-                 originalElement.parentElement.hasAttribute('href')) {
-            href = originalElement.parentElement.getAttribute('href');
-        }
-        // 3. Construct from post ID
-        else {
-            const postElement = originalElement.closest('.post');
-            if (postElement && postElement.id) {
-                const postIdMatch = postElement.id.match(/\d+/);
-                if (postIdMatch) {
-                    const postId = postIdMatch[0];
-                    const topicMatch = window.location.href.match(/t=(\d+)/);
-                    if (topicMatch) {
-                        href = '#entry' + postId;
-                    } else {
-                        // Fallback to current page with anchor
-                        href = '#entry' + postId;
-                    }
+    
+    // Strategy 3: Check parent elements for title (only if not skipped above)
+    const parentCheckElements = [
+        element.parentElement,
+        element.parentElement?.parentElement,
+        element.closest('a'),
+        element.closest('.lt.Sub'),
+        element.closest('.title2')
+    ];
+    
+    for (const parent of parentCheckElements) {
+        if (parent && parent.hasAttribute('title')) {
+            // Skip if parent is an action link
+            if (parent.tagName === 'A') {
+                const parentHref = parent.getAttribute('href') || '';
+                if (parentHref.includes('CODE=') || parentHref.includes('delete_post') || 
+                    parentHref.includes('javascript:') || parentHref.includes('&p=')) {
+                    continue; // Skip this parent
                 }
             }
-        }
-        
-        if (href) {
-            link.href = href;
             
-            // Copy rel attribute if exists
-            if (originalElement.hasAttribute('rel')) {
-                link.setAttribute('rel', originalElement.getAttribute('rel'));
-            } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
-                      originalElement.parentElement.hasAttribute('rel')) {
-                link.setAttribute('rel', originalElement.parentElement.getAttribute('rel'));
-            }
+            const parentTitle = parent.getAttribute('title');
+            const cleanTitle = parentTitle.replace(/:\d+$/, '');
+            console.debug('Extracted date from parent title:', cleanTitle);
+            return cleanTitle;
         }
-        
-        // Create the time element
-        const timeElement = document.createElement('time');
-        timeElement.className = 'modern-timestamp';
-        
-        // Store UTC ISO string for machine readability
-        const utcISOString = momentDate.toISOString();
-        timeElement.setAttribute('datetime', utcISOString);
-        
-        // Convert to user's local timezone for display
-        const userLocalDate = momentDate.tz(userSettings.timezone);
-        
-        // Create title with full localized date-time
-        const titleFormat = userSettings.formats.longDateTime;
-        const localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat);
-        const timezoneAbbr = userLocalDate.format('z');
-        
-        timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
-        
-        // Create relative time display
-        const relativeSpan = document.createElement('span');
-        relativeSpan.className = 'relative-time';
-        
-        // Calculate relative time from UTC date
-        const relativeTime = this.#formatTimeAgo(momentDate);
-        relativeSpan.textContent = relativeTime;
-        
-        // Add absolute time as data attribute for debugging
-        timeElement.setAttribute('data-absolute-time', userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime));
-        
-        timeElement.appendChild(relativeSpan);
-        
-        // Only wrap with link if we have a valid href
-        let finalElement;
-        if (href) {
-            link.appendChild(timeElement);
-            finalElement = link;
-        } else {
-            finalElement = timeElement;
+    }
+    
+    console.warn('Could not extract date from element (after filtering):', {
+        tag: element.tagName,
+        href: element.getAttribute('href'),
+        classes: element.className,
+        textPreview: element.textContent?.substring(0, 50)
+    });
+    return null;
+}
+    
+#transformEditTimestamp(span) {
+    // Look for any edit pattern across languages
+    // Examples: 
+    // English: "Edited by Username - 12/28/2025, 07:27 PM"
+    // Italian: "Modificato da Username - 12/28/2025, 07:27 PM"
+    // Spanish: "Editado por Username - 12/28/2025, 07:27 PM"
+    
+    // Pattern: "Edited by/MODIFIED BY/Editado por/Modificato da" followed by username and dash, then date
+    const editPatterns = [
+        /Edited by .+? - (.+)/i,
+        /Modificato da .+? - (.+)/i,
+        /Editado por .+? - (.+)/i,
+        /Bearbeitet von .+? - (.+)/i,
+        /Modifié par .+? - (.+)/i,
+        /(.+ - \d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}.+)/i  // Fallback: anything ending with date pattern
+    ];
+    
+    let editDate = null;
+    for (const pattern of editPatterns) {
+        const timeMatch = span.textContent.match(pattern);
+        if (timeMatch) {
+            editDate = timeMatch[1].trim();
+            break;
         }
+    }
+    
+    if (editDate) {
+        console.debug('Found edit timestamp:', editDate);
         
-        // Generate unique ID for this timestamp
-        const timeElementId = 'timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-        timeElement.setAttribute('data-timestamp-id', timeElementId);
+        // Use the same parsing logic as regular timestamps
+        const momentDate = this.#parseForumDate(editDate);
         
-        // Store the original UTC date for updates
-        timeElement.setAttribute('data-utc-date', utcISOString);
-        
-        // Store original date string for debugging
-        timeElement.setAttribute('data-original-date', dateString);
-        
-        // Set up interval to update relative time
-        const updateInterval = setInterval(() => {
-            if (!document.body.contains(timeElement)) {
-                clearInterval(updateInterval);
-                this.#timeUpdateIntervals.delete(timeElementId);
-                return;
-            }
+        if (momentDate) {
+            const userSettings = this.#getUserLocaleSettings();
             
-            // Re-parse the stored UTC date to ensure accuracy
-            const storedUTC = moment(timeElement.getAttribute('data-utc-date'));
-            if (storedUTC.isValid()) {
-                const newRelativeTime = this.#formatTimeAgo(storedUTC);
-                if (relativeSpan.textContent !== newRelativeTime) {
-                    relativeSpan.textContent = newRelativeTime;
+            // Convert UTC to user's local timezone
+            const userLocalDate = momentDate.tz(userSettings.timezone);
+            
+            // Format for display
+            const formattedTime = userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
+            const timezoneAbbr = userLocalDate.format('z');
+            
+            const timeElement = document.createElement('time');
+            timeElement.setAttribute('datetime', momentDate.toISOString());
+            timeElement.setAttribute('title', formattedTime + ' (' + timezoneAbbr + ')');
+            timeElement.textContent = this.#formatTimeAgo(momentDate);
+            
+            // Generate unique ID for updates
+            const timeElementId = 'edit-timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            timeElement.setAttribute('data-timestamp-id', timeElementId);
+            timeElement.setAttribute('data-utc-date', momentDate.toISOString());
+            
+            // Always use "Edited" in English before the time element
+            span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited ' + timeElement.outerHTML;
+            
+            // Set up interval to update relative time
+            const updateInterval = setInterval(() => {
+                if (!document.body.contains(timeElement)) {
+                    clearInterval(updateInterval);
+                    this.#timeUpdateIntervals.delete(timeElementId);
+                    return;
                 }
                 
-                // Update title periodically to ensure accuracy
-                const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
-                const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
-                const currentTimezoneAbbr = currentUserLocalDate.format('z');
-                timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
-            }
-        }, 30000);
-        
-        this.#timeUpdateIntervals.set(timeElementId, updateInterval);
-        
-        // Add data attributes for debugging
-        timeElement.setAttribute('data-parsed-date', dateString);
-        timeElement.setAttribute('data-user-timezone', userSettings.timezone);
-        timeElement.setAttribute('data-user-locale', userSettings.locale);
-        timeElement.setAttribute('data-parsed-utc', utcISOString);
-        
-        console.debug('Created timestamp element:', {
-            href: href,
-            utc: utcISOString,
-            userLocal: userLocalDate.format(),
-            relativeTime: relativeTime,
-            elementHTML: finalElement.outerHTML.substring(0, 200)
-        });
-        
-        return finalElement;
+                const storedUTC = moment(timeElement.getAttribute('data-utc-date'));
+                if (storedUTC.isValid()) {
+                    const newRelativeTime = this.#formatTimeAgo(storedUTC);
+                    if (timeElement.textContent !== newRelativeTime) {
+                        timeElement.textContent = newRelativeTime;
+                    }
+                    
+                    // Update title
+                    const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
+                    const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
+                    const currentTimezoneAbbr = currentUserLocalDate.format('z');
+                    timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
+                }
+            }, 30000);
+            
+            this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+            
+            console.debug('Created edit timestamp:', {
+                original: editDate,
+                parsedUTC: momentDate.format(),
+                userLocal: userLocalDate.format(),
+                relativeTime: timeElement.textContent
+            });
+        } else {
+            console.warn('Could not parse edit date:', editDate);
+            // Fallback: keep original text but add icon
+            span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
+        }
+    } else {
+        // If no edit pattern found but it's an edit span, just add icon
+        span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
     }
+}
 
-    #extractDateFromElement(element) {
+#transformTimestampElements(element) {
+    const timestampSelectors = [
+        '.lt.Sub a span.when',
+        '.lt.Sub time',
+        '.post-edit time',
+        '.lt.Sub span',
+        '.lt.Sub a',
+        '.title2.top time',
+        '.title2.top span',
+        '.title2.top a',
+        'span.when'
+        // REMOVED: 'a[href*="#entry"]', 'a[title*="/"]' - too broad
+    ];
+    
+    const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
+    
+    timestampElements.forEach(timestampElement => {
         // ===========================================
-        // CRITICAL: Skip elements that should NOT have dates
+        // CRITICAL: Filter out non-timestamp elements BEFORE extraction
         // ===========================================
         
         // Skip already modernized timestamps
-        if (element.classList && element.classList.contains('modern-timestamp')) {
-            return null;
+        if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
+            return;
         }
         
-        // Skip if inside a modern timestamp
-        if (element.closest && element.closest('.modern-timestamp')) {
-            return null;
+        // Skip if any ancestor is already a modern timestamp
+        if (timestampElement.closest('.modern-timestamp')) {
+            return;
         }
         
-        // Skip action links (edit, quote, delete, share, file links)
-        if (element.tagName === 'A') {
-            const href = element.getAttribute('href') || '';
-            const rel = element.getAttribute('rel') || '';
+        // Skip if element contains a modern timestamp
+        if (timestampElement.querySelector && timestampElement.querySelector('.modern-timestamp')) {
+            return;
+        }
+        
+        // Skip if we're trying to transform something inside an already transformed timestamp
+        if (timestampElement.closest('time.modern-timestamp, a .modern-timestamp')) {
+            return;
+        }
+        
+        // Check if element is an anchor
+        if (timestampElement.tagName === 'A') {
+            const href = timestampElement.getAttribute('href') || '';
             
-            // Skip these types of links:
-            // 1. Post number links (with p= parameter)
-            if (href.includes('&p=') || href.includes('?p=')) {
-                return null;
+            // Skip anchors that already contain a time element (these are already transformed)
+            if (timestampElement.querySelector('time')) {
+                return;
             }
-            // 2. Action links (edit, quote, delete)
-            if (href.includes('CODE=08') || href.includes('CODE=02') || 
-                href.includes('delete_post') || href.includes('javascript:')) {
-                return null;
+            
+            // Skip anchors that contain modern timestamps
+            if (timestampElement.querySelector('.modern-timestamp')) {
+                return;
             }
-            // 3. File/folder icons (fa-file-o)
-            if (element.querySelector('.fa-file-o, .fa-folder')) {
-                return null;
+            
+            // Skip post number/permalink links (they don't contain dates in their text)
+            // These should be processed by their inner span.when elements instead
+            if (href.includes('#entry') && !timestampElement.querySelector('span.when, time')) {
+                return;
             }
-            // 4. Nofollow action links
-            if (rel === 'nofollow' && (href.includes('act=Post') || href.includes('CODE='))) {
-                return null;
+            
+            // Skip action links (edit, quote, delete, share)
+            if (href.includes('CODE=08') || // edit
+                href.includes('CODE=02') || // quote
+                href.includes('delete_post') || 
+                href.includes('javascript:')) {
+                return;
             }
-            // 5. Share buttons
-            if (element.closest('.btn-share') || element.getAttribute('data-action') === 'share') {
-                return null;
+            
+            // Skip file/folder icon links
+            if (timestampElement.querySelector('.fa-file-o, .fa-folder, .fa-file-lines')) {
+                return;
+            }
+            
+            // Check for action icons inside the link
+            const hasActionIcon = timestampElement.querySelector(
+                '.fa-pen-to-square, .fa-quote-left, .fa-eraser, ' +
+                '.fa-share-nodes, .fa-file-o, .fa-folder, .fa-file-lines'
+            );
+            if (hasActionIcon) {
+                return;
             }
         }
         
-        // Skip buttons
-        if (element.tagName === 'BUTTON') {
-            return null;
+        // Skip buttons entirely
+        if (timestampElement.tagName === 'BUTTON') {
+            return;
         }
         
-        // Skip action icons
-        if (element.tagName === 'I' && (
-            element.classList.contains('fa-pen-to-square') ||
-            element.classList.contains('fa-quote-left') ||
-            element.classList.contains('fa-eraser') ||
-            element.classList.contains('fa-share-nodes') ||
-            element.classList.contains('fa-file-o') ||
-            element.classList.contains('fa-folder')
-        )) {
-            return null;
+        // Skip action icons directly
+        if (timestampElement.tagName === 'I') {
+            const iconClasses = timestampElement.className;
+            if (iconClasses.includes('fa-pen-to-square') ||
+                iconClasses.includes('fa-quote-left') ||
+                iconClasses.includes('fa-eraser') ||
+                iconClasses.includes('fa-share-nodes') ||
+                iconClasses.includes('fa-file-o') ||
+                iconClasses.includes('fa-folder') ||
+                iconClasses.includes('fa-file-lines')) {
+                return;
+            }
         }
         
         // ===========================================
-        // Now proceed with date extraction for valid elements
+        // Now safely extract date from valid timestamp elements
         // ===========================================
         
-        // Strategy 1: Check title attribute (most reliable)
-        if (element.hasAttribute('title')) {
-            const title = element.getAttribute('title');
-            // Remove any time suffix like ":49" or ":10"
-            const cleanTitle = title.replace(/:\d+$/, '');
-            console.debug('Extracted date from title:', cleanTitle);
-            return cleanTitle;
-        }
+        const dateString = this.#extractDateFromElement(timestampElement);
         
-        // Strategy 2: Check text content - look for date patterns
-        if (element.textContent) {
-            const text = element.textContent.trim();
+        if (dateString) {
+            console.debug('Found timestamp element for transformation:', {
+                element: timestampElement.tagName,
+                classes: timestampElement.className,
+                dateString: dateString
+            });
             
-            // Look for date patterns (MM/DD/YYYY or DD/MM/YYYY with time)
-            const datePatterns = [
-                /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i,  // 12/23/2025, 09:30 PM
-                /(\d{1,2}\/\d{1,2}\/\d{4},?\s+\d{1,2}:\d{2}:\d{2}\s*(?:AM|PM)?)/i, // 12/23/2025, 09:30:49 PM
-                /(\d{4}-\d{1,2}-\d{1,2},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i,  // 2025-12-23, 09:30 PM
-                /(\d{1,2}\.\d{1,2}\.\d{4},?\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)/i  // 23.12.2025, 09:30 PM
-            ];
+            const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
             
-            for (const pattern of datePatterns) {
-                const match = text.match(pattern);
-                if (match) {
-                    console.debug('Extracted date from text pattern:', match[1].trim());
-                    return match[1].trim();
+            if (modernTimestamp && modernTimestamp !== timestampElement) {
+                // Check if we're replacing an anchor that contains our timestamp
+                const parent = timestampElement.parentNode;
+                
+                // If the parent is an anchor and we're replacing its only child
+                if (parent && parent.tagName === 'A' && parent.children.length === 1 && 
+                    parent.children[0] === timestampElement && parent.href && parent.href.includes('#entry')) {
+                    // Replace the entire anchor with our new timestamp link
+                    parent.parentNode.replaceChild(modernTimestamp, parent);
+                } 
+                // If the element itself is an anchor with href
+                else if (timestampElement.tagName === 'A' && timestampElement.href && 
+                         timestampElement.href.includes('#entry') && 
+                         timestampElement.children.length === 0) {
+                    // Replace the anchor directly
+                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
                 }
-            }
-            
-            // Last resort: extract just the date+time part
-            const dateTimeMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
-            if (dateTimeMatch) {
-                console.debug('Extracted date-time with fallback:', dateTimeMatch[1].trim());
-                return dateTimeMatch[1].trim();
-            }
-        }
-        
-        // Strategy 3: Check parent elements for title (only if not skipped above)
-        const parentCheckElements = [
-            element.parentElement,
-            element.parentElement?.parentElement,
-            element.closest('a'),
-            element.closest('.lt.Sub'),
-            element.closest('.title2')
-        ];
-        
-        for (const parent of parentCheckElements) {
-            if (parent && parent.hasAttribute('title')) {
-                // Skip if parent is an action link
-                if (parent.tagName === 'A') {
-                    const parentHref = parent.getAttribute('href') || '';
-                    if (parentHref.includes('CODE=') || parentHref.includes('delete_post') || 
-                        parentHref.includes('javascript:') || parentHref.includes('&p=')) {
-                        continue; // Skip this parent
-                    }
+                // If we're replacing a span inside an anchor
+                else if (timestampElement.tagName === 'SPAN' && parent && parent.tagName === 'A' && 
+                         parent.href && parent.href.includes('#entry')) {
+                    // Replace the span, but keep the anchor
+                    parent.replaceChild(modernTimestamp, timestampElement);
                 }
-                
-                const parentTitle = parent.getAttribute('title');
-                const cleanTitle = parentTitle.replace(/:\d+$/, '');
-                console.debug('Extracted date from parent title:', cleanTitle);
-                return cleanTitle;
-            }
-        }
-        
-        console.warn('Could not extract date from element (after filtering):', {
-            tag: element.tagName,
-            href: element.getAttribute('href'),
-            classes: element.className,
-            textPreview: element.textContent?.substring(0, 50)
-        });
-        return null;
-    }
-    
-    #transformEditTimestamp(span) {
-        // Look for any edit pattern across languages
-        // Examples: 
-        // English: "Edited by Username - 12/28/2025, 07:27 PM"
-        // Italian: "Modificato da Username - 12/28/2025, 07:27 PM"
-        // Spanish: "Editado por Username - 12/28/2025, 07:27 PM"
-        
-        // Pattern: "Edited by/MODIFIED BY/Editado por/Modificato da" followed by username and dash, then date
-        const editPatterns = [
-            /Edited by .+? - (.+)/i,
-            /Modificato da .+? - (.+)/i,
-            /Editado por .+? - (.+)/i,
-            /Bearbeitet von .+? - (.+)/i,
-            /Modifié par .+? - (.+)/i,
-            /(.+ - \d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}.+)/i  // Fallback: anything ending with date pattern
-        ];
-        
-        let editDate = null;
-        for (const pattern of editPatterns) {
-            const timeMatch = span.textContent.match(pattern);
-            if (timeMatch) {
-                editDate = timeMatch[1].trim();
-                break;
-            }
-        }
-        
-        if (editDate) {
-            console.debug('Found edit timestamp:', editDate);
-            
-            // Use the same parsing logic as regular timestamps
-            const momentDate = this.#parseForumDate(editDate);
-            
-            if (momentDate) {
-                const userSettings = this.#getUserLocaleSettings();
-                
-                // Convert UTC to user's local timezone
-                const userLocalDate = momentDate.tz(userSettings.timezone);
-                
-                // Format for display
-                const formattedTime = userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
-                const timezoneAbbr = userLocalDate.format('z');
-                
-                const timeElement = document.createElement('time');
-                timeElement.setAttribute('datetime', momentDate.toISOString());
-                timeElement.setAttribute('title', formattedTime + ' (' + timezoneAbbr + ')');
-                timeElement.textContent = this.#formatTimeAgo(momentDate);
-                
-                // Generate unique ID for updates
-                const timeElementId = 'edit-timestamp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-                timeElement.setAttribute('data-timestamp-id', timeElementId);
-                timeElement.setAttribute('data-utc-date', momentDate.toISOString());
-                
-                // Always use "Edited" in English before the time element
-                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited ' + timeElement.outerHTML;
-                
-                // Set up interval to update relative time
-                const updateInterval = setInterval(() => {
-                    if (!document.body.contains(timeElement)) {
-                        clearInterval(updateInterval);
-                        this.#timeUpdateIntervals.delete(timeElementId);
-                        return;
-                    }
-                    
-                    const storedUTC = moment(timeElement.getAttribute('data-utc-date'));
-                    if (storedUTC.isValid()) {
-                        const newRelativeTime = this.#formatTimeAgo(storedUTC);
-                        if (timeElement.textContent !== newRelativeTime) {
-                            timeElement.textContent = newRelativeTime;
-                        }
-                        
-                        // Update title
-                        const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
-                        const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime);
-                        const currentTimezoneAbbr = currentUserLocalDate.format('z');
-                        timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
-                    }
-                }, 30000);
-                
-                this.#timeUpdateIntervals.set(timeElementId, updateInterval);
-                
-                console.debug('Created edit timestamp:', {
-                    original: editDate,
-                    parsedUTC: momentDate.format(),
-                    userLocal: userLocalDate.format(),
-                    relativeTime: timeElement.textContent
-                });
-            } else {
-                console.warn('Could not parse edit date:', editDate);
-                // Fallback: keep original text but add icon
-                span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
+                // Default replacement
+                else {
+                    timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
+                }
             }
         } else {
-            // If no edit pattern found but it's an edit span, just add icon
-            span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
-        }
-    }
-
-    #transformTimestampElements(element) {
-        const timestampSelectors = [
-            '.lt.Sub a span.when',
-            '.lt.Sub time',
-            '.post-edit time',
-            '.lt.Sub span',
-            '.lt.Sub a',
-            '.title2.top time',
-            '.title2.top span',
-            '.title2.top a',
-            'span.when'
-            // REMOVED: 'a[href*="#entry"]', 'a[title*="/"]' - too broad
-        ];
-        
-        const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
-        
-        timestampElements.forEach(timestampElement => {
-            // ===========================================
-            // CRITICAL: Filter out non-timestamp elements BEFORE extraction
-            // ===========================================
-            
-            // Skip already modernized timestamps
-            if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
-                return;
-            }
-            
-            // Skip if any ancestor is already a modern timestamp
-            if (timestampElement.closest('.modern-timestamp')) {
-                return;
-            }
-            
-            // Skip if element contains a modern timestamp
-            if (timestampElement.querySelector && timestampElement.querySelector('.modern-timestamp')) {
-                return;
-            }
-            
-            // Skip if we're trying to transform something inside an already transformed timestamp
-            if (timestampElement.closest('time.modern-timestamp, a .modern-timestamp')) {
-                return;
-            }
-            
-            // Check if element is an anchor
-            if (timestampElement.tagName === 'A') {
-                const href = timestampElement.getAttribute('href') || '';
-                
-                // Skip anchors that already contain a time element (these are already transformed)
-                if (timestampElement.querySelector('time')) {
-                    return;
-                }
-                
-                // Skip anchors that contain modern timestamps
-                if (timestampElement.querySelector('.modern-timestamp')) {
-                    return;
-                }
-                
-                // Skip post number/permalink links (they don't contain dates in their text)
-                // These should be processed by their inner span.when elements instead
-                if (href.includes('#entry') && !timestampElement.querySelector('span.when, time')) {
-                    return;
-                }
-                
-                // Skip action links (edit, quote, delete, share)
-                if (href.includes('CODE=08') || // edit
-                    href.includes('CODE=02') || // quote
-                    href.includes('delete_post') || 
-                    href.includes('javascript:')) {
-                    return;
-                }
-                
-                // Skip file/folder icon links
-                if (timestampElement.querySelector('.fa-file-o, .fa-folder, .fa-file-lines')) {
-                    return;
-                }
-                
-                // Check for action icons inside the link
-                const hasActionIcon = timestampElement.querySelector(
-                    '.fa-pen-to-square, .fa-quote-left, .fa-eraser, ' +
-                    '.fa-share-nodes, .fa-file-o, .fa-folder, .fa-file-lines'
-                );
-                if (hasActionIcon) {
-                    return;
-                }
-            }
-            
-            // Skip buttons entirely
-            if (timestampElement.tagName === 'BUTTON') {
-                return;
-            }
-            
-            // Skip action icons directly
-            if (timestampElement.tagName === 'I') {
-                const iconClasses = timestampElement.className;
-                if (iconClasses.includes('fa-pen-to-square') ||
-                    iconClasses.includes('fa-quote-left') ||
-                    iconClasses.includes('fa-eraser') ||
-                    iconClasses.includes('fa-share-nodes') ||
-                    iconClasses.includes('fa-file-o') ||
-                    iconClasses.includes('fa-folder') ||
-                    iconClasses.includes('fa-file-lines')) {
-                    return;
-                }
-            }
-            
-            // ===========================================
-            // Now safely extract date from valid timestamp elements
-            // ===========================================
-            
-            const dateString = this.#extractDateFromElement(timestampElement);
-            
-            if (dateString) {
-                console.debug('Found timestamp element for transformation:', {
-                    element: timestampElement.tagName,
-                    classes: timestampElement.className,
-                    dateString: dateString
-                });
-                
-                const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
-                
-                if (modernTimestamp && modernTimestamp !== timestampElement) {
-                    // Check if we're replacing an anchor that contains our timestamp
-                    const parent = timestampElement.parentNode;
-                    
-                    // If the parent is an anchor and we're replacing its only child
-                    if (parent && parent.tagName === 'A' && parent.children.length === 1 && 
-                        parent.children[0] === timestampElement && parent.href && parent.href.includes('#entry')) {
-                        // Replace the entire anchor with our new timestamp link
-                        parent.parentNode.replaceChild(modernTimestamp, parent);
-                    } 
-                    // If the element itself is an anchor with href
-                    else if (timestampElement.tagName === 'A' && timestampElement.href && 
-                             timestampElement.href.includes('#entry') && 
-                             timestampElement.children.length === 0) {
-                        // Replace the anchor directly
-                        timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
-                    }
-                    // If we're replacing a span inside an anchor
-                    else if (timestampElement.tagName === 'SPAN' && parent && parent.tagName === 'A' && 
-                             parent.href && parent.href.includes('#entry')) {
-                        // Replace the span, but keep the anchor
-                        parent.replaceChild(modernTimestamp, timestampElement);
-                    }
-                    // Default replacement
-                    else {
-                        timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
-                    }
-                }
-            } else {
-                // Log debug info for elements that matched selectors but weren't timestamps
-                console.debug('Element matched timestamp selector but has no date:', {
-                    tag: timestampElement.tagName,
-                    href: timestampElement.getAttribute('href'),
-                    classes: timestampElement.className,
-                    textPreview: timestampElement.textContent?.substring(0, 30)
-                });
-            }
-        });
-    }
-    
-    #transformPostHeaderTimestamps(postHeader) {
-        if (!postHeader) return;
-        
-        // Look for specific timestamp elements in post headers
-        // Focus on elements that actually contain dates, not general anchors
-        const timestampPatterns = [
-            'span.when',           // Original timestamp spans
-            'time:not(.modern-timestamp)', // Original time elements
-            '.lt.Sub span.when',   // Specific timestamp spans in lt.Sub
-            '.lt.Sub a span.when'  // Timestamp spans inside anchors
-        ];
-        
-        timestampPatterns.forEach(pattern => {
-            const elements = postHeader.querySelectorAll(pattern);
-            elements.forEach(el => {
-                // Skip if already modernized
-                if (el.classList && el.classList.contains('modern-timestamp')) return;
-                
-                const dateString = this.#extractDateFromElement(el);
-                if (dateString) {
-                    console.log('Post header timestamp found:', {
-                        element: el,
-                        dateString: dateString,
-                        pattern: pattern
-                    });
-                    
-                    const modernTimestamp = this.#createModernTimestamp(el, dateString);
-                    if (modernTimestamp !== el) {
-                        el.parentNode.replaceChild(modernTimestamp, el);
-                    }
-                }
+            // Log debug info for elements that matched selectors but weren't timestamps
+            console.debug('Element matched timestamp selector but has no date:', {
+                tag: timestampElement.tagName,
+                href: timestampElement.getAttribute('href'),
+                classes: timestampElement.className,
+                textPreview: timestampElement.textContent?.substring(0, 30)
             });
+        }
+    });
+}
+    
+ #transformPostHeaderTimestamps(postHeader) {
+    if (!postHeader) return;
+    
+    // Look for specific timestamp elements in post headers
+    // Focus on elements that actually contain dates, not general anchors
+    const timestampPatterns = [
+        'span.when',           // Original timestamp spans
+        'time:not(.modern-timestamp)', // Original time elements
+        '.lt.Sub span.when',   // Specific timestamp spans in lt.Sub
+        '.lt.Sub a span.when'  // Timestamp spans inside anchors
+    ];
+    
+    timestampPatterns.forEach(pattern => {
+        const elements = postHeader.querySelectorAll(pattern);
+        elements.forEach(el => {
+            // Skip if already modernized
+            if (el.classList && el.classList.contains('modern-timestamp')) return;
+            
+            const dateString = this.#extractDateFromElement(el);
+            if (dateString) {
+                console.log('Post header timestamp found:', {
+                    element: el,
+                    dateString: dateString,
+                    pattern: pattern
+                });
+                
+                const modernTimestamp = this.#createModernTimestamp(el, dateString);
+                if (modernTimestamp !== el) {
+                    el.parentNode.replaceChild(modernTimestamp, el);
+                }
+            }
         });
-    }
+    });
+}
 
     // ==============================
     // ATTACHMENT TRANSFORMATION - UPDATED WITH MEDIA DIMENSION EXTRACTOR INTEGRATION
@@ -5562,10 +5695,10 @@ class PostModernizer {
     }
 
     #modernizeTablesInContent(contentWrapper) {
-        contentWrapper.querySelectorAll('table').forEach(table => {
-            if (table.classList.contains('modern-table')) return;
-            this.#transformTable(table);
-            table.classList.add('modern-table');
+        contentWrapper.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
+            if (!table.closest('.modern-table-container')) {
+                this.#transformTable(table);
+            }
         });
     }
 
@@ -5759,7 +5892,7 @@ class PostModernizer {
                     });
                 }
 
-                this.#processTextAndLineBreaksPreservingTables(contentWrapper);
+                this.#processTextAndLineBreaks(contentWrapper);
                 this.#cleanupSearchPostContent(contentWrapper);
 
                 const editSpanInContent = contentWrapper.querySelector('span.edit');
@@ -5911,133 +6044,15 @@ class PostModernizer {
         });
     }
 
-    #cleanupSearchPostContent(contentWrapper) {
-        // First mark tables for preservation
-        contentWrapper.querySelectorAll('table').forEach(table => {
-            table.setAttribute('data-preserve-table', 'true');
-        });
-
-        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
-            // Skip tables that should be preserved
-            if (el.hasAttribute('data-preserve-table') || el.closest('[data-preserve-table]')) {
-                return;
+    #removeInvalidTableStructure(element) {
+        element.querySelectorAll('td.right.Item').forEach(td => {
+            while (td.firstChild) {
+                td.parentNode.insertBefore(td.firstChild, td);
             }
-            
-            if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
-                el.remove();
-            } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
-                const parent = el.parentNode;
-                if (parent) {
-                    while (el.firstChild) {
-                        parent.insertBefore(el.firstChild, el);
-                    }
-                    el.remove();
-                }
-            }
+            td.remove();
         });
 
-        // Modernize various content blocks
-        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
-            if (container.classList.contains('quote-modernized')) return;
-            this.#transformQuote(container);
-            container.classList.add('quote-modernized');
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
-            if (container.classList.contains('spoiler-modernized')) return;
-            this.#transformSpoiler(container);
-            container.classList.add('spoiler-modernized');
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
-            if (container.classList.contains('code-modernized')) return;
-            this.#transformCodeBlock(container);
-            container.classList.add('code-modernized');
-        });
-
-        // Modernize attachments in search posts
-        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
-            if (container.classList.contains('attachment-modernized')) return;
-            this.#transformAttachment(container);
-            container.classList.add('attachment-modernized');
-        });
-
-        // Modernize tables in search posts
-        contentWrapper.querySelectorAll('table').forEach(table => {
-            if (table.classList.contains('modern-table')) return;
-            this.#transformTable(table);
-            table.classList.add('modern-table');
-        });
-
-        // Remove preservation markers
-        contentWrapper.querySelectorAll('[data-preserve-table]').forEach(el => {
-            el.removeAttribute('data-preserve-table');
-        });
-    }
-
-    #escapeRegex(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    #handleShareSearchPost(post) {
-        let postLink = null;
-
-        const postLinkElement = post.querySelector('.post-header a[href*="#entry"]');
-        if (postLinkElement) {
-            postLink = postLinkElement.href;
-        }
-
-        if (!postLink) {
-            const postIdMatch = post.id.match(/\d+/);
-            if (postIdMatch) {
-                const postId = postIdMatch[0];
-                const topicLink = post.querySelector('.topic-link');
-                if (topicLink) {
-                    const topicMatch = topicLink.textContent.match(/t=(\d+)/);
-                    if (topicMatch) {
-                        postLink = window.location.origin + '/?t=' + topicMatch[1] + '#entry' + postId;
-                    }
-                }
-            }
-        }
-
-        if (postLink) {
-            this.#copyPostLinkToClipboard(postLink);
-        } else {
-            this.#showCopyNotification('Could not find post link');
-        }
-    }
-
-    #cleanEmptyElements(element) {
-        element.querySelectorAll(':empty').forEach(emptyEl => {
-            if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
-                emptyEl.remove();
-            }
-        });
-
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const nodesToRemove = [];
-        let node;
-
-        while (node = walker.nextNode()) {
-            if (node.textContent.trim() === '') {
-                nodesToRemove.push(node);
-            }
-        }
-
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
-    }
-
-    #cleanupEditSpans(element) {
-        element.querySelectorAll('span.edit').forEach(span => {
-            // Check if already transformed (contains a time element)
-            if (span.querySelector('time[datetime]')) {
-                return;
-            }
-            
-            // Always transform edit spans regardless of language
-            this.#transformEditTimestamp(span);
-        });
+        element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
     #cleanUpLineBreaksBetweenBlocks(element) {
@@ -6049,8 +6064,7 @@ class PostModernizer {
             'div[align="center"].spoiler',
             'div[align="center"]:has(.quote_top)',
             '.modern-attachment',
-            '.modern-table-container',
-            'table.modern-table'
+            '.modern-table-container'  // Add modern tables to block selectors
         ];
 
         const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
@@ -6098,8 +6112,132 @@ class PostModernizer {
         });
     }
 
+    #cleanEmptyElements(element) {
+        element.querySelectorAll(':empty').forEach(emptyEl => {
+            // Skip modern table elements
+            if (emptyEl.closest('.modern-table-container')) {
+                return;
+            }
+            
+            if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
+                emptyEl.remove();
+            }
+        });
+
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const nodesToRemove = [];
+        let node;
+
+        while (node = walker.nextNode()) {
+            // Skip text nodes inside modern tables
+            if (node.parentNode && node.parentNode.closest('.modern-table-container')) {
+                continue;
+            }
+            
+            if (node.textContent.trim() === '') {
+                nodesToRemove.push(node);
+            }
+        }
+
+        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+    }
+
+    #processTextAndLineBreaks(element) {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+        let node;
+
+        while (node = walker.nextNode()) {
+            // Skip text nodes inside modern tables
+            if (node.parentNode && node.parentNode.closest('.modern-table-container')) {
+                continue;
+            }
+            
+            if (node.textContent.trim() !== '') {
+                textNodes.push(node);
+            }
+        }
+
+        textNodes.forEach(textNode => {
+            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
+                const span = document.createElement('span');
+                span.className = 'post-text';
+                span.textContent = textNode.textContent;
+                textNode.parentNode.replaceChild(span, textNode);
+            }
+        });
+
+        element.querySelectorAll('br').forEach(br => {
+            // Skip br elements inside modern tables
+            if (br.closest('.modern-table-container')) {
+                return;
+            }
+            
+            const prevSibling = br.previousElementSibling;
+            const nextSibling = br.nextElementSibling;
+
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-table-container')) {
+                return;
+            }
+
+            if (prevSibling && nextSibling) {
+                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
+                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+
+                if (prevIsPostText && nextIsPostText) {
+                    prevSibling.classList.add('paragraph-end');
+                    br.remove();
+                } else {
+                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-table-container');
+                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-table-container');
+
+                    if (prevIsModern && nextIsModern) {
+                        br.remove();
+                    } else {
+                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                    }
+                }
+            } else {
+                br.remove();
+            }
+        });
+
+        const postTextElements = element.querySelectorAll('.post-text');
+        for (let i = 0; i < postTextElements.length - 1; i++) {
+            const current = postTextElements[i];
+            const next = postTextElements[i + 1];
+
+            let nodeBetween = current.nextSibling;
+            let onlyWhitespace = true;
+
+            while (nodeBetween && nodeBetween !== next) {
+                // Skip modern tables
+                if (nodeBetween.nodeType === Node.ELEMENT_NODE && 
+                    nodeBetween.closest('.modern-table-container')) {
+                    onlyWhitespace = false;
+                    break;
+                }
+                
+                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                    onlyWhitespace = false;
+                    break;
+                }
+                nodeBetween = nodeBetween.nextSibling;
+            }
+
+            if (onlyWhitespace) {
+                current.classList.add('paragraph-end');
+            }
+        }
+    }
+
     #processSignature(element) {
         element.querySelectorAll('.signature').forEach(sig => {
+            // Skip signatures inside modern tables
+            if (sig.closest('.modern-table-container')) {
+                return;
+            }
+            
             sig.classList.add('post-signature');
             sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
         });
@@ -6129,101 +6267,19 @@ class PostModernizer {
         });
     }
 
-    #transformQuote(container) {
-        const quoteTop = container.querySelector('.quote_top');
-        const quoteContent = container.querySelector('.quote');
+    #addQuoteEventListeners(quoteElement) {
+        const expandBtn = quoteElement.querySelector('.quote-expand-btn');
+        const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
 
-        if (!quoteTop || !quoteContent) return;
-
-        const quoteText = quoteTop.textContent.trim();
-        const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/);
-        const author = match ? match[1].trim() : 'Unknown';
-        const quoteLink = quoteTop.querySelector('a');
-        const linkHref = quoteLink ? quoteLink.href : '#';
-        const isLongContent = this.#isLongContent(quoteContent);
-
-        const modernQuote = document.createElement('div');
-        modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : '');
-
-        let html = '<div class="quote-header">' +
-            '<div class="quote-meta">' +
-            '<div class="quote-icon">' +
-            '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
-            '</div>' +
-            '<div class="quote-info">' +
-            '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' +
-            '</div>' +
-            '</div>' +
-            '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">' +
-            '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' +
-            '</a>' +
-            '</div>';
-
-        html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' +
-            this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) +
-            '</div>';
-
-        if (isLongContent) {
-            html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' +
-                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-                'Show more' +
-                '</button>';
+        if (expandBtn && quoteContent) {
+            expandBtn.addEventListener('click', () => {
+                quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
+                expandBtn.style.display = 'none';
+                setTimeout(() => {
+                    quoteContent.style.maxHeight = 'none';
+                }, 300);
+            });
         }
-
-        modernQuote.innerHTML = html;
-        container.replaceWith(modernQuote);
-
-        if (isLongContent) {
-            this.#addQuoteEventListeners(modernQuote);
-        }
-
-        setTimeout(() => {
-            const quoteLink = modernQuote.querySelector('.quote-link');
-            if (quoteLink) {
-                this.#enhanceSingleQuoteLink(quoteLink);
-            }
-        }, 10);
-    }
-
-    #transformSpoiler(container) {
-        const spoilerTop = container.querySelector('.code_top');
-        const spoilerContent = container.querySelector('.code[align="left"]');
-
-        if (!spoilerTop || !spoilerContent) return;
-
-        const isLongContent = this.#isLongContent(spoilerContent);
-
-        const modernSpoiler = document.createElement('div');
-        modernSpoiler.className = 'modern-spoiler';
-
-        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
-            '<div class="spoiler-icon">' +
-            '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
-            '</div>' +
-            '<div class="spoiler-info">' +
-            '<span class="spoiler-title">SPOILER</span>' +
-            '</div>' +
-            '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
-            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-            '</button>' +
-            '</div>';
-
-        html += '<div class="spoiler-content' +
-            (isLongContent ? ' collapsible-content' : '') + '">' +
-            this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
-            '</div>';
-
-        if (isLongContent) {
-            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
-                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-                'Show more' +
-                '</button>';
-        }
-
-        modernSpoiler.innerHTML = html;
-        container.replaceWith(modernSpoiler);
-
-        this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
     }
 
     #addSpoilerEventListeners(spoilerElement, isLongContent = false) {
@@ -6364,13 +6420,6 @@ class PostModernizer {
         return contentScore >= 4;
     }
 
-    #preserveMediaDimensionsInHTML(html) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        this.#preserveMediaDimensions(tempDiv);
-        return tempDiv.innerHTML;
-    }
-
     #preserveMediaDimensions(element) {
         element.querySelectorAll('img').forEach(img => {
             if (!img.style.maxWidth) {
@@ -6465,21 +6514,6 @@ class PostModernizer {
                 iframe.setAttribute('title', 'Embedded content');
             }
         });
-    }
-
-    #addQuoteEventListeners(quoteElement) {
-        const expandBtn = quoteElement.querySelector('.quote-expand-btn');
-        const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
-
-        if (expandBtn && quoteContent) {
-            expandBtn.addEventListener('click', () => {
-                quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
-                expandBtn.style.display = 'none';
-                setTimeout(() => {
-                    quoteContent.style.maxHeight = 'none';
-                }, 300);
-            });
-        }
     }
 
     #addReputationToFooter(miniButtons, stEmoji, postFooter) {
@@ -7615,8 +7649,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId, this.#attachmentObserverId,
-            this.#tableObserverId];
+            this.#codeBlockObserverId, this.#attachmentObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
