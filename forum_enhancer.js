@@ -5467,61 +5467,62 @@ class PostModernizer {
         element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
-    #cleanupPostContentStructure(contentElement) {
-        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+#cleanupPostContentStructure(contentElement) {
+    contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+        while (td.firstChild) {
+            contentElement.appendChild(td.firstChild);
+        }
+        td.remove();
+    });
+
+    contentElement.querySelectorAll('td').forEach(td => {
+        const parent = td.parentNode;
+        if (parent) {
             while (td.firstChild) {
-                contentElement.appendChild(td.firstChild);
+                parent.insertBefore(td.firstChild, td);
             }
             td.remove();
-        });
+        }
+    });
 
-        contentElement.querySelectorAll('td').forEach(td => {
-            const parent = td.parentNode;
-            if (parent) {
-                while (td.firstChild) {
-                    parent.insertBefore(td.firstChild, td);
-                }
-                td.remove();
+    contentElement.querySelectorAll('tr').forEach(tr => {
+        const parent = tr.parentNode;
+        if (parent) {
+            while (tr.firstChild) {
+                parent.insertBefore(tr.firstChild, tr);
             }
-        });
+            tr.remove();
+        }
+    });
 
-        contentElement.querySelectorAll('tr').forEach(tr => {
-            const parent = tr.parentNode;
-            if (parent) {
-                while (tr.firstChild) {
-                    parent.insertBefore(tr.firstChild, tr);
-                }
-                tr.remove();
+    contentElement.querySelectorAll('tbody').forEach(tbody => {
+        const parent = tbody.parentNode;
+        if (parent) {
+            while (tbody.firstChild) {
+                parent.insertBefore(tbody.firstChild, tbody);
             }
-        });
+            tbody.remove();
+        }
+    });
 
-        contentElement.querySelectorAll('tbody').forEach(tbody => {
-            const parent = tbody.parentNode;
-            if (parent) {
-                while (tbody.firstChild) {
-                    parent.insertBefore(tbody.firstChild, tbody);
-                }
-                tbody.remove();
+    // MODIFIED: Only remove tables that are NOT .ve-table
+    contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
+        const parent = table.parentNode;
+        if (parent) {
+            while (table.firstChild) {
+                parent.insertBefore(table.firstChild, table);
             }
-        });
+            table.remove();
+        }
+    });
 
-        contentElement.querySelectorAll('table').forEach(table => {
-            const parent = table.parentNode;
-            if (parent) {
-                while (table.firstChild) {
-                    parent.insertBefore(table.firstChild, table);
-                }
-                table.remove();
-            }
-        });
-
-        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-        this.#cleanEmptyElements(contentElement);
-        this.#processTextAndLineBreaks(contentElement);
-        this.#cleanupEditSpans(contentElement);
-        this.#processSignature(contentElement);
-        this.#cleanInvalidAttributes(contentElement);
-    }
+    this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+    this.#cleanEmptyElements(contentElement);
+    this.#processTextAndLineBreaks(contentElement);
+    this.#cleanupEditSpans(contentElement);
+    this.#processSignature(contentElement);
+    this.#cleanInvalidAttributes(contentElement);
+}
 
 #cleanupEditSpans(element) {
     element.querySelectorAll('span.edit').forEach(span => {
