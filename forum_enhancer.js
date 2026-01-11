@@ -3759,7 +3759,69 @@ class PostModernizer {
 }
 
 #extractDateFromElement(element) {
-    // Try multiple strategies to extract date
+    // ===========================================
+    // CRITICAL: Skip elements that should NOT have dates
+    // ===========================================
+    
+    // Skip already modernized timestamps
+    if (element.classList && element.classList.contains('modern-timestamp')) {
+        return null;
+    }
+    
+    // Skip if inside a modern timestamp
+    if (element.closest && element.closest('.modern-timestamp')) {
+        return null;
+    }
+    
+    // Skip action links (edit, quote, delete, share, file links)
+    if (element.tagName === 'A') {
+        const href = element.getAttribute('href') || '';
+        const rel = element.getAttribute('rel') || '';
+        
+        // Skip these types of links:
+        // 1. Post number links (with p= parameter)
+        if (href.includes('&p=') || href.includes('?p=')) {
+            return null;
+        }
+        // 2. Action links (edit, quote, delete)
+        if (href.includes('CODE=08') || href.includes('CODE=02') || 
+            href.includes('delete_post') || href.includes('javascript:')) {
+            return null;
+        }
+        // 3. File/folder icons (fa-file-o)
+        if (element.querySelector('.fa-file-o, .fa-folder')) {
+            return null;
+        }
+        // 4. Nofollow action links
+        if (rel === 'nofollow' && (href.includes('act=Post') || href.includes('CODE='))) {
+            return null;
+        }
+        // 5. Share buttons
+        if (element.closest('.btn-share') || element.getAttribute('data-action') === 'share') {
+            return null;
+        }
+    }
+    
+    // Skip buttons
+    if (element.tagName === 'BUTTON') {
+        return null;
+    }
+    
+    // Skip action icons
+    if (element.tagName === 'I' && (
+        element.classList.contains('fa-pen-to-square') ||
+        element.classList.contains('fa-quote-left') ||
+        element.classList.contains('fa-eraser') ||
+        element.classList.contains('fa-share-nodes') ||
+        element.classList.contains('fa-file-o') ||
+        element.classList.contains('fa-folder')
+    )) {
+        return null;
+    }
+    
+    // ===========================================
+    // Now proceed with date extraction for valid elements
+    // ===========================================
     
     // Strategy 1: Check title attribute (most reliable)
     if (element.hasAttribute('title')) {
@@ -3791,7 +3853,6 @@ class PostModernizer {
         }
         
         // Last resort: extract just the date+time part
-        // This handles cases like "<span>Posted on</span> 12/23/2025, 09:30 PM"
         const dateTimeMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
         if (dateTimeMatch) {
             console.debug('Extracted date-time with fallback:', dateTimeMatch[1].trim());
@@ -3799,7 +3860,7 @@ class PostModernizer {
         }
     }
     
-    // Strategy 3: Check parent elements for title
+    // Strategy 3: Check parent elements for title (only if not skipped above)
     const parentCheckElements = [
         element.parentElement,
         element.parentElement?.parentElement,
@@ -3810,6 +3871,15 @@ class PostModernizer {
     
     for (const parent of parentCheckElements) {
         if (parent && parent.hasAttribute('title')) {
+            // Skip if parent is an action link
+            if (parent.tagName === 'A') {
+                const parentHref = parent.getAttribute('href') || '';
+                if (parentHref.includes('CODE=') || parentHref.includes('delete_post') || 
+                    parentHref.includes('javascript:') || parentHref.includes('&p=')) {
+                    continue; // Skip this parent
+                }
+            }
+            
             const parentTitle = parent.getAttribute('title');
             const cleanTitle = parentTitle.replace(/:\d+$/, '');
             console.debug('Extracted date from parent title:', cleanTitle);
@@ -3817,7 +3887,12 @@ class PostModernizer {
         }
     }
     
-    console.warn('Could not extract date from element:', element.outerHTML);
+    console.warn('Could not extract date from element (after filtering):', {
+        tag: element.tagName,
+        href: element.getAttribute('href'),
+        classes: element.className,
+        textPreview: element.textContent?.substring(0, 50)
+    });
     return null;
 }
     
@@ -3918,7 +3993,7 @@ class PostModernizer {
     }
 }
 
-    #transformTimestampElements(element) {
+  #transformTimestampElements(element) {
     const timestampSelectors = [
         '.lt.Sub a span.when',
         '.lt.Sub time',
@@ -3936,7 +4011,11 @@ class PostModernizer {
     const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
     
     timestampElements.forEach(timestampElement => {
-        // Skip if the element itself is already a modern timestamp
+        // ===========================================
+        // CRITICAL: Filter out non-timestamp elements BEFORE extraction
+        // ===========================================
+        
+        // Skip already modernized timestamps
         if (timestampElement.classList && timestampElement.classList.contains('modern-timestamp')) {
             return;
         }
@@ -3960,6 +4039,73 @@ class PostModernizer {
         if (timestampElement.closest('time.modern-timestamp, a .modern-timestamp')) {
             return;
         }
+        
+        // Check if element is an anchor and filter out action links
+        if (timestampElement.tagName === 'A') {
+            const href = timestampElement.getAttribute('href') || '';
+            const rel = timestampElement.getAttribute('rel') || '';
+            
+            // Skip post number/permalink links (they don't contain dates)
+            if (href.includes('&p=') || href.includes('?p=')) {
+                return;
+            }
+            
+            // Skip action links (edit, quote, delete, share)
+            if (href.includes('CODE=08') || // edit
+                href.includes('CODE=02') || // quote
+                href.includes('delete_post') || 
+                href.includes('javascript:')) {
+                return;
+            }
+            
+            // Skip file/folder icon links
+            if (timestampElement.querySelector('.fa-file-o, .fa-folder, .fa-file-lines')) {
+                return;
+            }
+            
+            // Skip nofollow action links
+            if (rel === 'nofollow' && (href.includes('act=Post') || href.includes('CODE='))) {
+                return;
+            }
+            
+            // Skip share buttons
+            if (timestampElement.closest('.btn-share') || 
+                timestampElement.getAttribute('data-action') === 'share') {
+                return;
+            }
+            
+            // Check for action icons inside the link
+            const hasActionIcon = timestampElement.querySelector(
+                '.fa-pen-to-square, .fa-quote-left, .fa-eraser, ' +
+                '.fa-share-nodes, .fa-file-o, .fa-folder, .fa-file-lines'
+            );
+            if (hasActionIcon) {
+                return;
+            }
+        }
+        
+        // Skip buttons entirely
+        if (timestampElement.tagName === 'BUTTON') {
+            return;
+        }
+        
+        // Skip action icons directly
+        if (timestampElement.tagName === 'I') {
+            const iconClasses = timestampElement.className;
+            if (iconClasses.includes('fa-pen-to-square') ||
+                iconClasses.includes('fa-quote-left') ||
+                iconClasses.includes('fa-eraser') ||
+                iconClasses.includes('fa-share-nodes') ||
+                iconClasses.includes('fa-file-o') ||
+                iconClasses.includes('fa-folder') ||
+                iconClasses.includes('fa-file-lines')) {
+                return;
+            }
+        }
+        
+        // ===========================================
+        // Now safely extract date from valid timestamp elements
+        // ===========================================
         
         const dateString = this.#extractDateFromElement(timestampElement);
         
@@ -4000,6 +4146,14 @@ class PostModernizer {
                     timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
                 }
             }
+        } else {
+            // Log debug info for elements that matched selectors but weren't timestamps
+            console.debug('Element matched timestamp selector but has no date:', {
+                tag: timestampElement.tagName,
+                href: timestampElement.getAttribute('href'),
+                classes: timestampElement.className,
+                textPreview: timestampElement.textContent?.substring(0, 30)
+            });
         }
     });
 }
