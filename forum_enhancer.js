@@ -3993,7 +3993,7 @@ class PostModernizer {
     }
 }
 
-  #transformTimestampElements(element) {
+#transformTimestampElements(element) {
     const timestampSelectors = [
         '.lt.Sub a span.when',
         '.lt.Sub time',
@@ -4003,9 +4003,8 @@ class PostModernizer {
         '.title2.top time',
         '.title2.top span',
         '.title2.top a',
-        'span.when',
-        'a[href*="#entry"]',
-        'a[title*="/"]'
+        'span.when'
+        // REMOVED: 'a[href*="#entry"]', 'a[title*="/"]' - too broad
     ];
     
     const timestampElements = element.querySelectorAll(timestampSelectors.join(', '));
@@ -4025,13 +4024,8 @@ class PostModernizer {
             return;
         }
         
-        // Skip if this is an anchor that contains a modern timestamp
-        if (timestampElement.tagName === 'A' && timestampElement.querySelector('.modern-timestamp')) {
-            return;
-        }
-        
-        // Skip if this is a time element that contains a modern timestamp
-        if (timestampElement.tagName === 'TIME' && timestampElement.querySelector('.modern-timestamp')) {
+        // Skip if element contains a modern timestamp
+        if (timestampElement.querySelector && timestampElement.querySelector('.modern-timestamp')) {
             return;
         }
         
@@ -4040,13 +4034,23 @@ class PostModernizer {
             return;
         }
         
-        // Check if element is an anchor and filter out action links
+        // Check if element is an anchor
         if (timestampElement.tagName === 'A') {
             const href = timestampElement.getAttribute('href') || '';
-            const rel = timestampElement.getAttribute('rel') || '';
             
-            // Skip post number/permalink links (they don't contain dates)
-            if (href.includes('&p=') || href.includes('?p=')) {
+            // Skip anchors that already contain a time element (these are already transformed)
+            if (timestampElement.querySelector('time')) {
+                return;
+            }
+            
+            // Skip anchors that contain modern timestamps
+            if (timestampElement.querySelector('.modern-timestamp')) {
+                return;
+            }
+            
+            // Skip post number/permalink links (they don't contain dates in their text)
+            // These should be processed by their inner span.when elements instead
+            if (href.includes('#entry') && !timestampElement.querySelector('span.when, time')) {
                 return;
             }
             
@@ -4060,17 +4064,6 @@ class PostModernizer {
             
             // Skip file/folder icon links
             if (timestampElement.querySelector('.fa-file-o, .fa-folder, .fa-file-lines')) {
-                return;
-            }
-            
-            // Skip nofollow action links
-            if (rel === 'nofollow' && (href.includes('act=Post') || href.includes('CODE='))) {
-                return;
-            }
-            
-            // Skip share buttons
-            if (timestampElement.closest('.btn-share') || 
-                timestampElement.getAttribute('data-action') === 'share') {
                 return;
             }
             
@@ -4157,41 +4150,41 @@ class PostModernizer {
         }
     });
 }
-
-    #transformPostHeaderTimestamps(postHeader) {
-        if (!postHeader) return;
-        
-        // Look for common timestamp patterns in post headers
-        const timestampPatterns = [
-            'a[href*="#entry"]',
-            'span.when',
-            'time',
-            '.lt.Sub a',
-            '.lt.Sub span'
-        ];
-        
-        timestampPatterns.forEach(pattern => {
-            const elements = postHeader.querySelectorAll(pattern);
-            elements.forEach(el => {
-                // Skip if already modernized
-                if (el.classList && el.classList.contains('modern-timestamp')) return;
+    
+ #transformPostHeaderTimestamps(postHeader) {
+    if (!postHeader) return;
+    
+    // Look for specific timestamp elements in post headers
+    // Focus on elements that actually contain dates, not general anchors
+    const timestampPatterns = [
+        'span.when',           // Original timestamp spans
+        'time:not(.modern-timestamp)', // Original time elements
+        '.lt.Sub span.when',   // Specific timestamp spans in lt.Sub
+        '.lt.Sub a span.when'  // Timestamp spans inside anchors
+    ];
+    
+    timestampPatterns.forEach(pattern => {
+        const elements = postHeader.querySelectorAll(pattern);
+        elements.forEach(el => {
+            // Skip if already modernized
+            if (el.classList && el.classList.contains('modern-timestamp')) return;
+            
+            const dateString = this.#extractDateFromElement(el);
+            if (dateString) {
+                console.log('Post header timestamp found:', {
+                    element: el,
+                    dateString: dateString,
+                    pattern: pattern
+                });
                 
-                const dateString = this.#extractDateFromElement(el);
-                if (dateString) {
-                    console.log('Post header timestamp found:', {
-                        element: el,
-                        dateString: dateString,
-                        pattern: pattern
-                    });
-                    
-                    const modernTimestamp = this.#createModernTimestamp(el, dateString);
-                    if (modernTimestamp !== el) {
-                        el.parentNode.replaceChild(modernTimestamp, el);
-                    }
+                const modernTimestamp = this.#createModernTimestamp(el, dateString);
+                if (modernTimestamp !== el) {
+                    el.parentNode.replaceChild(modernTimestamp, el);
                 }
-            });
+            }
         });
-    }
+    });
+}
 
     // ==============================
     // OBSERVER SETUP
