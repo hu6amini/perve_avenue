@@ -3266,10 +3266,10 @@ globalThis.addEventListener('pagehide', () => {
 
 
 
-// Enhanced Post Transformation and Modernization System with Table Preservation
+// Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
-// modern attachment styling, Media Dimension Extractor integration, and Table Modernization
+// modern attachment styling, and Media Dimension Extractor integration
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -3336,7 +3336,6 @@ class PostModernizer {
         this.#enhanceQuoteLinks();
         this.#modernizeCodeBlocks();
         this.#modernizeAttachments();
-        this.#modernizeTables(); // Add table modernization
 
         console.log('✅ Post Modernizer with all optimizations initialized');
     } catch (error) {
@@ -3353,656 +3352,7 @@ class PostModernizer {
         }
     }
 }
-
-    // ==============================
-    // TABLE TRANSFORMATION SYSTEM
-    // ==============================
-
-    #modernizeTables() {
-        this.#processExistingTables();
-        this.#setupTableObserver();
-    }
-
-    #processExistingTables() {
-        // Process tables in regular posts
-        document.querySelectorAll('.post:not(.post-modernized) table').forEach(table => {
-            this.#transformTable(table);
-        });
-        
-        // Process tables in already modernized posts
-        document.querySelectorAll('.post.post-modernized table').forEach(table => {
-            if (!table.classList.contains('modern-table-processed')) {
-                this.#transformTable(table);
-            }
-        });
-        
-        // Process tables in post content
-        document.querySelectorAll('.post-main-content table').forEach(table => {
-            if (!table.classList.contains('modern-table-processed')) {
-                this.#transformTable(table);
-            }
-        });
-    }
-
-    #transformTable(table) {
-        if (!table || table.classList.contains('modern-table-processed')) {
-            return;
-        }
-        
-        // Check if this is a valid table to transform (not empty, has rows)
-        const hasValidStructure = table.querySelector('tr') && 
-                                 (table.querySelector('th') || table.querySelector('td'));
-        
-        if (!hasValidStructure) {
-            // Mark as processed to avoid reprocessing
-            table.classList.add('modern-table-processed');
-            return;
-        }
-        
-        console.debug('Transforming table:', {
-            rows: table.rows.length,
-            cols: table.rows[0] ? table.rows[0].cells.length : 0,
-            hasHeaders: !!table.querySelector('th')
-        });
-        
-        // Create modern table container
-        const modernTable = document.createElement('div');
-        modernTable.className = 'modern-table-container';
-        
-        // Add responsive wrapper
-        const responsiveWrapper = document.createElement('div');
-        responsiveWrapper.className = 'table-responsive';
-        
-        // Create the modern table structure
-        const tableHtml = this.#createModernTableHTML(table);
-        
-        // Build the complete structure
-        responsiveWrapper.innerHTML = tableHtml;
-        modernTable.appendChild(responsiveWrapper);
-        
-        // Add controls for wide tables
-        this.#addTableControls(modernTable, table);
-        
-        // Replace the original table with our modern version
-        table.parentNode.replaceChild(modernTable, table);
-        
-        // Mark as processed
-        modernTable.classList.add('modern-table-processed');
-        
-        // Apply any additional styling or enhancements
-        setTimeout(() => {
-            this.#enhanceTableAccessibility(modernTable);
-            this.#addTableInteraction(modernTable);
-        }, 10);
-    }
-
-    #createModernTableHTML(originalTable) {
-        const rows = originalTable.querySelectorAll('tr');
-        if (rows.length === 0) {
-            return '<div class="table-empty">Empty table</div>';
-        }
-        
-        // Detect if table has headers (th elements in first row or any row)
-        const hasHeaders = originalTable.querySelector('th') !== null;
-        const firstRow = rows[0];
-        const isFirstRowHeader = firstRow.querySelector('th') !== null;
-        
-        let html = '<div class="modern-table">';
-        
-        // Process each row
-        rows.forEach((row, rowIndex) => {
-            const cells = row.querySelectorAll('th, td');
-            
-            // Determine row type
-            const isHeaderRow = isFirstRowHeader && rowIndex === 0;
-            const rowType = isHeaderRow ? 'header' : 'data';
-            
-            html += '<div class="table-row table-row-' + rowType + '">';
-            
-            cells.forEach((cell, cellIndex) => {
-                const cellType = cell.tagName.toLowerCase();
-                const isHeaderCell = cellType === 'th';
-                const cellContent = cell.innerHTML.trim();
-                
-                // Get cell attributes
-                const rowspan = cell.getAttribute('rowspan') || '1';
-                const colspan = cell.getAttribute('colspan') || '1';
-                
-                // Build cell attributes string
-                let attrs = '';
-                if (parseInt(rowspan) > 1) {
-                    attrs += ' data-rowspan="' + rowspan + '"';
-                }
-                if (parseInt(colspan) > 1) {
-                    attrs += ' data-colspan="' + colspan + '"';
-                }
-                
-                // Get alignment if specified
-                const align = cell.getAttribute('align') || cell.style.textAlign || '';
-                if (align) {
-                    attrs += ' data-align="' + align + '"';
-                }
-                
-                // Get width if specified
-                const width = cell.getAttribute('width') || cell.style.width || '';
-                if (width) {
-                    attrs += ' data-width="' + width + '"';
-                }
-                
-                // Create cell class based on type
-                const cellClass = isHeaderCell ? 'table-header-cell' : 'table-data-cell';
-                const additionalClasses = [];
-                
-                if (parseInt(colspan) > 1) additionalClasses.push('colspan-' + colspan);
-                if (parseInt(rowspan) > 1) additionalClasses.push('rowspan-' + rowspan);
-                if (align) additionalClasses.push('align-' + align);
-                
-                html += '<div class="' + cellClass + (additionalClasses.length ? ' ' + additionalClasses.join(' ') : '') + '"' + attrs + '>';
-                html += '<div class="table-cell-content">' + cellContent + '</div>';
-                html += '</div>';
-            });
-            
-            html += '</div>';
-        });
-        
-        html += '</div>';
-        return html;
-    }
-
-    #addTableControls(modernTable, originalTable) {
-        const tableContent = modernTable.querySelector('.modern-table');
-        if (!tableContent) return;
-        
-        // Check if table is wide (has many columns or long content)
-        const estimatedWidth = this.#estimateTableWidth(originalTable);
-        const viewportWidth = window.innerWidth;
-        
-        if (estimatedWidth > viewportWidth * 0.8) {
-            // Add scroll indicator
-            const scrollIndicator = document.createElement('div');
-            scrollIndicator.className = 'table-scroll-indicator';
-            scrollIndicator.innerHTML = '<i class="fa-regular fa-arrows-left-right" aria-hidden="true"></i> Scroll horizontally';
-            modernTable.appendChild(scrollIndicator);
-            
-            // Add scroll controls for mobile
-            const scrollControls = document.createElement('div');
-            scrollControls.className = 'table-scroll-controls';
-            scrollControls.innerHTML = 
-                '<button class="table-scroll-btn scroll-left" aria-label="Scroll left">' +
-                '<i class="fa-regular fa-chevron-left" aria-hidden="true"></i>' +
-                '</button>' +
-                '<button class="table-scroll-btn scroll-right" aria-label="Scroll right">' +
-                '<i class="fa-regular fa-chevron-right" aria-hidden="true"></i>' +
-                '</button>';
-            
-            modernTable.appendChild(scrollControls);
-            
-            // Add scroll functionality
-            this.#addTableScrollControls(tableContent, scrollControls);
-        }
-        
-        // Add table info badge
-        const tableInfo = document.createElement('div');
-        tableInfo.className = 'table-info-badge';
-        
-        const rowCount = originalTable.rows.length;
-        const colCount = originalTable.rows[0] ? originalTable.rows[0].cells.length : 0;
-        
-        tableInfo.innerHTML = 
-            '<i class="fa-regular fa-table" aria-hidden="true"></i> ' +
-            rowCount + ' row' + (rowCount !== 1 ? 's' : '') + ' × ' +
-            colCount + ' column' + (colCount !== 1 ? 's' : '');
-        
-        modernTable.insertBefore(tableInfo, modernTable.firstChild);
-    }
-
-    #estimateTableWidth(table) {
-        let width = 0;
-        const rows = table.rows;
-        
-        if (rows.length === 0) return 300; // Default width
-        
-        // Estimate based on first row
-        const firstRow = rows[0];
-        for (let cell of firstRow.cells) {
-            const cellWidth = cell.getAttribute('width') || 
-                             cell.style.width || 
-                             (cell.textContent.length * 8) + 20; // Rough estimate
-            width += parseInt(cellWidth) || 100;
-        }
-        
-        return Math.max(width, 300);
-    }
-
-    #addTableScrollControls(tableElement, controls) {
-        const scrollLeftBtn = controls.querySelector('.scroll-left');
-        const scrollRightBtn = controls.querySelector('.scroll-right');
-        
-        if (!scrollLeftBtn || !scrollRightBtn) return;
-        
-        const scrollAmount = 200;
-        
-        scrollLeftBtn.addEventListener('click', () => {
-            tableElement.scrollBy({
-                left: -scrollAmount,
-                behavior: 'smooth'
-            });
-        });
-        
-        scrollRightBtn.addEventListener('click', () => {
-            tableElement.scrollBy({
-                left: scrollAmount,
-                behavior: 'smooth'
-            });
-        });
-        
-        // Update button states based on scroll position
-        const updateScrollButtons = () => {
-            const { scrollLeft, scrollWidth, clientWidth } = tableElement;
-            scrollLeftBtn.disabled = scrollLeft <= 0;
-            scrollRightBtn.disabled = scrollLeft >= scrollWidth - clientWidth - 10;
-        };
-        
-        tableElement.addEventListener('scroll', updateScrollButtons);
-        updateScrollButtons(); // Initial update
-        
-        // Also handle keyboard navigation
-        tableElement.setAttribute('tabindex', '0');
-        tableElement.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') {
-                tableElement.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-                e.preventDefault();
-            } else if (e.key === 'ArrowRight') {
-                tableElement.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-                e.preventDefault();
-            }
-        });
-    }
-
-    #enhanceTableAccessibility(tableElement) {
-        // Add ARIA attributes
-        const table = tableElement.querySelector('.modern-table');
-        if (table) {
-            table.setAttribute('role', 'table');
-            table.setAttribute('aria-label', 'Data table');
-            
-            // Add role to rows and cells
-            const rows = table.querySelectorAll('.table-row');
-            rows.forEach((row, rowIndex) => {
-                row.setAttribute('role', 'row');
-                if (row.classList.contains('table-row-header')) {
-                    row.setAttribute('aria-rowindex', rowIndex + 1);
-                }
-                
-                const cells = row.querySelectorAll('.table-header-cell, .table-data-cell');
-                cells.forEach((cell, cellIndex) => {
-                    const isHeader = cell.classList.contains('table-header-cell');
-                    cell.setAttribute('role', isHeader ? 'columnheader' : 'cell');
-                    cell.setAttribute('aria-colindex', cellIndex + 1);
-                    
-                    // Add scope for headers
-                    if (isHeader) {
-                        cell.setAttribute('scope', 'col');
-                    }
-                });
-            });
-        }
-    }
-
-    #addTableInteraction(tableElement) {
-        const rows = tableElement.querySelectorAll('.table-row-data');
-        
-        // Add hover effects
-        rows.forEach(row => {
-            row.addEventListener('mouseenter', () => {
-                row.classList.add('row-hover');
-            });
-            
-            row.addEventListener('mouseleave', () => {
-                row.classList.remove('row-hover');
-            });
-            
-            // Make rows clickable for selection if needed
-            row.addEventListener('click', (e) => {
-                if (!e.target.closest('.table-header-cell') && 
-                    !e.target.closest('a') && 
-                    !e.target.closest('button')) {
-                    rows.forEach(r => r.classList.remove('row-selected'));
-                    row.classList.add('row-selected');
-                }
-            });
-        });
-        
-        // Add column highlighting on header hover
-        const headers = tableElement.querySelectorAll('.table-header-cell');
-        headers.forEach((header, colIndex) => {
-            header.addEventListener('mouseenter', () => {
-                const allRows = tableElement.querySelectorAll('.table-row');
-                allRows.forEach(row => {
-                    const cell = row.children[colIndex];
-                    if (cell) {
-                        cell.classList.add('col-highlight');
-                    }
-                });
-            });
-            
-            header.addEventListener('mouseleave', () => {
-                const allCells = tableElement.querySelectorAll('.table-header-cell, .table-data-cell');
-                allCells.forEach(cell => {
-                    cell.classList.remove('col-highlight');
-                });
-            });
-        });
-    }
-
-    #setupTableObserver() {
-        if (globalThis.forumObserver) {
-            // We'll use the existing debounced observer to handle tables
-            // since they're part of post content
-        } else {
-            // Fallback periodic check
-            setInterval(() => this.#processExistingTables(), 2000);
-        }
-    }
-
-    #handleNewTables(node) {
-        if (node.matches('table') && !node.closest('.modern-table-container')) {
-            this.#transformTable(node);
-        } else {
-            node.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
-                if (!table.closest('.modern-table-container')) {
-                    this.#transformTable(table);
-                }
-            });
-        }
-    }
-
-    // ==============================
-    // UPDATED CLEANUP METHODS TO PRESERVE MODERN TABLES
-    // ==============================
-
-    #cleanupPostContentStructure(contentElement) {
-        // FIRST: Transform any tables before they get destroyed
-        contentElement.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
-            if (!table.closest('.modern-table-container')) {
-                this.#transformTable(table);
-            }
-        });
-        
-        // Now proceed with original cleanup, but skip modern tables
-        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
-            // Skip if inside a modern table
-            if (td.closest('.modern-table-container')) {
-                return;
-            }
-            
-            while (td.firstChild) {
-                contentElement.appendChild(td.firstChild);
-            }
-            td.remove();
-        });
-
-        contentElement.querySelectorAll('td').forEach(td => {
-            // Skip if inside a modern table
-            if (td.closest('.modern-table-container')) {
-                return;
-            }
-            
-            const parent = td.parentNode;
-            if (parent) {
-                while (td.firstChild) {
-                    parent.insertBefore(td.firstChild, td);
-                }
-                td.remove();
-            }
-        });
-
-        contentElement.querySelectorAll('tr').forEach(tr => {
-            // Skip if inside a modern table
-            if (tr.closest('.modern-table-container')) {
-                return;
-            }
-            
-            const parent = tr.parentNode;
-            if (parent) {
-                while (tr.firstChild) {
-                    parent.insertBefore(tr.firstChild, tr);
-                }
-                tr.remove();
-            }
-        });
-
-        contentElement.querySelectorAll('tbody').forEach(tbody => {
-            // Skip if inside a modern table
-            if (tbody.closest('.modern-table-container')) {
-                return;
-            }
-            
-            const parent = tbody.parentNode;
-            if (parent) {
-                while (tbody.firstChild) {
-                    parent.insertBefore(tbody.firstChild, tbody);
-                }
-                tbody.remove();
-            }
-        });
-
-        contentElement.querySelectorAll('table').forEach(table => {
-            // Skip if already transformed or inside a modern table
-            if (table.classList.contains('modern-table-processed') || 
-                table.closest('.modern-table-container')) {
-                return;
-            }
-            
-            const parent = table.parentNode;
-            if (parent) {
-                while (table.firstChild) {
-                    parent.insertBefore(table.firstChild, table);
-                }
-                table.remove();
-            }
-        });
-
-        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-        this.#cleanEmptyElements(contentElement);
-        this.#processTextAndLineBreaks(contentElement);
-        this.#cleanupEditSpans(contentElement);
-        this.#processSignature(contentElement);
-        this.#cleanInvalidAttributes(contentElement);
-    }
-
-    #cleanupSearchPostContent(contentWrapper) {
-        // Transform tables first
-        contentWrapper.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
-            if (!table.closest('.modern-table-container')) {
-                this.#transformTable(table);
-            }
-        });
-        
-        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
-            // Skip modern tables
-            if (el.closest('.modern-table-container')) {
-                return;
-            }
-            
-            if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
-                el.remove();
-            } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
-                const parent = el.parentNode;
-                if (parent) {
-                    while (el.firstChild) {
-                        parent.insertBefore(el.firstChild, el);
-                    }
-                    el.remove();
-                }
-            }
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
-            if (container.classList.contains('quote-modernized')) return;
-            this.#transformQuote(container);
-            container.classList.add('quote-modernized');
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
-            if (container.classList.contains('spoiler-modernized')) return;
-            this.#transformSpoiler(container);
-            container.classList.add('spoiler-modernized');
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
-            if (container.classList.contains('code-modernized')) return;
-            this.#transformCodeBlock(container);
-            container.classList.add('code-modernized');
-        });
-
-        // Modernize attachments in search posts
-        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
-            if (container.classList.contains('attachment-modernized')) return;
-            this.#transformAttachment(container);
-            container.classList.add('attachment-modernized');
-        });
-    }
-
-    #cleanInvalidAttributes(element) {
-        element.querySelectorAll('[width]').forEach(el => {
-            // Skip elements inside modern tables
-            if (el.closest('.modern-table-container')) {
-                return;
-            }
-            
-            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
-                el.removeAttribute('width');
-            }
-        });
-
-        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
-            // Skip modern tables
-            if (el.closest('.modern-table-container')) {
-                return;
-            }
-            
-            if (el.tagName !== 'TABLE') {
-                el.removeAttribute('cellpadding');
-                el.removeAttribute('cellspacing');
-            }
-        });
-    }
-
-    // ==============================
-    // PRESERVE TABLES IN QUOTES AND SPOILERS
-    // ==============================
-
-    #preserveMediaDimensionsInHTML(html) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        
-        // Transform tables in the HTML before processing
-        tempDiv.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
-            this.#transformTable(table);
-        });
-        
-        this.#preserveMediaDimensions(tempDiv);
-        return tempDiv.innerHTML;
-    }
-
-    #transformQuote(container) {
-        const quoteTop = container.querySelector('.quote_top');
-        const quoteContent = container.querySelector('.quote');
-
-        if (!quoteTop || !quoteContent) return;
-
-        const quoteText = quoteTop.textContent.trim();
-        const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/);
-        const author = match ? match[1].trim() : 'Unknown';
-        const quoteLink = quoteTop.querySelector('a');
-        const linkHref = quoteLink ? quoteLink.href : '#';
-        const isLongContent = this.#isLongContent(quoteContent);
-
-        const modernQuote = document.createElement('div');
-        modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : '');
-
-        let html = '<div class="quote-header">' +
-            '<div class="quote-meta">' +
-            '<div class="quote-icon">' +
-            '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
-            '</div>' +
-            '<div class="quote-info">' +
-            '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' +
-            '</div>' +
-            '</div>' +
-            '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">' +
-            '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' +
-            '</a>' +
-            '</div>';
-
-        html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' +
-            this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) +
-            '</div>';
-
-        if (isLongContent) {
-            html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' +
-                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-                'Show more' +
-                '</button>';
-        }
-
-        modernQuote.innerHTML = html;
-        container.replaceWith(modernQuote);
-
-        if (isLongContent) {
-            this.#addQuoteEventListeners(modernQuote);
-        }
-
-        setTimeout(() => {
-            const quoteLink = modernQuote.querySelector('.quote-link');
-            if (quoteLink) {
-                this.#enhanceSingleQuoteLink(quoteLink);
-            }
-        }, 10);
-    }
-
-    #transformSpoiler(container) {
-        const spoilerTop = container.querySelector('.code_top');
-        const spoilerContent = container.querySelector('.code[align="left"]');
-
-        if (!spoilerTop || !spoilerContent) return;
-
-        const isLongContent = this.#isLongContent(spoilerContent);
-
-        const modernSpoiler = document.createElement('div');
-        modernSpoiler.className = 'modern-spoiler';
-
-        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
-            '<div class="spoiler-icon">' +
-            '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
-            '</div>' +
-            '<div class="spoiler-info">' +
-            '<span class="spoiler-title">SPOILER</span>' +
-            '</div>' +
-            '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
-            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-            '</button>' +
-            '</div>';
-
-        html += '<div class="spoiler-content' +
-            (isLongContent ? ' collapsible-content' : '') + '">' +
-            this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
-            '</div>';
-
-        if (isLongContent) {
-            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
-                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-                'Show more' +
-                '</button>';
-        }
-
-        modernSpoiler.innerHTML = html;
-        container.replaceWith(modernSpoiler);
-
-        this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
-    }
-
+    
     // ==============================
     // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
     // ==============================
@@ -5653,8 +5003,6 @@ class PostModernizer {
                     this.#modernizeCodeBlocksInContent(contentWrapper);
                     // Modernize attachments in post content
                     this.#modernizeAttachmentsInContent(contentWrapper);
-                    // Modernize tables in post content
-                    this.#modernizeTablesInContent(contentWrapper);
                 }
             });
 
@@ -5691,14 +5039,6 @@ class PostModernizer {
             if (container.classList.contains('attachment-modernized')) return;
             this.#transformAttachment(container);
             container.classList.add('attachment-modernized');
-        });
-    }
-
-    #modernizeTablesInContent(contentWrapper) {
-        contentWrapper.querySelectorAll('table:not(.modern-table-processed)').forEach(table => {
-            if (!table.closest('.modern-table-container')) {
-                this.#transformTable(table);
-            }
         });
     }
 
@@ -5905,8 +5245,6 @@ class PostModernizer {
                 this.#modernizeCodeBlocksInContent(contentWrapper);
                 // Modernize attachments in search posts
                 this.#modernizeAttachmentsInContent(contentWrapper);
-                // Modernize tables in search posts
-                this.#modernizeTablesInContent(contentWrapper);
 
                 postContent.appendChild(contentWrapper);
             }
@@ -6044,6 +5382,80 @@ class PostModernizer {
         });
     }
 
+    #cleanupSearchPostContent(contentWrapper) {
+        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
+            if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
+                el.remove();
+            } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
+                const parent = el.parentNode;
+                if (parent) {
+                    while (el.firstChild) {
+                        parent.insertBefore(el.firstChild, el);
+                    }
+                    el.remove();
+                }
+            }
+        });
+
+        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
+            if (container.classList.contains('quote-modernized')) return;
+            this.#transformQuote(container);
+            container.classList.add('quote-modernized');
+        });
+
+        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
+            if (container.classList.contains('spoiler-modernized')) return;
+            this.#transformSpoiler(container);
+            container.classList.add('spoiler-modernized');
+        });
+
+        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
+            if (container.classList.contains('code-modernized')) return;
+            this.#transformCodeBlock(container);
+            container.classList.add('code-modernized');
+        });
+
+        // Modernize attachments in search posts
+        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
+            if (container.classList.contains('attachment-modernized')) return;
+            this.#transformAttachment(container);
+            container.classList.add('attachment-modernized');
+        });
+    }
+
+    #escapeRegex(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    #handleShareSearchPost(post) {
+        let postLink = null;
+
+        const postLinkElement = post.querySelector('.post-header a[href*="#entry"]');
+        if (postLinkElement) {
+            postLink = postLinkElement.href;
+        }
+
+        if (!postLink) {
+            const postIdMatch = post.id.match(/\d+/);
+            if (postIdMatch) {
+                const postId = postIdMatch[0];
+                const topicLink = post.querySelector('.topic-link');
+                if (topicLink) {
+                    const topicMatch = topicLink.textContent.match(/t=(\d+)/);
+                    if (topicMatch) {
+                        postLink = window.location.origin + '/?t=' + topicMatch[1] + '#entry' + postId;
+                    }
+                }
+            }
+        }
+
+        if (postLink) {
+            this.#copyPostLinkToClipboard(postLink);
+        } else {
+            this.#showCopyNotification('Could not find post link');
+        }
+    }
+
     #removeInvalidTableStructure(element) {
         element.querySelectorAll('td.right.Item').forEach(td => {
             while (td.firstChild) {
@@ -6055,6 +5467,74 @@ class PostModernizer {
         element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
+    #cleanupPostContentStructure(contentElement) {
+        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+            while (td.firstChild) {
+                contentElement.appendChild(td.firstChild);
+            }
+            td.remove();
+        });
+
+        contentElement.querySelectorAll('td').forEach(td => {
+            const parent = td.parentNode;
+            if (parent) {
+                while (td.firstChild) {
+                    parent.insertBefore(td.firstChild, td);
+                }
+                td.remove();
+            }
+        });
+
+        contentElement.querySelectorAll('tr').forEach(tr => {
+            const parent = tr.parentNode;
+            if (parent) {
+                while (tr.firstChild) {
+                    parent.insertBefore(tr.firstChild, tr);
+                }
+                tr.remove();
+            }
+        });
+
+        contentElement.querySelectorAll('tbody').forEach(tbody => {
+            const parent = tbody.parentNode;
+            if (parent) {
+                while (tbody.firstChild) {
+                    parent.insertBefore(tbody.firstChild, tbody);
+                }
+                tbody.remove();
+            }
+        });
+
+        contentElement.querySelectorAll('table').forEach(table => {
+            const parent = table.parentNode;
+            if (parent) {
+                while (table.firstChild) {
+                    parent.insertBefore(table.firstChild, table);
+                }
+                table.remove();
+            }
+        });
+
+        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+        this.#cleanEmptyElements(contentElement);
+        this.#processTextAndLineBreaks(contentElement);
+        this.#cleanupEditSpans(contentElement);
+        this.#processSignature(contentElement);
+        this.#cleanInvalidAttributes(contentElement);
+    }
+
+#cleanupEditSpans(element) {
+    element.querySelectorAll('span.edit').forEach(span => {
+        // Check if already transformed (contains a time element)
+        if (span.querySelector('time[datetime]')) {
+            return;
+        }
+        
+        // Always transform edit spans regardless of language
+        this.#transformEditTimestamp(span);
+    });
+}
+
     #cleanUpLineBreaksBetweenBlocks(element) {
         const blockSelectors = [
             '.modern-spoiler',
@@ -6063,8 +5543,7 @@ class PostModernizer {
             'div[align="center"]:has(.code_top)',
             'div[align="center"].spoiler',
             'div[align="center"]:has(.quote_top)',
-            '.modern-attachment',
-            '.modern-table-container'  // Add modern tables to block selectors
+            '.modern-attachment'
         ];
 
         const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
@@ -6114,11 +5593,6 @@ class PostModernizer {
 
     #cleanEmptyElements(element) {
         element.querySelectorAll(':empty').forEach(emptyEl => {
-            // Skip modern table elements
-            if (emptyEl.closest('.modern-table-container')) {
-                return;
-            }
-            
             if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
                 emptyEl.remove();
             }
@@ -6129,11 +5603,6 @@ class PostModernizer {
         let node;
 
         while (node = walker.nextNode()) {
-            // Skip text nodes inside modern tables
-            if (node.parentNode && node.parentNode.closest('.modern-table-container')) {
-                continue;
-            }
-            
             if (node.textContent.trim() === '') {
                 nodesToRemove.push(node);
             }
@@ -6142,17 +5611,27 @@ class PostModernizer {
         nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
     }
 
+    #cleanInvalidAttributes(element) {
+        element.querySelectorAll('[width]').forEach(el => {
+            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
+                el.removeAttribute('width');
+            }
+        });
+
+        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
+            if (el.tagName !== 'TABLE') {
+                el.removeAttribute('cellpadding');
+                el.removeAttribute('cellspacing');
+            }
+        });
+    }
+
     #processTextAndLineBreaks(element) {
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
         const textNodes = [];
         let node;
 
         while (node = walker.nextNode()) {
-            // Skip text nodes inside modern tables
-            if (node.parentNode && node.parentNode.closest('.modern-table-container')) {
-                continue;
-            }
-            
             if (node.textContent.trim() !== '') {
                 textNodes.push(node);
             }
@@ -6168,15 +5647,10 @@ class PostModernizer {
         });
 
         element.querySelectorAll('br').forEach(br => {
-            // Skip br elements inside modern tables
-            if (br.closest('.modern-table-container')) {
-                return;
-            }
-            
             const prevSibling = br.previousElementSibling;
             const nextSibling = br.nextElementSibling;
 
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-table-container')) {
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header')) {
                 return;
             }
 
@@ -6188,8 +5662,8 @@ class PostModernizer {
                     prevSibling.classList.add('paragraph-end');
                     br.remove();
                 } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-table-container');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-table-container');
+                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
+                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
 
                     if (prevIsModern && nextIsModern) {
                         br.remove();
@@ -6211,13 +5685,6 @@ class PostModernizer {
             let onlyWhitespace = true;
 
             while (nodeBetween && nodeBetween !== next) {
-                // Skip modern tables
-                if (nodeBetween.nodeType === Node.ELEMENT_NODE && 
-                    nodeBetween.closest('.modern-table-container')) {
-                    onlyWhitespace = false;
-                    break;
-                }
-                
                 if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
                     onlyWhitespace = false;
                     break;
@@ -6233,11 +5700,6 @@ class PostModernizer {
 
     #processSignature(element) {
         element.querySelectorAll('.signature').forEach(sig => {
-            // Skip signatures inside modern tables
-            if (sig.closest('.modern-table-container')) {
-                return;
-            }
-            
             sig.classList.add('post-signature');
             sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
         });
@@ -6267,19 +5729,101 @@ class PostModernizer {
         });
     }
 
-    #addQuoteEventListeners(quoteElement) {
-        const expandBtn = quoteElement.querySelector('.quote-expand-btn');
-        const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
+    #transformQuote(container) {
+        const quoteTop = container.querySelector('.quote_top');
+        const quoteContent = container.querySelector('.quote');
 
-        if (expandBtn && quoteContent) {
-            expandBtn.addEventListener('click', () => {
-                quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
-                expandBtn.style.display = 'none';
-                setTimeout(() => {
-                    quoteContent.style.maxHeight = 'none';
-                }, 300);
-            });
+        if (!quoteTop || !quoteContent) return;
+
+        const quoteText = quoteTop.textContent.trim();
+        const match = quoteText.match(/QUOTE\s*\(([^@]+)\s*@/);
+        const author = match ? match[1].trim() : 'Unknown';
+        const quoteLink = quoteTop.querySelector('a');
+        const linkHref = quoteLink ? quoteLink.href : '#';
+        const isLongContent = this.#isLongContent(quoteContent);
+
+        const modernQuote = document.createElement('div');
+        modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : '');
+
+        let html = '<div class="quote-header">' +
+            '<div class="quote-meta">' +
+            '<div class="quote-icon">' +
+            '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="quote-info">' +
+            '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' +
+            '</div>' +
+            '</div>' +
+            '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">' +
+            '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>';
+
+        html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) +
+            '</div>';
+
+        if (isLongContent) {
+            html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
         }
+
+        modernQuote.innerHTML = html;
+        container.replaceWith(modernQuote);
+
+        if (isLongContent) {
+            this.#addQuoteEventListeners(modernQuote);
+        }
+
+        setTimeout(() => {
+            const quoteLink = modernQuote.querySelector('.quote-link');
+            if (quoteLink) {
+                this.#enhanceSingleQuoteLink(quoteLink);
+            }
+        }, 10);
+    }
+
+    #transformSpoiler(container) {
+        const spoilerTop = container.querySelector('.code_top');
+        const spoilerContent = container.querySelector('.code[align="left"]');
+
+        if (!spoilerTop || !spoilerContent) return;
+
+        const isLongContent = this.#isLongContent(spoilerContent);
+
+        const modernSpoiler = document.createElement('div');
+        modernSpoiler.className = 'modern-spoiler';
+
+        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
+            '<div class="spoiler-icon">' +
+            '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="spoiler-info">' +
+            '<span class="spoiler-title">SPOILER</span>' +
+            '</div>' +
+            '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
+            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
+
+        html += '<div class="spoiler-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
+            '</div>';
+
+        if (isLongContent) {
+            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
+        }
+
+        modernSpoiler.innerHTML = html;
+        container.replaceWith(modernSpoiler);
+
+        this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
     }
 
     #addSpoilerEventListeners(spoilerElement, isLongContent = false) {
@@ -6420,6 +5964,13 @@ class PostModernizer {
         return contentScore >= 4;
     }
 
+    #preserveMediaDimensionsInHTML(html) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        this.#preserveMediaDimensions(tempDiv);
+        return tempDiv.innerHTML;
+    }
+
     #preserveMediaDimensions(element) {
         element.querySelectorAll('img').forEach(img => {
             if (!img.style.maxWidth) {
@@ -6514,6 +6065,21 @@ class PostModernizer {
                 iframe.setAttribute('title', 'Embedded content');
             }
         });
+    }
+
+    #addQuoteEventListeners(quoteElement) {
+        const expandBtn = quoteElement.querySelector('.quote-expand-btn');
+        const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
+
+        if (expandBtn && quoteContent) {
+            expandBtn.addEventListener('click', () => {
+                quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
+                expandBtn.style.display = 'none';
+                setTimeout(() => {
+                    quoteContent.style.maxHeight = 'none';
+                }, 300);
+            });
+        }
     }
 
     #addReputationToFooter(miniButtons, stEmoji, postFooter) {
