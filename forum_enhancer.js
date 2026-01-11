@@ -5468,6 +5468,12 @@ class PostModernizer {
     }
 
 #cleanupPostContentStructure(contentElement) {
+    // STEP 1: FIRST protect and repair .ve-table tables
+    contentElement.querySelectorAll('.ve-table').forEach(table => {
+        this.#protectAndRepairTable(table);
+    });
+
+    // STEP 2: THEN run your original cleanup (which skips protected tables)
     contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
         while (td.firstChild) {
             contentElement.appendChild(td.firstChild);
@@ -5477,7 +5483,8 @@ class PostModernizer {
 
     contentElement.querySelectorAll('td').forEach(td => {
         const parent = td.parentNode;
-        if (parent) {
+        // Skip if inside a protected table
+        if (parent && !td.closest('.ve-table')) {
             while (td.firstChild) {
                 parent.insertBefore(td.firstChild, td);
             }
@@ -5487,7 +5494,8 @@ class PostModernizer {
 
     contentElement.querySelectorAll('tr').forEach(tr => {
         const parent = tr.parentNode;
-        if (parent) {
+        // Skip if inside a protected table
+        if (parent && !tr.closest('.ve-table')) {
             while (tr.firstChild) {
                 parent.insertBefore(tr.firstChild, tr);
             }
@@ -5497,7 +5505,8 @@ class PostModernizer {
 
     contentElement.querySelectorAll('tbody').forEach(tbody => {
         const parent = tbody.parentNode;
-        if (parent) {
+        // Skip if inside a protected table
+        if (parent && !tbody.closest('.ve-table')) {
             while (tbody.firstChild) {
                 parent.insertBefore(tbody.firstChild, tbody);
             }
@@ -5505,7 +5514,7 @@ class PostModernizer {
         }
     });
 
-    // MODIFIED: Only remove tables that are NOT .ve-table
+    // Remove only non-ve-table tables
     contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
         const parent = table.parentNode;
         if (parent) {
@@ -5524,6 +5533,97 @@ class PostModernizer {
     this.#cleanInvalidAttributes(contentElement);
 }
 
+#protectAndRepairTable(table) {
+    // Add protection marker
+    table.setAttribute('data-table-protected', 'true');
+    
+    // STEP 1: Ensure proper table structure
+    if (!table.querySelector('tbody')) {
+        const tbody = document.createElement('tbody');
+        const rows = [];
+        let currentRow = null;
+        
+        // Collect all direct children
+        Array.from(table.children).forEach(child => {
+            if (child.tagName === 'TR') {
+                // Complete row found
+                if (currentRow) {
+                    rows.push(currentRow);
+                    currentRow = null;
+                }
+                rows.push(child);
+            } else if (child.tagName === 'TH' || child.tagName === 'TD') {
+                // Cell found - add to current row or create new one
+                if (!currentRow) {
+                    currentRow = document.createElement('tr');
+                }
+                currentRow.appendChild(child);
+            } else if (child.tagName === 'TBODY') {
+                // Already have tbody, use it (shouldn't happen but just in case)
+                tbody = child;
+                return;
+            }
+        });
+        
+        // Add last row if exists
+        if (currentRow) {
+            rows.push(currentRow);
+        }
+        
+        // Add all rows to tbody
+        rows.forEach(row => tbody.appendChild(row));
+        
+        // Replace table contents
+        table.innerHTML = '';
+        table.appendChild(tbody);
+    }
+    
+    // STEP 2: Clean up cell content
+    table.querySelectorAll('th, td').forEach(cell => {
+        // Remove existing .post-text spans to avoid duplication
+        const existingSpans = cell.querySelectorAll('.post-text');
+        existingSpans.forEach(span => {
+            while (span.firstChild) {
+                cell.insertBefore(span.firstChild, span);
+            }
+            span.remove();
+        });
+        
+        // Get all text content
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+            if (node.textContent.trim()) {
+                textNodes.push(node);
+            }
+        }
+        
+        // Wrap text nodes in .post-text
+        textNodes.forEach(textNode => {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
+        });
+        
+        // If no text content but has other elements, add empty post-text
+        if (cell.children.length === 0 && !cell.textContent.trim()) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            cell.appendChild(span);
+        }
+    });
+    
+    // STEP 3: Clean up table attributes
+    table.removeAttribute('style');
+    table.removeAttribute('cellpadding');
+    table.removeAttribute('cellspacing');
+    table.removeAttribute('border');
+    
+    // Ensure it has the ve-table class
+    table.classList.add('ve-table');
+}
 #cleanupEditSpans(element) {
     element.querySelectorAll('span.edit').forEach(span => {
         // Check if already transformed (contains a time element)
