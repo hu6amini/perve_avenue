@@ -3269,7 +3269,8 @@ globalThis.addEventListener('pagehide', () => {
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
-// modern attachment styling, Media Dimension Extractor integration, and modern table styling
+// modern attachment styling, Media Dimension Extractor integration,
+// and modern table styling
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -3337,7 +3338,7 @@ class PostModernizer {
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
             this.#modernizeAttachments();
-            this.#modernizeTables();
+            this.#modernizeTables(); // New: Modernize tables
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
@@ -3355,6 +3356,520 @@ class PostModernizer {
         }
     }
     
+    // ==============================
+    // TABLE MODERNIZATION FUNCTIONS
+    // ==============================
+
+    #modernizeTables() {
+        this.#processExistingTables();
+        this.#setupTableObserver();
+    }
+
+    #processExistingTables() {
+        // Target both user-generated tables and forum default tables
+        const tableSelectors = [
+            '.post-content table',
+            '.post-main-content table',
+            '.modern-quote table',
+            '.modern-spoiler table',
+            '.modern-code table',
+            '.quote-content table',
+            '.spoiler-content table',
+            '.attachment-preview table'
+        ];
+
+        tableSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(table => {
+                if (table.classList.contains('modern-table')) return;
+                this.#transformTable(table);
+                table.classList.add('modern-table');
+            });
+        });
+    }
+
+    #transformTable(table) {
+        // Check if this is a simple table (not nested in another table)
+        if (table.closest('table')) return;
+        
+        // Check if table already has modern styling
+        if (table.classList.contains('modern-table')) return;
+
+        // Create a modern table wrapper
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'modern-table-container';
+        
+        // Apply modern table classes
+        table.classList.add('modern-table');
+        
+        // Add responsive wrapper for horizontal scrolling on mobile
+        const scrollWrapper = document.createElement('div');
+        scrollWrapper.className = 'table-scroll-wrapper';
+        
+        // Wrap the table
+        table.parentNode.insertBefore(scrollWrapper, table);
+        scrollWrapper.appendChild(table);
+        
+        // Add wrapper for styling
+        scrollWrapper.parentNode.insertBefore(tableWrapper, scrollWrapper);
+        tableWrapper.appendChild(scrollWrapper);
+        
+        // Style table elements
+        this.#applyModernTableStyles(table);
+        
+        // Add column count detection for styling
+        const columnCount = this.#countTableColumns(table);
+        if (columnCount > 5) {
+            table.classList.add('wide-table');
+        }
+        
+        console.debug('Modernized table with ' + columnCount + ' columns');
+    }
+
+    #applyModernTableStyles(table) {
+        // Apply base table styles
+        table.style.borderCollapse = 'collapse';
+        table.style.width = '100%';
+        
+        // Style table headers (th)
+        Array.from(table.querySelectorAll('th')).forEach(th => {
+            th.style.backgroundColor = 'var(--surface-color)';
+            th.style.border = '1px solid var(--border-color)';
+            th.style.padding = 'var(--pad-4) var(--pad-5)';
+            th.style.textAlign = 'center';
+            th.style.fontWeight = '600';
+            th.style.color = 'var(--text-primary)';
+            th.style.fontSize = 'var(--text-sm)';
+            th.style.position = 'sticky';
+            th.style.top = '0';
+            th.style.zIndex = '1';
+        });
+        
+        // Style table cells (td)
+        Array.from(table.querySelectorAll('td')).forEach((td, index) => {
+            const rowIndex = Math.floor(index / this.#countTableColumns(table));
+            td.style.border = '1px solid var(--border-color)';
+            td.style.padding = 'var(--pad-3) var(--pad-4)';
+            td.style.fontSize = 'var(--text-sm)';
+            
+            // Alternate row colors for better readability
+            if (rowIndex % 2 === 0) {
+                td.style.backgroundColor = 'var(--bg-color)';
+            } else {
+                td.style.backgroundColor = 'var(--surface-color)';
+            }
+            
+            // Remove any inline styles that might interfere
+            td.removeAttribute('style');
+            
+            // Preserve alignment if specified
+            const align = td.getAttribute('align') || td.style.textAlign;
+            if (align) {
+                td.style.textAlign = align;
+            }
+            
+            // Handle text content - preserve existing spans but don't add new ones
+            this.#preserveTableTextContent(td);
+        });
+        
+        // Style the table itself
+        table.style.border = '1px solid var(--border-color)';
+        table.style.borderRadius = 'var(--radius)';
+        table.style.overflow = 'hidden';
+        table.style.boxShadow = 'var(--shadow-sm)';
+    }
+
+    #preserveTableTextContent(td) {
+        // If the cell already has content (including spans), leave it as is
+        if (td.children.length > 0) {
+            // Check if it already has post-text spans
+            const hasPostText = td.querySelector('.post-text');
+            if (!hasPostText) {
+                // Wrap text nodes in spans but preserve existing HTML structure
+                const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT, null, false);
+                const textNodes = [];
+                let node;
+                
+                while (node = walker.nextNode()) {
+                    if (node.textContent.trim() !== '') {
+                        textNodes.push(node);
+                    }
+                }
+                
+                textNodes.forEach(textNode => {
+                    const span = document.createElement('span');
+                    span.className = 'post-text';
+                    span.textContent = textNode.textContent;
+                    textNode.parentNode.replaceChild(span, textNode);
+                });
+            }
+        } else if (td.textContent.trim() !== '') {
+            // Cell only has text content, wrap it
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = td.textContent;
+            td.textContent = '';
+            td.appendChild(span);
+        }
+    }
+
+    #countTableColumns(table) {
+        // Count the maximum number of columns in the table
+        let maxCols = 0;
+        const rows = table.querySelectorAll('tr');
+        
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('th, td');
+            let colCount = 0;
+            
+            cells.forEach(cell => {
+                const colspan = parseInt(cell.getAttribute('colspan') || '1');
+                colCount += colspan;
+            });
+            
+            maxCols = Math.max(maxCols, colCount);
+        });
+        
+        return maxCols;
+    }
+
+    #setupTableObserver() {
+        if (globalThis.forumObserver) {
+            this.#tableObserverId = globalThis.forumObserver.register({
+                id: 'table-modernizer',
+                callback: (node) => this.#handleNewTables(node),
+                selector: '.post-content table, .post-main-content table, .modern-quote table, .modern-spoiler table, .modern-code table',
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'send', 'search']
+            });
+        } else {
+            setInterval(() => this.#processExistingTables(), 2000);
+        }
+    }
+
+    #handleNewTables(node) {
+        if (node.matches && node.matches('table')) {
+            if (!node.classList.contains('modern-table')) {
+                this.#transformTable(node);
+                node.classList.add('modern-table');
+            }
+        } else {
+            node.querySelectorAll('table').forEach(table => {
+                if (!table.classList.contains('modern-table')) {
+                    this.#transformTable(table);
+                    table.classList.add('modern-table');
+                }
+            });
+        }
+    }
+
+    // ==============================
+    // UPDATED POST CONTENT CLEANUP - PRESERVES TABLES
+    // ==============================
+
+    #cleanupPostContentStructure(contentElement) {
+        // First, process and preserve tables
+        const tables = contentElement.querySelectorAll('table');
+        tables.forEach(table => {
+            // Mark tables so they won't be broken down
+            table.setAttribute('data-preserve-table', 'true');
+        });
+
+        // Remove invalid table structure but preserve actual tables
+        this.#removeInvalidTableStructure(contentElement);
+        
+        // Clean up post content while preserving tables
+        this.#cleanupPostContentStructurePreservingTables(contentElement);
+    }
+
+    #cleanupPostContentStructurePreservingTables(contentElement) {
+        // Process all child nodes, but skip tables
+        const processNode = (node) => {
+            // Skip tables that should be preserved
+            if (node.nodeType === Node.ELEMENT_NODE && 
+                (node.tagName === 'TABLE' || node.hasAttribute('data-preserve-table'))) {
+                return;
+            }
+            
+            // Process non-table elements
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                // Clean up table cells that might be direct children
+                if (node.tagName === 'TD' || node.tagName === 'TH') {
+                    const parent = node.parentNode;
+                    if (parent && parent.tagName !== 'TR' && parent.tagName !== 'TABLE') {
+                        // Move td/th up the DOM
+                        while (node.firstChild) {
+                            parent.insertBefore(node.firstChild, node);
+                        }
+                        node.remove();
+                        return;
+                    }
+                }
+                
+                // Clean up table rows that might be direct children
+                if (node.tagName === 'TR') {
+                    const parent = node.parentNode;
+                    if (parent && parent.tagName !== 'TBODY' && parent.tagName !== 'THEAD' && parent.tagName !== 'TABLE') {
+                        while (node.firstChild) {
+                            parent.insertBefore(node.firstChild, node);
+                        }
+                        node.remove();
+                        return;
+                    }
+                }
+                
+                // Clean up tbody/thead that might be direct children
+                if (node.tagName === 'TBODY' || node.tagName === 'THEAD') {
+                    const parent = node.parentNode;
+                    if (parent && parent.tagName !== 'TABLE') {
+                        while (node.firstChild) {
+                            parent.insertBefore(node.firstChild, node);
+                        }
+                        node.remove();
+                        return;
+                    }
+                }
+                
+                // Process children recursively
+                Array.from(node.childNodes).forEach(child => {
+                    processNode(child);
+                });
+            }
+        };
+
+        // Start processing from content element
+        Array.from(contentElement.childNodes).forEach(child => {
+            processNode(child);
+        });
+
+        // Clean up line breaks between blocks (preserving tables)
+        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+        
+        // Clean empty elements
+        this.#cleanEmptyElements(contentElement);
+        
+        // Process text and line breaks (skipping table cells)
+        this.#processTextAndLineBreaksPreservingTables(contentElement);
+        
+        // Clean up edit spans
+        this.#cleanupEditSpans(contentElement);
+        
+        // Process signature
+        this.#processSignature(contentElement);
+        
+        // Clean invalid attributes (preserving table attributes)
+        this.#cleanInvalidAttributesPreservingTables(contentElement);
+        
+        // Remove table preservation markers
+        contentElement.querySelectorAll('[data-preserve-table]').forEach(el => {
+            el.removeAttribute('data-preserve-table');
+        });
+    }
+
+    #processTextAndLineBreaksPreservingTables(element) {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+        let node;
+
+        while (node = walker.nextNode()) {
+            // Skip text nodes inside tables
+            if (node.closest('table, th, td')) {
+                continue;
+            }
+            
+            if (node.textContent.trim() !== '') {
+                textNodes.push(node);
+            }
+        }
+
+        textNodes.forEach(textNode => {
+            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
+                const span = document.createElement('span');
+                span.className = 'post-text';
+                span.textContent = textNode.textContent;
+                textNode.parentNode.replaceChild(span, textNode);
+            }
+        });
+
+        // Process line breaks, skipping those inside tables
+        element.querySelectorAll('br').forEach(br => {
+            if (br.closest('table, th, td')) {
+                return;
+            }
+            
+            const prevSibling = br.previousElementSibling;
+            const nextSibling = br.nextElementSibling;
+
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header')) {
+                return;
+            }
+
+            if (prevSibling && nextSibling) {
+                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
+                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+
+                if (prevIsPostText && nextIsPostText) {
+                    prevSibling.classList.add('paragraph-end');
+                    br.remove();
+                } else {
+                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
+                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment');
+
+                    if (prevIsModern && nextIsModern) {
+                        br.remove();
+                    } else {
+                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                    }
+                }
+            } else {
+                br.remove();
+            }
+        });
+
+        // Add paragraph-end class to consecutive post-text elements (outside tables)
+        const postTextElements = Array.from(element.querySelectorAll('.post-text')).filter(el => !el.closest('table, th, td'));
+        
+        for (let i = 0; i < postTextElements.length - 1; i++) {
+            const current = postTextElements[i];
+            const next = postTextElements[i + 1];
+
+            let nodeBetween = current.nextSibling;
+            let onlyWhitespace = true;
+
+            while (nodeBetween && nodeBetween !== next) {
+                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                    onlyWhitespace = false;
+                    break;
+                }
+                nodeBetween = nodeBetween.nextSibling;
+            }
+
+            if (onlyWhitespace) {
+                current.classList.add('paragraph-end');
+            }
+        }
+    }
+
+    #cleanInvalidAttributesPreservingTables(element) {
+        // Preserve width/height on table elements
+        element.querySelectorAll('[width]').forEach(el => {
+            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
+                el.removeAttribute('width');
+            }
+        });
+
+        element.querySelectorAll('[height]').forEach(el => {
+            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
+                el.removeAttribute('height');
+            }
+        });
+
+        // Preserve cellpadding/cellspacing on tables
+        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
+            if (el.tagName !== 'TABLE') {
+                el.removeAttribute('cellpadding');
+                el.removeAttribute('cellspacing');
+            }
+        });
+    }
+
+    #removeInvalidTableStructure(element) {
+        // Remove td.right.Item but preserve table structure
+        element.querySelectorAll('td.right.Item').forEach(td => {
+            // Only remove if it's not inside a valid table
+            if (!td.closest('table[data-preserve-table]')) {
+                while (td.firstChild) {
+                    td.parentNode.insertBefore(td.firstChild, td);
+                }
+                td.remove();
+            }
+        });
+
+        // Remove empty tables that shouldn't be preserved
+        element.querySelectorAll('table.color:empty').forEach(table => {
+            if (!table.hasAttribute('data-preserve-table')) {
+                table.remove();
+            }
+        });
+    }
+
+    // ==============================
+    // CSS FOR MODERN TABLES (to be added to skin)
+    // ==============================
+    /*
+    Add this CSS to your skin:
+    
+    .modern-table-container {
+        margin: var(--space-md) 0;
+        overflow: hidden;
+    }
+    
+    .table-scroll-wrapper {
+        overflow-x: auto;
+        border-radius: var(--radius);
+        margin: 0;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .modern-table {
+        border-collapse: collapse;
+        width: 100%;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        background: var(--surface-color);
+    }
+    
+    .modern-table th {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        padding: var(--pad-4) var(--pad-5);
+        text-align: center;
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: var(--text-sm);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    
+    .modern-table td {
+        border: 1px solid var(--border-color);
+        padding: var(--pad-3) var(--pad-4);
+        font-size: var(--text-sm);
+    }
+    
+    .modern-table tr:nth-child(even) td {
+        background: var(--bg-color);
+    }
+    
+    .modern-table tr:nth-child(odd) td {
+        background: var(--surface-color);
+    }
+    
+    .modern-table .post-text {
+        margin: 0;
+        padding: 0;
+        display: inline;
+    }
+    
+    .modern-table.wide-table {
+        min-width: 600px;
+    }
+    
+    @media (max-width: 768px) {
+        .modern-table th,
+        .modern-table td {
+            padding: var(--pad-3) var(--pad-4);
+            font-size: var(--text-xs);
+        }
+        
+        .modern-table.wide-table {
+            min-width: 800px;
+        }
+    }
+    */
+
     // ==============================
     // MOMENT.JS TIMESTAMP FUNCTIONS - ENHANCED
     // ==============================
@@ -4630,179 +5145,6 @@ class PostModernizer {
     }
 
     // ==============================
-    // MODERN TABLE TRANSFORMATION
-    // ==============================
-
-    #modernizeTables() {
-        this.#processExistingTables();
-        this.#setupTableObserver();
-    }
-
-    #processExistingTables() {
-        // Process tables in post content
-        document.querySelectorAll('.post-content table, .post-main-content table, .quote-content table, .spoiler-content table').forEach(table => {
-            if (table.classList.contains('modern-table') || table.closest('.modern-table')) {
-                return;
-            }
-            this.#transformTable(table);
-        });
-    }
-
-    #transformTable(table) {
-        // Skip if already modernized
-        if (table.classList.contains('modern-table')) {
-            return;
-        }
-
-        // Skip tables inside modern elements that shouldn't be transformed
-        if (table.closest('.modern-code, .code-content, .code-header') || 
-            table.closest('.modern-quote, .quote-content, .quote-header') ||
-            table.closest('.modern-spoiler, .spoiler-content, .spoiler-header')) {
-            return;
-        }
-
-        // Create a wrapper for the modern table
-        const tableWrapper = document.createElement('div');
-        tableWrapper.className = 'modern-table-wrapper';
-        
-        // Create a container for the scrollable table
-        const scrollContainer = document.createElement('div');
-        scrollContainer.className = 'modern-table-scroll';
-        
-        // Clone the table and add modern classes
-        const modernTable = table.cloneNode(true);
-        modernTable.classList.add('modern-table');
-        
-        // Remove old styling and add modern classes
-        modernTable.removeAttribute('style');
-        modernTable.removeAttribute('cellpadding');
-        modernTable.removeAttribute('cellspacing');
-        modernTable.removeAttribute('border');
-        modernTable.classList.remove('ve-table');
-        
-        // Process table structure
-        this.#processTableStructure(modernTable);
-        
-        // Add responsive wrapper if needed
-        if (modernTable.offsetWidth > 600) {
-            scrollContainer.appendChild(modernTable);
-            tableWrapper.appendChild(scrollContainer);
-            
-            // Add a note about horizontal scroll for wide tables
-            const scrollNote = document.createElement('div');
-            scrollNote.className = 'table-scroll-note';
-            scrollNote.innerHTML = '<i class="fa-regular fa-arrows-left-right" aria-hidden="true"></i> Scroll horizontally to view full table';
-            tableWrapper.appendChild(scrollNote);
-        } else {
-            tableWrapper.appendChild(modernTable);
-        }
-        
-        // Replace the original table
-        table.parentNode.replaceChild(tableWrapper, table);
-        
-        // Add data attribute to mark as modernized
-        modernTable.setAttribute('data-modernized', 'true');
-    }
-
-    #processTableStructure(table) {
-        // Process table headers
-        const headers = table.querySelectorAll('th');
-        headers.forEach(th => {
-            th.classList.add('table-header');
-            th.setAttribute('scope', 'col');
-            
-            // Add sort indicator if there's no rowspan/colspan
-            if (!th.hasAttribute('rowspan') && !th.hasAttribute('colspan') && !th.querySelector('.sort-indicator')) {
-                const sortIndicator = document.createElement('span');
-                sortIndicator.className = 'sort-indicator';
-                sortIndicator.innerHTML = '<i class="fa-regular fa-sort" aria-hidden="true"></i>';
-                sortIndicator.setAttribute('aria-hidden', 'true');
-                th.appendChild(sortIndicator);
-            }
-        });
-        
-        // Process table cells
-        const cells = table.querySelectorAll('td');
-        cells.forEach(td => {
-            td.classList.add('table-cell');
-            
-            // Add zebra striping classes
-            const row = td.parentElement;
-            if (row && row.tagName === 'TR') {
-                const rowIndex = Array.from(row.parentElement.children).indexOf(row);
-                if (rowIndex % 2 === 0) {
-                    row.classList.add('even-row');
-                } else {
-                    row.classList.add('odd-row');
-                }
-            }
-        });
-        
-        // Process table rows
-        const rows = table.querySelectorAll('tr');
-        rows.forEach(tr => {
-            tr.classList.add('table-row');
-        });
-        
-        // Process table head and body
-        const thead = table.querySelector('thead');
-        if (!thead && table.querySelector('th')) {
-            // Create thead if not present
-            const firstRow = table.querySelector('tr');
-            if (firstRow && firstRow.querySelector('th')) {
-                const newThead = document.createElement('thead');
-                newThead.appendChild(firstRow.cloneNode(true));
-                firstRow.remove();
-                table.insertBefore(newThead, table.firstChild);
-                
-                // Create tbody for remaining rows
-                const tbody = document.createElement('tbody');
-                while (table.querySelector('tr')) {
-                    tbody.appendChild(table.querySelector('tr'));
-                }
-                table.appendChild(tbody);
-            }
-        }
-        
-        // Add responsive classes for mobile
-        if (table.querySelectorAll('th, td').length > 6) {
-            table.classList.add('wide-table');
-        }
-        
-        // Add hover effect classes
-        table.classList.add('hover-rows');
-    }
-
-    #setupTableObserver() {
-        if (globalThis.forumObserver) {
-            this.#tableObserverId = globalThis.forumObserver.register({
-                id: 'table-modernizer',
-                callback: (node) => this.#handleNewTables(node),
-                selector: '.post-content table, .post-main-content table, .quote-content table, .spoiler-content table',
-                priority: 'normal',
-                pageTypes: ['topic', 'blog', 'send', 'search']
-            });
-        } else {
-            setInterval(() => this.#processExistingTables(), 2000);
-        }
-    }
-
-    #handleNewTables(node) {
-        if (node.matches('table') && !node.classList.contains('modern-table') && 
-            !node.closest('.modern-table') && !node.closest('.modern-code, .code-content') &&
-            !node.closest('.modern-quote, .quote-content') && !node.closest('.modern-spoiler, .spoiler-content')) {
-            this.#transformTable(node);
-        } else {
-            node.querySelectorAll('table:not(.modern-table)').forEach(table => {
-                if (!table.closest('.modern-table') && !table.closest('.modern-code, .code-content') &&
-                    !table.closest('.modern-quote, .quote-content') && !table.closest('.modern-spoiler, .spoiler-content')) {
-                    this.#transformTable(table);
-                }
-            });
-        }
-    }
-
-    // ==============================
     // OBSERVER SETUP
     // ==============================
 
@@ -5220,11 +5562,10 @@ class PostModernizer {
     }
 
     #modernizeTablesInContent(contentWrapper) {
-        contentWrapper.querySelectorAll('table:not(.modern-table)').forEach(table => {
-            if (!table.closest('.modern-table') && !table.closest('.modern-code, .code-content') &&
-                !table.closest('.modern-quote, .quote-content') && !table.closest('.modern-spoiler, .spoiler-content')) {
-                this.#transformTable(table);
-            }
+        contentWrapper.querySelectorAll('table').forEach(table => {
+            if (table.classList.contains('modern-table')) return;
+            this.#transformTable(table);
+            table.classList.add('modern-table');
         });
     }
 
@@ -5418,7 +5759,7 @@ class PostModernizer {
                     });
                 }
 
-                this.#processTextAndLineBreaks(contentWrapper);
+                this.#processTextAndLineBreaksPreservingTables(contentWrapper);
                 this.#cleanupSearchPostContent(contentWrapper);
 
                 const editSpanInContent = contentWrapper.querySelector('span.edit');
@@ -5571,7 +5912,17 @@ class PostModernizer {
     }
 
     #cleanupSearchPostContent(contentWrapper) {
+        // First mark tables for preservation
+        contentWrapper.querySelectorAll('table').forEach(table => {
+            table.setAttribute('data-preserve-table', 'true');
+        });
+
         contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
+            // Skip tables that should be preserved
+            if (el.hasAttribute('data-preserve-table') || el.closest('[data-preserve-table]')) {
+                return;
+            }
+            
             if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
                 el.remove();
             } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
@@ -5585,6 +5936,7 @@ class PostModernizer {
             }
         });
 
+        // Modernize various content blocks
         contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
             if (container.classList.contains('quote-modernized')) return;
             this.#transformQuote(container);
@@ -5611,11 +5963,15 @@ class PostModernizer {
         });
 
         // Modernize tables in search posts
-        contentWrapper.querySelectorAll('table:not(.modern-table)').forEach(table => {
-            if (!table.closest('.modern-table') && !table.closest('.modern-code, .code-content') &&
-                !table.closest('.modern-quote, .quote-content') && !table.closest('.modern-spoiler, .spoiler-content')) {
-                this.#transformTable(table);
-            }
+        contentWrapper.querySelectorAll('table').forEach(table => {
+            if (table.classList.contains('modern-table')) return;
+            this.#transformTable(table);
+            table.classList.add('modern-table');
+        });
+
+        // Remove preservation markers
+        contentWrapper.querySelectorAll('[data-preserve-table]').forEach(el => {
+            el.removeAttribute('data-preserve-table');
         });
     }
 
@@ -5652,71 +6008,24 @@ class PostModernizer {
         }
     }
 
-    #removeInvalidTableStructure(element) {
-        element.querySelectorAll('td.right.Item').forEach(td => {
-            while (td.firstChild) {
-                td.parentNode.insertBefore(td.firstChild, td);
-            }
-            td.remove();
-        });
-
-        element.querySelectorAll('table.color:empty').forEach(table => table.remove());
-    }
-
-    #cleanupPostContentStructure(contentElement) {
-        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
-            while (td.firstChild) {
-                contentElement.appendChild(td.firstChild);
-            }
-            td.remove();
-        });
-
-        contentElement.querySelectorAll('td').forEach(td => {
-            const parent = td.parentNode;
-            if (parent) {
-                while (td.firstChild) {
-                    parent.insertBefore(td.firstChild, td);
-                }
-                td.remove();
+    #cleanEmptyElements(element) {
+        element.querySelectorAll(':empty').forEach(emptyEl => {
+            if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
+                emptyEl.remove();
             }
         });
 
-        contentElement.querySelectorAll('tr').forEach(tr => {
-            const parent = tr.parentNode;
-            if (parent) {
-                while (tr.firstChild) {
-                    parent.insertBefore(tr.firstChild, tr);
-                }
-                tr.remove();
-            }
-        });
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const nodesToRemove = [];
+        let node;
 
-        contentElement.querySelectorAll('tbody').forEach(tbody => {
-            const parent = tbody.parentNode;
-            if (parent) {
-                while (tbody.firstChild) {
-                    parent.insertBefore(tbody.firstChild, tbody);
-                }
-                tbody.remove();
+        while (node = walker.nextNode()) {
+            if (node.textContent.trim() === '') {
+                nodesToRemove.push(node);
             }
-        });
+        }
 
-        contentElement.querySelectorAll('table').forEach(table => {
-            const parent = table.parentNode;
-            if (parent) {
-                while (table.firstChild) {
-                    parent.insertBefore(table.firstChild, table);
-                }
-                table.remove();
-            }
-        });
-
-        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-        this.#cleanEmptyElements(contentElement);
-        this.#processTextAndLineBreaks(contentElement);
-        this.#cleanupEditSpans(contentElement);
-        this.#processSignature(contentElement);
-        this.#cleanInvalidAttributes(contentElement);
+        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
     }
 
     #cleanupEditSpans(element) {
@@ -5740,7 +6049,8 @@ class PostModernizer {
             'div[align="center"].spoiler',
             'div[align="center"]:has(.quote_top)',
             '.modern-attachment',
-            '.modern-table-wrapper'
+            '.modern-table-container',
+            'table.modern-table'
         ];
 
         const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
@@ -5786,113 +6096,6 @@ class PostModernizer {
                 }
             }
         });
-    }
-
-    #cleanEmptyElements(element) {
-        element.querySelectorAll(':empty').forEach(emptyEl => {
-            if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
-                emptyEl.remove();
-            }
-        });
-
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const nodesToRemove = [];
-        let node;
-
-        while (node = walker.nextNode()) {
-            if (node.textContent.trim() === '') {
-                nodesToRemove.push(node);
-            }
-        }
-
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
-    }
-
-    #cleanInvalidAttributes(element) {
-        element.querySelectorAll('[width]').forEach(el => {
-            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
-                el.removeAttribute('width');
-            }
-        });
-
-        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
-            if (el.tagName !== 'TABLE') {
-                el.removeAttribute('cellpadding');
-                el.removeAttribute('cellspacing');
-            }
-        });
-    }
-
-    #processTextAndLineBreaks(element) {
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const textNodes = [];
-        let node;
-
-        while (node = walker.nextNode()) {
-            if (node.textContent.trim() !== '') {
-                textNodes.push(node);
-            }
-        }
-
-        textNodes.forEach(textNode => {
-            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            }
-        });
-
-        element.querySelectorAll('br').forEach(br => {
-            const prevSibling = br.previousElementSibling;
-            const nextSibling = br.nextElementSibling;
-
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-table-wrapper')) {
-                return;
-            }
-
-            if (prevSibling && nextSibling) {
-                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
-                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
-
-                if (prevIsPostText && nextIsPostText) {
-                    prevSibling.classList.add('paragraph-end');
-                    br.remove();
-                } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-table-wrapper');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-table-wrapper');
-
-                    if (prevIsModern && nextIsModern) {
-                        br.remove();
-                    } else {
-                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-                    }
-                }
-            } else {
-                br.remove();
-            }
-        });
-
-        const postTextElements = element.querySelectorAll('.post-text');
-        for (let i = 0; i < postTextElements.length - 1; i++) {
-            const current = postTextElements[i];
-            const next = postTextElements[i + 1];
-
-            let nodeBetween = current.nextSibling;
-            let onlyWhitespace = true;
-
-            while (nodeBetween && nodeBetween !== next) {
-                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                    onlyWhitespace = false;
-                    break;
-                }
-                nodeBetween = nodeBetween.nextSibling;
-            }
-
-            if (onlyWhitespace) {
-                current.classList.add('paragraph-end');
-            }
-        }
     }
 
     #processSignature(element) {
@@ -7412,7 +7615,8 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId, this.#attachmentObserverId, this.#tableObserverId];
+            this.#codeBlockObserverId, this.#attachmentObserverId,
+            this.#tableObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
