@@ -3269,7 +3269,7 @@ globalThis.addEventListener('pagehide', () => {
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
-// and modern attachment styling
+// modern attachment styling, and Media Dimension Extractor integration
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -4190,7 +4190,7 @@ class PostModernizer {
 }
 
     // ==============================
-    // ATTACHMENT TRANSFORMATION
+    // ATTACHMENT TRANSFORMATION - UPDATED WITH MEDIA DIMENSION EXTRACTOR INTEGRATION
     // ==============================
 
     #modernizeAttachments() {
@@ -4206,133 +4206,177 @@ class PostModernizer {
         });
     }
 
-   #transformAttachment(container) {
-    // Get the fancytop element (attachment header)
-    const fancyTop = container.previousElementSibling;
-    if (!fancyTop || !fancyTop.classList.contains('fancytop')) {
-        return;
-    }
+    #transformAttachment(container) {
+        // Get the fancytop element (attachment header)
+        const fancyTop = container.previousElementSibling;
+        if (!fancyTop || !fancyTop.classList.contains('fancytop')) {
+            return;
+        }
 
-    // Check what type of attachment we have
-    const isImageAttachment = container.querySelector('a[href*="image.forumcommunity.it"]') || 
-                              container.querySelector('img[src*="image.forumcommunity.it"]');
-    
-    const isFileAttachment = container.querySelector('img[src*="mime_types/"]') || 
-                            container.querySelector('a[onclick*="act=Attach"]');
-
-    if (!isImageAttachment && !isFileAttachment) {
-        return;
-    }
-
-    // Remove the fancytop header (we'll replace it with modern header)
-    fancyTop.remove();
-
-    // Create modern attachment container
-    const modernAttachment = document.createElement('div');
-    modernAttachment.className = 'modern-attachment';
-
-    let html = '';
-
-    if (isImageAttachment) {
-        html = this.#createImageAttachmentHTML(container);
-    } else if (isFileAttachment) {
-        html = this.#createFileAttachmentHTML(container);
-    }
-
-    if (html) {
-        modernAttachment.innerHTML = html;
-        container.replaceWith(modernAttachment);
+        // Check what type of attachment we have
+        const isImageAttachment = container.querySelector('a[href*="image.forumcommunity.it"]') || 
+                                  container.querySelector('img[src*="image.forumcommunity.it"]');
         
-        // Add event listeners for image attachments
+        const isFileAttachment = container.querySelector('img[src*="mime_types/"]') || 
+                                container.querySelector('a[onclick*="act=Attach"]');
+
+        if (!isImageAttachment && !isFileAttachment) {
+            return;
+        }
+
+        // Remove the fancytop header (we'll replace it with modern header)
+        fancyTop.remove();
+
+        // Create modern attachment container
+        const modernAttachment = document.createElement('div');
+        modernAttachment.className = 'modern-attachment';
+
+        let html = '';
+
         if (isImageAttachment) {
-            this.#addImageAttachmentListeners(modernAttachment);
+            html = this.#createImageAttachmentHTML(container);
+        } else if (isFileAttachment) {
+            html = this.#createFileAttachmentHTML(container);
+        }
+
+        if (html) {
+            modernAttachment.innerHTML = html;
+            container.replaceWith(modernAttachment);
+            
+            // Add event listeners for image attachments
+            if (isImageAttachment) {
+                this.#addImageAttachmentListeners(modernAttachment);
+            }
+            
+            // Add event listeners for file attachments
+            if (isFileAttachment) {
+                this.#addFileAttachmentListeners(modernAttachment);
+            }
+            
+            // Trigger media dimension extractor for image attachments
+            if (isImageAttachment) {
+                this.#triggerMediaDimensionExtractor(modernAttachment);
+            }
+        }
+    }
+
+    #createImageAttachmentHTML(container) {
+        // Extract image link and image element
+        const imageLink = container.querySelector('a[href*="image.forumcommunity.it"]');
+        const imageElement = container.querySelector('img[src*="image.forumcommunity.it"]');
+        
+        if (!imageLink || !imageElement) {
+            return '';
+        }
+
+        const imageUrl = imageLink.getAttribute('href') || imageElement.getAttribute('src');
+        const imageAlt = imageElement.getAttribute('alt') || 'Attached image';
+        const imageTitle = imageLink.getAttribute('title') || imageAlt;
+        
+        // Get dimensions from image element - USE EXISTING DATA
+        let width = imageElement.getAttribute('width');
+        let height = imageElement.getAttribute('height');
+        
+        // If dimensions are not set, check natural dimensions
+        if ((!width || !height) && imageElement.naturalWidth && imageElement.naturalHeight) {
+            width = imageElement.naturalWidth;
+            height = imageElement.naturalHeight;
         }
         
-        // Add event listeners for file attachments
-        if (isFileAttachment) {
-            this.#addFileAttachmentListeners(modernAttachment);
+        // Check if the Media Dimension Extractor has already set dimensions
+        // Look for data attributes that might have been added
+        const dataWidth = imageElement.getAttribute('data-width');
+        const dataHeight = imageElement.getAttribute('data-height');
+        
+        if (dataWidth && dataHeight) {
+            width = dataWidth;
+            height = dataHeight;
         }
         
-        // Trigger media dimension extractor for image attachments
-        if (isImageAttachment) {
-            this.#triggerMediaDimensionExtractor(modernAttachment);
+        // Create download URL (same as image URL)
+        const downloadUrl = imageUrl;
+        
+        // Get file name from URL
+        const fileName = this.#extractFileNameFromUrl(imageUrl) || 'image.jpg';
+        const fileSize = this.#calculateImageSize(width, height, fileName);
+        
+        let html = '<div class="attachment-header">' +
+            '<div class="attachment-icon">' +
+            '<i class="fa-regular fa-image" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="attachment-info">' +
+            '<span class="attachment-title">Attached Image</span>' +
+            '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileSize + '</span>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+            '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download image" target="_blank" rel="nofollow">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '</a>' +
+            '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-view-btn" title="View full size" target="_blank" rel="nofollow">' +
+            '<i class="fa-regular fa-expand" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>' +
+            '</div>';
+        
+        html += '<div class="attachment-preview">' +
+            '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-image-link" title="' + this.#escapeHtml(imageTitle) + '" target="_blank" rel="nofollow">' +
+            '<img src="' + this.#escapeHtml(imageElement.getAttribute('src')) + '" alt="' + this.#escapeHtml(imageAlt) + '" loading="lazy" decoding="async"';
+        
+        // Add width and height attributes if available
+        if (width && height) {
+            html += ' width="' + width + '" height="' + height + '"';
+        }
+        
+        html += ' style="max-width: 100%; height: auto; display: block;">' +
+            '</a>' +
+            '</div>';
+        
+        return html;
+    }
+
+    #calculateImageSize(width, height, fileName) {
+        // If we don't have dimensions, try to estimate from file name or return dimensions
+        if (!width || !height) {
+            // Try to extract dimensions from filename (common pattern: name-widthxheight.jpg)
+            const dimensionMatch = fileName.match(/(\d+)x(\d+)/);
+            if (dimensionMatch) {
+                width = parseInt(dimensionMatch[1]);
+                height = parseInt(dimensionMatch[2]);
+            } else {
+                return 'Unknown dimensions';
+            }
+        }
+        
+        // Calculate megapixels
+        const megapixels = (width * height) / 1000000;
+        
+        if (megapixels < 0.1) {
+            return width + '×' + height + ' pixels';
+        } else if (megapixels < 1) {
+            return width + '×' + height + ' (' + Math.round(megapixels * 1000) + 'K pixels)';
+        } else {
+            return width + '×' + height + ' (' + megapixels.toFixed(1) + ' MP)';
         }
     }
-}
 
-  #createImageAttachmentHTML(container) {
-    // Extract image link and image element
-    const imageLink = container.querySelector('a[href*="image.forumcommunity.it"]');
-    const imageElement = container.querySelector('img[src*="image.forumcommunity.it"]');
-    
-    if (!imageLink || !imageElement) {
-        return '';
+    #extractFileNameFromUrl(url) {
+        if (!url) return '';
+        
+        try {
+            const urlObj = new URL(url);
+            const pathname = urlObj.pathname;
+            const parts = pathname.split('/');
+            const fileName = parts[parts.length - 1] || 'image.jpg';
+            
+            // Remove query parameters
+            return fileName.split('?')[0];
+        } catch {
+            // If URL parsing fails, try simple extraction
+            const parts = url.split('/');
+            const fileName = parts[parts.length - 1] || 'image.jpg';
+            return fileName.split('?')[0];
+        }
     }
-
-    const imageUrl = imageLink.getAttribute('href') || imageElement.getAttribute('src');
-    const imageAlt = imageElement.getAttribute('alt') || 'Attached image';
-    const imageTitle = imageLink.getAttribute('title') || imageAlt;
-    
-    // Get dimensions from image element - USE EXISTING DATA
-    let width = imageElement.getAttribute('width');
-    let height = imageElement.getAttribute('height');
-    
-    // If dimensions are not set, check natural dimensions
-    if ((!width || !height) && imageElement.naturalWidth && imageElement.naturalHeight) {
-        width = imageElement.naturalWidth;
-        height = imageElement.naturalHeight;
-    }
-    
-    // Check if the Media Dimension Extractor has already set dimensions
-    // Look for data attributes that might have been added
-    const dataWidth = imageElement.getAttribute('data-width');
-    const dataHeight = imageElement.getAttribute('data-height');
-    
-    if (dataWidth && dataHeight) {
-        width = dataWidth;
-        height = dataHeight;
-    }
-    
-    // Create download URL (same as image URL)
-    const downloadUrl = imageUrl;
-    
-    // Get file name from URL
-    const fileName = this.#extractFileNameFromUrl(imageUrl) || 'image.jpg';
-    const fileSize = this.#calculateImageSize(width, height, fileName);
-    
-    let html = '<div class="attachment-header">' +
-        '<div class="attachment-icon">' +
-        '<i class="fa-regular fa-image" aria-hidden="true"></i>' +
-        '</div>' +
-        '<div class="attachment-info">' +
-        '<span class="attachment-title">Attached Image</span>' +
-        '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileSize + '</span>' +
-        '</div>' +
-        '<div class="attachment-actions">' +
-        '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download image" target="_blank" rel="nofollow">' +
-        '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
-        '</a>' +
-        '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-view-btn" title="View full size" target="_blank" rel="nofollow">' +
-        '<i class="fa-regular fa-expand" aria-hidden="true"></i>' +
-        '</a>' +
-        '</div>' +
-        '</div>';
-    
-    html += '<div class="attachment-preview">' +
-        '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-image-link" title="' + this.#escapeHtml(imageTitle) + '" target="_blank" rel="nofollow">' +
-        '<img src="' + this.#escapeHtml(imageElement.getAttribute('src')) + '" alt="' + this.#escapeHtml(imageAlt) + '" loading="lazy" decoding="async"';
-    
-    // Add width and height attributes if available
-    if (width && height) {
-        html += ' width="' + width + '" height="' + height + '"';
-    }
-    
-    html += ' style="max-width: 100%; height: auto; display: block;">' +
-        '</a>' +
-        '</div>';
-    
-    return html;
-}
 
     #createFileAttachmentHTML(container) {
         // Extract file information
@@ -4388,32 +4432,6 @@ class PostModernizer {
             '</div>';
         
         return html;
-    }
-
-    #extractFileNameFromUrl(url) {
-        if (!url) return '';
-        const parts = url.split('/');
-        return parts[parts.length - 1] || 'image.jpg';
-    }
-
-    #estimateImageSize(width, height) {
-        if (!width || !height) return 'Unknown size';
-        
-        const widthNum = parseInt(width);
-        const heightNum = parseInt(height);
-        
-        if (isNaN(widthNum) || isNaN(heightNum)) {
-            return 'Unknown size';
-        }
-        
-        // Calculate megapixels
-        const megapixels = (widthNum * heightNum) / 1000000;
-        
-        if (megapixels < 1) {
-            return Math.round(megapixels * 1000) + 'K pixels';
-        } else {
-            return megapixels.toFixed(1) + ' MP';
-        }
     }
 
     #getFileTypeFromName(fileName) {
@@ -4534,6 +4552,54 @@ class PostModernizer {
                 // Let it execute, but we can add our own tracking
                 console.log('Downloading file attachment');
             });
+        }
+    }
+
+    #triggerMediaDimensionExtractor(attachmentElement) {
+        // If the Media Dimension Extractor is available, trigger it for the image
+        if (globalThis.mediaDimensionExtractor && 
+            typeof globalThis.mediaDimensionExtractor.extractDimensionsForElement === 'function') {
+            
+            const image = attachmentElement.querySelector('img');
+            if (image) {
+                // Wait a moment for the image to be in the DOM
+                setTimeout(() => {
+                    globalThis.mediaDimensionExtractor.extractDimensionsForElement(image);
+                    
+                    // Update the attachment details after dimensions are extracted
+                    setTimeout(() => {
+                        this.#updateAttachmentSizeInfo(attachmentElement, image);
+                    }, 100);
+                }, 10);
+            }
+        }
+    }
+
+    #updateAttachmentSizeInfo(attachmentElement, imageElement) {
+        // Get updated dimensions
+        const width = imageElement.getAttribute('width') || imageElement.naturalWidth;
+        const height = imageElement.getAttribute('height') || imageElement.naturalHeight;
+        
+        if (width && height) {
+            const fileName = this.#extractFileNameFromUrl(imageElement.src) || 'image.jpg';
+            const fileSize = this.#calculateImageSize(width, height, fileName);
+            
+            // Update the attachment details
+            const detailsElement = attachmentElement.querySelector('.attachment-details');
+            if (detailsElement) {
+                detailsElement.textContent = fileName + ' • ' + fileSize;
+            }
+            
+            // Also update the image element with proper dimensions
+            if (!imageElement.hasAttribute('width')) {
+                imageElement.setAttribute('width', width);
+            }
+            if (!imageElement.hasAttribute('height')) {
+                imageElement.setAttribute('height', height);
+            }
+            
+            // Add aspect ratio for better rendering
+            imageElement.style.aspectRatio = width + ' / ' + height;
         }
     }
 
