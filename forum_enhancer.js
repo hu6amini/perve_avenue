@@ -5615,14 +5615,22 @@ class PostModernizer {
         }
     });
     
-    // STEP 3: Clean up table attributes
-    table.removeAttribute('style');
-    table.removeAttribute('cellpadding');
-    table.removeAttribute('cellspacing');
-    table.removeAttribute('border');
-    
-    // Ensure it has the ve-table class
-    table.classList.add('ve-table');
+// STEP 3: Clean up table attributes
+table.removeAttribute('style');
+table.removeAttribute('cellpadding');
+table.removeAttribute('cellspacing');
+table.removeAttribute('border');
+
+// Clean up redundant rowspan/colspan attributes
+table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
+    cell.removeAttribute('rowspan');
+});
+table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
+    cell.removeAttribute('colspan');
+});
+
+// Ensure it has the ve-table class
+table.classList.add('ve-table');
 }
 #cleanupEditSpans(element) {
     element.querySelectorAll('span.edit').forEach(span => {
