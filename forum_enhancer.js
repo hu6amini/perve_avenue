@@ -5615,23 +5615,42 @@ class PostModernizer {
         }
     });
     
-// STEP 3: Clean up table attributes
-table.removeAttribute('style');
-table.removeAttribute('cellpadding');
-table.removeAttribute('cellspacing');
-table.removeAttribute('border');
-
-// Clean up redundant rowspan/colspan attributes
-table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
-    cell.removeAttribute('rowspan');
-});
-table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
-    cell.removeAttribute('colspan');
-});
-
-// Ensure it has the ve-table class
-table.classList.add('ve-table');
+    // STEP 3: Clean up table attributes
+    table.removeAttribute('style');
+    table.removeAttribute('cellpadding');
+    table.removeAttribute('cellspacing');
+    table.removeAttribute('border');
+    
+    // Clean up redundant rowspan/colspan attributes
+    table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
+        cell.removeAttribute('rowspan');
+    });
+    table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
+        cell.removeAttribute('colspan');
+    });
+    
+    // STEP 4: Wrap table in container div
+    if (!table.parentElement || !table.parentElement.classList.contains('table-container')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-container';
+        
+        // Copy any additional classes from table to wrapper
+        const tableClasses = Array.from(table.classList).filter(cls => cls !== 've-table');
+        if (tableClasses.length > 0) {
+            wrapper.classList.add(...tableClasses);
+        }
+        
+        // Insert wrapper before table
+        table.parentNode.insertBefore(wrapper, table);
+        
+        // Move table into wrapper
+        wrapper.appendChild(table);
+    }
+    
+    // STEP 5: Ensure it has the ve-table class
+    table.classList.add('ve-table');
 }
+    
 #cleanupEditSpans(element) {
     element.querySelectorAll('span.edit').forEach(span => {
         // Check if already transformed (contains a time element)
