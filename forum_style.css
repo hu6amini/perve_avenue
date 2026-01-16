@@ -42,16 +42,40 @@ input[type="checkbox"]:checked::before {
 }
 
 /* EXCEPTION: .post.focus checkboxes ALWAYS show checked state */
-.post.focus input[type="checkbox"] {
+/* BUT EXCLUDE task list checkboxes */
+.post.focus input[type="checkbox"]:not(ul[data-type="taskList"] input[type="checkbox"]) {
   background:var(--primary-color) !important;
   border-color:var(--primary-color) !important;
 }
 
-.post.focus input[type="checkbox"]::before {
+.post.focus input[type="checkbox"]:not(ul[data-type="taskList"] input[type="checkbox"])::before {
   color:#fff !important;
   content:'\f00c' !important;
   font-family:"Font Awesome 6 Pro" !important;
   font-weight: 900 !important;
+}
+
+/* Special rule: Checkboxes inside task lists in focused posts should behave normally */
+.post.focus ul[data-type="taskList"] input[type="checkbox"]:checked {
+  background:var(--primary-color) !important;
+  border-color:var(--primary-color) !important;
+}
+
+.post.focus ul[data-type="taskList"] input[type="checkbox"]:checked::before {
+  color:#fff !important;
+  content:'\f00c' !important;
+  font-family:"Font Awesome 6 Pro" !important;
+  font-weight: 900 !important;
+}
+
+/* Unchecked checkboxes in task lists should remain unchecked visually */
+.post.focus ul[data-type="taskList"] input[type="checkbox"]:not(:checked) {
+  background:none !important;
+  border-color:var(--border-color) !important;
+}
+
+.post.focus ul[data-type="taskList"] input[type="checkbox"]:not(:checked)::before {
+  content:'' !important;
 }
 
 input[type="radio"]
