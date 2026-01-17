@@ -5305,22 +5305,27 @@ class PostModernizer {
                 postHeader.appendChild(anchorContainer);
             }
 
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = startOffset + index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
+            // ===========================================
+            // MODIFIED: Skip post-number for post_queue elements
+            // ===========================================
+            if (!post.classList.contains('post_queue')) {
+                const postNumber = document.createElement('span');
+                postNumber.className = 'post-number';
+                
+                const hashIcon = document.createElement('i');
+                hashIcon.className = 'fa-regular fa-hashtag';
+                hashIcon.setAttribute('aria-hidden', 'true');
+                
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'post-number-value';
+                numberSpan.textContent = startOffset + index + 1;
+                
+                postNumber.appendChild(hashIcon);
+                postNumber.appendChild(document.createTextNode(' '));
+                postNumber.appendChild(numberSpan);
+                
+                postHeader.appendChild(postNumber);
+            }
 
             this.#addNewPostBadge(post, postHeader);
 
@@ -5667,22 +5672,27 @@ class PostModernizer {
                 postHeader.appendChild(anchorContainer);
             }
 
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
+            // ===========================================
+            // MODIFIED: Skip post-number for post_queue elements in search results
+            // ===========================================
+            if (!post.classList.contains('post_queue')) {
+                const postNumber = document.createElement('span');
+                postNumber.className = 'post-number';
+                
+                const hashIcon = document.createElement('i');
+                hashIcon.className = 'fa-regular fa-hashtag';
+                hashIcon.setAttribute('aria-hidden', 'true');
+                
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'post-number-value';
+                numberSpan.textContent = index + 1;
+                
+                postNumber.appendChild(hashIcon);
+                postNumber.appendChild(document.createTextNode(' '));
+                postNumber.appendChild(numberSpan);
+                
+                postHeader.appendChild(postNumber);
+            }
 
             this.#addNewPostBadge(post, postHeader);
 
@@ -7656,6 +7666,13 @@ class PostModernizer {
     // ==============================
 
     #addNewPostBadge(post, postHeader) {
+        // ===========================================
+        // MODIFIED: Skip new post badge for post_queue elements
+        // ===========================================
+        if (post.classList.contains('post_queue')) {
+            return;
+        }
+        
         const hasNewPostAnchor = post.querySelector('.anchor a#newpost');
         if (!hasNewPostAnchor) return;
 
