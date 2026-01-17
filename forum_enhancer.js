@@ -3370,186 +3370,224 @@ class PostModernizer {
     // ==============================
 
     #analyzeDateComponents(dateString) {
-        const components = {
-            hasAMPM: /[AP]M/i.test(dateString),
-            has24Hour: /\d{1,2}:\d{2}(?::\d{2})?(?!\s*[AP]M)/i.test(dateString),
-            separator: null,
-            parts: []
-        };
+    const components = {
+        hasAMPM: /[AP]M/i.test(dateString),
+        has24Hour: /\d{1,2}:\d{2}(?::\d{2})?(?!\s*[AP]M)/i.test(dateString),
+        separator: null,
+        parts: []
+    };
+    
+    // Extract date parts
+    const dateMatch = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+    if (dateMatch) {
+        components.parts = [parseInt(dateMatch[1]), parseInt(dateMatch[2]), parseInt(dateMatch[3])];
         
-        // Extract date parts
-        const dateMatch = dateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-        if (dateMatch) {
-            components.parts = [parseInt(dateMatch[1]), parseInt(dateMatch[2]), parseInt(dateMatch[3])];
+        // Determine separator
+        const separatorMatch = dateString.match(/\d{1,2}([\/\-\.])\d{1,2}/);
+        components.separator = separatorMatch ? separatorMatch[1] : '/';
+        
+        // Determine likely format
+        const [first, second] = components.parts;
+        
+        // ENHANCED LOGIC: Check for unambiguous cases
+        if (first > 12 && second <= 12) {
+            components.likelyFormat = 'EU'; // DD/MM (25/1)
+            components.confidence = 'high';
+            components.reason = 'First number > 12, second ≤ 12';
+        } else if (first <= 12 && second > 12) {
+            components.likelyFormat = 'US'; // MM/DD (1/25)
+            components.confidence = 'high';
+            components.reason = 'First number ≤ 12, second > 12';
+        } else if (first <= 12 && second <= 12) {
+            // Both numbers ≤ 12, ambiguous
+            components.likelyFormat = 'ambiguous';
+            components.confidence = 'low';
+            components.reason = 'Both numbers ≤ 12, ambiguous';
             
-            // Determine separator
-            const separatorMatch = dateString.match(/\d{1,2}([\/\-\.])\d{1,2}/);
-            components.separator = separatorMatch ? separatorMatch[1] : '/';
-            
-            // Determine likely format
-            const [first, second] = components.parts;
-            
-            if (first > 12 && second <= 12) {
-                components.likelyFormat = 'EU'; // DD/MM
-                components.confidence = 'high';
-            } else if (first <= 12 && second > 12) {
-                components.likelyFormat = 'US'; // MM/DD
-                components.confidence = 'high';
-            } else if (first <= 12 && second <= 12) {
-                components.likelyFormat = 'ambiguous';
-                components.confidence = 'low';
-            } else {
-                components.likelyFormat = 'unknown';
-                components.confidence = 'low';
+            // If it's 24-hour format with no AM/PM, lean European
+            if (components.has24Hour && !components.hasAMPM) {
+                components.likelyFormat = 'EU';
+                components.confidence = 'medium';
+                components.reason = '24-hour format suggests European';
             }
+        } else if (first > 12 && second > 12) {
+            // Both > 12 - invalid date, but try to salvage
+            components.likelyFormat = 'unknown';
+            components.confidence = 'low';
+            components.reason = 'Both numbers > 12, invalid';
+        } else {
+            components.likelyFormat = 'unknown';
+            components.confidence = 'low';
+            components.reason = 'Unknown pattern';
         }
-        
-        return components;
     }
+    
+    return components;
+}
     
     #learnFormat(components, successfulFormat) {
-        // Store the pattern
-        const patternKey = `${components.separator}|${components.hasAMPM ? '12h' : '24h'}|${successfulFormat}`;
-        this.#formatPatterns.set(patternKey, (this.#formatPatterns.get(patternKey) || 0) + 1);
-        
-        // Update confidence scores
-        if (successfulFormat === 'EU') {
-            this.#formatConfidence.EU++;
-        } else if (successfulFormat === 'US') {
-            this.#formatConfidence.US++;
-        }
-        
-        // Detect most common separator
-        if (components.separator) {
-            const separatorCount = this.#formatPatterns.get(`separator|${components.separator}`) || 0;
-            this.#formatPatterns.set(`separator|${components.separator}`, separatorCount + 1);
-            
-            // Update detected separator if we have enough confidence
-            if (separatorCount > 2) {
-                this.#detectedSeparator = components.separator;
-            }
-        }
-        
-        // Detect time format preference
-        const timeFormatKey = components.hasAMPM ? '12h' : '24h';
-        const timeFormatCount = this.#formatPatterns.get(`timeformat|${timeFormatKey}`) || 0;
-        this.#formatPatterns.set(`timeformat|${timeFormatKey}`, timeFormatCount + 1);
-        
-        if (timeFormatCount > 2) {
-            this.#detectedTimeFormat = timeFormatKey;
-        }
-        
-        console.debug('Learned format pattern:', {
-            patternKey,
-            formatConfidence: this.#formatConfidence,
-            detectedSeparator: this.#detectedSeparator,
-            detectedTimeFormat: this.#detectedTimeFormat
-        });
+    // Store the pattern
+    const patternKey = `${components.separator}|${components.hasAMPM ? '12h' : '24h'}|${successfulFormat}`;
+    this.#formatPatterns.set(patternKey, (this.#formatPatterns.get(patternKey) || 0) + 1);
+    
+    // Update confidence scores
+    if (successfulFormat === 'EU') {
+        this.#formatConfidence.EU++;
+    } else if (successfulFormat === 'US') {
+        this.#formatConfidence.US++;
     }
     
+    // Detect most common separator
+    if (components.separator) {
+        const separatorCount = this.#formatPatterns.get(`separator|${components.separator}`) || 0;
+        this.#formatPatterns.set(`separator|${components.separator}`, separatorCount + 1);
+        
+        // Update detected separator if we have enough confidence
+        if (separatorCount > 2) {
+            this.#detectedSeparator = components.separator;
+        }
+    }
+    
+    // Detect time format preference
+    const timeFormatKey = components.hasAMPM ? '12h' : '24h';
+    const timeFormatCount = this.#formatPatterns.get(`timeformat|${timeFormatKey}`) || 0;
+    this.#formatPatterns.set(`timeformat|${timeFormatKey}`, timeFormatCount + 1);
+    
+    if (timeFormatCount > 2) {
+        this.#detectedTimeFormat = timeFormatKey;
+    }
+    
+    console.debug('Learned format pattern:', {
+        patternKey,
+        formatConfidence: this.#formatConfidence,
+        detectedSeparator: this.#detectedSeparator,
+        detectedTimeFormat: this.#detectedTimeFormat
+    });
+}
+    
     #getBestFormatForComponents(components) {
-        const patternKey = `${components.separator}|${components.hasAMPM ? '12h' : '24h'}|`;
-        
-        // Check if we've seen this pattern before
-        let bestFormat = null;
-        let bestCount = 0;
-        
-        for (const [key, count] of this.#formatPatterns.entries()) {
-            if (key.startsWith(patternKey) && count > bestCount) {
-                const format = key.split('|')[2];
-                bestFormat = format;
-                bestCount = count;
-            }
+    const patternKey = `${components.separator}|${components.hasAMPM ? '12h' : '24h'}|`;
+    
+    // Check if we've seen this pattern before
+    let bestFormat = null;
+    let bestCount = 0;
+    
+    for (const [key, count] of this.#formatPatterns.entries()) {
+        if (key.startsWith(patternKey) && count > bestCount) {
+            const format = key.split('|')[2];
+            bestFormat = format;
+            bestCount = count;
         }
-        
-        // If we have strong confidence in one format, use it
-        if (this.#formatConfidence.EU > 10 && this.#formatConfidence.EU > this.#formatConfidence.US * 2) {
-            bestFormat = 'EU';
-        } else if (this.#formatConfidence.US > 10 && this.#formatConfidence.US > this.#formatConfidence.EU * 2) {
-            bestFormat = 'US';
-        }
-        
-        // Use component analysis as fallback
-        if (!bestFormat && components.likelyFormat === 'EU') {
-            bestFormat = 'EU';
-        } else if (!bestFormat && components.likelyFormat === 'US') {
-            bestFormat = 'US';
-        }
-        
-        return bestFormat;
     }
+    
+    // If we have strong confidence in one format, use it
+    if (this.#formatConfidence.EU > 10 && this.#formatConfidence.EU > this.#formatConfidence.US * 2) {
+        bestFormat = 'EU';
+    } else if (this.#formatConfidence.US > 10 && this.#formatConfidence.US > this.#formatConfidence.EU * 2) {
+        bestFormat = 'US';
+    }
+    
+    // Use component analysis as fallback
+    if (!bestFormat && components.likelyFormat === 'EU') {
+        bestFormat = 'EU';
+    } else if (!bestFormat && components.likelyFormat === 'US') {
+        bestFormat = 'US';
+    }
+    
+    return bestFormat;
+}
 
-    #buildFormatArray(preference, components) {
-        const formats = [];
-        const separator = components.separator || '/';
-        const timeFormat = components.hasAMPM ? 'h:mm A' : 'HH:mm';
-        const timeFormatWithSeconds = components.hasAMPM ? 'h:mm:ss A' : 'HH:mm:ss';
+ #buildFormatArray(preference, components) {
+    const formats = [];
+    const separator = components.separator || '/';
+    const timeFormat = components.hasAMPM ? 'h:mm A' : 'HH:mm';
+    const timeFormatWithSeconds = components.hasAMPM ? 'h:mm:ss A' : 'HH:mm:ss';
+    
+    // Replace / in format strings with actual separator
+    const createFormat = (dateFormat, timeFormat) => {
+        return dateFormat.replace(/\//g, separator) + ', ' + timeFormat;
+    };
+    
+    // Helper to create formats with single-digit support
+    const addFormatsWithSingleDigitSupport = (dateFormat, timeFormat) => {
+        // Add both double-digit and single-digit versions
+        formats.push(createFormat(dateFormat, timeFormat));
         
-        // Replace / in format strings with actual separator
-        const createFormat = (dateFormat, timeFormat) => {
-            return dateFormat.replace(/\//g, separator) + ', ' + timeFormat;
-        };
-        
-        if (preference === 'EU') {
-            // European formats first
-            formats.push(
-                createFormat('DD/MM/YYYY', timeFormat),
-                createFormat('DD/MM/YYYY', timeFormatWithSeconds),
-                createFormat('DD/MM/YYYY', 'HH:mm'),
-                createFormat('DD/MM/YYYY', 'HH:mm:ss')
-            );
-            
-            // Add US formats as fallback
-            formats.push(
-                createFormat('MM/DD/YYYY', timeFormat),
-                createFormat('MM/DD/YYYY', timeFormatWithSeconds)
-            );
-        } else if (preference === 'US') {
-            // US formats first
-            formats.push(
-                createFormat('MM/DD/YYYY', timeFormat),
-                createFormat('MM/DD/YYYY', timeFormatWithSeconds),
-                createFormat('MM/DD/YYYY', 'HH:mm'),
-                createFormat('MM/DD/YYYY', 'HH:mm:ss')
-            );
-            
-            // Add European formats as fallback
-            formats.push(
-                createFormat('DD/MM/YYYY', timeFormat),
-                createFormat('DD/MM/YYYY', timeFormatWithSeconds)
-            );
-        } else {
-            // AUTO: Try both with intelligence based on components
-            if (components.likelyFormat === 'EU') {
-                formats.push(
-                    createFormat('DD/MM/YYYY', timeFormat),
-                    createFormat('DD/MM/YYYY', timeFormatWithSeconds)
-                );
-            } else if (components.likelyFormat === 'US') {
-                formats.push(
-                    createFormat('MM/DD/YYYY', timeFormat),
-                    createFormat('MM/DD/YYYY', timeFormatWithSeconds)
-                );
-            } else {
-                // Ambiguous, try both orders
-                formats.push(
-                    createFormat('DD/MM/YYYY', timeFormat),
-                    createFormat('MM/DD/YYYY', timeFormat),
-                    createFormat('DD/MM/YYYY', timeFormatWithSeconds),
-                    createFormat('MM/DD/YYYY', timeFormatWithSeconds)
-                );
+        // For DD/MM or MM/DD formats, also add D/M versions
+        if (dateFormat === 'DD/MM/YYYY') {
+            formats.push(createFormat('D/M/YYYY', timeFormat));
+            formats.push(createFormat('D/MM/YYYY', timeFormat));
+            formats.push(createFormat('DD/M/YYYY', timeFormat));
+            // Also try without leading zeros in time
+            if (!components.hasAMPM) {
+                formats.push(createFormat('DD/MM/YYYY', 'H:mm'));
+                formats.push(createFormat('D/M/YYYY', 'H:mm'));
+            }
+        } else if (dateFormat === 'MM/DD/YYYY') {
+            formats.push(createFormat('M/D/YYYY', timeFormat));
+            formats.push(createFormat('M/DD/YYYY', timeFormat));
+            formats.push(createFormat('MM/D/YYYY', timeFormat));
+            // Also try without leading zeros in time
+            if (!components.hasAMPM) {
+                formats.push(createFormat('MM/DD/YYYY', 'H:mm'));
+                formats.push(createFormat('M/D/YYYY', 'H:mm'));
             }
         }
+    };
+    
+    if (preference === 'EU') {
+        // European formats first (DD/MM) with single-digit support
+        addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormat);
+        addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormatWithSeconds);
+        formats.push(createFormat('DD/MM/YYYY', 'HH:mm'));
+        formats.push(createFormat('DD/MM/YYYY', 'HH:mm:ss'));
         
-        // Always add these common formats
-        const additionalFormats = [
-            'YYYY-MM-DD HH:mm:ss',
-            'YYYY-MM-DDTHH:mm:ss',
-            'dddd, MMMM D, YYYY h:mm A'
-        ];
+        // Add US formats as fallback
+        addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormat);
+        addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormatWithSeconds);
+    } else if (preference === 'US') {
+        // US formats first (MM/DD) with single-digit support
+        addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormat);
+        addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormatWithSeconds);
+        formats.push(createFormat('MM/DD/YYYY', 'HH:mm'));
+        formats.push(createFormat('MM/DD/YYYY', 'HH:mm:ss'));
         
-        return [...formats, ...additionalFormats];
+        // Add European formats as fallback
+        addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormat);
+        addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormatWithSeconds);
+    } else {
+        // AUTO: Try both with intelligence based on components
+        if (components.likelyFormat === 'EU') {
+            addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormat);
+            addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormatWithSeconds);
+        } else if (components.likelyFormat === 'US') {
+            addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormat);
+            addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormatWithSeconds);
+        } else {
+            // Ambiguous, try both orders with single-digit support
+            addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormat);
+            addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormat);
+            addFormatsWithSingleDigitSupport('DD/MM/YYYY', timeFormatWithSeconds);
+            addFormatsWithSingleDigitSupport('MM/DD/YYYY', timeFormatWithSeconds);
+        }
     }
+    
+    // Always add these common formats with flexible time parsing
+    const additionalFormats = [
+        'YYYY-MM-DD HH:mm:ss',
+        'YYYY-MM-DDTHH:mm:ss',
+        'dddd, MMMM D, YYYY h:mm A',
+        // More flexible formats
+        'D/M/YYYY HH:mm',
+        'M/D/YYYY HH:mm',
+        'D/M/YYYY, H:mm',
+        'M/D/YYYY, H:mm',
+        'D/M/YYYY H:mm',
+        'M/D/YYYY H:mm'
+    ];
+    
+    return [...formats, ...additionalFormats];
+}
 
 #parseForumDate(dateString) {
     if (!dateString || typeof dateString !== 'string') {
@@ -3575,13 +3613,80 @@ class PostModernizer {
     // Analyze components
     const components = this.#analyzeDateComponents(cleanDateString);
     
+    // SPECIAL HANDLING: If we have a clear DD/MM pattern (first > 12), force EU format
+    if (components.parts.length >= 2) {
+        const [first, second] = components.parts;
+        if (first > 12 && second <= 12) {
+            console.debug('CLEAR DD/MM PATTERN DETECTED:', first, '/', second, '- Forcing EU format');
+            // Build format array with EU preference and aggressive single-digit support
+            const formats = this.#buildFormatArray('EU', components);
+            
+            // Add even more aggressive formats for this clear case
+            const aggressiveFormats = [
+                'D/M/YYYY, H:mm',
+                'D/M/YYYY, HH:mm',
+                'D/M/YYYY H:mm',
+                'D/M/YYYY HH:mm',
+                'DD/M/YYYY, H:mm',
+                'DD/M/YYYY, HH:mm',
+                'D/MM/YYYY, H:mm',
+                'D/MM/YYYY, HH:mm'
+            ];
+            
+            const allFormats = [...aggressiveFormats, ...formats];
+            
+            let momentDate = null;
+            let successfulFormat = null;
+            
+            // Try all formats
+            for (let i = 0; i < allFormats.length; i++) {
+                momentDate = moment(cleanDateString, allFormats[i], true);
+                if (momentDate && momentDate.isValid()) {
+                    console.debug('Parsed clear DD/MM with format', allFormats[i], 'as local time:', momentDate.format());
+                    
+                    // Additional validation: month should be 1-12
+                    const month = momentDate.month() + 1;
+                    if (month >= 1 && month <= 12) {
+                        successfulFormat = 'EU';
+                        break;
+                    } else {
+                        momentDate = null;
+                    }
+                }
+            }
+            
+            if (momentDate && momentDate.isValid()) {
+                const utcTime = momentDate.utc();
+                
+                // Learn from successful parse
+                if (successfulFormat) {
+                    this.#learnFormat(components, successfulFormat);
+                }
+                
+                // Cache the result
+                this.#dateFormatCache.set(cacheKey, utcTime);
+                
+                console.debug('Final conversion for clear DD/MM:', {
+                    original: cleanDateString,
+                    parsedLocal: momentDate.format(),
+                    parsedUTC: utcTime.format(),
+                    successfulFormat,
+                    confidence: this.#formatConfidence
+                });
+                
+                return utcTime;
+            }
+        }
+    }
+    
     // Get best format based on learned patterns
     const bestFormat = this.#getBestFormatForComponents(components);
     
     console.debug('Date analysis:', {
         components,
         bestFormat,
-        confidence: this.#formatConfidence
+        confidence: this.#formatConfidence,
+        reason: components.reason || 'Normal analysis'
     });
 
     // Create format arrays based on detection
@@ -3610,8 +3715,8 @@ class PostModernizer {
             // Additional validation: month should be 1-12
             const month = momentDate.month() + 1;
             if (month >= 1 && month <= 12) {
-                successfulFormat = formats[i].includes('DD/MM') ? 'EU' : 
-                                  formats[i].includes('MM/DD') ? 'US' : 'UNKNOWN';
+                successfulFormat = formats[i].includes('DD/MM') || formats[i].includes('D/M') ? 'EU' : 
+                                  formats[i].includes('MM/DD') || formats[i].includes('M/D') ? 'US' : 'UNKNOWN';
                 break;
             } else {
                 momentDate = null;
@@ -3638,8 +3743,8 @@ class PostModernizer {
                             } else {
                                 momentDate = parsed;
                             }
-                            successfulFormat = formats[i].includes('DD/MM') ? 'EU' : 
-                                             formats[i].includes('MM/DD') ? 'US' : 'UNKNOWN';
+                            successfulFormat = formats[i].includes('DD/MM') || formats[i].includes('D/M') ? 'EU' : 
+                                             formats[i].includes('MM/DD') || formats[i].includes('M/D') ? 'US' : 'UNKNOWN';
                             console.debug('Parsed with timezone', tzAbbr, ':', momentDate.format());
                             break;
                         }
@@ -3674,6 +3779,30 @@ class PostModernizer {
         }
     }
     
+    // EXTREME FALLBACK: Try manual parsing for problematic dates
+    if (!momentDate || !momentDate.isValid()) {
+        // Try to extract and manually construct date
+        const manualMatch = cleanDateString.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4}),?\s+(\d{1,2}):(\d{2})/);
+        if (manualMatch) {
+            const [_, dayOrMonth, monthOrDay, year, hour, minute] = manualMatch.map(Number);
+            
+            // If first number > 12, assume DD/MM
+            if (dayOrMonth > 12 && monthOrDay <= 12) {
+                // DD/MM format
+                const dateStr = `${year}-${String(monthOrDay).padStart(2, '0')}-${String(dayOrMonth).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+                momentDate = moment(dateStr);
+                successfulFormat = 'EU';
+                console.debug('Manual parsing succeeded (DD/MM):', momentDate.format());
+            } else if (dayOrMonth <= 12 && monthOrDay > 12) {
+                // MM/DD format
+                const dateStr = `${year}-${String(dayOrMonth).padStart(2, '0')}-${String(monthOrDay).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+                momentDate = moment(dateStr);
+                successfulFormat = 'US';
+                console.debug('Manual parsing succeeded (MM/DD):', momentDate.format());
+            }
+        }
+    }
+    
     if (momentDate && momentDate.isValid()) {
         const utcTime = momentDate.utc();
         
@@ -3701,7 +3830,7 @@ class PostModernizer {
     this.#dateFormatCache.set(cacheKey, null);
     return null;
 }
-
+    
   #detectForumTimezone() {
     // Since the forum already displays times in user's local timezone,
     // we don't need to detect a forum server timezone.
