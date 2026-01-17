@@ -3270,7 +3270,7 @@ globalThis.addEventListener('pagehide', () => {
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
 // modern attachment styling, Media Dimension Extractor integration,
-// and adaptive date format detection for mixed international formats
+// adaptive date format detection, and future timestamp handling for scheduled posts
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -3863,97 +3863,92 @@ class PostModernizer {
     return abbrMap[abbr] || [];
 }
 
+   // ==============================
+   // FUTURE TIMESTAMP HANDLING FOR POST_QUEUE
+   // ==============================
+
+   #shouldSkipFutureTimestamp(element) {
+       // Check if element is inside a post_queue element
+       const postElement = element.closest('.post');
+       return postElement && postElement.classList.contains('post_queue');
+   }
+
    #formatTimeAgo(date) {
-    if (!date || !date.isValid()) {
-        return 'Unknown time';
-    }
+       if (!date || !date.isValid()) {
+           return 'Unknown time';
+       }
 
-    // Convert UTC date to user's local timezone for display
-    const now = moment();
-    const userDate = moment(date).local();
-    
-    console.debug('Time ago calculation:', {
-        utcDate: date.format(),
-        userLocalDate: userDate.format(),
-        now: now.format(),
-        diffSeconds: now.diff(userDate, 'seconds')
-    });
-    
-    const diffInSeconds = now.diff(userDate, 'seconds');
-    const diffInMinutes = now.diff(userDate, 'minutes');
-    const diffInHours = now.diff(userDate, 'hours');
-    const diffInDays = now.diff(userDate, 'days');
-    
-    // Smart time ago display with precision
-    if (diffInSeconds < 0) {
-        // This shouldn't happen if parsing is correct
-        console.warn('Negative time diff:', diffInSeconds, 'for date:', userDate.format());
-        return 'Just now'; // Fallback
-    } else if (diffInSeconds < 45) {
-        return 'Just now';
-    } else if (diffInSeconds < 90) {
-        return 'A minute ago';
-    } else if (diffInMinutes < 45) {
-        return diffInMinutes + ' minutes ago';
-    } else if (diffInMinutes < 90) {
-        return 'An hour ago';
-    } else if (diffInHours < 24) {
-        return diffInHours + ' hours ago';
-    } else if (diffInDays === 1) {
-        return 'Yesterday';
-    } else if (diffInDays < 7) {
-        return diffInDays + ' days ago';
-    } else if (diffInDays < 30) {
-        const weeks = Math.floor(diffInDays / 7);
-        return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
-    } else if (diffInDays < 365) {
-        const months = Math.floor(diffInDays / 30);
-        return months + (months === 1 ? ' month ago' : ' months ago');
-    } else {
-        const years = Math.floor(diffInDays / 365);
-        return years + (years === 1 ? ' year ago' : ' years ago');
-    }
-}
-
-#getUserLocaleSettings() {
-    try {
-        const locale = navigator.language || 'en-US';
-        
-        // Detect time format preference
-        const testTime = moment().locale(locale).format('LT');
-        const uses24Hour = !testTime.includes('AM') && !testTime.includes('PM');
-        
-        // Get user's timezone from browser
-        const timezone = moment.tz.guess() || 'UTC';
-        
-        return {
-            locale: locale,
-            timezone: timezone,
-            uses24Hour: uses24Hour,
-            formats: {
-                longDateTime: 'LLLL',
-                mediumDateTime: 'llll',
-                shortDateTime: 'lll',
-                timeOnly: uses24Hour ? 'HH:mm' : 'h:mm A',
-                dateOnly: 'll'
-            }
-        };
-    } catch (error) {
-        console.debug('Locale detection failed:', error);
-        return {
-            locale: 'en-US',
-            timezone: 'UTC',
-            uses24Hour: false,
-            formats: {
-                longDateTime: 'LLLL',
-                mediumDateTime: 'llll',
-                shortDateTime: 'lll',
-                timeOnly: 'h:mm A',
-                dateOnly: 'll'
-            }
-        };
-    }
-}
+       // Convert UTC date to user's local timezone for display
+       const now = moment();
+       const userDate = moment(date).local();
+       
+       const diffInSeconds = now.diff(userDate, 'seconds');
+       
+       console.debug('Time ago calculation:', {
+           utcDate: date.format(),
+           userLocalDate: userDate.format(),
+           now: now.format(),
+           diffSeconds: diffInSeconds,
+           isFuture: diffInSeconds < 0
+       });
+       
+       // Handle future dates (for scheduled posts)
+       if (diffInSeconds < 0) {
+           const futureDiffInSeconds = Math.abs(diffInSeconds);
+           const futureDiffInMinutes = Math.abs(now.diff(userDate, 'minutes'));
+           const futureDiffInHours = Math.abs(now.diff(userDate, 'hours'));
+           const futureDiffInDays = Math.abs(now.diff(userDate, 'days'));
+           
+           if (futureDiffInSeconds < 60) {
+               return 'in ' + futureDiffInSeconds + ' seconds';
+           } else if (futureDiffInMinutes < 60) {
+               return 'in ' + futureDiffInMinutes + ' minute' + (futureDiffInMinutes > 1 ? 's' : '');
+           } else if (futureDiffInHours < 24) {
+               return 'in ' + futureDiffInHours + ' hour' + (futureDiffInHours > 1 ? 's' : '');
+           } else if (futureDiffInDays < 7) {
+               return 'in ' + futureDiffInDays + ' day' + (futureDiffInDays > 1 ? 's' : '');
+           } else if (futureDiffInDays < 30) {
+               const weeks = Math.floor(futureDiffInDays / 7);
+               return 'in ' + weeks + ' week' + (weeks > 1 ? 's' : '');
+           } else if (futureDiffInDays < 365) {
+               const months = Math.floor(futureDiffInDays / 30);
+               return 'in ' + months + ' month' + (months > 1 ? 's' : '');
+           } else {
+               const years = Math.floor(futureDiffInDays / 365);
+               return 'in ' + years + ' year' + (years > 1 ? 's' : '');
+           }
+       }
+       
+       // Original past date logic remains the same
+       const diffInMinutes = now.diff(userDate, 'minutes');
+       const diffInHours = now.diff(userDate, 'hours');
+       const diffInDays = now.diff(userDate, 'days');
+       
+       if (diffInSeconds < 45) {
+           return 'Just now';
+       } else if (diffInSeconds < 90) {
+           return 'A minute ago';
+       } else if (diffInMinutes < 45) {
+           return diffInMinutes + ' minutes ago';
+       } else if (diffInMinutes < 90) {
+           return 'An hour ago';
+       } else if (diffInHours < 24) {
+           return diffInHours + ' hours ago';
+       } else if (diffInDays === 1) {
+           return 'Yesterday';
+       } else if (diffInDays < 7) {
+           return diffInDays + ' days ago';
+       } else if (diffInDays < 30) {
+           const weeks = Math.floor(diffInDays / 7);
+           return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
+       } else if (diffInDays < 365) {
+           const months = Math.floor(diffInDays / 30);
+           return months + (months === 1 ? ' month ago' : ' months ago');
+       } else {
+           const years = Math.floor(diffInDays / 365);
+           return years + (years === 1 ? ' year ago' : ' years ago');
+       }
+   }
 
 #createModernTimestamp(originalElement, dateString) {
     if (typeof moment === 'undefined' || typeof moment.tz === 'undefined') {
@@ -3979,10 +3974,14 @@ class PostModernizer {
         return originalElement;
     }
     
+    // Check if this is a future timestamp (scheduled post)
+    const isPostQueue = this.#shouldSkipFutureTimestamp(originalElement);
+    
     console.debug('Creating modern timestamp for:', {
         element: originalElement.tagName,
         classes: originalElement.className,
-        dateString: dateString
+        dateString: dateString,
+        isPostQueue: isPostQueue
     });
     
     const momentDate = this.#parseForumDate(dateString);
@@ -3997,7 +3996,8 @@ class PostModernizer {
         originalDateString: dateString,
         parsedUTC: momentDate.format(),
         parsedLocal: momentDate.local().format(),
-        formatConfidence: this.#formatConfidence
+        formatConfidence: this.#formatConfidence,
+        isPostQueue: isPostQueue
     });
     
     // Get user's locale settings
@@ -4052,6 +4052,12 @@ class PostModernizer {
     const timeElement = document.createElement('time');
     timeElement.className = 'modern-timestamp';
     
+    // Add special class for scheduled posts
+    if (isPostQueue) {
+        timeElement.classList.add('future-timestamp');
+        timeElement.setAttribute('data-scheduled-post', 'true');
+    }
+    
     // Store UTC ISO string for machine readability
     const utcISOString = momentDate.toISOString();
     timeElement.setAttribute('datetime', utcISOString);
@@ -4064,7 +4070,15 @@ class PostModernizer {
     const localizedTitle = userLocalDate.locale(userSettings.locale).format(titleFormat);
     const timezoneAbbr = userLocalDate.format('z');
     
-    timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
+    // Update title to indicate scheduled post for future dates
+    const now = moment();
+    const isFuture = momentDate.isAfter(now);
+    
+    if (isFuture && isPostQueue) {
+        timeElement.setAttribute('title', 'Scheduled for ' + localizedTitle + ' (' + timezoneAbbr + ')');
+    } else {
+        timeElement.setAttribute('title', localizedTitle + ' (' + timezoneAbbr + ')');
+    }
     
     // Create relative time display
     const relativeSpan = document.createElement('span');
@@ -4076,6 +4090,16 @@ class PostModernizer {
     
     // Add absolute time as data attribute for debugging
     timeElement.setAttribute('data-absolute-time', userLocalDate.locale(userSettings.locale).format(userSettings.formats.mediumDateTime));
+    
+    // Add indicator for future dates
+    if (isFuture && isPostQueue) {
+        const indicator = document.createElement('span');
+        indicator.className = 'future-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+        indicator.innerHTML = '&#x23F1;'; // ⏱️ hourglass with flowing sand emoji
+        indicator.style.marginLeft = '4px';
+        relativeSpan.appendChild(indicator);
+    }
     
     timeElement.appendChild(relativeSpan);
     
@@ -4112,12 +4136,37 @@ class PostModernizer {
             const newRelativeTime = this.#formatTimeAgo(storedUTC);
             if (relativeSpan.textContent !== newRelativeTime) {
                 relativeSpan.textContent = newRelativeTime;
+                
+                // Update indicator if needed
+                const now = moment();
+                const isFuture = storedUTC.isAfter(now);
+                
+                // Remove existing indicator
+                const existingIndicator = relativeSpan.querySelector('.future-indicator');
+                if (existingIndicator) {
+                    existingIndicator.remove();
+                }
+                
+                // Add indicator if it's still a future date (should always be for scheduled posts)
+                if (isFuture && timeElement.classList.contains('future-timestamp')) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'future-indicator';
+                    indicator.setAttribute('aria-hidden', 'true');
+                    indicator.innerHTML = '&#x23F1;';
+                    indicator.style.marginLeft = '4px';
+                    relativeSpan.appendChild(indicator);
+                }
             }
             
             // Update title periodically to ensure accuracy
             const currentUserLocalDate = storedUTC.tz(userSettings.timezone);
-            const currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
+            let currentTitle = currentUserLocalDate.locale(userSettings.locale).format(titleFormat);
             const currentTimezoneAbbr = currentUserLocalDate.format('z');
+            
+            if (timeElement.classList.contains('future-timestamp')) {
+                currentTitle = 'Scheduled for ' + currentTitle;
+            }
+            
             timeElement.setAttribute('title', currentTitle + ' (' + currentTimezoneAbbr + ')');
         }
     }, 30000);
@@ -4135,10 +4184,51 @@ class PostModernizer {
         utc: utcISOString,
         userLocal: userLocalDate.format(),
         relativeTime: relativeTime,
+        isPostQueue: isPostQueue,
         elementHTML: finalElement.outerHTML.substring(0, 200)
     });
     
     return finalElement;
+}
+
+#getUserLocaleSettings() {
+    try {
+        const locale = navigator.language || 'en-US';
+        
+        // Detect time format preference
+        const testTime = moment().locale(locale).format('LT');
+        const uses24Hour = !testTime.includes('AM') && !testTime.includes('PM');
+        
+        // Get user's timezone from browser
+        const timezone = moment.tz.guess() || 'UTC';
+        
+        return {
+            locale: locale,
+            timezone: timezone,
+            uses24Hour: uses24Hour,
+            formats: {
+                longDateTime: 'LLLL',
+                mediumDateTime: 'llll',
+                shortDateTime: 'lll',
+                timeOnly: uses24Hour ? 'HH:mm' : 'h:mm A',
+                dateOnly: 'll'
+            }
+        };
+    } catch (error) {
+        console.debug('Locale detection failed:', error);
+        return {
+            locale: 'en-US',
+            timezone: 'UTC',
+            uses24Hour: false,
+            formats: {
+                longDateTime: 'LLLL',
+                mediumDateTime: 'llll',
+                shortDateTime: 'lll',
+                timeOnly: 'h:mm A',
+                dateOnly: 'll'
+            }
+        };
+    }
 }
 
 #extractDateFromElement(element) {
@@ -4489,7 +4579,8 @@ class PostModernizer {
             console.debug('Found timestamp element for transformation:', {
                 element: timestampElement.tagName,
                 classes: timestampElement.className,
-                dateString: dateString
+                dateString: dateString,
+                isPostQueue: this.#shouldSkipFutureTimestamp(timestampElement)
             });
             
             const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
@@ -4528,7 +4619,8 @@ class PostModernizer {
                 tag: timestampElement.tagName,
                 href: timestampElement.getAttribute('href'),
                 classes: timestampElement.className,
-                textPreview: timestampElement.textContent?.substring(0, 30)
+                textPreview: timestampElement.textContent?.substring(0, 30),
+                isPostQueue: this.#shouldSkipFutureTimestamp(timestampElement)
             });
         }
     });
