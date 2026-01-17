@@ -5479,7 +5479,14 @@ class PostModernizer {
             });
 
             const title2Bottom = post.querySelector('.title2.bottom');
-            if (title2Bottom) {
+            
+            // ===========================================
+            // MODIFIED: Skip footer creation for post_queue elements
+            // ===========================================
+            if (post.classList.contains('post_queue')) {
+                // Don't add reputation footer for post_queue
+                // Don't modernize bottom elements for post_queue
+            } else if (title2Bottom) {
                 this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
                 this.#modernizeBottomElements(title2Bottom, postFooter);
                 title2Bottom.remove();
@@ -5490,13 +5497,27 @@ class PostModernizer {
             fragment.appendChild(postHeader);
             fragment.appendChild(userInfo);
             fragment.appendChild(postContent);
-            fragment.appendChild(postFooter);
+            
+            // ===========================================
+            // MODIFIED: Only add footer if it's not a post_queue element
+            // ===========================================
+            if (!post.classList.contains('post_queue')) {
+                fragment.appendChild(postFooter);
+            }
 
             post.innerHTML = '';
             post.appendChild(fragment);
 
-            this.#convertMiniButtonsToButtons(post);
-            this.#addShareButton(post);
+            // ===========================================
+            // MODIFIED: Handle post_queue button transformation specially
+            // ===========================================
+            if (post.classList.contains('post_queue')) {
+                this.#transformPostQueueButtons(post);
+            } else {
+                this.#convertMiniButtonsToButtons(post);
+                this.#addShareButton(post);
+            }
+            
             this.#cleanupPostContent(post);
 
             const postId = post.id;
@@ -5504,6 +5525,79 @@ class PostModernizer {
                 post.setAttribute('data-post-id', postId.replace('ee', ''));
             }
         });
+    }
+
+    // ===========================================
+    // NEW METHOD: Transform post_queue buttons
+    // ===========================================
+    #transformPostQueueButtons(post) {
+        const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
+        if (!miniButtonsContainer) return;
+
+        // Remove the share button from post_queue
+        const shareButton = miniButtonsContainer.querySelector('.btn-share, [data-action="share"]');
+        if (shareButton) {
+            shareButton.remove();
+        }
+
+        // Transform Edit/Remove links to use icons
+        const editLink = miniButtonsContainer.querySelector('a[href*="act=edit"]');
+        const removeLink = miniButtonsContainer.querySelector('a[onclick*="remove_cron"]');
+
+        if (editLink) {
+            editLink.classList.add('btn', 'btn-icon', 'btn-edit');
+            editLink.setAttribute('data-action', 'edit');
+            editLink.setAttribute('title', 'Edit');
+            editLink.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>';
+        }
+
+        if (removeLink) {
+            removeLink.classList.add('btn', 'btn-icon', 'btn-delete');
+            removeLink.setAttribute('data-action', 'delete');
+            removeLink.setAttribute('title', 'Remove');
+            removeLink.innerHTML = '<i class="fa-regular fa-eraser" aria-hidden="true"></i>';
+            
+            // Remove the style attribute that might interfere
+            removeLink.removeAttribute('style');
+        }
+
+        this.#reorderPostQueueButtons(miniButtonsContainer);
+    }
+
+    // ===========================================
+    // NEW METHOD: Reorder post_queue buttons
+    // ===========================================
+    #reorderPostQueueButtons(container) {
+        const elements = Array.from(container.children);
+        const order = ['edit', 'delete'];
+
+        elements.sort((a, b) => {
+            const getAction = (element) => {
+                const dataAction = element.getAttribute('data-action');
+                if (dataAction && order.includes(dataAction)) return dataAction;
+
+                if (element.classList.contains('btn-edit')) return 'edit';
+                if (element.classList.contains('btn-delete')) return 'delete';
+
+                if (element.href && element.href.includes('act=edit')) return 'edit';
+                if (element.onclick && element.onclick.toString().includes('remove_cron')) return 'delete';
+
+                return 'other';
+            };
+
+            const actionA = getAction(a);
+            const actionB = getAction(b);
+            const indexA = order.indexOf(actionA);
+            const indexB = order.indexOf(actionB);
+
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return 0;
+        });
+
+        container.innerHTML = '';
+        elements.forEach(el => container.appendChild(el));
     }
 
     #modernizeAttachmentsInContent(contentWrapper) {
@@ -7003,6 +7097,13 @@ class PostModernizer {
     }
 
     #addShareButton(post) {
+        // ===========================================
+        // MODIFIED: Don't add share button to post_queue elements
+        // ===========================================
+        if (post.classList.contains('post_queue')) {
+            return;
+        }
+
         const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub');
         if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return;
 
