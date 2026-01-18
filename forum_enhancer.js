@@ -1,5 +1,5 @@
 // ==============================
-// Forum Avatar Injection System (API Version)
+// Forum Avatar Injection System (Observer Version)
 // ==============================
 
 (function() {
@@ -19,17 +19,7 @@
     // Cache for pending requests to avoid duplicate API calls
     var pendingRequests = {};
     var userCache = {};
-
-    // Main function
-    function initAvatarSystem() {
-        console.log('Initializing avatar system (API version)...');
-        
-        // Process all posts
-        processAllPosts();
-        
-        // Set up observer for dynamically loaded content
-        setupContentObserver();
-    }
+    var avatarCallbackId = null;
 
     // ==============================
     // Core Functions
@@ -86,7 +76,7 @@
                         avatarUrl = userData.avatar;
                     } else {
                         // User has no avatar, generate letter avatar
-                        avatarUrl = generateLetterAvatar(userId, username || userData.nickname);
+                        avatarUrl = generateLetterAvatar(userId, username || (userData && userData.nickname));
                     }
                     
                     // Cache the result
@@ -137,10 +127,10 @@
         var oneDayAgo = Date.now() - CACHE_DURATION;
         for (var i = 0; i < localStorage.length; i++) {
             var key = localStorage.key(i);
-            if (key.startsWith('avatar_')) {
+            if (key && key.startsWith('avatar_')) {
                 try {
                     var data = JSON.parse(localStorage.getItem(key));
-                    if (data.timestamp < oneDayAgo) {
+                    if (data && data.timestamp && data.timestamp < oneDayAgo) {
                         localStorage.removeItem(key);
                     }
                 } catch (e) {
@@ -154,7 +144,8 @@
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
         var colorIndex = (firstLetter.charCodeAt(0) + parseInt(userId, 10)) % COLOR_PALETTE.length;
-        var backgroundColor = COLOR_PALETTE[colorIndex].replace('#', '');
+        var backgroundColor = COLOR_PALETTE[colorIndex];
+        backgroundColor = backgroundColor ? backgroundColor.replace('#', '') : 'FF6B6B';
         var size = AVATAR_SIZE * 2;
         
         return 'https://api.dicebear.com/7.x/initials/svg?' +
@@ -164,27 +155,12 @@
                '&size=' + size;
     }
 
-    function processAllPosts() {
-        var postElements = document.querySelectorAll('li[class^="box_"]');
-        
-        postElements.forEach(function(postElement) {
-            if (postElement.classList.contains('forum-avatar-injected')) {
-                return; // Already processed
-            }
-            
-            var classMatch = postElement.className.match(/box_m(\d+)/);
-            if (classMatch) {
-                var userId = classMatch[1];
-                var nickElement = postElement.querySelector('.nick a');
-                
-                if (nickElement) {
-                    insertAvatar(postElement, nickElement, userId);
-                }
-            }
-        });
-    }
-
     function insertAvatar(postElement, nickElement, userId) {
+        // Check if already has avatar
+        if (postElement.querySelector('.forum-avatar-container')) {
+            return;
+        }
+        
         // Create avatar container
         var avatarContainer = document.createElement('div');
         avatarContainer.className = 'forum-avatar-container';
@@ -231,44 +207,109 @@
             });
     }
 
-    // ==============================
-    // Dynamic Content Handling
-    // ==============================
-
-    function setupContentObserver() {
-        var observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.addedNodes.length) {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) {
-                            if (node.matches && node.matches('li[class^="box_"]')) {
-                                processNewPost(node);
-                            } else if (node.querySelectorAll) {
-                                var newPosts = node.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
-                                newPosts.forEach(function(post) {
-                                    processNewPost(post);
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-    }
-
-    function processNewPost(postElement) {
+    function processPostElement(postElement) {
+        if (postElement.classList.contains('forum-avatar-injected')) {
+            return; // Already processed
+        }
+        
         var classMatch = postElement.className.match(/box_m(\d+)/);
         if (classMatch) {
             var userId = classMatch[1];
-            var nickElement = postElement.querySelector('.nick a:not(:has(~ .forum-avatar-container))');
+            var nickElement = postElement.querySelector('.nick a');
             
             if (nickElement) {
                 insertAvatar(postElement, nickElement, userId);
+            }
+        }
+    }
+
+    function processAllPosts() {
+        var postElements = document.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
+        
+        for (var i = 0; i < postElements.length; i++) {
+            processPostElement(postElements[i]);
+        }
+    }
+
+    function batchProcessAvatars() {
+        var userIds = [];
+        var userMap = {};
+        
+        // Collect all user IDs from the page
+        var postElements = document.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
+        for (var i = 0; i < postElements.length; i++) {
+            var postElement = postElements[i];
+            var classMatch = postElement.className.match(/box_m(\d+)/);
+            if (classMatch) {
+                var userId = classMatch[1];
+                if (!userMap[userId]) {
+                    userMap[userId] = true;
+                    userIds.push(userId);
+                }
+            }
+        }
+        
+        if (userIds.length === 0) {
+            // No new users, but process existing posts anyway
+            processAllPosts();
+            return;
+        }
+        
+        // Batch API call for multiple users
+        fetch('/api.php?mid=' + userIds.join(','))
+            .then(function(response) {
+                if (!response.ok) throw new Error('Batch API failed');
+                return response.json();
+            })
+            .then(function(data) {
+                // Process each user
+                for (var i = 0; i < userIds.length; i++) {
+                    var userId = userIds[i];
+                    var userKey = 'm' + userId;
+                    var userData = data[userKey];
+                    var avatarUrl;
+                    
+                    if (userData && userData.avatar && 
+                        userData.avatar.trim() !== '' && 
+                        userData.avatar !== 'http') {
+                        avatarUrl = userData.avatar;
+                    } else {
+                        // Need username to generate letter avatar
+                        var posts = document.querySelectorAll('.box_m' + userId + ' .nick a');
+                        var username = posts.length > 0 ? posts[0].textContent : 'User';
+                        avatarUrl = generateLetterAvatar(userId, username);
+                    }
+                    
+                    // Cache the result
+                    cacheAvatar(userId, avatarUrl);
+                    userCache[userId] = avatarUrl;
+                }
+                
+                // Now process all posts with cached avatars
+                processAllPosts();
+            })
+            .catch(function(error) {
+                console.log('Batch API failed, falling back to individual requests:', error);
+                processAllPosts(); // Fall back to individual requests
+            });
+    }
+
+    // ==============================
+    // Observer Callback
+    // ==============================
+
+    function handlePostMutation(node) {
+        // Check if it's a post element
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if this is a post element directly
+            if (node.matches('li[class^="box_"]')) {
+                processPostElement(node);
+            }
+            
+            // Check for posts inside this node
+            var posts = node.querySelectorAll('li[class^="box_"]');
+            for (var i = 0; i < posts.length; i++) {
+                processPostElement(posts[i]);
             }
         }
     }
@@ -301,89 +342,161 @@
     }
 
     // ==============================
-    // Batch Processing Optimization
+    // Initialize with ForumCoreObserver
     // ==============================
 
-    function batchProcessAvatars() {
-        var userIds = [];
-        var userMap = {};
+    function initAvatarSystem() {
+        console.log('Initializing avatar system with ForumCoreObserver...');
         
-        // Collect all user IDs from the page
-        var postElements = document.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
-        postElements.forEach(function(postElement) {
-            var classMatch = postElement.className.match(/box_m(\d+)/);
-            if (classMatch) {
-                var userId = classMatch[1];
-                if (!userMap[userId]) {
-                    userMap[userId] = true;
-                    userIds.push(userId);
-                }
-            }
-        });
+        // Inject styles
+        injectStyles();
         
-        if (userIds.length === 0) return;
-        
-        // Batch API call for multiple users
-        fetch('/api.php?mid=' + userIds.join(','))
-            .then(function(response) {
-                if (!response.ok) throw new Error('Batch API failed');
-                return response.json();
-            })
-            .then(function(data) {
-                // Process each user
-                userIds.forEach(function(userId) {
-                    var userKey = 'm' + userId;
-                    var userData = data[userKey];
-                    var avatarUrl;
-                    
-                    if (userData && userData.avatar && 
-                        userData.avatar.trim() !== '' && 
-                        userData.avatar !== 'http') {
-                        avatarUrl = userData.avatar;
-                    } else {
-                        // Need username to generate letter avatar
-                        var posts = document.querySelectorAll('.box_m' + userId + ' .nick a');
-                        var username = posts.length > 0 ? posts[0].textContent : 'User';
-                        avatarUrl = generateLetterAvatar(userId, username);
-                    }
-                    
-                    // Cache the result
-                    cacheAvatar(userId, avatarUrl);
-                    userCache[userId] = avatarUrl;
-                });
-                
-                // Now process all posts with cached avatars
-                processAllPosts();
-            })
-            .catch(function(error) {
-                console.log('Batch API failed, falling back to individual requests:', error);
-                processAllPosts(); // Fall back to individual requests
+        // Register with ForumCoreObserver
+        if (window.forumObserver && typeof window.forumObserver.register === 'function') {
+            avatarCallbackId = window.forumObserver.register({
+                id: 'forum_avatars',
+                selector: 'li[class^="box_"], .post, .big_list li',
+                callback: handlePostMutation,
+                priority: 'high'
             });
-    }
-
-    // ==============================
-    // Initialize
-    // ==============================
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-            injectStyles();
-            // Try batch processing first for efficiency
+            
+            console.log('Registered avatar callback with ID: ' + avatarCallbackId);
+            
+            // Initial batch processing for efficiency
             setTimeout(function() {
                 batchProcessAvatars();
             }, 100);
-            // Also set up individual processing for dynamic content
-            initAvatarSystem();
-        });
-    } else {
-        injectStyles();
-        setTimeout(function() {
-            batchProcessAvatars();
-        }, 100);
-        initAvatarSystem();
+            
+            // Also process any existing posts immediately
+            processAllPosts();
+            
+        } else {
+            console.error('ForumCoreObserver not available, falling back to standalone mode');
+            // Fallback to standalone initialization
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    injectStyles();
+                    setTimeout(function() {
+                        batchProcessAvatars();
+                    }, 100);
+                    processAllPosts();
+                });
+            } else {
+                injectStyles();
+                setTimeout(function() {
+                    batchProcessAvatars();
+                }, 100);
+                processAllPosts();
+            }
+        }
     }
 
+    // ==============================
+    // Cleanup
+    // ==============================
+
+    function cleanup() {
+        if (avatarCallbackId && window.forumObserver && typeof window.forumObserver.unregister === 'function') {
+            window.forumObserver.unregister(avatarCallbackId);
+            avatarCallbackId = null;
+        }
+        
+        // Clear caches
+        pendingRequests = {};
+        userCache = {};
+        
+        console.log('Avatar system cleaned up');
+    }
+
+    // ==============================
+    // Public API
+    // ==============================
+
+    window.ForumAvatars = {
+        init: initAvatarSystem,
+        refresh: function() {
+            // Clear all caches and reprocess
+            userCache = {};
+            pendingRequests = {};
+            
+            // Clear localStorage cache
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith('avatar_')) {
+                    localStorage.removeItem(key);
+                }
+            }
+            
+            // Remove existing avatars
+            var containers = document.querySelectorAll('.forum-avatar-container');
+            for (var j = 0; j < containers.length; j++) {
+                containers[j].remove();
+            }
+            
+            // Remove processed class
+            var posts = document.querySelectorAll('.forum-avatar-injected');
+            for (var k = 0; k < posts.length; k++) {
+                posts[k].classList.remove('forum-avatar-injected');
+            }
+            
+            // Reprocess
+            batchProcessAvatars();
+        },
+        getAvatarUrl: function(userId, username) {
+            return generateLetterAvatar(userId, username);
+        },
+        cleanup: cleanup,
+        stats: function() {
+            return {
+                cachedUsers: Object.keys(userCache).length,
+                pendingRequests: Object.keys(pendingRequests).length,
+                localStorageEntries: (function() {
+                    var count = 0;
+                    for (var i = 0; i < localStorage.length; i++) {
+                        var key = localStorage.key(i);
+                        if (key && key.startsWith('avatar_')) {
+                            count++;
+                        }
+                    }
+                    return count;
+                })()
+            };
+        }
+    };
+
+    // ==============================
+    // Auto-initialize
+    // ==============================
+
+    // Wait for ForumCoreObserver to be ready
+    if (window.forumObserver) {
+        // ForumCoreObserver is already loaded, initialize immediately
+        setTimeout(initAvatarSystem, 100);
+    } else {
+        // Wait for ForumCoreObserver to be available
+        var checkInterval = setInterval(function() {
+            if (window.forumObserver) {
+                clearInterval(checkInterval);
+                setTimeout(initAvatarSystem, 100);
+            }
+        }, 100);
+        
+        // Timeout after 5 seconds
+        setTimeout(function() {
+            clearInterval(checkInterval);
+            if (!window.forumObserver) {
+                console.warn('ForumCoreObserver not found after 5 seconds, initializing standalone');
+                initAvatarSystem();
+            }
+        }, 5000);
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', cleanup);
+    window.addEventListener('pagehide', cleanup);
+
 })();
+
 
 // Ultra-Optimized Media Dimension Extractor for deferred loading
 // DOM is guaranteed to be ready when this executes (defer attribute)
