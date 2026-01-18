@@ -1,16 +1,45 @@
 // ==============================
-// Optimized Forum Avatar System
+// Multi-Size Forum Avatar System
 // ==============================
 
 (function() {
     'use strict';
 
-    // Configuration (using const for true constants)
-    var AVATAR_SIZE = 40;
-    var CACHE_DURATION = 86400000; // 24 hours in ms
-    var BATCH_SIZE = 10; // Users per API call
-    
-    // Color palette (could be replaced with CSS variables)
+    // Configuration for different element types
+    var AVATAR_CONFIG = Object.freeze({
+        // Default sizes for different contexts
+        sizes: {
+            'post': 60,        // Main posts (box_ elements) - 60px as requested
+            'profile': 120,    // User profiles
+            'sidebar': 40,     // Sidebar widgets
+            'list': 32,        // User lists
+            'small': 24        // Tiny avatars
+        },
+        
+        // Element selectors mapped to sizes
+        selectors: {
+            'li[class^="box_"] .nick a': 'post',           // Main posts: 60px
+            '.modern-profile .user-info': 'profile',       // Profile: 120px
+            '.stats .aa a[href*="MID="]': 'sidebar',       // Sidebar: 40px
+            '.big_list .who a': 'list',                    // User lists: 32px
+            '.online .thumbs a': 'small'                   // Online list: 24px
+        },
+        
+        // DiceBear API configuration
+        dicebear: {
+            style: 'initials',
+            version: '7.x',
+            format: 'svg'
+        },
+        
+        // Cache settings
+        cache: {
+            duration: 86400000, // 24 hours
+            prefix: 'avatar_'
+        }
+    });
+
+    // Color palette
     var COLOR_PALETTE = Object.freeze([
         '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
         '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
@@ -18,78 +47,133 @@
 
     // State management
     var state = {
-        pendingRequests: Object.create(null), // Faster than {}
-        userCache: Object.create(null),
-        processedPosts: new WeakSet(),
+        pendingRequests: Object.create(null),
+        userCache: Object.create(null), // userId_size -> avatarUrl
+        processedElements: new WeakMap(), // element -> {processed: true, size: number}
         avatarCallbackId: null,
         isInitialized: false
     };
 
     // ==============================
-    // Utility Functions
+    // Size Detection Utilities
     // ==============================
 
-    function generateLetterAvatar(userId, username) {
+    function getAvatarSizeForElement(element) {
+        // First, check if element has explicit data-avatar-size attribute
+        if (element.hasAttribute('data-avatar-size')) {
+            var explicitSize = parseInt(element.getAttribute('data-avatar-size'), 10);
+            if (!isNaN(explicitSize) && explicitSize > 0) {
+                return explicitSize;
+            }
+        }
+        
+        // Check parent elements for data-avatar-size
+        var parentWithSize = element.closest('[data-avatar-size]');
+        if (parentWithSize) {
+            var parentSize = parseInt(parentWithSize.getAttribute('data-avatar-size'), 10);
+            if (!isNaN(parentSize) && parentSize > 0) {
+                return parentSize;
+            }
+        }
+        
+        // Match against configured selectors
+        var elementSelectors = Object.keys(AVATAR_CONFIG.selectors);
+        for (var i = 0; i < elementSelectors.length; i++) {
+            var selector = elementSelectors[i];
+            var sizeKey = AVATAR_CONFIG.selectors[selector];
+            
+            // Check if element matches selector
+            if (element.matches(selector)) {
+                return AVATAR_CONFIG.sizes[sizeKey];
+            }
+            
+            // Check if element is inside matching element
+            var parentMatch = element.closest(selector);
+            if (parentMatch) {
+                return AVATAR_CONFIG.sizes[sizeKey];
+            }
+        }
+        
+        // Default size for posts (60px)
+        return AVATAR_CONFIG.sizes.post;
+    }
+
+    function getSizeKey(size) {
+        // Convert size to string key (60 -> '60')
+        return String(size);
+    }
+
+    // ==============================
+    // Avatar Generation (Size-Aware)
+    // ==============================
+
+    function generateLetterAvatar(userId, username, size) {
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
         var colorIndex = (firstLetter.charCodeAt(0) + parseInt(userId, 10)) % COLOR_PALETTE.length;
         var backgroundColor = COLOR_PALETTE[colorIndex].replace('#', '');
         
-        // Use more efficient URL construction
+        // Size-aware parameters
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
             'radius=50',
-            'size=' + (AVATAR_SIZE * 2)
+            'size=' + (size * 2) // DiceBear uses 2x for retina
         ];
         
-        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+        return 'https://api.dicebear.com/' + 
+               AVATAR_CONFIG.dicebear.version + '/' +
+               AVATAR_CONFIG.dicebear.style + '/' +
+               AVATAR_CONFIG.dicebear.format + '?' +
+               params.join('&');
     }
 
-    function getCacheKey(userId) {
-        return 'avatar_' + userId;
+    // ==============================
+    // Cache Management (Size-Aware)
+    // ==============================
+
+    function getCacheKey(userId, size) {
+        return AVATAR_CONFIG.cache.prefix + userId + '_' + getSizeKey(size);
     }
 
-    function cacheAvatar(userId, avatarUrl) {
+    function cacheAvatar(userId, size, avatarUrl) {
         var cacheData = {
             url: avatarUrl,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            size: size
         };
         
         try {
-            localStorage.setItem(getCacheKey(userId), JSON.stringify(cacheData));
+            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
         } catch (e) {
-            // localStorage full - implement LRU
             clearOldCacheEntries();
-            localStorage.setItem(getCacheKey(userId), JSON.stringify(cacheData));
+            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
         }
     }
 
-    function getCachedAvatar(userId) {
-        var cached = localStorage.getItem(getCacheKey(userId));
+    function getCachedAvatar(userId, size) {
+        var cached = localStorage.getItem(getCacheKey(userId, size));
         if (!cached) return null;
         
         try {
             var data = JSON.parse(cached);
-            if (Date.now() - data.timestamp < CACHE_DURATION) {
+            if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
                 return data.url;
             }
-            // Expired - clean up
-            localStorage.removeItem(getCacheKey(userId));
+            localStorage.removeItem(getCacheKey(userId, size));
         } catch (e) {
-            localStorage.removeItem(getCacheKey(userId));
+            localStorage.removeItem(getCacheKey(userId, size));
         }
         return null;
     }
 
     function clearOldCacheEntries() {
-        var cutoff = Date.now() - CACHE_DURATION;
+        var cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
         var keysToRemove = [];
         
-        // First pass: collect keys
         for (var i = 0; i < localStorage.length; i++) {
             var key = localStorage.key(i);
-            if (key && key.startsWith('avatar_')) {
+            if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
                 try {
                     var data = JSON.parse(localStorage.getItem(key));
                     if (data && data.timestamp < cutoff) {
@@ -101,326 +185,237 @@
             }
         }
         
-        // Second pass: remove
         for (var j = 0; j < keysToRemove.length; j++) {
             localStorage.removeItem(keysToRemove[j]);
         }
     }
 
     // ==============================
-    // API Functions
+    // Avatar Element Creation (Size-Aware)
     // ==============================
 
-    function fetchUserAvatars(userIds) {
-        return fetch('/api.php?mid=' + userIds.join(',')).then(function(response) {
-            if (!response.ok) throw new Error('API failed: ' + response.status);
-            return response.json();
-        });
-    }
-
-    function processUserData(userId, apiData, fallbackUsername) {
-        var userKey = 'm' + userId;
-        var userData = apiData[userKey];
+    function createAvatarElement(avatarUrl, userId, size) {
+        var img = new Image(size, size);
         
-        if (userData && userData.avatar && 
-            userData.avatar.trim() !== '' && 
-            userData.avatar !== 'http') {
-            return userData.avatar;
-        }
+        // Size-aware styling
+        var borderWidth = Math.max(1, Math.floor(size / 30)); // Proportional border
+        var fontSize = Math.floor(size / 2);
         
-        // Generate letter avatar
-        var username = (userData && userData.nickname) || fallbackUsername || 'User';
-        return generateLetterAvatar(userId, username);
-    }
-
-    // ==============================
-    // Avatar Management
-    // ==============================
-
-    function createAvatarElement(avatarUrl, userId) {
-        var img = new Image(AVATAR_SIZE, AVATAR_SIZE);
-        img.className = 'forum-user-avatar';
+        img.className = 'forum-user-avatar avatar-size-' + getSizeKey(size);
         img.alt = '';
         img.loading = 'lazy';
         img.decoding = 'async';
+        
+        // Set styles
         img.style.cssText = 
-            'width:' + AVATAR_SIZE + 'px;' +
-            'height:' + AVATAR_SIZE + 'px;' +
+            'width:' + size + 'px;' +
+            'height:' + size + 'px;' +
             'border-radius:50%;' +
             'object-fit:cover;' +
             'vertical-align:middle;' +
-            'border:2px solid #fff;' +
-            'box-shadow:0 2px 4px rgba(0,0,0,0.1);';
+            'border:' + borderWidth + 'px solid #fff;' +
+            'box-shadow:0 ' + Math.floor(size/30) + 'px ' + Math.floor(size/15) + 'px rgba(0,0,0,0.1);' +
+            'background-color:#f0f0f0;' +
+            'display:inline-block;';
+        
         img.src = avatarUrl;
         
-        // Use event listener instead of onerror for better control
-        img.addEventListener('error', function() {
-            this.src = generateLetterAvatar(userId, '');
+        // Error handling
+        img.addEventListener('error', function onError() {
+            this.src = generateLetterAvatar(userId, '', size);
+            this.removeEventListener('error', onError);
         }, { once: true });
         
         return img;
     }
 
-    function insertAvatarForPost(postElement) {
-        if (state.processedPosts.has(postElement)) return;
-        
-        var classMatch = postElement.className.match(/box_m(\d+)/);
-        if (!classMatch) return;
-        
-        var userId = classMatch[1];
-        var nickElement = postElement.querySelector('.nick a');
-        if (!nickElement) return;
-        
-        // Check memory cache first (fastest)
-        var avatarUrl = state.userCache[userId];
-        if (!avatarUrl) {
-            // Check localStorage
-            avatarUrl = getCachedAvatar(userId);
-            if (avatarUrl) {
-                state.userCache[userId] = avatarUrl;
-            }
-        }
-        
-        if (avatarUrl) {
-            // We have cached avatar, insert immediately
-            insertAvatar(postElement, nickElement, userId, avatarUrl);
-        } else {
-            // Need to fetch
-            queueAvatarRequest(userId, nickElement.textContent, function(fetchedUrl) {
-                insertAvatar(postElement, nickElement, userId, fetchedUrl);
-            });
-        }
-    }
-
-    function insertAvatar(postElement, nickElement, userId, avatarUrl) {
-        // Create container
-        var container = document.createElement('div');
-        container.className = 'forum-avatar-container';
-        container.style.cssText = 
-            'display:inline-block;' +
-            'vertical-align:middle;' +
-            'margin-right:8px;';
-        
-        // Create and add avatar
-        container.appendChild(createAvatarElement(avatarUrl, userId));
-        
-        // Insert before nickname
-        nickElement.parentNode.insertBefore(container, nickElement);
-        
-        // Mark as processed
-        state.processedPosts.add(postElement);
-    }
-
     // ==============================
-    // Request Queue System
+    // Core Processing Functions
     // ==============================
 
-    function queueAvatarRequest(userId, username, callback) {
-        // Check if already pending
-        if (state.pendingRequests[userId]) {
-            state.pendingRequests[userId].push(callback);
+    function getOrCreateAvatar(userId, username, size, callback) {
+        // Check memory cache first
+        var cacheKey = userId + '_' + getSizeKey(size);
+        if (state.userCache[cacheKey]) {
+            callback(state.userCache[cacheKey]);
             return;
         }
         
-        // Create new queue
-        state.pendingRequests[userId] = [callback];
-        
-        // Batch similar requests
-        setTimeout(function() {
-            processAvatarQueue(userId, username);
-        }, 0);
-    }
-
-    function processAvatarQueue(userId, username) {
-        var callbacks = state.pendingRequests[userId];
-        if (!callbacks) return;
-        
-        // Get cached if available now
-        var cached = getCachedAvatar(userId);
+        // Check localStorage
+        var cached = getCachedAvatar(userId, size);
         if (cached) {
-            state.userCache[userId] = cached;
-            resolveCallbacks(userId, cached);
+            state.userCache[cacheKey] = cached;
+            callback(cached);
             return;
         }
         
         // Fetch from API
-        fetchUserAvatars([userId])
+        fetch('/api.php?mid=' + userId)
+            .then(function(response) {
+                if (!response.ok) throw new Error('API failed');
+                return response.json();
+            })
             .then(function(data) {
-                var avatarUrl = processUserData(userId, data, username);
-                cacheAvatar(userId, avatarUrl);
-                state.userCache[userId] = avatarUrl;
-                resolveCallbacks(userId, avatarUrl);
+                var userKey = 'm' + userId;
+                var userData = data[userKey];
+                var avatarUrl;
+                
+                if (userData && userData.avatar && 
+                    userData.avatar.trim() !== '' && 
+                    userData.avatar !== 'http') {
+                    avatarUrl = userData.avatar;
+                } else {
+                    avatarUrl = generateLetterAvatar(userId, username || userData.nickname, size);
+                }
+                
+                cacheAvatar(userId, size, avatarUrl);
+                state.userCache[cacheKey] = avatarUrl;
+                callback(avatarUrl);
             })
             .catch(function(error) {
-                console.warn('Avatar fetch failed for ' + userId + ':', error);
-                var fallback = generateLetterAvatar(userId, username);
-                resolveCallbacks(userId, fallback);
+                console.warn('Avatar fetch failed:', error);
+                var fallback = generateLetterAvatar(userId, username, size);
+                callback(fallback);
             });
     }
 
-    function resolveCallbacks(userId, avatarUrl) {
-        var callbacks = state.pendingRequests[userId];
-        if (!callbacks) return;
+    function insertAvatarForElement(element, userId, username) {
+        if (!element || !userId) return;
         
-        delete state.pendingRequests[userId];
+        // Check if already processed
+        var processedInfo = state.processedElements.get(element);
+        var targetSize = getAvatarSizeForElement(element);
         
-        // Use microtask for better performance
-        queueMicrotask(function() {
-            for (var i = 0; i < callbacks.length; i++) {
-                try {
-                    callbacks[i](avatarUrl);
-                } catch (e) {
-                    console.error('Avatar callback failed:', e);
-                }
-            }
-        });
-    }
-
-    // ==============================
-    // Batch Processing
-    // ==============================
-
-    function batchProcessVisiblePosts() {
-        if (state.isInitialized) return;
-        
-        var posts = document.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
-        if (posts.length === 0) return;
-        
-        // Collect unique user IDs
-        var userIds = [];
-        var idMap = Object.create(null);
-        var userPosts = Object.create(null);
-        
-        for (var i = 0; i < posts.length; i++) {
-            var post = posts[i];
-            var match = post.className.match(/box_m(\d+)/);
-            if (match) {
-                var userId = match[1];
-                if (!idMap[userId]) {
-                    idMap[userId] = true;
-                    userIds.push(userId);
-                    userPosts[userId] = post;
-                }
-            }
+        if (processedInfo && processedInfo.size === targetSize) {
+            return; // Already processed with correct size
         }
         
-        if (userIds.length === 0) return;
+        // Find insertion point (before nickname/link)
+        var nickname = element.querySelector('.nick a, .username, [href*="MID=' + userId + '"]');
+        if (!nickname) return;
         
-        // Process in batches
-        for (var j = 0; j < userIds.length; j += BATCH_SIZE) {
-            var batch = userIds.slice(j, j + BATCH_SIZE);
-            processUserBatch(batch, userPosts);
-        }
-        
-        state.isInitialized = true;
-    }
-
-    function processUserBatch(userIds, userPosts) {
-        // Check cache first
-        var uncachedIds = [];
-        var cachedResults = Object.create(null);
-        
-        for (var i = 0; i < userIds.length; i++) {
-            var userId = userIds[i];
-            var cached = getCachedAvatar(userId);
-            if (cached) {
-                cachedResults[userId] = cached;
-                state.userCache[userId] = cached;
-            } else {
-                uncachedIds.push(userId);
-            }
-        }
-        
-        // Process cached results immediately
-        Object.keys(cachedResults).forEach(function(userId) {
-            var post = userPosts[userId];
-            if (post) {
-                var nickElement = post.querySelector('.nick a');
-                if (nickElement) {
-                    insertAvatar(post, nickElement, userId, cachedResults[userId]);
-                }
-            }
-        });
-        
-        if (uncachedIds.length === 0) return;
-        
-        // Fetch uncached users
-        fetchUserAvatars(uncachedIds)
-            .then(function(data) {
-                uncachedIds.forEach(function(userId) {
-                    var post = userPosts[userId];
-                    if (!post) return;
-                    
-                    var nickElement = post.querySelector('.nick a');
-                    if (!nickElement) return;
-                    
-                    var avatarUrl = processUserData(userId, data, nickElement.textContent);
-                    cacheAvatar(userId, avatarUrl);
-                    state.userCache[userId] = avatarUrl;
-                    
-                    insertAvatar(post, nickElement, userId, avatarUrl);
-                });
-            })
-            .catch(function(error) {
-                console.warn('Batch avatar fetch failed:', error);
-                // Fallback to individual generation
-                uncachedIds.forEach(function(userId) {
-                    var post = userPosts[userId];
-                    if (!post) return;
-                    
-                    var nickElement = post.querySelector('.nick a');
-                    if (!nickElement) return;
-                    
-                    var fallback = generateLetterAvatar(userId, nickElement.textContent);
-                    insertAvatar(post, nickElement, userId, fallback);
-                });
+        // Get or create avatar
+        getOrCreateAvatar(userId, username || nickname.textContent, targetSize, function(avatarUrl) {
+            // Create container
+            var container = document.createElement('div');
+            container.className = 'forum-avatar-container';
+            container.style.cssText = 
+                'display:inline-block;' +
+                'vertical-align:middle;' +
+                'margin-right:' + Math.floor(targetSize / 7.5) + 'px;' + // Proportional margin
+                'position:relative;';
+            
+            // Add avatar
+            container.appendChild(createAvatarElement(avatarUrl, userId, targetSize));
+            
+            // Insert before nickname
+            nickname.parentNode.insertBefore(container, nickname);
+            
+            // Mark as processed
+            state.processedElements.set(element, {
+                processed: true,
+                size: targetSize,
+                timestamp: Date.now()
             });
+        });
+    }
+
+    function extractUserIdFromElement(element) {
+        // Try multiple extraction methods
+        var userId = null;
+        
+        // 1. From class name (box_m123456)
+        var classMatch = element.className.match(/box_m(\d+)/);
+        if (classMatch) {
+            userId = classMatch[1];
+        }
+        
+        // 2. From data attribute
+        if (!userId && element.dataset.userId) {
+            userId = element.dataset.userId;
+        }
+        
+        // 3. From link href
+        if (!userId) {
+            var link = element.querySelector('a[href*="MID="]');
+            if (link) {
+                var hrefMatch = link.href.match(/MID=(\d+)/);
+                if (hrefMatch) userId = hrefMatch[1];
+            }
+        }
+        
+        // 4. From parent element
+        if (!userId) {
+            var parentLink = element.closest('a[href*="MID="]');
+            if (parentLink) {
+                var parentMatch = parentLink.href.match(/MID=(\d+)/);
+                if (parentMatch) userId = parentMatch[1];
+            }
+        }
+        
+        return userId;
     }
 
     // ==============================
     // Observer Callback
     // ==============================
 
-    function handleNewPost(node) {
+    function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
-        var posts = [];
+        var elements = [];
         
-        // Check if node itself is a post
-        if (node.matches('li[class^="box_"]')) {
-            posts.push(node);
+        // Check if node itself needs an avatar
+        if (node.matches('li[class^="box_"], .user-info, .aa a[href*="MID="]')) {
+            elements.push(node);
         }
         
-        // Check for posts within node
-        var childPosts = node.querySelectorAll('li[class^="box_"]');
-        for (var i = 0; i < childPosts.length; i++) {
-            posts.push(childPosts[i]);
+        // Check children
+        var childElements = node.querySelectorAll(
+            'li[class^="box_"], .user-info, .aa a[href*="MID="], [data-avatar-size]'
+        );
+        for (var i = 0; i < childElements.length; i++) {
+            elements.push(childElements[i]);
         }
         
-        // Process each post
-        for (var j = 0; j < posts.length; j++) {
-            insertAvatarForPost(posts[j]);
+        // Process each element
+        for (var j = 0; j < elements.length; j++) {
+            var element = elements[j];
+            var userId = extractUserIdFromElement(element);
+            if (userId) {
+                insertAvatarForElement(element, userId);
+            }
         }
     }
 
     // ==============================
-    // CSS Injection (Critical Path)
+    // CSS Injection (Size-Aware)
     // ==============================
 
-    function injectCriticalCSS() {
-        // Only inject if not already present
-        if (document.querySelector('#forum-avatar-styles')) return;
+    function injectSizeAwareCSS() {
+        if (document.querySelector('#forum-avatar-multisize-styles')) return;
         
         var style = document.createElement('style');
-        style.id = 'forum-avatar-styles';
-        style.textContent = 
-            '.forum-avatar-container{display:inline-block;vertical-align:middle;margin-right:8px;transition:transform .2s ease}' +
-            '.forum-avatar-container:hover{transform:scale(1.05)}' +
-            '.forum-user-avatar{cursor:pointer;border-radius:50%;object-fit:cover}' +
-            '.forum-user-avatar:hover{opacity:.9}' +
-            '.nick a{display:inline-flex;align-items:center;vertical-align:middle}';
+        style.id = 'forum-avatar-multisize-styles';
         
-        // Inject as early as possible
+        // Base styles
+        var css = 
+            '.forum-avatar-container{display:inline-block;vertical-align:middle;position:relative;transition:transform .2s ease}' +
+            '.forum-avatar-container:hover{transform:scale(1.05)}' +
+            '.forum-user-avatar{cursor:pointer;border-radius:50%;object-fit:cover;background-color:#f0f0f0}' +
+            '.forum-user-avatar:hover{opacity:.9}';
+        
+        // Size-specific hover effects
+        var sizes = AVATAR_CONFIG.sizes;
+        for (var sizeKey in sizes) {
+            if (sizes.hasOwnProperty(sizeKey)) {
+                var size = sizes[sizeKey];
+                css += '.avatar-size-' + size + '{transition:all .2s ease}';
+            }
+        }
+        
+        style.textContent = css;
+        
         var head = document.head || document.getElementsByTagName('head')[0];
         if (head.firstChild) {
             head.insertBefore(style, head.firstChild);
@@ -430,64 +425,71 @@
     }
 
     // ==============================
-    // Initialization
-    // ==============================
-
-    function initAvatarSystem() {
-        if (state.isInitialized) return;
-        
-        console.log('🚀 Initializing optimized avatar system');
-        
-        // 1. Inject CSS immediately
-        injectCriticalCSS();
-        
-        // 2. Register with observer if available
-        if (window.forumObserver && typeof window.forumObserver.register === 'function') {
-            state.avatarCallbackId = window.forumObserver.register({
-                id: 'forum_avatars_optimized',
-                selector: 'li[class^="box_"]',
-                callback: handleNewPost,
-                priority: 'high'
-            });
-            console.log('✅ Registered with ForumCoreObserver');
-        }
-        
-        // 3. Process existing posts with debounce
-        var debounceTimer;
-        function processWithDebounce() {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(batchProcessVisiblePosts, 50);
-        }
-        
-        // Initial processing
-        processWithDebounce();
-        
-        // Also process on DOM ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', processWithDebounce);
-        }
-        
-        // Mark as initialized
-        state.isInitialized = true;
-    }
-
-    // ==============================
-    // Public API
+    // Public API with Size Control
     // ==============================
 
     window.ForumAvatars = Object.freeze({
-        init: initAvatarSystem,
-        refresh: function() {
-            // Clear all caches
-            state.userCache = Object.create(null);
-            state.pendingRequests = Object.create(null);
-            state.processedPosts = new WeakSet();
-            state.isInitialized = false;
+        init: function() {
+            if (state.isInitialized) return;
             
-            // Clear localStorage
+            console.log('🚀 Initializing multi-size avatar system');
+            
+            // Inject CSS
+            injectSizeAwareCSS();
+            
+            // Register with observer
+            if (window.forumObserver) {
+                state.avatarCallbackId = window.forumObserver.register({
+                    id: 'forum_avatars_multisize',
+                    selector: 'li[class^="box_"], .user-info, [data-avatar-size]',
+                    callback: handleNewElement,
+                    priority: 'high'
+                });
+            }
+            
+            // Process existing elements
+            setTimeout(function() {
+                var elements = document.querySelectorAll('li[class^="box_"]');
+                for (var i = 0; i < elements.length; i++) {
+                    handleNewElement(elements[i]);
+                }
+            }, 100);
+            
+            state.isInitialized = true;
+        },
+        
+        // Force avatar for specific element with custom size
+        addAvatarToElement: function(element, userId, options) {
+            var size = options && options.size || getAvatarSizeForElement(element);
+            var username = options && options.username;
+            
+            insertAvatarForElement(element, userId, username);
+        },
+        
+        // Get avatar URL for any size
+        getAvatarUrl: function(userId, username, size) {
+            size = size || AVATAR_CONFIG.sizes.post;
+            return generateLetterAvatar(userId, username, size);
+        },
+        
+        // Configure custom size for selector
+        addSizeRule: function(selector, sizeKey) {
+            AVATAR_CONFIG.selectors[selector] = sizeKey;
+        },
+        
+        // Add custom size
+        addSize: function(key, pixels) {
+            AVATAR_CONFIG.sizes[key] = pixels;
+        },
+        
+        refresh: function() {
+            state.userCache = Object.create(null);
+            state.processedElements = new WeakMap();
+            
+            // Clear localStorage cache
             for (var i = 0; i < localStorage.length; i++) {
                 var key = localStorage.key(i);
-                if (key && key.startsWith('avatar_')) {
+                if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
                     localStorage.removeItem(key);
                 }
             }
@@ -498,58 +500,41 @@
             });
             
             // Re-initialize
-            initAvatarSystem();
+            state.isInitialized = false;
+            this.init();
         },
-        getAvatar: function(userId, username) {
-            return new Promise(function(resolve) {
-                var cached = getCachedAvatar(userId) || state.userCache[userId];
-                if (cached) {
-                    resolve(cached);
-                } else {
-                    queueAvatarRequest(userId, username, resolve);
-                }
-            });
-        },
+        
         stats: function() {
             var cacheCount = 0;
             for (var i = 0; i < localStorage.length; i++) {
-                if (localStorage.key(i).startsWith('avatar_')) cacheCount++;
+                if (localStorage.key(i).startsWith(AVATAR_CONFIG.cache.prefix)) cacheCount++;
             }
             
             return {
-                memoryCache: Object.keys(state.userCache).length,
-                pendingRequests: Object.keys(state.pendingRequests).length,
-                localStorageCache: cacheCount,
-                processedPosts: 'WeakSet (size not enumerable)',
-                isInitialized: state.isInitialized
+                memoryCacheEntries: Object.keys(state.userCache).length,
+                localStorageCacheEntries: cacheCount,
+                processedElements: 'WeakMap',
+                isInitialized: state.isInitialized,
+                configuredSizes: Object.keys(AVATAR_CONFIG.sizes).length,
+                configuredSelectors: Object.keys(AVATAR_CONFIG.selectors).length
             };
-        },
-        cleanup: function() {
-            if (state.avatarCallbackId && window.forumObserver) {
-                window.forumObserver.unregister(state.avatarCallbackId);
-            }
-            state.userCache = Object.create(null);
-            state.pendingRequests = Object.create(null);
-            state.processedPosts = new WeakSet();
-            state.isInitialized = false;
         }
     });
 
     // ==============================
-    // Auto-initialize with optimization
+    // Auto-initialize
     // ==============================
 
-    // Use requestIdleCallback for better initialization timing
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(initAvatarSystem, { timeout: 1000 });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                ForumAvatars.init();
+            }, 100);
+        });
     } else {
-        // Fallback to setTimeout
-        setTimeout(initAvatarSystem, 100);
-    }
-
-    // Export for debugging
-    if (typeof module !== 'undefined') {
-        module.exports = window.ForumAvatars;
+        setTimeout(function() {
+            ForumAvatars.init();
+        }, 100);
     }
 
 })();
