@@ -132,4 +132,4 @@ input[type="radio"]:checked::before
 }
 
 /*Hidden*/
-.nascosta{display:hidden}
+.nascosta{display:none}
