@@ -1,3 +1,332 @@
+// ==============================
+// Forum Avatar Injection System
+// ==============================
+
+(function() {
+    'use strict';
+
+    // Configuration
+    var AVATAR_SIZE = 40; // pixels
+    var AVATAR_CACHE_KEY = 'forum_avatar_cache';
+    var CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+    var MEMBERS_PAGE_URL = 'https://newtest.forumcommunity.net/?act=Members';
+    
+    // Color palette for letter avatars (based on first character)
+    var COLOR_PALETTE = [
+        '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
+        '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
+    ];
+
+    // Main function
+    async function initAvatarSystem() {
+        console.log('Initializing avatar system...');
+        
+        // Load or fetch avatar data
+        var avatarData = await loadAvatarData();
+        
+        // Process all posts on page
+        processAllPosts(avatarData);
+        
+        // Set up observer for dynamically loaded content
+        setupContentObserver(avatarData);
+    }
+
+    // ==============================
+    // Core Functions
+    // ==============================
+
+    async function loadAvatarData() {
+        // Try to get cached data first
+        var cachedData = getCachedAvatarData();
+        if (cachedData && isCacheValid(cachedData)) {
+            console.log('Using cached avatar data');
+            return cachedData.data;
+        }
+        
+        console.log('Fetching fresh avatar data...');
+        var avatarData = await fetchAvatarDataFromMembersPage();
+        
+        // Cache the data
+        cacheAvatarData(avatarData);
+        
+        return avatarData;
+    }
+
+    async function fetchAvatarDataFromMembersPage() {
+        var avatarData = {};
+        
+        try {
+            var response = await fetch(MEMBERS_PAGE_URL);
+            var html = await response.text();
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(html, 'text/html');
+            
+            // Find all user entries on members page
+            var userElements = doc.querySelectorAll('a[href*="MID="]');
+            
+            userElements.forEach(function(element) {
+                var href = element.getAttribute('href');
+                var midMatch = href.match(/MID=(\d+)/);
+                
+                if (midMatch) {
+                    var userId = midMatch[1];
+                    
+                    // Check if user has a custom avatar or default one
+                    var avatarDiv = element.querySelector('.thumbs img, .default-avatar');
+                    
+                    if (avatarDiv) {
+                        if (avatarDiv.classList.contains('default-avatar')) {
+                            // User has default avatar - we'll generate letter avatar
+                            var closestTr = element.closest('tr');
+                            var usernameLink = closestTr ? closestTr.querySelector('a[href*="MID="]') : null;
+                            var username = usernameLink ? usernameLink.textContent.trim() : '';
+                            avatarData[userId] = {
+                                type: 'letter',
+                                username: username
+                            };
+                        } else if (avatarDiv.tagName === 'IMG') {
+                            // User has custom avatar
+                            var avatarUrl = avatarDiv.src;
+                            avatarData[userId] = {
+                                type: 'image',
+                                url: avatarUrl
+                            };
+                        }
+                    }
+                }
+            });
+            
+            console.log('Loaded ' + Object.keys(avatarData).length + ' user avatars');
+        } catch (error) {
+            console.error('Error fetching members page:', error);
+        }
+        
+        return avatarData;
+    }
+
+    function processAllPosts(avatarData) {
+        // Find all posts (li elements with class starting with "box_")
+        var postElements = document.querySelectorAll('li[class^="box_"]');
+        
+        postElements.forEach(function(postElement) {
+            // Extract user ID from class name (box_m12252299)
+            var classMatch = postElement.className.match(/box_m(\d+)/);
+            if (classMatch) {
+                var userId = classMatch[1];
+                var nickElement = postElement.querySelector('.nick a');
+                
+                if (nickElement && !postElement.querySelector('.forum-avatar-injected')) {
+                    insertAvatar(postElement, nickElement, userId, avatarData);
+                }
+            }
+        });
+    }
+
+    function insertAvatar(postElement, nickElement, userId, avatarData) {
+        // Create avatar container
+        var avatarContainer = document.createElement('div');
+        avatarContainer.className = 'forum-avatar-container';
+        avatarContainer.style.cssText = 
+            'display: inline-block;' +
+            'vertical-align: middle;' +
+            'margin-right: 8px;';
+        
+        // Get or create avatar
+        var avatarUrl = getAvatarUrl(userId, avatarData, nickElement.textContent);
+        
+        // Create avatar image
+        var avatarImg = document.createElement('img');
+        avatarImg.className = 'forum-user-avatar';
+        avatarImg.alt = 'Avatar for user ' + userId;
+        avatarImg.style.cssText = 
+            'width: ' + AVATAR_SIZE + 'px;' +
+            'height: ' + AVATAR_SIZE + 'px;' +
+            'border-radius: 50%;' +
+            'object-fit: cover;' +
+            'vertical-align: middle;' +
+            'border: 2px solid #fff;' +
+            'box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
+        avatarImg.src = avatarUrl;
+        
+        // Mark as injected
+        avatarImg.setAttribute('data-injected', 'true');
+        avatarImg.setAttribute('data-user-id', userId);
+        
+        // Insert before nick element
+        avatarContainer.appendChild(avatarImg);
+        nickElement.parentNode.insertBefore(avatarContainer, nickElement);
+        
+        // Mark post as processed
+        postElement.classList.add('forum-avatar-injected');
+    }
+
+    function getAvatarUrl(userId, avatarData, username) {
+        var userData = avatarData[userId];
+        
+        if (userData && userData.type === 'image') {
+            return userData.url; // Custom avatar
+        }
+        
+        // Generate DiceBear letter avatar
+        var displayName = userData && userData.username ? userData.username : (username || 'User');
+        var firstLetter = displayName.charAt(0).toUpperCase();
+        var colorIndex = (firstLetter.charCodeAt(0) + parseInt(userId, 10)) % COLOR_PALETTE.length;
+        var backgroundColor = COLOR_PALETTE[colorIndex].replace('#', '');
+        var doubleSize = AVATAR_SIZE * 2;
+        
+        // DiceBear initials API URL
+        return 'https://api.dicebear.com/7.x/initials/svg?' +
+               'seed=' + encodeURIComponent(firstLetter) +
+               '&backgroundColor=' + backgroundColor +
+               '&radius=50' +
+               '&size=' + doubleSize;
+    }
+
+    // ==============================
+    // Cache Management
+    // ==============================
+
+    function cacheAvatarData(data) {
+        var cache = {
+            timestamp: Date.now(),
+            data: data
+        };
+        localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(cache));
+    }
+
+    function getCachedAvatarData() {
+        var cached = localStorage.getItem(AVATAR_CACHE_KEY);
+        return cached ? JSON.parse(cached) : null;
+    }
+
+    function isCacheValid(cache) {
+        return Date.now() - cache.timestamp < CACHE_DURATION;
+    }
+
+    // ==============================
+    // Dynamic Content Handling
+    // ==============================
+
+    function setupContentObserver(avatarData) {
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            if (node.matches && node.matches('li[class^="box_"]')) {
+                                processPostElement(node, avatarData);
+                            } else if (node.querySelectorAll) {
+                                var newPosts = node.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
+                                newPosts.forEach(function(post) {
+                                    processPostElement(post, avatarData);
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    function processPostElement(postElement, avatarData) {
+        var classMatch = postElement.className.match(/box_m(\d+)/);
+        if (classMatch) {
+            var userId = classMatch[1];
+            var nickElement = postElement.querySelector('.nick a:not(:has(~ .forum-avatar-container))');
+            
+            if (nickElement) {
+                insertAvatar(postElement, nickElement, userId, avatarData);
+            }
+        }
+    }
+
+    // ==============================
+    // CSS Styling
+    // ==============================
+
+    function injectStyles() {
+        var style = document.createElement('style');
+        style.textContent = 
+            '.forum-avatar-container {' +
+            '    transition: transform 0.2s ease;' +
+            '}' +
+            '.forum-avatar-container:hover {' +
+            '    transform: scale(1.1);' +
+            '}' +
+            '.forum-user-avatar {' +
+            '    cursor: pointer;' +
+            '}' +
+            '.forum-user-avatar:hover {' +
+            '    opacity: 0.9;' +
+            '}' +
+            '.nick a {' +
+            '    display: inline-flex;' +
+            '    align-items: center;' +
+            '    vertical-align: middle;' +
+            '}';
+        document.head.appendChild(style);
+    }
+
+    // ==============================
+    // Utility Functions
+    // ==============================
+
+    function getFirstLetter(name) {
+        if (!name) return 'U';
+        return name.charAt(0).toUpperCase();
+    }
+
+    function getColorForLetter(letter) {
+        var index = letter.charCodeAt(0) % COLOR_PALETTE.length;
+        return COLOR_PALETTE[index];
+    }
+
+    // ==============================
+    // Public API (optional)
+    // ==============================
+
+    window.ForumAvatars = {
+        refresh: async function() {
+            localStorage.removeItem(AVATAR_CACHE_KEY);
+            var avatarData = await loadAvatarData();
+            processAllPosts(avatarData);
+        },
+        getAvatarUrl: function(userId, username) {
+            var firstLetter = getFirstLetter(username);
+            var color = getColorForLetter(firstLetter);
+            var backgroundColor = color.replace('#', '');
+            var doubleSize = AVATAR_SIZE * 2;
+            return 'https://api.dicebear.com/7.x/initials/svg?' +
+                   'seed=' + encodeURIComponent(firstLetter) +
+                   '&backgroundColor=' + backgroundColor +
+                   '&radius=50' +
+                   '&size=' + doubleSize;
+        }
+    };
+
+    // ==============================
+    // Initialize
+    // ==============================
+
+    // Wait for page to load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            injectStyles();
+            initAvatarSystem();
+        });
+    } else {
+        injectStyles();
+        initAvatarSystem();
+    }
+
+})();
+
+
 // Ultra-Optimized Media Dimension Extractor for deferred loading
 // DOM is guaranteed to be ready when this executes (defer attribute)
 'use strict';
