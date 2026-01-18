@@ -1,128 +1,190 @@
 // ==============================
-// Forum Avatar Injection System
+// Forum Avatar Injection System (API Version)
 // ==============================
 
 (function() {
     'use strict';
 
     // Configuration
-    var AVATAR_SIZE = 40; // pixels
+    var AVATAR_SIZE = 40;
     var AVATAR_CACHE_KEY = 'forum_avatar_cache';
     var CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-    var MEMBERS_PAGE_URL = 'https://newtest.forumcommunity.net/?act=Members';
     
-    // Color palette for letter avatars (based on first character)
+    // Color palette for letter avatars
     var COLOR_PALETTE = [
         '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
         '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
     ];
 
+    // Cache for pending requests to avoid duplicate API calls
+    var pendingRequests = {};
+    var userCache = {};
+
     // Main function
-    async function initAvatarSystem() {
-        console.log('Initializing avatar system...');
+    function initAvatarSystem() {
+        console.log('Initializing avatar system (API version)...');
         
-        // Load or fetch avatar data
-        var avatarData = await loadAvatarData();
-        
-        // Process all posts on page
-        processAllPosts(avatarData);
+        // Process all posts
+        processAllPosts();
         
         // Set up observer for dynamically loaded content
-        setupContentObserver(avatarData);
+        setupContentObserver();
     }
 
     // ==============================
     // Core Functions
     // ==============================
 
-    async function loadAvatarData() {
-        // Try to get cached data first
-        var cachedData = getCachedAvatarData();
-        if (cachedData && isCacheValid(cachedData)) {
-            console.log('Using cached avatar data');
-            return cachedData.data;
-        }
-        
-        console.log('Fetching fresh avatar data...');
-        var avatarData = await fetchAvatarDataFromMembersPage();
-        
-        // Cache the data
-        cacheAvatarData(avatarData);
-        
-        return avatarData;
-    }
-
-    async function fetchAvatarDataFromMembersPage() {
-        var avatarData = {};
-        
-        try {
-            var response = await fetch(MEMBERS_PAGE_URL);
-            var html = await response.text();
-            var parser = new DOMParser();
-            var doc = parser.parseFromString(html, 'text/html');
+    function getUserAvatar(userId, username) {
+        // Return a promise for async handling
+        return new Promise(function(resolve) {
+            // Check memory cache first
+            if (userCache[userId]) {
+                resolve(userCache[userId]);
+                return;
+            }
             
-            // Find all user entries on members page
-            var userElements = doc.querySelectorAll('a[href*="MID="]');
+            // Check localStorage cache
+            var cacheKey = 'avatar_' + userId;
+            var cached = localStorage.getItem(cacheKey);
             
-            userElements.forEach(function(element) {
-                var href = element.getAttribute('href');
-                var midMatch = href.match(/MID=(\d+)/);
-                
-                if (midMatch) {
-                    var userId = midMatch[1];
-                    
-                    // Check if user has a custom avatar or default one
-                    var avatarDiv = element.querySelector('.thumbs img, .default-avatar');
-                    
-                    if (avatarDiv) {
-                        if (avatarDiv.classList.contains('default-avatar')) {
-                            // User has default avatar - we'll generate letter avatar
-                            var closestTr = element.closest('tr');
-                            var usernameLink = closestTr ? closestTr.querySelector('a[href*="MID="]') : null;
-                            var username = usernameLink ? usernameLink.textContent.trim() : '';
-                            avatarData[userId] = {
-                                type: 'letter',
-                                username: username
-                            };
-                        } else if (avatarDiv.tagName === 'IMG') {
-                            // User has custom avatar
-                            var avatarUrl = avatarDiv.src;
-                            avatarData[userId] = {
-                                type: 'image',
-                                url: avatarUrl
-                            };
-                        }
-                    }
+            if (cached) {
+                var cacheData = JSON.parse(cached);
+                if (Date.now() - cacheData.timestamp < CACHE_DURATION) {
+                    userCache[userId] = cacheData.avatar;
+                    resolve(cacheData.avatar);
+                    return;
                 }
-            });
+            }
             
-            console.log('Loaded ' + Object.keys(avatarData).length + ' user avatars');
-        } catch (error) {
-            console.error('Error fetching members page:', error);
-        }
-        
-        return avatarData;
+            // Check if request is already pending
+            if (pendingRequests[userId]) {
+                pendingRequests[userId].push(resolve);
+                return;
+            }
+            
+            // Create pending request queue
+            pendingRequests[userId] = [resolve];
+            
+            // Fetch from API
+            fetch('/api.php?mid=' + userId)
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error('API request failed with status: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(function(data) {
+                    var userKey = 'm' + userId;
+                    var userData = data[userKey];
+                    var avatarUrl;
+                    
+                    if (userData && userData.avatar && 
+                        userData.avatar.trim() !== '' && 
+                        userData.avatar !== 'http') {
+                        // User has custom avatar (checking for 'http' which might be empty)
+                        avatarUrl = userData.avatar;
+                    } else {
+                        // User has no avatar, generate letter avatar
+                        avatarUrl = generateLetterAvatar(userId, username || userData.nickname);
+                    }
+                    
+                    // Cache the result
+                    cacheAvatar(userId, avatarUrl);
+                    userCache[userId] = avatarUrl;
+                    
+                    // Resolve all pending requests for this user
+                    var callbacks = pendingRequests[userId];
+                    delete pendingRequests[userId];
+                    callbacks.forEach(function(callback) {
+                        callback(avatarUrl);
+                    });
+                })
+                .catch(function(error) {
+                    console.log('API failed for user ' + userId + ', generating fallback:', error);
+                    // Generate letter avatar as fallback
+                    var fallbackAvatar = generateLetterAvatar(userId, username);
+                    
+                    // Cache the fallback
+                    cacheAvatar(userId, fallbackAvatar);
+                    userCache[userId] = fallbackAvatar;
+                    
+                    // Resolve all pending requests
+                    var callbacks = pendingRequests[userId];
+                    delete pendingRequests[userId];
+                    callbacks.forEach(function(callback) {
+                        callback(fallbackAvatar);
+                    });
+                });
+        });
     }
 
-    function processAllPosts(avatarData) {
-        // Find all posts (li elements with class starting with "box_")
+    function cacheAvatar(userId, avatarUrl) {
+        var cacheData = {
+            avatar: avatarUrl,
+            timestamp: Date.now()
+        };
+        try {
+            localStorage.setItem('avatar_' + userId, JSON.stringify(cacheData));
+        } catch (e) {
+            console.log('LocalStorage full, clearing old cache entries');
+            clearOldCacheEntries();
+            localStorage.setItem('avatar_' + userId, JSON.stringify(cacheData));
+        }
+    }
+
+    function clearOldCacheEntries() {
+        var oneDayAgo = Date.now() - CACHE_DURATION;
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key.startsWith('avatar_')) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data.timestamp < oneDayAgo) {
+                        localStorage.removeItem(key);
+                    }
+                } catch (e) {
+                    localStorage.removeItem(key);
+                }
+            }
+        }
+    }
+
+    function generateLetterAvatar(userId, username) {
+        var displayName = username || 'User';
+        var firstLetter = displayName.charAt(0).toUpperCase();
+        var colorIndex = (firstLetter.charCodeAt(0) + parseInt(userId, 10)) % COLOR_PALETTE.length;
+        var backgroundColor = COLOR_PALETTE[colorIndex].replace('#', '');
+        var size = AVATAR_SIZE * 2;
+        
+        return 'https://api.dicebear.com/7.x/initials/svg?' +
+               'seed=' + encodeURIComponent(firstLetter) +
+               '&backgroundColor=' + backgroundColor +
+               '&radius=50' +
+               '&size=' + size;
+    }
+
+    function processAllPosts() {
         var postElements = document.querySelectorAll('li[class^="box_"]');
         
         postElements.forEach(function(postElement) {
-            // Extract user ID from class name (box_m12252299)
+            if (postElement.classList.contains('forum-avatar-injected')) {
+                return; // Already processed
+            }
+            
             var classMatch = postElement.className.match(/box_m(\d+)/);
             if (classMatch) {
                 var userId = classMatch[1];
                 var nickElement = postElement.querySelector('.nick a');
                 
-                if (nickElement && !postElement.querySelector('.forum-avatar-injected')) {
-                    insertAvatar(postElement, nickElement, userId, avatarData);
+                if (nickElement) {
+                    insertAvatar(postElement, nickElement, userId);
                 }
             }
         });
     }
 
-    function insertAvatar(postElement, nickElement, userId, avatarData) {
+    function insertAvatar(postElement, nickElement, userId) {
         // Create avatar container
         var avatarContainer = document.createElement('div');
         avatarContainer.className = 'forum-avatar-container';
@@ -131,94 +193,60 @@
             'vertical-align: middle;' +
             'margin-right: 8px;';
         
-        // Get or create avatar
-        var avatarUrl = getAvatarUrl(userId, avatarData, nickElement.textContent);
-        
-        // Create avatar image
-        var avatarImg = document.createElement('img');
-        avatarImg.className = 'forum-user-avatar';
-        avatarImg.alt = 'Avatar for user ' + userId;
-        avatarImg.style.cssText = 
-            'width: ' + AVATAR_SIZE + 'px;' +
-            'height: ' + AVATAR_SIZE + 'px;' +
-            'border-radius: 50%;' +
-            'object-fit: cover;' +
-            'vertical-align: middle;' +
-            'border: 2px solid #fff;' +
-            'box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
-        avatarImg.src = avatarUrl;
-        
-        // Mark as injected
-        avatarImg.setAttribute('data-injected', 'true');
-        avatarImg.setAttribute('data-user-id', userId);
-        
-        // Insert before nick element
-        avatarContainer.appendChild(avatarImg);
-        nickElement.parentNode.insertBefore(avatarContainer, nickElement);
-        
-        // Mark post as processed
-        postElement.classList.add('forum-avatar-injected');
-    }
-
-    function getAvatarUrl(userId, avatarData, username) {
-        var userData = avatarData[userId];
-        
-        if (userData && userData.type === 'image') {
-            return userData.url; // Custom avatar
-        }
-        
-        // Generate DiceBear letter avatar
-        var displayName = userData && userData.username ? userData.username : (username || 'User');
-        var firstLetter = displayName.charAt(0).toUpperCase();
-        var colorIndex = (firstLetter.charCodeAt(0) + parseInt(userId, 10)) % COLOR_PALETTE.length;
-        var backgroundColor = COLOR_PALETTE[colorIndex].replace('#', '');
-        var doubleSize = AVATAR_SIZE * 2;
-        
-        // DiceBear initials API URL
-        return 'https://api.dicebear.com/7.x/initials/svg?' +
-               'seed=' + encodeURIComponent(firstLetter) +
-               '&backgroundColor=' + backgroundColor +
-               '&radius=50' +
-               '&size=' + doubleSize;
-    }
-
-    // ==============================
-    // Cache Management
-    // ==============================
-
-    function cacheAvatarData(data) {
-        var cache = {
-            timestamp: Date.now(),
-            data: data
-        };
-        localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(cache));
-    }
-
-    function getCachedAvatarData() {
-        var cached = localStorage.getItem(AVATAR_CACHE_KEY);
-        return cached ? JSON.parse(cached) : null;
-    }
-
-    function isCacheValid(cache) {
-        return Date.now() - cache.timestamp < CACHE_DURATION;
+        // Get avatar promise
+        getUserAvatar(userId, nickElement.textContent)
+            .then(function(avatarUrl) {
+                // Create avatar image
+                var avatarImg = document.createElement('img');
+                avatarImg.className = 'forum-user-avatar';
+                avatarImg.alt = 'Avatar for user ' + userId;
+                avatarImg.style.cssText = 
+                    'width: ' + AVATAR_SIZE + 'px;' +
+                    'height: ' + AVATAR_SIZE + 'px;' +
+                    'border-radius: 50%;' +
+                    'object-fit: cover;' +
+                    'vertical-align: middle;' +
+                    'border: 2px solid #fff;' +
+                    'box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
+                avatarImg.src = avatarUrl;
+                
+                // Add error handler
+                avatarImg.onerror = function() {
+                    console.log('Avatar failed to load, using fallback for user ' + userId);
+                    this.src = generateLetterAvatar(userId, nickElement.textContent);
+                };
+                
+                avatarImg.setAttribute('data-injected', 'true');
+                avatarImg.setAttribute('data-user-id', userId);
+                
+                // Insert before nick element
+                avatarContainer.appendChild(avatarImg);
+                nickElement.parentNode.insertBefore(avatarContainer, nickElement);
+                
+                // Mark as processed
+                postElement.classList.add('forum-avatar-injected');
+            })
+            .catch(function(error) {
+                console.error('Failed to get avatar for user ' + userId + ':', error);
+            });
     }
 
     // ==============================
     // Dynamic Content Handling
     // ==============================
 
-    function setupContentObserver(avatarData) {
+    function setupContentObserver() {
         var observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.addedNodes.length) {
                     mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === 1) { // Element node
+                        if (node.nodeType === 1) {
                             if (node.matches && node.matches('li[class^="box_"]')) {
-                                processPostElement(node, avatarData);
+                                processNewPost(node);
                             } else if (node.querySelectorAll) {
                                 var newPosts = node.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
                                 newPosts.forEach(function(post) {
-                                    processPostElement(post, avatarData);
+                                    processNewPost(post);
                                 });
                             }
                         }
@@ -233,14 +261,14 @@
         });
     }
 
-    function processPostElement(postElement, avatarData) {
+    function processNewPost(postElement) {
         var classMatch = postElement.className.match(/box_m(\d+)/);
         if (classMatch) {
             var userId = classMatch[1];
             var nickElement = postElement.querySelector('.nick a:not(:has(~ .forum-avatar-container))');
             
             if (nickElement) {
-                insertAvatar(postElement, nickElement, userId, avatarData);
+                insertAvatar(postElement, nickElement, userId);
             }
         }
     }
@@ -273,59 +301,89 @@
     }
 
     // ==============================
-    // Utility Functions
+    // Batch Processing Optimization
     // ==============================
 
-    function getFirstLetter(name) {
-        if (!name) return 'U';
-        return name.charAt(0).toUpperCase();
+    function batchProcessAvatars() {
+        var userIds = [];
+        var userMap = {};
+        
+        // Collect all user IDs from the page
+        var postElements = document.querySelectorAll('li[class^="box_"]:not(.forum-avatar-injected)');
+        postElements.forEach(function(postElement) {
+            var classMatch = postElement.className.match(/box_m(\d+)/);
+            if (classMatch) {
+                var userId = classMatch[1];
+                if (!userMap[userId]) {
+                    userMap[userId] = true;
+                    userIds.push(userId);
+                }
+            }
+        });
+        
+        if (userIds.length === 0) return;
+        
+        // Batch API call for multiple users
+        fetch('/api.php?mid=' + userIds.join(','))
+            .then(function(response) {
+                if (!response.ok) throw new Error('Batch API failed');
+                return response.json();
+            })
+            .then(function(data) {
+                // Process each user
+                userIds.forEach(function(userId) {
+                    var userKey = 'm' + userId;
+                    var userData = data[userKey];
+                    var avatarUrl;
+                    
+                    if (userData && userData.avatar && 
+                        userData.avatar.trim() !== '' && 
+                        userData.avatar !== 'http') {
+                        avatarUrl = userData.avatar;
+                    } else {
+                        // Need username to generate letter avatar
+                        var posts = document.querySelectorAll('.box_m' + userId + ' .nick a');
+                        var username = posts.length > 0 ? posts[0].textContent : 'User';
+                        avatarUrl = generateLetterAvatar(userId, username);
+                    }
+                    
+                    // Cache the result
+                    cacheAvatar(userId, avatarUrl);
+                    userCache[userId] = avatarUrl;
+                });
+                
+                // Now process all posts with cached avatars
+                processAllPosts();
+            })
+            .catch(function(error) {
+                console.log('Batch API failed, falling back to individual requests:', error);
+                processAllPosts(); // Fall back to individual requests
+            });
     }
-
-    function getColorForLetter(letter) {
-        var index = letter.charCodeAt(0) % COLOR_PALETTE.length;
-        return COLOR_PALETTE[index];
-    }
-
-    // ==============================
-    // Public API (optional)
-    // ==============================
-
-    window.ForumAvatars = {
-        refresh: async function() {
-            localStorage.removeItem(AVATAR_CACHE_KEY);
-            var avatarData = await loadAvatarData();
-            processAllPosts(avatarData);
-        },
-        getAvatarUrl: function(userId, username) {
-            var firstLetter = getFirstLetter(username);
-            var color = getColorForLetter(firstLetter);
-            var backgroundColor = color.replace('#', '');
-            var doubleSize = AVATAR_SIZE * 2;
-            return 'https://api.dicebear.com/7.x/initials/svg?' +
-                   'seed=' + encodeURIComponent(firstLetter) +
-                   '&backgroundColor=' + backgroundColor +
-                   '&radius=50' +
-                   '&size=' + doubleSize;
-        }
-    };
 
     // ==============================
     // Initialize
     // ==============================
 
-    // Wait for page to load
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             injectStyles();
+            // Try batch processing first for efficiency
+            setTimeout(function() {
+                batchProcessAvatars();
+            }, 100);
+            // Also set up individual processing for dynamic content
             initAvatarSystem();
         });
     } else {
         injectStyles();
+        setTimeout(function() {
+            batchProcessAvatars();
+        }, 100);
         initAvatarSystem();
     }
 
 })();
-
 
 // Ultra-Optimized Media Dimension Extractor for deferred loading
 // DOM is guaranteed to be ready when this executes (defer attribute)
