@@ -3270,7 +3270,8 @@ globalThis.addEventListener('pagehide', () => {
 // Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
 // modern attachment styling, Media Dimension Extractor integration,
-// adaptive date format detection, and future timestamp handling for scheduled posts
+// adaptive date format detection, future timestamp handling for scheduled posts,
+// and .summary li[class^="box_"] element support for body#send page
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -3280,6 +3281,7 @@ class PostModernizer {
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
+    #summaryObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -3348,6 +3350,12 @@ class PostModernizer {
         this.#enhanceQuoteLinks();
         this.#modernizeCodeBlocks();
         this.#modernizeAttachments();
+        
+        // NEW: Handle summary elements on body#send
+        if (bodyId === 'send') {
+            this.#transformSummaryElements();
+            this.#setupSummaryObserver();
+        }
 
         console.log('✅ Post Modernizer with all optimizations initialized');
     } catch (error) {
@@ -3364,6 +3372,298 @@ class PostModernizer {
         }
     }
 }
+    
+    // ==============================
+    // NEW: SUMMARY ELEMENTS HANDLING FOR BODY#SEND
+    // ==============================
+    
+    #transformSummaryElements() {
+        const summaryElements = document.querySelectorAll('.summary li[class^="box_"]:not(.summary-modernized)');
+        
+        summaryElements.forEach((summaryElement, index) => {
+            this.#transformSummaryElement(summaryElement, index);
+        });
+    }
+    
+    #transformSummaryElement(summaryElement, index) {
+        try {
+            // Mark as processed to avoid double processing
+            summaryElement.classList.add('summary-modernized');
+            
+            // Extract user info from class
+            const classNames = summaryElement.className.split(' ');
+            let userId = null;
+            let userNick = null;
+            let userGender = 'unknown';
+            let userGroup = 'user';
+            let isMine = false;
+            
+            classNames.forEach(className => {
+                if (className.startsWith('box_m')) {
+                    const match = className.match(/box_m(\d+)/);
+                    if (match) {
+                        userId = match[1];
+                    }
+                }
+                if (className === 'box_mine') {
+                    isMine = true;
+                }
+                if (className.startsWith('box_')) {
+                    const groupMatch = className.match(/box_([a-zA-Z]+)/);
+                    if (groupMatch && !['male', 'female', 'mine', 'm' + userId].includes(className)) {
+                        userGroup = groupMatch[1];
+                    }
+                }
+                if (className === 'box_male') {
+                    userGender = 'male';
+                }
+                if (className === 'box_female') {
+                    userGender = 'female';
+                }
+            });
+            
+            // Extract nick element
+            const nickElement = summaryElement.querySelector('.nick a');
+            if (nickElement) {
+                userNick = nickElement.textContent.trim();
+                // Use extracted userId or get from href
+                if (!userId && nickElement.href) {
+                    const match = nickElement.href.match(/MID=(\d+)/);
+                    if (match) {
+                        userId = match[1];
+                    }
+                }
+            }
+            
+            // Extract timestamp
+            const whenElement = summaryElement.querySelector('.when.Item');
+            let dateString = null;
+            if (whenElement) {
+                // Extract date from text content
+                const text = whenElement.textContent.trim();
+                const dateMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
+                if (dateMatch) {
+                    dateString = dateMatch[1].trim();
+                }
+            }
+            
+            // Extract content
+            const colorItem = summaryElement.querySelector('.color.Item');
+            let contentHTML = '';
+            if (colorItem) {
+                contentHTML = colorItem.innerHTML;
+            }
+            
+            // Create modern summary element
+            const modernSummary = this.#createModernSummaryElement({
+                index: index + 1,
+                userId: userId,
+                userNick: userNick,
+                userGender: userGender,
+                userGroup: userGroup,
+                isMine: isMine,
+                dateString: dateString,
+                contentHTML: contentHTML,
+                originalElement: summaryElement
+            });
+            
+            // Replace the original element
+            summaryElement.parentNode.replaceChild(modernSummary, summaryElement);
+            
+        } catch (error) {
+            console.error('Error transforming summary element:', error, summaryElement);
+        }
+    }
+    
+    #createModernSummaryElement(data) {
+        const { index, userId, userNick, userGender, userGroup, isMine, dateString, contentHTML, originalElement } = data;
+        
+        // Create main container
+        const modernSummary = document.createElement('li');
+        modernSummary.className = 'summary-modernized';
+        // Copy original classes
+        modernSummary.className += ' ' + originalElement.className;
+        modernSummary.classList.add('summary-post');
+        
+        // Create modern summary HTML structure
+        let html = '<div class="summary-post-container">';
+        
+        // Post header with post number and user info
+        html += '<div class="summary-post-header">';
+        
+        // Post number
+        html += '<span class="post-number">';
+        html += '<i class="fa-regular fa-hashtag" aria-hidden="true"></i>';
+        html += ' <span class="post-number-value">' + index + '</span>';
+        html += '</span>';
+        
+        // User info section
+        html += '<div class="summary-user-info">';
+        
+        // Avatar - create default avatar from nick link
+        if (userId && userNick) {
+            const profileUrl = '/?act=Profile&MID=' + userId;
+            html += '<a class="avatar" href="' + this.#escapeHtml(profileUrl) + '" rel="nofollow">';
+            html += '<div class="default-avatar">';
+            html += '<i class="fa-regular fa-user" aria-hidden="true"></i>';
+            html += '</div>';
+            html += '</a>';
+        }
+        
+        // Nick and group badge
+        html += '<div class="summary-user-details">';
+        
+        if (userNick) {
+            html += '<strong class="nick">';
+            if (userId) {
+                html += '<a href="/?act=Profile&MID=' + this.#escapeHtml(userId) + '" class="user' + this.#escapeHtml(userId) + '">';
+                html += this.#escapeHtml(userNick);
+                html += '</a>';
+            } else {
+                html += this.#escapeHtml(userNick);
+            }
+            html += '</strong>';
+            
+            // Group badge if not "user"
+            if (userGroup && userGroup !== 'user') {
+                html += '<div class="badge">' + this.#escapeHtml(userGroup) + '</div>';
+            }
+            
+            // "My post" indicator
+            if (isMine) {
+                html += '<span class="my-post-indicator" title="Your post">';
+                html += '<i class="fa-regular fa-user" aria-hidden="true"></i>';
+                html += '</span>';
+            }
+        }
+        
+        html += '</div>'; // Close summary-user-details
+        
+        html += '</div>'; // Close summary-user-info
+        
+        // Timestamp
+        if (dateString) {
+            // Create modern timestamp
+            const timestampContainer = document.createElement('span');
+            timestampContainer.className = 'summary-timestamp-container';
+            
+            const modernTimestamp = this.#createModernTimestamp(timestampContainer, dateString);
+            if (modernTimestamp && modernTimestamp !== timestampContainer) {
+                // Wrap timestamp in a div for proper styling
+                const timestampWrapper = document.createElement('div');
+                timestampWrapper.className = 'summary-timestamp-wrapper';
+                timestampWrapper.appendChild(modernTimestamp);
+                html += timestampWrapper.outerHTML;
+            } else {
+                // Fallback to original date string
+                html += '<span class="summary-timestamp-fallback">' + this.#escapeHtml(dateString) + '</span>';
+            }
+        }
+        
+        html += '</div>'; // Close summary-post-header
+        
+        // Post content
+        html += '<div class="summary-post-content">';
+        
+        // Process content HTML
+        if (contentHTML) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = contentHTML;
+            
+            // Modernize elements within content
+            this.#modernizeQuotes(tempDiv);
+            this.#modernizeSpoilers(tempDiv);
+            this.#modernizeCodeBlocksInContent(tempDiv);
+            this.#modernizeAttachmentsInContent(tempDiv);
+            
+            // Process text and line breaks
+            this.#processTextAndLineBreaks(tempDiv);
+            
+            // Clean up empty elements
+            this.#cleanEmptyElements(tempDiv);
+            
+            html += tempDiv.innerHTML;
+        }
+        
+        html += '</div>'; // Close summary-post-content
+        html += '</div>'; // Close summary-post-container
+        
+        modernSummary.innerHTML = html;
+        
+        // Add event listeners for interactive elements
+        setTimeout(() => {
+            // Enhance quote jump buttons
+            modernSummary.querySelectorAll('.quote-jump-btn').forEach(button => {
+                this.#enhanceSingleQuoteLink(button);
+            });
+            
+            // Add spoiler toggle listeners
+            modernSummary.querySelectorAll('.modern-spoiler').forEach(spoiler => {
+                this.#addSpoilerEventListeners(spoiler);
+            });
+            
+            // Add code copy listeners
+            modernSummary.querySelectorAll('.modern-code').forEach(codeBlock => {
+                const codeContent = codeBlock.querySelector('code');
+                if (codeContent) {
+                    const copyBtn = codeBlock.querySelector('.code-copy-btn');
+                    if (copyBtn) {
+                        copyBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.#copyCodeToClipboard(codeContent.textContent, 'code');
+                        });
+                    }
+                }
+            });
+            
+            // Add quote expand listeners
+            modernSummary.querySelectorAll('.modern-quote').forEach(quote => {
+                const expandBtn = quote.querySelector('.quote-expand-btn');
+                if (expandBtn) {
+                    expandBtn.addEventListener('click', () => {
+                        const quoteContent = quote.querySelector('.quote-content');
+                        if (quoteContent) {
+                            quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
+                            expandBtn.style.display = 'none';
+                            setTimeout(() => {
+                                quoteContent.style.maxHeight = 'none';
+                            }, 300);
+                        }
+                    });
+                }
+            });
+        }, 10);
+        
+        return modernSummary;
+    }
+    
+    #setupSummaryObserver() {
+        if (globalThis.forumObserver) {
+            this.#summaryObserverId = globalThis.forumObserver.register({
+                id: 'summary-modernizer',
+                callback: (node) => this.#handleNewSummaryElements(node),
+                selector: '.summary li[class^="box_"]:not(.summary-modernized)',
+                priority: 'normal',
+                pageTypes: ['send']
+            });
+        } else {
+            // Fallback polling for summary elements
+            setInterval(() => {
+                this.#transformSummaryElements();
+            }, 2000);
+        }
+    }
+    
+    #handleNewSummaryElements(node) {
+        if (node.matches('.summary li[class^="box_"]:not(.summary-modernized)')) {
+            const index = Array.from(document.querySelectorAll('.summary li[class^="box_"]')).indexOf(node);
+            this.#transformSummaryElement(node, index);
+        } else {
+            node.querySelectorAll('.summary li[class^="box_"]:not(.summary-modernized)').forEach((element, index) => {
+                this.#transformSummaryElement(element, index);
+            });
+        }
+    }
     
     // ==============================
     // ADAPTIVE DATE PARSING SYSTEM - ENHANCED FOR MIXED FORMATS
@@ -3427,7 +3727,7 @@ class PostModernizer {
     
     #learnFormat(components, successfulFormat) {
     // Store the pattern
-    const patternKey = `${components.separator}|${components.hasAMPM ? '12h' : '24h'}|${successfulFormat}`;
+    const patternKey = components.separator + '|' + (components.hasAMPM ? '12h' : '24h') + '|' + successfulFormat;
     this.#formatPatterns.set(patternKey, (this.#formatPatterns.get(patternKey) || 0) + 1);
     
     // Update confidence scores
@@ -3439,8 +3739,8 @@ class PostModernizer {
     
     // Detect most common separator
     if (components.separator) {
-        const separatorCount = this.#formatPatterns.get(`separator|${components.separator}`) || 0;
-        this.#formatPatterns.set(`separator|${components.separator}`, separatorCount + 1);
+        const separatorCount = this.#formatPatterns.get('separator|' + components.separator) || 0;
+        this.#formatPatterns.set('separator|' + components.separator, separatorCount + 1);
         
         // Update detected separator if we have enough confidence
         if (separatorCount > 2) {
@@ -3450,15 +3750,15 @@ class PostModernizer {
     
     // Detect time format preference
     const timeFormatKey = components.hasAMPM ? '12h' : '24h';
-    const timeFormatCount = this.#formatPatterns.get(`timeformat|${timeFormatKey}`) || 0;
-    this.#formatPatterns.set(`timeformat|${timeFormatKey}`, timeFormatCount + 1);
+    const timeFormatCount = this.#formatPatterns.get('timeformat|' + timeFormatKey) || 0;
+    this.#formatPatterns.set('timeformat|' + timeFormatKey, timeFormatCount + 1);
     
     if (timeFormatCount > 2) {
         this.#detectedTimeFormat = timeFormatKey;
     }
     
     console.debug('Learned format pattern:', {
-        patternKey,
+        patternKey: patternKey,
         formatConfidence: this.#formatConfidence,
         detectedSeparator: this.#detectedSeparator,
         detectedTimeFormat: this.#detectedTimeFormat
@@ -3466,7 +3766,7 @@ class PostModernizer {
 }
     
     #getBestFormatForComponents(components) {
-    const patternKey = `${components.separator}|${components.hasAMPM ? '12h' : '24h'}|`;
+    const patternKey = components.separator + '|' + (components.hasAMPM ? '12h' : '24h') + '|';
     
     // Check if we've seen this pattern before
     let bestFormat = null;
@@ -3586,7 +3886,7 @@ class PostModernizer {
         'M/D/YYYY H:mm'
     ];
     
-    return [...formats, ...additionalFormats];
+    return formats.concat(additionalFormats);
 }
 
 #parseForumDate(dateString) {
@@ -3633,7 +3933,7 @@ class PostModernizer {
                 'D/MM/YYYY, HH:mm'
             ];
             
-            const allFormats = [...aggressiveFormats, ...formats];
+            const allFormats = aggressiveFormats.concat(formats);
             
             let momentDate = null;
             let successfulFormat = null;
@@ -3670,7 +3970,7 @@ class PostModernizer {
                     original: cleanDateString,
                     parsedLocal: momentDate.format(),
                     parsedUTC: utcTime.format(),
-                    successfulFormat,
+                    successfulFormat: successfulFormat,
                     confidence: this.#formatConfidence
                 });
                 
@@ -3683,8 +3983,8 @@ class PostModernizer {
     const bestFormat = this.#getBestFormatForComponents(components);
     
     console.debug('Date analysis:', {
-        components,
-        bestFormat,
+        components: components,
+        bestFormat: bestFormat,
         confidence: this.#formatConfidence,
         reason: components.reason || 'Normal analysis'
     });
@@ -3789,13 +4089,13 @@ class PostModernizer {
             // If first number > 12, assume DD/MM
             if (dayOrMonth > 12 && monthOrDay <= 12) {
                 // DD/MM format
-                const dateStr = `${year}-${String(monthOrDay).padStart(2, '0')}-${String(dayOrMonth).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+                const dateStr = year + '-' + String(monthOrDay).padStart(2, '0') + '-' + String(dayOrMonth).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
                 momentDate = moment(dateStr);
                 successfulFormat = 'EU';
                 console.debug('Manual parsing succeeded (DD/MM):', momentDate.format());
             } else if (dayOrMonth <= 12 && monthOrDay > 12) {
                 // MM/DD format
-                const dateStr = `${year}-${String(dayOrMonth).padStart(2, '0')}-${String(monthOrDay).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+                const dateStr = year + '-' + String(dayOrMonth).padStart(2, '0') + '-' + String(monthOrDay).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
                 momentDate = moment(dateStr);
                 successfulFormat = 'US';
                 console.debug('Manual parsing succeeded (MM/DD):', momentDate.format());
@@ -3818,7 +4118,7 @@ class PostModernizer {
             original: cleanDateString,
             parsedLocal: momentDate.format(),
             parsedUTC: utcTime.format(),
-            successfulFormat,
+            successfulFormat: successfulFormat,
             confidence: this.#formatConfidence
         });
         
@@ -6926,27 +7226,23 @@ class PostModernizer {
         const pointsDown = pointsContainer.querySelector('.points_down');
         const bulletDelete = pointsContainer.querySelector('.bullet_delete');
 
-        if (bulletDelete) {
-            if (pointsPos) {
-                pointsUp && pointsUp.classList.add('active');
-                pointsDown && pointsDown.classList.remove('active');
-            } else if (pointsNeg) {
-                const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
-                const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
+        if (bulletDelete && bulletDelete.onclick &&
+            (pointsContainer.querySelector('.points_pos') ||
+                pointsContainer.querySelector('.points_neg'))) {
+            bulletDelete.onclick();
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
 
-                if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
-                    pointsUp && pointsUp.classList.add('active');
-                }
-                if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
-                    pointsDown && pointsDown.classList.add('active');
-                }
+        if (pointsUp) {
+            pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
+            pointsUp.classList.add('active');
+        }
 
-                if (pointsUp && pointsUp.classList.contains('active')) {
-                    pointsDown && pointsDown.classList.remove('active');
-                } else if (pointsDown && pointsDown.classList.contains('active')) {
-                    pointsUp && pointsUp.classList.remove('active');
-                }
-            }
+        if (pointsDown) {
+            pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
+            pointsDown.classList.add('active');
         }
     }
 
@@ -7933,7 +8229,7 @@ class PostModernizer {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId, this.#attachmentObserverId];
+            this.#codeBlockObserverId, this.#attachmentObserverId, this.#summaryObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
