@@ -1,176 +1,100 @@
 // ==============================
-// Fixed Multi-Size Forum Avatar System
+// Fixed Double Avatar Prevention
 // ==============================
 
 (function() {
     'use strict';
 
-    // Configuration for different element types
+    // Configuration
     var AVATAR_CONFIG = Object.freeze({
-        // Default sizes for different contexts
         sizes: {
-            'post': 60,        // Main posts inside .summary - 60px
-            'profile': 120,    // User profiles
-            'sidebar': 40,     // Sidebar widgets
-            'list': 32,        // User lists
-            'small': 24        // Tiny avatars
+            'post': 60
         },
-        
-        // Element selectors mapped to sizes
-        // FIXED: Only target box_ elements inside .summary for posts
         selectors: {
-            '.summary li[class^="box_"] .nick a': 'post',           // Only main posts in summary
-            '.modern-profile .user-info': 'profile',                // Profile: 120px
-            '.stats .aa a[href*="MID="]': 'sidebar',                // Sidebar: 40px
-            '.big_list .who a': 'list',                             // User lists: 32px
-            '.online .thumbs a': 'small'                            // Online list: 24px
+            '.summary li[class^="box_"] .nick a': 'post'
         },
-        
-        // DiceBear API configuration
         dicebear: {
             style: 'initials',
             version: '7.x',
             format: 'svg'
         },
-        
-        // Cache settings
         cache: {
-            duration: 86400000, // 24 hours
+            duration: 86400000,
             prefix: 'avatar_'
         }
     });
 
-    // Color palette
     var COLOR_PALETTE = Object.freeze([
         '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
         '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
     ]);
 
-    // State management
     var state = {
         pendingRequests: Object.create(null),
         userCache: Object.create(null),
-        processedElements: new WeakMap(),
+        processedPosts: new WeakSet(), // Track posts, not elements
         avatarCallbackId: null,
         isInitialized: false
     };
 
     // ==============================
-    // Improved Element Detection
+    // Key Fix: Better Process Tracking
     // ==============================
 
-    function getAvatarSizeForElement(element) {
-        // First, check if element has explicit data-avatar-size attribute
-        if (element.hasAttribute('data-avatar-size')) {
-            var explicitSize = parseInt(element.getAttribute('data-avatar-size'), 10);
-            if (!isNaN(explicitSize) && explicitSize > 0) {
-                return explicitSize;
-            }
-        }
-        
-        // Check parent elements for data-avatar-size
-        var parentWithSize = element.closest('[data-avatar-size]');
-        if (parentWithSize) {
-            var parentSize = parseInt(parentWithSize.getAttribute('data-avatar-size'), 10);
-            if (!isNaN(parentSize) && parentSize > 0) {
-                return parentSize;
-            }
-        }
-        
-        // Match against configured selectors
-        var elementSelectors = Object.keys(AVATAR_CONFIG.selectors);
-        for (var i = 0; i < elementSelectors.length; i++) {
-            var selector = elementSelectors[i];
-            var sizeKey = AVATAR_CONFIG.selectors[selector];
-            
-            // Check if element matches selector
-            if (element.matches(selector)) {
-                return AVATAR_CONFIG.sizes[sizeKey];
-            }
-            
-            // Check if element is inside matching element
-            var parentMatch = element.closest(selector);
-            if (parentMatch) {
-                return AVATAR_CONFIG.sizes[sizeKey];
-            }
-        }
-        
-        // Default size
-        return AVATAR_CONFIG.sizes.post;
-    }
-
-    function getSizeKey(size) {
-        return String(size);
-    }
-
-    // ==============================
-    // Fixed Element Filtering
-    // ==============================
-
-    function shouldProcessElement(element) {
-        if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+    function shouldProcessPost(postElement) {
+        if (!postElement || postElement.nodeType !== Node.ELEMENT_NODE) {
             return false;
         }
         
-        // Check if already processed
-        if (state.processedElements.has(element)) {
+        // Already processed this post?
+        if (state.processedPosts.has(postElement)) {
             return false;
         }
         
-        // Check if it's a box_ element
-        if (!element.className || !element.className.match(/\bbox_/)) {
+        // Is it a box_ element?
+        if (!postElement.className || !postElement.className.match(/\bbox_/)) {
             return false;
         }
         
-        // FIXED: Only process box_ elements that are inside .summary
-        // This excludes .cron_ elements and other non-post box_ elements
-        var isInsideSummary = element.closest('.summary');
-        if (!isInsideSummary) {
+        // Is it inside .summary?
+        if (!postElement.closest('.summary')) {
             return false;
         }
         
-        // Check if it has a nickname element
-        var nickname = element.querySelector('.nick a');
+        // Does it have a nickname link?
+        var nickname = postElement.querySelector('.nick a');
         if (!nickname) {
             return false;
         }
         
-        // Check if it already has an avatar
-        if (element.querySelector('.forum-avatar-container')) {
+        // KEY FIX: Check if the NICKNAME already has an avatar
+        // Not the post element, but the actual .nick element
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            // Already has avatar, mark as processed and skip
+            state.processedPosts.add(postElement);
             return false;
         }
         
         return true;
     }
 
-    function extractUserIdFromElement(element) {
-        // Try multiple extraction methods
+    function extractUserIdFromPost(postElement) {
         var userId = null;
         
-        // 1. From class name (box_m123456)
-        var classMatch = element.className.match(/\bbox_m(\d+)\b/);
+        // From class name
+        var classMatch = postElement.className.match(/\bbox_m(\d+)\b/);
         if (classMatch) {
             userId = classMatch[1];
         }
         
-        // 2. From link href (more reliable)
+        // From nickname link
         if (!userId) {
-            var link = element.querySelector('.nick a[href*="MID="]');
+            var link = postElement.querySelector('.nick a[href*="MID="]');
             if (link) {
                 var hrefMatch = link.href.match(/MID=(\d+)/);
                 if (hrefMatch) userId = hrefMatch[1];
-            }
-        }
-        
-        // 3. From any link in element
-        if (!userId) {
-            var allLinks = element.querySelectorAll('a[href*="MID="]');
-            for (var i = 0; i < allLinks.length; i++) {
-                var hrefMatch = allLinks[i].href.match(/MID=(\d+)/);
-                if (hrefMatch) {
-                    userId = hrefMatch[1];
-                    break;
-                }
             }
         }
         
@@ -178,7 +102,7 @@
     }
 
     // ==============================
-    // Avatar Generation
+    // Avatar Functions (unchanged)
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
@@ -187,111 +111,36 @@
         var colorIndex = (firstLetter.charCodeAt(0) + parseInt(userId, 10)) % COLOR_PALETTE.length;
         var backgroundColor = COLOR_PALETTE[colorIndex].replace('#', '');
         
-        var params = [
-            'seed=' + encodeURIComponent(firstLetter),
-            'backgroundColor=' + backgroundColor,
-            'radius=50',
-            'size=' + (size * 2)
-        ];
-        
-        return 'https://api.dicebear.com/' + 
-               AVATAR_CONFIG.dicebear.version + '/' +
-               AVATAR_CONFIG.dicebear.style + '/' +
-               AVATAR_CONFIG.dicebear.format + '?' +
-               params.join('&');
+        return 'https://api.dicebear.com/7.x/initials/svg?' +
+               'seed=' + encodeURIComponent(firstLetter) +
+               '&backgroundColor=' + backgroundColor +
+               '&radius=50&size=' + (size * 2);
     }
-
-    // ==============================
-    // Cache Management
-    // ==============================
 
     function getCacheKey(userId, size) {
-        return AVATAR_CONFIG.cache.prefix + userId + '_' + getSizeKey(size);
+        return 'avatar_' + userId + '_' + size;
     }
-
-    function cacheAvatar(userId, size, avatarUrl) {
-        var cacheData = {
-            url: avatarUrl,
-            timestamp: Date.now(),
-            size: size
-        };
-        
-        try {
-            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-        } catch (e) {
-            clearOldCacheEntries();
-            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-        }
-    }
-
-    function getCachedAvatar(userId, size) {
-        var cached = localStorage.getItem(getCacheKey(userId, size));
-        if (!cached) return null;
-        
-        try {
-            var data = JSON.parse(cached);
-            if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
-                return data.url;
-            }
-            localStorage.removeItem(getCacheKey(userId, size));
-        } catch (e) {
-            localStorage.removeItem(getCacheKey(userId, size));
-        }
-        return null;
-    }
-
-    // ==============================
-    // Avatar Element Creation
-    // ==============================
-
-    function createAvatarElement(avatarUrl, userId, size) {
-        var img = new Image(size, size);
-        
-        var borderWidth = Math.max(1, Math.floor(size / 30));
-        
-        img.className = 'forum-user-avatar avatar-size-' + getSizeKey(size);
-        img.alt = '';
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        
-        img.style.cssText = 
-            'width:' + size + 'px;' +
-            'height:' + size + 'px;' +
-            'border-radius:50%;' +
-            'object-fit:cover;' +
-            'vertical-align:middle;' +
-            'border:' + borderWidth + 'px solid #fff;' +
-            'box-shadow:0 ' + Math.floor(size/30) + 'px ' + Math.floor(size/15) + 'px rgba(0,0,0,0.1);' +
-            'background-color:#f0f0f0;' +
-            'display:inline-block;';
-        
-        img.src = avatarUrl;
-        
-        img.addEventListener('error', function onError() {
-            this.src = generateLetterAvatar(userId, '', size);
-            this.removeEventListener('error', onError);
-        }, { once: true });
-        
-        return img;
-    }
-
-    // ==============================
-    // Core Processing Functions
-    // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback) {
-        var cacheKey = userId + '_' + getSizeKey(size);
+        var cacheKey = userId + '_' + size;
         
         if (state.userCache[cacheKey]) {
             callback(state.userCache[cacheKey]);
             return;
         }
         
-        var cached = getCachedAvatar(userId, size);
+        var cached = localStorage.getItem(getCacheKey(userId, size));
         if (cached) {
-            state.userCache[cacheKey] = cached;
-            callback(cached);
-            return;
+            try {
+                var data = JSON.parse(cached);
+                if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                    state.userCache[cacheKey] = data.url;
+                    callback(data.url);
+                    return;
+                }
+            } catch (e) {
+                // Invalid cache, ignore
+            }
         }
         
         fetch('/api.php?mid=' + userId)
@@ -312,7 +161,11 @@
                     avatarUrl = generateLetterAvatar(userId, username || userData.nickname, size);
                 }
                 
-                cacheAvatar(userId, size, avatarUrl);
+                // Cache it
+                localStorage.setItem(getCacheKey(userId, size), JSON.stringify({
+                    url: avatarUrl,
+                    timestamp: Date.now()
+                }));
                 state.userCache[cacheKey] = avatarUrl;
                 callback(avatarUrl);
             })
@@ -323,45 +176,95 @@
             });
     }
 
-    function insertAvatarForElement(element) {
-        if (!shouldProcessElement(element)) {
+    function createAvatarElement(avatarUrl, userId, size) {
+        var img = new Image(size, size);
+        
+        img.className = 'forum-user-avatar avatar-size-' + size;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        
+        img.style.cssText = 
+            'width:' + size + 'px;' +
+            'height:' + size + 'px;' +
+            'border-radius:50%;' +
+            'object-fit:cover;' +
+            'vertical-align:middle;' +
+            'border:2px solid #fff;' +
+            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
+            'background-color:#f0f0f0;' +
+            'display:inline-block;';
+        
+        img.src = avatarUrl;
+        
+        img.addEventListener('error', function onError() {
+            this.src = generateLetterAvatar(userId, '', size);
+            this.removeEventListener('error', onError);
+        }, { once: true });
+        
+        return img;
+    }
+
+    // ==============================
+    // KEY FIX: Safer Avatar Insertion
+    // ==============================
+
+    function insertAvatarForPost(postElement) {
+        if (!shouldProcessPost(postElement)) {
             return;
         }
         
-        var userId = extractUserIdFromElement(element);
+        var userId = extractUserIdFromPost(postElement);
         if (!userId) {
             return;
         }
         
-        var nickname = element.querySelector('.nick a');
+        var nickname = postElement.querySelector('.nick a');
         if (!nickname) {
             return;
         }
         
-        var targetSize = getAvatarSizeForElement(nickname);
+        // DOUBLE CHECK: Make sure we don't already have an avatar
+        // Check the immediate previous sibling
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            // Already has avatar, mark as processed and exit
+            state.processedPosts.add(postElement);
+            return;
+        }
+        
+        var targetSize = 60; // Fixed for posts
         
         getOrCreateAvatar(userId, nickname.textContent, targetSize, function(avatarUrl) {
+            // TRIPLE CHECK: Verify again before inserting
+            if (nickname.previousElementSibling && 
+                nickname.previousElementSibling.classList && 
+                nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                state.processedPosts.add(postElement);
+                return;
+            }
+            
             var container = document.createElement('div');
             container.className = 'forum-avatar-container';
             container.style.cssText = 
                 'display:inline-block;' +
                 'vertical-align:middle;' +
-                'margin-right:' + Math.floor(targetSize / 7.5) + 'px;' +
+                'margin-right:8px;' +
                 'position:relative;';
             
             container.appendChild(createAvatarElement(avatarUrl, userId, targetSize));
+            
+            // Insert before the nickname link
             nickname.parentNode.insertBefore(container, nickname);
             
-            state.processedElements.set(element, {
-                processed: true,
-                size: targetSize,
-                timestamp: Date.now()
-            });
+            // Mark as processed
+            state.processedPosts.add(postElement);
         });
     }
 
     // ==============================
-    // Fixed Observer Callback
+    // Safer Observer Callback
     // ==============================
 
     function handleNewElement(node) {
@@ -369,44 +272,57 @@
             return;
         }
         
-        var elements = [];
+        var posts = [];
         
-        // FIXED: Only process elements that match our criteria
-        if (shouldProcessElement(node)) {
-            elements.push(node);
+        // If node is a post
+        if (node.matches && node.matches('.summary li[class^="box_"]')) {
+            posts.push(node);
         }
         
-        // FIXED: Only look for box_ elements inside .summary
-        var childElements = node.querySelectorAll('.summary li[class*="box_"]');
-        for (var i = 0; i < childElements.length; i++) {
-            var element = childElements[i];
-            if (shouldProcessElement(element)) {
-                elements.push(element);
+        // Find posts inside node
+        var childPosts = node.querySelectorAll('.summary li[class^="box_"]');
+        for (var i = 0; i < childPosts.length; i++) {
+            if (!state.processedPosts.has(childPosts[i])) {
+                posts.push(childPosts[i]);
             }
         }
         
-        // Process each valid element
-        for (var j = 0; j < elements.length; j++) {
-            insertAvatarForElement(elements[j]);
+        // Process each post
+        for (var j = 0; j < posts.length; j++) {
+            insertAvatarForPost(posts[j]);
         }
     }
 
     // ==============================
-    // Process Existing Elements
+    // Process Existing Posts
     // ==============================
 
     function processExistingPosts() {
-        var posts = document.querySelectorAll('.summary li[class*="box_"]');
+        var posts = document.querySelectorAll('.summary li[class^="box_"]');
         var processed = 0;
+        var skipped = 0;
         
         for (var i = 0; i < posts.length; i++) {
-            if (shouldProcessElement(posts[i])) {
-                insertAvatarForElement(posts[i]);
+            var post = posts[i];
+            
+            // Check if already has avatar
+            var nickname = post.querySelector('.nick a');
+            if (nickname && nickname.previousElementSibling && 
+                nickname.previousElementSibling.classList && 
+                nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                // Already has avatar, mark as processed
+                state.processedPosts.add(post);
+                skipped++;
+                continue;
+            }
+            
+            if (shouldProcessPost(post)) {
+                insertAvatarForPost(post);
                 processed++;
             }
         }
         
-        console.log('Processed ' + processed + ' posts in .summary');
+        console.log('Processed ' + processed + ' posts, skipped ' + skipped + ' (already had avatars)');
     }
 
     // ==============================
@@ -414,12 +330,12 @@
     // ==============================
 
     function injectCSS() {
-        if (document.querySelector('#forum-avatar-fixed-styles')) {
+        if (document.querySelector('#forum-avatar-final-styles')) {
             return;
         }
         
         var style = document.createElement('style');
-        style.id = 'forum-avatar-fixed-styles';
+        style.id = 'forum-avatar-final-styles';
         
         var css = 
             '.forum-avatar-container{' +
@@ -462,14 +378,14 @@
                 return;
             }
             
-            console.log('🚀 Initializing fixed avatar system (summary posts only)');
+            console.log('🚀 Initializing final avatar system (no double avatars)');
             
             injectCSS();
             
             if (window.forumObserver) {
                 state.avatarCallbackId = window.forumObserver.register({
-                    id: 'forum_avatars_fixed',
-                    selector: '.summary li[class*="box_"]', // FIXED: Only in .summary
+                    id: 'forum_avatars_final',
+                    selector: '.summary li[class^="box_"] .nick a', // Target the link, not the container
                     callback: handleNewElement,
                     priority: 'high'
                 });
@@ -480,77 +396,111 @@
             state.isInitialized = true;
         },
         
-        addAvatarToElement: function(element, userId, options) {
-            if (!element || !userId) {
-                return;
-            }
+        fixDoubleAvatars: function() {
+            // Clean up any double avatars
+            var containers = document.querySelectorAll('.forum-avatar-container');
+            var removed = 0;
             
-            var size = options && options.size || getAvatarSizeForElement(element);
-            var username = options && options.username;
-            
-            var nickname = element.querySelector('.nick a');
-            if (!nickname) {
-                return;
-            }
-            
-            getOrCreateAvatar(userId, username || nickname.textContent, size, function(avatarUrl) {
-                var container = document.createElement('div');
-                container.className = 'forum-avatar-container';
-                container.style.cssText = 
-                    'display:inline-block;' +
-                    'vertical-align:middle;' +
-                    'margin-right:' + Math.floor(size / 7.5) + 'px;';
+            for (var i = 0; i < containers.length; i++) {
+                var container = containers[i];
+                var nextSibling = container.nextElementSibling;
                 
-                container.appendChild(createAvatarElement(avatarUrl, userId, size));
-                nickname.parentNode.insertBefore(container, nickname);
-            });
-        },
-        
-        refresh: function() {
-            state.userCache = Object.create(null);
-            state.processedElements = new WeakMap();
-            
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
-                if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
-                    localStorage.removeItem(key);
+                // If next sibling is also an avatar container, remove this one
+                if (nextSibling && nextSibling.classList && 
+                    nextSibling.classList.contains('forum-avatar-container')) {
+                    container.remove();
+                    removed++;
                 }
             }
             
+            console.log('Removed ' + removed + ' double avatars');
+            
+            // Reset processed state
+            state.processedPosts = new WeakSet();
+            
+            // Mark existing posts with avatars as processed
+            var posts = document.querySelectorAll('.summary li[class^="box_"]');
+            for (var j = 0; j < posts.length; j++) {
+                var post = posts[j];
+                var nickname = post.querySelector('.nick a');
+                if (nickname && nickname.previousElementSibling && 
+                    nickname.previousElementSibling.classList && 
+                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                    state.processedPosts.add(post);
+                }
+            }
+        },
+        
+        refresh: function() {
+            // Remove all avatars
             document.querySelectorAll('.forum-avatar-container').forEach(function(el) {
                 el.remove();
             });
             
+            // Reset state
+            state.userCache = Object.create(null);
+            state.processedPosts = new WeakSet();
             state.isInitialized = false;
+            
+            // Clear cache
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith('avatar_')) {
+                    localStorage.removeItem(key);
+                }
+            }
+            
+            // Re-initialize
             this.init();
         },
         
         stats: function() {
             var cacheCount = 0;
             for (var i = 0; i < localStorage.length; i++) {
-                if (localStorage.key(i).startsWith(AVATAR_CONFIG.cache.prefix)) {
+                if (localStorage.key(i).startsWith('avatar_')) {
                     cacheCount++;
+                }
+            }
+            
+            var posts = document.querySelectorAll('.summary li[class^="box_"]');
+            var withAvatars = 0;
+            for (var j = 0; j < posts.length; j++) {
+                var nickname = posts[j].querySelector('.nick a');
+                if (nickname && nickname.previousElementSibling && 
+                    nickname.previousElementSibling.classList && 
+                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                    withAvatars++;
                 }
             }
             
             return {
                 memoryCacheEntries: Object.keys(state.userCache).length,
                 localStorageCacheEntries: cacheCount,
+                totalPosts: posts.length,
+                postsWithAvatars: withAvatars,
+                processedPosts: 'WeakSet',
                 isInitialized: state.isInitialized
             };
         }
     });
 
     // ==============================
-    // Auto-initialize
+    // Auto-initialize with cleanup
     // ==============================
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(ForumAvatars.init, 100);
+            setTimeout(function() {
+                ForumAvatars.init();
+                // Run cleanup after a short delay to catch any doubles
+                setTimeout(ForumAvatars.fixDoubleAvatars, 500);
+            }, 100);
         });
     } else {
-        setTimeout(ForumAvatars.init, 100);
+        setTimeout(function() {
+            ForumAvatars.init();
+            setTimeout(ForumAvatars.fixDoubleAvatars, 500);
+        }, 100);
     }
 
 })();
