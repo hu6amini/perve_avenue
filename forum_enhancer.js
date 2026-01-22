@@ -1,5 +1,5 @@
 // ==============================
-// Forum Avatar System (Dual System)
+// Fixed Dual Avatar System
 // ==============================
 
 (function() {
@@ -24,32 +24,25 @@
     };
 
     var AVATAR_CONFIG = Object.freeze({
-        // Size configurations for different contexts
         sizes: {
-            'post': 60,           // Main posts in .summary
-            'profile_card': 80,   // Profile cards/sidebar
-            'default': 60         // Default size
+            'post': 60,
+            'profile_card': 80,
+            'default': 60
         },
         
-        // Element selectors for different avatar types
+        // FIXED: Simpler selector configuration
         selectors: {
-            // CASE 1: Posts in .summary (box_m{ID} in class)
-            '.summary li[class^="box_"] .nick a': {
+            // CASE 1: Posts in .summary - target the POST ELEMENT, not the link
+            '.summary li[class^="box_"]': {
                 type: 'post',
                 size: 'post',
-                extractor: 'class' // Extract ID from box_m{ID} class
+                extractor: 'class',
+                findNickname: '.nick a' // Where to find username
             },
             
-            // CASE 2: Default avatar divs (MID in href)
+            // CASE 2: Default avatar divs
             'a.avatar[href*="MID="] .default-avatar': {
                 type: 'default_avatar',
-                size: 'profile_card',
-                extractor: 'href' // Extract ID from href attribute
-            },
-            
-            // Additional selectors can be added here
-            '.user-info a[href*="MID="] .avatar': {
-                type: 'user_info',
                 size: 'profile_card',
                 extractor: 'href'
             }
@@ -75,7 +68,8 @@
         pendingRequests: Object.create(null),
         userCache: Object.create(null),
         brokenAvatars: new Set(),
-        processedElements: new WeakSet(), // Track all processed elements
+        processedPosts: new WeakSet(), // Keep separate tracking for posts
+        processedAvatars: new WeakSet(), // For avatar elements
         avatarCallbackId: null,
         isInitialized: false,
         
@@ -86,139 +80,7 @@
     };
 
     // ==============================
-    // THEME DETECTION (same as before)
-    // ==============================
-
-    function detectCurrentTheme() {
-        var htmlTheme = document.documentElement.getAttribute('data-theme');
-        if (htmlTheme === 'dark' || htmlTheme === 'light') {
-            return htmlTheme;
-        }
-        
-        var body = document.body;
-        if (body.classList.contains('dark') || body.classList.contains('dark-mode')) {
-            return 'dark';
-        }
-        if (body.classList.contains('light') || body.classList.contains('light-mode')) {
-            return 'light';
-        }
-        
-        var storedTheme = localStorage.getItem('forum-theme') || 
-                         localStorage.getItem('theme') ||
-                         localStorage.getItem('color-scheme');
-        if (storedTheme) {
-            if (storedTheme.includes('dark')) return 'dark';
-            if (storedTheme.includes('light')) return 'light';
-        }
-        
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            return 'dark';
-        }
-        
-        return 'light';
-    }
-
-    function updateThemeColors() {
-        if (!AVATAR_THEME.autoDetect) {
-            return;
-        }
-        
-        var detectedTheme = detectCurrentTheme();
-        AVATAR_THEME.currentTheme = detectedTheme;
-        state.themeState.isDarkMode = detectedTheme === 'dark';
-        state.themeState.colors = AVATAR_THEME.colors[detectedTheme];
-    }
-
-    function setupThemeListener() {
-        if (window.matchMedia) {
-            var darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-            darkModeMediaQuery.addListener(function(e) {
-                if (AVATAR_THEME.autoDetect) {
-                    updateThemeColors();
-                }
-            });
-        }
-        
-        document.addEventListener('themechange', function(e) {
-            if (e.detail && e.detail.theme) {
-                AVATAR_THEME.currentTheme = e.detail.theme;
-                state.themeState.isDarkMode = e.detail.theme === 'dark';
-                state.themeState.colors = AVATAR_THEME.colors[e.detail.theme];
-            }
-        });
-        
-        updateThemeColors();
-    }
-
-    // ==============================
-    // USER ID EXTRACTION FOR DIFFERENT CASES
-    // ==============================
-
-    function extractUserIdFromElement(element, extractorType) {
-        var userId = null;
-        
-        switch (extractorType) {
-            case 'class':
-                // CASE 1: Extract from class name (box_m{ID})
-                var classMatch = element.closest('li[class^="box_"]').className.match(/\bbox_m(\d+)\b/);
-                if (classMatch) {
-                    userId = classMatch[1];
-                }
-                break;
-                
-            case 'href':
-                // CASE 2: Extract from href attribute (?act=Profile&MID={ID})
-                var parentLink = element.closest('a[href*="MID="]');
-                if (parentLink) {
-                    var hrefMatch = parentLink.href.match(/MID=(\d+)/);
-                    if (hrefMatch) {
-                        userId = hrefMatch[1];
-                    }
-                }
-                break;
-                
-            case 'data':
-                // Future: Extract from data attribute
-                if (element.dataset.userId) {
-                    userId = element.dataset.userId;
-                }
-                break;
-        }
-        
-        return userId;
-    }
-
-    function extractUsernameFromElement(element, selectorType) {
-        var username = '';
-        
-        switch (selectorType) {
-            case 'post':
-                var nickElement = element.closest('.summary li[class^="box_"]').querySelector('.nick a');
-                if (nickElement) {
-                    username = nickElement.textContent;
-                }
-                break;
-                
-            case 'default_avatar':
-                var parentLink = element.closest('a[href*="MID="]');
-                if (parentLink) {
-                    // Try to find username in nearby elements
-                    var usernameElement = parentLink.closest('.user-info, .author, .username')?.querySelector('.nick, .username, [class*="name"]');
-                    if (usernameElement) {
-                        username = usernameElement.textContent;
-                    } else {
-                        // Fallback: Use link title or text
-                        username = parentLink.title || parentLink.textContent || '';
-                    }
-                }
-                break;
-        }
-        
-        return username.trim();
-    }
-
-    // ==============================
-    // ELEMENT DETECTION & PROCESSING
+    // SIMPLIFIED ELEMENT PROCESSING
     // ==============================
 
     function getAvatarConfigForElement(element) {
@@ -226,7 +88,6 @@
             return null;
         }
         
-        // Check all configured selectors
         var selectors = Object.keys(AVATAR_CONFIG.selectors);
         for (var i = 0; i < selectors.length; i++) {
             var selector = selectors[i];
@@ -238,11 +99,26 @@
                     selector: selector,
                     type: config.type,
                     size: AVATAR_CONFIG.sizes[config.size] || AVATAR_CONFIG.sizes.default,
-                    extractor: config.extractor
+                    extractor: config.extractor,
+                    findNickname: config.findNickname,
+                    targetElement: element
                 };
             }
             
-            // Check if element is inside matching element
+            // Check if element contains matching child
+            var childMatch = element.querySelector(selector);
+            if (childMatch) {
+                return {
+                    selector: selector,
+                    type: config.type,
+                    size: AVATAR_CONFIG.sizes[config.size] || AVATAR_CONFIG.sizes.default,
+                    extractor: config.extractor,
+                    findNickname: config.findNickname,
+                    targetElement: childMatch
+                };
+            }
+            
+            // Check if element is inside matching parent
             var parentMatch = element.closest(selector);
             if (parentMatch) {
                 return {
@@ -250,7 +126,8 @@
                     type: config.type,
                     size: AVATAR_CONFIG.sizes[config.size] || AVATAR_CONFIG.sizes.default,
                     extractor: config.extractor,
-                    targetElement: parentMatch // The element that actually matches
+                    findNickname: config.findNickname,
+                    targetElement: parentMatch
                 };
             }
         }
@@ -260,41 +137,61 @@
 
     function shouldProcessElement(element) {
         if (!element || element.nodeType !== Node.ELEMENT_NODE) {
-            return false;
+            return null;
         }
         
-        // Already processed?
-        if (state.processedElements.has(element)) {
-            return false;
-        }
-        
-        // Get avatar configuration for this element
         var config = getAvatarConfigForElement(element);
         if (!config) {
-            return false;
+            return null;
         }
         
-        // For default-avatar elements, make sure they contain the default icon
-        if (config.type === 'default_avatar') {
-            var target = config.targetElement || element;
-            if (!target.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
-                return false; // Not a default avatar
+        var targetElement = config.targetElement;
+        
+        // Check if already processed (different tracking per type)
+        if (config.type === 'post') {
+            if (state.processedPosts.has(targetElement)) {
+                return null;
+            }
+        } else {
+            if (state.processedAvatars.has(targetElement)) {
+                return null;
             }
         }
         
         // Extract user ID
-        var targetElement = config.targetElement || element;
         var userId = extractUserIdFromElement(targetElement, config.extractor);
         if (!userId) {
-            return false;
+            return null;
         }
         
-        // Check if already has our avatar
-        if (config.type === 'default_avatar') {
-            var parentLink = targetElement.closest('a.avatar[href*="MID="]');
-            if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
-                return false; // Already has our avatar
-            }
+        // Additional checks per type
+        switch (config.type) {
+            case 'post':
+                // Check if already has avatar
+                var nickname = targetElement.querySelector(config.findNickname || '.nick a');
+                if (!nickname) {
+                    return null;
+                }
+                if (nickname.previousElementSibling && 
+                    nickname.previousElementSibling.classList && 
+                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                    state.processedPosts.add(targetElement);
+                    return null;
+                }
+                break;
+                
+            case 'default_avatar':
+                // Check if it's really a default avatar (has fa-user icon)
+                if (!targetElement.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
+                    return null;
+                }
+                // Check if already replaced
+                var parentLink = targetElement.closest('a.avatar[href*="MID="]');
+                if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
+                    state.processedAvatars.add(targetElement);
+                    return null;
+                }
+                break;
         }
         
         return {
@@ -305,7 +202,81 @@
     }
 
     // ==============================
-    // AVATAR GENERATION & CACHE (same as before)
+    // USER ID EXTRACTION
+    // ==============================
+
+    function extractUserIdFromElement(element, extractorType) {
+        var userId = null;
+        
+        switch (extractorType) {
+            case 'class':
+                // Extract from box_m{ID} class
+                var classMatch = element.className.match(/\bbox_m(\d+)\b/);
+                if (!classMatch && element.closest) {
+                    // Try parent with box_ class
+                    var parentBox = element.closest('[class*="box_m"]');
+                    if (parentBox) {
+                        classMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
+                    }
+                }
+                if (classMatch) {
+                    userId = classMatch[1];
+                }
+                break;
+                
+            case 'href':
+                // Extract from href attribute
+                var linkElement = element;
+                if (!element.matches('a[href*="MID="]') && element.closest) {
+                    linkElement = element.closest('a[href*="MID="]');
+                }
+                if (linkElement) {
+                    var hrefMatch = linkElement.href.match(/MID=(\d+)/);
+                    if (hrefMatch) {
+                        userId = hrefMatch[1];
+                    }
+                }
+                break;
+        }
+        
+        return userId;
+    }
+
+    function extractUsernameFromElement(processingInfo) {
+        var element = processingInfo.element;
+        var config = processingInfo.config;
+        var userId = processingInfo.userId;
+        
+        var username = '';
+        
+        switch (config.type) {
+            case 'post':
+                var nickname = element.querySelector(config.findNickname || '.nick a');
+                if (nickname) {
+                    username = nickname.textContent;
+                }
+                break;
+                
+            case 'default_avatar':
+                var parentLink = element.closest('a[href*="MID="]');
+                if (parentLink) {
+                    // Try to find username nearby
+                    var usernameSpan = parentLink.querySelector('span, .username, .nick');
+                    if (usernameSpan) {
+                        username = usernameSpan.textContent;
+                    } else {
+                        // Fallback to link text or title
+                        username = parentLink.title || parentLink.textContent || '';
+                    }
+                }
+                break;
+        }
+        
+        return username.trim() || 'User';
+    }
+
+    // ==============================
+    // AVATAR FUNCTIONS (same as before)
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
@@ -338,13 +309,8 @@
     }
 
     function isBrokenAvatarUrl(avatarUrl) {
-        if (!avatarUrl || avatarUrl === 'http') {
-            return true;
-        }
-        
-        if (state.brokenAvatars.has(avatarUrl)) {
-            return true;
-        }
+        if (!avatarUrl || avatarUrl === 'http') return true;
+        if (state.brokenAvatars.has(avatarUrl)) return true;
         
         var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
         var brokenCache = localStorage.getItem(brokenKey);
@@ -355,23 +321,16 @@
                     state.brokenAvatars.add(avatarUrl);
                     return true;
                 }
-            } catch (e) {
-                // Invalid cache
-            }
+            } catch (e) {}
         }
-        
         return false;
     }
 
     function markAvatarAsBroken(avatarUrl) {
         if (!avatarUrl) return;
-        
         state.brokenAvatars.add(avatarUrl);
         var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
-        localStorage.setItem(brokenKey, JSON.stringify({
-            url: avatarUrl,
-            timestamp: Date.now()
-        }));
+        localStorage.setItem(brokenKey, JSON.stringify({ url: avatarUrl, timestamp: Date.now() }));
     }
 
     function getOrCreateAvatar(userId, username, size, callback) {
@@ -395,9 +354,7 @@
                     callback(data.url);
                     return;
                 }
-            } catch (e) {
-                // Invalid cache
-            }
+            } catch (e) {}
         }
         
         fetch('/api.php?mid=' + userId)
@@ -418,15 +375,14 @@
                     
                     if (isBrokenAvatarUrl(avatarUrl)) {
                         avatarUrl = generateLetterAvatar(userId, username || userData.nickname, size);
-                        cacheAndReturn();
                     } else {
                         testImageUrl(avatarUrl, function(success) {
                             if (success) {
-                                cacheAndReturn();
+                                finishAvatar(avatarUrl);
                             } else {
                                 markAvatarAsBroken(avatarUrl);
                                 avatarUrl = generateLetterAvatar(userId, username || userData.nickname, size);
-                                cacheAndReturn();
+                                finishAvatar(avatarUrl);
                             }
                         });
                         return;
@@ -435,17 +391,17 @@
                     avatarUrl = generateLetterAvatar(userId, username || userData.nickname, size);
                 }
                 
-                function cacheAndReturn() {
+                finishAvatar(avatarUrl);
+                
+                function finishAvatar(finalUrl) {
                     localStorage.setItem(getCacheKey(userId, size), JSON.stringify({
-                        url: avatarUrl,
+                        url: finalUrl,
                         timestamp: Date.now(),
                         size: size
                     }));
-                    state.userCache[cacheKey] = avatarUrl;
-                    callback(avatarUrl);
+                    state.userCache[cacheKey] = finalUrl;
+                    callback(finalUrl);
                 }
-                
-                cacheAndReturn();
             })
             .catch(function(error) {
                 console.warn('Avatar fetch failed:', error);
@@ -461,7 +417,10 @@
         }
         
         var img = new Image();
-        var timeoutId;
+        var timeoutId = setTimeout(function() {
+            img.onload = img.onerror = null;
+            callback(false);
+        }, 5000);
         
         img.onload = function() {
             clearTimeout(timeoutId);
@@ -473,25 +432,18 @@
             callback(false);
         };
         
-        timeoutId = setTimeout(function() {
-            img.onload = img.onerror = null;
-            callback(false);
-        }, 5000);
-        
         img.src = url;
     }
 
     // ==============================
-    // AVATAR ELEMENT CREATION
+    // AVATAR INSERTION
     // ==============================
 
     function createAvatarElement(avatarUrl, userId, size, isReplacement) {
         var img = new Image(size, size);
         
         img.className = 'forum-user-avatar avatar-size-' + size;
-        if (isReplacement) {
-            img.className += ' avatar-replacement';
-        }
+        if (isReplacement) img.className += ' avatar-replacement';
         img.alt = '';
         img.loading = 'lazy';
         img.decoding = 'async';
@@ -511,20 +463,16 @@
         
         img.addEventListener('error', function onError() {
             markAvatarAsBroken(avatarUrl);
-            
             var cacheKey = userId + '_' + size;
             delete state.userCache[cacheKey];
             localStorage.removeItem(getCacheKey(userId, size));
-            
             var fallbackUrl = generateLetterAvatar(userId, '', size);
-            
             localStorage.setItem(getCacheKey(userId, size), JSON.stringify({
                 url: fallbackUrl,
                 timestamp: Date.now(),
                 size: size
             }));
             state.userCache[cacheKey] = fallbackUrl;
-            
             this.src = fallbackUrl;
             this.removeEventListener('error', onError);
         }, { once: true });
@@ -532,35 +480,25 @@
         return img;
     }
 
-    // ==============================
-    // AVATAR INSERTION FOR DIFFERENT CASES
-    // ==============================
-
     function insertAvatarForElement(processingInfo) {
         var element = processingInfo.element;
         var userId = processingInfo.userId;
         var config = processingInfo.config;
         
-        // Get username based on element type
-        var username = extractUsernameFromElement(element, config.type);
+        var username = extractUsernameFromElement(processingInfo);
         
         getOrCreateAvatar(userId, username, config.size, function(avatarUrl) {
             switch (config.type) {
                 case 'post':
                     insertPostAvatar(element, userId, config.size, avatarUrl);
+                    state.processedPosts.add(element);
                     break;
                     
                 case 'default_avatar':
                     insertDefaultAvatarReplacement(element, userId, config.size, avatarUrl);
-                    break;
-                    
-                default:
-                    insertGenericAvatar(element, userId, config.size, avatarUrl);
+                    state.processedAvatars.add(element);
                     break;
             }
-            
-            // Mark as processed
-            state.processedElements.add(element);
         });
     }
 
@@ -596,115 +534,93 @@
             return;
         }
         
-        // Create avatar image
         var avatarImg = createAvatarElement(avatarUrl, userId, size, true);
         
-        // Replace the default-avatar div with our image
         var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
         if (defaultAvatarDiv) {
             defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
         } else {
-            // Just append if no default-avatar div found
             parentLink.appendChild(avatarImg);
         }
         
-        // Add a class to indicate this was a replacement
         parentLink.classList.add('avatar-replaced');
     }
 
-    function insertGenericAvatar(element, userId, size, avatarUrl) {
-        // Generic insertion for other element types
-        var container = document.createElement('div');
-        container.className = 'forum-avatar-container';
-        container.style.cssText = 
-            'display:inline-block;' +
-            'vertical-align:middle;' +
-            'margin-right:8px;' +
-            'position:relative;';
-        
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, false));
-        element.parentNode.insertBefore(container, element);
-    }
-
     // ==============================
-    // OBSERVER INTEGRATION (Updated for both cases)
+    // OBSERVER & PROCESSING
     // ==============================
 
     function handleNewElement(node) {
-        if (node.nodeType !== Node.ELEMENT_NODE) {
-            return;
-        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
         
         var elementsToProcess = [];
         
-        // Check if node itself needs processing
-        var processingInfo = shouldProcessElement(node);
-        if (processingInfo) {
-            elementsToProcess.push(processingInfo);
+        // Check node itself
+        var nodeInfo = shouldProcessElement(node);
+        if (nodeInfo) {
+            elementsToProcess.push(nodeInfo);
         }
         
-        // Check all configured selectors within node
-        var selectors = Object.keys(AVATAR_CONFIG.selectors);
-        for (var i = 0; i < selectors.length; i++) {
-            var selector = selectors[i];
-            var matches = node.querySelectorAll(selector);
-            for (var j = 0; j < matches.length; j++) {
-                var match = matches[j];
-                if (!state.processedElements.has(match)) {
-                    var info = shouldProcessElement(match);
-                    if (info) {
-                        elementsToProcess.push(info);
-                    }
-                }
+        // Check for posts in node
+        if (node.matches && node.matches('.summary li[class^="box_"]')) {
+            var postInfo = shouldProcessElement(node);
+            if (postInfo && !elementsToProcess.some(function(e) { return e.element === postInfo.element; })) {
+                elementsToProcess.push(postInfo);
+            }
+        }
+        
+        // Check for default avatars in node
+        var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        for (var i = 0; i < defaultAvatars.length; i++) {
+            var avatarInfo = shouldProcessElement(defaultAvatars[i]);
+            if (avatarInfo && !elementsToProcess.some(function(e) { return e.element === avatarInfo.element; })) {
+                elementsToProcess.push(avatarInfo);
             }
         }
         
         // Process all found elements
-        for (var k = 0; k < elementsToProcess.length; k++) {
-            insertAvatarForElement(elementsToProcess[k]);
+        for (var j = 0; j < elementsToProcess.length; j++) {
+            insertAvatarForElement(elementsToProcess[j]);
         }
     }
 
-    // ==============================
-    // INITIAL PROCESSING
-    // ==============================
-
     function processExistingElements() {
-        console.log('Processing existing elements for avatars...');
+        console.log('Processing existing elements...');
         
-        var processedCount = 0;
-        var selectors = Object.keys(AVATAR_CONFIG.selectors);
+        var processed = 0;
         
-        for (var i = 0; i < selectors.length; i++) {
-            var selector = selectors[i];
-            var elements = document.querySelectorAll(selector);
-            
-            for (var j = 0; j < elements.length; j++) {
-                var element = elements[j];
-                if (!state.processedElements.has(element)) {
-                    var processingInfo = shouldProcessElement(element);
-                    if (processingInfo) {
-                        insertAvatarForElement(processingInfo);
-                        processedCount++;
-                    }
-                }
+        // Process posts in .summary
+        var posts = document.querySelectorAll('.summary li[class^="box_"]');
+        for (var i = 0; i < posts.length; i++) {
+            var postInfo = shouldProcessElement(posts[i]);
+            if (postInfo) {
+                insertAvatarForElement(postInfo);
+                processed++;
             }
         }
         
-        console.log('Processed ' + processedCount + ' elements');
+        // Process default avatars
+        var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        for (var j = 0; j < defaultAvatars.length; j++) {
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
+            if (avatarInfo) {
+                insertAvatarForElement(avatarInfo);
+                processed++;
+            }
+        }
+        
+        console.log('Processed ' + processed + ' elements');
     }
 
     // ==============================
-    // CSS INJECTION
+    // CSS & INITIALIZATION
     // ==============================
 
     function injectCSS() {
-        if (document.querySelector('#forum-avatar-dual-styles')) {
-            return;
-        }
+        if (document.querySelector('#forum-avatar-fixed-styles')) return;
         
         var style = document.createElement('style');
-        style.id = 'forum-avatar-dual-styles';
+        style.id = 'forum-avatar-fixed-styles';
         
         var css = 
             '.forum-avatar-container{' +
@@ -726,27 +642,6 @@
             '}' +
             '.forum-user-avatar:hover{' +
             'opacity:.9' +
-            '}' +
-            '.avatar-replaced{' +
-            'position:relative' +
-            '}' +
-            '.avatar-replaced:after{' +
-            'content:"✓";' +
-            'position:absolute;' +
-            'top:-5px;' +
-            'right:-5px;' +
-            'background:#4CAF50;' +
-            'color:white;' +
-            'border-radius:50%;' +
-            'width:16px;' +
-            'height:16px;' +
-            'font-size:12px;' +
-            'text-align:center;' +
-            'line-height:16px;' +
-            'display:none' +
-            '}' +
-            '.avatar-replaced:hover:after{' +
-            'display:block' +
             '}';
         
         style.textContent = css;
@@ -759,27 +654,41 @@
         }
     }
 
+    function setupThemeListener() {
+        updateThemeColors();
+    }
+
+    function updateThemeColors() {
+        if (!AVATAR_THEME.autoDetect) return;
+        
+        // Simple theme detection
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+                    document.body.classList.contains('dark') ||
+                    (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        
+        AVATAR_THEME.currentTheme = isDark ? 'dark' : 'light';
+        state.themeState.isDarkMode = isDark;
+        state.themeState.colors = AVATAR_THEME.colors[AVATAR_THEME.currentTheme];
+    }
+
     // ==============================
     // PUBLIC API
     // ==============================
 
     window.ForumAvatars = Object.freeze({
         init: function() {
-            if (state.isInitialized) {
-                return;
-            }
+            if (state.isInitialized) return;
             
-            console.log('🚀 Initializing dual avatar system');
+            console.log('🚀 Initializing fixed dual avatar system');
             
             injectCSS();
             setupThemeListener();
             
             if (window.forumObserver) {
-                // Register callback for all avatar-related selectors
-                var allSelectors = Object.keys(AVATAR_CONFIG.selectors).join(', ');
+                // Register for both post and avatar events
                 state.avatarCallbackId = window.forumObserver.register({
-                    id: 'forum_avatars_dual',
-                    selector: allSelectors,
+                    id: 'forum_avatars_fixed_dual',
+                    selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar',
                     callback: handleNewElement,
                     priority: 'high'
                 });
@@ -790,70 +699,8 @@
             state.isInitialized = true;
         },
         
-        // Add new avatar selector configuration
-        addAvatarSelector: function(selector, config) {
-            if (selector && config && config.type && config.size) {
-                AVATAR_CONFIG.selectors[selector] = {
-                    type: config.type,
-                    size: config.size,
-                    extractor: config.extractor || 'href'
-                };
-                
-                // Add size if not already defined
-                if (!AVATAR_CONFIG.sizes[config.size]) {
-                    AVATAR_CONFIG.sizes[config.size] = config.pixelSize || 60;
-                }
-                
-                console.log('Added new avatar selector:', selector);
-                return true;
-            }
-            return false;
-        },
-        
-        // Process specific elements now
-        processElement: function(element) {
-            var processingInfo = shouldProcessElement(element);
-            if (processingInfo) {
-                insertAvatarForElement(processingInfo);
-                return true;
-            }
-            return false;
-        },
-        
-        // Fix any issues
-        cleanup: function() {
-            // Remove double containers
-            var containers = document.querySelectorAll('.forum-avatar-container');
-            var removed = 0;
-            
-            for (var i = 0; i < containers.length; i++) {
-                var container = containers[i];
-                var nextSibling = container.nextElementSibling;
-                
-                if (nextSibling && nextSibling.classList && 
-                    nextSibling.classList.contains('forum-avatar-container')) {
-                    container.remove();
-                    removed++;
-                }
-            }
-            
-            console.log('Cleaned up ' + removed + ' duplicate avatars');
-            
-            // Reset processed state
-            state.processedElements = new WeakSet();
-            
-            // Mark existing avatars as processed
-            var selectors = Object.keys(AVATAR_CONFIG.selectors);
-            for (var j = 0; j < selectors.length; j++) {
-                var elements = document.querySelectorAll(selectors[j]);
-                for (var k = 0; k < elements.length; k++) {
-                    state.processedElements.add(elements[k]);
-                }
-            }
-        },
-        
         refresh: function() {
-            // Remove all our avatars
+            // Remove our avatars
             document.querySelectorAll('.forum-avatar-container, .avatar-replaced img.forum-user-avatar').forEach(function(el) {
                 el.remove();
             });
@@ -866,7 +713,8 @@
             // Reset state
             state.userCache = Object.create(null);
             state.brokenAvatars.clear();
-            state.processedElements = new WeakSet();
+            state.processedPosts = new WeakSet();
+            state.processedAvatars = new WeakSet();
             state.isInitialized = false;
             
             // Clear cache
@@ -896,14 +744,28 @@
                 }
             }
             
+            var posts = document.querySelectorAll('.summary li[class^="box_"]');
+            var withAvatars = 0;
+            for (var j = 0; j < posts.length; j++) {
+                var nickname = posts[j].querySelector('.nick a');
+                if (nickname && nickname.previousElementSibling && 
+                    nickname.previousElementSibling.classList && 
+                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                    withAvatars++;
+                }
+            }
+            
+            var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+            var replacedAvatars = document.querySelectorAll('.avatar-replaced').length;
+            
             return {
-                memoryCacheEntries: Object.keys(state.userCache).length,
-                localStorageCacheEntries: cacheCount,
-                brokenAvatarCache: brokenCount,
-                knownBrokenUrls: state.brokenAvatars.size,
-                processedElements: 'WeakSet',
-                configuredSelectors: Object.keys(AVATAR_CONFIG.selectors).length,
-                configuredSizes: Object.keys(AVATAR_CONFIG.sizes).length,
+                totalPosts: posts.length,
+                postsWithAvatars: withAvatars,
+                defaultAvatars: defaultAvatars.length,
+                replacedAvatars: replacedAvatars,
+                memoryCache: Object.keys(state.userCache).length,
+                localStorageCache: cacheCount,
+                brokenUrls: state.brokenAvatars.size,
                 theme: AVATAR_THEME.currentTheme,
                 isInitialized: state.isInitialized
             };
@@ -916,16 +778,10 @@
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(function() {
-                ForumAvatars.init();
-                setTimeout(ForumAvatars.cleanup, 500);
-            }, 100);
+            setTimeout(ForumAvatars.init, 100);
         });
     } else {
-        setTimeout(function() {
-            ForumAvatars.init();
-            setTimeout(ForumAvatars.cleanup, 500);
-        }, 100);
+        setTimeout(ForumAvatars.init, 100);
     }
 
 })();
