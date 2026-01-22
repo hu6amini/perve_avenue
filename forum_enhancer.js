@@ -1,5 +1,5 @@
 // ==============================
-// Fixed Username Extraction for Avatars
+// Complete Working Avatar System
 // ==============================
 
 (function() {
@@ -19,15 +19,13 @@
                 '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
             ]
         },
-        currentTheme: 'light',
-        autoDetect: true
+        currentTheme: 'light'
     };
 
-    var AVATAR_CONFIG = Object.freeze({
+    var AVATAR_CONFIG = {
         sizes: {
             'post': 60,
-            'profile_card': 80,
-            'default': 60
+            'profile_card': 80
         },
         
         selectors: {
@@ -55,153 +53,124 @@
             prefix: 'avatar_',
             brokenPrefix: 'broken_avatar_'
         }
-    });
+    };
 
     // ==============================
     // STATE MANAGEMENT
     // ==============================
     var state = {
-        pendingRequests: Object.create(null),
-        userCache: Object.create(null),
+        pendingRequests: {},
+        userCache: {},
         brokenAvatars: new Set(),
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
-        avatarCallbackId: null,
-        isInitialized: false,
-        
-        themeState: {
-            isDarkMode: false,
-            colors: AVATAR_THEME.colors.light
-        }
+        isInitialized: false
     };
 
     // ==============================
-    // IMPROVED USERNAME EXTRACTION
+    // CORE FUNCTIONS
     // ==============================
 
-    function extractUsernameFromElement(processingInfo) {
-        var element = processingInfo.element;
-        var config = processingInfo.config;
-        var userId = processingInfo.userId;
+    function getCacheKey(userId, size) {
+        return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
+    }
+
+    function clearOldCacheEntries() {
+        var cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
+        var keysToRemove = [];
         
-        var username = '';
-        
-        switch (config.type) {
-            case 'post':
-                // STRATEGY 1: Direct nickname from .nick a (most reliable)
-                var nickname = element.querySelector('.nick a');
-                if (nickname && nickname.textContent && nickname.textContent.trim()) {
-                    username = nickname.textContent.trim();
-                    break;
-                }
-                
-                // STRATEGY 2: Check for user{ID} class
-                var userClassLink = element.querySelector('.user' + userId);
-                if (userClassLink && userClassLink.textContent && userClassLink.textContent.trim()) {
-                    username = userClassLink.textContent.trim();
-                    break;
-                }
-                
-                // STRATEGY 3: Any link with MID={userId}
-                var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
-                for (var i = 0; i < midLinks.length; i++) {
-                    if (midLinks[i].textContent && midLinks[i].textContent.trim()) {
-                        username = midLinks[i].textContent.trim();
-                        if (username && username !== '...') break;
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.timestamp < cutoff) {
+                        keysToRemove.push(key);
                     }
-                }
-                
-                // STRATEGY 4: Check parent elements
-                if (!username) {
-                    var parentWithText = element.closest('.post, .message, .content');
-                    if (parentWithText) {
-                        var textElements = parentWithText.querySelectorAll('.username, .author, .nick, .name');
-                        for (var j = 0; j < textElements.length; j++) {
-                            if (textElements[j].textContent && textElements[j].textContent.trim()) {
-                                username = textElements[j].textContent.trim();
-                                if (username && username !== '...') break;
-                            }
-                        }
-                    }
-                }
-                break;
-                
-            case 'default_avatar':
-                var parentLink = element.closest('a[href*="MID="]');
-                if (parentLink) {
-                    // STRATEGY 1: Title attribute
-                    if (parentLink.title && parentLink.title.trim()) {
-                        username = parentLink.title.trim();
-                    }
-                    
-                    // STRATEGY 2: Nearby text elements
-                    if (!username) {
-                        var container = parentLink.closest('.user-info, .author, .profile, .member');
-                        if (container) {
-                            var nameElements = container.querySelectorAll('.username, .nick, .name, [class*="user"]');
-                            for (var k = 0; k < nameElements.length; k++) {
-                                if (nameElements[k].textContent && nameElements[k].textContent.trim()) {
-                                    var text = nameElements[k].textContent.trim();
-                                    if (text && text !== '...' && text.length > 1) {
-                                        username = text;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // STRATEGY 3: Link text as fallback
-                    if (!username && parentLink.textContent && parentLink.textContent.trim()) {
-                        var linkText = parentLink.textContent.trim();
-                        // Only use if it looks like a username (not empty, not just icon)
-                        if (linkText && linkText.length > 1 && !linkText.includes('\n')) {
-                            username = linkText;
-                        }
-                    }
-                }
-                break;
-        }
-        
-        // Clean up username
-        username = cleanUsername(username);
-        
-        // Fallback if still empty
-        if (!username || username === 'User') {
-            // Try to get username from API cache if available
-            var cacheKey = userId + '_' + config.size;
-            if (state.userCache[cacheKey]) {
-                var cachedData = localStorage.getItem(getCacheKey(userId, config.size));
-                if (cachedData) {
-                    try {
-                        var data = JSON.parse(cachedData);
-                        if (data.username) {
-                            username = cleanUsername(data.username);
-                        }
-                    } catch (e) {}
+                } catch (e) {
+                    keysToRemove.push(key);
                 }
             }
         }
         
-        return username || 'User';
+        for (var j = 0; j < keysToRemove.length; j++) {
+            localStorage.removeItem(keysToRemove[j]);
+        }
     }
+
+    function isBrokenAvatarUrl(avatarUrl) {
+        if (!avatarUrl || avatarUrl === 'http') {
+            return true;
+        }
+        
+        if (state.brokenAvatars.has(avatarUrl)) {
+            return true;
+        }
+        
+        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        var brokenCache = localStorage.getItem(brokenKey);
+        if (brokenCache) {
+            try {
+                var data = JSON.parse(brokenCache);
+                if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                    state.brokenAvatars.add(avatarUrl);
+                    return true;
+                }
+            } catch (e) {
+                // Invalid cache
+            }
+        }
+        
+        return false;
+    }
+
+    function markAvatarAsBroken(avatarUrl) {
+        if (!avatarUrl) return;
+        
+        state.brokenAvatars.add(avatarUrl);
+        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        localStorage.setItem(brokenKey, JSON.stringify({
+            url: avatarUrl,
+            timestamp: Date.now()
+        }));
+    }
+
+    function testImageUrl(url, callback) {
+        if (!url || url === 'http') {
+            callback(false);
+            return;
+        }
+        
+        var img = new Image();
+        var timeoutId = setTimeout(function() {
+            img.onload = img.onerror = null;
+            callback(false);
+        }, 3000);
+        
+        img.onload = function() {
+            clearTimeout(timeoutId);
+            callback(true);
+        };
+        
+        img.onerror = function() {
+            clearTimeout(timeoutId);
+            callback(false);
+        };
+        
+        img.src = url;
+    }
+
+    // ==============================
+    // USERNAME EXTRACTION
+    // ==============================
 
     function cleanUsername(username) {
         if (!username) return 'User';
-        
-        // Remove extra whitespace
         username = username.trim();
-        
-        // Remove ellipsis
         username = username.replace(/\.{3,}/g, '');
-        
-        // Remove newlines and tabs
         username = username.replace(/[\n\t]/g, ' ');
-        
-        // Collapse multiple spaces
         username = username.replace(/\s+/g, ' ');
         
-        // If username is too short or just symbols, use 'User'
         if (username.length < 2 || /^[^a-zA-Z0-9]+$/.test(username)) {
             return 'User';
         }
@@ -209,23 +178,60 @@
         return username;
     }
 
+    function extractUsernameFromElement(element, type, userId) {
+        var username = '';
+        
+        if (type === 'post') {
+            // Try .nick a first
+            var nickname = element.querySelector('.nick a');
+            if (nickname && nickname.textContent) {
+                username = nickname.textContent;
+            }
+            
+            // Try .user{ID} class
+            if (!username) {
+                var userClass = element.querySelector('.user' + userId);
+                if (userClass && userClass.textContent) {
+                    username = userClass.textContent;
+                }
+            }
+            
+            // Try any link with MID
+            if (!username) {
+                var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
+                for (var i = 0; i < midLinks.length; i++) {
+                    if (midLinks[i].textContent) {
+                        username = midLinks[i].textContent;
+                        break;
+                    }
+                }
+            }
+        } else if (type === 'default_avatar') {
+            var parentLink = element.closest('a[href*="MID="]');
+            if (parentLink) {
+                if (parentLink.title) {
+                    username = parentLink.title;
+                }
+                
+                if (!username && parentLink.textContent) {
+                    username = parentLink.textContent;
+                }
+            }
+        }
+        
+        return cleanUsername(username);
+    }
+
     // ==============================
-    // IMPROVED AVATAR GENERATION WITH USERNAME CACHING
+    // AVATAR GENERATION
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
         var displayName = username || 'User';
-        
-        // Always use first character for consistency
         var firstLetter = displayName.charAt(0).toUpperCase();
         
-        // If first letter is not A-Z or 0-9, use 'U'
-        if (!/[A-Z0-9]/.test(firstLetter)) {
-            firstLetter = 'U';
-        }
-        
-        // Consistent color calculation
-        var colors = state.themeState.colors;
+        // Use light theme colors by default
+        var colors = AVATAR_THEME.colors.light;
         var colorIndex = 0;
         
         if (firstLetter >= 'A' && firstLetter <= 'Z') {
@@ -233,13 +239,10 @@
         } else if (firstLetter >= '0' && firstLetter <= '9') {
             colorIndex = (parseInt(firstLetter) + 26) % colors.length;
         } else {
-            // Add userId to ensure consistency for same users
             colorIndex = (parseInt(userId, 10) || 0) % colors.length;
         }
         
         var backgroundColor = colors[colorIndex];
-        
-        // Remove # for DiceBear
         if (backgroundColor.startsWith('#')) {
             backgroundColor = backgroundColor.substring(1);
         }
@@ -251,46 +254,26 @@
             'size=' + (size * 2)
         ];
         
-        return 'https://api.dicebear.com/' + 
-               AVATAR_CONFIG.dicebear.version + '/' +
-               AVATAR_CONFIG.dicebear.style + '/' +
-               AVATAR_CONFIG.dicebear.format + '?' +
-               params.join('&');
+        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
     }
 
-    function getCacheKey(userId, size) {
-        return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
-    }
-
-    function cacheAvatar(userId, size, avatarUrl, username) {
-        var cacheData = {
-            url: avatarUrl,
-            timestamp: Date.now(),
-            size: size,
-            username: username || '' // Store username with cache
-        };
-        
-        try {
-            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-        } catch (e) {
-            clearOldCacheEntries();
-            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-        }
-    }
+    // ==============================
+    // AVATAR FETCHING
+    // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback) {
         var cacheKey = userId + '_' + size;
         
-        // Check memory cache first
+        // Check memory cache
         if (state.userCache[cacheKey]) {
-            var cachedData = state.userCache[cacheKey];
-            if (!isBrokenAvatarUrl(cachedData.url)) {
-                callback(cachedData.url, cachedData.username);
+            var cached = state.userCache[cacheKey];
+            if (!isBrokenAvatarUrl(cached.url)) {
+                callback(cached.url, cached.username);
                 return;
             }
         }
         
-        // Check localStorage cache
+        // Check localStorage
         var stored = localStorage.getItem(getCacheKey(userId, size));
         if (stored) {
             try {
@@ -298,7 +281,7 @@
                 if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
                     !isBrokenAvatarUrl(data.url)) {
                     state.userCache[cacheKey] = data;
-                    callback(data.url, data.username || username);
+                    callback(data.url, data.username);
                     return;
                 }
             } catch (e) {
@@ -306,7 +289,7 @@
             }
         }
         
-        // Fetch from API (which includes username!)
+        // Fetch from API
         fetch('/api.php?mid=' + userId)
             .then(function(response) {
                 if (!response.ok) throw new Error('API failed');
@@ -315,16 +298,13 @@
             .then(function(data) {
                 var userKey = 'm' + userId;
                 var userData = data[userKey];
+                var finalUsername = username;
                 var avatarUrl;
-                var apiUsername = '';
                 
-                // Get username from API (most reliable!)
+                // Get username from API if available
                 if (userData && userData.nickname) {
-                    apiUsername = cleanUsername(userData.nickname);
+                    finalUsername = cleanUsername(userData.nickname);
                 }
-                
-                // Use API username if available, otherwise use provided username
-                var finalUsername = apiUsername || username || 'User';
                 
                 if (userData && userData.avatar && 
                     userData.avatar.trim() !== '' && 
@@ -353,21 +333,27 @@
                 
                 finishAvatar(avatarUrl, finalUsername);
                 
-                function finishAvatar(finalUrl, finalUsername) {
+                function finishAvatar(url, name) {
                     var cacheData = {
-                        url: finalUrl,
-                        username: finalUsername,
+                        url: url,
+                        username: name,
                         timestamp: Date.now(),
                         size: size
                     };
                     
-                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    try {
+                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    } catch (e) {
+                        clearOldCacheEntries();
+                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    }
+                    
                     state.userCache[cacheKey] = cacheData;
-                    callback(finalUrl, finalUsername);
+                    callback(url, name);
                 }
             })
             .catch(function(error) {
-                console.warn('Avatar fetch failed:', error);
+                console.warn('Avatar fetch failed for user ' + userId + ':', error);
                 var fallbackUrl = generateLetterAvatar(userId, username, size);
                 var cacheData = {
                     url: fallbackUrl,
@@ -375,15 +361,47 @@
                     timestamp: Date.now(),
                     size: size
                 };
-                localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                
+                try {
+                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                } catch (e) {
+                    clearOldCacheEntries();
+                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                }
+                
                 state.userCache[cacheKey] = cacheData;
                 callback(fallbackUrl, username || 'User');
             });
     }
 
     // ==============================
-    // REST OF THE FUNCTIONS (updated to pass username)
+    // ELEMENT PROCESSING
     // ==============================
+
+    function extractUserIdFromElement(element, extractorType) {
+        var userId = null;
+        
+        if (extractorType === 'class') {
+            var classMatch = element.className.match(/\bbox_m(\d+)\b/);
+            if (classMatch) {
+                userId = classMatch[1];
+            } else {
+                var parentBox = element.closest('[class*="box_m"]');
+                if (parentBox) {
+                    classMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
+                    if (classMatch) userId = classMatch[1];
+                }
+            }
+        } else if (extractorType === 'href') {
+            var linkElement = element.closest('a[href*="MID="]');
+            if (linkElement) {
+                var hrefMatch = linkElement.href.match(/MID=(\d+)/);
+                if (hrefMatch) userId = hrefMatch[1];
+            }
+        }
+        
+        return userId;
+    }
 
     function shouldProcessElement(element) {
         if (!element || element.nodeType !== Node.ELEMENT_NODE) {
@@ -391,135 +409,77 @@
         }
         
         var config = null;
-        var selectors = Object.keys(AVATAR_CONFIG.selectors);
         
-        for (var i = 0; i < selectors.length; i++) {
-            var selector = selectors[i];
-            var selectorConfig = AVATAR_CONFIG.selectors[selector];
-            
-            if (element.matches(selector)) {
-                config = {
-                    selector: selector,
-                    type: selectorConfig.type,
-                    size: AVATAR_CONFIG.sizes[selectorConfig.size] || AVATAR_CONFIG.sizes.default,
-                    extractor: selectorConfig.extractor,
-                    targetElement: element
-                };
-                break;
-            }
+        // Check if it's a post
+        if (element.matches('.summary li[class^="box_"]')) {
+            config = {
+                type: 'post',
+                size: AVATAR_CONFIG.sizes.post,
+                extractor: 'class'
+            };
+        }
+        // Check if it's a default avatar
+        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
+            config = {
+                type: 'default_avatar',
+                size: AVATAR_CONFIG.sizes.profile_card,
+                extractor: 'href'
+            };
         }
         
         if (!config) {
             return null;
         }
         
-        var targetElement = config.targetElement;
-        
         // Check if already processed
-        if ((config.type === 'post' && state.processedPosts.has(targetElement)) ||
-            (config.type !== 'post' && state.processedAvatars.has(targetElement))) {
+        if ((config.type === 'post' && state.processedPosts.has(element)) ||
+            (config.type === 'default_avatar' && state.processedAvatars.has(element))) {
             return null;
         }
         
-        // Extract user ID
-        var userId = extractUserIdFromElement(targetElement, config.extractor);
+        var userId = extractUserIdFromElement(element, config.extractor);
         if (!userId) {
             return null;
         }
         
-        // Additional checks per type
-        switch (config.type) {
-            case 'post':
-                var nickname = targetElement.querySelector('.nick a');
-                if (!nickname) {
-                    return null;
-                }
-                if (nickname.previousElementSibling && 
-                    nickname.previousElementSibling.classList && 
-                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
-                    state.processedPosts.add(targetElement);
-                    return null;
-                }
-                break;
-                
-            case 'default_avatar':
-                if (!targetElement.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
-                    return null;
-                }
-                var parentLink = targetElement.closest('a.avatar[href*="MID="]');
-                if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
-                    state.processedAvatars.add(targetElement);
-                    return null;
-                }
-                break;
+        // Additional checks
+        if (config.type === 'post') {
+            var nickname = element.querySelector('.nick a');
+            if (!nickname) {
+                return null;
+            }
+            if (nickname.previousElementSibling && 
+                nickname.previousElementSibling.classList && 
+                nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                state.processedPosts.add(element);
+                return null;
+            }
+        } else if (config.type === 'default_avatar') {
+            if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
+                return null;
+            }
+            var parentLink = element.closest('a.avatar[href*="MID="]');
+            if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
+                state.processedAvatars.add(element);
+                return null;
+            }
         }
         
         return {
-            element: targetElement,
+            element: element,
             userId: userId,
             config: config
         };
     }
 
-    function extractUserIdFromElement(element, extractorType) {
-        var userId = null;
-        
-        switch (extractorType) {
-            case 'class':
-                var classMatch = element.className.match(/\bbox_m(\d+)\b/);
-                if (classMatch) {
-                    userId = classMatch[1];
-                } else {
-                    var parentBox = element.closest('[class*="box_m"]');
-                    if (parentBox) {
-                        classMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
-                        if (classMatch) userId = classMatch[1];
-                    }
-                }
-                break;
-                
-            case 'href':
-                var linkElement = element.matches('a[href*="MID="]') ? element : element.closest('a[href*="MID="]');
-                if (linkElement) {
-                    var hrefMatch = linkElement.href.match(/MID=(\d+)/);
-                    if (hrefMatch) userId = hrefMatch[1];
-                }
-                break;
-        }
-        
-        return userId;
-    }
+    // ==============================
+    // AVATAR CREATION & INSERTION
+    // ==============================
 
-    function insertAvatarForElement(processingInfo) {
-        var element = processingInfo.element;
-        var userId = processingInfo.userId;
-        var config = processingInfo.config;
-        
-        var username = extractUsernameFromElement(processingInfo);
-        
-        getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
-            // Update with final username (might be from API)
-            processingInfo.username = finalUsername;
-            
-            switch (config.type) {
-                case 'post':
-                    insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
-                    state.processedPosts.add(element);
-                    break;
-                    
-                case 'default_avatar':
-                    insertDefaultAvatarReplacement(element, userId, config.size, avatarUrl, finalUsername);
-                    state.processedAvatars.add(element);
-                    break;
-            }
-        });
-    }
-
-    function createAvatarElement(avatarUrl, userId, size, isReplacement, username) {
+    function createAvatarElement(avatarUrl, userId, size, username) {
         var img = new Image(size, size);
         
         img.className = 'forum-user-avatar avatar-size-' + size;
-        if (isReplacement) img.className += ' avatar-replacement';
         img.alt = username ? 'Avatar for ' + username : '';
         img.loading = 'lazy';
         img.decoding = 'async';
@@ -537,7 +497,6 @@
         
         img.src = avatarUrl;
         
-        // Store username in data attribute for debugging
         if (username) {
             img.dataset.username = username;
         }
@@ -549,14 +508,29 @@
             localStorage.removeItem(getCacheKey(userId, size));
             
             var fallbackUrl = generateLetterAvatar(userId, username || '', size);
-            cacheAvatar(userId, size, fallbackUrl, username);
-            state.userCache[cacheKey] = { url: fallbackUrl, username: username };
-            
             this.src = fallbackUrl;
             this.removeEventListener('error', onError);
         }, { once: true });
         
         return img;
+    }
+
+    function insertAvatarForElement(processingInfo) {
+        var element = processingInfo.element;
+        var userId = processingInfo.userId;
+        var config = processingInfo.config;
+        
+        var username = extractUsernameFromElement(element, config.type, userId);
+        
+        getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
+            if (config.type === 'post') {
+                insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
+                state.processedPosts.add(element);
+            } else if (config.type === 'default_avatar') {
+                insertDefaultAvatar(element, userId, config.size, avatarUrl, finalUsername);
+                state.processedAvatars.add(element);
+            }
+        });
     }
 
     function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
@@ -577,74 +551,266 @@
             'margin-right:8px;' +
             'position:relative;';
         
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, false, username));
+        container.appendChild(createAvatarElement(avatarUrl, userId, size, username));
         nickname.parentNode.insertBefore(container, nickname);
     }
 
+    function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
+        var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
+        if (!parentLink) return;
+        
+        if (parentLink.querySelector('img.forum-user-avatar')) {
+            return;
+        }
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username);
+        
+        var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
+        if (defaultAvatarDiv) {
+            defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
+        } else {
+            parentLink.appendChild(avatarImg);
+        }
+        
+        parentLink.classList.add('avatar-replaced');
+    }
+
     // ==============================
-    // INITIALIZATION & PUBLIC API
+    // PAGE PROCESSING
     // ==============================
 
-    window.ForumAvatars = Object.freeze({
-        init: function() {
-            if (state.isInitialized) return;
-            
-            console.log('🚀 Initializing with improved username extraction');
-            
-            // Process existing elements
-            setTimeout(function() {
-                processExistingElements();
-            }, 100);
-            
-            state.isInitialized = true;
-        },
+    function handleNewElement(node) {
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
         
-        debugUser: function(userId) {
-            // Debug function to see what username is being used
-            var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
-            console.log('Debug user ' + userId + ':');
-            console.log('Found ' + posts.length + ' posts');
-            
-            for (var i = 0; i < posts.length; i++) {
-                var nickname = posts[i].querySelector('.nick a');
-                var userClass = posts[i].querySelector('.user' + userId);
-                console.log('Post ' + (i+1) + ':');
-                console.log('- .nick a text:', nickname ? nickname.textContent : 'none');
-                console.log('- .user' + userId + ' text:', userClass ? userClass.textContent : 'none');
-                
-                // Test username extraction
-                var testInfo = {
-                    element: posts[i],
-                    config: { type: 'post' },
-                    userId: userId
-                };
-                var extracted = extractUsernameFromElement(testInfo);
-                console.log('- Extracted username:', extracted);
+        // Check node itself
+        var nodeInfo = shouldProcessElement(node);
+        if (nodeInfo) {
+            insertAvatarForElement(nodeInfo);
+        }
+        
+        // Check for posts in node
+        var posts = node.querySelectorAll('.summary li[class^="box_"]');
+        for (var i = 0; i < posts.length; i++) {
+            var postInfo = shouldProcessElement(posts[i]);
+            if (postInfo) {
+                insertAvatarForElement(postInfo);
             }
-        },
+        }
         
-        refresh: function() {
-            document.querySelectorAll('.forum-avatar-container, .avatar-replaced img.forum-user-avatar').forEach(function(el) {
-                el.remove();
+        // Check for default avatars in node
+        var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        for (var j = 0; j < defaultAvatars.length; j++) {
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
+            if (avatarInfo) {
+                insertAvatarForElement(avatarInfo);
+            }
+        }
+    }
+
+    function processExistingElements() {
+        console.log('Processing existing elements...');
+        
+        // Process posts
+        var posts = document.querySelectorAll('.summary li[class^="box_"]');
+        for (var i = 0; i < posts.length; i++) {
+            var postInfo = shouldProcessElement(posts[i]);
+            if (postInfo) {
+                insertAvatarForElement(postInfo);
+            }
+        }
+        
+        // Process default avatars
+        var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        for (var j = 0; j < defaultAvatars.length; j++) {
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
+            if (avatarInfo) {
+                insertAvatarForElement(avatarInfo);
+            }
+        }
+    }
+
+    // ==============================
+    // CSS INJECTION
+    // ==============================
+
+    function injectCSS() {
+        if (document.querySelector('#forum-avatar-working-styles')) return;
+        
+        var style = document.createElement('style');
+        style.id = 'forum-avatar-working-styles';
+        
+        var css = 
+            '.forum-avatar-container{' +
+            'display:inline-block;' +
+            'vertical-align:middle;' +
+            'margin-right:8px;' +
+            'position:relative;' +
+            'transition:transform .2s ease' +
+            '}' +
+            '.forum-avatar-container:hover{' +
+            'transform:scale(1.05)' +
+            '}' +
+            '.forum-user-avatar{' +
+            'cursor:pointer;' +
+            'border-radius:50%;' +
+            'object-fit:cover;' +
+            'background-color:#f0f0f0;' +
+            'display:inline-block' +
+            '}' +
+            '.forum-user-avatar:hover{' +
+            'opacity:.9' +
+            '}';
+        
+        style.textContent = css;
+        
+        var head = document.head || document.getElementsByTagName('head')[0];
+        if (head.firstChild) {
+            head.insertBefore(style, head.firstChild);
+        } else {
+            head.appendChild(style);
+        }
+    }
+
+    // ==============================
+    // OBSERVER INTEGRATION
+    // ==============================
+
+    function setupObserver() {
+        if (window.forumObserver && typeof window.forumObserver.register === 'function') {
+            window.forumObserver.register({
+                id: 'forum_avatars_working',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar',
+                callback: handleNewElement,
+                priority: 'high'
+            });
+            console.log('Registered with ForumCoreObserver');
+        } else {
+            // Fallback observer
+            var observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length) {
+                        mutation.addedNodes.forEach(function(node) {
+                            handleNewElement(node);
+                        });
+                    }
+                });
             });
             
-            state.userCache = Object.create(null);
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+            console.log('Using fallback MutationObserver');
+        }
+    }
+
+    // ==============================
+    // INITIALIZATION
+    // ==============================
+
+    function initAvatarSystem() {
+        if (state.isInitialized) return;
+        
+        console.log('🚀 Initializing working avatar system');
+        
+        injectCSS();
+        setupObserver();
+        
+        setTimeout(function() {
+            processExistingElements();
+            state.isInitialized = true;
+            console.log('Avatar system initialized');
+        }, 100);
+    }
+
+    // ==============================
+    // PUBLIC API
+    // ==============================
+
+    window.ForumAvatars = {
+        init: initAvatarSystem,
+        
+        refresh: function() {
+            // Remove existing avatars
+            var containers = document.querySelectorAll('.forum-avatar-container');
+            for (var i = 0; i < containers.length; i++) {
+                containers[i].remove();
+            }
+            
+            var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
+            for (var j = 0; j < replacedAvatars.length; j++) {
+                replacedAvatars[j].remove();
+            }
+            
+            // Remove avatar-replaced class
+            var replacedLinks = document.querySelectorAll('.avatar-replaced');
+            for (var k = 0; k < replacedLinks.length; k++) {
+                replacedLinks[k].classList.remove('avatar-replaced');
+            }
+            
+            // Reset state
+            state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
             state.isInitialized = false;
             
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
+            // Clear cache
+            for (var l = 0; l < localStorage.length; l++) {
+                var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
                             key.startsWith(AVATAR_CONFIG.cache.brokenPrefix))) {
                     localStorage.removeItem(key);
                 }
             }
             
-            this.init();
+            // Re-initialize
+            initAvatarSystem();
+        },
+        
+        stats: function() {
+            var cacheCount = 0;
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
+                    cacheCount++;
+                }
+            }
+            
+            var posts = document.querySelectorAll('.summary li[class^="box_"]');
+            var withAvatars = 0;
+            for (var j = 0; j < posts.length; j++) {
+                var nickname = posts[j].querySelector('.nick a');
+                if (nickname && nickname.previousElementSibling && 
+                    nickname.previousElementSibling.classList && 
+                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                    withAvatars++;
+                }
+            }
+            
+            return {
+                postsTotal: posts.length,
+                postsWithAvatars: withAvatars,
+                memoryCache: Object.keys(state.userCache).length,
+                localStorageCache: cacheCount,
+                brokenUrls: state.brokenAvatars.size,
+                isInitialized: state.isInitialized
+            };
+        },
+        
+        debugUser: function(userId) {
+            var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
+            console.log('Debug user ' + userId + ':');
+            
+            for (var i = 0; i < posts.length; i++) {
+                var nickname = posts[i].querySelector('.nick a');
+                console.log('Post ' + (i+1) + ' .nick a:', nickname ? nickname.textContent : 'none');
+                
+                var extracted = extractUsernameFromElement(posts[i], 'post', userId);
+                console.log('Extracted username:', extracted);
+            }
         }
-    });
+    };
 
     // ==============================
     // AUTO-INITIALIZE
@@ -652,10 +818,10 @@
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(ForumAvatars.init, 100);
+            setTimeout(initAvatarSystem, 100);
         });
     } else {
-        setTimeout(ForumAvatars.init, 100);
+        setTimeout(initAvatarSystem, 100);
     }
 
 })();
