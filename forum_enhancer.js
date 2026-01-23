@@ -4156,8 +4156,8 @@ class PostModernizer {
         this.#retryCount = 0;
         this.#init();
     }
-
-    #init() {
+    
+   #init() {
         try {
             const bodyId = document.body.id;
             
@@ -4175,7 +4175,7 @@ class PostModernizer {
             this.#enhanceQuoteLinks();
             this.#modernizeCodeBlocks();
             this.#modernizeAttachments();
-            this.#modernizeEmbeddedLinks(); // NEW: Add embedded link modernization
+            this.#modernizeEmbeddedLinks();
 
             console.log('✅ Post Modernizer with embedded link support initialized');
         } catch (error) {
@@ -4194,7 +4194,7 @@ class PostModernizer {
     }
     
     // ==============================
-    // EMBEDDED LINK TRANSFORMATION SYSTEM
+    // EMBEDDED LINK TRANSFORMATION SYSTEM - ENHANCED
     // ==============================
 
     #modernizeEmbeddedLinks() {
@@ -4202,10 +4202,24 @@ class PostModernizer {
         this.#setupEmbedObserver();
     }
 
-    #processExistingEmbeddedLinks() {
-        // Process both FFB embed links and standard link previews
-        document.querySelectorAll('.ffb_embedlink, .post-text a[target="_blank"]').forEach(element => {
-            this.#transformEmbeddedLink(element);
+       #processExistingEmbeddedLinks() {
+        // More robust selector to catch all FFB embed variations
+        const embedSelectors = [
+            '.ffb_embedlink',
+            'div[data-ve-css].ffb_embedlink',
+            '.post-text a[href*="bbc.com"]',
+            '.post-text a[href*="youtube.com"]',
+            '.post-text a[href*="youtu.be"]',
+            '.post-text a[href*="twitter.com"]',
+            '.post-text a[href*="x.com"]'
+        ];
+        
+        embedSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(element => {
+                if (!element.closest('.modern-embed')) {
+                    this.#transformEmbeddedLink(element);
+                }
+            });
         });
     }
 
@@ -4215,9 +4229,11 @@ class PostModernizer {
         
         // Determine the type of embed
         const isFFBEmbed = element.classList && element.classList.contains('ffb_embedlink');
+        const isFFBEmbedData = element.getAttribute && element.getAttribute('data-ve-css') !== null && 
+                              element.classList && element.classList.contains('ffb_embedlink');
         const isExternalLink = element.tagName === 'A' && element.target === '_blank';
         
-        if (isFFBEmbed) {
+        if (isFFBEmbed || isFFBEmbedData) {
             this.#transformFFBEmbed(element);
         } else if (isExternalLink) {
             this.#transformExternalLink(element);
@@ -4226,11 +4242,36 @@ class PostModernizer {
 
     #transformFFBEmbed(embedDiv) {
         try {
-            // Extract information from the FFB embed structure
-            const hiddenDiv = embedDiv.querySelector('div[style*="display: none"]');
-            const previewDiv = embedDiv.querySelector('div:not([style*="display: none"])');
+            console.log('Transforming FFB embed:', embedDiv);
             
-            if (!previewDiv) return;
+            // Extract information from the FFB embed structure
+            // Look for hidden div or any div structure
+            let hiddenDiv = embedDiv.querySelector('div[style*="display: none"]');
+            if (!hiddenDiv) {
+                // Try to find the first child div that might contain hidden content
+                const firstDiv = embedDiv.querySelector('div');
+                if (firstDiv && firstDiv.children.length > 0) {
+                    hiddenDiv = firstDiv;
+                }
+            }
+            
+            const previewDiv = embedDiv.querySelector('div:not([style*="display: none"])');
+            if (!previewDiv && embedDiv.children.length > 1) {
+                // Try to find the visible content div
+                for (let i = 0; i < embedDiv.children.length; i++) {
+                    const child = embedDiv.children[i];
+                    if (child.tagName === 'DIV' && 
+                        (!child.style.display || child.style.display !== 'none')) {
+                        previewDiv = child;
+                        break;
+                    }
+                }
+            }
+            
+            if (!previewDiv) {
+                console.warn('No preview div found in FFB embed');
+                return;
+            }
             
             // Extract data
             let url = '';
@@ -4240,21 +4281,30 @@ class PostModernizer {
             let image = '';
             let domain = '';
             
-            // Try to extract URL from hidden div
-            if (hiddenDiv) {
-                const hiddenLink = hiddenDiv.querySelector('a[href]');
-                if (hiddenLink) {
-                    url = hiddenLink.getAttribute('href') || '';
-                    // Extract domain from URL
-                    try {
-                        const urlObj = new URL(url);
-                        domain = urlObj.hostname.toLowerCase().replace('www.', '');
-                    } catch (e) {
-                        domain = this.#extractDomainFromUrl(url);
-                    }
+            // Try to extract URL from various sources
+            const allLinks = embedDiv.querySelectorAll('a[href]');
+            for (const link of allLinks) {
+                const href = link.getAttribute('href');
+                if (href && (href.includes('bbc.com') || href.includes('youtube.com') || 
+                    href.includes('youtu.be') || href.includes('twitter.com') || 
+                    href.includes('x.com'))) {
+                    url = href;
+                    break;
                 }
-                
-                // Extract favicon
+            }
+            
+            // If no URL found, try to get from any link
+            if (!url && allLinks.length > 0) {
+                url = allLinks[0].getAttribute('href');
+            }
+            
+            // Extract domain from URL
+            if (url) {
+                domain = this.#extractDomainFromUrl(url);
+            }
+            
+            // Extract favicon
+            if (hiddenDiv) {
                 const faviconImg = hiddenDiv.querySelector('img');
                 if (faviconImg) {
                     favicon = faviconImg.getAttribute('src') || '';
@@ -4263,42 +4313,61 @@ class PostModernizer {
             
             // Extract preview information
             if (previewDiv) {
-                const titleLink = previewDiv.querySelector('a');
-                if (titleLink) {
-                    url = url || titleLink.getAttribute('href') || '';
-                    title = titleLink.textContent.trim();
-                    
-                    // If no domain extracted yet, try from this link
-                    if (!domain) {
-                        try {
-                            const urlObj = new URL(url);
-                            domain = urlObj.hostname.toLowerCase().replace('www.', '');
-                        } catch (e) {
-                            domain = this.#extractDomainFromUrl(url);
+                // Try to find title link
+                let titleLink = previewDiv.querySelector('a[href]');
+                if (!titleLink) {
+                    // Look for any link in preview div
+                    const links = previewDiv.querySelectorAll('a');
+                    for (const link of links) {
+                        if (link.textContent && link.textContent.trim().length > 10) {
+                            titleLink = link;
+                            break;
                         }
                     }
                 }
                 
-                // Extract description (text after title, before the "Leggi altro su" link)
-                const allText = previewDiv.textContent || '';
-                const titleEndIndex = allText.indexOf(title) + title.length;
-                let descriptionText = allText.substring(titleEndIndex).trim();
+                if (titleLink) {
+                    if (!url) {
+                        url = titleLink.getAttribute('href') || '';
+                    }
+                    title = this.#cleanTextContent(titleLink.textContent || titleLink.innerHTML);
+                    
+                    // If no domain extracted yet, try from this link
+                    if (!domain && url) {
+                        domain = this.#extractDomainFromUrl(url);
+                    }
+                }
+                
+                // Extract description - get all text content
+                const allText = this.#cleanTextContent(previewDiv.textContent || previewDiv.innerHTML);
                 
                 // Find and remove the "Leggi altro su" or "Read more on" text
                 const readMorePatterns = [
                     /Leggi altro su.*$/i,
                     /Read more on.*$/i,
-                    /Continua a leggere.*$/i
+                    /Continua a leggere.*$/i,
+                    /www\..*\.com.*$/i
                 ];
                 
+                let descriptionText = allText;
                 for (const pattern of readMorePatterns) {
                     descriptionText = descriptionText.replace(pattern, '').trim();
+                }
+                
+                // Remove title from description if present
+                if (title && descriptionText.includes(title)) {
+                    descriptionText = descriptionText.replace(title, '').trim();
                 }
                 
                 description = descriptionText;
                 
                 // Extract preview image
-                const previewImg = previewDiv.querySelector('img');
+                let previewImg = previewDiv.querySelector('img');
+                if (!previewImg) {
+                    // Look for any image in the embed
+                    previewImg = embedDiv.querySelector('img:not([style*="display: none"])');
+                }
+                
                 if (previewImg) {
                     image = previewImg.getAttribute('src') || '';
                 }
@@ -4311,6 +4380,15 @@ class PostModernizer {
             
             // Ensure domain is lowercase
             domain = domain.toLowerCase();
+            
+            // Clean up the data
+            title = title.trim();
+            description = description.trim();
+            
+            // Remove any trailing ">" characters
+            if (description.endsWith('>')) {
+                description = description.slice(0, -1).trim();
+            }
             
             // Create modern embed element
             const modernEmbed = this.#createModernEmbedElement({
@@ -4325,13 +4403,24 @@ class PostModernizer {
             
             if (modernEmbed) {
                 embedDiv.parentNode.replaceChild(modernEmbed, embedDiv);
+                console.log('Successfully transformed FFB embed:', { url, title, domain });
             }
         } catch (error) {
             console.error('Error transforming FFB embed:', error, embedDiv);
         }
     }
 
-    #transformExternalLink(linkElement) {
+      #cleanTextContent(text) {
+        // Remove HTML tags
+        let cleaned = text.replace(/<[^>]*>/g, ' ');
+        // Replace multiple spaces with single space
+        cleaned = cleaned.replace(/\s+/g, ' ');
+        // Trim
+        cleaned = cleaned.trim();
+        return cleaned;
+    }
+
+     #transformExternalLink(linkElement) {
         // Skip if it's already inside a modern embed
         if (linkElement.closest('.modern-embed')) return;
         
@@ -4381,8 +4470,11 @@ class PostModernizer {
         }
     }
 
-    #createModernEmbedElement(data) {
-        if (!data.url || !data.title) return null;
+      #createModernEmbedElement(data) {
+        if (!data.url || !data.title) {
+            console.warn('Missing required data for embed:', data);
+            return null;
+        }
         
         // Create container
         const embedContainer = document.createElement('div');
@@ -4395,7 +4487,7 @@ class PostModernizer {
         html += '<div class="embed-content">';
         
         // Add image if available
-        if (data.image) {
+        if (data.image && data.image.trim() !== '') {
             html += '<div class="embed-image">';
             html += '<img src="' + this.#escapeHtml(data.image) + '" alt="' + this.#escapeHtml(data.title) + '" loading="lazy" decoding="async">';
             html += '</div>';
@@ -4405,7 +4497,7 @@ class PostModernizer {
         
         // Add domain/favicon row
         html += '<div class="embed-meta">';
-        if (data.favicon) {
+        if (data.favicon && data.favicon.trim() !== '') {
             html += '<img src="' + this.#escapeHtml(data.favicon) + '" alt="" class="embed-favicon" loading="lazy" decoding="async">';
         }
         html += '<span class="embed-domain">' + this.#escapeHtml(data.domain) + '</span>';
@@ -4415,7 +4507,7 @@ class PostModernizer {
         html += '<h4 class="embed-title">' + this.#escapeHtml(data.title) + '</h4>';
         
         // Add description if available
-        if (data.description) {
+        if (data.description && data.description.trim() !== '') {
             html += '<p class="embed-description">' + this.#escapeHtml(data.description) + '</p>';
         }
         
@@ -4430,7 +4522,7 @@ class PostModernizer {
         return embedContainer;
     }
 
-    #extractDomainFromUrl(url) {
+     #extractDomainFromUrl(url) {
         if (!url) return '';
         try {
             const urlObj = new URL(url);
@@ -4450,21 +4542,14 @@ class PostModernizer {
         }
     }
 
-    async #enhanceExternalLink(embedElement, url) {
+  async #enhanceExternalLink(embedElement, url) {
         try {
-            // This is a simplified version - in production you might want to:
-            // 1. Use a backend service to fetch link metadata
-            // 2. Implement proper caching
-            // 3. Handle rate limiting
-            
-            // For now, we'll just update the domain display
             const domain = this.#extractDomainFromUrl(url);
             const domainElement = embedElement.querySelector('.embed-domain');
             if (domainElement && domain) {
                 domainElement.textContent = domain.toLowerCase();
             }
             
-            // Update the "Read more on" text
             const readMoreElement = embedElement.querySelector('.embed-read-more');
             if (readMoreElement && domain) {
                 readMoreElement.textContent = 'Read more on ' + domain.toLowerCase();
@@ -4475,12 +4560,12 @@ class PostModernizer {
         }
     }
 
-    #setupEmbedObserver() {
+     #setupEmbedObserver() {
         if (globalThis.forumObserver) {
             this.#embedObserverId = globalThis.forumObserver.register({
                 id: 'embed-modernizer',
                 callback: (node) => this.#handleNewEmbeds(node),
-                selector: '.ffb_embedlink, .post-text a[target="_blank"]',
+                selector: '.ffb_embedlink, div[data-ve-css].ffb_embedlink, .post-text a[target="_blank"]',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
             });
@@ -4490,12 +4575,23 @@ class PostModernizer {
         }
     }
 
-    #handleNewEmbeds(node) {
-        if (node.matches('.ffb_embedlink') || 
-            (node.matches('.post-text a[target="_blank"]') && !node.closest('.modern-embed'))) {
+     #handleNewEmbeds(node) {
+        const isFFBEmbed = node.matches && (node.matches('.ffb_embedlink') || node.matches('div[data-ve-css].ffb_embedlink'));
+        const isExternalLink = node.matches && node.matches('.post-text a[target="_blank"]') && !node.closest('.modern-embed');
+        
+        if (isFFBEmbed || isExternalLink) {
             this.#transformEmbeddedLink(node);
         } else {
-            node.querySelectorAll('.ffb_embedlink, .post-text a[target="_blank"]').forEach(element => {
+            // Check children
+            const ffbEmbeds = node.querySelectorAll ? node.querySelectorAll('.ffb_embedlink, div[data-ve-css].ffb_embedlink') : [];
+            ffbEmbeds.forEach(element => {
+                if (!element.closest('.modern-embed')) {
+                    this.#transformEmbeddedLink(element);
+                }
+            });
+            
+            const externalLinks = node.querySelectorAll ? node.querySelectorAll('.post-text a[target="_blank"]') : [];
+            externalLinks.forEach(element => {
                 if (!element.closest('.modern-embed')) {
                     this.#transformEmbeddedLink(element);
                 }
