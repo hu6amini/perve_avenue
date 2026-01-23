@@ -4095,11 +4095,12 @@ globalThis.addEventListener('pagehide', () => {
 
 
 
-// Enhanced Post Transformation and Modernization System with Embedded Link Support
-// Includes CSS-first image dimension handling, optimized DOM updates,
+// Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
+// Now includes CSS-first image dimension handling, optimized DOM updates,
 // enhanced accessibility, modern code blocks, robust Moment.js timestamps,
 // modern attachment styling, Media Dimension Extractor integration,
-// adaptive date format detection, future timestamp handling, and embedded link transformation
+// adaptive date format detection, future timestamp handling for scheduled posts,
+// and modern embedded link support
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -4109,7 +4110,7 @@ class PostModernizer {
     #quoteLinkObserverId = null;
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
-    #embedObserverId = null;
+    #embeddedLinkObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -4117,9 +4118,9 @@ class PostModernizer {
     #rafPending = false;
     #timeUpdateIntervals = new Map();
     
-    // Add format detection properties
-    #formatPatterns = new Map();
-    #dateFormatCache = new Map();
+    // NEW: Add format detection properties
+    #formatPatterns = new Map(); // Stores detected patterns
+    #dateFormatCache = new Map(); // Cache for parsed dates
     #formatConfidence = {
         EU: 0,
         US: 0,
@@ -4156,20 +4157,23 @@ class PostModernizer {
         this.#retryCount = 0;
         this.#init();
     }
-    
-   #init() {
+
+    #init() {
         try {
             const bodyId = document.body.id;
             
             if (bodyId === 'search') {
+                // Handle search pages specially
                 this.#transformSearchPostElements();
                 this.#setupSearchPostObserver();
             } else {
+                // Handle topic/blog/send pages
                 this.#transformPostElements();
                 this.#setupObserverCallbacks();
                 this.#setupActiveStateObserver();
             }
             
+            // These run on all page types
             this.#enhanceReputationSystem();
             this.#setupEnhancedAnchorNavigation();
             this.#enhanceQuoteLinks();
@@ -4177,7 +4181,7 @@ class PostModernizer {
             this.#modernizeAttachments();
             this.#modernizeEmbeddedLinks();
 
-            console.log('✅ Post Modernizer with embedded link support initialized');
+            console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
 
@@ -4192,415 +4196,152 @@ class PostModernizer {
             }
         }
     }
-    
+
     // ==============================
-    // EMBEDDED LINK TRANSFORMATION SYSTEM - ENHANCED
+    // EMBEDDED LINK TRANSFORMATION
     // ==============================
 
     #modernizeEmbeddedLinks() {
         this.#processExistingEmbeddedLinks();
-        this.#setupEmbedObserver();
+        this.#setupEmbeddedLinkObserver();
     }
 
-       #processExistingEmbeddedLinks() {
-        // More robust selector to catch all FFB embed variations
-        const embedSelectors = [
-            '.ffb_embedlink',
-            'div[data-ve-css].ffb_embedlink',
-            '.post-text a[href*="bbc.com"]',
-            '.post-text a[href*="youtube.com"]',
-            '.post-text a[href*="youtu.be"]',
-            '.post-text a[href*="twitter.com"]',
-            '.post-text a[href*="x.com"]'
-        ];
-        
-        embedSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(element => {
-                if (!element.closest('.modern-embed')) {
-                    this.#transformEmbeddedLink(element);
-                }
-            });
+    #processExistingEmbeddedLinks() {
+        document.querySelectorAll('.ffb_embedlink').forEach(container => {
+            if (container.classList.contains('embedded-link-modernized')) return;
+            this.#transformEmbeddedLink(container);
+            container.classList.add('embedded-link-modernized');
         });
     }
 
-    #transformEmbeddedLink(element) {
-        // Skip if already modernized
-        if (element.classList && element.classList.contains('modern-embed')) return;
-        
-        // Determine the type of embed
-        const isFFBEmbed = element.classList && element.classList.contains('ffb_embedlink');
-        const isFFBEmbedData = element.getAttribute && element.getAttribute('data-ve-css') !== null && 
-                              element.classList && element.classList.contains('ffb_embedlink');
-        const isExternalLink = element.tagName === 'A' && element.target === '_blank';
-        
-        if (isFFBEmbed || isFFBEmbedData) {
-            this.#transformFFBEmbed(element);
-        } else if (isExternalLink) {
-            this.#transformExternalLink(element);
-        }
-    }
+    #transformEmbeddedLink(container) {
+        if (!container || container.classList.contains('modern-embedded-link')) return;
 
-    #transformFFBEmbed(embedDiv) {
         try {
-            console.log('Transforming FFB embed:', embedDiv);
+            // Extract main link
+            const mainLink = container.querySelector('a[href*="bbc.com"]');
+            if (!mainLink) return;
+
+            const href = mainLink.href;
+            const domain = this.#extractDomain(href);
             
-            // Extract information from the FFB embed structure
-            // Look for hidden div or any div structure
-            let hiddenDiv = embedDiv.querySelector('div[style*="display: none"]');
-            if (!hiddenDiv) {
-                // Try to find the first child div that might contain hidden content
-                const firstDiv = embedDiv.querySelector('div');
-                if (firstDiv && firstDiv.children.length > 0) {
-                    hiddenDiv = firstDiv;
-                }
-            }
-            
-            const previewDiv = embedDiv.querySelector('div:not([style*="display: none"])');
-            if (!previewDiv && embedDiv.children.length > 1) {
-                // Try to find the visible content div
-                for (let i = 0; i < embedDiv.children.length; i++) {
-                    const child = embedDiv.children[i];
-                    if (child.tagName === 'DIV' && 
-                        (!child.style.display || child.style.display !== 'none')) {
-                        previewDiv = child;
-                        break;
-                    }
-                }
-            }
-            
-            if (!previewDiv) {
-                console.warn('No preview div found in FFB embed');
-                return;
-            }
-            
-            // Extract data
-            let url = '';
-            let title = '';
+            // Extract title
+            const titleElement = container.querySelector('div > div > a[href*="bbc.com"]');
+            const title = titleElement ? titleElement.textContent.trim() : '';
+
+            // Extract description
+            const descriptionElement = container.querySelector('div > div');
             let description = '';
-            let favicon = '';
-            let image = '';
-            let domain = '';
-            
-            // Try to extract URL from various sources
-            const allLinks = embedDiv.querySelectorAll('a[href]');
-            for (const link of allLinks) {
-                const href = link.getAttribute('href');
-                if (href && (href.includes('bbc.com') || href.includes('youtube.com') || 
-                    href.includes('youtu.be') || href.includes('twitter.com') || 
-                    href.includes('x.com'))) {
-                    url = href;
-                    break;
+            if (descriptionElement) {
+                const textElements = descriptionElement.querySelectorAll('span.post-text');
+                if (textElements.length > 1) {
+                    description = textElements[1].textContent.trim();
                 }
             }
-            
-            // If no URL found, try to get from any link
-            if (!url && allLinks.length > 0) {
-                url = allLinks[0].getAttribute('href');
-            }
-            
-            // Extract domain from URL
-            if (url) {
-                domain = this.#extractDomainFromUrl(url);
-            }
-            
+
+            // Extract image
+            const imageElement = container.querySelector('img[src*="bbci.co.uk"]');
+            const imageUrl = imageElement ? imageElement.src : '';
+
             // Extract favicon
-            if (hiddenDiv) {
-                const faviconImg = hiddenDiv.querySelector('img');
-                if (faviconImg) {
-                    favicon = faviconImg.getAttribute('src') || '';
-                }
-            }
-            
-            // Extract preview information
-            if (previewDiv) {
-                // Try to find title link
-                let titleLink = previewDiv.querySelector('a[href]');
-                if (!titleLink) {
-                    // Look for any link in preview div
-                    const links = previewDiv.querySelectorAll('a');
-                    for (const link of links) {
-                        if (link.textContent && link.textContent.trim().length > 10) {
-                            titleLink = link;
-                            break;
-                        }
-                    }
-                }
-                
-                if (titleLink) {
-                    if (!url) {
-                        url = titleLink.getAttribute('href') || '';
-                    }
-                    title = this.#cleanTextContent(titleLink.textContent || titleLink.innerHTML);
-                    
-                    // If no domain extracted yet, try from this link
-                    if (!domain && url) {
-                        domain = this.#extractDomainFromUrl(url);
-                    }
-                }
-                
-                // Extract description - get all text content
-                const allText = this.#cleanTextContent(previewDiv.textContent || previewDiv.innerHTML);
-                
-                // Find and remove the "Leggi altro su" or "Read more on" text
-                const readMorePatterns = [
-                    /Leggi altro su.*$/i,
-                    /Read more on.*$/i,
-                    /Continua a leggere.*$/i,
-                    /www\..*\.com.*$/i
-                ];
-                
-                let descriptionText = allText;
-                for (const pattern of readMorePatterns) {
-                    descriptionText = descriptionText.replace(pattern, '').trim();
-                }
-                
-                // Remove title from description if present
-                if (title && descriptionText.includes(title)) {
-                    descriptionText = descriptionText.replace(title, '').trim();
-                }
-                
-                description = descriptionText;
-                
-                // Extract preview image
-                let previewImg = previewDiv.querySelector('img');
-                if (!previewImg) {
-                    // Look for any image in the embed
-                    previewImg = embedDiv.querySelector('img:not([style*="display: none"])');
-                }
-                
-                if (previewImg) {
-                    image = previewImg.getAttribute('src') || '';
-                }
-                
-                // If no favicon but we have an image, try to use it
-                if (!favicon && image) {
-                    favicon = image;
-                }
-            }
-            
-            // Ensure domain is lowercase
-            domain = domain.toLowerCase();
-            
-            // Clean up the data
-            title = title.trim();
-            description = description.trim();
-            
-            // Remove any trailing ">" characters
-            if (description.endsWith('>')) {
-                description = description.slice(0, -1).trim();
-            }
-            
-            // Create modern embed element
-            const modernEmbed = this.#createModernEmbedElement({
-                url: url,
-                title: title,
-                description: description,
-                domain: domain,
-                favicon: favicon,
-                image: image,
-                type: 'ffb'
-            });
-            
-            if (modernEmbed) {
-                embedDiv.parentNode.replaceChild(modernEmbed, embedDiv);
-                console.log('Successfully transformed FFB embed:', { url, title, domain });
-            }
-        } catch (error) {
-            console.error('Error transforming FFB embed:', error, embedDiv);
-        }
-    }
+            const faviconElement = container.querySelector('img[src*="touch-icon-36"]');
+            const faviconUrl = faviconElement ? faviconElement.src : '';
 
-      #cleanTextContent(text) {
-        // Remove HTML tags
-        let cleaned = text.replace(/<[^>]*>/g, ' ');
-        // Replace multiple spaces with single space
-        cleaned = cleaned.replace(/\s+/g, ' ');
-        // Trim
-        cleaned = cleaned.trim();
-        return cleaned;
-    }
+            // Normalize domain display (lowercase)
+            const displayDomain = domain.toLowerCase();
 
-     #transformExternalLink(linkElement) {
-        // Skip if it's already inside a modern embed
-        if (linkElement.closest('.modern-embed')) return;
-        
-        // Skip if it's a short link or doesn't look like an article
-        const url = linkElement.getAttribute('href') || '';
-        const text = linkElement.textContent || '';
-        
-        // Don't transform links that are:
-        // - Very short (likely just a mention)
-        // - Images or media files
-        // - Internal forum links
-        const shouldSkip = 
-            text.length < 10 ||
-            url.match(/\.(jpg|jpeg|png|gif|webp|mp4|mp3|pdf)$/i) ||
-            url.includes(window.location.hostname) ||
-            url.startsWith('#') ||
-            url.startsWith('javascript:');
-        
-        if (shouldSkip) return;
-        
-        // Check if this looks like an article link
-        const isLikelyArticle = 
-            url.includes('//') && 
-            (url.includes('/article/') || 
-             url.includes('/news/') || 
-             url.includes('/blog/') || 
-             url.match(/https?:\/\/[^\/]+\/[^\/]+\/[^\/]+/));
-        
-        if (!isLikelyArticle) return;
-        
-        // Create a placeholder embed that will be enhanced
-        const modernEmbed = this.#createModernEmbedElement({
-            url: url,
-            title: text,
-            description: '',
-            domain: this.#extractDomainFromUrl(url),
-            favicon: '',
-            image: '',
-            type: 'external'
-        });
-        
-        if (modernEmbed) {
-            linkElement.parentNode.replaceChild(modernEmbed, linkElement);
+            // Create modern embedded link
+            const modernEmbeddedLink = document.createElement('div');
+            modernEmbeddedLink.className = 'modern-embedded-link';
+
+            // Build HTML
+            let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer">';
             
-            // Try to fetch more information about the link
-            this.#enhanceExternalLink(modernEmbed, url);
-        }
-    }
-
-      #createModernEmbedElement(data) {
-        if (!data.url || !data.title) {
-            console.warn('Missing required data for embed:', data);
-            return null;
-        }
-        
-        // Create container
-        const embedContainer = document.createElement('div');
-        embedContainer.className = 'modern-embed';
-        embedContainer.setAttribute('data-embed-type', data.type);
-        embedContainer.setAttribute('data-domain', data.domain);
-        
-        // Build HTML using string concatenation
-        let html = '<a href="' + this.#escapeHtml(data.url) + '" class="embed-link" target="_blank" rel="noopener noreferrer" tabindex="0">';
-        html += '<div class="embed-content">';
-        
-        // Add image if available
-        if (data.image && data.image.trim() !== '') {
-            html += '<div class="embed-image">';
-            html += '<img src="' + this.#escapeHtml(data.image) + '" alt="' + this.#escapeHtml(data.title) + '" loading="lazy" decoding="async">';
+            // Left side: Image
+            html += '<div class="embedded-link-image">';
+            if (imageUrl) {
+                html += '<img src="' + this.#escapeHtml(imageUrl) + '" alt="Preview image for ' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">';
+            }
             html += '</div>';
+            
+            // Right side: Content
+            html += '<div class="embedded-link-content">';
+            
+            // Domain with favicon
+            html += '<div class="embedded-link-domain">';
+            if (faviconUrl) {
+                html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async">';
+            }
+            html += '<span>' + this.#escapeHtml(displayDomain) + '</span>';
+            html += '</div>';
+            
+            // Title
+            if (title) {
+                html += '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
+            }
+            
+            // Description
+            if (description) {
+                html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
+            }
+            
+            // Read more text (always in English)
+            html += '<div class="embedded-link-meta">';
+            html += '<span class="embedded-link-read-more">Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;</span>';
+            html += '</div>';
+            
+            html += '</div></a>';
+
+            modernEmbeddedLink.innerHTML = html;
+            
+            // Replace the original container
+            container.parentNode.replaceChild(modernEmbeddedLink, container);
+
+            // Add event listener for tracking
+            modernEmbeddedLink.querySelector('a').addEventListener('click', (e) => {
+                console.log('Embedded link clicked:', href);
+            });
+
+        } catch (error) {
+            console.error('Error transforming embedded link:', error);
         }
-        
-        html += '<div class="embed-text">';
-        
-        // Add domain/favicon row
-        html += '<div class="embed-meta">';
-        if (data.favicon && data.favicon.trim() !== '') {
-            html += '<img src="' + this.#escapeHtml(data.favicon) + '" alt="" class="embed-favicon" loading="lazy" decoding="async">';
-        }
-        html += '<span class="embed-domain">' + this.#escapeHtml(data.domain) + '</span>';
-        html += '</div>';
-        
-        // Add title
-        html += '<h4 class="embed-title">' + this.#escapeHtml(data.title) + '</h4>';
-        
-        // Add description if available
-        if (data.description && data.description.trim() !== '') {
-            html += '<p class="embed-description">' + this.#escapeHtml(data.description) + '</p>';
-        }
-        
-        // Always show "Read more on [domain]" in English
-        html += '<div class="embed-footer">';
-        html += '<span class="embed-read-more">Read more on ' + this.#escapeHtml(data.domain) + '</span>';
-        html += '</div>';
-        
-        html += '</div></div></a>';
-        
-        embedContainer.innerHTML = html;
-        return embedContainer;
     }
 
-     #extractDomainFromUrl(url) {
-        if (!url) return '';
+    #extractDomain(url) {
         try {
             const urlObj = new URL(url);
-            let domain = urlObj.hostname.toLowerCase();
-            // Remove www. prefix
-            domain = domain.replace(/^www\./, '');
-            return domain;
-        } catch (e) {
-            // Fallback: extract domain from string
-            const match = url.match(/https?:\/\/([^\/]+)/);
-            if (match && match[1]) {
-                let domain = match[1].toLowerCase();
-                domain = domain.replace(/^www\./, '');
-                return domain;
-            }
-            return '';
+            return urlObj.hostname.replace('www.', '');
+        } catch {
+            return 'unknown.com';
         }
     }
 
-  async #enhanceExternalLink(embedElement, url) {
-        try {
-            const domain = this.#extractDomainFromUrl(url);
-            const domainElement = embedElement.querySelector('.embed-domain');
-            if (domainElement && domain) {
-                domainElement.textContent = domain.toLowerCase();
-            }
-            
-            const readMoreElement = embedElement.querySelector('.embed-read-more');
-            if (readMoreElement && domain) {
-                readMoreElement.textContent = 'Read more on ' + domain.toLowerCase();
-            }
-            
-        } catch (error) {
-            console.debug('Could not enhance external link:', url, error);
-        }
-    }
-
-     #setupEmbedObserver() {
+    #setupEmbeddedLinkObserver() {
         if (globalThis.forumObserver) {
-            this.#embedObserverId = globalThis.forumObserver.register({
-                id: 'embed-modernizer',
-                callback: (node) => this.#handleNewEmbeds(node),
-                selector: '.ffb_embedlink, div[data-ve-css].ffb_embedlink, .post-text a[target="_blank"]',
+            this.#embeddedLinkObserverId = globalThis.forumObserver.register({
+                id: 'embedded-link-modernizer',
+                callback: (node) => this.#handleNewEmbeddedLinks(node),
+                selector: '.ffb_embedlink',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
             });
         } else {
-            // Fallback: check for new embeds periodically
-            setInterval(() => this.#processExistingEmbeddedLinks(), 3000);
+            setInterval(() => this.#processExistingEmbeddedLinks(), 2000);
         }
     }
 
-     #handleNewEmbeds(node) {
-        const isFFBEmbed = node.matches && (node.matches('.ffb_embedlink') || node.matches('div[data-ve-css].ffb_embedlink'));
-        const isExternalLink = node.matches && node.matches('.post-text a[target="_blank"]') && !node.closest('.modern-embed');
-        
-        if (isFFBEmbed || isExternalLink) {
+    #handleNewEmbeddedLinks(node) {
+        if (node.matches('.ffb_embedlink')) {
             this.#transformEmbeddedLink(node);
         } else {
-            // Check children
-            const ffbEmbeds = node.querySelectorAll ? node.querySelectorAll('.ffb_embedlink, div[data-ve-css].ffb_embedlink') : [];
-            ffbEmbeds.forEach(element => {
-                if (!element.closest('.modern-embed')) {
-                    this.#transformEmbeddedLink(element);
-                }
-            });
-            
-            const externalLinks = node.querySelectorAll ? node.querySelectorAll('.post-text a[target="_blank"]') : [];
-            externalLinks.forEach(element => {
-                if (!element.closest('.modern-embed')) {
-                    this.#transformEmbeddedLink(element);
-                }
+            node.querySelectorAll('.ffb_embedlink').forEach(link => {
+                this.#transformEmbeddedLink(link);
             });
         }
     }
 
     // ==============================
-    // ADAPTIVE DATE PARSING SYSTEM
+    // ADAPTIVE DATE PARSING SYSTEM - ENHANCED FOR MIXED FORMATS
     // ==============================
 
     #analyzeDateComponents(dateString) {
@@ -4678,6 +4419,13 @@ class PostModernizer {
         if (timeFormatCount > 2) {
             this.#detectedTimeFormat = timeFormatKey;
         }
+        
+        console.debug('Learned format pattern:', {
+            patternKey: patternKey,
+            formatConfidence: this.#formatConfidence,
+            detectedSeparator: this.#detectedSeparator,
+            detectedTimeFormat: this.#detectedTimeFormat
+        });
     }
     
     #getBestFormatForComponents(components) {
@@ -4794,6 +4542,7 @@ class PostModernizer {
 
         const cacheKey = dateString.trim();
         if (this.#dateFormatCache.has(cacheKey)) {
+            console.debug('Using cached date parse for:', dateString);
             return this.#dateFormatCache.get(cacheKey);
         }
 
@@ -4803,11 +4552,14 @@ class PostModernizer {
             .replace(/^Posted\s*/i, '')
             .trim();
 
+        console.debug('Parsing date string:', dateString, '->', cleanDateString);
+
         const components = this.#analyzeDateComponents(cleanDateString);
         
         if (components.parts.length >= 2) {
             const [first, second] = components.parts;
             if (first > 12 && second <= 12) {
+                console.debug('CLEAR DD/MM PATTERN DETECTED:', first, '/', second, '- Forcing EU format');
                 const formats = this.#buildFormatArray('EU', components);
                 
                 const aggressiveFormats = [
@@ -4829,6 +4581,8 @@ class PostModernizer {
                 for (let i = 0; i < allFormats.length; i++) {
                     momentDate = moment(cleanDateString, allFormats[i], true);
                     if (momentDate && momentDate.isValid()) {
+                        console.debug('Parsed clear DD/MM with format', allFormats[i], 'as local time:', momentDate.format());
+                        
                         const month = momentDate.month() + 1;
                         if (month >= 1 && month <= 12) {
                             successfulFormat = 'EU';
@@ -4847,6 +4601,15 @@ class PostModernizer {
                     }
                     
                     this.#dateFormatCache.set(cacheKey, utcTime);
+                    
+                    console.debug('Final conversion for clear DD/MM:', {
+                        original: cleanDateString,
+                        parsedLocal: momentDate.format(),
+                        parsedUTC: utcTime.format(),
+                        successfulFormat: successfulFormat,
+                        confidence: this.#formatConfidence
+                    });
+                    
                     return utcTime;
                 }
             }
@@ -4854,6 +4617,13 @@ class PostModernizer {
         
         const bestFormat = this.#getBestFormatForComponents(components);
         
+        console.debug('Date analysis:', {
+            components: components,
+            bestFormat: bestFormat,
+            confidence: this.#formatConfidence,
+            reason: components.reason || 'Normal analysis'
+        });
+
         let formats = [];
         
         if (bestFormat === 'EU') {
@@ -4870,6 +4640,8 @@ class PostModernizer {
         for (let i = 0; i < formats.length; i++) {
             momentDate = moment(cleanDateString, formats[i], true);
             if (momentDate && momentDate.isValid()) {
+                console.debug('Parsed with format', formats[i], 'as local time:', momentDate.format());
+                
                 const month = momentDate.month() + 1;
                 if (month >= 1 && month <= 12) {
                     successfulFormat = formats[i].includes('DD/MM') || formats[i].includes('D/M') ? 'EU' : 
@@ -4901,6 +4673,7 @@ class PostModernizer {
                                 }
                                 successfulFormat = formats[i].includes('DD/MM') || formats[i].includes('D/M') ? 'EU' : 
                                                  formats[i].includes('MM/DD') || formats[i].includes('M/D') ? 'US' : 'UNKNOWN';
+                                console.debug('Parsed with timezone', tzAbbr, ':', momentDate.format());
                                 break;
                             }
                         }
@@ -4927,6 +4700,8 @@ class PostModernizer {
                         successfulFormat = 'EU';
                     }
                 }
+                
+                console.debug('Parsed with JS Date:', momentDate.format(), 'detected format:', successfulFormat);
             }
         }
         
@@ -4939,10 +4714,12 @@ class PostModernizer {
                     const dateStr = year + '-' + String(monthOrDay).padStart(2, '0') + '-' + String(dayOrMonth).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
                     momentDate = moment(dateStr);
                     successfulFormat = 'EU';
+                    console.debug('Manual parsing succeeded (DD/MM):', momentDate.format());
                 } else if (dayOrMonth <= 12 && monthOrDay > 12) {
                     const dateStr = year + '-' + String(dayOrMonth).padStart(2, '0') + '-' + String(monthOrDay).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
                     momentDate = moment(dateStr);
                     successfulFormat = 'US';
+                    console.debug('Manual parsing succeeded (MM/DD):', momentDate.format());
                 }
             }
         }
@@ -4955,6 +4732,15 @@ class PostModernizer {
             }
             
             this.#dateFormatCache.set(cacheKey, utcTime);
+            
+            console.debug('Final conversion:', {
+                original: cleanDateString,
+                parsedLocal: momentDate.format(),
+                parsedUTC: utcTime.format(),
+                successfulFormat: successfulFormat,
+                confidence: this.#formatConfidence
+            });
+            
             return utcTime;
         }
         
@@ -5005,6 +4791,14 @@ class PostModernizer {
         const userDate = moment(date).local();
         
         const diffInSeconds = now.diff(userDate, 'seconds');
+        
+        console.debug('Time ago calculation:', {
+            utcDate: date.format(),
+            userLocalDate: userDate.format(),
+            now: now.format(),
+            diffSeconds: diffInSeconds,
+            isFuture: diffInSeconds < 0
+        });
         
         if (diffInSeconds < 0) {
             const futureDiffInSeconds = Math.abs(diffInSeconds);
@@ -5069,18 +4863,28 @@ class PostModernizer {
         }
         
         if (originalElement.classList && originalElement.classList.contains('modern-timestamp')) {
+            console.debug('Element already modernized:', originalElement);
             return originalElement;
         }
         
         if (originalElement.querySelector && originalElement.querySelector('.modern-timestamp')) {
+            console.debug('Element contains modern timestamp:', originalElement);
             return originalElement;
         }
         
         if (originalElement.closest && originalElement.closest('.modern-timestamp')) {
+            console.debug('Inside modern timestamp:', originalElement);
             return originalElement;
         }
         
         const isPostQueue = this.#shouldSkipFutureTimestamp(originalElement);
+        
+        console.debug('Creating modern timestamp for:', {
+            element: originalElement.tagName,
+            classes: originalElement.className,
+            dateString: dateString,
+            isPostQueue: isPostQueue
+        });
         
         const momentDate = this.#parseForumDate(dateString);
         
@@ -5088,6 +4892,14 @@ class PostModernizer {
             console.warn('Could not parse date:', dateString);
             return originalElement;
         }
+        
+        console.debug('Timestamp creation details:', {
+            originalDateString: dateString,
+            parsedUTC: momentDate.format(),
+            parsedLocal: momentDate.local().format(),
+            formatConfidence: this.#formatConfidence,
+            isPostQueue: isPostQueue
+        });
         
         const userSettings = this.#getUserLocaleSettings();
         
@@ -5098,7 +4910,7 @@ class PostModernizer {
         if (originalElement.tagName === 'A' && originalElement.hasAttribute('href')) {
             href = originalElement.getAttribute('href');
         } else if (originalElement.parentElement && originalElement.parentElement.tagName === 'A' && 
-                   originalElement.parentElement.hasAttribute('href')) {
+                 originalElement.parentElement.hasAttribute('href')) {
             href = originalElement.parentElement.getAttribute('href');
         } else {
             const postElement = originalElement.closest('.post');
@@ -5184,7 +4996,6 @@ class PostModernizer {
         timeElement.setAttribute('data-timestamp-id', timeElementId);
         
         timeElement.setAttribute('data-utc-date', utcISOString);
-        
         timeElement.setAttribute('data-original-date', dateString);
         
         const updateInterval = setInterval(() => {
@@ -5233,6 +5044,15 @@ class PostModernizer {
         timeElement.setAttribute('data-user-timezone', userSettings.timezone);
         timeElement.setAttribute('data-user-locale', userSettings.locale);
         timeElement.setAttribute('data-parsed-utc', utcISOString);
+        
+        console.debug('Created timestamp element:', {
+            href: href,
+            utc: utcISOString,
+            userLocal: userLocalDate.format(),
+            relativeTime: relativeTime,
+            isPostQueue: isPostQueue,
+            elementHTML: finalElement.outerHTML.substring(0, 200)
+        });
         
         return finalElement;
     }
@@ -5324,6 +5144,7 @@ class PostModernizer {
         if (element.hasAttribute('title')) {
             const title = element.getAttribute('title');
             const cleanTitle = title.replace(/:\d+$/, '');
+            console.debug('Extracted date from title:', cleanTitle);
             return cleanTitle;
         }
         
@@ -5340,12 +5161,14 @@ class PostModernizer {
             for (const pattern of datePatterns) {
                 const match = text.match(pattern);
                 if (match) {
+                    console.debug('Extracted date from text pattern:', match[1].trim());
                     return match[1].trim();
                 }
             }
             
             const dateTimeMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
             if (dateTimeMatch) {
+                console.debug('Extracted date-time with fallback:', dateTimeMatch[1].trim());
                 return dateTimeMatch[1].trim();
             }
         }
@@ -5370,13 +5193,20 @@ class PostModernizer {
                 
                 const parentTitle = parent.getAttribute('title');
                 const cleanTitle = parentTitle.replace(/:\d+$/, '');
+                console.debug('Extracted date from parent title:', cleanTitle);
                 return cleanTitle;
             }
         }
         
+        console.warn('Could not extract date from element (after filtering):', {
+            tag: element.tagName,
+            href: element.getAttribute('href'),
+            classes: element.className,
+            textPreview: element.textContent?.substring(0, 50)
+        });
         return null;
     }
-
+    
     #transformEditTimestamp(span) {
         const editPatterns = [
             /Edited by .+? - (.+)/i,
@@ -5397,6 +5227,8 @@ class PostModernizer {
         }
         
         if (editDate) {
+            console.debug('Found edit timestamp:', editDate);
+            
             const momentDate = this.#parseForumDate(editDate);
             
             if (momentDate) {
@@ -5440,7 +5272,15 @@ class PostModernizer {
                 }, 30000);
                 
                 this.#timeUpdateIntervals.set(timeElementId, updateInterval);
+                
+                console.debug('Created edit timestamp:', {
+                    original: editDate,
+                    parsedUTC: momentDate.format(),
+                    userLocal: userLocalDate.format(),
+                    relativeTime: timeElement.textContent
+                });
             } else {
+                console.warn('Could not parse edit date:', editDate);
                 span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
             }
         } else {
@@ -5535,6 +5375,13 @@ class PostModernizer {
             const dateString = this.#extractDateFromElement(timestampElement);
             
             if (dateString) {
+                console.debug('Found timestamp element for transformation:', {
+                    element: timestampElement.tagName,
+                    classes: timestampElement.className,
+                    dateString: dateString,
+                    isPostQueue: this.#shouldSkipFutureTimestamp(timestampElement)
+                });
+                
                 const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
                 
                 if (modernTimestamp && modernTimestamp !== timestampElement) {
@@ -5554,6 +5401,14 @@ class PostModernizer {
                         timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
                     }
                 }
+            } else {
+                console.debug('Element matched timestamp selector but has no date:', {
+                    tag: timestampElement.tagName,
+                    href: timestampElement.getAttribute('href'),
+                    classes: timestampElement.className,
+                    textPreview: timestampElement.textContent?.substring(0, 30),
+                    isPostQueue: this.#shouldSkipFutureTimestamp(timestampElement)
+                });
             }
         });
     }
@@ -5575,6 +5430,12 @@ class PostModernizer {
                 
                 const dateString = this.#extractDateFromElement(el);
                 if (dateString) {
+                    console.log('Post header timestamp found:', {
+                        element: el,
+                        dateString: dateString,
+                        pattern: pattern
+                    });
+                    
                     const modernTimestamp = this.#createModernTimestamp(el, dateString);
                     if (modernTimestamp !== el) {
                         el.parentNode.replaceChild(modernTimestamp, el);
@@ -5677,39 +5538,38 @@ class PostModernizer {
         }
         
         const downloadUrl = imageUrl;
-        
         const fileName = this.#extractFileNameFromUrl(imageUrl) || 'image.jpg';
         const fileSize = this.#calculateImageSize(width, height, fileName);
         
-        let html = '<div class="attachment-header">';
-        html += '<div class="attachment-icon">';
-        html += '<i class="fa-regular fa-image" aria-hidden="true"></i>';
-        html += '</div>';
-        html += '<div class="attachment-info">';
-        html += '<span class="attachment-title">Attached Image</span>';
-        html += '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileSize + '</span>';
-        html += '</div>';
-        html += '<div class="attachment-actions">';
-        html += '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download image" target="_blank" rel="nofollow">';
-        html += '<i class="fa-regular fa-download" aria-hidden="true"></i>';
-        html += '</a>';
-        html += '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-view-btn" title="View full size" target="_blank" rel="nofollow">';
-        html += '<i class="fa-regular fa-expand" aria-hidden="true"></i>';
-        html += '</a>';
-        html += '</div>';
-        html += '</div>';
+        let html = '<div class="attachment-header">' +
+            '<div class="attachment-icon">' +
+            '<i class="fa-regular fa-image" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="attachment-info">' +
+            '<span class="attachment-title">Attached Image</span>' +
+            '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileSize + '</span>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+            '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download image" target="_blank" rel="nofollow">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '</a>' +
+            '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-view-btn" title="View full size" target="_blank" rel="nofollow">' +
+            '<i class="fa-regular fa-expand" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>' +
+            '</div>';
         
-        html += '<div class="attachment-preview">';
-        html += '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-image-link" title="' + this.#escapeHtml(imageTitle) + '" target="_blank" rel="nofollow">';
-        html += '<img src="' + this.#escapeHtml(imageElement.getAttribute('src')) + '" alt="' + this.#escapeHtml(imageAlt) + '" loading="lazy" decoding="async"';
+        html += '<div class="attachment-preview">' +
+            '<a href="' + this.#escapeHtml(imageUrl) + '" class="attachment-image-link" title="' + this.#escapeHtml(imageTitle) + '" target="_blank" rel="nofollow">' +
+            '<img src="' + this.#escapeHtml(imageElement.getAttribute('src')) + '" alt="' + this.#escapeHtml(imageAlt) + '" loading="lazy" decoding="async"';
         
         if (width && height) {
             html += ' width="' + width + '" height="' + height + '"';
         }
         
-        html += ' style="max-width: 100%; height: auto; display: block;">';
-        html += '</a>';
-        html += '</div>';
+        html += ' style="max-width: 100%; height: auto; display: block;">' +
+            '</a>' +
+            '</div>';
         
         return html;
     }
@@ -5777,31 +5637,31 @@ class PostModernizer {
             }
         }
         
-        let html = '<div class="attachment-header">';
-        html += '<div class="attachment-icon">';
-        html += '<i class="' + fileIcon + '" aria-hidden="true"></i>';
-        html += '</div>';
-        html += '<div class="attachment-info">';
-        html += '<span class="attachment-title">Attached File</span>';
-        html += '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileType.toUpperCase() + '</span>';
-        html += '</div>';
-        html += '<div class="attachment-actions">';
-        html += '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download file" target="_blank" rel="nofollow" onclick="' + this.#escapeHtml(onclickAttr || '') + '">';
-        html += '<i class="fa-regular fa-download" aria-hidden="true"></i>';
-        html += '</a>';
-        html += '</div>';
-        html += '</div>';
+        let html = '<div class="attachment-header">' +
+            '<div class="attachment-icon">' +
+            '<i class="' + fileIcon + '" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="attachment-info">' +
+            '<span class="attachment-title">Attached File</span>' +
+            '<span class="attachment-details">' + this.#escapeHtml(fileName) + ' • ' + fileType.toUpperCase() + '</span>' +
+            '</div>' +
+            '<div class="attachment-actions">' +
+            '<a href="' + this.#escapeHtml(downloadUrl) + '" class="attachment-download-btn" download="' + this.#escapeHtml(fileName) + '" title="Download file" target="_blank" rel="nofollow" onclick="' + this.#escapeHtml(onclickAttr || '') + '">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>' +
+            '</div>';
         
-        html += '<div class="attachment-stats">';
-        html += '<div class="stat-item">';
-        html += '<i class="fa-regular fa-download" aria-hidden="true"></i>';
-        html += '<span>' + downloadCount + ' download' + (downloadCount !== '1' ? 's' : '') + '</span>';
-        html += '</div>';
-        html += '<div class="stat-item">';
-        html += '<i class="fa-regular fa-file" aria-hidden="true"></i>';
-        html += '<span>' + fileType.toUpperCase() + ' file</span>';
-        html += '</div>';
-        html += '</div>';
+        html += '<div class="attachment-stats">' +
+            '<div class="stat-item">' +
+            '<i class="fa-regular fa-download" aria-hidden="true"></i>' +
+            '<span>' + downloadCount + ' download' + (downloadCount !== '1' ? 's' : '') + '</span>' +
+            '</div>' +
+            '<div class="stat-item">' +
+            '<i class="fa-regular fa-file" aria-hidden="true"></i>' +
+            '<span>' + fileType.toUpperCase() + ' file</span>' +
+            '</div>' +
+            '</div>';
         
         return html;
     }
@@ -6351,14 +6211,13 @@ class PostModernizer {
                     this.#modernizeSpoilers(contentWrapper);
                     this.#modernizeCodeBlocksInContent(contentWrapper);
                     this.#modernizeAttachmentsInContent(contentWrapper);
-                    this.#modernizeEmbeddedLinksInContent(contentWrapper); // NEW: Add embedded links
+                    this.#modernizeEmbeddedLinksInContent(contentWrapper);
                 }
             });
 
             const title2Bottom = post.querySelector('.title2.bottom');
             
             if (post.classList.contains('post_queue')) {
-                // Skip footer for post_queue
             } else if (title2Bottom) {
                 this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
                 this.#modernizeBottomElements(title2Bottom, postFooter);
@@ -6395,19 +6254,10 @@ class PostModernizer {
     }
 
     #modernizeEmbeddedLinksInContent(contentWrapper) {
-        // Transform embedded links in post content
-        const embedSelectors = [
-            '.ffb_embedlink',
-            'div[data-ve-css].ffb_embedlink',
-            '.post-text a[target="_blank"]'
-        ];
-        
-        embedSelectors.forEach(selector => {
-            contentWrapper.querySelectorAll(selector).forEach(element => {
-                if (!element.closest('.modern-embed')) {
-                    this.#transformEmbeddedLink(element);
-                }
-            });
+        contentWrapper.querySelectorAll('.ffb_embedlink').forEach(container => {
+            if (container.classList.contains('embedded-link-modernized')) return;
+            this.#transformEmbeddedLink(container);
+            container.classList.add('embedded-link-modernized');
         });
     }
 
@@ -6686,7 +6536,7 @@ class PostModernizer {
                 this.#modernizeSpoilers(contentWrapper);
                 this.#modernizeCodeBlocksInContent(contentWrapper);
                 this.#modernizeAttachmentsInContent(contentWrapper);
-                this.#modernizeEmbeddedLinksInContent(contentWrapper); // NEW: Add embedded links
+                this.#modernizeEmbeddedLinksInContent(contentWrapper);
 
                 postContent.appendChild(contentWrapper);
             }
@@ -6863,11 +6713,10 @@ class PostModernizer {
             container.classList.add('attachment-modernized');
         });
 
-        // NEW: Transform embedded links in search results
-        contentWrapper.querySelectorAll('.ffb_embedlink, .post-text a[target="_blank"]').forEach(element => {
-            if (!element.closest('.modern-embed')) {
-                this.#transformEmbeddedLink(element);
-            }
+        contentWrapper.querySelectorAll('.ffb_embedlink').forEach(container => {
+            if (container.classList.contains('embedded-link-modernized')) return;
+            this.#transformEmbeddedLink(container);
+            container.classList.add('embedded-link-modernized');
         });
     }
 
@@ -7091,7 +6940,7 @@ class PostModernizer {
             'div[align="center"].spoiler',
             'div[align="center"]:has(.quote_top)',
             '.modern-attachment',
-            '.modern-embed' // NEW: Add embedded links to block list
+            '.modern-embedded-link'
         ];
 
         const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
@@ -7198,7 +7047,7 @@ class PostModernizer {
             const prevSibling = br.previousElementSibling;
             const nextSibling = br.nextElementSibling;
 
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embed')) {
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
                 return;
             }
 
@@ -7210,8 +7059,8 @@ class PostModernizer {
                     prevSibling.classList.add('paragraph-end');
                     br.remove();
                 } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embed');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embed');
+                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
 
                     if (prevIsModern && nextIsModern) {
                         br.remove();
@@ -7293,29 +7142,29 @@ class PostModernizer {
         const modernQuote = document.createElement('div');
         modernQuote.className = 'modern-quote' + (isLongContent ? ' long-quote' : '');
 
-        let html = '<div class="quote-header">';
-        html += '<div class="quote-meta">';
-        html += '<div class="quote-icon">';
-        html += '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>';
-        html += '</div>';
-        html += '<div class="quote-info">';
-        html += '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>';
-        html += '</div>';
-        html += '</div>';
-        html += '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">';
-        html += '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>';
-        html += '</a>';
-        html += '</div>';
+        let html = '<div class="quote-header">' +
+            '<div class="quote-meta">' +
+            '<div class="quote-icon">' +
+            '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="quote-info">' +
+            '<span class="quote-author">' + this.#escapeHtml(author) + ' <span class="quote-said">said:</span></span>' +
+            '</div>' +
+            '</div>' +
+            '<a href="' + this.#escapeHtml(linkHref) + '" class="quote-link" title="Go to post" tabindex="0">' +
+            '<i class="fa-regular fa-chevron-up" aria-hidden="true"></i>' +
+            '</a>' +
+            '</div>';
 
-        html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">';
-        html += this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML);
-        html += '</div>';
+        html += '<div class="quote-content' + (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(quoteContent.innerHTML) +
+            '</div>';
 
         if (isLongContent) {
-            html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">';
-            html += '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>';
-            html += 'Show more';
-            html += '</button>';
+            html += '<button class="quote-expand-btn" type="button" aria-label="Show full quote">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
         }
 
         modernQuote.innerHTML = html;
@@ -7344,27 +7193,28 @@ class PostModernizer {
         const modernSpoiler = document.createElement('div');
         modernSpoiler.className = 'modern-spoiler';
 
-        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">';
-        html += '<div class="spoiler-icon">';
-        html += '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
-        html += '</div>';
-        html += '<div class="spoiler-info">';
-        html += '<span class="spoiler-title">SPOILER</span>';
-        html += '</div>';
-        html += '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">';
-        html += '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>';
-        html += '</button>';
-        html += '</div>';
+        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
+            '<div class="spoiler-icon">' +
+            '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="spoiler-info">' +
+            '<span class="spoiler-title">SPOILER</span>' +
+            '</div>' +
+            '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
+            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
 
-        html += '<div class="spoiler-content' + (isLongContent ? ' collapsible-content' : '') + '">';
-        html += this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML);
-        html += '</div>';
+        html += '<div class="spoiler-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
+            '</div>';
 
         if (isLongContent) {
-            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">';
-            html += '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>';
-            html += 'Show more';
-            html += '</button>';
+            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
         }
 
         modernSpoiler.innerHTML = html;
@@ -7797,16 +7647,16 @@ class PostModernizer {
         const labelText = label.textContent.replace('multiquote »', '').trim();
         const originalOnClick = label.getAttribute('onclick') || '';
 
-        let html = '<div class="multiquote-control">';
-        html += '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">';
-        html += '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
-        html += '</button>';
-        html += '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>';
+        let html = '<div class="multiquote-control">' +
+            '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' +
+            '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+            '</button>' +
+            '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>';
 
         if (checkbox) {
-            html += '<div class="user-checkbox-container">';
-            html += checkbox.outerHTML;
-            html += '</div>';
+            html += '<div class="user-checkbox-container">' +
+                checkbox.outerHTML +
+                '</div>';
         }
 
         html += '</div>';
@@ -7817,29 +7667,27 @@ class PostModernizer {
         const postId = checkbox.id.replace('p', '');
         const originalOnClick = 'document.getElementById(\'' + checkbox.id + '\').checked=!document.getElementById(\'' + checkbox.id + '\').checked;post(\'' + postId + '\')';
 
-        let html = '<div class="multiquote-control">';
-        html += '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">';
-        html += '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
-        html += '</button>';
-        html += '<label class="multiquote-label">Quote +</label>';
-        html += '<div class="user-checkbox-container">';
-        html += checkbox.outerHTML;
-        html += '</div>';
-        html += '</div>';
-        return html;
+        return '<div class="multiquote-control">' +
+            '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' +
+            '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+            '</button>' +
+            '<label class="multiquote-label">Quote +</label>' +
+            '<div class="user-checkbox-container">' +
+            checkbox.outerHTML +
+            '</div>' +
+            '</div>';
     }
 
     #createLabelOnly(label) {
         const labelText = label.textContent.replace('multiquote »', '').trim();
         const originalOnClick = label.getAttribute('onclick') || '';
 
-        let html = '<div class="multiquote-control">';
-        html += '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">';
-        html += '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
-        html += '</button>';
-        html += '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>';
-        html += '</div>';
-        return html;
+        return '<div class="multiquote-control">' +
+            '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="' + this.#escapeHtml(label.title || 'Select post') + '" type="button">' +
+            '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+            '</button>' +
+            '<label class="multiquote-label">' + this.#escapeHtml(labelText || 'Quote +') + '</label>' +
+            '</div>';
     }
 
     #createModernModeratorView(ipAddress, checkbox, label) {
@@ -7858,16 +7706,16 @@ class PostModernizer {
             originalOnClick = 'document.getElementById(\'' + checkbox.id + '\').checked=!document.getElementById(\'' + checkbox.id + '\').checked;post(\'' + postId + '\')';
         }
 
-        let html = '<div class="moderator-controls">';
-        html += '<div class="multiquote-control">';
-        html += '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">';
-        html += '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>';
-        html += '</button>';
-        html += '<label class="multiquote-label">' + this.#escapeHtml(labelText) + '</label>';
-        html += '</div>';
-        html += '<div class="ip-address-control">';
-        html += '<span class="ip-label">IP:</span>';
-        html += '<span class="ip-value">';
+        let html = '<div class="moderator-controls">' +
+            '<div class="multiquote-control">' +
+            '<button class="btn btn-icon multiquote-btn" onclick="' + this.#escapeHtml(originalOnClick) + '" title="Select post for multiquote" type="button">' +
+            '<i class="fa-regular fa-quote-right" aria-hidden="true"></i>' +
+            '</button>' +
+            '<label class="multiquote-label">' + this.#escapeHtml(labelText) + '</label>' +
+            '</div>' +
+            '<div class="ip-address-control">' +
+            '<span class="ip-label">IP:</span>' +
+            '<span class="ip-value">';
 
         if (ipLink) {
             html += '<a href="' + this.#escapeHtml(ipLink.href) + '" target="_self" class="ip-link" tabindex="0">' + this.#escapeHtml(ipText) + '</a>';
@@ -7875,10 +7723,10 @@ class PostModernizer {
             html += '<span class="ip-text">' + this.#escapeHtml(ipText) + '</span>';
         }
 
-        html += '</span></div>';
-        html += '<div class="mod-checkbox-container">';
-        html += checkbox.outerHTML;
-        html += '</div></div>';
+        html += '</span></div>' +
+            '<div class="mod-checkbox-container">' +
+            checkbox.outerHTML +
+            '</div></div>';
 
         return html;
     }
@@ -7888,9 +7736,9 @@ class PostModernizer {
         const ipTextElement = ipAddress.querySelector('dd');
         const ipText = ipTextElement && ipTextElement.textContent ? ipTextElement.textContent : '';
 
-        let html = '<div class="ip-address-control">';
-        html += '<span class="ip-label">IP:</span>';
-        html += '<span class="ip-value">';
+        let html = '<div class="ip-address-control">' +
+            '<span class="ip-label">IP:</span>' +
+            '<span class="ip-value">';
 
         if (ipLink) {
             html += '<a href="' + this.#escapeHtml(ipLink.href) + '" target="_self" class="ip-link" tabindex="0">' + this.#escapeHtml(ipText) + '</a>';
@@ -8564,27 +8412,28 @@ class PostModernizer {
         const modernCode = document.createElement('div');
         modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
 
-        let html = '<div class="code-header">';
-        html += '<div class="code-icon">';
-        html += '<i class="fa-regular fa-code" aria-hidden="true"></i>';
-        html += '</div>';
-        html += '<div class="code-info">';
-        html += '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>';
-        html += '</div>';
-        html += '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">';
-        html += '<i class="fa-regular fa-copy" aria-hidden="true"></i>';
-        html += '</button>';
-        html += '</div>';
+        let html = '<div class="code-header">' +
+            '<div class="code-icon">' +
+            '<i class="fa-regular fa-code" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="code-info">' +
+            '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
+            '</div>' +
+            '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
+            '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
 
-        html += '<div class="code-content' + (isLongContent ? ' collapsible-content' : '') + '">';
-        html += '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>';
-        html += '</div>';
+        html += '<div class="code-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
+            '</div>';
 
         if (isLongContent) {
-            html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">';
-            html += '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>';
-            html += 'Show more code';
-            html += '</button>';
+            html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more code' +
+                '</button>';
         }
 
         modernCode.innerHTML = html;
@@ -8768,17 +8617,11 @@ class PostModernizer {
     }
 
     destroy() {
-        const ids = [
-            this.#postModernizerId, 
-            this.#activeStateObserverId,
-            this.#debouncedObserverId, 
-            this.#cleanupObserverId,
-            this.#searchPostObserverId, 
-            this.#quoteLinkObserverId,
-            this.#codeBlockObserverId, 
-            this.#attachmentObserverId,
-            this.#embedObserverId // NEW: Add embed observer to cleanup
-        ];
+        const ids = [this.#postModernizerId, this.#activeStateObserverId,
+        this.#debouncedObserverId, this.#cleanupObserverId,
+        this.#searchPostObserverId, this.#quoteLinkObserverId,
+            this.#codeBlockObserverId, this.#attachmentObserverId,
+            this.#embeddedLinkObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
