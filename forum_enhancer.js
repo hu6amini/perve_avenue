@@ -6396,10 +6396,18 @@ class PostModernizer {
 
     #modernizeEmbeddedLinksInContent(contentWrapper) {
         // Transform embedded links in post content
-        contentWrapper.querySelectorAll('.ffb_embedlink, .post-text a[target="_blank"]').forEach(element => {
-            if (!element.closest('.modern-embed')) {
-                this.#transformEmbeddedLink(element);
-            }
+        const embedSelectors = [
+            '.ffb_embedlink',
+            'div[data-ve-css].ffb_embedlink',
+            '.post-text a[target="_blank"]'
+        ];
+        
+        embedSelectors.forEach(selector => {
+            contentWrapper.querySelectorAll(selector).forEach(element => {
+                if (!element.closest('.modern-embed')) {
+                    this.#transformEmbeddedLink(element);
+                }
+            });
         });
     }
 
