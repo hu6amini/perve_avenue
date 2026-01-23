@@ -4215,97 +4215,174 @@ class PostModernizer {
     }
 
     #transformEmbeddedLink(container) {
-        if (!container || container.classList.contains('modern-embedded-link')) return;
+    if (!container || container.classList.contains('modern-embedded-link')) return;
 
-        try {
-            // Extract main link
-            const mainLink = container.querySelector('a[href*="bbc.com"]');
-            if (!mainLink) return;
+    try {
+        // Extract main link
+        const mainLinks = container.querySelectorAll('a[href*="bbc.com"]');
+        const mainLink = mainLinks.length > 0 ? mainLinks[0] : null;
+        if (!mainLink) return;
 
-            const href = mainLink.href;
-            const domain = this.#extractDomain(href);
-            
-            // Extract title
-            const titleElement = container.querySelector('div > div > a[href*="bbc.com"]');
-            const title = titleElement ? titleElement.textContent.trim() : '';
+        const href = mainLink.href;
+        const domain = this.#extractDomain(href);
+        
+        // Extract title - look for the actual article title link
+        let title = '';
+        let titleElement = null;
+        
+        // Try to find the article title link (not the domain link)
+        const allLinks = container.querySelectorAll('a[href]');
+        for (const link of allLinks) {
+            const linkText = link.textContent.trim();
+            // Skip domain links and "Read more" links
+            if (linkText.toLowerCase().includes(domain.toLowerCase()) || 
+                linkText.toLowerCase().includes('leggi altro') ||
+                linkText.toLowerCase().includes('read more')) {
+                continue;
+            }
+            // This is likely the article title
+            titleElement = link;
+            title = linkText;
+            break;
+        }
+        
+        // If no title found, use fallback
+        if (!title) {
+            title = 'Article on ' + domain;
+        }
 
-            // Extract description
-            const descriptionElement = container.querySelector('div > div');
-            let description = '';
-            if (descriptionElement) {
-                const textElements = descriptionElement.querySelectorAll('span.post-text');
-                if (textElements.length > 1) {
-                    description = textElements[1].textContent.trim();
+        // Extract description - look for text after the title
+        let description = '';
+        if (titleElement) {
+            // Get the next sibling text after the title link
+            let nextElement = titleElement.nextElementSibling;
+            while (nextElement) {
+                const text = nextElement.textContent.trim();
+                if (text && !text.toLowerCase().includes(domain.toLowerCase()) && 
+                    !text.includes('>')) {
+                    description = text;
+                    break;
+                }
+                nextElement = nextElement.nextElementSibling;
+            }
+        }
+        
+        // If still no description, look in the container
+        if (!description) {
+            const containerText = container.textContent;
+            const lines = containerText.split('\n').filter(line => 
+                line.trim() && 
+                !line.toLowerCase().includes(domain.toLowerCase()) &&
+                line.trim() !== title
+            );
+            if (lines.length > 0) {
+                description = lines[0].trim();
+            }
+        }
+
+        // Extract main image (not the favicon)
+        let imageUrl = '';
+        const images = container.querySelectorAll('img');
+        for (const img of images) {
+            const src = img.src || '';
+            // Skip favicon images (small images, usually contain "icon" or "touch-icon")
+            if (src.includes('ichef.bbci.co.uk') || src.includes('standard')) {
+                imageUrl = src;
+                break;
+            }
+            // Skip favicons
+            if (!src.includes('touch-icon') && !src.includes('icon')) {
+                // Check if this is likely a content image by size or filename
+                if (src.includes('jpg') || src.includes('jpeg') || src.includes('png')) {
+                    imageUrl = src;
+                    break;
                 }
             }
-
-            // Extract image
-            const imageElement = container.querySelector('img[src*="bbci.co.uk"]');
-            const imageUrl = imageElement ? imageElement.src : '';
-
-            // Extract favicon
-            const faviconElement = container.querySelector('img[src*="touch-icon-36"]');
-            const faviconUrl = faviconElement ? faviconElement.src : '';
-
-            // Normalize domain display (lowercase)
-            const displayDomain = domain.toLowerCase();
-
-            // Create modern embedded link
-            const modernEmbeddedLink = document.createElement('div');
-            modernEmbeddedLink.className = 'modern-embedded-link';
-
-            // Build HTML
-            let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer">';
-            
-            // Left side: Image
-            html += '<div class="embedded-link-image">';
-            if (imageUrl) {
-                html += '<img src="' + this.#escapeHtml(imageUrl) + '" alt="Preview image for ' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">';
+        }
+        
+        // Extract favicon
+        let faviconUrl = '';
+        for (const img of images) {
+            const src = img.src || '';
+            if (src.includes('touch-icon') || src.includes('icon') || 
+                (img.width && img.width <= 48 && img.height && img.height <= 48)) {
+                faviconUrl = src;
+                break;
             }
-            html += '</div>';
-            
-            // Right side: Content
-            html += '<div class="embedded-link-content">';
-            
-            // Domain with favicon
-            html += '<div class="embedded-link-domain">';
-            if (faviconUrl) {
-                html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async">';
-            }
-            html += '<span>' + this.#escapeHtml(displayDomain) + '</span>';
-            html += '</div>';
-            
-            // Title
-            if (title) {
-                html += '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
-            }
-            
-            // Description
-            if (description) {
-                html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
-            }
-            
-            // Read more text (always in English)
-            html += '<div class="embedded-link-meta">';
-            html += '<span class="embedded-link-read-more">Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;</span>';
-            html += '</div>';
-            
-            html += '</div></a>';
+        }
 
-            modernEmbeddedLink.innerHTML = html;
-            
-            // Replace the original container
-            container.parentNode.replaceChild(modernEmbeddedLink, container);
+        // Normalize domain display (lowercase without www)
+        const displayDomain = domain.toLowerCase().replace('www.', '');
 
-            // Add event listener for tracking
-            modernEmbeddedLink.querySelector('a').addEventListener('click', (e) => {
+        // Create modern embedded link
+        const modernEmbeddedLink = document.createElement('div');
+        modernEmbeddedLink.className = 'modern-embedded-link';
+
+        // Build HTML
+        let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer">';
+        
+        // Left side: Image (only if we have a content image)
+        if (imageUrl) {
+            html += '<div class="embedded-link-image">' +
+                '<img src="' + this.#escapeHtml(imageUrl) + '" alt="Preview image for ' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
+                '</div>';
+        }
+        
+        // Right side: Content
+        html += '<div class="embedded-link-content">';
+        
+        // Domain with favicon
+        html += '<div class="embedded-link-domain">';
+        if (faviconUrl) {
+            html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
+        }
+        html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
+            '</div>';
+        
+        // Title
+        if (title) {
+            html += '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
+        }
+        
+        // Description
+        if (description) {
+            html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
+        }
+        
+        // Read more text (always in English)
+        html += '<div class="embedded-link-meta">' +
+            '<span class="embedded-link-read-more">Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;</span>' +
+            '</div>' +
+            '</div></a>';
+
+        modernEmbeddedLink.innerHTML = html;
+        
+        // Ensure proper image dimensions
+        const imagesInLink = modernEmbeddedLink.querySelectorAll('img');
+        imagesInLink.forEach(img => {
+            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
+                img.setAttribute('width', '100%');
+                img.setAttribute('height', 'auto');
+                img.style.width = '100%';
+                img.style.height = 'auto';
+            }
+        });
+        
+        // Replace the original container
+        container.parentNode.replaceChild(modernEmbeddedLink, container);
+
+        // Add event listener for tracking
+        const linkElement = modernEmbeddedLink.querySelector('a');
+        if (linkElement) {
+            linkElement.addEventListener('click', (e) => {
                 console.log('Embedded link clicked:', href);
             });
-
-        } catch (error) {
-            console.error('Error transforming embedded link:', error);
         }
+
+    } catch (error) {
+        console.error('Error transforming embedded link:', error);
     }
+}
 
     #extractDomain(url) {
         try {
