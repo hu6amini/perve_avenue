@@ -6576,7 +6576,7 @@ class PostModernizer {
     }
 
     // NEW METHOD: Handle deleted user details for box_visitatore posts
-       // Method to process deleted user details for box_visitatore posts
+        // Method to process deleted user details for box_visitatore posts
     #processDeletedUserDetails(detailsElement, nickElement) {
         console.debug('Processing deleted user details for box_visitatore');
         
@@ -6608,7 +6608,7 @@ class PostModernizer {
         // Process the u_title element to create a badge
         const uTitleElement = detailsElement.querySelector('span.u_title');
         if (uTitleElement) {
-            // Extract meaningful text from u_title
+            // Extract text from u_title using the new method
             const titleText = this.#extractTextFromUTitle(uTitleElement);
             console.debug('Extracted title text:', titleText);
             
@@ -6622,24 +6622,8 @@ class PostModernizer {
             }
         }
         
-        // Add user-stats for consistency
-        const userStats = document.createElement('div');
-        userStats.className = 'user-stats';
-        
-        const statusStat = document.createElement('div');
-        statusStat.className = 'stat status deleted-status';
-        // Add the icon
-        const icon = document.createElement('i');
-        icon.className = 'fa-regular fa-user-slash';
-        icon.setAttribute('aria-hidden', 'true');
-        statusStat.appendChild(icon);
-        
-        const statusSpan = document.createElement('span');
-        statusSpan.textContent = 'Deleted User';
-        statusStat.appendChild(statusSpan);
-        
-        userStats.appendChild(statusStat);
-        newContainer.appendChild(userStats);
+        // REMOVED: user-stats section since we don't have stats for deleted users
+        // and the badge already indicates the deleted status
         
         // Clean up: remove any td.left.Item wrappers that might be inside
         const leftItemWrappers = newContainer.querySelectorAll('td.left.Item');
