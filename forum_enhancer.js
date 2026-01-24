@@ -6840,51 +6840,57 @@ class PostModernizer {
         });
     }
 
-    #cleanupSearchPostContent(contentWrapper) {
-        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
-            if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
-                el.remove();
-            } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
-                const parent = el.parentNode;
-                if (parent) {
-                    while (el.firstChild) {
-                        parent.insertBefore(el.firstChild, el);
-                    }
-                    el.remove();
-                }
-            }
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
-            if (container.classList.contains('quote-modernized')) return;
-            this.#transformQuote(container);
-            container.classList.add('quote-modernized');
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
-            if (container.classList.contains('spoiler-modernized')) return;
-            this.#transformSpoiler(container);
-            container.classList.add('spoiler-modernized');
-        });
-
-        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
-            if (container.classList.contains('code-modernized')) return;
-            this.#transformCodeBlock(container);
-            container.classList.add('code-modernized');
-        });
-
-        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
-            if (container.classList.contains('attachment-modernized')) return;
-            this.#transformAttachment(container);
-            container.classList.add('attachment-modernized');
-        });
-
-        contentWrapper.querySelectorAll('.ffb_embedlink').forEach(container => {
-            if (container.classList.contains('embedded-link-modernized')) return;
-            this.#transformEmbeddedLink(container);
-            container.classList.add('embedded-link-modernized');
-        });
+   #cleanupSearchPostContent(contentWrapper) {
+    // Skip if in editor
+    if (this.#isInEditor(contentWrapper)) {
+        console.debug('Skipping search post content cleanup in editor');
+        return;
     }
+    
+    contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
+        if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
+            el.remove();
+        } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
+            const parent = el.parentNode;
+            if (parent) {
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                el.remove();
+            }
+        }
+    });
+
+    contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
+        if (container.classList.contains('quote-modernized')) return;
+        this.#transformQuote(container);
+        container.classList.add('quote-modernized');
+    });
+
+    contentWrapper.querySelectorAll('div[align="center"].spoiler').forEach(container => {
+        if (container.classList.contains('spoiler-modernized')) return;
+        this.#transformSpoiler(container);
+        container.classList.add('spoiler-modernized');
+    });
+
+    contentWrapper.querySelectorAll('div[align="center"]:has(.code_top)').forEach(container => {
+        if (container.classList.contains('code-modernized')) return;
+        this.#transformCodeBlock(container);
+        container.classList.add('code-modernized');
+    });
+
+    contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(container => {
+        if (container.classList.contains('attachment-modernized')) return;
+        this.#transformAttachment(container);
+        container.classList.add('attachment-modernized');
+    });
+
+    contentWrapper.querySelectorAll('.ffb_embedlink').forEach(container => {
+        if (container.classList.contains('embedded-link-modernized')) return;
+        this.#transformEmbeddedLink(container);
+        container.classList.add('embedded-link-modernized');
+    });
+}
 
     #escapeRegex(string) {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
