@@ -6575,132 +6575,96 @@ class PostModernizer {
     }
 
     // NEW METHOD: Handle deleted user details for box_visitatore posts
-      // NEW METHOD: Handle deleted user details for box_visitatore posts
-    #handleDeletedUserDetails(detailsClone, nickElement, userInfo) {
+    // Method to process deleted user details for box_visitatore posts
+    #processDeletedUserDetails(detailsElement, nickElement) {
         console.debug('Processing deleted user details for box_visitatore');
         
-        // First, remove the <br class="br_status"> element
-        const brStatus = detailsClone.querySelector('br.br_status');
-        if (brStatus) {
-            console.debug('Removing br.br_status element');
-            brStatus.remove();
+        if (!detailsElement) {
+            console.warn('No details element provided');
+            return;
         }
         
-        // Find and process the u_title element
-        const uTitleElement = detailsClone.querySelector('span.u_title');
-        let badge = null;
+        // Create a clean container for the new structure
+        const newContainer = document.createElement('div');
+        newContainer.className = 'details';
         
+        // Extract the avatar container
+        const avatarContainer = detailsElement.querySelector('.forum-avatar-container, .deleted-user-container');
+        if (avatarContainer) {
+            newContainer.appendChild(avatarContainer.cloneNode(true));
+        }
+        
+        // Extract the nick from details (preferred) or use the one from title2Top
+        let nickFromDetails = detailsElement.querySelector('.nick');
+        if (nickFromDetails) {
+            newContainer.appendChild(nickFromDetails.cloneNode(true));
+        } else if (nickElement) {
+            // Fallback to nick from title2Top
+            const nickClone = nickElement.cloneNode(true);
+            newContainer.appendChild(nickClone);
+        }
+        
+        // Process the u_title element to create a badge
+        const uTitleElement = detailsElement.querySelector('span.u_title');
         if (uTitleElement) {
-            console.debug('Found u_title element:', uTitleElement.innerHTML);
-            
-            // Extract text from u_title, handling <br> and text nodes
-            let titleText = '';
-            const textNodes = [];
-            const walker = document.createTreeWalker(uTitleElement, NodeFilter.SHOW_TEXT, null, false);
-            let node;
-            while (node = walker.nextNode()) {
-                const text = node.textContent.trim();
-                if (text && text.toLowerCase() !== 'user deleted') {
-                    textNodes.push(text);
-                }
-            }
-            
-            if (textNodes.length > 0) {
-                titleText = textNodes.join(' ');
-            }
-            
-            console.debug('Extracted title text:', titleText);
-            
-            // Remove the u_title element and its parent <p> if exists
-            const uTitleParent = uTitleElement.parentElement;
-            if (uTitleParent && uTitleParent.tagName === 'P') {
-                uTitleParent.remove();
-            } else {
-                uTitleElement.remove();
-            }
-            
-            // If we have a title text, create a badge
-            if (titleText) {
-                badge = document.createElement('div');
+            // Extract meaningful text from u_title (skip "User deleted")
+            const titleText = this.#extractMeaningfulText(uTitleElement);
+            if (titleText && titleText.toLowerCase() !== 'user deleted') {
+                const badge = document.createElement('div');
                 badge.className = 'badge deleted-user-badge';
                 badge.textContent = titleText;
-                
-                console.debug('Created badge with text:', titleText);
+                newContainer.appendChild(badge);
             }
         }
         
-        // Remove any remaining empty <p> elements
-        detailsClone.querySelectorAll('p').forEach(p => {
-            const text = p.textContent.trim().toLowerCase();
-            if (!p.textContent.trim() || text === 'user deleted') {
-                console.debug('Removing empty or "User deleted" p element');
-                p.remove();
-            }
-        });
-        
-        // Clean up any remaining <br> elements
-        detailsClone.querySelectorAll('br').forEach(br => {
-            console.debug('Removing br element');
-            br.remove();
-        });
-        
-        // Remove any remaining text nodes that only contain whitespace
-        const walker = document.createTreeWalker(detailsClone, NodeFilter.SHOW_TEXT, null, false);
-        const textNodesToRemove = [];
-        let textNode;
-        while (textNode = walker.nextNode()) {
-            if (textNode.textContent.trim() === '') {
-                textNodesToRemove.push(textNode);
-            }
-        }
-        
-        textNodesToRemove.forEach(node => {
-            if (node.parentNode) {
-                node.parentNode.removeChild(node);
-            }
-        });
-        
-        // Now reconstruct the detailsClone content
-        const newContent = document.createElement('div');
-        
-        // Add avatar if present
-        const avatar = detailsClone.querySelector('.forum-avatar-container, .deleted-user-container');
-        if (avatar) {
-            newContent.appendChild(avatar.cloneNode(true));
-        }
-        
-        // Add nick element if we have one
-        if (nickElement) {
-            const nickClone = nickElement.cloneNode(true);
-            newContent.appendChild(nickClone);
-            
-            // Add badge after nick if we have one
-            if (badge) {
-                newContent.appendChild(badge);
-            }
-        } else if (badge) {
-            // Add badge if no nick
-            newContent.appendChild(badge);
-        }
-        
-        // Add user-stats div for consistency with other posts
+        // Add user-stats for consistency
         const userStats = document.createElement('div');
         userStats.className = 'user-stats';
         
-        // Create a "Deleted User" status stat
         const statusStat = document.createElement('div');
         statusStat.className = 'stat status deleted-status';
         statusStat.innerHTML = '<i class="fa-regular fa-user-slash" aria-hidden="true"></i><span>Deleted User</span>';
         userStats.appendChild(statusStat);
         
-        newContent.appendChild(userStats);
+        newContainer.appendChild(userStats);
         
-        // Replace the entire detailsClone content with our new content
-        detailsClone.innerHTML = '';
-        detailsClone.appendChild(newContent);
+        // Clean up: remove any td.left.Item wrappers that might be inside
+        const leftItemWrappers = newContainer.querySelectorAll('td.left.Item');
+        leftItemWrappers.forEach(wrapper => {
+            const parent = wrapper.parentNode;
+            if (parent) {
+                while (wrapper.firstChild) {
+                    parent.insertBefore(wrapper.firstChild, wrapper);
+                }
+                wrapper.remove();
+            }
+        });
         
-        console.debug('Final detailsClone HTML:', detailsClone.innerHTML);
-        userInfo.appendChild(detailsClone);
+        // Replace the original details content with our new structure
+        detailsElement.innerHTML = '';
+        detailsElement.appendChild(newContainer);
+        
+        // Clean up any remaining empty elements
+        this.#cleanEmptyElements(detailsElement);
+    }
+    
+    // Helper method to extract meaningful text (skip "User deleted")
+    #extractMeaningfulText(element) {
+        if (!element) return '';
+        
+        const textNodes = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        
+        while (node = walker.nextNode()) {
+            const text = node.textContent.trim();
+            // Skip "User deleted" text
+            if (text && text.toLowerCase() !== 'user deleted') {
+                textNodes.push(text);
+            }
+        }
+        
+        return textNodes.join(' ').trim();
     }
     
    #modernizeEmbeddedLinksInContent(contentWrapper) {
