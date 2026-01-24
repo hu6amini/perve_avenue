@@ -6298,7 +6298,7 @@ class PostModernizer {
         miniButtons.forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
 
-    #transformPostElements() {
+     #transformPostElements() {
         const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
         const urlParams = new URLSearchParams(window.location.search);
         const startOffset = parseInt(urlParams.get('st') || '0');
@@ -6404,7 +6404,29 @@ class PostModernizer {
                     const details = leftSection.querySelector('.details');
                     const avatar = leftSection.querySelector('.avatar');
 
-                    if (details && avatar) {
+                    // SPECIAL HANDLING: Check if this is a deleted user post
+                    const isDeletedUser = post.classList.contains('box_visitatore');
+                    
+                    if (isDeletedUser) {
+                        console.debug('Processing deleted user (box_visitatore) post:', post.id);
+                        
+                        // For deleted users, we handle the structure differently
+                        if (details) {
+                            // Create a clean details clone
+                            const detailsClone = details.cloneNode(true);
+                            
+                            // Process the deleted user details
+                            this.#processDeletedUserDetails(detailsClone, nickElement);
+                            
+                            // Add the processed details to userInfo
+                            userInfo.appendChild(detailsClone);
+                        } else {
+                            // Fallback: append the left section as-is
+                            userInfo.appendChild(leftSection.cloneNode(true));
+                        }
+                    } 
+                    // NORMAL USER HANDLING
+                    else if (details && avatar) {
                         const groupDd = details.querySelector('dl.u_group dd');
                         groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
 
@@ -6413,89 +6435,83 @@ class PostModernizer {
                         const detailsClone = details.cloneNode(true);
                         detailsClone.querySelector('.avatar')?.remove();
 
-                        // Special handling for deleted users (box_visitatore)
-                        if (post.classList.contains('box_visitatore')) {
-                            this.#handleDeletedUserDetails(detailsClone, nickElement, userInfo);
-                        } else {
-                            // Normal user handling
-                            if (nickElement) {
-                                const nickClone = nickElement.cloneNode(true);
-                                detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+                        if (nickElement) {
+                            const nickClone = nickElement.cloneNode(true);
+                            detailsClone.insertBefore(nickClone, detailsClone.firstChild);
 
-                                if (groupValue) {
-                                    const badge = document.createElement('div');
-                                    badge.className = 'badge';
-                                    badge.textContent = groupValue;
-                                    nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                                }
+                            if (groupValue) {
+                                const badge = document.createElement('div');
+                                badge.className = 'badge';
+                                badge.textContent = groupValue;
+                                nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
                             }
-
-                            detailsClone.querySelector('span.u_title')?.remove();
-
-                            let rankHTML = '';
-                            const pWithURank = detailsClone.querySelector('p');
-                            if (pWithURank && pWithURank.querySelector('span.u_rank')) {
-                                rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
-                                pWithURank.remove();
-                            }
-
-                            detailsClone.querySelector('br.br_status')?.remove();
-
-                            const userStats = document.createElement('div');
-                            userStats.className = 'user-stats';
-
-                            const originalDetails = details.cloneNode(true);
-
-                            if (rankHTML) {
-                                const rankStat = document.createElement('div');
-                                rankStat.className = 'stat rank';
-                                rankStat.innerHTML = rankHTML;
-                                userStats.appendChild(rankStat);
-                            }
-
-                            const postsDd = originalDetails.querySelector('dl.u_posts dd');
-                            if (postsDd) {
-                                const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
-                                userStats.appendChild(postsStat);
-                            }
-
-                            const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
-                            if (reputationDd) {
-                                const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
-                                userStats.appendChild(reputationStat);
-                            }
-
-                            const statusDl = originalDetails.querySelector('dl.u_status');
-                            if (statusDl) {
-                                const statusDd = statusDl.querySelector('dd');
-                                const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
-                                const isOnline = statusValue.toLowerCase().includes('online');
-                                const originalStatusIcon = statusDl.querySelector('dd i');
-
-                                let statusIconHTML = '';
-                                if (originalStatusIcon) {
-                                    statusIconHTML = originalStatusIcon.outerHTML;
-                                    if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
-                                        statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
-                                    }
-                                } else {
-                                    statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
-                                }
-
-                                const statusStat = document.createElement('div');
-                                statusStat.className = 'stat status' + (isOnline ? ' online' : '');
-                                statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
-                                userStats.appendChild(statusStat);
-                            }
-
-                            detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
-
-                            if (userStats.children.length > 0) {
-                                detailsClone.appendChild(userStats);
-                            }
-
-                            userInfo.appendChild(detailsClone);
                         }
+
+                        detailsClone.querySelector('span.u_title')?.remove();
+
+                        let rankHTML = '';
+                        const pWithURank = detailsClone.querySelector('p');
+                        if (pWithURank && pWithURank.querySelector('span.u_rank')) {
+                            rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
+                            pWithURank.remove();
+                        }
+
+                        detailsClone.querySelector('br.br_status')?.remove();
+
+                        const userStats = document.createElement('div');
+                        userStats.className = 'user-stats';
+
+                        const originalDetails = details.cloneNode(true);
+
+                        if (rankHTML) {
+                            const rankStat = document.createElement('div');
+                            rankStat.className = 'stat rank';
+                            rankStat.innerHTML = rankHTML;
+                            userStats.appendChild(rankStat);
+                        }
+
+                        const postsDd = originalDetails.querySelector('dl.u_posts dd');
+                        if (postsDd) {
+                            const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
+                            userStats.appendChild(postsStat);
+                        }
+
+                        const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
+                        if (reputationDd) {
+                            const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
+                            userStats.appendChild(reputationStat);
+                        }
+
+                        const statusDl = originalDetails.querySelector('dl.u_status');
+                        if (statusDl) {
+                            const statusDd = statusDl.querySelector('dd');
+                            const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
+                            const isOnline = statusValue.toLowerCase().includes('online');
+                            const originalStatusIcon = statusDl.querySelector('dd i');
+
+                            let statusIconHTML = '';
+                            if (originalStatusIcon) {
+                                statusIconHTML = originalStatusIcon.outerHTML;
+                                if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
+                                    statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
+                                }
+                            } else {
+                                statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
+                            }
+
+                            const statusStat = document.createElement('div');
+                            statusStat.className = 'stat status' + (isOnline ? ' online' : '');
+                            statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
+                            userStats.appendChild(statusStat);
+                        }
+
+                        detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
+
+                        if (userStats.children.length > 0) {
+                            detailsClone.appendChild(userStats);
+                        }
+
+                        userInfo.appendChild(detailsClone);
                     } else {
                         userInfo.appendChild(leftSection.cloneNode(true));
                     }
