@@ -64,8 +64,7 @@
         brokenAvatars: new Set(),
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
-        isInitialized: false,
-        observerRegistered: false
+        isInitialized: false
     };
 
     // ==============================
@@ -673,195 +672,6 @@
     }
 
     // ==============================
-    // FORUM OBSERVER INTEGRATION
-    // ==============================
-
-    function setupObserver() {
-        if (!window.forumObserver || typeof window.forumObserver.register !== 'function') {
-            console.warn('ForumCoreObserver not available. Avatar system will only process existing elements.');
-            return;
-        }
-        
-        // Register with ForumCoreObserver
-        var observerId = window.forumObserver.register({
-            id: 'forum_avatars_working',
-            selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar',
-            callback: handleNewElement,
-            priority: 'high'
-        });
-        
-        if (observerId) {
-            state.observerRegistered = true;
-            console.log('✅ Avatar system registered with ForumCoreObserver (ID: ' + observerId + ')');
-        } else {
-            console.warn('Failed to register avatar system with ForumCoreObserver');
-        }
-    }
-
-    // ==============================
-    // INITIALIZATION
-    // ==============================
-
-    function initAvatarSystem() {
-        if (state.isInitialized) return;
-        
-        console.log('🚀 Initializing avatar system (ForumCoreObserver only)');
-        
-        injectCSS();
-        setupObserver();
-        
-        setTimeout(function() {
-            processExistingElements();
-            state.isInitialized = true;
-            console.log('✅ Avatar system initialized');
-            
-            // Log observer status
-            if (!state.observerRegistered) {
-                console.warn('⚠️ Avatar system running without observer (static mode only)');
-            }
-        }, 100);
-    }
-
-    // ==============================
-    // PUBLIC API
-    // ==============================
-
-    window.ForumAvatars = {
-        init: initAvatarSystem,
-        
-        refresh: function() {
-            // Remove existing avatars
-            var containers = document.querySelectorAll('.forum-avatar-container');
-            for (var i = 0; i < containers.length; i++) {
-                containers[i].remove();
-            }
-            
-            var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
-            for (var j = 0; j < replacedAvatars.length; j++) {
-                replacedAvatars[j].remove();
-            }
-            
-            // Remove avatar-replaced class
-            var replacedLinks = document.querySelectorAll('.avatar-replaced');
-            for (var k = 0; k < replacedLinks.length; k++) {
-                replacedLinks[k].classList.remove('avatar-replaced');
-            }
-            
-            // Reset state
-            state.userCache = {};
-            state.brokenAvatars.clear();
-            state.processedPosts = new WeakSet();
-            state.processedAvatars = new WeakSet();
-            state.isInitialized = false;
-            state.observerRegistered = false;
-            
-            // Clear cache
-            for (var l = 0; l < localStorage.length; l++) {
-                var key = localStorage.key(l);
-                if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
-                            key.startsWith(AVATAR_CONFIG.cache.brokenPrefix))) {
-                    localStorage.removeItem(key);
-                }
-            }
-            
-            // Re-initialize
-            initAvatarSystem();
-        },
-        
-        stats: function() {
-            var cacheCount = 0;
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
-                if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
-                    cacheCount++;
-                }
-            }
-            
-            var posts = document.querySelectorAll('.summary li[class^="box_"]');
-            var withAvatars = 0;
-            for (var j = 0; j < posts.length; j++) {
-                var nickname = posts[j].querySelector('.nick a');
-                if (nickname && nickname.previousElementSibling && 
-                    nickname.previousElementSibling.classList && 
-                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
-                    withAvatars++;
-                }
-            }
-            
-            return {
-                postsTotal: posts.length,
-                postsWithAvatars: withAvatars,
-                memoryCache: Object.keys(state.userCache).length,
-                localStorageCache: cacheCount,
-                brokenUrls: state.brokenAvatars.size,
-                isInitialized: state.isInitialized,
-                observerRegistered: state.observerRegistered,
-                usesForumObserver: state.observerRegistered
-            };
-        },
-        
-        debugUser: function(userId) {
-            var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
-            console.log('Debug user ' + userId + ':');
-            
-            for (var i = 0; i < posts.length; i++) {
-                var nickname = posts[i].querySelector('.nick a');
-                console.log('Post ' + (i+1) + ' .nick a:', nickname ? nickname.textContent : 'none');
-                
-                var extracted = extractUsernameFromElement(posts[i], 'post', userId);
-                console.log('Extracted username:', extracted);
-            }
-        },
-        
-        // New method to check observer status
-        observerStatus: function() {
-            return {
-                hasForumObserver: !!(window.forumObserver && typeof window.forumObserver.register === 'function'),
-                isRegistered: state.observerRegistered,
-                observerAvailable: !!(window.forumObserver)
-            };
-        }
-    };
-
-    // ==============================
-    // AUTO-INITIALIZE
-    // ==============================
-
-    function delayedInit() {
-        // Wait a bit longer to ensure forumObserver is loaded
-        if (window.forumObserver && typeof window.forumObserver.register === 'function') {
-            initAvatarSystem();
-        } else {
-            // Try again in 500ms if forumObserver not yet available
-            setTimeout(function() {
-                if (window.forumObserver && typeof window.forumObserver.register === 'function') {
-                    initAvatarSystem();
-                } else {
-                    console.warn('ForumCoreObserver not found after delay. Initializing avatar system in static mode.');
-                    // Still initialize but without dynamic observation
-                    injectCSS();
-                    setTimeout(function() {
-                        processExistingElements();
-                        state.isInitialized = true;
-                        console.log('✅ Avatar system initialized in static mode (no dynamic updates)');
-                    }, 100);
-                }
-            }, 500);
-        }
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(delayedInit, 100);
-        });
-    } else {
-        setTimeout(delayedInit, 100);
-    }
-
-})();
-
-
-    // ==============================
     // OBSERVER INTEGRATION
     // ==============================
 
@@ -875,22 +685,7 @@
             });
             console.log('Registered with ForumCoreObserver');
         } else {
-            // Fallback observer
-            var observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.addedNodes.length) {
-                        mutation.addedNodes.forEach(function(node) {
-                            handleNewElement(node);
-                        });
-                    }
-                });
-            });
-            
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-            console.log('Using fallback MutationObserver');
+            console.error('ForumCoreObserver not available. Avatar system will not work.');
         }
     }
 
