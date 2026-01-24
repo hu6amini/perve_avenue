@@ -25,7 +25,8 @@
     var AVATAR_CONFIG = {
         sizes: {
             'post': 60,
-            'profile_card': 80
+            'profile_card': 80,
+            'deleted_user': 60 // Added size for deleted users
         },
         
         selectors: {
@@ -39,6 +40,12 @@
                 type: 'default_avatar',
                 size: 'profile_card',
                 extractor: 'href'
+            },
+            
+            '.post.box_visitatore': { // NEW: Handle deleted users
+                type: 'deleted_user',
+                size: 'deleted_user',
+                extractor: 'visitatore'
             }
         },
         
@@ -51,7 +58,8 @@
         cache: {
             duration: 86400000,
             prefix: 'avatar_',
-            brokenPrefix: 'broken_avatar_'
+            brokenPrefix: 'broken_avatar_',
+            deletedPrefix: 'deleted_avatar_' // Added for deleted users
         }
     };
 
@@ -64,6 +72,7 @@
         brokenAvatars: new Set(),
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
+        processedDeletedUsers: new WeakSet(), // NEW: Track deleted users
         isInitialized: false
     };
 
@@ -75,13 +84,24 @@
         return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
     }
 
+    function getDeletedUserCacheKey(username, size) {
+        // Create a stable hash from username for caching
+        var hash = 0;
+        for (var i = 0; i < username.length; i++) {
+            hash = ((hash << 5) - hash) + username.charCodeAt(i);
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        return AVATAR_CONFIG.cache.deletedPrefix + Math.abs(hash) + '_' + size;
+    }
+
     function clearOldCacheEntries() {
         var cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
         var keysToRemove = [];
         
         for (var i = 0; i < localStorage.length; i++) {
             var key = localStorage.key(i);
-            if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
+            if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                        key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                 try {
                     var data = JSON.parse(localStorage.getItem(key));
                     if (data && data.timestamp < cutoff) {
@@ -217,6 +237,11 @@
                     username = parentLink.textContent;
                 }
             }
+        } else if (type === 'deleted_user') { // NEW: Handle deleted users
+            var nickname = element.querySelector('.nick');
+            if (nickname && nickname.textContent) {
+                username = nickname.textContent;
+            }
         }
         
         return cleanUsername(username);
@@ -239,7 +264,13 @@
         } else if (firstLetter >= '0' && firstLetter <= '9') {
             colorIndex = (parseInt(firstLetter) + 26) % colors.length;
         } else {
-            colorIndex = (parseInt(userId, 10) || 0) % colors.length;
+            // For deleted users (no userId), use username hash
+            var hash = 0;
+            for (var i = 0; i < username.length; i++) {
+                hash = ((hash << 5) - hash) + username.charCodeAt(i);
+                hash = hash & hash;
+            }
+            colorIndex = Math.abs(hash) % colors.length;
         }
         
         var backgroundColor = colors[colorIndex];
@@ -258,10 +289,59 @@
     }
 
     // ==============================
-    // AVATAR FETCHING
+    // AVATAR FETCHING - UPDATED FOR DELETED USERS
     // ==============================
 
-    function getOrCreateAvatar(userId, username, size, callback) {
+    function getOrCreateAvatar(userId, username, size, callback, isDeletedUser) {
+        // NEW: Handle deleted users differently
+        if (isDeletedUser) {
+            var cacheKey = 'deleted_' + username + '_' + size;
+            
+            // Check memory cache
+            if (state.userCache[cacheKey]) {
+                var cached = state.userCache[cacheKey];
+                callback(cached.url, cached.username);
+                return;
+            }
+            
+            // Check localStorage
+            var stored = localStorage.getItem(getDeletedUserCacheKey(username, size));
+            if (stored) {
+                try {
+                    var data = JSON.parse(stored);
+                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                        state.userCache[cacheKey] = data;
+                        callback(data.url, data.username);
+                        return;
+                    }
+                } catch (e) {
+                    // Invalid cache
+                }
+            }
+            
+            // Generate avatar for deleted user
+            var avatarUrl = generateLetterAvatar(null, username, size);
+            var cacheData = {
+                url: avatarUrl,
+                username: username,
+                timestamp: Date.now(),
+                size: size,
+                isDeletedUser: true
+            };
+            
+            try {
+                localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
+            } catch (e) {
+                clearOldCacheEntries();
+                localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
+            }
+            
+            state.userCache[cacheKey] = cacheData;
+            callback(avatarUrl, username);
+            return;
+        }
+        
+        // Original code for regular users
         var cacheKey = userId + '_' + size;
         
         // Check memory cache
@@ -375,7 +455,7 @@
     }
 
     // ==============================
-    // ELEMENT PROCESSING
+    // ELEMENT PROCESSING - UPDATED FOR DELETED USERS
     // ==============================
 
     function extractUserIdFromElement(element, extractorType) {
@@ -398,6 +478,9 @@
                 var hrefMatch = linkElement.href.match(/MID=(\d+)/);
                 if (hrefMatch) userId = hrefMatch[1];
             }
+        } else if (extractorType === 'visitatore') {
+            // Deleted users have no ID, return null
+            return null;
         }
         
         return userId;
@@ -426,6 +509,14 @@
                 extractor: 'href'
             };
         }
+        // NEW: Check if it's a deleted user post
+        else if (element.matches('.post.box_visitatore')) {
+            config = {
+                type: 'deleted_user',
+                size: AVATAR_CONFIG.sizes.deleted_user,
+                extractor: 'visitatore'
+            };
+        }
         
         if (!config) {
             return null;
@@ -433,25 +524,29 @@
         
         // Check if already processed
         if ((config.type === 'post' && state.processedPosts.has(element)) ||
-            (config.type === 'default_avatar' && state.processedAvatars.has(element))) {
+            (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
+            (config.type === 'deleted_user' && state.processedDeletedUsers.has(element))) {
             return null;
         }
         
         var userId = extractUserIdFromElement(element, config.extractor);
-        if (!userId) {
-            return null;
-        }
+        
+        // For deleted users, userId will be null, which is expected
         
         // Additional checks
-        if (config.type === 'post') {
-            var nickname = element.querySelector('.nick a');
+        if (config.type === 'post' || config.type === 'deleted_user') {
+            var nickname = element.querySelector('.nick');
             if (!nickname) {
                 return null;
             }
             if (nickname.previousElementSibling && 
                 nickname.previousElementSibling.classList && 
                 nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
-                state.processedPosts.add(element);
+                if (config.type === 'post') {
+                    state.processedPosts.add(element);
+                } else {
+                    state.processedDeletedUsers.add(element);
+                }
                 return null;
             }
         } else if (config.type === 'default_avatar') {
@@ -467,7 +562,7 @@
         
         return {
             element: element,
-            userId: userId,
+            userId: userId, // Will be null for deleted users
             config: config
         };
     }
@@ -476,10 +571,13 @@
     // AVATAR CREATION & INSERTION
     // ==============================
 
-    function createAvatarElement(avatarUrl, userId, size, username) {
+    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser) {
         var img = new Image(size, size);
         
         img.className = 'forum-user-avatar avatar-size-' + size;
+        if (isDeletedUser) {
+            img.className += ' deleted-user-avatar';
+        }
         img.alt = username ? 'Avatar for ' + username : '';
         img.loading = 'lazy';
         img.decoding = 'async';
@@ -503,12 +601,22 @@
         
         img.addEventListener('error', function onError() {
             markAvatarAsBroken(avatarUrl);
-            var cacheKey = userId + '_' + size;
-            delete state.userCache[cacheKey];
-            localStorage.removeItem(getCacheKey(userId, size));
-            
-            var fallbackUrl = generateLetterAvatar(userId, username || '', size);
-            this.src = fallbackUrl;
+            if (userId) {
+                var cacheKey = userId + '_' + size;
+                delete state.userCache[cacheKey];
+                localStorage.removeItem(getCacheKey(userId, size));
+                
+                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+                this.src = fallbackUrl;
+            } else if (username) {
+                // For deleted users
+                var cacheKey = 'deleted_' + username + '_' + size;
+                delete state.userCache[cacheKey];
+                localStorage.removeItem(getDeletedUserCacheKey(username, size));
+                
+                var fallbackUrl = generateLetterAvatar(null, username || '', size);
+                this.src = fallbackUrl;
+            }
             this.removeEventListener('error', onError);
         }, { once: true });
         
@@ -522,6 +630,9 @@
         
         var username = extractUsernameFromElement(element, config.type, userId);
         
+        // NEW: Determine if this is a deleted user
+        var isDeletedUser = config.type === 'deleted_user';
+        
         getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
             if (config.type === 'post') {
                 insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
@@ -529,12 +640,15 @@
             } else if (config.type === 'default_avatar') {
                 insertDefaultAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedAvatars.add(element);
+            } else if (config.type === 'deleted_user') {
+                insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
+                state.processedDeletedUsers.add(element);
             }
-        });
+        }, isDeletedUser);
     }
 
     function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick a');
+        var nickname = postElement.querySelector('.nick a, .nick');
         if (!nickname) return;
         
         if (nickname.previousElementSibling && 
@@ -551,7 +665,7 @@
             'margin-right:8px;' +
             'position:relative;';
         
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, username));
+        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false));
         nickname.parentNode.insertBefore(container, nickname);
     }
 
@@ -563,7 +677,7 @@
             return;
         }
         
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username);
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false);
         
         var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
         if (defaultAvatarDiv) {
@@ -573,6 +687,29 @@
         }
         
         parentLink.classList.add('avatar-replaced');
+    }
+
+    // NEW: Function to insert avatars for deleted users
+    function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
+        var nickname = postElement.querySelector('.nick');
+        if (!nickname) return;
+        
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            return;
+        }
+        
+        var container = document.createElement('div');
+        container.className = 'forum-avatar-container deleted-user-container';
+        container.style.cssText = 
+            'display:inline-block;' +
+            'vertical-align:middle;' +
+            'margin-right:8px;' +
+            'position:relative;';
+        
+        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true));
+        nickname.parentNode.insertBefore(container, nickname);
     }
 
     // ==============================
@@ -589,7 +726,7 @@
         }
         
         // Check for posts in node
-        var posts = node.querySelectorAll('.summary li[class^="box_"]');
+        var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -610,8 +747,8 @@
     function processExistingElements() {
         console.log('Processing existing elements...');
         
-        // Process posts
-        var posts = document.querySelectorAll('.summary li[class^="box_"]');
+        // Process posts (including deleted users)
+        var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -659,6 +796,16 @@
             '}' +
             '.forum-user-avatar:hover{' +
             'opacity:.9' +
+            '}' +
+            /* NEW: Styles for deleted users */
+            '.deleted-user-avatar{' +
+            'filter:grayscale(30%);' +
+            'opacity:0.8;' +
+            'border:2px dashed #ccc;' +
+            '}' +
+            '.deleted-user-container:hover .deleted-user-avatar{' +
+            'opacity:0.9;' +
+            'filter:grayscale(10%);' +
             '}';
         
         style.textContent = css;
@@ -679,7 +826,7 @@
         if (window.forumObserver && typeof window.forumObserver.register === 'function') {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
-                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore',
                 callback: handleNewElement,
                 priority: 'high'
             });
@@ -738,13 +885,15 @@
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
+            state.processedDeletedUsers = new WeakSet();
             state.isInitialized = false;
             
             // Clear cache
             for (var l = 0; l < localStorage.length; l++) {
                 var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
-                            key.startsWith(AVATAR_CONFIG.cache.brokenPrefix))) {
+                            key.startsWith(AVATAR_CONFIG.cache.brokenPrefix) ||
+                            key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                     localStorage.removeItem(key);
                 }
             }
@@ -755,17 +904,21 @@
         
         stats: function() {
             var cacheCount = 0;
+            var deletedCacheCount = 0;
             for (var i = 0; i < localStorage.length; i++) {
                 var key = localStorage.key(i);
                 if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
                     cacheCount++;
                 }
+                if (key && key.startsWith(AVATAR_CONFIG.cache.deletedPrefix)) {
+                    deletedCacheCount++;
+                }
             }
             
-            var posts = document.querySelectorAll('.summary li[class^="box_"]');
+            var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
             var withAvatars = 0;
             for (var j = 0; j < posts.length; j++) {
-                var nickname = posts[j].querySelector('.nick a');
+                var nickname = posts[j].querySelector('.nick a, .nick');
                 if (nickname && nickname.previousElementSibling && 
                     nickname.previousElementSibling.classList && 
                     nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
@@ -778,6 +931,7 @@
                 postsWithAvatars: withAvatars,
                 memoryCache: Object.keys(state.userCache).length,
                 localStorageCache: cacheCount,
+                deletedUserCache: deletedCacheCount,
                 brokenUrls: state.brokenAvatars.size,
                 isInitialized: state.isInitialized
             };
@@ -788,8 +942,8 @@
             console.log('Debug user ' + userId + ':');
             
             for (var i = 0; i < posts.length; i++) {
-                var nickname = posts[i].querySelector('.nick a');
-                console.log('Post ' + (i+1) + ' .nick a:', nickname ? nickname.textContent : 'none');
+                var nickname = posts[i].querySelector('.nick a, .nick');
+                console.log('Post ' + (i+1) + ' .nick:', nickname ? nickname.textContent : 'none');
                 
                 var extracted = extractUsernameFromElement(posts[i], 'post', userId);
                 console.log('Extracted username:', extracted);
