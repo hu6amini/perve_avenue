@@ -6575,8 +6575,7 @@ class PostModernizer {
     }
 
     // NEW METHOD: Handle deleted user details for box_visitatore posts
-       // Method to process deleted user details for box_visitatore posts
-    #processDeletedUserDetails(detailsElement, nickElement) {
+      #processDeletedUserDetails(detailsElement, nickElement) {
         console.debug('Processing deleted user details for box_visitatore');
         
         if (!detailsElement) {
@@ -6584,56 +6583,54 @@ class PostModernizer {
             return;
         }
         
-        // Clear the existing content but keep the div.details element
-        const originalDetails = detailsElement;
+        // Create a clean container for the new structure
+        const newContainer = document.createElement('div');
+        newContainer.className = 'details';
         
-        // Store avatar and nick before clearing
-        const avatarContainer = originalDetails.querySelector('.forum-avatar-container, .deleted-user-container');
-        const nickFromDetails = originalDetails.querySelector('.nick');
-        const uTitleElement = originalDetails.querySelector('span.u_title');
-        
-        // Clear the details element
-        originalDetails.innerHTML = '';
-        
-        // Add avatar if present
+        // Extract the avatar container
+        const avatarContainer = detailsElement.querySelector('.forum-avatar-container, .deleted-user-container');
         if (avatarContainer) {
-            originalDetails.appendChild(avatarContainer.cloneNode(true));
+            newContainer.appendChild(avatarContainer.cloneNode(true));
         }
         
-        // Add nick if we have one
+        // Extract the nick from details (preferred) or use the one from title2Top
+        let nickFromDetails = detailsElement.querySelector('.nick');
         if (nickFromDetails) {
-            originalDetails.appendChild(nickFromDetails.cloneNode(true));
+            newContainer.appendChild(nickFromDetails.cloneNode(true));
         } else if (nickElement) {
             // Fallback to nick from title2Top
             const nickClone = nickElement.cloneNode(true);
-            originalDetails.appendChild(nickClone);
+            newContainer.appendChild(nickClone);
         }
         
-        // Process u_title to create badge
+        // Process the u_title element to create a badge
+        const uTitleElement = detailsElement.querySelector('span.u_title');
         if (uTitleElement) {
-            // Extract text from u_title
+            // Extract text from u_title - include ALL text including "User deleted"
             const titleText = this.#extractAllText(uTitleElement);
             console.debug('Extracted u_title text:', titleText);
             
-            // Create badge with the text
+            // Create badge with whatever text we found
             if (titleText && titleText.trim()) {
                 const badge = document.createElement('div');
                 badge.className = 'badge deleted-user-badge';
                 badge.textContent = titleText.trim();
-                originalDetails.appendChild(badge);
+                newContainer.appendChild(badge);
+                console.debug('Created badge with text:', titleText);
             }
-        } else {
-            // Check for any "User deleted" text nodes in the original
-            const walker = document.createTreeWalker(originalDetails, NodeFilter.SHOW_TEXT, null, false);
+            
+            // Also check for any text nodes directly in the details that might be "User deleted"
+            const walker = document.createTreeWalker(detailsElement, NodeFilter.SHOW_TEXT, null, false);
             let node;
             while (node = walker.nextNode()) {
                 const text = node.textContent.trim();
-                if (text.toLowerCase() === 'user deleted') {
+                if (text.toLowerCase() === 'user deleted' && !newContainer.querySelector('.badge')) {
                     // Create a badge for "User deleted"
                     const badge = document.createElement('div');
                     badge.className = 'badge deleted-user-badge';
                     badge.textContent = 'User deleted';
-                    originalDetails.appendChild(badge);
+                    newContainer.appendChild(badge);
+                    console.debug('Created badge for "User deleted" text node');
                     break;
                 }
             }
@@ -6645,17 +6642,22 @@ class PostModernizer {
         
         const statusStat = document.createElement('div');
         statusStat.className = 'stat status deleted-status';
+        // Add the icon with aria-hidden attribute
         statusStat.innerHTML = '<i class="fa-regular fa-user-slash" aria-hidden="true"></i><span>Deleted User</span>';
         userStats.appendChild(statusStat);
         
-        originalDetails.appendChild(userStats);
+        newContainer.appendChild(userStats);
+        
+        // Replace the entire details element content (don't create nested details divs)
+        detailsElement.innerHTML = '';
+        detailsElement.appendChild(newContainer);
         
         // Clean up any remaining empty elements
-        this.#cleanEmptyElements(originalDetails);
+        this.#cleanEmptyElements(detailsElement);
     }
     
-    // Helper method to extract meaningful text (skip "User deleted")
-    #extractMeaningfulText(element) {
+    // Helper method to extract ALL text from an element (including "User deleted")
+    #extractAllText(element) {
         if (!element) return '';
         
         const textNodes = [];
@@ -6664,8 +6666,7 @@ class PostModernizer {
         
         while (node = walker.nextNode()) {
             const text = node.textContent.trim();
-            // Skip "User deleted" text
-            if (text && text.toLowerCase() !== 'user deleted') {
+            if (text) {
                 textNodes.push(text);
             }
         }
