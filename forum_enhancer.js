@@ -6936,343 +6936,367 @@ class PostModernizer {
         element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
-    #cleanupPostContentStructure(contentElement) {
-        contentElement.querySelectorAll('.ve-table').forEach(table => {
-            this.#protectAndRepairTable(table);
-        });
-
-        contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
-            while (td.firstChild) {
-                contentElement.appendChild(td.firstChild);
-            }
-            td.remove();
-        });
-
-        contentElement.querySelectorAll('td').forEach(td => {
-            const parent = td.parentNode;
-            if (parent && !td.closest('.ve-table')) {
-                while (td.firstChild) {
-                    parent.insertBefore(td.firstChild, td);
-                }
-                td.remove();
-            }
-        });
-
-        contentElement.querySelectorAll('tr').forEach(tr => {
-            const parent = tr.parentNode;
-            if (parent && !tr.closest('.ve-table')) {
-                while (tr.firstChild) {
-                    parent.insertBefore(tr.firstChild, tr);
-                }
-                tr.remove();
-            }
-        });
-
-        contentElement.querySelectorAll('tbody').forEach(tbody => {
-            const parent = tbody.parentNode;
-            if (parent && !tbody.closest('.ve-table')) {
-                while (tbody.firstChild) {
-                    parent.insertBefore(tbody.firstChild, tbody);
-                }
-                tbody.remove();
-            }
-        });
-
-        contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
-            const parent = table.parentNode;
-            if (parent) {
-                while (table.firstChild) {
-                    parent.insertBefore(table.firstChild, table);
-                }
-                table.remove();
-            }
-        });
-
-        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-        this.#cleanEmptyElements(contentElement);
-        this.#processTextAndLineBreaks(contentElement);
-        this.#cleanupEditSpans(contentElement);
-        this.#processSignature(contentElement);
-        this.#cleanInvalidAttributes(contentElement);
-    }
-
-    #protectAndRepairTable(table) {
-        table.setAttribute('data-table-protected', 'true');
-        
-        if (!table.querySelector('tbody')) {
-            const tbody = document.createElement('tbody');
-            const rows = [];
-            let currentRow = null;
-            
-            Array.from(table.children).forEach(child => {
-                if (child.tagName === 'TR') {
-                    if (currentRow) {
-                        rows.push(currentRow);
-                        currentRow = null;
-                    }
-                    rows.push(child);
-                } else if (child.tagName === 'TH' || child.tagName === 'TD') {
-                    if (!currentRow) {
-                        currentRow = document.createElement('tr');
-                    }
-                    currentRow.appendChild(child);
-                } else if (child.tagName === 'TBODY') {
-                    tbody = child;
-                    return;
-                }
-            });
-            
-            if (currentRow) {
-                rows.push(currentRow);
-            }
-            
-            rows.forEach(row => tbody.appendChild(row));
-            
-            table.innerHTML = '';
-            table.appendChild(tbody);
-        }
-        
-        table.querySelectorAll('th, td').forEach(cell => {
-            const existingSpans = cell.querySelectorAll('.post-text');
-            existingSpans.forEach(span => {
-                while (span.firstChild) {
-                    cell.insertBefore(span.firstChild, span);
-                }
-                span.remove();
-            });
-            
-            const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            let node;
-            while (node = walker.nextNode()) {
-                if (node.textContent.trim()) {
-                    textNodes.push(node);
-                }
-            }
-            
-            textNodes.forEach(textNode => {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            });
-            
-            if (cell.children.length === 0 && !cell.textContent.trim()) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                cell.appendChild(span);
-            }
-        });
-        
-        table.removeAttribute('style');
-        table.removeAttribute('cellpadding');
-        table.removeAttribute('cellspacing');
-        table.removeAttribute('border');
-        
-        table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
-            cell.removeAttribute('rowspan');
-        });
-        table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
-            cell.removeAttribute('colspan');
-        });
-        
-        if (!table.parentElement || !table.parentElement.classList.contains('table-container')) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'table-container';
-            
-            const tableClasses = Array.from(table.classList).filter(cls => cls !== 've-table');
-            if (tableClasses.length > 0) {
-                wrapper.classList.add(...tableClasses);
-            }
-            
-            table.parentNode.insertBefore(wrapper, table);
-            
-            wrapper.appendChild(table);
-        }
-        
-        table.classList.add('ve-table');
+   #cleanupPostContentStructure(contentElement) {
+    // Skip if in editor
+    if (this.#isInEditor(contentElement)) {
+        console.debug('Skipping post content structure cleanup in editor');
+        return;
     }
     
-    #cleanupEditSpans(element) {
-        element.querySelectorAll('span.edit').forEach(span => {
-            if (span.querySelector('time[datetime]')) {
+    contentElement.querySelectorAll('.ve-table').forEach(table => {
+        this.#protectAndRepairTable(table);
+    });
+
+    contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
+        while (td.firstChild) {
+            contentElement.appendChild(td.firstChild);
+        }
+        td.remove();
+    });
+
+    contentElement.querySelectorAll('td').forEach(td => {
+        const parent = td.parentNode;
+        if (parent && !td.closest('.ve-table')) {
+            while (td.firstChild) {
+                parent.insertBefore(td.firstChild, td);
+            }
+            td.remove();
+        }
+    });
+
+    contentElement.querySelectorAll('tr').forEach(tr => {
+        const parent = tr.parentNode;
+        if (parent && !tr.closest('.ve-table')) {
+            while (tr.firstChild) {
+                parent.insertBefore(tr.firstChild, tr);
+            }
+            tr.remove();
+        }
+    });
+
+    contentElement.querySelectorAll('tbody').forEach(tbody => {
+        const parent = tbody.parentNode;
+        if (parent && !tbody.closest('.ve-table')) {
+            while (tbody.firstChild) {
+                parent.insertBefore(tbody.firstChild, tbody);
+            }
+            tbody.remove();
+        }
+    });
+
+    contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
+        const parent = table.parentNode;
+        if (parent) {
+            while (table.firstChild) {
+                parent.insertBefore(table.firstChild, table);
+            }
+            table.remove();
+        }
+    });
+
+    this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+    this.#cleanEmptyElements(contentElement);
+    this.#processTextAndLineBreaks(contentElement);
+    this.#cleanupEditSpans(contentElement);
+    this.#processSignature(contentElement);
+    this.#cleanInvalidAttributes(contentElement);
+}
+
+#protectAndRepairTable(table) {
+    table.setAttribute('data-table-protected', 'true');
+    
+    if (!table.querySelector('tbody')) {
+        const tbody = document.createElement('tbody');
+        const rows = [];
+        let currentRow = null;
+        
+        Array.from(table.children).forEach(child => {
+            if (child.tagName === 'TR') {
+                if (currentRow) {
+                    rows.push(currentRow);
+                    currentRow = null;
+                }
+                rows.push(child);
+            } else if (child.tagName === 'TH' || child.tagName === 'TD') {
+                if (!currentRow) {
+                    currentRow = document.createElement('tr');
+                }
+                currentRow.appendChild(child);
+            } else if (child.tagName === 'TBODY') {
+                tbody = child;
                 return;
             }
-            
-            this.#transformEditTimestamp(span);
         });
-    }
-
-    #cleanUpLineBreaksBetweenBlocks(element) {
-        const blockSelectors = [
-            '.modern-spoiler',
-            '.modern-code',
-            '.modern-quote',
-            'div[align="center"]:has(.code_top)',
-            'div[align="center"].spoiler',
-            'div[align="center"]:has(.quote_top)',
-            '.modern-attachment',
-            '.modern-embedded-link'
-        ];
-
-        const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
-        blocks.sort((a, b) => {
-            const position = a.compareDocumentPosition(b);
-            return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-        });
-
-        blocks.forEach(block => {
-            let nextSibling = block.nextSibling;
-            while (nextSibling) {
-                if (nextSibling.nodeType === Node.ELEMENT_NODE &&
-                    nextSibling.tagName === 'BR') {
-                    const brToRemove = nextSibling;
-                    nextSibling = nextSibling.nextSibling;
-                    brToRemove.remove();
-                } else if (nextSibling.nodeType === Node.TEXT_NODE &&
-                    /^\s*$/.test(nextSibling.textContent)) {
-                    const textToRemove = nextSibling;
-                    nextSibling = nextSibling.nextSibling;
-                    textToRemove.remove();
-                } else {
-                    break;
-                }
-            }
-        });
-
-        blocks.forEach(block => {
-            let prevSibling = block.previousSibling;
-            while (prevSibling) {
-                if (prevSibling.nodeType === Node.ELEMENT_NODE &&
-                    prevSibling.tagName === 'BR') {
-                    const brToRemove = prevSibling;
-                    prevSibling = prevSibling.previousSibling;
-                    brToRemove.remove();
-                } else if (prevSibling.nodeType === Node.TEXT_NODE &&
-                    /^\s*$/.test(prevSibling.textContent)) {
-                    const textToRemove = prevSibling;
-                    prevSibling = prevSibling.previousSibling;
-                    textToRemove.remove();
-                } else {
-                    break;
-                }
-            }
-        });
-    }
-
-    #cleanEmptyElements(element) {
-        element.querySelectorAll(':empty').forEach(emptyEl => {
-            if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
-                emptyEl.remove();
-            }
-        });
-
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const nodesToRemove = [];
-        let node;
-
-        while (node = walker.nextNode()) {
-            if (node.textContent.trim() === '') {
-                nodesToRemove.push(node);
-            }
+        
+        if (currentRow) {
+            rows.push(currentRow);
         }
-
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+        
+        rows.forEach(row => tbody.appendChild(row));
+        
+        table.innerHTML = '';
+        table.appendChild(tbody);
     }
-
-    #cleanInvalidAttributes(element) {
-        element.querySelectorAll('[width]').forEach(el => {
-            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
-                el.removeAttribute('width');
+    
+    table.querySelectorAll('th, td').forEach(cell => {
+        const existingSpans = cell.querySelectorAll('.post-text');
+        existingSpans.forEach(span => {
+            while (span.firstChild) {
+                cell.insertBefore(span.firstChild, span);
             }
+            span.remove();
         });
-
-        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
-            if (el.tagName !== 'TABLE') {
-                el.removeAttribute('cellpadding');
-                el.removeAttribute('cellspacing');
-            }
-        });
-    }
-
-    #processTextAndLineBreaks(element) {
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
         const textNodes = [];
         let node;
-
         while (node = walker.nextNode()) {
-            if (node.textContent.trim() !== '') {
+            if (node.textContent.trim()) {
                 textNodes.push(node);
             }
         }
-
+        
         textNodes.forEach(textNode => {
-            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            }
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
         });
+        
+        if (cell.children.length === 0 && !cell.textContent.trim()) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            cell.appendChild(span);
+        }
+    });
+    
+    table.removeAttribute('style');
+    table.removeAttribute('cellpadding');
+    table.removeAttribute('cellspacing');
+    table.removeAttribute('border');
+    
+    table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
+        cell.removeAttribute('rowspan');
+    });
+    table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
+        cell.removeAttribute('colspan');
+    });
+    
+    if (!table.parentElement || !table.parentElement.classList.contains('table-container')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-container';
+        
+        const tableClasses = Array.from(table.classList).filter(cls => cls !== 've-table');
+        if (tableClasses.length > 0) {
+            wrapper.classList.add(...tableClasses);
+        }
+        
+        table.parentNode.insertBefore(wrapper, table);
+        
+        wrapper.appendChild(table);
+    }
+    
+    table.classList.add('ve-table');
+}
+    
+  #cleanupEditSpans(element) {
+    // Skip if in editor
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll('span.edit').forEach(span => {
+        if (span.querySelector('time[datetime]')) {
+            return;
+        }
+        
+        this.#transformEditTimestamp(span);
+    });
+}
 
-        element.querySelectorAll('br').forEach(br => {
-            const prevSibling = br.previousElementSibling;
-            const nextSibling = br.nextElementSibling;
+#cleanUpLineBreaksBetweenBlocks(element) {
+    // Skip if in editor
+    if (this.#isInEditor(element)) return;
+    
+    const blockSelectors = [
+        '.modern-spoiler',
+        '.modern-code',
+        '.modern-quote',
+        'div[align="center"]:has(.code_top)',
+        'div[align="center"].spoiler',
+        'div[align="center"]:has(.quote_top)',
+        '.modern-attachment',
+        '.modern-embedded-link'
+    ];
 
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
-                return;
-            }
+    const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
+    blocks.sort((a, b) => {
+        const position = a.compareDocumentPosition(b);
+        return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
 
-            if (prevSibling && nextSibling) {
-                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
-                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
-
-                if (prevIsPostText && nextIsPostText) {
-                    prevSibling.classList.add('paragraph-end');
-                    br.remove();
-                } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-
-                    if (prevIsModern && nextIsModern) {
-                        br.remove();
-                    } else {
-                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-                    }
-                }
+    blocks.forEach(block => {
+        let nextSibling = block.nextSibling;
+        while (nextSibling) {
+            if (nextSibling.nodeType === Node.ELEMENT_NODE &&
+                nextSibling.tagName === 'BR') {
+                const brToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                brToRemove.remove();
+            } else if (nextSibling.nodeType === Node.TEXT_NODE &&
+                /^\s*$/.test(nextSibling.textContent)) {
+                const textToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                textToRemove.remove();
             } else {
-                br.remove();
+                break;
             }
-        });
+        }
+    });
 
-        const postTextElements = element.querySelectorAll('.post-text');
-        for (let i = 0; i < postTextElements.length - 1; i++) {
-            const current = postTextElements[i];
-            const next = postTextElements[i + 1];
-
-            let nodeBetween = current.nextSibling;
-            let onlyWhitespace = true;
-
-            while (nodeBetween && nodeBetween !== next) {
-                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                    onlyWhitespace = false;
-                    break;
-                }
-                nodeBetween = nodeBetween.nextSibling;
+    blocks.forEach(block => {
+        let prevSibling = block.previousSibling;
+        while (prevSibling) {
+            if (prevSibling.nodeType === Node.ELEMENT_NODE &&
+                prevSibling.tagName === 'BR') {
+                const brToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                brToRemove.remove();
+            } else if (prevSibling.nodeType === Node.TEXT_NODE &&
+                /^\s*$/.test(prevSibling.textContent)) {
+                const textToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                textToRemove.remove();
+            } else {
+                break;
             }
+        }
+    });
+}
 
-            if (onlyWhitespace) {
-                current.classList.add('paragraph-end');
-            }
+#cleanEmptyElements(element) {
+    // Skip if in editor
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll(':empty').forEach(emptyEl => {
+        if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
+            emptyEl.remove();
+        }
+    });
+
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    const nodesToRemove = [];
+    let node;
+
+    while (node = walker.nextNode()) {
+        if (node.textContent.trim() === '') {
+            nodesToRemove.push(node);
         }
     }
 
-    #processSignature(element) {
-        element.querySelectorAll('.signature').forEach(sig => {
-            sig.classList.add('post-signature');
-            sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
-        });
+    nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+}
+
+ #cleanInvalidAttributes(element) {
+    // Skip if in editor
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll('[width]').forEach(el => {
+        if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
+            el.removeAttribute('width');
+        }
+    });
+
+    element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
+        if (el.tagName !== 'TABLE') {
+            el.removeAttribute('cellpadding');
+            el.removeAttribute('cellspacing');
+        }
+    });
+}
+
+    #processTextAndLineBreaks(element) {
+    // Skip if in editor
+    if (this.#isInEditor(element)) return;
+    
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    const textNodes = [];
+    let node;
+
+    while (node = walker.nextNode()) {
+        if (node.textContent.trim() !== '') {
+            textNodes.push(node);
+        }
     }
+
+    textNodes.forEach(textNode => {
+        if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
+        }
+    });
+
+    element.querySelectorAll('br').forEach(br => {
+        const prevSibling = br.previousElementSibling;
+        const nextSibling = br.nextElementSibling;
+
+        if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
+            return;
+        }
+
+        if (prevSibling && nextSibling) {
+            const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
+            const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+
+            if (prevIsPostText && nextIsPostText) {
+                prevSibling.classList.add('paragraph-end');
+                br.remove();
+            } else {
+                const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+                const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+
+                if (prevIsModern && nextIsModern) {
+                    br.remove();
+                } else {
+                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                }
+            }
+        } else {
+            br.remove();
+        }
+    });
+
+    const postTextElements = element.querySelectorAll('.post-text');
+    for (let i = 0; i < postTextElements.length - 1; i++) {
+        const current = postTextElements[i];
+        const next = postTextElements[i + 1];
+
+        let nodeBetween = current.nextSibling;
+        let onlyWhitespace = true;
+
+        while (nodeBetween && nodeBetween !== next) {
+            if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                onlyWhitespace = false;
+                break;
+            }
+            nodeBetween = nodeBetween.nextSibling;
+        }
+
+        if (onlyWhitespace) {
+            current.classList.add('paragraph-end');
+        }
+    }
+}
+
+ #processSignature(element) {
+    // Skip if in editor
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll('.signature').forEach(sig => {
+        sig.classList.add('post-signature');
+        sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
+    });
+}
 
     #modernizeQuotes(contentWrapper) {
         contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top)').forEach(container => {
