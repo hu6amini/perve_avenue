@@ -6408,23 +6408,24 @@ class PostModernizer {
                     const isDeletedUser = post.classList.contains('box_visitatore');
                     
                     if (isDeletedUser) {
-                        console.debug('Processing deleted user (box_visitatore) post:', post.id);
+    console.debug('Processing deleted user (box_visitatore) post:', post.id);
+    
+    // For deleted users, we handle the structure differently
+    if (details) {
+        // Create a clean details clone
+        const detailsClone = details.cloneNode(true);
+        
+        // Process the deleted user details
+        this.#processDeletedUserDetails(detailsClone, nickElement);
+        
+        // Add the processed details to userInfo
+        userInfo.appendChild(detailsClone);
+    } else {
+        // Fallback: append the left section as-is
+        userInfo.appendChild(leftSection.cloneNode(true));
+    }
+} 
                         
-                        // For deleted users, we handle the structure differently
-                        if (details) {
-                            // Create a clean details clone
-                            const detailsClone = details.cloneNode(true);
-                            
-                            // Process the deleted user details
-                            this.#processDeletedUserDetails(detailsClone, nickElement);
-                            
-                            // Add the processed details to userInfo
-                            userInfo.appendChild(detailsClone);
-                        } else {
-                            // Fallback: append the left section as-is
-                            userInfo.appendChild(leftSection.cloneNode(true));
-                        }
-                    } 
                     // NORMAL USER HANDLING
                     else if (details && avatar) {
                         const groupDd = details.querySelector('dl.u_group dd');
