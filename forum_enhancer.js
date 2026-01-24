@@ -4201,20 +4201,49 @@ class PostModernizer {
     // EMBEDDED LINK TRANSFORMATION
     // ==============================
 
-    #modernizeEmbeddedLinks() {
-        this.#processExistingEmbeddedLinks();
-        this.#setupEmbeddedLinkObserver();
-    }
+#modernizeEmbeddedLinks() {
+    this.#processExistingEmbeddedLinks();
+    this.#setupEmbeddedLinkObserver();
+}
 
-    #processExistingEmbeddedLinks() {
-        document.querySelectorAll('.ffb_embedlink').forEach(container => {
-            if (container.classList.contains('embedded-link-modernized')) return;
-            this.#transformEmbeddedLink(container);
-            container.classList.add('embedded-link-modernized');
-        });
-    }
+    #isInEditor(element) {
+    if (!element || !element.closest) return false;
+    
+    // Check for TipTap/ProseMirror editor containers
+    return element.closest('.ve-content') || 
+           element.closest('.color.ve-content') ||
+           element.closest('[contenteditable="true"]') ||
+           element.closest('.ProseMirror') ||
+           element.closest('.tiptap') ||
+           element.closest('.editor-container') ||
+           element.closest('#compose') ||
+           element.closest('.composer') ||
+           element.closest('.message-editor') ||
+           element.closest('.reply-editor') ||
+           element.closest('.new-topic-editor');
+}
 
- #transformEmbeddedLink(container) {
+#processExistingEmbeddedLinks() {
+    document.querySelectorAll('.ffb_embedlink').forEach(container => {
+        // Skip embedded links in the editor
+        if (this.#isInEditor(container)) {
+            console.debug('Skipping embedded link in editor:', container);
+            return;
+        }
+        
+        if (container.classList.contains('embedded-link-modernized')) return;
+        this.#transformEmbeddedLink(container);
+        container.classList.add('embedded-link-modernized');
+    });
+}
+
+#transformEmbeddedLink(container) {
+    // Double-check we're not in editor
+    if (this.#isInEditor(container)) {
+        console.debug('Aborting embedded link transformation in editor');
+        return;
+    }
+    
     if (!container || container.classList.contains('modern-embedded-link')) return;
 
     try {
@@ -4431,39 +4460,46 @@ class PostModernizer {
     }
 }
 
-    #extractDomain(url) {
-        try {
-            const urlObj = new URL(url);
-            return urlObj.hostname.replace('www.', '');
-        } catch {
-            return 'unknown.com';
-        }
+#extractDomain(url) {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.hostname.replace('www.', '');
+    } catch {
+        return 'unknown.com';
     }
+}
 
-    #setupEmbeddedLinkObserver() {
-        if (globalThis.forumObserver) {
-            this.#embeddedLinkObserverId = globalThis.forumObserver.register({
-                id: 'embedded-link-modernizer',
-                callback: (node) => this.#handleNewEmbeddedLinks(node),
-                selector: '.ffb_embedlink',
-                priority: 'normal',
-                pageTypes: ['topic', 'blog', 'send', 'search']
-            });
-        } else {
-            setInterval(() => this.#processExistingEmbeddedLinks(), 2000);
-        }
+#setupEmbeddedLinkObserver() {
+    if (globalThis.forumObserver) {
+        this.#embeddedLinkObserverId = globalThis.forumObserver.register({
+            id: 'embedded-link-modernizer',
+            callback: (node) => this.#handleNewEmbeddedLinks(node),
+            selector: '.ffb_embedlink',
+            priority: 'normal',
+            pageTypes: ['topic', 'blog', 'send', 'search']
+        });
+    } else {
+        setInterval(() => this.#processExistingEmbeddedLinks(), 2000);
     }
+}
 
-    #handleNewEmbeddedLinks(node) {
-        if (node.matches('.ffb_embedlink')) {
-            this.#transformEmbeddedLink(node);
-        } else {
-            node.querySelectorAll('.ffb_embedlink').forEach(link => {
-                this.#transformEmbeddedLink(link);
-            });
-        }
+   #handleNewEmbeddedLinks(node) {
+    // Skip if node itself is in editor
+    if (this.#isInEditor(node)) return;
+    
+    if (node.matches('.ffb_embedlink')) {
+        // Check if this specific node is in editor
+        if (this.#isInEditor(node)) return;
+        this.#transformEmbeddedLink(node);
+    } else {
+        node.querySelectorAll('.ffb_embedlink').forEach(link => {
+            // Check each link individually
+            if (this.#isInEditor(link)) return;
+            this.#transformEmbeddedLink(link);
+        });
     }
-
+}
+    
     // ==============================
     // ADAPTIVE DATE PARSING SYSTEM - ENHANCED FOR MIXED FORMATS
     // ==============================
