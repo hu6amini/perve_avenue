@@ -132,4 +132,4 @@ input[type="radio"]:checked::before
 }
 
 /*Hidden*/
-.nascosta,.box_visitatore .u_title::before{display:none}
+.nascosta,.box_visitatore .u_title::before{display:none!important}
