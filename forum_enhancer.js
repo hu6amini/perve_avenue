@@ -6559,24 +6559,25 @@ class PostModernizer {
     }
 
     // NEW METHOD: Handle deleted user details for box_visitatore posts
+      // NEW METHOD: Handle deleted user details for box_visitatore posts
     #handleDeletedUserDetails(detailsClone, nickElement, userInfo) {
-        // Remove the <br class="br_status"> element
-        detailsClone.querySelector('br.br_status')?.remove();
+        console.debug('Processing deleted user details for box_visitatore');
         
-        // Remove the <td class="left Item"> wrapper if present
-        const leftItemElement = detailsClone.querySelector('td.left.Item');
-        if (leftItemElement) {
-            // Move all children of leftItemElement to detailsClone
-            while (leftItemElement.firstChild) {
-                detailsClone.appendChild(leftItemElement.firstChild);
-            }
-            leftItemElement.remove();
+        // First, remove the <br class="br_status"> element
+        const brStatus = detailsClone.querySelector('br.br_status');
+        if (brStatus) {
+            console.debug('Removing br.br_status element');
+            brStatus.remove();
         }
         
         // Find and process the u_title element
         const uTitleElement = detailsClone.querySelector('span.u_title');
+        let badge = null;
+        
         if (uTitleElement) {
-            // Extract the text (removing <br> and "User deleted")
+            console.debug('Found u_title element:', uTitleElement.innerHTML);
+            
+            // Extract text from u_title, handling <br> and text nodes
             let titleText = '';
             const textNodes = [];
             const walker = document.createTreeWalker(uTitleElement, NodeFilter.SHOW_TEXT, null, false);
@@ -6592,38 +6593,79 @@ class PostModernizer {
                 titleText = textNodes.join(' ');
             }
             
-            // Remove the u_title element
-            uTitleElement.remove();
+            console.debug('Extracted title text:', titleText);
+            
+            // Remove the u_title element and its parent <p> if exists
+            const uTitleParent = uTitleElement.parentElement;
+            if (uTitleParent && uTitleParent.tagName === 'P') {
+                uTitleParent.remove();
+            } else {
+                uTitleElement.remove();
+            }
             
             // If we have a title text, create a badge
             if (titleText) {
-                const badge = document.createElement('div');
+                badge = document.createElement('div');
                 badge.className = 'badge deleted-user-badge';
                 badge.textContent = titleText;
                 
-                // Insert badge after nick if we have one
-                if (nickElement) {
-                    const nickClone = nickElement.cloneNode(true);
-                    detailsClone.insertBefore(nickClone, detailsClone.firstChild);
-                    
-                    // Add badge after nick
-                    nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                } else {
-                    // Add badge at the beginning
-                    detailsClone.insertBefore(badge, detailsClone.firstChild);
-                }
+                console.debug('Created badge with text:', titleText);
             }
         }
         
         // Remove any remaining empty <p> elements
         detailsClone.querySelectorAll('p').forEach(p => {
-            if (!p.textContent.trim() || p.textContent.trim().toLowerCase() === 'user deleted') {
+            const text = p.textContent.trim().toLowerCase();
+            if (!p.textContent.trim() || text === 'user deleted') {
+                console.debug('Removing empty or "User deleted" p element');
                 p.remove();
             }
         });
         
         // Clean up any remaining <br> elements
-        detailsClone.querySelectorAll('br').forEach(br => br.remove());
+        detailsClone.querySelectorAll('br').forEach(br => {
+            console.debug('Removing br element');
+            br.remove();
+        });
+        
+        // Remove any remaining text nodes that only contain whitespace
+        const walker = document.createTreeWalker(detailsClone, NodeFilter.SHOW_TEXT, null, false);
+        const textNodesToRemove = [];
+        let textNode;
+        while (textNode = walker.nextNode()) {
+            if (textNode.textContent.trim() === '') {
+                textNodesToRemove.push(textNode);
+            }
+        }
+        
+        textNodesToRemove.forEach(node => {
+            if (node.parentNode) {
+                node.parentNode.removeChild(node);
+            }
+        });
+        
+        // Now reconstruct the detailsClone content
+        const newContent = document.createElement('div');
+        
+        // Add avatar if present
+        const avatar = detailsClone.querySelector('.forum-avatar-container, .deleted-user-container');
+        if (avatar) {
+            newContent.appendChild(avatar.cloneNode(true));
+        }
+        
+        // Add nick element if we have one
+        if (nickElement) {
+            const nickClone = nickElement.cloneNode(true);
+            newContent.appendChild(nickClone);
+            
+            // Add badge after nick if we have one
+            if (badge) {
+                newContent.appendChild(badge);
+            }
+        } else if (badge) {
+            // Add badge if no nick
+            newContent.appendChild(badge);
+        }
         
         // Add user-stats div for consistency with other posts
         const userStats = document.createElement('div');
@@ -6635,11 +6677,16 @@ class PostModernizer {
         statusStat.innerHTML = '<i class="fa-regular fa-user-slash" aria-hidden="true"></i><span>Deleted User</span>';
         userStats.appendChild(statusStat);
         
-        detailsClone.appendChild(userStats);
+        newContent.appendChild(userStats);
         
+        // Replace the entire detailsClone content with our new content
+        detailsClone.innerHTML = '';
+        detailsClone.appendChild(newContent);
+        
+        console.debug('Final detailsClone HTML:', detailsClone.innerHTML);
         userInfo.appendChild(detailsClone);
     }
-
+    
    #modernizeEmbeddedLinksInContent(contentWrapper) {
     // Skip editor content
     if (this.#isInEditor(contentWrapper)) {
