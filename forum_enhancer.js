@@ -6576,6 +6576,7 @@ class PostModernizer {
     }
 
     // NEW METHOD: Handle deleted user details for box_visitatore posts
+       // Method to process deleted user details for box_visitatore posts
     #processDeletedUserDetails(detailsElement, nickElement) {
         console.debug('Processing deleted user details for box_visitatore');
         
@@ -6586,7 +6587,7 @@ class PostModernizer {
         
         // Create a clean container for the new structure
         const newContainer = document.createElement('div');
-        newContainer.className = 'details';
+        // Don't add 'details' class here - the element already has it
         
         // Extract the avatar container
         const avatarContainer = detailsElement.querySelector('.forum-avatar-container, .deleted-user-container');
@@ -6607,13 +6608,17 @@ class PostModernizer {
         // Process the u_title element to create a badge
         const uTitleElement = detailsElement.querySelector('span.u_title');
         if (uTitleElement) {
-            // Extract meaningful text from u_title (skip "User deleted")
-            const titleText = this.#extractMeaningfulText(uTitleElement);
-            if (titleText && titleText.toLowerCase() !== 'user deleted') {
+            // Extract meaningful text from u_title
+            const titleText = this.#extractTextFromUTitle(uTitleElement);
+            console.debug('Extracted title text:', titleText);
+            
+            // Create badge if we have any text (even if it's "User deleted")
+            if (titleText) {
                 const badge = document.createElement('div');
                 badge.className = 'badge deleted-user-badge';
                 badge.textContent = titleText;
                 newContainer.appendChild(badge);
+                console.debug('Created badge with text:', titleText);
             }
         }
         
@@ -6623,9 +6628,17 @@ class PostModernizer {
         
         const statusStat = document.createElement('div');
         statusStat.className = 'stat status deleted-status';
-        statusStat.innerHTML = '<i class="fa-regular fa-user-slash" aria-hidden="true"></i><span>Deleted User</span>';
-        userStats.appendChild(statusStat);
+        // Add the icon
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-user-slash';
+        icon.setAttribute('aria-hidden', 'true');
+        statusStat.appendChild(icon);
         
+        const statusSpan = document.createElement('span');
+        statusSpan.textContent = 'Deleted User';
+        statusStat.appendChild(statusSpan);
+        
+        userStats.appendChild(statusStat);
         newContainer.appendChild(userStats);
         
         // Clean up: remove any td.left.Item wrappers that might be inside
@@ -6646,25 +6659,40 @@ class PostModernizer {
         
         // Clean up any remaining empty elements
         this.#cleanEmptyElements(detailsElement);
+        
+        console.debug('Final processed details:', detailsElement.innerHTML);
     }
     
-    // Helper method to extract meaningful text (skip "User deleted")
-    #extractMeaningfulText(element) {
-        if (!element) return '';
+    // Helper method to extract text from u_title element
+    #extractTextFromUTitle(uTitleElement) {
+        if (!uTitleElement) return '';
         
+        // Get all text nodes
         const textNodes = [];
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const walker = document.createTreeWalker(uTitleElement, NodeFilter.SHOW_TEXT, null, false);
         let node;
         
         while (node = walker.nextNode()) {
             const text = node.textContent.trim();
-            // Skip "User deleted" text
-            if (text && text.toLowerCase() !== 'user deleted') {
+            if (text) {
                 textNodes.push(text);
             }
         }
         
-        return textNodes.join(' ').trim();
+        // Join all text nodes
+        let result = textNodes.join(' ').trim();
+        
+        // If the text contains "User deleted", we might want to clean it up
+        if (result.toLowerCase().includes('user deleted')) {
+            // Remove any <br> HTML tags from the text
+            result = result.replace(/<br\s*\/?>/gi, ' ').trim();
+            // Remove multiple spaces
+            result = result.replace(/\s+/g, ' ');
+            // Capitalize properly
+            result = result.replace(/\b\w/g, char => char.toUpperCase());
+        }
+        
+        return result;
     }
     
    #modernizeEmbeddedLinksInContent(contentWrapper) {
