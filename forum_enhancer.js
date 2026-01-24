@@ -4214,7 +4214,7 @@ class PostModernizer {
         });
     }
 
-    #transformEmbeddedLink(container) {
+ #transformEmbeddedLink(container) {
     if (!container || container.classList.contains('modern-embedded-link')) return;
 
     try {
@@ -4226,57 +4226,96 @@ class PostModernizer {
         const href = mainLink.href;
         const domain = this.#extractDomain(href);
         
-        // Extract title - look for the actual article title link
+        // Extract title - look for the actual article title
+        // The structure after post modernizer processing is different
         let title = '';
         let titleElement = null;
         
-        // Try to find the article title link (not the domain link)
-        const allLinks = container.querySelectorAll('a[href]');
-        for (const link of allLinks) {
-            const linkText = link.textContent.trim();
-            // Skip domain links and "Read more" links
-            if (linkText.toLowerCase().includes(domain.toLowerCase()) || 
-                linkText.toLowerCase().includes('leggi altro') ||
-                linkText.toLowerCase().includes('read more')) {
-                continue;
+        // Method 1: Look for the second link (usually the article title)
+        const allLinks = container.querySelectorAll('a[href*="bbc.com"]');
+        if (allLinks.length >= 2) {
+            titleElement = allLinks[1];
+            // Get text from span.post-text inside the link
+            const titleSpan = titleElement.querySelector('span.post-text');
+            if (titleSpan) {
+                title = titleSpan.textContent.trim();
+            } else {
+                title = titleElement.textContent.trim();
             }
-            // This is likely the article title
-            titleElement = link;
-            title = linkText;
-            break;
         }
         
-        // If no title found, use fallback
+        // Method 2: Look for text that looks like a headline
+        if (!title) {
+            const postTextElements = container.querySelectorAll('span.post-text');
+            for (const span of postTextElements) {
+                const text = span.textContent.trim();
+                // Skip domain text and "Read more" text
+                if (text.toLowerCase().includes(domain.toLowerCase()) || 
+                    text.toLowerCase().includes('leggi altro') ||
+                    text.toLowerCase().includes('read more') ||
+                    text.includes('>') ||
+                    text.length < 10) {
+                    continue;
+                }
+                // This looks like an article title (longer text)
+                if (text.length > 20 && text.length < 200) {
+                    title = text;
+                    break;
+                }
+            }
+        }
+        
+        // Method 3: Extract from the original HTML structure
+        if (!title) {
+            // Look for text that's not the domain and not "Read more"
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const texts = [];
+            let node;
+            while (node = walker.nextNode()) {
+                const text = node.textContent.trim();
+                if (text && 
+                    !text.toLowerCase().includes(domain.toLowerCase()) && 
+                    !text.toLowerCase().includes('leggi altro') &&
+                    !text.toLowerCase().includes('read more') &&
+                    !text.includes('>')) {
+                    texts.push(text);
+                }
+            }
+            
+            // The first substantial text that's not a domain is likely the title
+            for (const text of texts) {
+                if (text.length > 20 && text.length < 200) {
+                    title = text;
+                    break;
+                }
+            }
+        }
+        
+        // Fallback
         if (!title) {
             title = 'Article on ' + domain;
         }
 
-        // Extract description - look for text after the title
+        // Extract description - look for additional text after the title
         let description = '';
-        if (titleElement) {
-            // Get the next sibling text after the title link
-            let nextElement = titleElement.nextElementSibling;
-            while (nextElement) {
-                const text = nextElement.textContent.trim();
-                if (text && !text.toLowerCase().includes(domain.toLowerCase()) && 
-                    !text.includes('>')) {
+        if (title !== 'Article on ' + domain) {
+            // Find all text nodes
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            let foundTitle = false;
+            let node;
+            while (node = walker.nextNode()) {
+                const text = node.textContent.trim();
+                if (!text) continue;
+                
+                if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
+                    foundTitle = true;
+                    continue;
+                }
+                
+                if (foundTitle && text && text.length > 30) {
                     description = text;
                     break;
                 }
-                nextElement = nextElement.nextElementSibling;
-            }
-        }
-        
-        // If still no description, look in the container
-        if (!description) {
-            const containerText = container.textContent;
-            const lines = containerText.split('\n').filter(line => 
-                line.trim() && 
-                !line.toLowerCase().includes(domain.toLowerCase()) &&
-                line.trim() !== title
-            );
-            if (lines.length > 0) {
-                description = lines[0].trim();
             }
         }
 
@@ -4285,27 +4324,20 @@ class PostModernizer {
         const images = container.querySelectorAll('img');
         for (const img of images) {
             const src = img.src || '';
-            // Skip favicon images (small images, usually contain "icon" or "touch-icon")
-            if (src.includes('ichef.bbci.co.uk') || src.includes('standard')) {
+            // Look for BBC content images
+            if (src.includes('ichef.bbci.co.uk') && 
+                (src.includes('standard') || src.includes('live'))) {
                 imageUrl = src;
                 break;
             }
-            // Skip favicons
-            if (!src.includes('touch-icon') && !src.includes('icon')) {
-                // Check if this is likely a content image by size or filename
-                if (src.includes('jpg') || src.includes('jpeg') || src.includes('png')) {
-                    imageUrl = src;
-                    break;
-                }
-            }
         }
         
-        // Extract favicon
+        // Extract favicon (small icon, usually 36x36 or smaller)
         let faviconUrl = '';
         for (const img of images) {
             const src = img.src || '';
-            if (src.includes('touch-icon') || src.includes('icon') || 
-                (img.width && img.width <= 48 && img.height && img.height <= 48)) {
+            if (src.includes('touch-icon') || 
+                (src.includes('static.files.bbci.co.uk') && src.includes('icon'))) {
                 faviconUrl = src;
                 break;
             }
@@ -4319,12 +4351,12 @@ class PostModernizer {
         modernEmbeddedLink.className = 'modern-embedded-link';
 
         // Build HTML
-        let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer">';
+        let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
         
         // Left side: Image (only if we have a content image)
         if (imageUrl) {
             html += '<div class="embedded-link-image">' +
-                '<img src="' + this.#escapeHtml(imageUrl) + '" alt="Preview image for ' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
+                '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
                 '</div>';
         }
         
@@ -4340,9 +4372,7 @@ class PostModernizer {
             '</div>';
         
         // Title
-        if (title) {
-            html += '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
-        }
+        html += '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
         
         // Description
         if (description) {
@@ -4357,14 +4387,30 @@ class PostModernizer {
 
         modernEmbeddedLink.innerHTML = html;
         
-        // Ensure proper image dimensions
+        // Ensure proper image dimensions and remove inline styles that might interfere
         const imagesInLink = modernEmbeddedLink.querySelectorAll('img');
         imagesInLink.forEach(img => {
-            if (!img.hasAttribute('width') || !img.hasAttribute('height')) {
-                img.setAttribute('width', '100%');
-                img.setAttribute('height', 'auto');
+            // Remove any inline styles that might cause issues
+            img.removeAttribute('style');
+            
+            // Set proper styles for embedded link images
+            if (img.classList.contains('embedded-link-favicon')) {
+                img.style.width = '16px';
+                img.style.height = '16px';
+                img.style.objectFit = 'contain';
+                img.style.display = 'inline-block';
+                img.style.verticalAlign = 'middle';
+            } else {
+                // Main content image
                 img.style.width = '100%';
-                img.style.height = 'auto';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+            }
+            
+            // Remove width/height attributes that might be too large
+            if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 400) {
+                img.removeAttribute('width');
+                img.removeAttribute('height');
             }
         });
         
@@ -4375,12 +4421,13 @@ class PostModernizer {
         const linkElement = modernEmbeddedLink.querySelector('a');
         if (linkElement) {
             linkElement.addEventListener('click', (e) => {
-                console.log('Embedded link clicked:', href);
+                console.log('Embedded link clicked to:', href);
             });
         }
 
     } catch (error) {
         console.error('Error transforming embedded link:', error);
+        // Keep the original if transformation fails
     }
 }
 
