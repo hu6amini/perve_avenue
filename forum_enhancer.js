@@ -6413,13 +6413,19 @@ class PostModernizer {
         });
     }
 
-    #modernizeEmbeddedLinksInContent(contentWrapper) {
-        contentWrapper.querySelectorAll('.ffb_embedlink').forEach(container => {
-            if (container.classList.contains('embedded-link-modernized')) return;
-            this.#transformEmbeddedLink(container);
-            container.classList.add('embedded-link-modernized');
-        });
+   #modernizeEmbeddedLinksInContent(contentWrapper) {
+    // Skip editor content
+    if (this.#isInEditor(contentWrapper)) {
+        console.debug('Skipping embedded links in editor content');
+        return;
     }
+    
+    contentWrapper.querySelectorAll('.ffb_embedlink').forEach(container => {
+        if (container.classList.contains('embedded-link-modernized')) return;
+        this.#transformEmbeddedLink(container);
+        container.classList.add('embedded-link-modernized');
+    });
+}
 
     #transformPostQueueButtons(post) {
         const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
