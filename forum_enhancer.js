@@ -662,7 +662,6 @@
         container.style.cssText = 
             'display:inline-block;' +
             'vertical-align:middle;' +
-            'margin-right:8px;' +
             'position:relative;';
         
         container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false));
