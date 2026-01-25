@@ -26,7 +26,7 @@
         sizes: {
             'post': 60,
             'profile_card': 80,
-            'deleted_user': 60 // Added size for deleted users
+            'deleted_user': 60
         },
         
         selectors: {
@@ -42,7 +42,7 @@
                 extractor: 'href'
             },
             
-            '.post.box_visitatore': { // NEW: Handle deleted users
+            '.post.box_visitatore': {
                 type: 'deleted_user',
                 size: 'deleted_user',
                 extractor: 'visitatore'
@@ -59,7 +59,7 @@
             duration: 86400000,
             prefix: 'avatar_',
             brokenPrefix: 'broken_avatar_',
-            deletedPrefix: 'deleted_avatar_' // Added for deleted users
+            deletedPrefix: 'deleted_avatar_'
         }
     };
 
@@ -72,7 +72,7 @@
         brokenAvatars: new Set(),
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
-        processedDeletedUsers: new WeakSet(), // NEW: Track deleted users
+        processedDeletedUsers: new WeakSet(),
         isInitialized: false
     };
 
@@ -85,11 +85,10 @@
     }
 
     function getDeletedUserCacheKey(username, size) {
-        // Create a stable hash from username for caching
         var hash = 0;
         for (var i = 0; i < username.length; i++) {
             hash = ((hash << 5) - hash) + username.charCodeAt(i);
-            hash = hash & hash; // Convert to 32-bit integer
+            hash = hash & hash;
         }
         return AVATAR_CONFIG.cache.deletedPrefix + Math.abs(hash) + '_' + size;
     }
@@ -202,13 +201,11 @@
         var username = '';
         
         if (type === 'post') {
-            // Try .nick a first
             var nickname = element.querySelector('.nick a');
             if (nickname && nickname.textContent) {
                 username = nickname.textContent;
             }
             
-            // Try .user{ID} class
             if (!username) {
                 var userClass = element.querySelector('.user' + userId);
                 if (userClass && userClass.textContent) {
@@ -216,7 +213,6 @@
                 }
             }
             
-            // Try any link with MID
             if (!username) {
                 var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
                 for (var i = 0; i < midLinks.length; i++) {
@@ -237,7 +233,7 @@
                     username = parentLink.textContent;
                 }
             }
-        } else if (type === 'deleted_user') { // NEW: Handle deleted users
+        } else if (type === 'deleted_user') {
             var nickname = element.querySelector('.nick');
             if (nickname && nickname.textContent) {
                 username = nickname.textContent;
@@ -255,7 +251,6 @@
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
         
-        // Use light theme colors by default
         var colors = AVATAR_THEME.colors.light;
         var colorIndex = 0;
         
@@ -264,7 +259,6 @@
         } else if (firstLetter >= '0' && firstLetter <= '9') {
             colorIndex = (parseInt(firstLetter) + 26) % colors.length;
         } else {
-            // For deleted users (no userId), use username hash
             var hash = 0;
             for (var i = 0; i < username.length; i++) {
                 hash = ((hash << 5) - hash) + username.charCodeAt(i);
@@ -289,22 +283,19 @@
     }
 
     // ==============================
-    // AVATAR FETCHING - UPDATED FOR DELETED USERS
+    // AVATAR FETCHING
     // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback, isDeletedUser) {
-        // NEW: Handle deleted users differently
         if (isDeletedUser) {
             var cacheKey = 'deleted_' + username + '_' + size;
             
-            // Check memory cache
             if (state.userCache[cacheKey]) {
                 var cached = state.userCache[cacheKey];
                 callback(cached.url, cached.username);
                 return;
             }
             
-            // Check localStorage
             var stored = localStorage.getItem(getDeletedUserCacheKey(username, size));
             if (stored) {
                 try {
@@ -319,7 +310,6 @@
                 }
             }
             
-            // Generate avatar for deleted user
             var avatarUrl = generateLetterAvatar(null, username, size);
             var cacheData = {
                 url: avatarUrl,
@@ -341,10 +331,8 @@
             return;
         }
         
-        // Original code for regular users
         var cacheKey = userId + '_' + size;
         
-        // Check memory cache
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
             if (!isBrokenAvatarUrl(cached.url)) {
@@ -353,7 +341,6 @@
             }
         }
         
-        // Check localStorage
         var stored = localStorage.getItem(getCacheKey(userId, size));
         if (stored) {
             try {
@@ -369,7 +356,6 @@
             }
         }
         
-        // Fetch from API
         fetch('/api.php?mid=' + userId)
             .then(function(response) {
                 if (!response.ok) throw new Error('API failed');
@@ -381,7 +367,6 @@
                 var finalUsername = username;
                 var avatarUrl;
                 
-                // Get username from API if available
                 if (userData && userData.nickname) {
                     finalUsername = cleanUsername(userData.nickname);
                 }
@@ -455,7 +440,7 @@
     }
 
     // ==============================
-    // ELEMENT PROCESSING - UPDATED FOR DELETED USERS
+    // ELEMENT PROCESSING
     // ==============================
 
     function extractUserIdFromElement(element, extractorType) {
@@ -479,7 +464,6 @@
                 if (hrefMatch) userId = hrefMatch[1];
             }
         } else if (extractorType === 'visitatore') {
-            // Deleted users have no ID, return null
             return null;
         }
         
@@ -493,7 +477,6 @@
         
         var config = null;
         
-        // Check if it's a post
         if (element.matches('.summary li[class^="box_"]')) {
             config = {
                 type: 'post',
@@ -501,7 +484,6 @@
                 extractor: 'class'
             };
         }
-        // Check if it's a default avatar
         else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
             config = {
                 type: 'default_avatar',
@@ -509,7 +491,6 @@
                 extractor: 'href'
             };
         }
-        // NEW: Check if it's a deleted user post
         else if (element.matches('.post.box_visitatore')) {
             config = {
                 type: 'deleted_user',
@@ -522,7 +503,6 @@
             return null;
         }
         
-        // Check if already processed
         if ((config.type === 'post' && state.processedPosts.has(element)) ||
             (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
             (config.type === 'deleted_user' && state.processedDeletedUsers.has(element))) {
@@ -531,9 +511,6 @@
         
         var userId = extractUserIdFromElement(element, config.extractor);
         
-        // For deleted users, userId will be null, which is expected
-        
-        // Additional checks
         if (config.type === 'post' || config.type === 'deleted_user') {
             var nickname = element.querySelector('.nick');
             if (!nickname) {
@@ -562,7 +539,7 @@
         
         return {
             element: element,
-            userId: userId, // Will be null for deleted users
+            userId: userId,
             config: config
         };
     }
@@ -609,7 +586,6 @@
                 var fallbackUrl = generateLetterAvatar(userId, username || '', size);
                 this.src = fallbackUrl;
             } else if (username) {
-                // For deleted users
                 var cacheKey = 'deleted_' + username + '_' + size;
                 delete state.userCache[cacheKey];
                 localStorage.removeItem(getDeletedUserCacheKey(username, size));
@@ -630,7 +606,6 @@
         
         var username = extractUsernameFromElement(element, config.type, userId);
         
-        // NEW: Determine if this is a deleted user
         var isDeletedUser = config.type === 'deleted_user';
         
         getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
@@ -688,7 +663,6 @@
         parentLink.classList.add('avatar-replaced');
     }
 
-    // NEW: Function to insert avatars for deleted users
     function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
         var nickname = postElement.querySelector('.nick');
         if (!nickname) return;
@@ -717,13 +691,11 @@
     function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
-        // Check node itself
         var nodeInfo = shouldProcessElement(node);
         if (nodeInfo) {
             insertAvatarForElement(nodeInfo);
         }
         
-        // Check for posts in node
         var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -732,7 +704,6 @@
             }
         }
         
-        // Check for default avatars in node
         var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -745,7 +716,6 @@
     function processExistingElements() {
         console.log('Processing existing elements...');
         
-        // Process posts (including deleted users)
         var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -754,64 +724,12 @@
             }
         }
         
-        // Process default avatars
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
                 insertAvatarForElement(avatarInfo);
             }
-        }
-    }
-
-    // ==============================
-    // CSS INJECTION
-    // ==============================
-
-    function injectCSS() {
-        if (document.querySelector('#forum-avatar-working-styles')) return;
-        
-        var style = document.createElement('style');
-        style.id = 'forum-avatar-working-styles';
-        
-        var css = 
-            '.forum-avatar-container{' +
-            'display:inline-block;' +
-            'vertical-align:middle;' +
-            'position:relative;' +
-            'transition:transform .2s ease' +
-            '}' +
-            '.forum-avatar-container:hover{' +
-            'transform:scale(1.05)' +
-            '}' +
-            '.forum-user-avatar{' +
-            'cursor:pointer;' +
-            'border-radius:50%;' +
-            'object-fit:cover;' +
-            'background-color:#f0f0f0;' +
-            'display:inline-block' +
-            '}' +
-            '.forum-user-avatar:hover{' +
-            'opacity:.9' +
-            '}' +
-            /* NEW: Styles for deleted users */
-            '.deleted-user-avatar{' +
-            'filter:grayscale(30%);' +
-            'opacity:0.8;' +
-            'border:2px dashed #ccc;' +
-            '}' +
-            '.deleted-user-container:hover .deleted-user-avatar{' +
-            'opacity:0.9;' +
-            'filter:grayscale(10%);' +
-            '}';
-        
-        style.textContent = css;
-        
-        var head = document.head || document.getElementsByTagName('head')[0];
-        if (head.firstChild) {
-            head.insertBefore(style, head.firstChild);
-        } else {
-            head.appendChild(style);
         }
     }
 
@@ -842,7 +760,6 @@
         
         console.log('🚀 Initializing working avatar system');
         
-        injectCSS();
         setupObserver();
         
         setTimeout(function() {
@@ -860,7 +777,6 @@
         init: initAvatarSystem,
         
         refresh: function() {
-            // Remove existing avatars
             var containers = document.querySelectorAll('.forum-avatar-container');
             for (var i = 0; i < containers.length; i++) {
                 containers[i].remove();
@@ -871,13 +787,11 @@
                 replacedAvatars[j].remove();
             }
             
-            // Remove avatar-replaced class
             var replacedLinks = document.querySelectorAll('.avatar-replaced');
             for (var k = 0; k < replacedLinks.length; k++) {
                 replacedLinks[k].classList.remove('avatar-replaced');
             }
             
-            // Reset state
             state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
@@ -885,7 +799,6 @@
             state.processedDeletedUsers = new WeakSet();
             state.isInitialized = false;
             
-            // Clear cache
             for (var l = 0; l < localStorage.length; l++) {
                 var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
@@ -895,7 +808,6 @@
                 }
             }
             
-            // Re-initialize
             initAvatarSystem();
         },
         
@@ -961,7 +873,6 @@
     }
 
 })();
-
 
 // Ultra-Optimized Media Dimension Extractor for deferred loading
 // DOM is guaranteed to be ready when this executes (defer attribute)
