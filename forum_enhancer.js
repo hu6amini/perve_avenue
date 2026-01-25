@@ -1,5 +1,5 @@
 // ==============================
-// Complete Working Avatar System - FIXED VERSION
+// Complete Working Avatar System - DEBUG VERSION
 // ==============================
 
 (function() {
@@ -33,22 +33,19 @@
             '.summary li[class^="box_"]': {
                 type: 'post',
                 size: 'post',
-                extractor: 'class',
-                priority: 1
+                extractor: 'class'
             },
             
             'a.avatar[href*="MID="] .default-avatar': {
                 type: 'default_avatar',
                 size: 'profile_card',
-                extractor: 'href',
-                priority: 2
+                extractor: 'href'
             },
             
             '.post.box_visitatore': {
                 type: 'deleted_user',
                 size: 'deleted_user',
-                extractor: 'visitatore',
-                priority: 1
+                extractor: 'visitatore'
             }
         },
         
@@ -76,7 +73,6 @@
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
-        processedElements: new WeakSet(), // NEW: Track all processed elements
         isInitialized: false
     };
 
@@ -248,10 +244,12 @@
     }
 
     // ==============================
-    // AVATAR GENERATION
+    // AVATAR GENERATION - DEBUG ADDED
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
+        console.log('🔧 generateLetterAvatar called:', { userId, username, size });
+        
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
         
@@ -283,18 +281,24 @@
             'size=' + size
         ];
         
-        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+        var url = 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+        console.log('🔧 Generated DiceBear URL:', url);
+        
+        return url;
     }
 
     // ==============================
-    // AVATAR FETCHING
+    // AVATAR FETCHING - DEBUG ADDED
     // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback, isDeletedUser) {
+        console.log('🔧 getOrCreateAvatar called:', { userId, username, size, isDeletedUser });
+        
         if (isDeletedUser) {
             var cacheKey = 'deleted_' + username + '_' + size;
             
             if (state.userCache[cacheKey]) {
+                console.log('🔧 Found in memory cache:', state.userCache[cacheKey]);
                 var cached = state.userCache[cacheKey];
                 if (cached.size === size) {
                     callback(cached.url, cached.username);
@@ -302,17 +306,19 @@
                 }
             }
             
-            var stored = localStorage.getItem(getDeletedUserCacheKey(username, size));
+            var storedKey = getDeletedUserCacheKey(username, size);
+            var stored = localStorage.getItem(storedKey);
             if (stored) {
                 try {
                     var data = JSON.parse(stored);
+                    console.log('🔧 Found in localStorage:', data);
                     if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && data.size === size) {
                         state.userCache[cacheKey] = data;
                         callback(data.url, data.username);
                         return;
                     }
                 } catch (e) {
-                    // Invalid cache
+                    console.log('🔧 Error parsing localStorage data:', e);
                 }
             }
             
@@ -325,11 +331,14 @@
                 isDeletedUser: true
             };
             
+            console.log('🔧 Creating new avatar:', cacheData);
+            
             try {
-                localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
+                localStorage.setItem(storedKey, JSON.stringify(cacheData));
             } catch (e) {
+                console.log('🔧 localStorage error, clearing old entries:', e);
                 clearOldCacheEntries();
-                localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
+                localStorage.setItem(storedKey, JSON.stringify(cacheData));
             }
             
             state.userCache[cacheKey] = cacheData;
@@ -340,6 +349,7 @@
         var cacheKey = userId + '_' + size;
         
         if (state.userCache[cacheKey]) {
+            console.log('🔧 Found in memory cache:', state.userCache[cacheKey]);
             var cached = state.userCache[cacheKey];
             if (!isBrokenAvatarUrl(cached.url) && cached.size === size) {
                 callback(cached.url, cached.username);
@@ -347,10 +357,12 @@
             }
         }
         
-        var stored = localStorage.getItem(getCacheKey(userId, size));
+        var storedKey = getCacheKey(userId, size);
+        var stored = localStorage.getItem(storedKey);
         if (stored) {
             try {
                 var data = JSON.parse(stored);
+                console.log('🔧 Found in localStorage:', data);
                 if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
                     !isBrokenAvatarUrl(data.url) && data.size === size) {
                     state.userCache[cacheKey] = data;
@@ -358,10 +370,11 @@
                     return;
                 }
             } catch (e) {
-                // Invalid cache
+                console.log('🔧 Error parsing localStorage data:', e);
             }
         }
         
+        console.log('🔧 Fetching from API for user:', userId);
         fetch('/api.php?mid=' + userId)
             .then(function(response) {
                 if (!response.ok) throw new Error('API failed');
@@ -373,6 +386,8 @@
                 var finalUsername = username;
                 var avatarUrl;
                 
+                console.log('🔧 API response:', userData);
+                
                 if (userData && userData.nickname) {
                     finalUsername = cleanUsername(userData.nickname);
                 }
@@ -382,15 +397,19 @@
                     userData.avatar !== 'http') {
                     
                     avatarUrl = userData.avatar;
+                    console.log('🔧 User has custom avatar:', avatarUrl);
                     
                     if (isBrokenAvatarUrl(avatarUrl)) {
+                        console.log('🔧 Avatar marked as broken, generating letter avatar');
                         avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                         finishAvatar(avatarUrl, finalUsername);
                     } else {
                         testImageUrl(avatarUrl, function(success) {
                             if (success) {
+                                console.log('🔧 Custom avatar is valid');
                                 finishAvatar(avatarUrl, finalUsername);
                             } else {
+                                console.log('🔧 Custom avatar failed to load, generating letter avatar');
                                 markAvatarAsBroken(avatarUrl);
                                 avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                                 finishAvatar(avatarUrl, finalUsername);
@@ -399,6 +418,7 @@
                         return;
                     }
                 } else {
+                    console.log('🔧 No custom avatar, generating letter avatar');
                     avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                 }
                 
@@ -412,11 +432,14 @@
                         size: size
                     };
                     
+                    console.log('🔧 Caching avatar:', cacheData);
+                    
                     try {
-                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                        localStorage.setItem(storedKey, JSON.stringify(cacheData));
                     } catch (e) {
+                        console.log('🔧 localStorage error, clearing old entries:', e);
                         clearOldCacheEntries();
-                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                        localStorage.setItem(storedKey, JSON.stringify(cacheData));
                     }
                     
                     state.userCache[cacheKey] = cacheData;
@@ -424,7 +447,7 @@
                 }
             })
             .catch(function(error) {
-                console.warn('Avatar fetch failed for user ' + userId + ':', error);
+                console.warn('🔧 Avatar fetch failed for user ' + userId + ':', error);
                 var fallbackUrl = generateLetterAvatar(userId, username, size);
                 var cacheData = {
                     url: fallbackUrl,
@@ -433,11 +456,14 @@
                     size: size
                 };
                 
+                console.log('🔧 Using fallback avatar:', cacheData);
+                
                 try {
-                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    localStorage.setItem(storedKey, JSON.stringify(cacheData));
                 } catch (e) {
+                    console.log('🔧 localStorage error, clearing old entries:', e);
                     clearOldCacheEntries();
-                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    localStorage.setItem(storedKey, JSON.stringify(cacheData));
                 }
                 
                 state.userCache[cacheKey] = cacheData;
@@ -446,7 +472,7 @@
     }
 
     // ==============================
-    // ELEMENT PROCESSING - UPDATED
+    // ELEMENT PROCESSING - DEBUG ADDED
     // ==============================
 
     function extractUserIdFromElement(element, extractorType) {
@@ -478,38 +504,28 @@
 
     function shouldProcessElement(element) {
         if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+            console.log('❌ shouldProcessElement: invalid element');
             return null;
         }
         
-        // Check if already processed
-        if (state.processedElements.has(element)) {
-            return null;
-        }
+        console.log('🔍 Checking element:', element);
+        console.log('🔍 Element classes:', element.className);
+        console.log('🔍 Element HTML:', element.outerHTML.substring(0, 200) + '...');
         
         var config = null;
         
-        // Check posts FIRST (priority)
+        // Test each selector
         if (element.matches('.summary li[class^="box_"]')) {
+            console.log('✅ Matched POST selector');
             config = {
                 type: 'post',
                 size: 'post',
                 extractor: 'class'
             };
         }
-        // Check deleted users
-        else if (element.matches('.post.box_visitatore')) {
-            config = {
-                type: 'deleted_user',
-                size: 'deleted_user',
-                extractor: 'visitatore'
-            };
-        }
-        // Check default avatars LAST (only if not inside a post)
-        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
-            // Don't process default avatars that are inside posts
-            if (element.closest('.summary li[class^="box_"]') || element.closest('.post.box_visitatore')) {
-                return null;
-            }
+        
+        if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
+            console.log('✅ Matched DEFAULT_AVATAR selector');
             config = {
                 type: 'default_avatar',
                 size: 'profile_card',
@@ -517,21 +533,44 @@
             };
         }
         
+        if (element.matches('.post.box_visitatore')) {
+            console.log('✅ Matched DELETED_USER selector');
+            config = {
+                type: 'deleted_user',
+                size: 'deleted_user',
+                extractor: 'visitatore'
+            };
+        }
+        
         if (!config) {
+            console.log('❌ No selector matched');
+            return null;
+        }
+        
+        console.log('🔍 Selected config:', config);
+        
+        // Check if already processed
+        if ((config.type === 'post' && state.processedPosts.has(element)) ||
+            (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
+            (config.type === 'deleted_user' && state.processedDeletedUsers.has(element))) {
+            console.log('❌ Already processed');
             return null;
         }
         
         var userId = extractUserIdFromElement(element, config.extractor);
+        console.log('🔍 Extracted userId:', userId);
         
         if (config.type === 'post' || config.type === 'deleted_user') {
             var nickname = element.querySelector('.nick');
+            console.log('🔍 Found nickname element:', nickname);
             if (!nickname) {
+                console.log('❌ No nickname found');
                 return null;
             }
             if (nickname.previousElementSibling && 
                 nickname.previousElementSibling.classList && 
                 nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
-                state.processedElements.add(element);
+                console.log('❌ Already has avatar container');
                 if (config.type === 'post') {
                     state.processedPosts.add(element);
                 } else {
@@ -541,16 +580,19 @@
             }
         } else if (config.type === 'default_avatar') {
             if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
+                console.log('❌ No fa-user icon found');
                 return null;
             }
             var parentLink = element.closest('a.avatar[href*="MID="]');
+            console.log('🔍 Parent link:', parentLink);
             if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
-                state.processedElements.add(element);
+                console.log('❌ Already has forum-user-avatar');
                 state.processedAvatars.add(element);
                 return null;
             }
         }
         
+        console.log('✅ Element should be processed');
         return {
             element: element,
             userId: userId,
@@ -559,10 +601,12 @@
     }
 
     // ==============================
-    // AVATAR CREATION & INSERTION
+    // AVATAR CREATION & INSERTION - DEBUG ADDED
     // ==============================
 
     function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser) {
+        console.log('🔧 createAvatarElement called:', { avatarUrl, userId, size, username, isDeletedUser });
+        
         var img = new Image();
         
         img.className = 'forum-user-avatar avatar-size-' + size;
@@ -574,6 +618,7 @@
         img.decoding = 'async';
         
         // Set HTML attributes
+        console.log('🔧 Setting width/height to:', size);
         img.width = size;
         img.height = size;
         
@@ -594,7 +639,10 @@
             img.dataset.username = username;
         }
         
+        console.log('🔧 Created img element:', img);
+        
         img.addEventListener('error', function onError() {
+            console.log('❌ Image error:', avatarUrl);
             markAvatarAsBroken(avatarUrl);
             if (userId) {
                 var cacheKey = userId + '_' + size;
@@ -602,6 +650,7 @@
                 localStorage.removeItem(getCacheKey(userId, size));
                 
                 var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+                console.log('🔧 Loading fallback:', fallbackUrl);
                 this.src = fallbackUrl;
             } else if (username) {
                 var cacheKey = 'deleted_' + username + '_' + size;
@@ -609,6 +658,7 @@
                 localStorage.removeItem(getDeletedUserCacheKey(username, size));
                 
                 var fallbackUrl = generateLetterAvatar(null, username || '', size);
+                console.log('🔧 Loading fallback:', fallbackUrl);
                 this.src = fallbackUrl;
             }
             this.removeEventListener('error', onError);
@@ -618,28 +668,34 @@
     }
 
     function insertAvatarForElement(processingInfo) {
+        console.log('🚀 insertAvatarForElement called:', processingInfo);
+        
         var element = processingInfo.element;
         var userId = processingInfo.userId;
         var config = processingInfo.config;
         
-        // Mark as processed immediately
-        state.processedElements.add(element);
-        
         var username = extractUsernameFromElement(element, config.type, userId);
+        console.log('🔍 Extracted username:', username);
         
         var isDeletedUser = config.type === 'deleted_user';
         
         // Get the actual pixel size from config
         var actualSize = AVATAR_CONFIG.sizes[config.size];
+        console.log('🔍 Config size key:', config.size);
+        console.log('🔍 Actual pixel size:', actualSize);
         
         getOrCreateAvatar(userId, username, actualSize, function(avatarUrl, finalUsername) {
+            console.log('✅ Avatar created:', { avatarUrl, finalUsername, size: actualSize });
             if (config.type === 'post') {
+                console.log('📝 Inserting post avatar');
                 insertPostAvatar(element, userId, actualSize, avatarUrl, finalUsername);
                 state.processedPosts.add(element);
             } else if (config.type === 'default_avatar') {
+                console.log('📝 Inserting default avatar');
                 insertDefaultAvatar(element, userId, actualSize, avatarUrl, finalUsername);
                 state.processedAvatars.add(element);
             } else if (config.type === 'deleted_user') {
+                console.log('📝 Inserting deleted user avatar');
                 insertDeletedUserAvatar(element, null, actualSize, avatarUrl, finalUsername);
                 state.processedDeletedUsers.add(element);
             }
@@ -647,12 +703,21 @@
     }
 
     function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
+        console.log('📝 insertPostAvatar called:', { postElement, userId, size, avatarUrl, username });
+        
         var nickname = postElement.querySelector('.nick a, .nick');
-        if (!nickname) return;
+        if (!nickname) {
+            console.log('❌ No nickname found in post');
+            return;
+        }
+        
+        console.log('🔍 Nickname:', nickname);
+        console.log('🔍 Previous sibling:', nickname.previousElementSibling);
         
         if (nickname.previousElementSibling && 
             nickname.previousElementSibling.classList && 
             nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            console.log('❌ Already has avatar container');
             return;
         }
         
@@ -663,15 +728,24 @@
             'vertical-align:middle;' +
             'position:relative;';
         
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false));
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false);
+        container.appendChild(avatarImg);
+        
+        console.log('✅ Inserting before nickname');
         nickname.parentNode.insertBefore(container, nickname);
     }
 
     function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
+        console.log('📝 insertDefaultAvatar called:', { defaultAvatarElement, userId, size, avatarUrl, username });
+        
         var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
-        if (!parentLink) return;
+        if (!parentLink) {
+            console.log('❌ No parent link found');
+            return;
+        }
         
         if (parentLink.querySelector('img.forum-user-avatar')) {
+            console.log('❌ Already has forum-user-avatar');
             return;
         }
         
@@ -679,8 +753,10 @@
         
         var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
         if (defaultAvatarDiv) {
+            console.log('✅ Replacing default-avatar div');
             defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
         } else {
+            console.log('✅ Appending avatar to parent link');
             parentLink.appendChild(avatarImg);
         }
         
@@ -688,12 +764,18 @@
     }
 
     function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
+        console.log('📝 insertDeletedUserAvatar called:', { postElement, userId, size, avatarUrl, username });
+        
         var nickname = postElement.querySelector('.nick');
-        if (!nickname) return;
+        if (!nickname) {
+            console.log('❌ No nickname found in deleted post');
+            return;
+        }
         
         if (nickname.previousElementSibling && 
             nickname.previousElementSibling.classList && 
             nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            console.log('❌ Already has avatar container');
             return;
         }
         
@@ -704,7 +786,10 @@
             'vertical-align:middle;' +
             'position:relative;';
         
-        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true));
+        var avatarImg = createAvatarElement(avatarUrl, null, size, username, true);
+        container.appendChild(avatarImg);
+        
+        console.log('✅ Inserting before nickname');
         nickname.parentNode.insertBefore(container, nickname);
     }
 
@@ -715,13 +800,15 @@
     function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
+        console.log('🔍 handleNewElement:', node);
+        
         var nodeInfo = shouldProcessElement(node);
         if (nodeInfo) {
             insertAvatarForElement(nodeInfo);
         }
         
-        // Process child elements
-        var posts = node.querySelectorAll('.summary li[class^="box_"]:not(.box_visitatore)');
+        var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+        console.log('🔍 Found posts in node:', posts.length);
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -729,17 +816,10 @@
             }
         }
         
-        var deletedPosts = node.querySelectorAll('.post.box_visitatore');
-        for (var j = 0; j < deletedPosts.length; j++) {
-            var deletedInfo = shouldProcessElement(deletedPosts[j]);
-            if (deletedInfo) {
-                insertAvatarForElement(deletedInfo);
-            }
-        }
-        
         var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
-        for (var k = 0; k < defaultAvatars.length; k++) {
-            var avatarInfo = shouldProcessElement(defaultAvatars[k]);
+        console.log('🔍 Found default avatars in node:', defaultAvatars.length);
+        for (var j = 0; j < defaultAvatars.length; j++) {
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
                 insertAvatarForElement(avatarInfo);
             }
@@ -747,57 +827,41 @@
     }
 
     function processExistingElements() {
-        console.log('Processing existing elements...');
+        console.log('🚀 PROCESSING EXISTING ELEMENTS...');
         
-        // Clear ALL old cache first
-        clearAllAvatarCache();
+        // First clear all cache
+        console.log('🧹 Clearing cache...');
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && (key.startsWith('avatar_') || key.startsWith('deleted_avatar_') || key.startsWith('broken_avatar_'))) {
+                localStorage.removeItem(key);
+                console.log('🧹 Removed:', key);
+            }
+        }
         
-        var posts = document.querySelectorAll('.summary li[class^="box_"]:not(.box_visitatore)');
+        var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+        console.log('📊 Total posts found:', posts.length);
+        
         for (var i = 0; i < posts.length; i++) {
+            console.log('\n=== Processing post ' + (i+1) + ' ===');
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
                 insertAvatarForElement(postInfo);
             }
         }
         
-        var deletedPosts = document.querySelectorAll('.post.box_visitatore');
-        for (var j = 0; j < deletedPosts.length; j++) {
-            var deletedInfo = shouldProcessElement(deletedPosts[j]);
-            if (deletedInfo) {
-                insertAvatarForElement(deletedInfo);
-            }
-        }
-        
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
-        for (var k = 0; k < defaultAvatars.length; k++) {
-            var avatarInfo = shouldProcessElement(defaultAvatars[k]);
+        console.log('📊 Total default avatars found:', defaultAvatars.length);
+        
+        for (var j = 0; j < defaultAvatars.length; j++) {
+            console.log('\n=== Processing default avatar ' + (j+1) + ' ===');
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
                 insertAvatarForElement(avatarInfo);
             }
         }
-    }
-
-    // ==============================
-    // CACHE CLEARING FUNCTION
-    // ==============================
-
-    function clearAllAvatarCache() {
-        console.log('Clearing all avatar cache...');
         
-        // Clear memory cache
-        state.userCache = {};
-        state.brokenAvatars.clear();
-        
-        // Clear localStorage
-        for (var i = 0; i < localStorage.length; i++) {
-            var key = localStorage.key(i);
-            if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
-                        key.startsWith(AVATAR_CONFIG.cache.brokenPrefix) ||
-                        key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
-                localStorage.removeItem(key);
-                i--; // Adjust index after removal
-            }
-        }
+        console.log('✅ Finished processing elements');
     }
 
     // ==============================
@@ -812,9 +876,9 @@
                 callback: handleNewElement,
                 priority: 'high'
             });
-            console.log('Registered with ForumCoreObserver');
+            console.log('✅ Registered with ForumCoreObserver');
         } else {
-            console.error('ForumCoreObserver not available. Avatar system will not work.');
+            console.error('❌ ForumCoreObserver not available. Avatar system will not work.');
         }
     }
 
@@ -825,14 +889,16 @@
     function initAvatarSystem() {
         if (state.isInitialized) return;
         
-        console.log('🚀 Initializing working avatar system');
+        console.log('🚀 ==========================================');
+        console.log('🚀 INITIALIZING WORKING AVATAR SYSTEM');
+        console.log('🚀 ==========================================');
         
         setupObserver();
         
         setTimeout(function() {
             processExistingElements();
             state.isInitialized = true;
-            console.log('Avatar system initialized');
+            console.log('✅ Avatar system initialized');
         }, 100);
     }
 
@@ -844,35 +910,42 @@
         init: initAvatarSystem,
         
         refresh: function() {
-            // Remove existing avatars
+            console.log('🔄 Refreshing avatars...');
+            
             var containers = document.querySelectorAll('.forum-avatar-container');
+            console.log('🧹 Removing containers:', containers.length);
             for (var i = 0; i < containers.length; i++) {
                 containers[i].remove();
             }
             
             var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
+            console.log('🧹 Removing replaced avatars:', replacedAvatars.length);
             for (var j = 0; j < replacedAvatars.length; j++) {
                 replacedAvatars[j].remove();
             }
             
             var replacedLinks = document.querySelectorAll('.avatar-replaced');
+            console.log('🧹 Cleaning replaced links:', replacedLinks.length);
             for (var k = 0; k < replacedLinks.length; k++) {
                 replacedLinks[k].classList.remove('avatar-replaced');
             }
             
-            // Reset state
             state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
             state.processedDeletedUsers = new WeakSet();
-            state.processedElements = new WeakSet();
             state.isInitialized = false;
             
-            // Clear all cache
-            clearAllAvatarCache();
+            for (var l = 0; l < localStorage.length; l++) {
+                var key = localStorage.key(l);
+                if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                            key.startsWith(AVATAR_CONFIG.cache.brokenPrefix) ||
+                            key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                    localStorage.removeItem(key);
+                }
+            }
             
-            // Re-initialize
             initAvatarSystem();
         },
         
@@ -913,7 +986,7 @@
         
         debugUser: function(userId) {
             var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
-            console.log('Debug user ' + userId + ':');
+            console.log('🔍 Debug user ' + userId + ':');
             
             for (var i = 0; i < posts.length; i++) {
                 var nickname = posts[i].querySelector('.nick a, .nick');
@@ -924,8 +997,13 @@
             }
         },
         
-        // NEW: Force clear cache
-        clearCache: clearAllAvatarCache
+        // Debug function to check what's happening
+        debugElement: function(element) {
+            console.log('🔍 Debug element:', element);
+            var info = shouldProcessElement(element);
+            console.log('Should process?', info);
+            return info;
+        }
     };
 
     // ==============================
@@ -934,9 +1012,11 @@
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 DOM Content Loaded');
             setTimeout(initAvatarSystem, 100);
         });
     } else {
+        console.log('📄 DOM already loaded');
         setTimeout(initAvatarSystem, 100);
     }
 
