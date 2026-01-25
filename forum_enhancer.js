@@ -548,57 +548,62 @@
     // AVATAR CREATION & INSERTION
     // ==============================
 
-    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser) {
-        var img = new Image(size, size);
-        
-        img.className = 'forum-user-avatar avatar-size-' + size;
-        if (isDeletedUser) {
-            img.className += ' deleted-user-avatar';
-        }
-        img.alt = username ? 'Avatar for ' + username : '';
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        
-        img.style.cssText = 
-            'width:' + size + 'px;' +
-            'height:' + size + 'px;' +
-            'border-radius:50%;' +
-            'object-fit:cover;' +
-            'vertical-align:middle;' +
-            'border:2px solid #fff;' +
-            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
-            'background-color:#f0f0f0;' +
-            'display:inline-block;';
-        
-        img.src = avatarUrl;
-        
-        if (username) {
-            img.dataset.username = username;
-        }
-        
-        img.addEventListener('error', function onError() {
-            markAvatarAsBroken(avatarUrl);
-            if (userId) {
-                var cacheKey = userId + '_' + size;
-                delete state.userCache[cacheKey];
-                localStorage.removeItem(getCacheKey(userId, size));
-                
-                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
-                this.src = fallbackUrl;
-            } else if (username) {
-                var cacheKey = 'deleted_' + username + '_' + size;
-                delete state.userCache[cacheKey];
-                localStorage.removeItem(getDeletedUserCacheKey(username, size));
-                
-                var fallbackUrl = generateLetterAvatar(null, username || '', size);
-                this.src = fallbackUrl;
-            }
-            this.removeEventListener('error', onError);
-        }, { once: true });
-        
-        return img;
+   function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser) {
+    // FIX: Remove size parameters from Image constructor
+    var img = new Image(); // Remove the size parameters
+    
+    img.className = 'forum-user-avatar avatar-size-' + size;
+    if (isDeletedUser) {
+        img.className += ' deleted-user-avatar';
     }
-
+    img.alt = username ? 'Avatar for ' + username : '';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    
+    // FIX: Set width/height attributes separately from style
+    img.width = size;
+    img.height = size;
+    
+    img.style.cssText = 
+        'width:' + size + 'px;' +
+        'height:' + size + 'px;' +
+        'border-radius:50%;' +
+        'object-fit:cover;' +
+        'vertical-align:middle;' +
+        'border:2px solid #fff;' +
+        'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
+        'background-color:#f0f0f0;' +
+        'display:inline-block;';
+    
+    img.src = avatarUrl;
+    
+    if (username) {
+        img.dataset.username = username;
+    }
+    
+    img.addEventListener('error', function onError() {
+        markAvatarAsBroken(avatarUrl);
+        if (userId) {
+            var cacheKey = userId + '_' + size;
+            delete state.userCache[cacheKey];
+            localStorage.removeItem(getCacheKey(userId, size));
+            
+            var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+            this.src = fallbackUrl;
+        } else if (username) {
+            var cacheKey = 'deleted_' + username + '_' + size;
+            delete state.userCache[cacheKey];
+            localStorage.removeItem(getDeletedUserCacheKey(username, size));
+            
+            var fallbackUrl = generateLetterAvatar(null, username || '', size);
+            this.src = fallbackUrl;
+        }
+        this.removeEventListener('error', onError);
+    }, { once: true });
+    
+    return img;
+}
+    
     function insertAvatarForElement(processingInfo) {
         var element = processingInfo.element;
         var userId = processingInfo.userId;
