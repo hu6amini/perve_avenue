@@ -197,52 +197,61 @@
         return username;
     }
 
-    function extractUsernameFromElement(element, type, userId) {
-        var username = '';
+function extractUsernameFromElement(element, type, userId) {
+    var username = '';
+    
+    if (type === 'post') {
+        var nickname = element.querySelector('.nick a');
+        if (nickname && nickname.textContent) {
+            username = nickname.textContent;
+        }
         
-        if (type === 'post') {
-            var nickname = element.querySelector('.nick a');
-            if (nickname && nickname.textContent) {
-                username = nickname.textContent;
+        if (!username) {
+            var userClass = element.querySelector('.user' + userId);
+            if (userClass && userClass.textContent) {
+                username = userClass.textContent;
+            }
+        }
+        
+        if (!username) {
+            var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
+            for (var i = 0; i < midLinks.length; i++) {
+                if (midLinks[i].textContent) {
+                    username = midLinks[i].textContent;
+                    break;
+                }
+            }
+        }
+    } else if (type === 'default_avatar') {
+        var parentLink = element.closest('a[href*="MID="]');
+        if (parentLink) {
+            if (parentLink.title) {
+                username = parentLink.title;
             }
             
-            if (!username) {
-                var userClass = element.querySelector('.user' + userId);
-                if (userClass && userClass.textContent) {
-                    username = userClass.textContent;
-                }
+            if (!username && parentLink.textContent) {
+                username = parentLink.textContent;
             }
-            
-            if (!username) {
-                var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
-                for (var i = 0; i < midLinks.length; i++) {
-                    if (midLinks[i].textContent) {
-                        username = midLinks[i].textContent;
-                        break;
-                    }
-                }
-            }
-        } else if (type === 'default_avatar') {
-            var parentLink = element.closest('a[href*="MID="]');
-            if (parentLink) {
-                if (parentLink.title) {
-                    username = parentLink.title;
-                }
-                
-                if (!username && parentLink.textContent) {
-                    username = parentLink.textContent;
-                }
-            }
-        } else if (type === 'deleted_user') {
-            var nickname = element.querySelector('.nick');
+        }
+    } else if (type === 'deleted_user') {
+        // FIXED: Try both .nick a and .nick like regular users
+        var nickname = element.querySelector('.nick a');
+        if (nickname && nickname.textContent) {
+            username = nickname.textContent;
+        }
+        
+        // Fallback to just .nick
+        if (!username) {
+            nickname = element.querySelector('.nick');
             if (nickname && nickname.textContent) {
                 username = nickname.textContent;
             }
         }
-        
-        return cleanUsername(username);
     }
-
+    
+    return cleanUsername(username);
+}
+    
     // ==============================
     // AVATAR GENERATION
     // ==============================
