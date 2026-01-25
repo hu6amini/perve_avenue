@@ -2650,3 +2650,6 @@ input[type="radio"]:checked::before
   font-family:"Font Awesome 6 Pro";
   font-weight:900;
 }
+
+/*Hidden*/
+.nascosta,.box_visitatore .u_title::before{display:none!important}
