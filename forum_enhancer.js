@@ -778,7 +778,6 @@
             '.forum-avatar-container{' +
             'display:inline-block;' +
             'vertical-align:middle;' +
-            'margin-right:8px;' +
             'position:relative;' +
             'transition:transform .2s ease' +
             '}' +
