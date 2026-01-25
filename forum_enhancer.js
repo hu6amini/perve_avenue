@@ -1,5 +1,5 @@
 // ==============================
-// Complete Working Avatar System - FINAL FIX
+// Complete Working Avatar System - SIZE FIX ONLY
 // ==============================
 
 (function() {
@@ -36,15 +36,9 @@
                 extractor: 'class'
             },
             
-            '.post:not(.box_visitatore)': { // NEW: Match regular posts
-                type: 'post',
-                size: 'post', 
-                extractor: 'class'
-            },
-            
             'a.avatar[href*="MID="] .default-avatar': {
                 type: 'default_avatar',
-                size: 'profile_card',
+                size: 'profile_card', // Default size for profile cards
                 extractor: 'href'
             },
             
@@ -250,7 +244,7 @@
     }
 
     // ==============================
-    // AVATAR GENERATION
+    // AVATAR GENERATION - FIXED SIZE
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
@@ -282,7 +276,7 @@
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
             'radius=50',
-            'size=' + size
+            'size=' + size // Use exact size, not double
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
@@ -298,17 +292,15 @@
             
             if (state.userCache[cacheKey]) {
                 var cached = state.userCache[cacheKey];
-                if (cached.size === size) {
-                    callback(cached.url, cached.username);
-                    return;
-                }
+                callback(cached.url, cached.username);
+                return;
             }
             
             var stored = localStorage.getItem(getDeletedUserCacheKey(username, size));
             if (stored) {
                 try {
                     var data = JSON.parse(stored);
-                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && data.size === size) {
+                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
                         state.userCache[cacheKey] = data;
                         callback(data.url, data.username);
                         return;
@@ -343,7 +335,7 @@
         
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
-            if (!isBrokenAvatarUrl(cached.url) && cached.size === size) {
+            if (!isBrokenAvatarUrl(cached.url)) {
                 callback(cached.url, cached.username);
                 return;
             }
@@ -354,7 +346,7 @@
             try {
                 var data = JSON.parse(stored);
                 if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
-                    !isBrokenAvatarUrl(data.url) && data.size === size) {
+                    !isBrokenAvatarUrl(data.url)) {
                     state.userCache[cacheKey] = data;
                     callback(data.url, data.username);
                     return;
@@ -448,7 +440,7 @@
     }
 
     // ==============================
-    // ELEMENT PROCESSING - FIXED
+    // ELEMENT PROCESSING - UPDATED FOR SIZE FIX
     // ==============================
 
     function extractUserIdFromElement(element, extractorType) {
@@ -485,41 +477,40 @@
         
         var config = null;
         
-        // Check posts FIRST (both summary and regular posts)
+        // Check if it's a summary post
         if (element.matches('.summary li[class^="box_"]')) {
             config = {
                 type: 'post',
-                size: 'post',
+                size: AVATAR_CONFIG.sizes.post, // 60px
                 extractor: 'class'
             };
         }
-        // Check regular posts (not deleted)
-        else if (element.matches('.post:not(.box_visitatore)')) {
-            config = {
-                type: 'post',
-                size: 'post',
-                extractor: 'class'
-            };
+        // Check if it's a default avatar inside a post
+        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
+            // Check if this default-avatar is inside a .post element
+            var postParent = element.closest('.post');
+            if (postParent) {
+                // Inside a post - use post size (60px)
+                config = {
+                    type: 'default_avatar',
+                    size: AVATAR_CONFIG.sizes.post, // 60px for posts
+                    extractor: 'href'
+                };
+            } else {
+                // Not inside a post - use profile_card size (80px)
+                config = {
+                    type: 'default_avatar',
+                    size: AVATAR_CONFIG.sizes.profile_card, // 80px for profile cards
+                    extractor: 'href'
+                };
+            }
         }
-        // Check deleted users
+        // Check if it's a deleted user
         else if (element.matches('.post.box_visitatore')) {
             config = {
                 type: 'deleted_user',
-                size: 'deleted_user',
+                size: AVATAR_CONFIG.sizes.deleted_user, // 60px
                 extractor: 'visitatore'
-            };
-        }
-        // Check default avatars ONLY if not inside a post
-        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
-            // Don't process default avatars that are inside posts
-            var postParent = element.closest('.post, .summary li[class^="box_"]');
-            if (postParent) {
-                return null; // Posts should be handled by post selector above
-            }
-            config = {
-                type: 'default_avatar',
-                size: 'profile_card',
-                extractor: 'href'
             };
         }
         
@@ -536,7 +527,7 @@
         var userId = extractUserIdFromElement(element, config.extractor);
         
         if (config.type === 'post' || config.type === 'deleted_user') {
-            var nickname = element.querySelector('.nick a, .nick');
+            var nickname = element.querySelector('.nick');
             if (!nickname) {
                 return null;
             }
@@ -569,10 +560,11 @@
     }
 
     // ==============================
-    // AVATAR CREATION & INSERTION
+    // AVATAR CREATION & INSERTION - FIXED IMAGE CONSTRUCTOR
     // ==============================
 
     function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser) {
+        // FIX: Don't pass size to Image constructor
         var img = new Image();
         
         img.className = 'forum-user-avatar avatar-size-' + size;
@@ -583,7 +575,7 @@
         img.loading = 'lazy';
         img.decoding = 'async';
         
-        // Set HTML attributes
+        // Set width/height attributes
         img.width = size;
         img.height = size;
         
@@ -636,18 +628,15 @@
         
         var isDeletedUser = config.type === 'deleted_user';
         
-        // Get the actual pixel size from config
-        var actualSize = AVATAR_CONFIG.sizes[config.size];
-        
-        getOrCreateAvatar(userId, username, actualSize, function(avatarUrl, finalUsername) {
+        getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
             if (config.type === 'post') {
-                insertPostAvatar(element, userId, actualSize, avatarUrl, finalUsername);
+                insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedPosts.add(element);
             } else if (config.type === 'default_avatar') {
-                insertDefaultAvatar(element, userId, actualSize, avatarUrl, finalUsername);
+                insertDefaultAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedAvatars.add(element);
             } else if (config.type === 'deleted_user') {
-                insertDeletedUserAvatar(element, null, actualSize, avatarUrl, finalUsername);
+                insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
                 state.processedDeletedUsers.add(element);
             }
         }, isDeletedUser);
@@ -727,7 +716,7 @@
             insertAvatarForElement(nodeInfo);
         }
         
-        var posts = node.querySelectorAll('.summary li[class^="box_"], .post');
+        var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -735,15 +724,9 @@
             }
         }
         
-        // Only get default avatars that are NOT inside posts
         var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
-            var avatar = defaultAvatars[j];
-            // Skip if inside a post
-            if (avatar.closest('.post, .summary li[class^="box_"]')) {
-                continue;
-            }
-            var avatarInfo = shouldProcessElement(avatar);
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
                 insertAvatarForElement(avatarInfo);
             }
@@ -753,7 +736,7 @@
     function processExistingElements() {
         console.log('Processing existing elements...');
         
-        var posts = document.querySelectorAll('.summary li[class^="box_"], .post');
+        var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -761,15 +744,9 @@
             }
         }
         
-        // Only get default avatars that are NOT inside posts
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
-            var avatar = defaultAvatars[j];
-            // Skip if inside a post
-            if (avatar.closest('.post, .summary li[class^="box_"]')) {
-                continue;
-            }
-            var avatarInfo = shouldProcessElement(avatar);
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
                 insertAvatarForElement(avatarInfo);
             }
@@ -784,7 +761,7 @@
         if (window.forumObserver && typeof window.forumObserver.register === 'function') {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
-                selector: '.summary li[class^="box_"], .post, a.avatar[href*="MID="] .default-avatar',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore',
                 callback: handleNewElement,
                 priority: 'high'
             });
@@ -867,7 +844,7 @@
                 }
             }
             
-            var posts = document.querySelectorAll('.summary li[class^="box_"], .post');
+            var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
             var withAvatars = 0;
             for (var j = 0; j < posts.length; j++) {
                 var nickname = posts[j].querySelector('.nick a, .nick');
