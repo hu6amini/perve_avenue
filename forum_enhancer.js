@@ -276,7 +276,7 @@
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
             'radius=50',
-            'size=' + size
+            'size=' + size  // Use exact size needed
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
@@ -292,15 +292,18 @@
             
             if (state.userCache[cacheKey]) {
                 var cached = state.userCache[cacheKey];
-                callback(cached.url, cached.username);
-                return;
+                // Check if cached size matches requested size
+                if (cached.size === size) {
+                    callback(cached.url, cached.username);
+                    return;
+                }
             }
             
             var stored = localStorage.getItem(getDeletedUserCacheKey(username, size));
             if (stored) {
                 try {
                     var data = JSON.parse(stored);
-                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && data.size === size) {
                         state.userCache[cacheKey] = data;
                         callback(data.url, data.username);
                         return;
@@ -335,7 +338,7 @@
         
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
-            if (!isBrokenAvatarUrl(cached.url)) {
+            if (!isBrokenAvatarUrl(cached.url) && cached.size === size) {
                 callback(cached.url, cached.username);
                 return;
             }
@@ -346,7 +349,7 @@
             try {
                 var data = JSON.parse(stored);
                 if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
-                    !isBrokenAvatarUrl(data.url)) {
+                    !isBrokenAvatarUrl(data.url) && data.size === size) {
                     state.userCache[cacheKey] = data;
                     callback(data.url, data.username);
                     return;
@@ -388,7 +391,7 @@
                                 markAvatarAsBroken(avatarUrl);
                                 avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                                 finishAvatar(avatarUrl, finalUsername);
-                        }
+                            }
                         });
                         return;
                     }
@@ -559,7 +562,7 @@
         img.loading = 'lazy';
         img.decoding = 'async';
         
-        // Set HTML attributes correctly
+        // Set HTML attributes to match requested size
         img.width = size;
         img.height = size;
         
@@ -612,7 +615,7 @@
         
         var isDeletedUser = config.type === 'deleted_user';
         
-        // Get the actual size from config
+        // Get the actual pixel size from config
         var actualSize = AVATAR_CONFIG.sizes[config.size];
         
         getOrCreateAvatar(userId, username, actualSize, function(avatarUrl, finalUsername) {
