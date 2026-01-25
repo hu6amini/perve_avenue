@@ -4362,7 +4362,6 @@ class PostModernizer {
     document.querySelectorAll('.ffb_embedlink').forEach(container => {
         // Skip embedded links in the editor
         if (this.#isInEditor(container)) {
-            console.debug('Skipping embedded link in editor:', container);
             return;
         }
         
@@ -4375,7 +4374,6 @@ class PostModernizer {
 #transformEmbeddedLink(container) {
     // Double-check we're not in editor
     if (this.#isInEditor(container)) {
-        console.debug('Aborting embedded link transformation in editor');
         return;
     }
     
@@ -4714,13 +4712,6 @@ class PostModernizer {
         if (timeFormatCount > 2) {
             this.#detectedTimeFormat = timeFormatKey;
         }
-        
-        console.debug('Learned format pattern:', {
-            patternKey: patternKey,
-            formatConfidence: this.#formatConfidence,
-            detectedSeparator: this.#detectedSeparator,
-            detectedTimeFormat: this.#detectedTimeFormat
-        });
     }
     
     #getBestFormatForComponents(components) {
@@ -4837,7 +4828,6 @@ class PostModernizer {
 
         const cacheKey = dateString.trim();
         if (this.#dateFormatCache.has(cacheKey)) {
-            console.debug('Using cached date parse for:', dateString);
             return this.#dateFormatCache.get(cacheKey);
         }
 
@@ -4847,14 +4837,11 @@ class PostModernizer {
             .replace(/^Posted\s*/i, '')
             .trim();
 
-        console.debug('Parsing date string:', dateString, '->', cleanDateString);
-
         const components = this.#analyzeDateComponents(cleanDateString);
         
         if (components.parts.length >= 2) {
             const [first, second] = components.parts;
             if (first > 12 && second <= 12) {
-                console.debug('CLEAR DD/MM PATTERN DETECTED:', first, '/', second, '- Forcing EU format');
                 const formats = this.#buildFormatArray('EU', components);
                 
                 const aggressiveFormats = [
@@ -4876,8 +4863,6 @@ class PostModernizer {
                 for (let i = 0; i < allFormats.length; i++) {
                     momentDate = moment(cleanDateString, allFormats[i], true);
                     if (momentDate && momentDate.isValid()) {
-                        console.debug('Parsed clear DD/MM with format', allFormats[i], 'as local time:', momentDate.format());
-                        
                         const month = momentDate.month() + 1;
                         if (month >= 1 && month <= 12) {
                             successfulFormat = 'EU';
@@ -4897,14 +4882,6 @@ class PostModernizer {
                     
                     this.#dateFormatCache.set(cacheKey, utcTime);
                     
-                    console.debug('Final conversion for clear DD/MM:', {
-                        original: cleanDateString,
-                        parsedLocal: momentDate.format(),
-                        parsedUTC: utcTime.format(),
-                        successfulFormat: successfulFormat,
-                        confidence: this.#formatConfidence
-                    });
-                    
                     return utcTime;
                 }
             }
@@ -4912,13 +4889,6 @@ class PostModernizer {
         
         const bestFormat = this.#getBestFormatForComponents(components);
         
-        console.debug('Date analysis:', {
-            components: components,
-            bestFormat: bestFormat,
-            confidence: this.#formatConfidence,
-            reason: components.reason || 'Normal analysis'
-        });
-
         let formats = [];
         
         if (bestFormat === 'EU') {
@@ -4935,8 +4905,6 @@ class PostModernizer {
         for (let i = 0; i < formats.length; i++) {
             momentDate = moment(cleanDateString, formats[i], true);
             if (momentDate && momentDate.isValid()) {
-                console.debug('Parsed with format', formats[i], 'as local time:', momentDate.format());
-                
                 const month = momentDate.month() + 1;
                 if (month >= 1 && month <= 12) {
                     successfulFormat = formats[i].includes('DD/MM') || formats[i].includes('D/M') ? 'EU' : 
@@ -4968,14 +4936,13 @@ class PostModernizer {
                                 }
                                 successfulFormat = formats[i].includes('DD/MM') || formats[i].includes('D/M') ? 'EU' : 
                                                  formats[i].includes('MM/DD') || formats[i].includes('M/D') ? 'US' : 'UNKNOWN';
-                                console.debug('Parsed with timezone', tzAbbr, ':', momentDate.format());
                                 break;
                             }
                         }
                     }
                 }
             } catch (e) {
-                console.debug('Timezone parsing failed:', e.message);
+                // Timezone parsing failed silently
             }
         }
         
@@ -4995,8 +4962,6 @@ class PostModernizer {
                         successfulFormat = 'EU';
                     }
                 }
-                
-                console.debug('Parsed with JS Date:', momentDate.format(), 'detected format:', successfulFormat);
             }
         }
         
@@ -5009,12 +4974,10 @@ class PostModernizer {
                     const dateStr = year + '-' + String(monthOrDay).padStart(2, '0') + '-' + String(dayOrMonth).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
                     momentDate = moment(dateStr);
                     successfulFormat = 'EU';
-                    console.debug('Manual parsing succeeded (DD/MM):', momentDate.format());
                 } else if (dayOrMonth <= 12 && monthOrDay > 12) {
                     const dateStr = year + '-' + String(dayOrMonth).padStart(2, '0') + '-' + String(monthOrDay).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
                     momentDate = moment(dateStr);
                     successfulFormat = 'US';
-                    console.debug('Manual parsing succeeded (MM/DD):', momentDate.format());
                 }
             }
         }
@@ -5027,14 +4990,6 @@ class PostModernizer {
             }
             
             this.#dateFormatCache.set(cacheKey, utcTime);
-            
-            console.debug('Final conversion:', {
-                original: cleanDateString,
-                parsedLocal: momentDate.format(),
-                parsedUTC: utcTime.format(),
-                successfulFormat: successfulFormat,
-                confidence: this.#formatConfidence
-            });
             
             return utcTime;
         }
@@ -5086,14 +5041,6 @@ class PostModernizer {
         const userDate = moment(date).local();
         
         const diffInSeconds = now.diff(userDate, 'seconds');
-        
-        console.debug('Time ago calculation:', {
-            utcDate: date.format(),
-            userLocalDate: userDate.format(),
-            now: now.format(),
-            diffSeconds: diffInSeconds,
-            isFuture: diffInSeconds < 0
-        });
         
         if (diffInSeconds < 0) {
             const futureDiffInSeconds = Math.abs(diffInSeconds);
@@ -5158,28 +5105,18 @@ class PostModernizer {
         }
         
         if (originalElement.classList && originalElement.classList.contains('modern-timestamp')) {
-            console.debug('Element already modernized:', originalElement);
             return originalElement;
         }
         
         if (originalElement.querySelector && originalElement.querySelector('.modern-timestamp')) {
-            console.debug('Element contains modern timestamp:', originalElement);
             return originalElement;
         }
         
         if (originalElement.closest && originalElement.closest('.modern-timestamp')) {
-            console.debug('Inside modern timestamp:', originalElement);
             return originalElement;
         }
         
         const isPostQueue = this.#shouldSkipFutureTimestamp(originalElement);
-        
-        console.debug('Creating modern timestamp for:', {
-            element: originalElement.tagName,
-            classes: originalElement.className,
-            dateString: dateString,
-            isPostQueue: isPostQueue
-        });
         
         const momentDate = this.#parseForumDate(dateString);
         
@@ -5187,14 +5124,6 @@ class PostModernizer {
             console.warn('Could not parse date:', dateString);
             return originalElement;
         }
-        
-        console.debug('Timestamp creation details:', {
-            originalDateString: dateString,
-            parsedUTC: momentDate.format(),
-            parsedLocal: momentDate.local().format(),
-            formatConfidence: this.#formatConfidence,
-            isPostQueue: isPostQueue
-        });
         
         const userSettings = this.#getUserLocaleSettings();
         
@@ -5340,15 +5269,6 @@ class PostModernizer {
         timeElement.setAttribute('data-user-locale', userSettings.locale);
         timeElement.setAttribute('data-parsed-utc', utcISOString);
         
-        console.debug('Created timestamp element:', {
-            href: href,
-            utc: utcISOString,
-            userLocal: userLocalDate.format(),
-            relativeTime: relativeTime,
-            isPostQueue: isPostQueue,
-            elementHTML: finalElement.outerHTML.substring(0, 200)
-        });
-        
         return finalElement;
     }
 
@@ -5374,7 +5294,6 @@ class PostModernizer {
                 }
             };
         } catch (error) {
-            console.debug('Locale detection failed:', error);
             return {
                 locale: 'en-US',
                 timezone: 'UTC',
@@ -5439,7 +5358,6 @@ class PostModernizer {
         if (element.hasAttribute('title')) {
             const title = element.getAttribute('title');
             const cleanTitle = title.replace(/:\d+$/, '');
-            console.debug('Extracted date from title:', cleanTitle);
             return cleanTitle;
         }
         
@@ -5456,14 +5374,12 @@ class PostModernizer {
             for (const pattern of datePatterns) {
                 const match = text.match(pattern);
                 if (match) {
-                    console.debug('Extracted date from text pattern:', match[1].trim());
                     return match[1].trim();
                 }
             }
             
             const dateTimeMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)/i);
             if (dateTimeMatch) {
-                console.debug('Extracted date-time with fallback:', dateTimeMatch[1].trim());
                 return dateTimeMatch[1].trim();
             }
         }
@@ -5488,17 +5404,10 @@ class PostModernizer {
                 
                 const parentTitle = parent.getAttribute('title');
                 const cleanTitle = parentTitle.replace(/:\d+$/, '');
-                console.debug('Extracted date from parent title:', cleanTitle);
                 return cleanTitle;
             }
         }
         
-        console.warn('Could not extract date from element (after filtering):', {
-            tag: element.tagName,
-            href: element.getAttribute('href'),
-            classes: element.className,
-            textPreview: element.textContent?.substring(0, 50)
-        });
         return null;
     }
     
@@ -5522,8 +5431,6 @@ class PostModernizer {
         }
         
         if (editDate) {
-            console.debug('Found edit timestamp:', editDate);
-            
             const momentDate = this.#parseForumDate(editDate);
             
             if (momentDate) {
@@ -5567,13 +5474,6 @@ class PostModernizer {
                 }, 30000);
                 
                 this.#timeUpdateIntervals.set(timeElementId, updateInterval);
-                
-                console.debug('Created edit timestamp:', {
-                    original: editDate,
-                    parsedUTC: momentDate.format(),
-                    userLocal: userLocalDate.format(),
-                    relativeTime: timeElement.textContent
-                });
             } else {
                 console.warn('Could not parse edit date:', editDate);
                 span.innerHTML = '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' + this.#escapeHtml(span.textContent);
@@ -5670,13 +5570,6 @@ class PostModernizer {
             const dateString = this.#extractDateFromElement(timestampElement);
             
             if (dateString) {
-                console.debug('Found timestamp element for transformation:', {
-                    element: timestampElement.tagName,
-                    classes: timestampElement.className,
-                    dateString: dateString,
-                    isPostQueue: this.#shouldSkipFutureTimestamp(timestampElement)
-                });
-                
                 const modernTimestamp = this.#createModernTimestamp(timestampElement, dateString);
                 
                 if (modernTimestamp && modernTimestamp !== timestampElement) {
@@ -5696,14 +5589,6 @@ class PostModernizer {
                         timestampElement.parentNode.replaceChild(modernTimestamp, timestampElement);
                     }
                 }
-            } else {
-                console.debug('Element matched timestamp selector but has no date:', {
-                    tag: timestampElement.tagName,
-                    href: timestampElement.getAttribute('href'),
-                    classes: timestampElement.className,
-                    textPreview: timestampElement.textContent?.substring(0, 30),
-                    isPostQueue: this.#shouldSkipFutureTimestamp(timestampElement)
-                });
             }
         });
     }
@@ -5725,12 +5610,6 @@ class PostModernizer {
                 
                 const dateString = this.#extractDateFromElement(el);
                 if (dateString) {
-                    console.log('Post header timestamp found:', {
-                        element: el,
-                        dateString: dateString,
-                        pattern: pattern
-                    });
-                    
                     const modernTimestamp = this.#createModernTimestamp(el, dateString);
                     if (modernTimestamp !== el) {
                         el.parentNode.replaceChild(modernTimestamp, el);
@@ -6404,23 +6283,21 @@ class PostModernizer {
                     const isDeletedUser = post.classList.contains('box_visitatore');
                     
                     if (isDeletedUser) {
-    console.debug('Processing deleted user (box_visitatore) post:', post.id);
-    
-    // For deleted users, we handle the structure differently
-    if (details) {
-        // Create a clean details clone
-        const detailsClone = details.cloneNode(true);
-        
-        // Process the deleted user details
-        this.#processDeletedUserDetails(detailsClone, nickElement);
-        
-        // Add the processed details to userInfo
-        userInfo.appendChild(detailsClone);
-    } else {
-        // Fallback: append the left section as-is
-        userInfo.appendChild(leftSection.cloneNode(true));
-    }
-} 
+                        // For deleted users, we handle the structure differently
+                        if (details) {
+                            // Create a clean details clone
+                            const detailsClone = details.cloneNode(true);
+                            
+                            // Process the deleted user details
+                            this.#processDeletedUserDetails(detailsClone, nickElement);
+                            
+                            // Add the processed details to userInfo
+                            userInfo.appendChild(detailsClone);
+                        } else {
+                            // Fallback: append the left section as-is
+                            userInfo.appendChild(leftSection.cloneNode(true));
+                        }
+                    } 
                         
                     // NORMAL USER HANDLING
                     else if (details && avatar) {
@@ -6573,10 +6450,7 @@ class PostModernizer {
 
     // NEW METHOD: Handle deleted user details for box_visitatore posts
    #processDeletedUserDetails(detailsElement, nickElement) {
-        console.debug('Processing deleted user details for box_visitatore');
-        
         if (!detailsElement) {
-            console.warn('No details element provided');
             return;
         }
         
@@ -6606,7 +6480,6 @@ class PostModernizer {
         if (uTitleElement) {
             // Extract text from u_title
             const titleText = this.#extractTextFromUTitle(uTitleElement);
-            console.debug('Extracted title text:', titleText);
             
             // Create badge if we have any text
             if (titleText) {
@@ -6614,14 +6487,11 @@ class PostModernizer {
                 badge.className = 'badge deleted-user-badge';
                 badge.textContent = titleText;
                 detailsElement.appendChild(badge);
-                console.debug('Created badge with text:', titleText);
             }
         }
         
         // Clean up any remaining empty elements
         this.#cleanEmptyElements(detailsElement);
-        
-        console.debug('Final processed details:', detailsElement.innerHTML);
     }
     
     // Helper method to extract text from u_title element
@@ -6659,7 +6529,6 @@ class PostModernizer {
    #modernizeEmbeddedLinksInContent(contentWrapper) {
     // Skip editor content
     if (this.#isInEditor(contentWrapper)) {
-        console.debug('Skipping embedded links in editor content');
         return;
     }
     
@@ -7086,7 +6955,6 @@ class PostModernizer {
    #cleanupSearchPostContent(contentWrapper) {
     // Skip if in editor
     if (this.#isInEditor(contentWrapper)) {
-        console.debug('Skipping search post content cleanup in editor');
         return;
     }
     
@@ -7182,7 +7050,6 @@ class PostModernizer {
    #cleanupPostContentStructure(contentElement) {
     // Skip if in editor
     if (this.#isInEditor(contentElement)) {
-        console.debug('Skipping post content structure cleanup in editor');
         return;
     }
     
@@ -8058,27 +7925,21 @@ class PostModernizer {
         const pointsDown = pointsContainer.querySelector('.points_down');
         const bulletDelete = pointsContainer.querySelector('.bullet_delete');
 
-        if (bulletDelete) {
-            if (pointsPos) {
-                pointsUp && pointsUp.classList.add('active');
-                pointsDown && pointsDown.classList.remove('active');
-            } else if (pointsNeg) {
-                const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
-                const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
+        if (bulletDelete && bulletDelete.onclick &&
+            (pointsContainer.querySelector('.points_pos') ||
+                pointsContainer.querySelector('.points_neg'))) {
+            bulletDelete.onclick();
+            return;
+        }
 
-                if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
-                    pointsUp && pointsUp.classList.add('active');
-                }
-                if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
-                    pointsDown && pointsDown.classList.add('active');
-                }
+        if (pointsPos) {
+            pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
+            pointsUp.classList.add('active');
+        }
 
-                if (pointsUp && pointsUp.classList.contains('active')) {
-                    pointsDown && pointsDown.classList.remove('active');
-                } else if (pointsDown && pointsDown.classList.contains('active')) {
-                    pointsUp && pointsUp.classList.remove('active');
-                }
-            }
+        if (pointsDown) {
+            pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
+            pointsDown.classList.add('active');
         }
     }
 
@@ -8506,8 +8367,6 @@ class PostModernizer {
     }
 
     #scrollToAnchorWithPrecision(anchorId, triggerElement = null) {
-        console.log('Navigating to anchor: ' + anchorId);
-
         const anchorElement = document.getElementById(anchorId);
         if (!anchorElement) {
             console.warn('Anchor #' + anchorId + ' not found');
