@@ -7915,33 +7915,44 @@ class PostModernizer {
         });
     }
 
-    #setInitialPointsState(miniButtons) {
-        const pointsContainer = miniButtons.querySelector('.points');
-        if (!pointsContainer) return;
+#setInitialPointsState(miniButtons) {
+    const pointsContainer = miniButtons.querySelector('.points');
+    if (!pointsContainer) return;
 
-        const pointsPos = pointsContainer.querySelector('.points_pos');
-        const pointsNeg = pointsContainer.querySelector('.points_neg');
-        const pointsUp = pointsContainer.querySelector('.points_up');
-        const pointsDown = pointsContainer.querySelector('.points_down');
-        const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+    const pointsPos = pointsContainer.querySelector('.points_pos');
+    const pointsNeg = pointsContainer.querySelector('.points_neg');
+    const pointsUp = pointsContainer.querySelector('.points_up');
+    const pointsDown = pointsContainer.querySelector('.points_down');
+    const bulletDelete = pointsContainer.querySelector('.bullet_delete');
 
-        if (bulletDelete && bulletDelete.onclick &&
-            (pointsContainer.querySelector('.points_pos') ||
-                pointsContainer.querySelector('.points_neg'))) {
-            bulletDelete.onclick();
-            return;
-        }
-
+    // Always check for bulletDelete first
+    if (bulletDelete) {
         if (pointsPos) {
-            pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
-            pointsUp.classList.add('active');
-        }
+            // Positive points - thumbs-up should be active
+            pointsUp && pointsUp.classList.add('active');
+            pointsDown && pointsDown.classList.remove('active');
+        } else if (pointsNeg) {
+            // Negative points - we need to check which icon is thumbs-down
+            const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
+            const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
 
-        if (pointsDown) {
-            pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
-            pointsDown.classList.add('active');
+            // Check which element has the thumbs-down icon
+            if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
+                pointsUp && pointsUp.classList.add('active');
+            }
+            if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
+                pointsDown && pointsDown.classList.add('active');
+            }
+
+            // Ensure only one is active
+            if (pointsUp && pointsUp.classList.contains('active')) {
+                pointsDown && pointsDown.classList.remove('active');
+            } else if (pointsDown && pointsDown.classList.contains('active')) {
+                pointsUp && pointsUp.classList.remove('active');
+            }
         }
     }
+}
 
     #createModernMultiquote(label, checkbox) {
         const labelText = label.textContent.replace('multiquote »', '').trim();
