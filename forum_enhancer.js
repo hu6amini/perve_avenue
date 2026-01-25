@@ -8287,41 +8287,57 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const emojiPreview = e.target.closest('.st-emoji-preview');
+   #enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const emojiPreview = e.target.closest('.st-emoji-preview');
 
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                if (bulletDelete && bulletDelete.onclick &&
-                    (pointsContainer.querySelector('.points_pos') ||
-                        pointsContainer.querySelector('.points_neg'))) {
-                    bulletDelete.onclick();
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
-
+            // Don't automatically trigger bulletDelete.onclick() - this was causing issues
+            // Just update the UI state and let the forum's original handlers work
+            if (bulletDelete) {
+                // The bulletDelete handler will be triggered by the forum's original code
+                // We just need to update the visual state
                 if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
                     pointsUp.classList.add('active');
                 }
 
                 if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
+                }
+                
+                // Let the event propagate so the forum's original handler can work
+                // Don't call bulletDelete.onclick() or prevent default
+            } else {
+                // If no bulletDelete, just toggle active states
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
+
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
                     pointsDown.classList.add('active');
                 }
             }
+        }
 
-            if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && emojiPreview.closest('.st-emoji-container').classList.toggle('active');
-            }
-        });
-    }
+        if (emojiPreview) {
+            emojiPreview.closest('.st-emoji-container') && 
+            emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+        }
+    });
+}
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
