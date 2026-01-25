@@ -5078,79 +5078,71 @@ class PostModernizer {
         return postElement && postElement.classList.contains('post_queue');
     }
 
-    #formatTimeAgo(date) {
-        if (!date || !date.isValid()) {
-            return 'Unknown time';
-        }
+   #formatTimeAgo(date) {
+    if (!date || !date.isValid()) {
+        return 'Unknown time';
+    }
 
-        const now = moment();
-        const userDate = moment(date).local();
+    const now = moment();
+    const userDate = moment(date).local();
+    
+    const diffInSeconds = now.diff(userDate, 'seconds');
+    
+    if (diffInSeconds < 0) {
+        const futureDiffInSeconds = Math.abs(diffInSeconds);
+        const futureDiffInMinutes = Math.abs(now.diff(userDate, 'minutes'));
+        const futureDiffInHours = Math.abs(now.diff(userDate, 'hours'));
+        const futureDiffInDays = Math.abs(now.diff(userDate, 'days'));
         
-        const diffInSeconds = now.diff(userDate, 'seconds');
-        
-        console.debug('Time ago calculation:', {
-            utcDate: date.format(),
-            userLocalDate: userDate.format(),
-            now: now.format(),
-            diffSeconds: diffInSeconds,
-            isFuture: diffInSeconds < 0
-        });
-        
-        if (diffInSeconds < 0) {
-            const futureDiffInSeconds = Math.abs(diffInSeconds);
-            const futureDiffInMinutes = Math.abs(now.diff(userDate, 'minutes'));
-            const futureDiffInHours = Math.abs(now.diff(userDate, 'hours'));
-            const futureDiffInDays = Math.abs(now.diff(userDate, 'days'));
-            
-            if (futureDiffInSeconds < 60) {
-                return 'in ' + futureDiffInSeconds + ' seconds';
-            } else if (futureDiffInMinutes < 60) {
-                return 'in ' + futureDiffInMinutes + ' minute' + (futureDiffInMinutes > 1 ? 's' : '');
-            } else if (futureDiffInHours < 24) {
-                return 'in ' + futureDiffInHours + ' hour' + (futureDiffInHours > 1 ? 's' : '');
-            } else if (futureDiffInDays < 7) {
-                return 'in ' + futureDiffInDays + ' day' + (futureDiffInDays > 1 ? 's' : '');
-            } else if (futureDiffInDays < 30) {
-                const weeks = Math.floor(futureDiffInDays / 7);
-                return 'in ' + weeks + ' week' + (weeks > 1 ? 's' : '');
-            } else if (futureDiffInDays < 365) {
-                const months = Math.floor(futureDiffInDays / 30);
-                return 'in ' + months + ' month' + (months > 1 ? 's' : '');
-            } else {
-                const years = Math.floor(futureDiffInDays / 365);
-                return 'in ' + years + ' year' + (years > 1 ? 's' : '');
-            }
-        }
-        
-        const diffInMinutes = now.diff(userDate, 'minutes');
-        const diffInHours = now.diff(userDate, 'hours');
-        const diffInDays = now.diff(userDate, 'days');
-        
-        if (diffInSeconds < 45) {
-            return 'Just now';
-        } else if (diffInSeconds < 90) {
-            return 'A minute ago';
-        } else if (diffInMinutes < 45) {
-            return diffInMinutes + ' minutes ago';
-        } else if (diffInMinutes < 90) {
-            return 'An hour ago';
-        } else if (diffInHours < 24) {
-            return diffInHours + ' hours ago';
-        } else if (diffInDays === 1) {
-            return 'Yesterday';
-        } else if (diffInDays < 7) {
-            return diffInDays + ' days ago';
-        } else if (diffInDays < 30) {
-            const weeks = Math.floor(diffInDays / 7);
-            return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
-        } else if (diffInDays < 365) {
-            const months = Math.floor(diffInDays / 30);
-            return months + (months === 1 ? ' month ago' : ' months ago');
+        if (futureDiffInSeconds < 60) {
+            return 'in ' + futureDiffInSeconds + ' seconds';
+        } else if (futureDiffInMinutes < 60) {
+            return 'in ' + futureDiffInMinutes + ' minute' + (futureDiffInMinutes > 1 ? 's' : '');
+        } else if (futureDiffInHours < 24) {
+            return 'in ' + futureDiffInHours + ' hour' + (futureDiffInHours > 1 ? 's' : '');
+        } else if (futureDiffInDays < 7) {
+            return 'in ' + futureDiffInDays + ' day' + (futureDiffInDays > 1 ? 's' : '');
+        } else if (futureDiffInDays < 30) {
+            const weeks = Math.floor(futureDiffInDays / 7);
+            return 'in ' + weeks + ' week' + (weeks > 1 ? 's' : '');
+        } else if (futureDiffInDays < 365) {
+            const months = Math.floor(futureDiffInDays / 30);
+            return 'in ' + months + ' month' + (months > 1 ? 's' : '');
         } else {
-            const years = Math.floor(diffInDays / 365);
-            return years + (years === 1 ? ' year ago' : ' years ago');
+            const years = Math.floor(futureDiffInDays / 365);
+            return 'in ' + years + ' year' + (years > 1 ? 's' : '');
         }
     }
+    
+    const diffInMinutes = now.diff(userDate, 'minutes');
+    const diffInHours = now.diff(userDate, 'hours');
+    const diffInDays = now.diff(userDate, 'days');
+    
+    if (diffInSeconds < 45) {
+        return 'Just now';
+    } else if (diffInSeconds < 90) {
+        return 'A minute ago';
+    } else if (diffInMinutes < 45) {
+        return diffInMinutes + ' minutes ago';
+    } else if (diffInMinutes < 90) {
+        return 'An hour ago';
+    } else if (diffInHours < 24) {
+        return diffInHours + ' hours ago';
+    } else if (diffInDays === 1) {
+        return 'Yesterday';
+    } else if (diffInDays < 7) {
+        return diffInDays + ' days ago';
+    } else if (diffInDays < 30) {
+        const weeks = Math.floor(diffInDays / 7);
+        return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
+    } else if (diffInDays < 365) {
+        const months = Math.floor(diffInDays / 30);
+        return months + (months === 1 ? ' month ago' : ' months ago');
+    } else {
+        const years = Math.floor(diffInDays / 365);
+        return years + (years === 1 ? ' year ago' : ' years ago');
+    }
+}
 
     #createModernTimestamp(originalElement, dateString) {
         if (typeof moment === 'undefined' || typeof moment.tz === 'undefined') {
