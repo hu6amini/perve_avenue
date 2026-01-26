@@ -7639,44 +7639,47 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-    #preserveMediaDimensions(element) {
-        element.querySelectorAll('img').forEach(img => {
-            if (!img.style.maxWidth) {
-                img.style.maxWidth = '100%';
-            }
-            if (!img.style.height) {
-                img.style.height = 'auto';
-            }
-            
-            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                           img.className.includes('emoji');
-            
-            if (isTwemoji || isEmoji) {
-                img.style.display = 'inline-block';
-                img.style.verticalAlign = 'text-bottom';
-                img.style.margin = '0 2px';
-            } else if (!img.style.display || img.style.display === 'inline') {
-                img.style.display = 'block';
-            }
-            
-            if (!img.hasAttribute('alt')) {
-                if (isEmoji) {
-                    img.setAttribute('alt', 'Emoji');
-                    img.setAttribute('role', 'img');
-                } else {
-                    img.setAttribute('alt', 'Forum image');
-                }
-            }
-        });
+#preserveMediaDimensions(element) {
+    element.querySelectorAll('img').forEach(img => {
+        // DO NOT set width/height styles here - your other scripts handle this
         
-        element.querySelectorAll('iframe, video').forEach(media => {
-            if (globalThis.mediaDimensionExtractor) {
-                globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        // Only set max-width to prevent overflow
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
+        }
+        
+        // Remove any height style that might interfere with aspect-ratio
+        img.style.removeProperty('height');
+        
+        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
+        
+        if (isTwemoji || isEmoji) {
+            img.style.display = 'inline-block';
+            img.style.verticalAlign = 'text-bottom';
+            img.style.margin = '0 2px';
+        } else if (!img.style.display || img.style.display === 'inline') {
+            img.style.display = 'block';
+        }
+        
+        if (!img.hasAttribute('alt')) {
+            if (isEmoji) {
+                img.setAttribute('alt', 'Emoji');
+                img.setAttribute('role', 'img');
+            } else {
+                img.setAttribute('alt', 'Forum image');
             }
-        });
-    }
+        }
+    });
+    
+    element.querySelectorAll('iframe, video').forEach(media => {
+        if (globalThis.mediaDimensionExtractor) {
+            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        }
+    });
+}
 
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
