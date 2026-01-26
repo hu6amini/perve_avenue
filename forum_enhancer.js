@@ -4528,14 +4528,20 @@ class PostModernizer {
                 img.style.display = 'inline-block';
                 img.style.verticalAlign = 'middle';
             } else {
-                // Main content image
-                img.style.width = '100%';
-                img.style.height = '100%';
+                // Main content image - let your other scripts handle dimensions
+                // Just ensure it doesn't overflow
+                img.style.maxWidth = '100%';
+                // REMOVED: img.style.height = 'auto' - let other scripts handle this
                 img.style.objectFit = 'cover';
+                
+                // Ensure proper display
+                img.style.display = 'block';
             }
             
             // Remove width/height attributes that might be too large
-            if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 400) {
+            // BUT: Keep them if your dimension scripts added them!
+            // Only remove if they're clearly wrong:
+            if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
                 img.removeAttribute('width');
                 img.removeAttribute('height');
             }
