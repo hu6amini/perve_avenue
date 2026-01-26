@@ -4312,8 +4312,8 @@ class PostModernizer {
     if (!container || container.classList.contains('modern-embedded-link')) return;
 
     try {
-        // Extract main link
-        const mainLinks = container.querySelectorAll('a[href*="bbc.com"]');
+        // Extract ALL main links, not just BBC
+        const mainLinks = container.querySelectorAll('a[target="_blank"]');
         const mainLink = mainLinks.length > 0 ? mainLinks[0] : null;
         if (!mainLink) return;
 
@@ -4321,12 +4321,11 @@ class PostModernizer {
         const domain = this.#extractDomain(href);
         
         // Extract title - look for the actual article title
-        // The structure after post modernizer processing is different
         let title = '';
         let titleElement = null;
         
         // Method 1: Look for the second link (usually the article title)
-        const allLinks = container.querySelectorAll('a[href*="bbc.com"]');
+        const allLinks = container.querySelectorAll('a[target="_blank"]');
         if (allLinks.length >= 2) {
             titleElement = allLinks[1];
             // Get text from span.post-text inside the link
@@ -4418,27 +4417,53 @@ class PostModernizer {
         const images = container.querySelectorAll('img');
         for (const img of images) {
             const src = img.src || '';
-            // Look for BBC content images
-            if (src.includes('ichef.bbci.co.uk') && 
-                (src.includes('standard') || src.includes('live'))) {
+            // Look for any content image (not favicon)
+            // Skip images that are likely favicons (small dimensions or have 'favicon' in src)
+            if (src.includes('favicon') || src.includes('icon')) {
+                continue;
+            }
+            
+            // Check image dimensions if available
+            const width = img.getAttribute('width') || img.naturalWidth || 0;
+            const height = img.getAttribute('height') || img.naturalHeight || 0;
+            
+            // If dimensions suggest it's a content image (larger than favicon)
+            if (width > 100 || height > 100 || 
+                src.includes('news/') || 
+                src.includes('media/') || 
+                src.includes('wp-content/') || 
+                src.includes('images/')) {
                 imageUrl = src;
                 break;
             }
         }
         
-        // Extract favicon (small icon, usually 36x36 or smaller)
+        // Extract favicon (small icon, usually 32x32 or smaller)
         let faviconUrl = '';
         for (const img of images) {
             const src = img.src || '';
-            if (src.includes('touch-icon') || 
-                (src.includes('static.files.bbci.co.uk') && src.includes('icon'))) {
+            if (src.includes('favicon') || 
+                src.includes('touch-icon') || 
+                src.includes('icon') ||
+                (src.includes('32x32') && src.includes('.png'))) {
                 faviconUrl = src;
                 break;
             }
         }
 
+        // Fallback: Look for hidden favicon in the structure
+        if (!faviconUrl) {
+            const hiddenDiv = container.querySelector('div[style*="display:none"]');
+            if (hiddenDiv) {
+                const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"], img[src*="icon"]');
+                if (hiddenFavicon) {
+                    faviconUrl = hiddenFavicon.src;
+                }
+            }
+        }
+
         // Normalize domain display (lowercase without www)
-        const displayDomain = domain.toLowerCase().replace('www.', '');
+        const displayDomain = domain.toLowerCase().replace('www.', '').replace('www2.', '').replace('www3.', '');
 
         // Create modern embedded link
         const modernEmbeddedLink = document.createElement('div');
@@ -4473,9 +4498,17 @@ class PostModernizer {
             html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
         }
         
-        // Read more text (always in English)
+        // Read more text (in the appropriate language)
+        const isItalian = domain.includes('.it') || 
+                         (description && (description.toLowerCase().includes('leggi') || 
+                                         description.toLowerCase().includes('italia')));
+        
+        const readMoreText = isItalian ? 
+            'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
+            'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
+            
         html += '<div class="embedded-link-meta">' +
-            '<span class="embedded-link-read-more">Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;</span>' +
+            '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
             '</div>' +
             '</div></a>';
 
