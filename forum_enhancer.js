@@ -1,5 +1,5 @@
 // ==============================
-// Complete Working Avatar System - SIZE FIX ONLY
+// Complete Working Avatar System - INCLUDING LIKES/DISLIKES
 // ==============================
 
 (function() {
@@ -26,7 +26,8 @@
         sizes: {
             'post': 60,
             'profile_card': 80,
-            'deleted_user': 60
+            'deleted_user': 60,
+            'likes_list': 30  // Smaller size for likes/dislikes lists
         },
         
         selectors: {
@@ -38,7 +39,7 @@
             
             'a.avatar[href*="MID="] .default-avatar': {
                 type: 'default_avatar',
-                size: 'profile_card', // Default size for profile cards
+                size: 'profile_card',
                 extractor: 'href'
             },
             
@@ -46,6 +47,12 @@
                 type: 'deleted_user',
                 size: 'deleted_user',
                 extractor: 'visitatore'
+            },
+            
+            '.popup.pop_points .users li a[href*="MID="]': {
+                type: 'likes_list',
+                size: 'likes_list',
+                extractor: 'href'
             }
         },
         
@@ -73,6 +80,7 @@
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
+        processedLikesList: new WeakSet(),
         isInitialized: false
     };
 
@@ -238,13 +246,32 @@
             if (nickname && nickname.textContent) {
                 username = nickname.textContent;
             }
+        } else if (type === 'likes_list') {
+            // For likes list, the element IS the link with the username
+            if (element.textContent) {
+                username = element.textContent;
+            } else if (element.title) {
+                username = element.title;
+            }
+            
+            // Also check for class name patterns
+            if (!username && element.className) {
+                var classMatch = element.className.match(/user\d+/);
+                if (classMatch) {
+                    // Try to get username from class
+                    var userSpan = document.querySelector('.' + classMatch[0]);
+                    if (userSpan && userSpan.textContent) {
+                        username = userSpan.textContent;
+                    }
+                }
+            }
         }
         
         return cleanUsername(username);
     }
 
     // ==============================
-    // AVATAR GENERATION - FIXED SIZE
+    // AVATAR GENERATION
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
@@ -276,7 +303,7 @@
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
             'radius=50',
-            'size=' + size // Use exact size, not double
+            'size=' + size
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
@@ -440,7 +467,7 @@
     }
 
     // ==============================
-    // ELEMENT PROCESSING - UPDATED FOR SIZE FIX
+    // ELEMENT PROCESSING
     // ==============================
 
     function extractUserIdFromElement(element, extractorType) {
@@ -465,6 +492,9 @@
             }
         } else if (extractorType === 'visitatore') {
             return null;
+        } else if (extractorType === 'likes_href') {
+            var hrefMatch = element.href.match(/MID=(\d+)/);
+            if (hrefMatch) userId = hrefMatch[1];
         }
         
         return userId;
@@ -481,26 +511,23 @@
         if (element.matches('.summary li[class^="box_"]')) {
             config = {
                 type: 'post',
-                size: AVATAR_CONFIG.sizes.post, // 60px
+                size: AVATAR_CONFIG.sizes.post,
                 extractor: 'class'
             };
         }
         // Check if it's a default avatar inside a post
         else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
-            // Check if this default-avatar is inside a .post element
             var postParent = element.closest('.post');
             if (postParent) {
-                // Inside a post - use post size (60px)
                 config = {
                     type: 'default_avatar',
-                    size: AVATAR_CONFIG.sizes.post, // 60px for posts
+                    size: AVATAR_CONFIG.sizes.post,
                     extractor: 'href'
                 };
             } else {
-                // Not inside a post - use profile_card size (80px)
                 config = {
                     type: 'default_avatar',
-                    size: AVATAR_CONFIG.sizes.profile_card, // 80px for profile cards
+                    size: AVATAR_CONFIG.sizes.profile_card,
                     extractor: 'href'
                 };
             }
@@ -509,8 +536,20 @@
         else if (element.matches('.post.box_visitatore')) {
             config = {
                 type: 'deleted_user',
-                size: AVATAR_CONFIG.sizes.deleted_user, // 60px
+                size: AVATAR_CONFIG.sizes.deleted_user,
                 extractor: 'visitatore'
+            };
+        }
+        // Check if it's a likes/dislikes list item
+        else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
+            if (state.processedLikesList.has(element)) {
+                return null;
+            }
+            
+            config = {
+                type: 'likes_list',
+                size: AVATAR_CONFIG.sizes.likes_list,
+                extractor: 'likes_href'
             };
         }
         
@@ -518,9 +557,11 @@
             return null;
         }
         
+        // Check if already processed
         if ((config.type === 'post' && state.processedPosts.has(element)) ||
             (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
-            (config.type === 'deleted_user' && state.processedDeletedUsers.has(element))) {
+            (config.type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
+            (config.type === 'likes_list' && state.processedLikesList.has(element))) {
             return null;
         }
         
@@ -550,6 +591,13 @@
                 state.processedAvatars.add(element);
                 return null;
             }
+        } else if (config.type === 'likes_list') {
+            // Check if this link already has an avatar before it
+            var span = element.closest('span');
+            if (span && span.querySelector('img.forum-likes-avatar')) {
+                state.processedLikesList.add(element);
+                return null;
+            }
         }
         
         return {
@@ -560,22 +608,26 @@
     }
 
     // ==============================
-    // AVATAR CREATION & INSERTION - FIXED IMAGE CONSTRUCTOR
+    // AVATAR CREATION & INSERTION
     // ==============================
 
-    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser) {
-        // FIX: Don't pass size to Image constructor
+    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser, isLikesList) {
         var img = new Image();
         
-        img.className = 'forum-user-avatar avatar-size-' + size;
+        if (isLikesList) {
+            img.className = 'forum-likes-avatar avatar-size-' + size;
+        } else {
+            img.className = 'forum-user-avatar avatar-size-' + size;
+        }
+        
         if (isDeletedUser) {
             img.className += ' deleted-user-avatar';
         }
+        
         img.alt = username ? 'Avatar for ' + username : '';
         img.loading = 'lazy';
         img.decoding = 'async';
         
-        // Set width/height attributes
         img.width = size;
         img.height = size;
         
@@ -589,6 +641,14 @@
             'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
             'background-color:#f0f0f0;' +
             'display:inline-block;';
+        
+        if (isLikesList) {
+            img.style.cssText += 
+                'margin-right:8px;' +
+                'margin-left:4px;' +
+                'border:1px solid #ddd;' +
+                'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
+        }
         
         img.src = avatarUrl;
         
@@ -627,6 +687,7 @@
         var username = extractUsernameFromElement(element, config.type, userId);
         
         var isDeletedUser = config.type === 'deleted_user';
+        var isLikesList = config.type === 'likes_list';
         
         getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
             if (config.type === 'post') {
@@ -638,6 +699,9 @@
             } else if (config.type === 'deleted_user') {
                 insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
                 state.processedDeletedUsers.add(element);
+            } else if (config.type === 'likes_list') {
+                insertLikesListAvatar(element, userId, config.size, avatarUrl, finalUsername);
+                state.processedLikesList.add(element);
             }
         }, isDeletedUser);
     }
@@ -659,7 +723,7 @@
             'vertical-align:middle;' +
             'position:relative;';
         
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false));
+        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false, false));
         nickname.parentNode.insertBefore(container, nickname);
     }
 
@@ -671,7 +735,7 @@
             return;
         }
         
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false);
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
         
         var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
         if (defaultAvatarDiv) {
@@ -700,8 +764,27 @@
             'vertical-align:middle;' +
             'position:relative;';
         
-        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true));
+        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true, false));
         nickname.parentNode.insertBefore(container, nickname);
+    }
+
+    function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
+        // Find the span container that holds the link
+        var span = linkElement.closest('span');
+        if (!span) return;
+        
+        // Check if avatar already exists
+        if (span.querySelector('img.forum-likes-avatar')) {
+            return;
+        }
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
+        
+        // Insert the avatar before the link
+        span.insertBefore(avatarImg, linkElement);
+        
+        // Add a class to mark as processed
+        span.classList.add('has-forum-avatar');
     }
 
     // ==============================
@@ -711,11 +794,13 @@
     function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
+        // Check the node itself
         var nodeInfo = shouldProcessElement(node);
         if (nodeInfo) {
             insertAvatarForElement(nodeInfo);
         }
         
+        // Check for posts
         var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -724,6 +809,7 @@
             }
         }
         
+        // Check for default avatars
         var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -731,11 +817,21 @@
                 insertAvatarForElement(avatarInfo);
             }
         }
+        
+        // Check for likes/dislikes lists
+        var likesLinks = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+        for (var k = 0; k < likesLinks.length; k++) {
+            var likesInfo = shouldProcessElement(likesLinks[k]);
+            if (likesInfo) {
+                insertAvatarForElement(likesInfo);
+            }
+        }
     }
 
     function processExistingElements() {
         console.log('Processing existing elements...');
         
+        // Process posts
         var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -744,11 +840,21 @@
             }
         }
         
+        // Process default avatars
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
                 insertAvatarForElement(avatarInfo);
+            }
+        }
+        
+        // Process likes/dislikes lists
+        var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+        for (var k = 0; k < likesLinks.length; k++) {
+            var likesInfo = shouldProcessElement(likesLinks[k]);
+            if (likesInfo) {
+                insertAvatarForElement(likesInfo);
             }
         }
     }
@@ -761,7 +867,7 @@
         if (window.forumObserver && typeof window.forumObserver.register === 'function') {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
-                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="]',
                 callback: handleNewElement,
                 priority: 'high'
             });
@@ -778,7 +884,7 @@
     function initAvatarSystem() {
         if (state.isInitialized) return;
         
-        console.log('🚀 Initializing working avatar system');
+        console.log('🚀 Initializing working avatar system with likes/dislikes support');
         
         setupObserver();
         
@@ -797,28 +903,39 @@
         init: initAvatarSystem,
         
         refresh: function() {
-            var containers = document.querySelectorAll('.forum-avatar-container');
+            // Remove all avatars
+            var containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
             for (var i = 0; i < containers.length; i++) {
-                containers[i].remove();
+                if (containers[i].classList && containers[i].classList.contains('forum-avatar-container')) {
+                    containers[i].remove();
+                } else {
+                    containers[i].remove();
+                }
             }
             
+            // Remove replaced avatars
             var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
             for (var j = 0; j < replacedAvatars.length; j++) {
                 replacedAvatars[j].remove();
             }
             
-            var replacedLinks = document.querySelectorAll('.avatar-replaced');
+            // Remove avatar-replaced class
+            var replacedLinks = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
             for (var k = 0; k < replacedLinks.length; k++) {
                 replacedLinks[k].classList.remove('avatar-replaced');
+                replacedLinks[k].classList.remove('has-forum-avatar');
             }
             
+            // Clear state
             state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
             state.processedDeletedUsers = new WeakSet();
+            state.processedLikesList = new WeakSet();
             state.isInitialized = false;
             
+            // Clear localStorage
             for (var l = 0; l < localStorage.length; l++) {
                 var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
@@ -855,9 +972,12 @@
                 }
             }
             
+            var likesAvatars = document.querySelectorAll('.forum-likes-avatar').length;
+            
             return {
                 postsTotal: posts.length,
                 postsWithAvatars: withAvatars,
+                likesAvatars: likesAvatars,
                 memoryCache: Object.keys(state.userCache).length,
                 localStorageCache: cacheCount,
                 deletedUserCache: deletedCacheCount,
