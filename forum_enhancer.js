@@ -1303,7 +1303,6 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
 
         // Prevent layout shift
         img.style.maxWidth = '100%';
-        img.style.height = 'auto';
     }
 
     #handleImageLoad(e) {
