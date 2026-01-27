@@ -33,6 +33,7 @@
 /*============================================
  twemoji scale============================================*/
 .twemoji {height: 1.25em;
+ content-visibility: auto;
  width: 1.25em;
  vertical-align: -0.2em;
  display: inline-block}
