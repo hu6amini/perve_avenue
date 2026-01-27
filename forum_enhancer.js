@@ -1317,21 +1317,29 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
         }
     }
 
-    #setImageDimensions(img, width, height) {
-        // Set attributes and styles
+#setImageDimensions(img, width, height) {
+    // Only set attributes if they're not already set or are wrong
+    const currentWidth = img.getAttribute('width');
+    const currentHeight = img.getAttribute('height');
+    
+    if (!currentWidth || currentWidth === '0' || currentWidth === 'auto') {
         img.setAttribute('width', width);
-        img.setAttribute('height', height);
-        
-        // Update aspect ratio without clearing other styles
-        const currentStyle = img.style.cssText || '';
-        if (!currentStyle.includes('aspect-ratio')) {
-            img.style.cssText = currentStyle + (currentStyle ? ';' : '') + 'aspect-ratio:' + width + '/' + height;
-        }
-
-        // Cache with LRU management
-        this.#cacheDimension(img.src, width, height);
     }
-
+    
+    if (!currentHeight || currentHeight === '0' || currentHeight === 'auto') {
+        img.setAttribute('height', height);
+    }
+    
+    // Update aspect ratio WITHOUT overriding height
+    img.style.aspectRatio = width + '/' + height;
+    
+    // IMPORTANT: Remove height: auto if it exists
+    img.style.removeProperty('height');
+    
+    // Cache with LRU management
+    this.#cacheDimension(img.src, width, height);
+}
+    
     #cacheDimension(src, width, height) {
         const cacheKey = this.#getCacheKey(src);
         
