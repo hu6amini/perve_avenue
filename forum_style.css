@@ -1307,7 +1307,8 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  display: block;
  object-fit: contain; margin: 3px}
 
-.attachment-image-link {display: block}
+.attachment-image-link {display: block;
+ max-width:800px;}
 
 .attachment-stats {background: var(--bg-color);
  display: flex;
