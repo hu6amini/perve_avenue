@@ -313,8 +313,8 @@
     // AVATAR FETCHING
     // ==============================
 
-    function getOrCreateAvatar(userId, username, size, callback, isDeletedUser) {
-        console.log('🔍 getOrCreateAvatar called:', { userId, username, size, isDeletedUser });
+    function getOrCreateAvatar(userId, username, size, callback, isDeletedUser, isLikesList) {
+        console.log('🔍 getOrCreateAvatar called:', { userId, username, size, isDeletedUser, isLikesList });
         
         if (isDeletedUser) {
             var cacheKey = 'deleted_' + username + '_' + size;
@@ -364,28 +364,67 @@
         // For active users with ID
         var cacheKey = userId + '_' + size;
         
-        if (state.userCache[cacheKey]) {
-            var cached = state.userCache[cacheKey];
-            if (!isBrokenAvatarUrl(cached.url)) {
-                console.log('Using cached avatar for user', userId, cached.url);
-                callback(cached.url, cached.username);
-                return;
-            }
-        }
-        
-        var stored = localStorage.getItem(getCacheKey(userId, size));
-        if (stored) {
-            try {
-                var data = JSON.parse(stored);
-                if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
-                    !isBrokenAvatarUrl(data.url)) {
-                    state.userCache[cacheKey] = data;
-                    console.log('Using localStorage cached avatar for user', userId, data.url);
-                    callback(data.url, data.username);
+        // SPECIAL HANDLING FOR LIKES LIST: Don't use cached generated avatars
+        if (isLikesList) {
+            console.log('Likes list - checking if cached avatar is generated...');
+            if (state.userCache[cacheKey]) {
+                var cached = state.userCache[cacheKey];
+                // If it's a DiceBear URL, don't use it - try API again
+                if (cached.url && cached.url.includes('dicebear.com')) {
+                    console.log('Cached avatar is generated DiceBear, forcing API check for likes list');
+                    delete state.userCache[cacheKey];
+                    localStorage.removeItem(getCacheKey(userId, size));
+                } else if (!isBrokenAvatarUrl(cached.url)) {
+                    console.log('Using cached REAL avatar for likes list user', userId, cached.url);
+                    callback(cached.url, cached.username);
                     return;
                 }
-            } catch (e) {
-                console.log('Invalid cache for user', userId);
+            }
+            
+            var stored = localStorage.getItem(getCacheKey(userId, size));
+            if (stored) {
+                try {
+                    var data = JSON.parse(stored);
+                    // If it's a DiceBear URL, don't use it - try API again
+                    if (data.url && data.url.includes('dicebear.com')) {
+                        console.log('LocalStorage cached avatar is generated DiceBear, forcing API check');
+                        localStorage.removeItem(getCacheKey(userId, size));
+                    } else if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
+                              !isBrokenAvatarUrl(data.url)) {
+                        state.userCache[cacheKey] = data;
+                        console.log('Using localStorage cached REAL avatar for likes list user', userId, data.url);
+                        callback(data.url, data.username);
+                        return;
+                    }
+                } catch (e) {
+                    console.log('Invalid cache for user', userId);
+                }
+            }
+        } else {
+            // Normal handling for posts
+            if (state.userCache[cacheKey]) {
+                var cached = state.userCache[cacheKey];
+                if (!isBrokenAvatarUrl(cached.url)) {
+                    console.log('Using cached avatar for post user', userId, cached.url);
+                    callback(cached.url, cached.username);
+                    return;
+                }
+            }
+            
+            var stored = localStorage.getItem(getCacheKey(userId, size));
+            if (stored) {
+                try {
+                    var data = JSON.parse(stored);
+                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
+                        !isBrokenAvatarUrl(data.url)) {
+                        state.userCache[cacheKey] = data;
+                        console.log('Using localStorage cached avatar for post user', userId, data.url);
+                        callback(data.url, data.username);
+                        return;
+                    }
+                } catch (e) {
+                    console.log('Invalid cache for user', userId);
+                }
             }
         }
         
@@ -491,8 +530,6 @@
     function extractUserIdFromElement(element, extractorType) {
         var userId = null;
         
-        console.log('extractUserIdFromElement:', extractorType, element);
-        
         if (extractorType === 'class') {
             var classMatch = element.className.match(/\bbox_m(\d+)\b/);
             if (classMatch) {
@@ -514,7 +551,6 @@
             return null;
         } else if (extractorType === 'likes_href') {
             // Check the element's href directly (it's already an <a> tag)
-            console.log('Checking href for likes:', element.href);
             if (element.href) {
                 // Try multiple patterns
                 var hrefMatch = element.href.match(/MID=(\d+)/) || 
@@ -534,10 +570,8 @@
                     }
                 }
             }
-            console.log('Extracted userId from likes href:', userId);
         }
         
-        console.log('Result userId:', userId);
         return userId;
     }
 
@@ -545,8 +579,6 @@
         if (!element || element.nodeType !== Node.ELEMENT_NODE) {
             return null;
         }
-        
-        console.log('shouldProcessElement checking:', element);
         
         var config = null;
         
@@ -586,7 +618,6 @@
         // Check if it's a likes/dislikes list item
         else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
             if (state.processedLikesList.has(element)) {
-                console.log('Already processed likes list element');
                 return null;
             }
             
@@ -598,28 +629,22 @@
         }
         
         if (!config) {
-            console.log('No config matched for element');
             return null;
         }
-        
-        console.log('Config matched:', config.type);
         
         // Check if already processed
         if ((config.type === 'post' && state.processedPosts.has(element)) ||
             (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
             (config.type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
             (config.type === 'likes_list' && state.processedLikesList.has(element))) {
-            console.log('Element already processed');
             return null;
         }
         
         var userId = extractUserIdFromElement(element, config.extractor);
-        console.log('Extracted userId:', userId, 'for type:', config.type);
         
         if (config.type === 'post' || config.type === 'deleted_user') {
             var nickname = element.querySelector('.nick');
             if (!nickname) {
-                console.log('No nickname found for post');
                 return null;
             }
             if (nickname.previousElementSibling && 
@@ -630,18 +655,15 @@
                 } else {
                     state.processedDeletedUsers.add(element);
                 }
-                console.log('Avatar already exists for post');
                 return null;
             }
         } else if (config.type === 'default_avatar') {
             if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
-                console.log('No user icon found for default avatar');
                 return null;
             }
             var parentLink = element.closest('a.avatar[href*="MID="]');
             if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
                 state.processedAvatars.add(element);
-                console.log('Avatar already exists for default avatar');
                 return null;
             }
         } else if (config.type === 'likes_list') {
@@ -649,12 +671,10 @@
             var span = element.closest('span');
             if (span && span.querySelector('img.forum-likes-avatar')) {
                 state.processedLikesList.add(element);
-                console.log('Avatar already exists for likes list');
                 return null;
             }
         }
         
-        console.log('Will process element:', { type: config.type, userId: userId });
         return {
             element: element,
             userId: userId,
@@ -712,7 +732,6 @@
         }
         
         img.addEventListener('error', function onError() {
-            console.log('Avatar image error for user', userId, avatarUrl);
             markAvatarAsBroken(avatarUrl);
             if (userId) {
                 var cacheKey = userId + '_' + size;
@@ -740,10 +759,7 @@
         var userId = processingInfo.userId;
         var config = processingInfo.config;
         
-        console.log('insertAvatarForElement:', { type: config.type, userId: userId, element: element });
-        
         var username = extractUsernameFromElement(element, config.type, userId);
-        console.log('Extracted username:', username);
         
         if (config.type === 'likes_list') {
             if (!userId) {
@@ -755,12 +771,10 @@
             }
             
             // Special handling for likes list - use forum API
-            console.log('Getting avatar for likes list user:', userId);
             getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
-                console.log('Got avatar for likes list:', { userId: userId, url: avatarUrl });
                 insertLikesListAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedLikesList.add(element);
-            }, false); // isDeletedUser = false for likes list
+            }, false, true); // isDeletedUser = false, isLikesList = true
         } else {
             var isDeletedUser = config.type === 'deleted_user';
             getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
@@ -774,7 +788,7 @@
                     insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
                     state.processedDeletedUsers.add(element);
                 }
-            }, isDeletedUser);
+            }, isDeletedUser, false); // isLikesList = false for posts
         }
     }
 
@@ -905,7 +919,6 @@
         
         // Process posts
         var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
-        console.log('Found posts:', posts.length);
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -915,7 +928,6 @@
         
         // Process default avatars
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
-        console.log('Found default avatars:', defaultAvatars.length);
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
@@ -925,13 +937,9 @@
         
         // Process likes/dislikes lists
         var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
-        console.log('Found likes links:', likesLinks.length);
         for (var k = 0; k < likesLinks.length; k++) {
-            var link = likesLinks[k];
-            console.log('Processing likes link:', link.href, link.textContent);
-            var likesInfo = shouldProcessElement(link);
+            var likesInfo = shouldProcessElement(likesLinks[k]);
             if (likesInfo) {
-                console.log('Will process likes info:', likesInfo);
                 insertAvatarForElement(likesInfo);
             }
         }
@@ -963,6 +971,28 @@
         if (state.isInitialized) return;
         
         console.log('🚀 Initializing working avatar system with likes/dislikes support');
+        
+        // Clear any existing generated avatars from cache for likes list users
+        console.log('Clearing generated avatars from cache...');
+        var keysToClear = [];
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.url && data.url.includes('dicebear.com')) {
+                        keysToClear.push(key);
+                    }
+                } catch (e) {
+                    // Skip invalid entries
+                }
+            }
+        }
+        
+        for (var j = 0; j < keysToClear.length; j++) {
+            localStorage.removeItem(keysToClear[j]);
+        }
+        console.log('Cleared', keysToClear.length, 'generated avatars from cache');
         
         setupObserver();
         
@@ -1013,7 +1043,7 @@
             state.processedLikesList = new WeakSet();
             state.isInitialized = false;
             
-            // Clear localStorage
+            // Clear localStorage of ALL avatar cache
             for (var l = 0; l < localStorage.length; l++) {
                 var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
@@ -1077,7 +1107,6 @@
             }
         },
         
-        // New debug function for likes
         debugLikes: function() {
             var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
             console.log('Debug likes links:', likesLinks.length);
