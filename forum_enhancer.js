@@ -314,6 +314,8 @@
     // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback, isDeletedUser) {
+        console.log('🔍 getOrCreateAvatar called:', { userId, username, size, isDeletedUser });
+        
         if (isDeletedUser) {
             var cacheKey = 'deleted_' + username + '_' + size;
             
@@ -338,6 +340,7 @@
             }
             
             var avatarUrl = generateLetterAvatar(null, username, size);
+            console.log('Generated deleted user avatar:', avatarUrl);
             var cacheData = {
                 url: avatarUrl,
                 username: username,
@@ -358,11 +361,13 @@
             return;
         }
         
+        // For active users with ID
         var cacheKey = userId + '_' + size;
         
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
             if (!isBrokenAvatarUrl(cached.url)) {
+                console.log('Using cached avatar for user', userId, cached.url);
                 callback(cached.url, cached.username);
                 return;
             }
@@ -375,20 +380,25 @@
                 if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration && 
                     !isBrokenAvatarUrl(data.url)) {
                     state.userCache[cacheKey] = data;
+                    console.log('Using localStorage cached avatar for user', userId, data.url);
                     callback(data.url, data.username);
                     return;
                 }
             } catch (e) {
-                // Invalid cache
+                console.log('Invalid cache for user', userId);
             }
         }
         
+        console.log('Fetching from API for user', userId);
+        // Fetch from forum API
         fetch('/api.php?mid=' + userId)
             .then(function(response) {
-                if (!response.ok) throw new Error('API failed');
+                console.log('API response status:', response.status, 'for user', userId);
+                if (!response.ok) throw new Error('API failed with status ' + response.status);
                 return response.json();
             })
             .then(function(data) {
+                console.log('API data received for user', userId, data);
                 var userKey = 'm' + userId;
                 var userData = data[userKey];
                 var finalUsername = username;
@@ -396,6 +406,7 @@
                 
                 if (userData && userData.nickname) {
                     finalUsername = cleanUsername(userData.nickname);
+                    console.log('API nickname:', userData.nickname, '-> cleaned:', finalUsername);
                 }
                 
                 if (userData && userData.avatar && 
@@ -403,15 +414,19 @@
                     userData.avatar !== 'http') {
                     
                     avatarUrl = userData.avatar;
+                    console.log('API avatar URL:', avatarUrl, 'for user', userId);
                     
                     if (isBrokenAvatarUrl(avatarUrl)) {
+                        console.log('Avatar marked as broken, generating fallback');
                         avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                         finishAvatar(avatarUrl, finalUsername);
                     } else {
                         testImageUrl(avatarUrl, function(success) {
                             if (success) {
+                                console.log('Avatar URL test SUCCESS for user', userId);
                                 finishAvatar(avatarUrl, finalUsername);
                             } else {
+                                console.log('Avatar URL test FAILED for user', userId);
                                 markAvatarAsBroken(avatarUrl);
                                 avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                                 finishAvatar(avatarUrl, finalUsername);
@@ -420,6 +435,7 @@
                         return;
                     }
                 } else {
+                    console.log('No avatar from API for user', userId, 'generating letter avatar');
                     avatarUrl = generateLetterAvatar(userId, finalUsername, size);
                 }
                 
@@ -433,6 +449,7 @@
                         size: size
                     };
                     
+                    console.log('Caching avatar for user', userId, url);
                     try {
                         localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
                     } catch (e) {
@@ -447,6 +464,7 @@
             .catch(function(error) {
                 console.warn('Avatar fetch failed for user ' + userId + ':', error);
                 var fallbackUrl = generateLetterAvatar(userId, username, size);
+                console.log('Using fallback avatar for user', userId, fallbackUrl);
                 var cacheData = {
                     url: fallbackUrl,
                     username: username || 'User',
@@ -473,6 +491,8 @@
     function extractUserIdFromElement(element, extractorType) {
         var userId = null;
         
+        console.log('extractUserIdFromElement:', extractorType, element);
+        
         if (extractorType === 'class') {
             var classMatch = element.className.match(/\bbox_m(\d+)\b/);
             if (classMatch) {
@@ -493,10 +513,31 @@
         } else if (extractorType === 'visitatore') {
             return null;
         } else if (extractorType === 'likes_href') {
-            var hrefMatch = element.href.match(/MID=(\d+)/);
-            if (hrefMatch) userId = hrefMatch[1];
+            // Check the element's href directly (it's already an <a> tag)
+            console.log('Checking href for likes:', element.href);
+            if (element.href) {
+                // Try multiple patterns
+                var hrefMatch = element.href.match(/MID=(\d+)/) || 
+                                element.href.match(/[?&]MID=(\d+)/) ||
+                                element.href.match(/MID\%3D(\d+)/);
+                
+                if (hrefMatch) {
+                    userId = hrefMatch[1];
+                } else {
+                    // Try to decode URL and check again
+                    try {
+                        var decodedUrl = decodeURIComponent(element.href);
+                        hrefMatch = decodedUrl.match(/MID=(\d+)/);
+                        if (hrefMatch) userId = hrefMatch[1];
+                    } catch (e) {
+                        console.log('Failed to decode URL:', element.href);
+                    }
+                }
+            }
+            console.log('Extracted userId from likes href:', userId);
         }
         
+        console.log('Result userId:', userId);
         return userId;
     }
 
@@ -504,6 +545,8 @@
         if (!element || element.nodeType !== Node.ELEMENT_NODE) {
             return null;
         }
+        
+        console.log('shouldProcessElement checking:', element);
         
         var config = null;
         
@@ -543,6 +586,7 @@
         // Check if it's a likes/dislikes list item
         else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
             if (state.processedLikesList.has(element)) {
+                console.log('Already processed likes list element');
                 return null;
             }
             
@@ -554,22 +598,28 @@
         }
         
         if (!config) {
+            console.log('No config matched for element');
             return null;
         }
+        
+        console.log('Config matched:', config.type);
         
         // Check if already processed
         if ((config.type === 'post' && state.processedPosts.has(element)) ||
             (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
             (config.type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
             (config.type === 'likes_list' && state.processedLikesList.has(element))) {
+            console.log('Element already processed');
             return null;
         }
         
         var userId = extractUserIdFromElement(element, config.extractor);
+        console.log('Extracted userId:', userId, 'for type:', config.type);
         
         if (config.type === 'post' || config.type === 'deleted_user') {
             var nickname = element.querySelector('.nick');
             if (!nickname) {
+                console.log('No nickname found for post');
                 return null;
             }
             if (nickname.previousElementSibling && 
@@ -580,15 +630,18 @@
                 } else {
                     state.processedDeletedUsers.add(element);
                 }
+                console.log('Avatar already exists for post');
                 return null;
             }
         } else if (config.type === 'default_avatar') {
             if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
+                console.log('No user icon found for default avatar');
                 return null;
             }
             var parentLink = element.closest('a.avatar[href*="MID="]');
             if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
                 state.processedAvatars.add(element);
+                console.log('Avatar already exists for default avatar');
                 return null;
             }
         } else if (config.type === 'likes_list') {
@@ -596,10 +649,12 @@
             var span = element.closest('span');
             if (span && span.querySelector('img.forum-likes-avatar')) {
                 state.processedLikesList.add(element);
+                console.log('Avatar already exists for likes list');
                 return null;
             }
         }
         
+        console.log('Will process element:', { type: config.type, userId: userId });
         return {
             element: element,
             userId: userId,
@@ -657,6 +712,7 @@
         }
         
         img.addEventListener('error', function onError() {
+            console.log('Avatar image error for user', userId, avatarUrl);
             markAvatarAsBroken(avatarUrl);
             if (userId) {
                 var cacheKey = userId + '_' + size;
@@ -684,11 +740,24 @@
         var userId = processingInfo.userId;
         var config = processingInfo.config;
         
+        console.log('insertAvatarForElement:', { type: config.type, userId: userId, element: element });
+        
         var username = extractUsernameFromElement(element, config.type, userId);
+        console.log('Extracted username:', username);
         
         if (config.type === 'likes_list') {
+            if (!userId) {
+                console.error('NO USER ID for likes list! Using generated avatar.');
+                var fallbackUrl = generateLetterAvatar(null, username, config.size);
+                insertLikesListAvatar(element, null, config.size, fallbackUrl, username);
+                state.processedLikesList.add(element);
+                return;
+            }
+            
             // Special handling for likes list - use forum API
+            console.log('Getting avatar for likes list user:', userId);
             getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
+                console.log('Got avatar for likes list:', { userId: userId, url: avatarUrl });
                 insertLikesListAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedLikesList.add(element);
             }, false); // isDeletedUser = false for likes list
@@ -832,10 +901,11 @@
     }
 
     function processExistingElements() {
-        console.log('Processing existing elements...');
+        console.log('🚀 Processing existing elements...');
         
         // Process posts
         var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+        console.log('Found posts:', posts.length);
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
             if (postInfo) {
@@ -845,6 +915,7 @@
         
         // Process default avatars
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        console.log('Found default avatars:', defaultAvatars.length);
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
             if (avatarInfo) {
@@ -854,9 +925,13 @@
         
         // Process likes/dislikes lists
         var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+        console.log('Found likes links:', likesLinks.length);
         for (var k = 0; k < likesLinks.length; k++) {
-            var likesInfo = shouldProcessElement(likesLinks[k]);
+            var link = likesLinks[k];
+            console.log('Processing likes link:', link.href, link.textContent);
+            var likesInfo = shouldProcessElement(link);
             if (likesInfo) {
+                console.log('Will process likes info:', likesInfo);
                 insertAvatarForElement(likesInfo);
             }
         }
@@ -999,6 +1074,27 @@
                 
                 var extracted = extractUsernameFromElement(posts[i], 'post', userId);
                 console.log('Extracted username:', extracted);
+            }
+        },
+        
+        // New debug function for likes
+        debugLikes: function() {
+            var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+            console.log('Debug likes links:', likesLinks.length);
+            
+            for (var i = 0; i < likesLinks.length; i++) {
+                var link = likesLinks[i];
+                console.log('Link', i + 1, ':', {
+                    href: link.href,
+                    text: link.textContent,
+                    className: link.className
+                });
+                
+                var userId = extractUserIdFromElement(link, 'likes_href');
+                console.log('Extracted userId:', userId);
+                
+                var username = extractUsernameFromElement(link, 'likes_list', userId);
+                console.log('Extracted username:', username);
             }
         }
     };
