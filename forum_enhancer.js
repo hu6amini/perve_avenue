@@ -1,5 +1,5 @@
 // ==============================
-// Complete Working Avatar System - INCLUDING LIKES/DISLIKES (FIXED)
+// Complete Working Avatar System - INCLUDING LIKES/DISLIKES
 // ==============================
 
 (function() {
@@ -81,8 +81,7 @@
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
-        isInitialized: false,
-        batchRequests: {}  // Add batch request tracking for likes
+        isInitialized: false
     };
 
     // ==============================
@@ -311,16 +310,15 @@
     }
 
     // ==============================
-    // AVATAR FETCHING (UPDATED FOR LIKES)
+    // AVATAR FETCHING
     // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback, isDeletedUser) {
-        // If no userId (deleted user), use letter avatar
-        if (!userId && isDeletedUser) {
-            var deletedCacheKey = 'deleted_' + username + '_' + size;
+        if (isDeletedUser) {
+            var cacheKey = 'deleted_' + username + '_' + size;
             
-            if (state.userCache[deletedCacheKey]) {
-                var cached = state.userCache[deletedCacheKey];
+            if (state.userCache[cacheKey]) {
+                var cached = state.userCache[cacheKey];
                 callback(cached.url, cached.username);
                 return;
             }
@@ -330,7 +328,7 @@
                 try {
                     var data = JSON.parse(stored);
                     if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
-                        state.userCache[deletedCacheKey] = data;
+                        state.userCache[cacheKey] = data;
                         callback(data.url, data.username);
                         return;
                     }
@@ -355,15 +353,13 @@
                 localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
             }
             
-            state.userCache[deletedCacheKey] = cacheData;
+            state.userCache[cacheKey] = cacheData;
             callback(avatarUrl, username);
             return;
         }
         
-        // For regular users (including likes list)
         var cacheKey = userId + '_' + size;
         
-        // Check memory cache first
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
             if (!isBrokenAvatarUrl(cached.url)) {
@@ -372,7 +368,6 @@
             }
         }
         
-        // Check localStorage cache
         var stored = localStorage.getItem(getCacheKey(userId, size));
         if (stored) {
             try {
@@ -387,23 +382,6 @@
                 // Invalid cache
             }
         }
-        
-        // Fetch user data from API (same as posts)
-        fetchUserAvatarFromAPI(userId, username, size, callback);
-    }
-
-    function fetchUserAvatarFromAPI(userId, username, size, callback) {
-        // Create a unique request key to avoid duplicate API calls
-        var requestKey = 'api_' + userId + '_' + size;
-        
-        // If there's already a pending request for this user/size, wait for it
-        if (state.pendingRequests[requestKey]) {
-            state.pendingRequests[requestKey].push(callback);
-            return;
-        }
-        
-        // Create new request queue
-        state.pendingRequests[requestKey] = [callback];
         
         fetch('/api.php?mid=' + userId)
             .then(function(response) {
@@ -420,40 +398,41 @@
                     finalUsername = cleanUsername(userData.nickname);
                 }
                 
-                // Check if user has a real avatar
                 if (userData && userData.avatar && 
                     userData.avatar.trim() !== '' && 
                     userData.avatar !== 'http') {
                     
                     avatarUrl = userData.avatar;
                     
-                    // Test if the avatar URL is valid
-                    testImageUrl(avatarUrl, function(success) {
-                        if (success) {
-                            finishAvatar(avatarUrl, finalUsername);
-                        } else {
-                            markAvatarAsBroken(avatarUrl);
-                            avatarUrl = generateLetterAvatar(userId, finalUsername, size);
-                            finishAvatar(avatarUrl, finalUsername);
-                        }
-                    });
-                    return;
+                    if (isBrokenAvatarUrl(avatarUrl)) {
+                        avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                        finishAvatar(avatarUrl, finalUsername);
+                    } else {
+                        testImageUrl(avatarUrl, function(success) {
+                            if (success) {
+                                finishAvatar(avatarUrl, finalUsername);
+                            } else {
+                                markAvatarAsBroken(avatarUrl);
+                                avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                                finishAvatar(avatarUrl, finalUsername);
+                            }
+                        });
+                        return;
+                    }
                 } else {
-                    // No avatar or invalid, generate letter avatar
                     avatarUrl = generateLetterAvatar(userId, finalUsername, size);
-                    finishAvatar(avatarUrl, finalUsername);
                 }
+                
+                finishAvatar(avatarUrl, finalUsername);
                 
                 function finishAvatar(url, name) {
                     var cacheData = {
                         url: url,
                         username: name,
                         timestamp: Date.now(),
-                        size: size,
-                        userId: userId
+                        size: size
                     };
                     
-                    // Cache the result
                     try {
                         localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
                     } catch (e) {
@@ -461,35 +440,18 @@
                         localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
                     }
                     
-                    state.userCache[userId + '_' + size] = cacheData;
-                    
-                    // Execute all callbacks waiting for this request
-                    var callbacks = state.pendingRequests[requestKey];
-                    delete state.pendingRequests[requestKey];
-                    
-                    for (var i = 0; i < callbacks.length; i++) {
-                        try {
-                            callbacks[i](url, name);
-                        } catch (err) {
-                            console.error('Avatar callback error:', err);
-                        }
-                    }
+                    state.userCache[cacheKey] = cacheData;
+                    callback(url, name);
                 }
             })
             .catch(function(error) {
                 console.warn('Avatar fetch failed for user ' + userId + ':', error);
-                
-                // On error, generate a letter avatar
                 var fallbackUrl = generateLetterAvatar(userId, username, size);
-                var fallbackUsername = username || 'User';
-                
                 var cacheData = {
                     url: fallbackUrl,
-                    username: fallbackUsername,
+                    username: username || 'User',
                     timestamp: Date.now(),
-                    size: size,
-                    userId: userId,
-                    isFallback: true
+                    size: size
                 };
                 
                 try {
@@ -499,19 +461,8 @@
                     localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
                 }
                 
-                state.userCache[userId + '_' + size] = cacheData;
-                
-                // Execute all callbacks waiting for this request
-                var callbacks = state.pendingRequests[requestKey];
-                delete state.pendingRequests[requestKey];
-                
-                for (var i = 0; i < callbacks.length; i++) {
-                    try {
-                        callbacks[i](fallbackUrl, fallbackUsername);
-                    } catch (err) {
-                        console.error('Avatar callback error:', err);
-                    }
-                }
+                state.userCache[cacheKey] = cacheData;
+                callback(fallbackUrl, username || 'User');
             });
     }
 
@@ -542,17 +493,8 @@
         } else if (extractorType === 'visitatore') {
             return null;
         } else if (extractorType === 'likes_href') {
-            // For likes list, extract directly from the link
             var hrefMatch = element.href.match(/MID=(\d+)/);
-            if (hrefMatch) {
-                userId = hrefMatch[1];
-            } else {
-                // Also check the class for user ID (like "user11517378")
-                var classMatch = element.className.match(/user(\d+)/);
-                if (classMatch) {
-                    userId = classMatch[1];
-                }
-            }
+            if (hrefMatch) userId = hrefMatch[1];
         }
         
         return userId;
@@ -604,11 +546,6 @@
                 return null;
             }
             
-            // Check if this is already a bullet delete image (not a user link)
-            if (element.matches('.bullet_delete')) {
-                return null;
-            }
-            
             config = {
                 type: 'likes_list',
                 size: AVATAR_CONFIG.sizes.likes_list,
@@ -655,23 +592,11 @@
                 return null;
             }
         } else if (config.type === 'likes_list') {
-            // For likes list, check if the parent span already has an avatar
+            // Check if this link already has an avatar before it
             var span = element.closest('span');
-            if (span) {
-                // Check if avatar already exists before this link
-                var previousSibling = element.previousElementSibling;
-                if (previousSibling && 
-                    previousSibling.classList && 
-                    previousSibling.classList.contains('forum-likes-avatar')) {
-                    state.processedLikesList.add(element);
-                    return null;
-                }
-                
-                // Also check for any avatar in the span
-                if (span.querySelector('img.forum-likes-avatar')) {
-                    state.processedLikesList.add(element);
-                    return null;
-                }
+            if (span && span.querySelector('img.forum-likes-avatar')) {
+                state.processedLikesList.add(element);
+                return null;
             }
         }
         
@@ -699,7 +624,7 @@
             img.className += ' deleted-user-avatar';
         }
         
-        img.alt = username ? 'Avatar for ' + username : 'User avatar';
+        img.alt = username ? 'Avatar for ' + username : '';
         img.loading = 'lazy';
         img.decoding = 'async';
         
@@ -712,6 +637,8 @@
             'border-radius:50%;' +
             'object-fit:cover;' +
             'vertical-align:middle;' +
+            'border:2px solid #fff;' +
+            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
             'background-color:#f0f0f0;' +
             'display:inline-block;';
         
@@ -721,10 +648,6 @@
                 'margin-left:4px;' +
                 'border:1px solid #ddd;' +
                 'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
-        } else {
-            img.style.cssText += 
-                'border:2px solid #fff;' +
-                'box-shadow:0 2px 4px rgba(0,0,0,0.1);';
         }
         
         img.src = avatarUrl;
@@ -733,21 +656,13 @@
             img.dataset.username = username;
         }
         
-        if (userId) {
-            img.dataset.userId = userId;
-        }
-        
         img.addEventListener('error', function onError() {
-            console.warn('Avatar failed to load:', avatarUrl);
             markAvatarAsBroken(avatarUrl);
-            
-            // Remove from caches
             if (userId) {
                 var cacheKey = userId + '_' + size;
                 delete state.userCache[cacheKey];
                 localStorage.removeItem(getCacheKey(userId, size));
                 
-                // Generate fallback
                 var fallbackUrl = generateLetterAvatar(userId, username || '', size);
                 this.src = fallbackUrl;
             } else if (username) {
@@ -771,30 +686,28 @@
         
         var username = extractUsernameFromElement(element, config.type, userId);
         
-        var isDeletedUser = config.type === 'deleted_user';
-        var isLikesList = config.type === 'likes_list';
-        
-        // For likes list, we want to fetch real avatars, not just generate letters
-        getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
-            if (config.type === 'post') {
-                insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
-                state.processedPosts.add(element);
-            } else if (config.type === 'default_avatar') {
-                insertDefaultAvatar(element, userId, config.size, avatarUrl, finalUsername);
-                state.processedAvatars.add(element);
-            } else if (config.type === 'deleted_user') {
-                insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
-                state.processedDeletedUsers.add(element);
-            } else if (config.type === 'likes_list') {
+        if (config.type === 'likes_list') {
+            // Special handling for likes list - use forum API
+            getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
                 insertLikesListAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedLikesList.add(element);
-            }
-        }, isDeletedUser);
+            }, false); // isDeletedUser = false for likes list
+        } else {
+            var isDeletedUser = config.type === 'deleted_user';
+            getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
+                if (config.type === 'post') {
+                    insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
+                    state.processedPosts.add(element);
+                } else if (config.type === 'default_avatar') {
+                    insertDefaultAvatar(element, userId, config.size, avatarUrl, finalUsername);
+                    state.processedAvatars.add(element);
+                } else if (config.type === 'deleted_user') {
+                    insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
+                    state.processedDeletedUsers.add(element);
+                }
+            }, isDeletedUser);
+        }
     }
-
-    // ==============================
-    // INSERTION FUNCTIONS
-    // ==============================
 
     function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
         var nickname = postElement.querySelector('.nick a, .nick');
@@ -861,23 +774,9 @@
     function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
         // Find the span container that holds the link
         var span = linkElement.closest('span');
-        if (!span) {
-            // If no span, create one
-            span = document.createElement('span');
-            span.style.whiteSpace = 'nowrap';
-            linkElement.parentNode.insertBefore(span, linkElement);
-            span.appendChild(linkElement);
-        }
+        if (!span) return;
         
-        // Check if avatar already exists before this link
-        var previousSibling = linkElement.previousElementSibling;
-        if (previousSibling && 
-            previousSibling.classList && 
-            previousSibling.classList.contains('forum-likes-avatar')) {
-            return;
-        }
-        
-        // Also check for any avatar in the span
+        // Check if avatar already exists
         if (span.querySelector('img.forum-likes-avatar')) {
             return;
         }
@@ -925,9 +824,6 @@
         // Check for likes/dislikes lists
         var likesLinks = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         for (var k = 0; k < likesLinks.length; k++) {
-            // Skip bullet delete images
-            if (likesLinks[k].matches('.bullet_delete')) continue;
-            
             var likesInfo = shouldProcessElement(likesLinks[k]);
             if (likesInfo) {
                 insertAvatarForElement(likesInfo);
@@ -959,9 +855,6 @@
         // Process likes/dislikes lists
         var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         for (var k = 0; k < likesLinks.length; k++) {
-            // Skip bullet delete images
-            if (likesLinks[k].matches('.bullet_delete')) continue;
-            
             var likesInfo = shouldProcessElement(likesLinks[k]);
             if (likesInfo) {
                 insertAvatarForElement(likesInfo);
@@ -994,7 +887,7 @@
     function initAvatarSystem() {
         if (state.isInitialized) return;
         
-        console.log('🚀 Initializing working avatar system with REAL avatars for likes/dislikes');
+        console.log('🚀 Initializing working avatar system with likes/dislikes support');
         
         setupObserver();
         
@@ -1013,27 +906,46 @@
         init: initAvatarSystem,
         
         refresh: function() {
-            // Clear all avatars and reinitialize
+            // Remove all avatars
+            var containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
+            for (var i = 0; i < containers.length; i++) {
+                if (containers[i].classList && containers[i].classList.contains('forum-avatar-container')) {
+                    containers[i].remove();
+                } else {
+                    containers[i].remove();
+                }
+            }
+            
+            // Remove replaced avatars
+            var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
+            for (var j = 0; j < replacedAvatars.length; j++) {
+                replacedAvatars[j].remove();
+            }
+            
+            // Remove avatar-replaced class
+            var replacedLinks = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
+            for (var k = 0; k < replacedLinks.length; k++) {
+                replacedLinks[k].classList.remove('avatar-replaced');
+                replacedLinks[k].classList.remove('has-forum-avatar');
+            }
+            
+            // Clear state
             state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
             state.processedDeletedUsers = new WeakSet();
             state.processedLikesList = new WeakSet();
-            state.pendingRequests = {};
             state.isInitialized = false;
             
-            // Remove all avatars from DOM
-            var avatars = document.querySelectorAll('.forum-user-avatar, .forum-likes-avatar, .forum-avatar-container');
-            for (var i = 0; i < avatars.length; i++) {
-                avatars[i].remove();
-            }
-            
-            // Clear avatar-related classes
-            var elements = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
-            for (var j = 0; j < elements.length; j++) {
-                elements[j].classList.remove('avatar-replaced');
-                elements[j].classList.remove('has-forum-avatar');
+            // Clear localStorage
+            for (var l = 0; l < localStorage.length; l++) {
+                var key = localStorage.key(l);
+                if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                            key.startsWith(AVATAR_CONFIG.cache.brokenPrefix) ||
+                            key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                    localStorage.removeItem(key);
+                }
             }
             
             initAvatarSystem();
@@ -1073,9 +985,21 @@
                 localStorageCache: cacheCount,
                 deletedUserCache: deletedCacheCount,
                 brokenUrls: state.brokenAvatars.size,
-                pendingRequests: Object.keys(state.pendingRequests).length,
                 isInitialized: state.isInitialized
             };
+        },
+        
+        debugUser: function(userId) {
+            var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
+            console.log('Debug user ' + userId + ':');
+            
+            for (var i = 0; i < posts.length; i++) {
+                var nickname = posts[i].querySelector('.nick a, .nick');
+                console.log('Post ' + (i+1) + ' .nick:', nickname ? nickname.textContent : 'none');
+                
+                var extracted = extractUsernameFromElement(posts[i], 'post', userId);
+                console.log('Extracted username:', extracted);
+            }
         }
     };
 
