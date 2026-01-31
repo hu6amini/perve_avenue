@@ -1,4 +1,4 @@
-/ ==============================
+// ==============================
 // Complete Working Avatar System - INCLUDING LIKES/DISLIKES
 // ==============================
 
@@ -1203,7 +1203,6 @@
     }
 
 })();
-
 
 // Ultra-Optimized Media Dimension Extractor for deferred loading
 // DOM is guaranteed to be ready when this executes (defer attribute)
