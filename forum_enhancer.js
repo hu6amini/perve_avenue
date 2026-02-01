@@ -5182,97 +5182,82 @@ class PostModernizer {
     }
 }
 
-#addPollEventListeners(modernPoll, pollForm, hiddenInputs, originalRadios = []) {
-    const state = modernPoll.getAttribute('data-poll-state');
+#setupPollEventListeners(modernPoll, pollForm, originalPollContent, options) {
+    const { isVoteState, isVotedState, originalCancelBtn, originalVoteBtn, originalViewResultsBtn } = options;
     
-    if (state === 'vote') {
-        const choiceElements = modernPoll.querySelectorAll('.poll-choice');
-        const radioInputs = modernPoll.querySelectorAll('.choice-radio');
+    // Vote state
+    if (isVoteState) {
+        const voteBtn = modernPoll.querySelector('.vote-btn');
+        const viewResultsBtn = modernPoll.querySelector('.view-results-btn');
+        const modernRadios = modernPoll.querySelectorAll('.choice-radio');
+        const originalRadios = originalPollContent.querySelectorAll('input[type="radio"]');
         
-        choiceElements.forEach(choice => {
-            choice.addEventListener('click', (e) => {
-                if (e.target.type === 'radio' || e.target.tagName === 'LABEL') return;
+        // Sync modern radios with original radios
+        modernRadios.forEach((modernRadio, index) => {
+            modernRadio.addEventListener('change', (e) => {
+                // Uncheck all radios first
+                modernRadios.forEach(r => {
+                    r.closest('.poll-choice')?.classList.remove('selected');
+                });
                 
-                const radio = choice.querySelector('.choice-radio');
-                if (radio) {
-                    radio.checked = true;
-                    choiceElements.forEach(c => c.classList.remove('selected'));
-                    choice.classList.add('selected');
+                // Check corresponding original radio
+                if (originalRadios[index]) {
+                    originalRadios[index].checked = true;
                 }
+                
+                // Add selected class
+                e.target.closest('.poll-choice')?.classList.add('selected');
             });
         });
         
-        radioInputs.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                choiceElements.forEach(c => c.classList.remove('selected'));
-                const selectedChoice = e.target.closest('.poll-choice');
-                if (selectedChoice) {
-                    selectedChoice.classList.add('selected');
-                }
-            });
-        });
-    }
-    
-    const submitButtons = modernPoll.querySelectorAll('button[type="submit"], button.poll-btn[value]');
-    submitButtons.forEach(button => {
-        button.addEventListener('click', (e) => {
-            e.preventDefault();
-            
-            if (state === 'vote') {
-                const selectedRadio = modernPoll.querySelector('.choice-radio:checked');
-                if (!selectedRadio && button.name === 'submit') {
+        // Vote button
+        if (voteBtn && originalVoteBtn) {
+            voteBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                
+                // Check if a choice is selected
+                const selectedModernRadio = modernPoll.querySelector('.choice-radio:checked');
+                if (!selectedModernRadio) {
                     this.#showPollNotification('Please select a choice before voting', 'warning');
                     return;
                 }
                 
-                // Find and check the corresponding original radio button
-                if (selectedRadio) {
-                    const originalRadio = pollForm.querySelector('input[type="radio"][value="' + selectedRadio.value + '"]');
-                    if (originalRadio) {
-                        originalRadio.checked = true;
-                    }
-                }
-            }
-            
-            const inputName = button.getAttribute('name');
-            const inputValue = button.getAttribute('value');
-            
-            if (inputName && inputValue) {
-                let existingInput = pollForm.querySelector('input[name="' + inputName + '"]');
-                
-                if (!existingInput) {
-                    existingInput = document.createElement('input');
-                    existingInput.type = 'hidden';
-                    existingInput.name = inputName;
-                    pollForm.appendChild(existingInput);
+                // Ensure corresponding original radio is checked
+                const modernValue = selectedModernRadio.value;
+                const originalRadio = Array.from(originalRadios).find(r => r.value === modernValue);
+                if (originalRadio) {
+                    originalRadio.checked = true;
                 }
                 
-                existingInput.value = inputValue;
-            }
-            
-            // Add hidden inputs
-            hiddenInputs.forEach(hidden => {
-                let existingHidden = pollForm.querySelector('input[name="' + hidden.name + '"]');
-                if (!existingHidden) {
-                    existingHidden = document.createElement('input');
-                    existingHidden.type = 'hidden';
-                    existingHidden.name = hidden.name;
-                    existingHidden.value = hidden.value;
-                    pollForm.appendChild(existingHidden);
-                }
+                // Submit the form using original button
+                setTimeout(() => {
+                    originalVoteBtn.click();
+                }, 50);
             });
-            
-            // Submit the form
-            pollForm.submit();
-        });
-    });
+        }
+        
+        // View results button
+        if (viewResultsBtn && originalViewResultsBtn) {
+            viewResultsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                setTimeout(() => {
+                    originalViewResultsBtn.click();
+                }, 50);
+            });
+        }
+    }
     
-    const refreshButton = modernPoll.querySelector('button[onclick*="location.reload"]');
-    if (refreshButton) {
-        refreshButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            location.reload();
-        });
+    // Cancel vote button (voted state)
+    if (isVotedState) {
+        const cancelBtn = modernPoll.querySelector('.cancel-vote-btn');
+        if (cancelBtn && originalCancelBtn) {
+            cancelBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                setTimeout(() => {
+                    originalCancelBtn.click();
+                }, 50);
+            });
+        }
     }
 }
 
@@ -5312,7 +5297,7 @@ class PostModernizer {
         }, { once: true });
     }, 3000);
 }
-
+    
 #setupPollObserver() {
     if (globalThis.forumObserver) {
         const pollObserverId = globalThis.forumObserver.register({
