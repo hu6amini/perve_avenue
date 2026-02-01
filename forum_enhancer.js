@@ -4931,10 +4931,8 @@ class PostModernizer {
 }
 
 #processExistingPolls() {
-    document.querySelectorAll('form#pollform .poll').forEach(pollContainer => {
-        if (pollContainer.classList.contains('poll-modernized')) return;
+    document.querySelectorAll('form#pollform .poll:not(.poll-modernized)').forEach(pollContainer => {
         this.#transformPoll(pollContainer);
-        pollContainer.classList.add('poll-modernized');
     });
 }
 
@@ -4942,7 +4940,6 @@ class PostModernizer {
     const pollForm = pollContainer.closest('form#pollform');
     if (!pollForm) return;
     
-    // Skip if already modernized
     if (pollContainer.classList.contains('poll-modernized')) return;
     
     try {
@@ -4952,36 +4949,30 @@ class PostModernizer {
         const list = pollContainer.querySelector('ul.list');
         if (!list) return;
         
-        const isVotedState = pollContainer.querySelector('input[name="delvote"]') !== null;
+        // Determine poll state
+        const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
+        const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
+        const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        
+        const isVotedState = originalCancelBtn !== null;
         const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
         const isVoteState = !isVotedState && !isResultsState;
         
-        // Store the original poll content for reference
         const originalPollContent = pollContainer.querySelector('.skin_tbl');
         if (!originalPollContent) return;
         
-        // Clone the original form inputs
-        const hiddenInputs = Array.from(pollForm.querySelectorAll('input[type="hidden"]')).map(input => {
-            return {
-                name: input.name,
-                value: input.value
-            };
-        });
+        // Hide original poll content but keep it in DOM
+        originalPollContent.style.opacity = '0';
+        originalPollContent.style.height = '0';
+        originalPollContent.style.overflow = 'hidden';
+        originalPollContent.style.position = 'absolute';
+        originalPollContent.style.pointerEvents = 'none';
         
-        // Store the original radio buttons for vote state
-        const originalRadios = isVoteState ? 
-            Array.from(pollForm.querySelectorAll('input[type="radio"]')).map(radio => ({
-                id: radio.id,
-                name: radio.name,
-                value: radio.value
-            })) : [];
-        
-        // Create modern poll wrapper
+        // Create modern poll
         const modernPoll = document.createElement('div');
         modernPoll.className = 'modern-poll';
         modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
         
-        // Build HTML (same as before)
         let html = '<div class="poll-header">' +
             '<div class="poll-icon">' +
             '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
@@ -5016,9 +5007,9 @@ class PostModernizer {
                 const choiceName = radio.name;
                 
                 html += '<div class="poll-choice" data-choice-index="' + index + '">' +
-                    '<input type="radio" class="choice-radio" id="' + this.#escapeHtml(choiceId) + '" name="' + 
-                    this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '">' +
-                    '<label for="' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
+                    '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '">' +
+                    '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
                     this.#escapeHtml(choiceText) + '</label>' +
                     '</div>';
             });
@@ -5106,11 +5097,11 @@ class PostModernizer {
         if (isVoteState) {
             html += '<p class="poll-message">Select your choice and click Vote</p>' +
                 '<div class="poll-actions">' +
-                '<button type="submit" name="submit" class="poll-btn" value="Vote">' +
+                '<button type="button" class="poll-btn vote-btn">' +
                 '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
                 'Vote' +
                 '</button>' +
-                '<button type="submit" name="nullvote" class="poll-btn secondary" value="1">' +
+                '<button type="button" class="poll-btn secondary view-results-btn">' +
                 '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
                 'View Results' +
                 '</button>' +
@@ -5131,17 +5122,13 @@ class PostModernizer {
                 }
             }
             
-// Get the original cancel button value
-const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
-const cancelValue = originalCancelBtn ? originalCancelBtn.value : 'Annulla';
-
-html += '<p class="poll-message">' + votedForText + '</p>' +
-    '<div class="poll-actions">' +
-    '<button type="submit" name="delvote" class="poll-btn delete" value="' + this.#escapeHtml(cancelValue) + '">' +
-    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
-    'Cancel Vote' +
-    '</button>' +
-    '</div>';
+            html += '<p class="poll-message">' + votedForText + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn delete cancel-vote-btn">' +
+                '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                'Cancel Vote' +
+                '</button>' +
+                '</div>';
         } else if (isResultsState) {
             const darkbar = pollContainer.querySelector('.darkbar.Item');
             let votersText = '';
@@ -5166,17 +5153,18 @@ html += '<p class="poll-message">' + votedForText + '</p>' +
         
         modernPoll.innerHTML = html;
         
-        // Hide the original poll content
-        originalPollContent.style.display = 'none';
-        
-        // Insert the modern poll BEFORE the original content
+        // Insert modern poll
         pollContainer.insertBefore(modernPoll, originalPollContent);
-        
-        // Mark as modernized
         pollContainer.classList.add('poll-modernized');
         
         // Add event listeners
-        this.#addPollEventListeners(modernPoll, pollForm, hiddenInputs, originalRadios);
+        this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
+            isVoteState: isVoteState,
+            isVotedState: isVotedState,
+            originalCancelBtn: originalCancelBtn,
+            originalVoteBtn: originalVoteBtn,
+            originalViewResultsBtn: originalViewResultsBtn
+        });
         
         // Animate percentage bars
         setTimeout(() => {
