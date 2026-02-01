@@ -5131,13 +5131,17 @@ class PostModernizer {
                 }
             }
             
-            html += '<p class="poll-message">' + votedForText + '</p>' +
-                '<div class="poll-actions">' +
-                '<button type="submit" name="delvote" class="poll-btn delete" value="Cancel">' +
-                '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
-                'Cancel Vote' +
-                '</button>' +
-                '</div>';
+// Get the original cancel button value
+const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
+const cancelValue = originalCancelBtn ? originalCancelBtn.value : 'Annulla';
+
+html += '<p class="poll-message">' + votedForText + '</p>' +
+    '<div class="poll-actions">' +
+    '<button type="submit" name="delvote" class="poll-btn delete" value="' + this.#escapeHtml(cancelValue) + '">' +
+    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+    'Cancel Vote' +
+    '</button>' +
+    '</div>';
         } else if (isResultsState) {
             const darkbar = pollContainer.querySelector('.darkbar.Item');
             let votersText = '';
