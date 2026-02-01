@@ -5326,20 +5326,24 @@ class PostModernizer {
         const pollObserverId = globalThis.forumObserver.register({
             id: 'poll-modernizer',
             callback: (node) => this.#handleNewPolls(node),
-            selector: 'form#pollform .poll',
+            selector: 'form#pollform .poll:not(.poll-modernized)',
             priority: 'normal',
             pageTypes: ['topic', 'blog', 'send']
         });
     } else {
-        setInterval(() => this.#processExistingPolls(), 2000);
+        setInterval(() => {
+            document.querySelectorAll('form#pollform .poll:not(.poll-modernized)').forEach(poll => {
+                this.#transformPoll(poll);
+            });
+        }, 2000);
     }
 }
 
 #handleNewPolls(node) {
-    if (node.matches('form#pollform .poll')) {
+    if (node.matches('form#pollform .poll:not(.poll-modernized)')) {
         this.#transformPoll(node);
     } else {
-        node.querySelectorAll('form#pollform .poll').forEach(poll => {
+        node.querySelectorAll('form#pollform .poll:not(.poll-modernized)').forEach(poll => {
             this.#transformPoll(poll);
         });
     }
