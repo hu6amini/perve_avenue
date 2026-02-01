@@ -4494,13 +4494,13 @@ class PostModernizer {
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
     #embeddedLinkObserverId = null;
+    #pollObserverId = null; // <-- ADD THIS LINE
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
     #domUpdates = new WeakMap();
     #rafPending = false;
     #timeUpdateIntervals = new Map();
-    #pollObserverId = null;
     
     // NEW: Add format detection properties
     #formatPatterns = new Map(); // Stores detected patterns
