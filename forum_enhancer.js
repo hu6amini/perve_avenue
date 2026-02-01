@@ -4500,6 +4500,7 @@ class PostModernizer {
     #domUpdates = new WeakMap();
     #rafPending = false;
     #timeUpdateIntervals = new Map();
+    #pollObserverId = null;
     
     // NEW: Add format detection properties
     #formatPatterns = new Map(); // Stores detected patterns
@@ -4563,6 +4564,7 @@ class PostModernizer {
             this.#modernizeCodeBlocks();
             this.#modernizeAttachments();
             this.#modernizeEmbeddedLinks();
+            this.#modernizePolls();
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
@@ -4916,6 +4918,409 @@ class PostModernizer {
             // Check each link individually
             if (this.#isInEditor(link)) return;
             this.#transformEmbeddedLink(link);
+        });
+    }
+}
+
+    // ==============================
+// POLL TRANSFORMATION
+// ==============================
+
+#modernizePolls() {
+    this.#processExistingPolls();
+    this.#setupPollObserver();
+}
+
+#processExistingPolls() {
+    document.querySelectorAll('.poll').forEach(poll => {
+        if (poll.classList.contains('poll-modernized')) return;
+        this.#transformPoll(poll);
+        poll.classList.add('poll-modernized');
+    });
+}
+
+#transformPoll(pollContainer) {
+    if (!pollContainer) return;
+    
+    const form = pollContainer.closest('form');
+    if (!form || form.id !== 'pollform') return;
+    
+    // Get hidden inputs
+    const actInput = form.querySelector('input[name="act"]');
+    const sInput = form.querySelector('input[name="s"]');
+    const tInput = form.querySelector('input[name="t"]');
+    
+    if (!actInput || !sInput || !tInput) return;
+    
+    const skinTbl = pollContainer.querySelector('.skin_tbl');
+    if (!skinTbl) return;
+    
+    const sunbar = skinTbl.querySelector('.sunbar.top');
+    const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
+    
+    // Check poll state
+    const hasVoted = !!skinTbl.querySelector('input[name="delvote"]');
+    const hasNullVote = !!skinTbl.querySelector('.nullvote');
+    const isViewResults = hasNullVote && !hasVoted && skinTbl.querySelector('.bar');
+    
+    const modernPoll = document.createElement('div');
+    modernPoll.className = 'modern-poll';
+    
+    let html = '<div class="poll-header">' +
+        '<div class="poll-icon">' +
+        '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+        '</div>' +
+        '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
+        '<div class="poll-actions">';
+    
+    // Add cancel button if user has voted
+    if (hasVoted) {
+        html += '<button type="submit" name="delvote" class="poll-cancel-btn" value="Annulla">' +
+            '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>' +
+            '<span>Cancel Vote</span>' +
+            '</button>';
+    }
+    
+    // Add view results button if not already viewing results
+    if (!isViewResults && !hasVoted) {
+        html += '<button type="submit" name="nullvote" class="poll-results-btn" value="1">' +
+            '<i class="fa-regular fa-chart-simple" aria-hidden="true"></i>' +
+            '<span>View Results</span>' +
+            '</button>';
+    }
+    
+    // Add vote button if user hasn't voted and not viewing results
+    if (!hasVoted && !isViewResults) {
+        html += '<button type="submit" name="submit" class="poll-vote-btn" value="&nbsp;Vote!&nbsp;">' +
+            '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
+            '<span>Vote</span>' +
+            '</button>';
+    }
+    
+    html += '</div></div>';
+    
+    // Add poll choices
+    html += '<div class="poll-choices">';
+    
+    if (hasVoted || isViewResults) {
+        // Display results (voted or viewing results)
+        const listItems = skinTbl.querySelectorAll('.list li:not(:first-child)');
+        let maxVotes = 0;
+        
+        // First pass to find max votes
+        listItems.forEach(li => {
+            const votesText = li.querySelector('.right.Sub') ? li.querySelector('.right.Sub').textContent : '0';
+            const votes = parseInt(votesText.replace(/[^\d]/g, '')) || 0;
+            if (votes > maxVotes) maxVotes = votes;
+        });
+        
+        // Second pass to create choices
+        listItems.forEach((li, index) => {
+            const choiceText = li.querySelector('.left.Sub') ? li.querySelector('.left.Sub').textContent : 'Choice ' + (index + 1);
+            const barDiv = li.querySelector('.bar div');
+            const percentageSpan = li.querySelector('.bar span b') || li.querySelector('.bar span');
+            const votesText = li.querySelector('.right.Sub') ? li.querySelector('.right.Sub').textContent : '0';
+            
+            const percentage = percentageSpan ? percentageSpan.textContent.replace('%', '').trim() : '0';
+            const votes = parseInt(votesText.replace(/[^\d]/g, '')) || 0;
+            const isMaxVote = votes === maxVotes && maxVotes > 0;
+            const isUsersVote = li.classList.contains('max') && hasVoted;
+            
+            html += '<div class="poll-choice' + (isMaxVote ? ' selected' : '') + '">';
+            
+            if (isUsersVote) {
+                html += '<span class="your-vote-badge">Your vote</span>';
+            }
+            
+            html += '<div class="choice-label">' + this.#escapeHtml(choiceText) + '</div>' +
+                '<div class="choice-percentage">' +
+                '<div class="percentage-bar-container">' +
+                '<div class="percentage-bar' + (isMaxVote ? ' max-vote' : '') + '" style="width: ' + percentage + '%;"></div>' +
+                '</div>' +
+                '<span class="percentage-text">' + percentage + '%</span>' +
+                '</div>' +
+                '<div class="choice-votes" title="' + votes + ' vote' + (votes !== 1 ? 's' : '') + '">' + votes + '</div>' +
+                '</div>';
+        });
+    } else {
+        // Display voting form
+        const listItems = skinTbl.querySelectorAll('.list li.Item');
+        listItems.forEach((li, index) => {
+            const label = li.querySelector('label');
+            if (!label) return;
+            
+            const input = label.querySelector('input[type="radio"]');
+            const choiceText = label.textContent.trim();
+            const inputId = input ? input.id : 'poll_vote' + index;
+            const inputName = input ? input.name : 'poll_vote';
+            const inputValue = input ? input.value : index;
+            
+            html += '<div class="poll-choice" onclick="this.querySelector(\'input\').click()">' +
+                '<input type="radio" name="' + this.#escapeHtml(inputName) + '" id="' + this.#escapeHtml(inputId) + '" value="' + this.#escapeHtml(inputValue) + '"' + (index === 0 ? ' checked' : '') + '>' +
+                '<label class="choice-label" for="' + this.#escapeHtml(inputId) + '">' + this.#escapeHtml(choiceText) + '</label>' +
+                '</div>';
+        });
+    }
+    
+    html += '</div>';
+    
+    // Add poll stats or voted message
+    const darkbar = skinTbl.querySelector('.darkbar');
+    if (darkbar) {
+        const darkbarText = darkbar.textContent.trim();
+        const votersMatch = darkbarText.match(/Voters:\s*(\d+)/i);
+        
+        if (hasVoted) {
+            // User has voted - show cancel vote message
+            const votedForMatch = darkbarText.match(/voted for option.*?(\d+)/i);
+            html += '<div class="poll-voted-message">' +
+                '<i class="fa-regular fa-check-circle" aria-hidden="true"></i>' +
+                '<span>You have already voted</span>' +
+                '</div>';
+            
+            if (votersMatch) {
+                html += '<div class="poll-stats">' +
+                    '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
+                    '<span>' + votersMatch[1] + ' voter' + (votersMatch[1] !== '1' ? 's' : '') + '</span>' +
+                    '</div>';
+            }
+        } else if (votersMatch) {
+            // Viewing results without voting
+            html += '<div class="poll-stats">' +
+                '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
+                '<span>' + votersMatch[1] + ' voter' + (votersMatch[1] !== '1' ? 's' : '') + '</span>' +
+                '</div>';
+        }
+    }
+    
+    modernPoll.innerHTML = html;
+    
+    // Replace the old poll structure but keep the form
+    const oldPollDiv = pollContainer.querySelector('.skin_tbl');
+    if (oldPollDiv) {
+        oldPollDiv.replaceWith(modernPoll);
+    }
+    
+    // Add event listeners
+    this.#addPollEventListeners(modernPoll, form);
+}
+
+#addPollEventListeners(pollElement, form) {
+    // Handle choice selection
+    const choices = pollElement.querySelectorAll('.poll-choice');
+    choices.forEach(choice => {
+        const input = choice.querySelector('input[type="radio"]');
+        if (input) {
+            choice.addEventListener('click', (e) => {
+                if (e.target === input) return;
+                
+                // Uncheck all other radios
+                choices.forEach(c => {
+                    const otherInput = c.querySelector('input[type="radio"]');
+                    if (otherInput && otherInput !== input) {
+                        otherInput.checked = false;
+                        c.classList.remove('selected');
+                    }
+                });
+                
+                // Check clicked one
+                input.checked = true;
+                choice.classList.add('selected');
+            });
+            
+            input.addEventListener('change', () => {
+                choices.forEach(c => c.classList.remove('selected'));
+                if (input.checked) {
+                    choice.classList.add('selected');
+                }
+            });
+            
+            // Set initial selected state
+            if (input.checked) {
+                choice.classList.add('selected');
+            }
+        }
+    });
+    
+    // Handle form submission through modern buttons
+    const cancelBtn = pollElement.querySelector('.poll-cancel-btn[name="delvote"]');
+    const resultsBtn = pollElement.querySelector('.poll-results-btn[name="nullvote"]');
+    const voteBtn = pollElement.querySelector('.poll-vote-btn[name="submit"]');
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            // Create and submit the form
+            const formData = new FormData(form);
+            formData.set('delvote', 'Annulla');
+            
+            // Submit via fetch for better UX
+            this.#submitPollForm(form, formData, 'Canceling vote...');
+        });
+    }
+    
+    if (resultsBtn) {
+        resultsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            formData.set('nullvote', '1');
+            
+            this.#submitPollForm(form, formData, 'Loading results...');
+        });
+    }
+    
+    if (voteBtn) {
+        voteBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            const selectedInput = pollElement.querySelector('input[type="radio"]:checked');
+            if (!selectedInput) {
+                this.#showPollNotification('Please select an option first', 'warning');
+                return;
+            }
+            
+            const formData = new FormData(form);
+            formData.set('poll_vote', selectedInput.value);
+            formData.set('submit', '&nbsp;Vote!&nbsp;');
+            
+            this.#submitPollForm(form, formData, 'Submitting vote...');
+        });
+    }
+}
+
+#submitPollForm(form, formData, loadingMessage) {
+    const submitBtn = form.querySelector('.poll-vote-btn, .poll-cancel-btn, .poll-results-btn');
+    const originalText = submitBtn ? submitBtn.innerHTML : '';
+    
+    // Show loading state
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin" aria-hidden="true"></i><span>' + loadingMessage + '</span>';
+        submitBtn.disabled = true;
+    }
+    
+    // Submit via fetch
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'Accept': 'text/html',
+        }
+    })
+    .then(response => response.text())
+    .then(html => {
+        // Parse the response and update the poll
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const newPoll = doc.querySelector('.poll');
+        
+        if (newPoll) {
+            // Replace the entire poll
+            const currentPoll = document.querySelector('.modern-poll');
+            if (currentPoll && currentPoll.closest('form') === form) {
+                // Transform and replace
+                const newModernPoll = document.createElement('div');
+                newModernPoll.innerHTML = newPoll.outerHTML;
+                
+                // Re-run transformation on the new poll
+                this.#transformPoll(newModernPoll.querySelector('.poll'));
+                
+                const transformedPoll = newModernPoll.querySelector('.modern-poll');
+                if (transformedPoll) {
+                    currentPoll.replaceWith(transformedPoll);
+                }
+            }
+            
+            this.#showPollNotification('Poll updated successfully', 'success');
+        }
+    })
+    .catch(error => {
+        console.error('Poll submission error:', error);
+        this.#showPollNotification('Failed to update poll', 'error');
+        
+        // Fallback to normal form submission
+        form.submit();
+    })
+    .finally(() => {
+        // Restore button state
+        if (submitBtn) {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    });
+}
+
+#showPollNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = 'poll-notification ' + type;
+    notification.textContent = message;
+    
+    notification.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index:9999;font-weight:500;display:flex;align-items:center;gap:8px;transform:translateX(calc(100% + 20px));opacity:0;transition:transform 0.3s ease-out,opacity 0.3s ease-out;pointer-events:none;white-space:nowrap;';
+    
+    if (type === 'success') {
+        notification.style.background = 'var(--success-color)';
+        notification.style.color = 'white';
+    } else if (type === 'error') {
+        notification.style.background = 'var(--danger-color)';
+        notification.style.color = 'white';
+    } else {
+        notification.style.background = 'var(--warning-color)';
+        notification.style.color = 'white';
+    }
+    
+    const icon = document.createElement('i');
+    if (type === 'success') {
+        icon.className = 'fa-regular fa-check-circle';
+    } else if (type === 'error') {
+        icon.className = 'fa-regular fa-exclamation-circle';
+    } else {
+        icon.className = 'fa-regular fa-info-circle';
+    }
+    icon.setAttribute('aria-hidden', 'true');
+    notification.prepend(icon);
+    
+    document.body.appendChild(notification);
+    
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            notification.style.transform = 'translateX(0)';
+            notification.style.opacity = '1';
+        });
+    });
+    
+    setTimeout(() => {
+        notification.style.transform = 'translateX(calc(100% + 20px))';
+        notification.style.opacity = '0';
+        
+        notification.addEventListener('transitionend', () => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, { once: true });
+    }, 3000);
+}
+
+#setupPollObserver() {
+    if (globalThis.forumObserver) {
+        this.#pollObserverId = globalThis.forumObserver.register({
+            id: 'poll-modernizer',
+            callback: (node) => this.#handleNewPolls(node),
+            selector: '.poll',
+            priority: 'normal',
+            pageTypes: ['topic', 'blog', 'send', 'search']
+        });
+    } else {
+        setInterval(() => this.#processExistingPolls(), 2000);
+    }
+}
+
+#handleNewPolls(node) {
+    if (node.matches('.poll')) {
+        this.#transformPoll(node);
+    } else {
+        node.querySelectorAll('.poll').forEach(poll => {
+            this.#transformPoll(poll);
         });
     }
 }
@@ -9231,29 +9636,28 @@ class PostModernizer {
         }
     }
 
-    destroy() {
-        const ids = [this.#postModernizerId, this.#activeStateObserverId,
-        this.#debouncedObserverId, this.#cleanupObserverId,
-        this.#searchPostObserverId, this.#quoteLinkObserverId,
-            this.#codeBlockObserverId, this.#attachmentObserverId,
-            this.#embeddedLinkObserverId];
+   destroy() {
+    const ids = [this.#postModernizerId, this.#activeStateObserverId,
+    this.#debouncedObserverId, this.#cleanupObserverId,
+    this.#searchPostObserverId, this.#quoteLinkObserverId,
+        this.#codeBlockObserverId, this.#attachmentObserverId,
+        this.#embeddedLinkObserverId, this.#pollObserverId]; // Add poll observer here
 
-        ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
+    ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
-        if (this.#retryTimeoutId) {
-            clearTimeout(this.#retryTimeoutId);
-            this.#retryTimeoutId = null;
-        }
-
-        this.#timeUpdateIntervals.forEach(interval => {
-            clearInterval(interval);
-        });
-        this.#timeUpdateIntervals.clear();
-
-        console.log('Post Modernizer destroyed');
+    if (this.#retryTimeoutId) {
+        clearTimeout(this.#retryTimeoutId);
+        this.#retryTimeoutId = null;
     }
-}
 
+    this.#timeUpdateIntervals.forEach(interval => {
+        clearInterval(interval);
+    });
+    this.#timeUpdateIntervals.clear();
+
+    console.log('Post Modernizer destroyed');
+}
+    
 // Modern initialization without DOMContentLoaded with body ID check
 (function initPostModernizer() {
     var bodyId = document.body.id;
