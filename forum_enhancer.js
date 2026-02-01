@@ -4942,6 +4942,9 @@ class PostModernizer {
     const pollForm = pollContainer.closest('form#pollform');
     if (!pollForm) return;
     
+    // Skip if already modernized
+    if (pollContainer.classList.contains('poll-modernized')) return;
+    
     try {
         const sunbar = pollContainer.querySelector('.sunbar.top.Item');
         const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
@@ -4953,6 +4956,11 @@ class PostModernizer {
         const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
         const isVoteState = !isVotedState && !isResultsState;
         
+        // Store the original poll content for reference
+        const originalPollContent = pollContainer.querySelector('.skin_tbl');
+        if (!originalPollContent) return;
+        
+        // Clone the original form inputs
         const hiddenInputs = Array.from(pollForm.querySelectorAll('input[type="hidden"]')).map(input => {
             return {
                 name: input.name,
@@ -4960,10 +4968,20 @@ class PostModernizer {
             };
         });
         
+        // Store the original radio buttons for vote state
+        const originalRadios = isVoteState ? 
+            Array.from(pollForm.querySelectorAll('input[type="radio"]')).map(radio => ({
+                id: radio.id,
+                name: radio.name,
+                value: radio.value
+            })) : [];
+        
+        // Create modern poll wrapper
         const modernPoll = document.createElement('div');
         modernPoll.className = 'modern-poll';
         modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
         
+        // Build HTML (same as before)
         let html = '<div class="poll-header">' +
             '<div class="poll-icon">' +
             '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
@@ -4983,7 +5001,6 @@ class PostModernizer {
         }
         
         html += '</div></div>';
-        
         html += '<div class="poll-choices">';
         
         if (isVoteState) {
@@ -5084,7 +5101,6 @@ class PostModernizer {
         }
         
         html += '</div>';
-        
         html += '<div class="poll-footer">';
         
         if (isVoteState) {
@@ -5146,16 +5162,19 @@ class PostModernizer {
         
         modernPoll.innerHTML = html;
         
-        const oldPollContent = pollContainer.querySelector('.skin_tbl');
-        if (oldPollContent) {
-            oldPollContent.style.display = 'none';
-            pollContainer.insertBefore(modernPoll, oldPollContent);
-        } else {
-            pollContainer.appendChild(modernPoll);
-        }
+        // Hide the original poll content
+        originalPollContent.style.display = 'none';
         
-        this.#addPollEventListeners(modernPoll, pollForm, hiddenInputs);
+        // Insert the modern poll BEFORE the original content
+        pollContainer.insertBefore(modernPoll, originalPollContent);
         
+        // Mark as modernized
+        pollContainer.classList.add('poll-modernized');
+        
+        // Add event listeners
+        this.#addPollEventListeners(modernPoll, pollForm, hiddenInputs, originalRadios);
+        
+        // Animate percentage bars
         setTimeout(() => {
             modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
                 const width = fill.style.width;
@@ -5171,7 +5190,7 @@ class PostModernizer {
     }
 }
 
-#addPollEventListeners(modernPoll, pollForm, hiddenInputs) {
+#addPollEventListeners(modernPoll, pollForm, hiddenInputs, originalRadios = []) {
     const state = modernPoll.getAttribute('data-poll-state');
     
     if (state === 'vote') {
@@ -5214,10 +5233,11 @@ class PostModernizer {
                     return;
                 }
                 
+                // Find and check the corresponding original radio button
                 if (selectedRadio) {
-                    const hiddenRadio = pollForm.querySelector('input[type="radio"][value="' + selectedRadio.value + '"]');
-                    if (hiddenRadio) {
-                        hiddenRadio.checked = true;
+                    const originalRadio = pollForm.querySelector('input[type="radio"][value="' + selectedRadio.value + '"]');
+                    if (originalRadio) {
+                        originalRadio.checked = true;
                     }
                 }
             }
@@ -5238,6 +5258,7 @@ class PostModernizer {
                 existingInput.value = inputValue;
             }
             
+            // Add hidden inputs
             hiddenInputs.forEach(hidden => {
                 let existingHidden = pollForm.querySelector('input[name="' + hidden.name + '"]');
                 if (!existingHidden) {
@@ -5249,6 +5270,7 @@ class PostModernizer {
                 }
             });
             
+            // Submit the form
             pollForm.submit();
         });
     });
