@@ -761,6 +761,571 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
 .post_neg .points_up.opacity.active i {color: var(--danger-color)}
 
 /*============================================
+ modern table container & styles============================================*/
+.table-container {border-radius: var(--radius); 
+ overflow: hidden; 
+ box-shadow: var(--shadow-sm); 
+ margin: var(--space-md) 0; 
+ background: var(--surface-color); 
+ border: 1px solid var(--border-color); 
+ transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ 
+.table-container:hover {box-shadow: var(--shadow); 
+ transform: translatey(-1px)} 
+ 
+.table-container .ve-table {width: 100%; 
+ border-collapse: collapse; 
+ margin: 0; 
+ border: none; 
+ border-radius: 0; 
+ box-shadow: none; 
+ background: var(--surface-color)} 
+ 
+/* Table Header Styles */ 
+.table-container .ve-table th {background: var(--bg-color); 
+ color: var(--primary-color); 
+ font-weight: 300; 
+ font-size: var(--text-sm); 
+ text-align: left; 
+ padding: var(--pad-4) var(--pad-5); 
+ border-bottom: 2px solid var(--primary-color); 
+ border-right: 1px solid var(--border-color); 
+ font-family: 'Bree Serif'; 
+ transition: background-color 0.3s ease} 
+ 
+.table-container .ve-table th:last-child {border-right: none} 
+ 
+/* Table Cell Styles */ 
+.table-container .ve-table td {padding: var(--pad-3) var(--pad-5); 
+ border-bottom: 1px solid var(--border-color); 
+ border-right: 1px solid var(--border-color); 
+ color: var(--text-secondary); 
+ font-size: var(--text-sm); 
+ line-height: 1.5; 
+ transition: background-color 0.3s ease} 
+ 
+.table-container .ve-table td:last-child {border-right: none} 
+ 
+.table-container .ve-table tr:last-child td {border-bottom: none} 
+ 
+/* Striped Rows */ 
+.table-container .ve-table tbody tr {background: var(--bg-color)} 
+.ve-table img {max-height: 125px; width:auto} 
+ 
+/* Responsive Design */ 
+@media(max-width: 768px) {.table-container {margin: var(--space-sm) 0; 
+ border-radius: calc(var(--radius) * 0.75)} 
+ 
+ .table-container .ve-table {display: block; 
+ overflow-x: auto; 
+ -webkit-overflow-scrolling: touch} 
+ 
+ .table-container .ve-table th, 
+ .table-container .ve-table td {padding: var(--pad-3) var(--pad-4); 
+ white-space: nowrap; 
+ min-width: 100px} 
+ 
+ .table-container .ve-table th {font-size: var(--text-xs)} 
+ 
+ .table-container .ve-table td {font-size: var(--text-xs)}} 
+ 
+/* Small Screens */ 
+@media(max-width: 480px) {.table-container {border-radius: calc(var(--radius) * 0.5); 
+ margin: var(--space-xs) 0} 
+ 
+ .table-container .ve-table th, 
+ .table-container .ve-table td {padding: var(--pad-2) var(--pad-3); 
+ min-width: 80px}} 
+ 
+/* Light Theme Adjustments */ 
+[data-theme="light"] .table-container {border-color: var(--border-color); 
+ background: var(--surface-color)} 
+ 
+[data-theme="light"] .table-container .ve-table th {background: var(--bg-color); 
+ color: var(--primary-color); 
+ border-bottom-color: var(--primary-color)} 
+ 
+[data-theme="light"] .table-container .ve-table td {color: var(--text-secondary)} 
+ 
+[data-theme="light"] .table-container .ve-table tbody tr:nth-child(even) {background: var(--bg-color)} 
+ 
+/* Caption Support(optional) */ 
+.table-container .ve-table caption {caption-side: bottom; 
+ padding: var(--pad-3) var(--pad-4); 
+ color: var(--text-tertiary); 
+ font-size: var(--text-sm); 
+ font-style: italic; 
+ text-align: center; 
+ border-top: 1px solid var(--border-color); 
+ margin-top: -1px}
+
+/*============================================
+ modern embedded link styles - proper alignment============================================*/ 
+.modern-embedded-link {background: var(--surface-color); 
+ border: 1px solid var(--border-color); 
+ border-radius: var(--radius); 
+ box-shadow: var(--shadow-sm); 
+ display: flex; 
+ margin: var(--space-md) 0; 
+ overflow: hidden; 
+ transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ 
+.modern-embedded-link:hover {box-shadow: var(--shadow); 
+ transform: translatey(-1px); 
+ border-color: var(--primary-color)} 
+ 
+.embedded-link-container {display: flex; 
+ align-items: stretch; 
+ width: 100%; /* Changed from height: 100% to width: 100% */ 
+ text-decoration: none; 
+ color: inherit; 
+ transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ 
+.embedded-link-container:hover {background: var(--hover-color)} 
+ 
+.embedded-link-image {flex: 0 0 180px; 
+ background: var(--bg-color); 
+ overflow: hidden; 
+ display: flex; 
+ align-items: center; 
+ justify-content: center; 
+ position: relative} 
+ 
+.embedded-link-image img {content-visibility: auto; 
+ top: 0; 
+ left: 0; 
+ width: 100%; 
+ height: 100%; 
+ object-fit: cover; 
+ transition: transform 0.3s ease} 
+ 
+.embedded-link-container:hover .embedded-link-image img {transform: scale(1.05)} 
+ 
+.embedded-link-content {flex: 1 1 0%; /* Changed from flex: 1 to be more explicit */ 
+ min-width: 0; /* Crucial for text truncation */ 
+ width: 100%; /* Ensure it takes full width */ 
+ padding: var(--pad-5) var(--pad-6); 
+ display: flex; 
+ flex-direction: column; 
+ justify-content: space-between; 
+ box-sizing: border-box} 
+ 
+/* Force the content to always expand fully */ 
+.embedded-link-container {min-width: 0} 
+ 
+/* Fix alignment - target specific classes to override host CSS */ 
+.modern-embedded-link .embedded-link-domain {display: flex; 
+ align-items: center; 
+ gap: var(--space-xs); 
+ margin: 0 0 var(--space-sm) 0; 
+ font-size: var(--text-xs); 
+ color: var(--text-tertiary); 
+ text-align: left; 
+ justify-content: flex-start; 
+ width: 100%} 
+ 
+.embedded-link-domain a.embedded-link-container {gap: var(--space-xs)} 
+ 
+.modern-embedded-link .embedded-link-favicon {width: 16px; 
+ height: 16px; 
+ min-width: 16px; 
+ min-height: 16px; 
+ border-radius: var(--pad-2); 
+ object-fit: contain; 
+ display: inline-block; 
+ vertical-align: middle; 
+ flex-shrink: 0} 
+ 
+.modern-embedded-link .embedded-link-domain span {font-weight: 500; 
+ text-transform: lowercase; 
+ display: inline-block; 
+ flex: 1; /* Allow span to take remaining space */ 
+ min-width: 0; /* Allow text truncation */ 
+ overflow: hidden; 
+ text-overflow: ellipsis; 
+ white-space: nowrap} 
+ 
+.modern-embedded-link .embedded-link-title {font-size: var(--text-base); 
+ font-weight: 400; 
+ line-height: 1.618; 
+ margin: 0 0 var(--space-xs) 0; 
+ color: var(--text-primary); 
+ display: -webkit-box; 
+ -webkit-line-clamp: 2; 
+ -webkit-box-orient: vertical; 
+ overflow: hidden; 
+ text-overflow: ellipsis; 
+ text-align: left; 
+ width: 100%} 
+ 
+.modern-embedded-link .embedded-link-description {font-size: var(--text-sm); 
+ line-height: 1.618; 
+ color: var(--text-secondary); 
+ margin: 0 0 var(--space-sm) 0; 
+ display: -webkit-box; 
+ -webkit-line-clamp: 2; 
+ -webkit-box-orient: vertical; 
+ overflow: hidden; 
+ text-overflow: ellipsis; 
+ text-align: left; 
+ width: 100%} 
+ 
+.modern-embedded-link .embedded-link-meta {display: flex; 
+ align-items: center; 
+ justify-content: space-between; 
+ margin: 0; 
+ text-align: left; 
+ width: 100%} 
+ 
+.modern-embedded-link .embedded-link-read-more {font-size: var(--text-xs); 
+ color: var(--primary-color); 
+ font-weight: 500; 
+ transition: color 0.3s ease; 
+ display: inline-block; 
+ text-align: left; 
+ width: 100%} 
+ 
+.modern-embedded-link .embedded-link-container:hover .embedded-link-read-more {color: var(--primary-light)} 
+ 
+/* No image version - ensure content takes full width */ 
+.modern-embedded-link:not(:has(.embedded-link-image)) .embedded-link-container {display: block} 
+ 
+.modern-embedded-link:not(:has(.embedded-link-image)) .embedded-link-content {width: 100%; 
+ flex: none} 
+ 
+/* Ensure the entire link container stretches */ 
+.embedded-link-container {display: flex; 
+ width: 100%; 
+ align-items: stretch} 
+ 
+/* Alternative approach: Use grid layout for better control */ 
+@media(min-width: 769px) {.modern-embedded-link .embedded-link-container {display: grid; 
+ grid-template-columns: 180px 1fr; /* Fixed image width, flexible content */ 
+ grid-template-rows: auto; 
+ min-height: 140px} 
+ 
+ .modern-embedded-link .embedded-link-image {grid-column: 1; 
+ width: 100%; 
+ height: 100%} 
+ 
+ .modern-embedded-link .embedded-link-content {grid-column: 2; 
+ width: 100%; 
+ display: flex; 
+ flex-direction: column; 
+ justify-content: space-between}} 
+ 
+/* Responsive styles */ 
+@media(max-width: 768px) {.modern-embedded-link .embedded-link-container {flex-direction: column; 
+ min-height: auto} 
+ 
+ .modern-embedded-link .embedded-link-image {flex: 0 0 140px; 
+ width: 100%} 
+ 
+ .modern-embedded-link .embedded-link-image img {position: relative; 
+ height: 140px} 
+ 
+ .modern-embedded-link .embedded-link-content {padding: var(--pad-4) var(--pad-5); 
+ width: 100%; /* Ensure full width on mobile */ 
+ flex: 1 1 auto} 
+ 
+ .modern-embedded-link .embedded-link-title {font-size: var(--text-sm); 
+ margin-bottom: var(--space-xs)} 
+ 
+ .modern-embedded-link .embedded-link-description {font-size: var(--text-xs); 
+ margin-bottom: var(--space-xs)}} 
+ 
+@media(max-width: 480px) {.modern-embedded-link .embedded-link-image {flex: 0 0 100px} 
+ 
+ .modern-embedded-link .embedded-link-image img {height: 100px} 
+ 
+ .modern-embedded-link .embedded-link-content {padding: var(--pad-3) var(--pad-4); 
+ width: 100%} 
+ 
+ .modern-embedded-link .embedded-link-title {font-size: var(--text-sm); 
+ margin-bottom: var(--pad-1)}} 
+ 
+/* Additional fix: Ensure the modern-embedded-link container itself expands */ 
+.modern-embedded-link {width: 100%; 
+ max-width: 100%} 
+ 
+/* If the issue persists, try this more aggressive approach */ 
+.embedded-link-content {flex: 1 1 100%; /* Force it to take all available space */ 
+ min-width: 0; 
+ width: 100%; 
+ box-sizing: border-box} 
+ 
+/* For short text content, ensure elements expand */ 
+.embedded-link-title, 
+.embedded-link-description, 
+.embedded-link-meta {width: 100%; 
+ display: block}
+
+/*============================================
+ modern poll styles============================================*/ 
+.modern-poll {background: var(--surface-color); 
+ border: 1px solid var(--border-color); 
+ border-radius: var(--radius); 
+ box-shadow: var(--shadow-sm); 
+ margin: var(--space-md) 0; 
+ overflow: hidden; 
+ transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ 
+.modern-poll:hover {box-shadow: var(--shadow); 
+ transform: translatey(-1px)} 
+ 
+.poll-header {align-items: center; 
+ background: var(--bg-color); 
+ border-bottom: 1px solid var(--border-color); 
+ display: flex; 
+ gap: 12px; 
+ justify-content: space-between; 
+ padding: var(--space-md)} 
+ 
+.poll-icon {align-items: center; 
+ background: var(--secondary-color); 
+ border-radius: 6px; 
+ display: flex; 
+ flex-shrink: 0; 
+ height: 28px; 
+ justify-content: center; 
+ width: 28px} 
+ 
+.poll-icon i {color: #FFF; 
+ font-size: 12px} 
+ 
+.poll-title {color: var(--text-primary); 
+display:flex; 
+ font-size: var(--text-sm); 
+flex: 1; 
+ margin: 0} 
+ 
+.poll-stats {align-items: center; 
+ color: var(--text-tertiary); 
+ display: flex; 
+ font-size: var(--text-xs); 
+ gap: 6px; 
+ white-space: nowrap} 
+ 
+.poll-choices {padding: var(--space-md)} 
+ 
+.poll-choice {align-items: center; 
+ background: var(--bg-color); 
+ border: 1px solid var(--border-color); 
+ border-radius: var(--radius); 
+ cursor: pointer; 
+ display: flex; 
+ gap: 12px; 
+ margin-bottom: 10px; 
+ padding: var(--space-sm); 
+ position: relative; 
+ transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ 
+.poll-choice:last-child {margin-bottom: 0} 
+ 
+.poll-choice:hover {background: var(--hover-color); 
+ border-color: var(--primary-color); 
+ transform: translatex(2px)} 
+ 
+.poll-choice.selected {background: rgba(5, 150, 105, 0.1); 
+ border-color: var(--primary-color); 
+ box-shadow: 0 2px 8px rgba(5, 150, 105, 0.15)} 
+ 
+.poll-choice.max {background: rgba(124, 58, 237, 0.1); 
+ border-color: var(--secondary-color)} 
+ 
+.poll-choice.max:hover {background: rgba(124, 58, 237, 0.15); 
+ border-color: var(--secondary-color)} 
+ 
+.choice-label {color: var(--text-primary); 
+ cursor: pointer; 
+ display:flex; 
+ flex: 1; 
+ font-size: var(--text-sm); 
+ font-weight: 500; 
+ margin: 0} 
+ 
+.poll-choice.max .choice-label {color: var(--secondary-color); 
+ font-weight: 600} 
+ 
+.choice-label strong {font-weight: 700} 
+ 
+.choice-stats {align-items: center; 
+ display: flex; 
+ gap: 12px; 
+ margin-left: auto} 
+ 
+.choice-percentage {color: var(--text-secondary); 
+ font-size: var(--text-xs); 
+ font-weight: 600; 
+ min-width: 50px; 
+ text-align: right} 
+ 
+.poll-choice.max .choice-percentage {color: var(--secondary-color); 
+ font-weight: 700} 
+ 
+.choice-bar {background: var(--bg-color); 
+ border-radius: 4px; 
+ height: 8px; 
+ overflow: hidden; 
+ width: 100px} 
+ 
+.choice-fill {background: var(--primary-color); 
+ border-radius: 4px; 
+ height: 100%; 
+ transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); 
+ width: 0} 
+ 
+.poll-choice.max .choice-fill {background: var(--secondary-color)} 
+ 
+.choice-votes {color: var(--text-tertiary); 
+ font-size: var(--text-xs); 
+ font-weight: 500; 
+ min-width: 40px; 
+ text-align: right} 
+ 
+.poll-choice.max .choice-votes {color: var(--secondary-color); 
+ font-weight: 600} 
+ 
+.poll-footer {align-items: center; 
+ background: var(--bg-color); 
+ border-top: 1px solid var(--border-color); 
+ display: flex; 
+ gap: 12px; 
+ justify-content: space-between; 
+ padding: var(--space-md)} 
+ 
+.poll-message {color: var(--text-secondary); 
+display:flex; 
+ font-size: var(--text-sm); 
+ flex: 1; 
+ margin: 0} 
+ 
+.poll-message strong {color: var(--primary-color); 
+ font-weight: 600} 
+ 
+.poll-message .poll-choice-name {background: rgba(5, 150, 105, 0.15); 
+ border-radius: 4px; 
+ color: var(--primary-color); 
+ display: inline-block; 
+ font-weight: 600; 
+ margin: 0 4px; 
+ padding: 2px 6px} 
+ 
+.poll-actions {align-items: center; 
+ display: flex; 
+ gap: 8px} 
+ 
+.poll-btn {align-items: center; 
+ background: var(--primary-color); 
+ border: 1px solid var(--primary-color); 
+ border-radius: var(--radius); 
+ color: #FFF; 
+ cursor: pointer; 
+ display: inline-flex; 
+ font-size: var(--text-sm); 
+ font-weight: 500; 
+ gap: 6px; 
+ padding: var(--pad-3) var(--pad-5); 
+ text-decoration: none; 
+ transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ 
+.poll-btn:hover {background: var(--primary-dark); 
+ border-color: var(--primary-dark); 
+ color: #FFF; 
+ transform: translatey(-1px)} 
+ 
+.poll-btn.secondary {background: transparent; 
+ border-color: var(--border-color); 
+ color: var(--text-secondary)} 
+ 
+.poll-btn.secondary:hover {background: var(--hover-color); 
+ border-color: var(--primary-color); 
+ color: var(--text-primary)} 
+ 
+.poll-btn.delete {background: var(--danger-color); 
+ border-color: var(--danger-color)} 
+ 
+.poll-btn.delete:hover {background: #C53030; 
+ border-color: #C53030} 
+ 
+.poll-btn i {font-size: 12px} 
+ 
+.poll-form {margin: 0} 
+ 
+.poll-form .modern-poll {margin: 0} 
+ 
+[data-theme="light"] .poll-choice.selected {background: rgba(5, 150, 105, 0.08); 
+ box-shadow: 0 2px 8px rgba(5, 150, 105, 0.1)} 
+ 
+[data-theme="light"] .poll-choice.max {background: rgba(124, 58, 237, 0.08); 
+ box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1)} 
+ 
+@media(max-width: 768px) {.poll-choice {flex-wrap: wrap; 
+ gap: var(--space-sm)} 
+ 
+ .choice-stats {flex-wrap: wrap; 
+ gap: var(--space-xs); 
+ justify-content: flex-end; 
+ margin-left: 0; 
+ margin-top: var(--space-xs); 
+ width: 100%} 
+ 
+ .choice-bar {order: 1; 
+ width: 100%} 
+ 
+ .choice-percentage {order: 2; 
+ min-width: auto} 
+ 
+ .choice-votes {order: 3; 
+ min-width: auto} 
+ 
+ .poll-footer {flex-direction: column; 
+ align-items: stretch; 
+ gap: var(--space-sm)} 
+ 
+ .poll-actions {justify-content: flex-end}}
+
+/*============================================
+ poll notification============================================*/ 
+.poll-notification {position: fixed; 
+ bottom: 20px; 
+ right: 20px; 
+ padding: 12px 20px; 
+ background: var(--primary-color); 
+ color: white; 
+ border-radius: var(--radius); 
+ box-shadow: var(--shadow-lg); 
+ z-index: 9; 
+ font-weight: 500; 
+ display: flex; 
+ align-items: center; 
+ gap: 8px; 
+ transform: translatex(calc(100% + 20px)); 
+ opacity: 0; 
+ transition: transform 0.3s ease-out, opacity 0.3s ease-out; 
+ pointer-events: none; 
+ white-space: nowrap} 
+ 
+.poll-notification.warning {background: var(--warning-color)} 
+ 
+.poll-notification i {font-size: 14px} 
+.poll-choice {position: relative; cursor: pointer} 
+ 
+.choice-radio {cursor: pointer; z-index: 1} 
+ 
+.choice-label {cursor: pointer; z-index: 1; position: relative} 
+ 
+/* Make the entire choice area clickable */ 
+.poll-choice::after {content: ''; 
+ position: absolute; 
+ top: 0; 
+ left: 0; 
+ right: 0; 
+ bottom: 0; 
+ z-index: 0; 
+ cursor: pointer}
+
+/*============================================
  modern quote styles============================================*/
 .modern-quote {background: var(--surface-color);
  border: 1px solid var(--border-color);
@@ -2059,10 +2624,6 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .title input.forminput:hover {background: #E8EAF6;
  color: #5C6BC0}
-
-.title.bottom.reserved {font-size: var(--text-sm);
- font-weight: 300;
- padding: var(--pad-4)}
 
 .title .forminput {color: #7986CB;
  background: #E8EAF6;
