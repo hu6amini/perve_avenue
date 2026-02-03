@@ -1138,22 +1138,34 @@ flex: 1;
 
 /* Poll-specific radio button styles */
 .poll-choice input[type="radio"] {
-    background: none !important;
-    border-color: var(--border-color) !important;
-    margin-right: 8px;
-    flex-shrink: 0;
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  font-size: .5rem;
+  height: 1rem;
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  text-align: center;
+  width: 1rem;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 .poll-choice input[type="radio"]:checked {
-    background: var(--primary-color) !important;
-    border-color: var(--primary-color) !important;
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
 .poll-choice input[type="radio"]:checked::before {
-    color: #fff !important;
-    content: '\f111' !important;
-    font-family: "Font Awesome 6 Pro" !important;
-    font-weight: 900 !important;
+  color: #fff;
+  content: '\f111';
+  font-family: "Font Awesome 6 Pro";
+  font-weight: 900;
 }
 
 /* Disabled state for poll results */
