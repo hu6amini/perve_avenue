@@ -1135,6 +1135,82 @@ flex: 1;
  
 .poll-choice.max:hover {background: rgba(124, 58, 237, 0.15); 
  border-color: var(--secondary-color)} 
+
+/* Poll-specific radio button styles */
+.poll-choice input[type="radio"] {
+    background: none !important;
+    border-color: var(--border-color) !important;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.poll-choice input[type="radio"]:checked {
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.poll-choice input[type="radio"]:checked::before {
+    color: #fff !important;
+    content: '\f111' !important;
+    font-family: "Font Awesome 6 Pro" !important;
+    font-weight: 900 !important;
+}
+
+/* Disabled state for poll results */
+.poll-choice input[type="radio"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Only show checkmark for selected choice in results */
+.poll-choice.selected input[type="radio"]:checked:disabled {
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+.poll-choice.selected input[type="radio"]:checked:disabled::before {
+    color: #fff !important;
+    content: '\f111' !important;
+    font-family: "Font Awesome 6 Pro" !important;
+    font-weight: 900 !important;
+}
+
+/* Non-selected choices in results should not show checkmark */
+.poll-choice:not(.selected) input[type="radio"]:checked:disabled {
+    background: none !important;
+    border-color: var(--border-color) !important;
+}
+
+.poll-choice:not(.selected) input[type="radio"]:checked:disabled::before {
+    content: '' !important;
+}
+
+/* Ensure poll choice radios are properly aligned */
+.poll-choice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.choice-radio {
+    order: -1; /* Put radio before label */
+}
+
+.choice-label {
+    flex: 1;
+    cursor: pointer;
+}
+
+/* Hover state for poll choices */
+.poll-choice:hover:not(.selected) {
+    background: var(--hover-color);
+}
+
+/* Selected state */
+.poll-choice.selected {
+    background: rgba(5, 150, 105, 0.1);
+    border-color: var(--primary-color);
+}
  
 .choice-label {color: var(--text-primary); 
  cursor: pointer; 
