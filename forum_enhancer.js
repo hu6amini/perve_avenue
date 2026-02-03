@@ -5260,29 +5260,40 @@ class PostModernizer {
             });
             
             // When modern radio is clicked directly
-            modernRadio.addEventListener('click', (e) => {
-                e.stopPropagation();
-                
-                // If already checked, keep it checked
-                if (modernRadio.checked) return;
-                
-                // Uncheck all radios
-                originalRadios.forEach(r => r.checked = false);
-                pollChoices.forEach(c => {
-                    const mr = c.querySelector('.choice-radio');
-                    if (mr && mr !== modernRadio) mr.checked = false;
-                    c.classList.remove('selected');
-                });
-                
-                // Check this radio
-                modernRadio.checked = true;
-                originalRadio.checked = true;
-                choice.classList.add('selected');
-                
-                // Dispatch events
-                originalRadio.dispatchEvent(new Event('change', { bubbles: true }));
-                modernRadio.dispatchEvent(new Event('change', { bubbles: true }));
-            });
+           // In the #setupPollEventListeners method, add this force update:
+modernRadio.addEventListener('click', (e) => {
+    e.stopPropagation();
+    
+    // Force uncheck all radios first
+    pollChoices.forEach((c, i) => {
+        const otherModernRadio = c.querySelector('.choice-radio');
+        const otherOriginalRadio = originalRadios[i];
+        if (otherModernRadio) {
+            otherModernRadio.checked = false;
+            // Force CSS update
+            otherModernRadio.style.cssText = '';
+        }
+        if (otherOriginalRadio) otherOriginalRadio.checked = false;
+    });
+    
+    // Check this radio
+    modernRadio.checked = true;
+    if (originalRadio) originalRadio.checked = true;
+    
+    // Force CSS update by toggling classes
+    modernRadio.classList.remove('checked');
+    void modernRadio.offsetWidth; // Trigger reflow
+    modernRadio.classList.add('checked');
+    
+    // Update visual selection
+    pollChoices.forEach(c => c.classList.remove('selected'));
+    choice.classList.add('selected');
+    
+    // Dispatch change event
+    const changeEvent = new Event('change', { bubbles: true });
+    modernRadio.dispatchEvent(changeEvent);
+    if (originalRadio) originalRadio.dispatchEvent(changeEvent);
+});
             
             // When modern radio changes (e.g., from keyboard)
             modernRadio.addEventListener('change', (e) => {
