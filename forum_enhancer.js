@@ -5195,67 +5195,156 @@ class PostModernizer {
         const originalRadios = originalPollContent.querySelectorAll('input[type="radio"]');
         const pollChoices = modernPoll.querySelectorAll('.poll-choice');
         
+        // Initialize selection state based on original radios
+        originalRadios.forEach((originalRadio, index) => {
+            if (originalRadio.checked && pollChoices[index]) {
+                pollChoices[index].classList.add('selected');
+                const modernRadio = pollChoices[index].querySelector('.choice-radio');
+                if (modernRadio) {
+                    modernRadio.checked = true;
+                }
+            }
+        });
+        
         // Map each modern choice to its original radio
         pollChoices.forEach((choice, index) => {
             const originalRadio = originalRadios[index];
             if (!originalRadio) return;
             
-            // When modern choice is clicked, check the original radio
+            const modernRadio = choice.querySelector('.choice-radio');
+            if (!modernRadio) return;
+            
+            // Sync initial state from original to modern
+            if (originalRadio.checked) {
+                modernRadio.checked = true;
+                choice.classList.add('selected');
+            }
+            
+            // When modern choice container is clicked
             choice.addEventListener('click', (e) => {
-                // Don't interfere with label clicks
+                // Don't interfere with label clicks or radio clicks
                 if (e.target.tagName === 'LABEL' || e.target.type === 'radio') {
                     return;
                 }
                 
-                // Uncheck all original radios
-                originalRadios.forEach(r => {
-                    r.checked = false;
+                e.stopPropagation();
+                
+                // Uncheck all radios
+                originalRadios.forEach(r => r.checked = false);
+                pollChoices.forEach(c => {
+                    const mr = c.querySelector('.choice-radio');
+                    if (mr) mr.checked = false;
+                    c.classList.remove('selected');
                 });
                 
-                // Check this original radio
+                // Check this radio
                 originalRadio.checked = true;
-                
-                // Update visual selection
-                pollChoices.forEach(c => c.classList.remove('selected'));
+                modernRadio.checked = true;
                 choice.classList.add('selected');
                 
-                // Also check the visual radio in modern UI
-                const modernRadio = choice.querySelector('.choice-radio');
-                if (modernRadio) {
-                    modernRadio.checked = true;
-                }
+                // Dispatch events for proper form handling
+                originalRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                modernRadio.dispatchEvent(new Event('change', { bubbles: true }));
             });
             
-            // Also handle the visual radio clicks
-            const modernRadio = choice.querySelector('.choice-radio');
-            if (modernRadio) {
-                modernRadio.addEventListener('click', (e) => {
-                    // Uncheck all original radios
-                    originalRadios.forEach(r => {
-                        r.checked = false;
+            // When modern radio is clicked directly
+            modernRadio.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // If already checked, keep it checked
+                if (modernRadio.checked) return;
+                
+                // Uncheck all radios
+                originalRadios.forEach(r => r.checked = false);
+                pollChoices.forEach(c => {
+                    const mr = c.querySelector('.choice-radio');
+                    if (mr && mr !== modernRadio) mr.checked = false;
+                    c.classList.remove('selected');
+                });
+                
+                // Check this radio
+                modernRadio.checked = true;
+                originalRadio.checked = true;
+                choice.classList.add('selected');
+                
+                // Dispatch events
+                originalRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                modernRadio.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            
+            // When modern radio changes (e.g., from keyboard)
+            modernRadio.addEventListener('change', (e) => {
+                if (modernRadio.checked) {
+                    // Uncheck all other radios
+                    originalRadios.forEach((r, i) => {
+                        if (i !== index) {
+                            r.checked = false;
+                            const otherChoice = pollChoices[i];
+                            const otherRadio = otherChoice?.querySelector('.choice-radio');
+                            if (otherRadio) otherRadio.checked = false;
+                            otherChoice?.classList.remove('selected');
+                        }
                     });
                     
-                    // Check this original radio
+                    // Check original radio
                     originalRadio.checked = true;
                     
                     // Update visual selection
                     pollChoices.forEach(c => c.classList.remove('selected'));
                     choice.classList.add('selected');
-                });
-            }
-            
-            // Sync when original radio changes (from elsewhere)
-            originalRadio.addEventListener('change', (e) => {
-                if (originalRadio.checked) {
-                    pollChoices.forEach(c => c.classList.remove('selected'));
-                    choice.classList.add('selected');
-                    
-                    const modernRadio = choice.querySelector('.choice-radio');
-                    if (modernRadio) {
-                        modernRadio.checked = true;
-                    }
                 }
             });
+            
+            // Sync from original radio to modern (in case something else changes it)
+            originalRadio.addEventListener('change', (e) => {
+                if (originalRadio.checked) {
+                    // Uncheck all other radios
+                    originalRadios.forEach((r, i) => {
+                        if (i !== index) {
+                            r.checked = false;
+                            const otherChoice = pollChoices[i];
+                            const otherRadio = otherChoice?.querySelector('.choice-radio');
+                            if (otherRadio) otherRadio.checked = false;
+                            otherChoice?.classList.remove('selected');
+                        }
+                    });
+                    
+                    // Check modern radio
+                    modernRadio.checked = true;
+                    
+                    // Update visual selection
+                    pollChoices.forEach(c => c.classList.remove('selected'));
+                    choice.classList.add('selected');
+                } else {
+                    modernRadio.checked = false;
+                    choice.classList.remove('selected');
+                }
+            });
+            
+            // Handle label clicks
+            const label = choice.querySelector('.choice-label');
+            if (label) {
+                label.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    // Uncheck all radios
+                    originalRadios.forEach(r => r.checked = false);
+                    pollChoices.forEach(c => {
+                        const mr = c.querySelector('.choice-radio');
+                        if (mr) mr.checked = false;
+                        c.classList.remove('selected');
+                    });
+                    
+                    // Check this radio
+                    originalRadio.checked = true;
+                    modernRadio.checked = true;
+                    choice.classList.add('selected');
+                    
+                    // Dispatch events
+                    originalRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                    modernRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            }
         });
         
         // Vote button
@@ -5299,6 +5388,15 @@ class PostModernizer {
                 }, 50);
             });
         }
+    }
+    
+    // Handle poll refresh button if exists
+    const refreshBtn = modernPoll.querySelector('button[onclick*="location.reload"]');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            location.reload();
+        });
     }
 }
 
