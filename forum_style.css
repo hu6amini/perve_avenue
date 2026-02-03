@@ -1140,185 +1140,92 @@ flex: 1;
    POLL RADIO BUTTON STYLES - UPDATED
    ============================================ */
 
-/* Base poll radio button styles - inherits from generic */
-.poll-choice input[type="radio"].choice-radio {
+/* Poll-specific radio button styles */
+.poll-choice input[type="radio"] {
   align-items: center;
   appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background: var(--bg-color);
+  background: none;
   border: 1px solid var(--border-color);
   border-radius: 50%;
-  cursor: pointer;
-  display: inline-flex;
-  flex-shrink: 0;
-  font-size: 0.5rem;
-  height: 1.125rem;
+  display: flex;
+  font-size: .5rem;
+  height: 1rem;
   justify-content: center;
   margin: 0;
-  margin-right: 10px;
-  outline: none;
+  outline-style: none;
   padding: 0;
-  position: relative;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  vertical-align: middle;
-  width: 1.125rem;
+  text-align: center;
+  width: 1rem;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
-/* Hover state */
-.poll-choice:hover input[type="radio"].choice-radio:not(:disabled) {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.1);
-}
-
-/* Checked state - THIS IS THE FIX */
-.poll-choice input[type="radio"].choice-radio:checked {
+.poll-choice input[type="radio"]:checked {
   background: var(--primary-color);
   border-color: var(--primary-color);
 }
 
-.poll-choice input[type="radio"].choice-radio:checked::before {
+.poll-choice input[type="radio"]:checked::before {
   color: #fff;
   content: '\f111';
   font-family: "Font Awesome 6 Pro";
   font-weight: 900;
-  font-size: 0.5rem;
-  line-height: 1;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-/* Active/focus state */
-.poll-choice input[type="radio"].choice-radio:focus {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-.poll-choice input[type="radio"].choice-radio:active:not(:disabled) {
-  transform: scale(0.95);
 }
 
 /* Disabled state for poll results */
-.poll-choice input[type="radio"].choice-radio:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background: var(--surface-color);
+.poll-choice input[type="radio"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
-/* Selected poll choice styling */
-.poll-choice.selected {
-  background: rgba(5, 150, 105, 0.08);
-  border-color: var(--primary-color);
+/* Only show checkmark for selected choice in results */
+.poll-choice.selected input[type="radio"]:checked:disabled {
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
 }
 
-/* Only show checkmark for selected choice in results (voted state) */
-.poll-choice.selected input[type="radio"].choice-radio:checked:disabled {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.poll-choice.selected input[type="radio"].choice-radio:checked:disabled::before {
-  color: #fff;
-  content: '\f111';
-  font-family: "Font Awesome 6 Pro";
-  font-weight: 900;
+.poll-choice.selected input[type="radio"]:checked:disabled::before {
+    color: #fff !important;
+    content: '\f111' !important;
+    font-family: "Font Awesome 6 Pro" !important;
+    font-weight: 900 !important;
 }
 
 /* Non-selected choices in results should not show checkmark */
-.poll-choice:not(.selected) input[type="radio"].choice-radio:checked:disabled {
-  background: var(--surface-color);
-  border-color: var(--border-color);
+.poll-choice:not(.selected) input[type="radio"]:checked:disabled {
+    background: none !important;
+    border-color: var(--border-color) !important;
 }
 
-.poll-choice:not(.selected) input[type="radio"].choice-radio:checked:disabled::before {
-  content: '' !important;
+.poll-choice:not(.selected) input[type="radio"]:checked:disabled::before {
+    content: '' !important;
 }
 
-/* Ensure poll choice layout */
+/* Ensure poll choice radios are properly aligned */
 .poll-choice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.choice-radio {
+    order: -1; /* Put radio before label */
 }
 
 .choice-label {
-  flex: 1;
-  cursor: pointer;
-  font-weight: 500;
-  margin: 0;
-  user-select: none;
+    flex: 1;
+    cursor: pointer;
 }
 
-/* Hover state for entire choice */
+/* Hover state for poll choices */
 .poll-choice:hover:not(.selected) {
-  background: var(--hover-color);
-  transform: translateX(2px);
+    background: var(--hover-color);
 }
 
-/* For voted state in results - make it clearer */
-.poll-choice.max.selected {
-  background: rgba(124, 58, 237, 0.08);
-  border-color: var(--secondary-color);
-}
-
-.poll-choice.max.selected input[type="radio"].choice-radio:checked:disabled {
-  background: var(--secondary-color);
-  border-color: var(--secondary-color);
-}
-
-/* Remove the duplicate/conflicting styles */
-.poll-choice .choice-radio {
-  order: -1;
-  /* This is handled by flex gap above */
-}
-
-/* Ensure proper contrast in different themes */
-[data-theme="light"] .poll-choice input[type="radio"].choice-radio:checked {
-  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.2);
-}
-
-[data-theme="dark"] .poll-choice input[type="radio"].choice-radio {
-  background: var(--surface-color);
-}
-
-[data-theme="dark"] .poll-choice input[type="radio"].choice-radio:checked {
-  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.3);
-}
-
-/* Mobile adjustments */
-@media (max-width: 768px) {
-  .poll-choice {
-    padding: 8px 12px;
-    min-height: 40px;
-    gap: 10px;
-  }
-  
-  .poll-choice input[type="radio"].choice-radio {
-    height: 1rem;
-    width: 1rem;
-    margin-right: 8px;
-  }
-  
-  .poll-choice input[type="radio"].choice-radio:checked::before {
-    font-size: 0.45rem;
-  }
-}
-
-/* Animation for selection */
-@keyframes radio-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
-}
-
-.poll-choice input[type="radio"].choice-radio:checked {
-  animation: radio-pulse 0.3s ease;
+/* Selected state */
+.poll-choice.selected {
+    background: rgba(5, 150, 105, 0.1);
+    border-color: var(--primary-color);
 }
  
 .choice-label {color: var(--text-primary); 
