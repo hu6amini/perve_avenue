@@ -5069,9 +5069,12 @@ class PostModernizer {
                 html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
                     (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
                 
-                if (isVotedState) {
-                    html += '<input type="radio" class="choice-radio" checked disabled>';
-                }
+            if (isVotedState) {
+    html += '<input type="radio" class="choice-radio" checked disabled>';
+} else {
+    // Remove the checked attribute from non-selected choices in results
+    html += '<input type="radio" class="choice-radio"' + (isVotedChoice ? ' checked disabled' : ' disabled') + '>';
+}
                 
                 html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
                 if (isVotedChoice) {
