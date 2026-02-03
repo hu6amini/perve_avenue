@@ -5006,9 +5006,13 @@ class PostModernizer {
                 const choiceValue = radio.value;
                 const choiceName = radio.name;
                 
-                html += '<div class="poll-choice" data-choice-index="' + index + '">' +
+                // Check if this choice is initially selected
+                const isChecked = radio.checked || item.classList.contains('selected');
+                
+                html += '<div class="poll-choice' + (isChecked ? ' selected' : '') + '" data-choice-index="' + index + '">' +
                     '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
-                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '">' +
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '"' + 
+                    (isChecked ? ' checked' : '') + '>' +
                     '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
                     this.#escapeHtml(choiceText) + '</label>' +
                     '</div>';
@@ -5053,13 +5057,19 @@ class PostModernizer {
                 
                 if (votes > maxVotes) maxVotes = votes;
                 
+                // Check if this is the user's voted choice (look for strong tag or specific styling)
+                const isVoted = leftDiv.querySelector('strong') !== null || 
+                               item.classList.contains('selected') || 
+                               item.querySelector('.selected') !== null ||
+                               (leftDiv.innerHTML && leftDiv.innerHTML.includes('<strong>'));
+                
                 choicesData.push({
                     text: choiceTextClean,
                     originalText: choiceText,
                     percentage: percentage,
                     votes: votes,
                     isMax: isMax,
-                    isVoted: isMax && leftDiv.querySelector('strong') !== null
+                    isVoted: isVoted
                 });
             });
             
@@ -5069,12 +5079,14 @@ class PostModernizer {
                 html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
                     (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
                 
-            if (isVotedState) {
-    html += '<input type="radio" class="choice-radio" checked disabled>';
-} else {
-    // Remove the checked attribute from non-selected choices in results
-    html += '<input type="radio" class="choice-radio"' + (isVotedChoice ? ' checked disabled' : ' disabled') + '>';
-}
+                // Only show checked radio for the voted choice
+                if (isVotedState) {
+                    if (isVotedChoice) {
+                        html += '<input type="radio" class="choice-radio" checked disabled>';
+                    } else {
+                        html += '<input type="radio" class="choice-radio" disabled>';
+                    }
+                }
                 
                 html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
                 if (isVotedChoice) {
