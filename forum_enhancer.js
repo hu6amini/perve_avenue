@@ -5069,9 +5069,11 @@ class PostModernizer {
                 html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
                     (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
                 
-                if (isVotedState) {
+                // ONLY add the radio input for voted state, and ONLY for the choice that was voted for
+                if (isVotedState && isVotedChoice) {
                     html += '<input type="radio" class="choice-radio" checked disabled>';
                 }
+                // For results state (not voted), don't add any radio inputs
                 
                 html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
                 if (isVotedChoice) {
@@ -5157,31 +5159,35 @@ class PostModernizer {
         pollContainer.insertBefore(modernPoll, originalPollContent);
         pollContainer.classList.add('poll-modernized');
         
-        // Add event listeners
-        this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
-            isVoteState: isVoteState,
-            isVotedState: isVotedState,
-            originalCancelBtn: originalCancelBtn,
-            originalVoteBtn: originalVoteBtn,
-            originalViewResultsBtn: originalViewResultsBtn
-        });
-        
-        // Animate percentage bars
-        setTimeout(() => {
-            modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
-                const width = fill.style.width;
-                fill.style.width = '0';
-                setTimeout(() => {
-                    fill.style.width = width;
-                }, 10);
+        // Add event listeners (only for vote state)
+        if (isVoteState) {
+            this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
+                isVoteState: isVoteState,
+                isVotedState: isVotedState,
+                originalCancelBtn: originalCancelBtn,
+                originalVoteBtn: originalVoteBtn,
+                originalViewResultsBtn: originalViewResultsBtn
             });
-        }, 100);
+        }
+        
+        // Animate percentage bars (only for results/voted states)
+        if (isVotedState || isResultsState) {
+            setTimeout(() => {
+                modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
+                    const width = fill.style.width;
+                    fill.style.width = '0';
+                    setTimeout(() => {
+                        fill.style.width = width;
+                    }, 10);
+                });
+            }, 100);
+        }
         
     } catch (error) {
         console.error('Error transforming poll:', error);
     }
 }
-
+    
 #setupPollEventListeners(modernPoll, pollForm, originalPollContent, options) {
     const { isVoteState, isVotedState, originalCancelBtn, originalVoteBtn, originalViewResultsBtn } = options;
     
