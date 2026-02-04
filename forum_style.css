@@ -1135,6 +1135,69 @@ flex: 1;
  
 .poll-choice.max:hover {background: rgba(124, 58, 237, 0.15); 
  border-color: var(--secondary-color)} 
+
+/* Poll-specific radio button styles */
+.poll-choice .choice-radio {
+  cursor: pointer;
+  z-index: 1;
+}
+
+.poll-choice .choice-radio:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.poll-choice .choice-radio:checked::before {
+  color: #fff !important;
+  content: '\f111' !important;
+  font-family: "Font Awesome 6 Pro" !important;
+  font-weight: 900 !important;
+  font-size: 0.5rem !important;
+}
+
+/* Make poll choice containers clickable */
+.poll-choice[data-choice-index] {
+  position: relative;
+  cursor: pointer;
+}
+
+/* For voted state (when showing results) */
+.poll-choice.selected .choice-radio:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.poll-choice.selected .choice-radio:checked::before {
+  color: #fff !important;
+  content: '\f111' !important;
+  font-family: "Font Awesome 6 Pro" !important;
+  font-weight: 900 !important;
+  font-size: 0.5rem !important;
+}
+
+/* For results view where all radios have checked attribute */
+.poll-choice .choice-radio[checked][disabled] {
+  background: var(--surface-color);
+  border-color: var(--border-color);
+  cursor: default;
+}
+
+.poll-choice .choice-radio[checked][disabled]::before {
+  color: var(--text-secondary) !important;
+  content: '\f111' !important;
+  font-family: "Font Awesome 6 Pro" !important;
+  font-weight: 900 !important;
+  font-size: 0.5rem !important;
+}
+
+.poll-choice.selected .choice-radio[checked][disabled] {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.poll-choice.selected .choice-radio[checked][disabled]::before {
+  color: #fff !important;
+}
  
 .choice-label {color: var(--text-primary); 
  cursor: pointer; 
