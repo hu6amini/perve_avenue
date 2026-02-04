@@ -5006,13 +5006,9 @@ class PostModernizer {
                 const choiceValue = radio.value;
                 const choiceName = radio.name;
                 
-                // Check if this choice is initially selected
-                const isChecked = radio.checked || item.classList.contains('selected');
-                
-                html += '<div class="poll-choice' + (isChecked ? ' selected' : '') + '" data-choice-index="' + index + '">' +
+                html += '<div class="poll-choice" data-choice-index="' + index + '">' +
                     '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
-                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '"' + 
-                    (isChecked ? ' checked' : '') + '>' +
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '">' +
                     '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
                     this.#escapeHtml(choiceText) + '</label>' +
                     '</div>';
@@ -5057,19 +5053,13 @@ class PostModernizer {
                 
                 if (votes > maxVotes) maxVotes = votes;
                 
-                // Check if this is the user's voted choice (look for strong tag or specific styling)
-                const isVoted = leftDiv.querySelector('strong') !== null || 
-                               item.classList.contains('selected') || 
-                               item.querySelector('.selected') !== null ||
-                               (leftDiv.innerHTML && leftDiv.innerHTML.includes('<strong>'));
-                
                 choicesData.push({
                     text: choiceTextClean,
                     originalText: choiceText,
                     percentage: percentage,
                     votes: votes,
                     isMax: isMax,
-                    isVoted: isVoted
+                    isVoted: isMax && leftDiv.querySelector('strong') !== null
                 });
             });
             
@@ -5079,13 +5069,8 @@ class PostModernizer {
                 html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
                     (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
                 
-                // Only show checked radio for the voted choice
                 if (isVotedState) {
-                    if (isVotedChoice) {
-                        html += '<input type="radio" class="choice-radio" checked disabled>';
-                    } else {
-                        html += '<input type="radio" class="choice-radio" disabled>';
-                    }
+                    html += '<input type="radio" class="choice-radio" checked disabled>';
                 }
                 
                 html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
@@ -5207,168 +5192,67 @@ class PostModernizer {
         const originalRadios = originalPollContent.querySelectorAll('input[type="radio"]');
         const pollChoices = modernPoll.querySelectorAll('.poll-choice');
         
-        // Initialize selection state based on original radios
-        originalRadios.forEach((originalRadio, index) => {
-            if (originalRadio.checked && pollChoices[index]) {
-                pollChoices[index].classList.add('selected');
-                const modernRadio = pollChoices[index].querySelector('.choice-radio');
-                if (modernRadio) {
-                    modernRadio.checked = true;
-                }
-            }
-        });
-        
         // Map each modern choice to its original radio
         pollChoices.forEach((choice, index) => {
             const originalRadio = originalRadios[index];
             if (!originalRadio) return;
             
-            const modernRadio = choice.querySelector('.choice-radio');
-            if (!modernRadio) return;
-            
-            // Sync initial state from original to modern
-            if (originalRadio.checked) {
-                modernRadio.checked = true;
-                choice.classList.add('selected');
-            }
-            
-            // When modern choice container is clicked
+            // When modern choice is clicked, check the original radio
             choice.addEventListener('click', (e) => {
-                // Don't interfere with label clicks or radio clicks
+                // Don't interfere with label clicks
                 if (e.target.tagName === 'LABEL' || e.target.type === 'radio') {
                     return;
                 }
                 
-                e.stopPropagation();
-                
-                // Uncheck all radios
-                originalRadios.forEach(r => r.checked = false);
-                pollChoices.forEach(c => {
-                    const mr = c.querySelector('.choice-radio');
-                    if (mr) mr.checked = false;
-                    c.classList.remove('selected');
+                // Uncheck all original radios
+                originalRadios.forEach(r => {
+                    r.checked = false;
                 });
                 
-                // Check this radio
+                // Check this original radio
                 originalRadio.checked = true;
-                modernRadio.checked = true;
+                
+                // Update visual selection
+                pollChoices.forEach(c => c.classList.remove('selected'));
                 choice.classList.add('selected');
                 
-                // Dispatch events for proper form handling
-                originalRadio.dispatchEvent(new Event('change', { bubbles: true }));
-                modernRadio.dispatchEvent(new Event('change', { bubbles: true }));
+                // Also check the visual radio in modern UI
+                const modernRadio = choice.querySelector('.choice-radio');
+                if (modernRadio) {
+                    modernRadio.checked = true;
+                }
             });
             
-            // When modern radio is clicked directly
-           // In the #setupPollEventListeners method, add this force update:
-modernRadio.addEventListener('click', (e) => {
-    e.stopPropagation();
-    
-    // Force uncheck all radios first
-    pollChoices.forEach((c, i) => {
-        const otherModernRadio = c.querySelector('.choice-radio');
-        const otherOriginalRadio = originalRadios[i];
-        if (otherModernRadio) {
-            otherModernRadio.checked = false;
-            // Force CSS update
-            otherModernRadio.style.cssText = '';
-        }
-        if (otherOriginalRadio) otherOriginalRadio.checked = false;
-    });
-    
-    // Check this radio
-    modernRadio.checked = true;
-    if (originalRadio) originalRadio.checked = true;
-    
-    // Force CSS update by toggling classes
-    modernRadio.classList.remove('checked');
-    void modernRadio.offsetWidth; // Trigger reflow
-    modernRadio.classList.add('checked');
-    
-    // Update visual selection
-    pollChoices.forEach(c => c.classList.remove('selected'));
-    choice.classList.add('selected');
-    
-    // Dispatch change event
-    const changeEvent = new Event('change', { bubbles: true });
-    modernRadio.dispatchEvent(changeEvent);
-    if (originalRadio) originalRadio.dispatchEvent(changeEvent);
-});
-            
-            // When modern radio changes (e.g., from keyboard)
-modernRadio.addEventListener('change', (e) => {
-    if (modernRadio.checked) {
-        // Force the ::before pseudo-element to show
-        modernRadio.style.setProperty('--radio-checked', 'true');
-        
-        pollChoices.forEach(c => {
-            c.classList.remove('selected');
-            const otherRadio = c.querySelector('.choice-radio');
-            if (otherRadio && otherRadio !== modernRadio) {
-                otherRadio.checked = false;
-                otherRadio.style.removeProperty('--radio-checked');
-            }
-        });
-        
-        choice.classList.add('selected');
-        
-        // Sync with original radio
-        if (originalRadio) {
-            originalRadio.checked = true;
-        }
-    }
-});
-            
-            // Sync from original radio to modern (in case something else changes it)
-            originalRadio.addEventListener('change', (e) => {
-                if (originalRadio.checked) {
-                    // Uncheck all other radios
-                    originalRadios.forEach((r, i) => {
-                        if (i !== index) {
-                            r.checked = false;
-                            const otherChoice = pollChoices[i];
-                            const otherRadio = otherChoice?.querySelector('.choice-radio');
-                            if (otherRadio) otherRadio.checked = false;
-                            otherChoice?.classList.remove('selected');
-                        }
+            // Also handle the visual radio clicks
+            const modernRadio = choice.querySelector('.choice-radio');
+            if (modernRadio) {
+                modernRadio.addEventListener('click', (e) => {
+                    // Uncheck all original radios
+                    originalRadios.forEach(r => {
+                        r.checked = false;
                     });
                     
-                    // Check modern radio
-                    modernRadio.checked = true;
+                    // Check this original radio
+                    originalRadio.checked = true;
                     
                     // Update visual selection
                     pollChoices.forEach(c => c.classList.remove('selected'));
                     choice.classList.add('selected');
-                } else {
-                    modernRadio.checked = false;
-                    choice.classList.remove('selected');
-                }
-            });
-            
-            // Handle label clicks
-            const label = choice.querySelector('.choice-label');
-            if (label) {
-                label.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    
-                    // Uncheck all radios
-                    originalRadios.forEach(r => r.checked = false);
-                    pollChoices.forEach(c => {
-                        const mr = c.querySelector('.choice-radio');
-                        if (mr) mr.checked = false;
-                        c.classList.remove('selected');
-                    });
-                    
-                    // Check this radio
-                    originalRadio.checked = true;
-                    modernRadio.checked = true;
-                    choice.classList.add('selected');
-                    
-                    // Dispatch events
-                    originalRadio.dispatchEvent(new Event('change', { bubbles: true }));
-                    modernRadio.dispatchEvent(new Event('change', { bubbles: true }));
                 });
             }
+            
+            // Sync when original radio changes (from elsewhere)
+            originalRadio.addEventListener('change', (e) => {
+                if (originalRadio.checked) {
+                    pollChoices.forEach(c => c.classList.remove('selected'));
+                    choice.classList.add('selected');
+                    
+                    const modernRadio = choice.querySelector('.choice-radio');
+                    if (modernRadio) {
+                        modernRadio.checked = true;
+                    }
+                }
+            });
         });
         
         // Vote button
@@ -5412,15 +5296,6 @@ modernRadio.addEventListener('change', (e) => {
                 }, 50);
             });
         }
-    }
-    
-    // Handle poll refresh button if exists
-    const refreshBtn = modernPoll.querySelector('button[onclick*="location.reload"]');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            location.reload();
-        });
     }
 }
 
