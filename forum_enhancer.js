@@ -5159,16 +5159,14 @@ class PostModernizer {
         pollContainer.insertBefore(modernPoll, originalPollContent);
         pollContainer.classList.add('poll-modernized');
         
-        // Add event listeners (only for vote state)
-        if (isVoteState) {
-            this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
-                isVoteState: isVoteState,
-                isVotedState: isVotedState,
-                originalCancelBtn: originalCancelBtn,
-                originalVoteBtn: originalVoteBtn,
-                originalViewResultsBtn: originalViewResultsBtn
-            });
-        }
+        // Add event listeners
+        this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
+            isVoteState: isVoteState,
+            isVotedState: isVotedState,
+            originalCancelBtn: originalCancelBtn,
+            originalVoteBtn: originalVoteBtn,
+            originalViewResultsBtn: originalViewResultsBtn
+        });
         
         // Animate percentage bars (only for results/voted states)
         if (isVotedState || isResultsState) {
@@ -5347,17 +5345,24 @@ class PostModernizer {
         }
     }
     
-    // Cancel vote button (voted state)
+    // Cancel vote button (voted state) - THIS WAS MISSING!
     if (isVotedState) {
         const cancelBtn = modernPoll.querySelector('.cancel-vote-btn');
+        console.log('Cancel button exists:', !!cancelBtn, 'Original cancel button exists:', !!originalCancelBtn);
+        
         if (cancelBtn && originalCancelBtn) {
             cancelBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                console.log('Cancel vote button clicked');
                 setTimeout(() => {
+                    console.log('Clicking original cancel button');
                     originalCancelBtn.click();
                 }, 50);
             });
+        } else {
+            console.warn('Cancel vote button not found or original cancel button not found');
+            console.log('Modern poll HTML:', modernPoll.outerHTML);
         }
     }
 }
