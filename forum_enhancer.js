@@ -5296,27 +5296,28 @@ modernRadio.addEventListener('click', (e) => {
 });
             
             // When modern radio changes (e.g., from keyboard)
-            modernRadio.addEventListener('change', (e) => {
-                if (modernRadio.checked) {
-                    // Uncheck all other radios
-                    originalRadios.forEach((r, i) => {
-                        if (i !== index) {
-                            r.checked = false;
-                            const otherChoice = pollChoices[i];
-                            const otherRadio = otherChoice?.querySelector('.choice-radio');
-                            if (otherRadio) otherRadio.checked = false;
-                            otherChoice?.classList.remove('selected');
-                        }
-                    });
-                    
-                    // Check original radio
-                    originalRadio.checked = true;
-                    
-                    // Update visual selection
-                    pollChoices.forEach(c => c.classList.remove('selected'));
-                    choice.classList.add('selected');
-                }
-            });
+modernRadio.addEventListener('change', (e) => {
+    if (modernRadio.checked) {
+        // Force the ::before pseudo-element to show
+        modernRadio.style.setProperty('--radio-checked', 'true');
+        
+        pollChoices.forEach(c => {
+            c.classList.remove('selected');
+            const otherRadio = c.querySelector('.choice-radio');
+            if (otherRadio && otherRadio !== modernRadio) {
+                otherRadio.checked = false;
+                otherRadio.style.removeProperty('--radio-checked');
+            }
+        });
+        
+        choice.classList.add('selected');
+        
+        // Sync with original radio
+        if (originalRadio) {
+            originalRadio.checked = true;
+        }
+    }
+});
             
             // Sync from original radio to modern (in case something else changes it)
             originalRadio.addEventListener('change', (e) => {
