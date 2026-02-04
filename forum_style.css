@@ -1061,124 +1061,142 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  display: block}
 
 /*============================================
- modern poll styles============================================*/ 
-.modern-poll {background: var(--surface-color); 
- border: 1px solid var(--border-color); 
- border-radius: var(--radius); 
- box-shadow: var(--shadow-sm); 
- margin: var(--space-md) 0; 
- overflow: hidden; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
- 
-.modern-poll:hover {box-shadow: var(--shadow); 
- transform: translatey(-1px)} 
- 
-.poll-header {align-items: center; 
- background: var(--bg-color); 
- border-bottom: 1px solid var(--border-color); 
- display: flex; 
- gap: 12px; 
- justify-content: space-between; 
- padding: var(--space-md)} 
- 
-.poll-icon {align-items: center; 
- background: var(--secondary-color); 
- border-radius: 6px; 
- display: flex; 
- flex-shrink: 0; 
- height: 28px; 
- justify-content: center; 
- width: 28px} 
- 
-.poll-icon i {color: #FFF; 
- font-size: 12px} 
- 
-.poll-title {color: var(--text-primary); 
-display:flex; 
- font-size: var(--text-sm); 
-flex: 1; 
- margin: 0} 
- 
-.poll-stats {align-items: center; 
- color: var(--text-tertiary); 
- display: flex; 
- font-size: var(--text-xs); 
- gap: 6px; 
- white-space: nowrap} 
- 
-.poll-choices {padding: var(--space-md)} 
- 
-.poll-choice {align-items: center; 
- background: var(--bg-color); 
- border: 1px solid var(--border-color); 
- border-radius: var(--radius); 
- cursor: pointer; 
- display: flex; 
- gap: 12px; 
- margin-bottom: 10px; 
- padding: var(--space-sm); 
- position: relative; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
- 
-.poll-choice:last-child {margin-bottom: 0} 
- 
-.poll-choice:hover {background: var(--hover-color); 
- border-color: var(--primary-color); 
- transform: translatex(2px)} 
- 
-.poll-choice.selected {background: rgba(5, 150, 105, 0.1); 
- border-color: var(--primary-color); 
- box-shadow: 0 2px 8px rgba(5, 150, 105, 0.15)} 
- 
-.poll-choice.max {background: rgba(124, 58, 237, 0.1); 
- border-color: var(--secondary-color)} 
- 
-.poll-choice.max:hover {background: rgba(124, 58, 237, 0.15); 
- border-color: var(--secondary-color)} 
+ MODERN POLL STYLES - CONSISTENT RADIO BUTTONS
+============================================*/
 
-/* ============================================
-   POLL RADIO BUTTON STYLES - UPDATED
-   ============================================ */
-
-/* Poll-specific radio button styles */
-.poll-choice input[type="radio"] {
-  align-items: center;
-  appearance: none;
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 50%;
-  display: flex;
-  font-size: .5rem;
-  height: 1rem;
-  justify-content: center;
-  margin: 0;
-  outline-style: none;
-  padding: 0;
-  text-align: center;
-  width: 1rem;
-  flex-shrink: 0;
-  cursor: pointer;
+.modern-poll {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    margin: var(--space-md) 0;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.modern-poll:hover {
+    box-shadow: var(--shadow);
+    transform: translatey(-1px);
+}
+
+.poll-header {
+    align-items: center;
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding: var(--space-md);
+}
+
+.poll-icon {
+    align-items: center;
+    background: var(--secondary-color);
+    border-radius: 6px;
+    display: flex;
+    flex-shrink: 0;
+    height: 28px;
+    justify-content: center;
+    width: 28px;
+}
+
+.poll-icon i {
+    color: #FFF;
+    font-size: 12px;
+}
+
+.poll-title {
+    color: var(--text-primary);
+    display: flex;
+    font-size: var(--text-sm);
+    flex: 1;
+    margin: 0;
+}
+
+.poll-stats {
+    align-items: center;
+    color: var(--text-tertiary);
+    display: flex;
+    font-size: var(--text-xs);
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.poll-choices {
+    padding: var(--space-md);
+}
+
+.poll-choice {
+    align-items: center;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: var(--space-sm);
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.poll-choice:last-child {
+    margin-bottom: 0;
+}
+
+.poll-choice:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    transform: translatex(2px);
+}
+
+.poll-choice.selected {
+    background: rgba(5, 150, 105, 0.1);
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.15);
+}
+
+.poll-choice.max {
+    background: rgba(124, 58, 237, 0.1);
+    border-color: var(--secondary-color);
+}
+
+.poll-choice.max:hover {
+    background: rgba(124, 58, 237, 0.15);
+    border-color: var(--secondary-color);
+}
+
+/* ===========================================
+   POLL RADIO BUTTONS - WORKING WITH GENERIC STYLES
+   =========================================== */
+
+/* Ensure poll radios use the generic radio button styles */
+.poll-choice input[type="radio"] {
+    flex-shrink: 0;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Override for poll radio checked state */
 .poll-choice input[type="radio"]:checked {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
 }
 
 .poll-choice input[type="radio"]:checked::before {
-  color: #fff;
-  content: '\f111';
-  font-family: "Font Awesome 6 Pro";
-  font-weight: 900;
+    color: #fff !important;
+    content: '\f111' !important;
+    font-family: "Font Awesome 6 Pro" !important;
+    font-weight: 900 !important;
 }
 
-/* Disabled state for poll results */
+/* Disabled radios in results state */
 .poll-choice input[type="radio"]:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-/* Only show checkmark for selected choice in results */
+/* Selected choice in results should show checkmark */
 .poll-choice.selected input[type="radio"]:checked:disabled {
     background: var(--primary-color) !important;
     border-color: var(--primary-color) !important;
@@ -1191,7 +1209,7 @@ flex: 1;
     font-weight: 900 !important;
 }
 
-/* Non-selected choices in results should not show checkmark */
+/* Non-selected choices in results should NOT show checkmark */
 .poll-choice:not(.selected) input[type="radio"]:checked:disabled {
     background: none !important;
     border-color: var(--border-color) !important;
@@ -1201,222 +1219,294 @@ flex: 1;
     content: '' !important;
 }
 
-/* Ensure poll choice radios are properly aligned */
-.poll-choice {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.choice-radio {
-    order: -1; /* Put radio before label */
-}
+/* ===========================================
+   POLL CONTENT STYLES
+   =========================================== */
 
 .choice-label {
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
     flex: 1;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    margin: 0;
+}
+
+.poll-choice.max .choice-label {
+    color: var(--secondary-color);
+    font-weight: 600;
+}
+
+.choice-label strong {
+    font-weight: 700;
+}
+
+.choice-stats {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.choice-percentage {
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    min-width: 50px;
+    text-align: right;
+}
+
+.poll-choice.max .choice-percentage {
+    color: var(--secondary-color);
+    font-weight: 700;
+}
+
+.choice-bar {
+    background: var(--bg-color);
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    width: 100px;
+}
+
+.choice-fill {
+    background: var(--primary-color);
+    border-radius: 4px;
+    height: 100%;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0;
+}
+
+.poll-choice.max .choice-fill {
+    background: var(--secondary-color);
+}
+
+.choice-votes {
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    min-width: 40px;
+    text-align: right;
+}
+
+.poll-choice.max .choice-votes {
+    color: var(--secondary-color);
+    font-weight: 600;
+}
+
+.poll-footer {
+    align-items: center;
+    background: var(--bg-color);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding: var(--space-md);
+}
+
+.poll-message {
+    color: var(--text-secondary);
+    display: flex;
+    font-size: var(--text-sm);
+    flex: 1;
+    margin: 0;
+}
+
+.poll-message strong {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.poll-message .poll-choice-name {
+    background: rgba(5, 150, 105, 0.15);
+    border-radius: 4px;
+    color: var(--primary-color);
+    display: inline-block;
+    font-weight: 600;
+    margin: 0 4px;
+    padding: 2px 6px;
+}
+
+.poll-actions {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+}
+
+.poll-btn {
+    align-items: center;
+    background: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    border-radius: var(--radius);
+    color: #FFF;
+    cursor: pointer;
+    display: inline-flex;
+    font-family: quicksand;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    gap: 6px;
+    padding: var(--pad-3) var(--pad-5);
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.poll-btn:hover {
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
+    color: #FFF;
+    transform: translatey(-1px);
+}
+
+.poll-btn.secondary {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+.poll-btn.secondary:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+}
+
+.poll-btn.delete {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+}
+
+.poll-btn.delete:hover {
+    background: #C53030;
+    border-color: #C53030;
+}
+
+.poll-btn i {
+    font-size: 12px;
+}
+
+.poll-form {
+    margin: 0;
+}
+
+.poll-form .modern-poll {
+    margin: 0;
+}
+
+[data-theme="light"] .poll-choice.selected {
+    background: rgba(5, 150, 105, 0.08);
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.1);
+}
+
+[data-theme="light"] .poll-choice.max {
+    background: rgba(124, 58, 237, 0.08);
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1);
+}
+
+@media(max-width: 768px) {
+    .poll-choice {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+    }
+    
+    .choice-stats {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+        justify-content: flex-end;
+        margin-left: 0;
+        margin-top: var(--space-xs);
+        width: 100%;
+    }
+    
+    .choice-bar {
+        order: 1;
+        width: 100%;
+    }
+    
+    .choice-percentage {
+        order: 2;
+        min-width: auto;
+    }
+    
+    .choice-votes {
+        order: 3;
+        min-width: auto;
+    }
+    
+    .poll-footer {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-sm);
+    }
+    
+    .poll-actions {
+        justify-content: flex-end;
+    }
+}
+
+/*============================================
+ POLL NOTIFICATION
+============================================*/
+
+.poll-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    z-index: 9;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transform: translatex(calc(100% + 20px));
+    opacity: 0;
+    transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.poll-notification.warning {
+    background: var(--warning-color);
+}
+
+.poll-notification i {
+    font-size: 14px;
+}
+
+/* ===========================================
+   ENTIRE POLL CHOICE CLICKABLE AREA
+   =========================================== */
+
+.poll-choice {
+    position: relative;
     cursor: pointer;
 }
 
-/* Hover state for poll choices */
-.poll-choice:hover:not(.selected) {
-    background: var(--hover-color);
+.poll-choice::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+    cursor: pointer;
 }
 
-/* Selected state */
-.poll-choice.selected {
-    background: rgba(5, 150, 105, 0.1);
-    border-color: var(--primary-color);
+.choice-radio {
+    cursor: pointer;
+    z-index: 1;
+    position: relative;
 }
- 
-.choice-label {color: var(--text-primary); 
- cursor: pointer; 
- display:flex; 
- flex: 1; 
- font-size: var(--text-sm); 
- font-weight: 500; 
- margin: 0} 
- 
-.poll-choice.max .choice-label {color: var(--secondary-color); 
- font-weight: 600} 
- 
-.choice-label strong {font-weight: 700} 
- 
-.choice-stats {align-items: center; 
- display: flex; 
- gap: 12px; 
- margin-left: auto} 
- 
-.choice-percentage {color: var(--text-secondary); 
- font-size: var(--text-xs); 
- font-weight: 600; 
- min-width: 50px; 
- text-align: right} 
- 
-.poll-choice.max .choice-percentage {color: var(--secondary-color); 
- font-weight: 700} 
- 
-.choice-bar {background: var(--bg-color); 
- border-radius: 4px; 
- height: 8px; 
- overflow: hidden; 
- width: 100px} 
- 
-.choice-fill {background: var(--primary-color); 
- border-radius: 4px; 
- height: 100%; 
- transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); 
- width: 0} 
- 
-.poll-choice.max .choice-fill {background: var(--secondary-color)} 
- 
-.choice-votes {color: var(--text-tertiary); 
- font-size: var(--text-xs); 
- font-weight: 500; 
- min-width: 40px; 
- text-align: right} 
- 
-.poll-choice.max .choice-votes {color: var(--secondary-color); 
- font-weight: 600} 
- 
-.poll-footer {align-items: center; 
- background: var(--bg-color); 
- border-top: 1px solid var(--border-color); 
- display: flex; 
- gap: 12px; 
- justify-content: space-between; 
- padding: var(--space-md)} 
- 
-.poll-message {color: var(--text-secondary); 
-display:flex; 
- font-size: var(--text-sm); 
- flex: 1; 
- margin: 0} 
- 
-.poll-message strong {color: var(--primary-color); 
- font-weight: 600} 
- 
-.poll-message .poll-choice-name {background: rgba(5, 150, 105, 0.15); 
- border-radius: 4px; 
- color: var(--primary-color); 
- display: inline-block; 
- font-weight: 600; 
- margin: 0 4px; 
- padding: 2px 6px} 
- 
-.poll-actions {align-items: center; 
- display: flex; 
- gap: 8px} 
- 
-.poll-btn {align-items: center; 
- background: var(--primary-color); 
- border: 1px solid var(--primary-color); 
- border-radius: var(--radius); 
- color: #FFF; 
- cursor: pointer; 
- display: inline-flex;
- font-family: quicksand;
- font-size: var(--text-sm); 
- font-weight: 500; 
- gap: 6px; 
- padding: var(--pad-3) var(--pad-5); 
- text-decoration: none; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
- 
-.poll-btn:hover {background: var(--primary-dark); 
- border-color: var(--primary-dark); 
- color: #FFF; 
- transform: translatey(-1px)} 
- 
-.poll-btn.secondary {background: transparent; 
- border-color: var(--border-color); 
- color: var(--text-secondary)} 
- 
-.poll-btn.secondary:hover {background: var(--hover-color); 
- border-color: var(--primary-color); 
- color: var(--text-primary)} 
- 
-.poll-btn.delete {background: var(--danger-color); 
- border-color: var(--danger-color)} 
- 
-.poll-btn.delete:hover {background: #C53030; 
- border-color: #C53030} 
- 
-.poll-btn i {font-size: 12px} 
- 
-.poll-form {margin: 0} 
- 
-.poll-form .modern-poll {margin: 0} 
- 
-[data-theme="light"] .poll-choice.selected {background: rgba(5, 150, 105, 0.08); 
- box-shadow: 0 2px 8px rgba(5, 150, 105, 0.1)} 
- 
-[data-theme="light"] .poll-choice.max {background: rgba(124, 58, 237, 0.08); 
- box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1)} 
- 
-@media(max-width: 768px) {.poll-choice {flex-wrap: wrap; 
- gap: var(--space-sm)} 
- 
- .choice-stats {flex-wrap: wrap; 
- gap: var(--space-xs); 
- justify-content: flex-end; 
- margin-left: 0; 
- margin-top: var(--space-xs); 
- width: 100%} 
- 
- .choice-bar {order: 1; 
- width: 100%} 
- 
- .choice-percentage {order: 2; 
- min-width: auto} 
- 
- .choice-votes {order: 3; 
- min-width: auto} 
- 
- .poll-footer {flex-direction: column; 
- align-items: stretch; 
- gap: var(--space-sm)} 
- 
- .poll-actions {justify-content: flex-end}}
 
-/*============================================
- poll notification============================================*/ 
-.poll-notification {position: fixed; 
- bottom: 20px; 
- right: 20px; 
- padding: 12px 20px; 
- background: var(--primary-color); 
- color: white; 
- border-radius: var(--radius); 
- box-shadow: var(--shadow-lg); 
- z-index: 9; 
- font-weight: 500; 
- display: flex; 
- align-items: center; 
- gap: 8px; 
- transform: translatex(calc(100% + 20px)); 
- opacity: 0; 
- transition: transform 0.3s ease-out, opacity 0.3s ease-out; 
- pointer-events: none; 
- white-space: nowrap} 
- 
-.poll-notification.warning {background: var(--warning-color)} 
- 
-.poll-notification i {font-size: 14px} 
-.poll-choice {position: relative; cursor: pointer} 
- 
-.choice-radio {cursor: pointer; z-index: 1} 
- 
-.choice-label {cursor: pointer; z-index: 1; position: relative} 
- 
-/* Make the entire choice area clickable */ 
-.poll-choice::after {content: ''; 
- position: absolute; 
- top: 0; 
- left: 0; 
- right: 0; 
- bottom: 0; 
- z-index: 0; 
- cursor: pointer}
+.choice-label {
+    cursor: pointer;
+    z-index: 1;
+    position: relative;
+}
 
 /*============================================
  modern quote styles============================================*/
