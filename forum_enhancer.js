@@ -5008,7 +5008,7 @@ class PostModernizer {
                 
                 html += '<div class="poll-choice" data-choice-index="' + index + '">' +
                     '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
-                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '">' +
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
                     '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
                     this.#escapeHtml(choiceText) + '</label>' +
                     '</div>';
