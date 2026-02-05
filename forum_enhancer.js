@@ -8515,62 +8515,92 @@ class PostModernizer {
     });
 }
 
-    #enhanceIframesInElement(element) {
-        element.querySelectorAll('iframe').forEach(iframe => {
-            const originalWidth = iframe.getAttribute('width');
-            const originalHeight = iframe.getAttribute('height');
-
-            const commonSizes = {
-                'youtube.com': { width: '560', height: '315' },
-                'youtu.be': { width: '560', height: '315' },
-                'vimeo.com': { width: '640', height: '360' },
-                'soundcloud.com': { width: '100%', height: '166' },
-                'twitter.com': { width: '550', height: '400' },
-                'x.com': { width: '550', height: '400' },
-                'default': { width: '100%', height: '400' }
-            };
-
-            let src = iframe.src || iframe.dataset.src || '';
-            let dimensions = commonSizes.default;
-
-            for (let domain in commonSizes) {
-                if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
-                    dimensions = commonSizes[domain];
-                    break;
-                }
+   #enhanceIframesInElement(element) {
+    element.querySelectorAll('iframe').forEach(iframe => {
+        // Skip if iframe is already inside a wrapper
+        if (iframe.closest('.iframe-wrapper')) {
+            return;
+        }
+        
+        // Skip if iframe is already inside a responsive container (like the YouTube embed)
+        if (iframe.parentElement && 
+            iframe.parentElement.style.paddingBottom && 
+            iframe.parentElement.style.position === 'relative') {
+            // This is already a responsive container, just ensure proper styles
+            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            
+            // Add our wrapper class for consistency
+            iframe.parentElement.classList.add('iframe-wrapper');
+            return;
+        }
+        
+        const originalWidth = iframe.getAttribute('width');
+        const originalHeight = iframe.getAttribute('height');
+        
+        const commonSizes = {
+            'youtube.com': { width: '560', height: '315' },
+            'youtu.be': { width: '560', height: '315' },
+            'vimeo.com': { width: '640', height: '360' },
+            'soundcloud.com': { width: '100%', height: '166' },
+            'twitter.com': { width: '550', height: '400' },
+            'x.com': { width: '550', height: '400' },
+            'default': { width: '100%', height: '400' }
+        };
+        
+        let src = iframe.src || iframe.dataset.src || '';
+        let dimensions = commonSizes.default;
+        
+        for (let domain in commonSizes) {
+            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                dimensions = commonSizes[domain];
+                break;
             }
-
-            if (!originalWidth || !originalHeight) {
-                iframe.setAttribute('width', dimensions.width);
-                iframe.setAttribute('height', dimensions.height);
-
-                const wrapper = document.createElement('div');
-                wrapper.className = 'iframe-wrapper';
-
-                if (dimensions.width !== '100%') {
-                    const widthNum = parseInt(dimensions.width);
-                    const heightNum = parseInt(dimensions.height);
-                    if (widthNum > 0 && heightNum > 0) {
-                        const paddingBottom = (heightNum / widthNum * 100) + '%';
-                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-                    } else {
-                        wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-                    }
-                } else {
-                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-                }
-
-                iframe.parentNode.insertBefore(wrapper, iframe);
-                wrapper.appendChild(iframe);
-
-                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        }
+        
+        // If iframe already has width/height, use them
+        if (originalWidth && originalHeight) {
+            dimensions = { width: originalWidth, height: originalHeight };
+        }
+        
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'iframe-wrapper';
+        
+        // Calculate aspect ratio padding
+        if (dimensions.width !== '100%') {
+            const widthNum = parseInt(dimensions.width);
+            const heightNum = parseInt(dimensions.height);
+            if (widthNum > 0 && heightNum > 0) {
+                const paddingBottom = (heightNum / widthNum * 100) + '%';
+                wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+            } else {
+                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
             }
-
-            if (!iframe.hasAttribute('title')) {
-                iframe.setAttribute('title', 'Embedded content');
-            }
-        });
-    }
+        } else {
+            wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+        }
+        
+        // Move iframe into wrapper
+        iframe.parentNode.insertBefore(wrapper, iframe);
+        wrapper.appendChild(iframe);
+        
+        // Apply responsive styles to iframe
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        
+        // Set dimensions if not already set
+        if (!originalWidth) {
+            iframe.setAttribute('width', dimensions.width);
+        }
+        if (!originalHeight) {
+            iframe.setAttribute('height', dimensions.height);
+        }
+        
+        // Ensure title attribute
+        if (!iframe.hasAttribute('title')) {
+            iframe.setAttribute('title', 'Embedded content');
+        }
+    });
+}
 
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
