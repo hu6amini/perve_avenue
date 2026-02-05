@@ -8509,7 +8509,51 @@ class PostModernizer {
     });
     
     element.querySelectorAll('iframe, video').forEach(media => {
-        if (globalThis.mediaDimensionExtractor) {
+        // Skip if already enhanced (marked by #enhanceIframesInElement)
+        if (media.hasAttribute('data-enhanced')) {
+            return;
+        }
+        
+        const parent = media.parentElement;
+        const src = media.src || media.dataset.src || '';
+        
+        // Check if this is already in a responsive wrapper
+        const isAlreadyWrapped = media.closest('.iframe-wrapper') || 
+                                (parent && 
+                                 parent.style.position === 'relative' && 
+                                 (parent.style.paddingBottom || parent.style.height === '0'));
+        
+        if (isAlreadyWrapped) {
+            // Mark as enhanced
+            media.setAttribute('data-enhanced', 'true');
+            
+            // Ensure media has proper styles inside existing wrapper
+            media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            
+            // Add wrapper class if not already present
+            if (parent && !parent.classList.contains('iframe-wrapper')) {
+                parent.classList.add('iframe-wrapper');
+            }
+            return;
+        }
+        
+        // Check for YouTube responsive embeds specifically
+        if ((src.includes('youtube.com') || src.includes('youtu.be')) && 
+            parent && parent.style.position === 'relative' && 
+            parent.style.paddingBottom) {
+            
+            // Mark as enhanced
+            media.setAttribute('data-enhanced', 'true');
+            parent.classList.add('iframe-wrapper');
+            
+            // Ensure iframe has proper styles
+            media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            return;
+        }
+        
+        // For other iframes/videos, let mediaDimensionExtractor handle them
+        if (globalThis.mediaDimensionExtractor && 
+            typeof globalThis.mediaDimensionExtractor.extractDimensionsForElement === 'function') {
             globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
         }
     });
