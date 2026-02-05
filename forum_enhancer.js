@@ -8466,21 +8466,12 @@ class PostModernizer {
         return contentScore >= 4;
     }
 
-   #preserveMediaDimensionsInHTML(html) {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    
-    // Skip iframes that are already in proper responsive containers
-    tempDiv.querySelectorAll('iframe').forEach(iframe => {
-        if (iframe.closest('[style*="padding-bottom"]')) {
-            return;
-        }
-        this.#enhanceIframesInElement(tempDiv);
-    });
-    
-    this.#preserveMediaDimensions(tempDiv);
-    return tempDiv.innerHTML;
-}
+    #preserveMediaDimensionsInHTML(html) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        this.#preserveMediaDimensions(tempDiv);
+        return tempDiv.innerHTML;
+    }
 
 #preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
@@ -8518,128 +8509,68 @@ class PostModernizer {
     });
     
     element.querySelectorAll('iframe, video').forEach(media => {
-        // Skip if already in a wrapper (like YouTube embeds)
-        const parent = media.parentElement;
-        const isAlreadyWrapped = media.closest('.iframe-wrapper') || 
-                                (parent && 
-                                 parent.style.position === 'relative' && 
-                                 parent.style.paddingBottom && 
-                                 !parent.style.height);
-        
-        if (isAlreadyWrapped) {
-            // Ensure iframe has proper styles inside existing wrapper
-            if (media.tagName === 'IFRAME') {
-                media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-                // Add wrapper class if not already present
-                if (parent && !parent.classList.contains('iframe-wrapper')) {
-                    parent.classList.add('iframe-wrapper');
-                }
-            }
-            return;
-        }
-        
-        // Skip if this is a YouTube embed that already has proper responsive styling
-        const src = media.src || '';
-        if (src.includes('youtube.com') || src.includes('youtu.be')) {
-            // Check if parent has YouTube embed styling
-            if (parent && parent.style.position === 'relative' && parent.style.paddingBottom) {
-                media.style.cssText = 'position:absolute;width:100%;height:100%;left:0;top:0;';
-                return;
-            }
-        }
-        
         if (globalThis.mediaDimensionExtractor) {
             globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
         }
     });
 }
-    
-   #enhanceIframesInElement(element) {
-    element.querySelectorAll('iframe').forEach(iframe => {
-        // Skip if iframe is already inside a wrapper
-        if (iframe.closest('.iframe-wrapper')) {
-            return;
-        }
-        
-        // Skip if iframe is already inside a responsive container (like the YouTube embed)
-        if (iframe.parentElement && 
-            iframe.parentElement.style.paddingBottom && 
-            iframe.parentElement.style.position === 'relative') {
-            // This is already a responsive container, just ensure proper styles
-            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-            
-            // Add our wrapper class for consistency
-            iframe.parentElement.classList.add('iframe-wrapper');
-            return;
-        }
-        
-        const originalWidth = iframe.getAttribute('width');
-        const originalHeight = iframe.getAttribute('height');
-        
-        const commonSizes = {
-            'youtube.com': { width: '560', height: '315' },
-            'youtu.be': { width: '560', height: '315' },
-            'vimeo.com': { width: '640', height: '360' },
-            'soundcloud.com': { width: '100%', height: '166' },
-            'twitter.com': { width: '550', height: '400' },
-            'x.com': { width: '550', height: '400' },
-            'default': { width: '100%', height: '400' }
-        };
-        
-        let src = iframe.src || iframe.dataset.src || '';
-        let dimensions = commonSizes.default;
-        
-        for (let domain in commonSizes) {
-            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
-                dimensions = commonSizes[domain];
-                break;
+
+    #enhanceIframesInElement(element) {
+        element.querySelectorAll('iframe').forEach(iframe => {
+            const originalWidth = iframe.getAttribute('width');
+            const originalHeight = iframe.getAttribute('height');
+
+            const commonSizes = {
+                'youtube.com': { width: '560', height: '315' },
+                'youtu.be': { width: '560', height: '315' },
+                'vimeo.com': { width: '640', height: '360' },
+                'soundcloud.com': { width: '100%', height: '166' },
+                'twitter.com': { width: '550', height: '400' },
+                'x.com': { width: '550', height: '400' },
+                'default': { width: '100%', height: '400' }
+            };
+
+            let src = iframe.src || iframe.dataset.src || '';
+            let dimensions = commonSizes.default;
+
+            for (let domain in commonSizes) {
+                if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                    dimensions = commonSizes[domain];
+                    break;
+                }
             }
-        }
-        
-        // If iframe already has width/height, use them
-        if (originalWidth && originalHeight) {
-            dimensions = { width: originalWidth, height: originalHeight };
-        }
-        
-        // Create wrapper
-        const wrapper = document.createElement('div');
-        wrapper.className = 'iframe-wrapper';
-        
-        // Calculate aspect ratio padding
-        if (dimensions.width !== '100%') {
-            const widthNum = parseInt(dimensions.width);
-            const heightNum = parseInt(dimensions.height);
-            if (widthNum > 0 && heightNum > 0) {
-                const paddingBottom = (heightNum / widthNum * 100) + '%';
-                wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-            } else {
-                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+
+            if (!originalWidth || !originalHeight) {
+                iframe.setAttribute('width', dimensions.width);
+                iframe.setAttribute('height', dimensions.height);
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'iframe-wrapper';
+
+                if (dimensions.width !== '100%') {
+                    const widthNum = parseInt(dimensions.width);
+                    const heightNum = parseInt(dimensions.height);
+                    if (widthNum > 0 && heightNum > 0) {
+                        const paddingBottom = (heightNum / widthNum * 100) + '%';
+                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+                    } else {
+                        wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                    }
+                } else {
+                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                }
+
+                iframe.parentNode.insertBefore(wrapper, iframe);
+                wrapper.appendChild(iframe);
+
+                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
             }
-        } else {
-            wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-        }
-        
-        // Move iframe into wrapper
-        iframe.parentNode.insertBefore(wrapper, iframe);
-        wrapper.appendChild(iframe);
-        
-        // Apply responsive styles to iframe
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-        
-        // Set dimensions if not already set
-        if (!originalWidth) {
-            iframe.setAttribute('width', dimensions.width);
-        }
-        if (!originalHeight) {
-            iframe.setAttribute('height', dimensions.height);
-        }
-        
-        // Ensure title attribute
-        if (!iframe.hasAttribute('title')) {
-            iframe.setAttribute('title', 'Embedded content');
-        }
-    });
-}
+
+            if (!iframe.hasAttribute('title')) {
+                iframe.setAttribute('title', 'Embedded content');
+            }
+        });
+    }
 
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
