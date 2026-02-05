@@ -8466,12 +8466,21 @@ class PostModernizer {
         return contentScore >= 4;
     }
 
-    #preserveMediaDimensionsInHTML(html) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        this.#preserveMediaDimensions(tempDiv);
-        return tempDiv.innerHTML;
-    }
+   #preserveMediaDimensionsInHTML(html) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    
+    // Skip iframes that are already in proper responsive containers
+    tempDiv.querySelectorAll('iframe').forEach(iframe => {
+        if (iframe.closest('[style*="padding-bottom"]')) {
+            return;
+        }
+        this.#enhanceIframesInElement(tempDiv);
+    });
+    
+    this.#preserveMediaDimensions(tempDiv);
+    return tempDiv.innerHTML;
+}
 
 #preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
