@@ -8466,22 +8466,12 @@ class PostModernizer {
         return contentScore >= 4;
     }
 
-#preserveMediaDimensionsInHTML(html) {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    this.#preserveMediaDimensions(tempDiv);
-    
-    // IMPORTANT: After processing, ensure iframes are still present
-    // Check if we accidentally removed the iframe content
-    const iframes = tempDiv.querySelectorAll('iframe');
-    if (iframes.length === 0 && html.includes('<iframe')) {
-        // If we lost the iframes, return the original HTML
-        // This preserves YouTube's original wrapper structure
-        return html;
+    #preserveMediaDimensionsInHTML(html) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        this.#preserveMediaDimensions(tempDiv);
+        return tempDiv.innerHTML;
     }
-    
-    return tempDiv.innerHTML;
-}
 
 #preserveMediaDimensions(element) {
     element.querySelectorAll('img').forEach(img => {
@@ -8518,112 +8508,13 @@ class PostModernizer {
         }
     });
     
-    element.querySelectorAll('iframe').forEach(iframe => {
-        // Check if iframe is already inside a responsive wrapper
-        const parent = iframe.parentElement;
-        
-        // Check for YouTube-style wrapper: div with padding-bottom
-        const isYouTubeWrapper = parent && 
-            parent.tagName === 'DIV' && 
-            (parent.style.paddingBottom === '56.25%' || 
-             (parent.style.height === '0' && parent.style.position === 'relative') ||
-             parent.getAttribute('style')?.includes('padding-bottom:56.25%'));
-        
-        // Check for our own wrapper
-        const isOurWrapper = parent && parent.classList.contains('iframe-wrapper');
-        
-        // If it's already in a proper wrapper, just ensure iframe styling
-        if (isYouTubeWrapper || isOurWrapper) {
-            // Ensure iframe has proper styling
-            iframe.style.width = '100%';
-            iframe.style.height = '100%';
-            iframe.style.position = 'absolute';
-            iframe.style.top = '0';
-            iframe.style.left = '0';
-            iframe.style.border = '0';
-            
-            // If it's a YouTube wrapper, add our class to it
-            if (isYouTubeWrapper && !isOurWrapper) {
-                parent.classList.add('iframe-wrapper');
-            }
-            return;
-        }
-        
-        // For standalone iframes, apply our wrapper logic
-        const originalWidth = iframe.getAttribute('width');
-        const originalHeight = iframe.getAttribute('height');
-        
-        const commonSizes = {
-            'youtube.com': { width: '560', height: '315' },
-            'youtu.be': { width: '560', height: '315' },
-            'vimeo.com': { width: '640', height: '360' },
-            'soundcloud.com': { width: '100%', height: '166' },
-            'twitter.com': { width: '550', height: '400' },
-            'x.com': { width: '550', height: '400' },
-            'default': { width: '100%', height: '400' }
-        };
-        
-        let src = iframe.src || iframe.dataset.src || '';
-        let dimensions = commonSizes.default;
-        
-        for (let domain in commonSizes) {
-            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
-                dimensions = commonSizes[domain];
-                break;
-            }
-        }
-        
-        // Use original dimensions if available, otherwise use defaults
-        const width = originalWidth || dimensions.width;
-        const height = originalHeight || dimensions.height;
-        
-        // Create wrapper
-        const wrapper = document.createElement('div');
-        wrapper.className = 'iframe-wrapper';
-        
-        if (width !== '100%') {
-            const widthNum = parseInt(width);
-            const heightNum = parseInt(height);
-            if (widthNum > 0 && heightNum > 0) {
-                const paddingBottom = (heightNum / widthNum * 100) + '%';
-                wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-            } else {
-                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-            }
-        } else {
-            wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-        }
-        
-        // Insert wrapper and move iframe into it
-        iframe.parentNode.insertBefore(wrapper, iframe);
-        wrapper.appendChild(iframe);
-        
-        // Style the iframe
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-        
-        if (!iframe.hasAttribute('title')) {
-            iframe.setAttribute('title', 'Embedded content');
-        }
-        
-        // Ensure loading attribute is set
-        if (!iframe.hasAttribute('loading')) {
-            iframe.setAttribute('loading', 'lazy');
-        }
-        
-        // Ensure allowfullscreen attribute is preserved
-        if (iframe.hasAttribute('allowfullscreen') && !iframe.hasAttribute('allowFullScreen')) {
-            iframe.setAttribute('allowFullScreen', '');
+    element.querySelectorAll('iframe, video').forEach(media => {
+        if (globalThis.mediaDimensionExtractor) {
+            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
         }
     });
-    
-    // Extract dimensions for other media types
-    if (globalThis.mediaDimensionExtractor) {
-        element.querySelectorAll('video').forEach(media => {
-            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
-        });
-    }
 }
-    
+
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
             const originalWidth = iframe.getAttribute('width');
