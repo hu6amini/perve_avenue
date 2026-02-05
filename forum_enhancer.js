@@ -8509,12 +8509,42 @@ class PostModernizer {
     });
     
     element.querySelectorAll('iframe, video').forEach(media => {
+        // Skip if already in a wrapper (like YouTube embeds)
+        const parent = media.parentElement;
+        const isAlreadyWrapped = media.closest('.iframe-wrapper') || 
+                                (parent && 
+                                 parent.style.position === 'relative' && 
+                                 parent.style.paddingBottom && 
+                                 !parent.style.height);
+        
+        if (isAlreadyWrapped) {
+            // Ensure iframe has proper styles inside existing wrapper
+            if (media.tagName === 'IFRAME') {
+                media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+                // Add wrapper class if not already present
+                if (parent && !parent.classList.contains('iframe-wrapper')) {
+                    parent.classList.add('iframe-wrapper');
+                }
+            }
+            return;
+        }
+        
+        // Skip if this is a YouTube embed that already has proper responsive styling
+        const src = media.src || '';
+        if (src.includes('youtube.com') || src.includes('youtu.be')) {
+            // Check if parent has YouTube embed styling
+            if (parent && parent.style.position === 'relative' && parent.style.paddingBottom) {
+                media.style.cssText = 'position:absolute;width:100%;height:100%;left:0;top:0;';
+                return;
+            }
+        }
+        
         if (globalThis.mediaDimensionExtractor) {
             globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
         }
     });
 }
-
+    
    #enhanceIframesInElement(element) {
     element.querySelectorAll('iframe').forEach(iframe => {
         // Skip if iframe is already inside a wrapper
