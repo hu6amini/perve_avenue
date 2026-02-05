@@ -7846,7 +7846,7 @@ class PostModernizer {
         element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
-   #cleanupPostContentStructure(contentElement) {
+#cleanupPostContentStructure(contentElement) {
     // Skip if in editor
     if (this.#isInEditor(contentElement)) {
         return;
@@ -7910,7 +7910,7 @@ class PostModernizer {
     this.#processSignature(contentElement);
     this.#cleanInvalidAttributes(contentElement);
 }
-
+    
 #protectAndRepairTable(table) {
     table.setAttribute('data-table-protected', 'true');
     
