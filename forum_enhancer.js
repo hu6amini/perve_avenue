@@ -8466,12 +8466,12 @@ class PostModernizer {
         return contentScore >= 4;
     }
 
-    #preserveMediaDimensionsInHTML(html) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        this.#preserveMediaDimensions(tempDiv);
-        return tempDiv.innerHTML;
-    }
+#preserveMediaDimensionsInHTML(html) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    this.#preserveMediaDimensions(tempDiv);
+    return tempDiv.innerHTML;
+}
 
 #preserveMediaDimensions(element) {
     // Skip if in editor
