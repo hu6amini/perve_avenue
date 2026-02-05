@@ -50,14 +50,8 @@ document.head.appendChild(instantPagePreload);
             "https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.0/moment-timezone-with-data.min.js"
         ]);
         
-        // Add external platform scripts
-        const platformScripts = Object.freeze([
-            "https://platform.twitter.com/widgets.js",
-            "https://platform.instagram.com/en_US/embeds.js"
-        ]);
-        
         requestIdleCallback(() => {
-            // Load main scripts
+            // Load main scripts with defer (they need to execute in order)
             const n = e.map((e) => new Promise((n, t) => {
                 const s = document.createElement("script");
                 Object.assign(s, {
@@ -71,21 +65,26 @@ document.head.appendChild(instantPagePreload);
                 document.head.appendChild(s);
             }));
             
-            // Load platform scripts with defer
-            const platformPromises = platformScripts.map((src) => new Promise((resolve, reject) => {
-                const script = document.createElement("script");
-                Object.assign(script, {
-                    src: src,
-                    defer: true,
-                    // Note: These external scripts may not support crossOrigin or referrerPolicy
-                    // Let the browser handle them with default behavior
-                    onload: resolve,
-                    onerror: reject
+            Promise.allSettled(n).finally(() => {
+                // Load platform scripts with async (they're self-contained and don't depend on order)
+                // They load after main libraries but before forum enhancer
+                const platformScripts = [
+                    "https://platform.twitter.com/widgets.js",
+                    "https://platform.instagram.com/en_US/embeds.js"
+                ];
+                
+                platformScripts.forEach((src) => {
+                    const script = document.createElement("script");
+                    Object.assign(script, {
+                        src: src,
+                        async: true,
+                        // No defer - these should execute as soon as they load
+                        // They'll be non-blocking due to async
+                        referrerPolicy: "no-referrer"
+                    });
+                    document.head.appendChild(script);
                 });
-                document.head.appendChild(script);
-            }));
-            
-            Promise.allSettled([...n, ...platformPromises]).finally(() => {
+                
                 // Add forum_core_observer.js with same attributes as pa_scripts
                 const forumCoreObserver = document.createElement("script");
                 Object.assign(forumCoreObserver, {
