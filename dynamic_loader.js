@@ -50,7 +50,14 @@ document.head.appendChild(instantPagePreload);
             "https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.0/moment-timezone-with-data.min.js"
         ]);
         
+        // Add external platform scripts
+        const platformScripts = Object.freeze([
+            "https://platform.twitter.com/widgets.js",
+            "https://platform.instagram.com/en_US/embeds.js"
+        ]);
+        
         requestIdleCallback(() => {
+            // Load main scripts
             const n = e.map((e) => new Promise((n, t) => {
                 const s = document.createElement("script");
                 Object.assign(s, {
@@ -64,7 +71,21 @@ document.head.appendChild(instantPagePreload);
                 document.head.appendChild(s);
             }));
             
-            Promise.allSettled(n).finally(() => {
+            // Load platform scripts with defer
+            const platformPromises = platformScripts.map((src) => new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                Object.assign(script, {
+                    src: src,
+                    defer: true,
+                    // Note: These external scripts may not support crossOrigin or referrerPolicy
+                    // Let the browser handle them with default behavior
+                    onload: resolve,
+                    onerror: reject
+                });
+                document.head.appendChild(script);
+            }));
+            
+            Promise.allSettled([...n, ...platformPromises]).finally(() => {
                 // Add forum_core_observer.js with same attributes as pa_scripts
                 const forumCoreObserver = document.createElement("script");
                 Object.assign(forumCoreObserver, {
