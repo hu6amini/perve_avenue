@@ -8508,11 +8508,100 @@ class PostModernizer {
         }
     });
     
-    element.querySelectorAll('iframe, video').forEach(media => {
-        if (globalThis.mediaDimensionExtractor) {
-            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+    element.querySelectorAll('iframe').forEach(iframe => {
+        // Check if iframe already has a responsive wrapper
+        const parent = iframe.parentElement;
+        const isAlreadyWrapped = parent && 
+            (parent.style.position === 'relative' || 
+             parent.style.paddingBottom || 
+             parent.classList.contains('iframe-wrapper') ||
+             (parent.tagName === 'DIV' && parent.style.height === '0' && parent.style.paddingBottom));
+        
+        // If it's already wrapped (like YouTube's default wrapper), leave it alone
+        if (isAlreadyWrapped) {
+            // Just ensure the iframe has proper styling
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.position = 'absolute';
+            iframe.style.top = '0';
+            iframe.style.left = '0';
+            iframe.style.border = '0';
+            return;
+        }
+        
+        // For standalone iframes, apply our wrapper logic
+        const originalWidth = iframe.getAttribute('width');
+        const originalHeight = iframe.getAttribute('height');
+        
+        const commonSizes = {
+            'youtube.com': { width: '560', height: '315' },
+            'youtu.be': { width: '560', height: '315' },
+            'vimeo.com': { width: '640', height: '360' },
+            'soundcloud.com': { width: '100%', height: '166' },
+            'twitter.com': { width: '550', height: '400' },
+            'x.com': { width: '550', height: '400' },
+            'default': { width: '100%', height: '400' }
+        };
+        
+        let src = iframe.src || iframe.dataset.src || '';
+        let dimensions = commonSizes.default;
+        
+        for (let domain in commonSizes) {
+            if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                dimensions = commonSizes[domain];
+                break;
+            }
+        }
+        
+        // Use original dimensions if available, otherwise use defaults
+        const width = originalWidth || dimensions.width;
+        const height = originalHeight || dimensions.height;
+        
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'iframe-wrapper';
+        
+        if (width !== '100%') {
+            const widthNum = parseInt(width);
+            const heightNum = parseInt(height);
+            if (widthNum > 0 && heightNum > 0) {
+                const paddingBottom = (heightNum / widthNum * 100) + '%';
+                wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+            } else {
+                wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+            }
+        } else {
+            wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+        }
+        
+        // Insert wrapper and move iframe into it
+        iframe.parentNode.insertBefore(wrapper, iframe);
+        wrapper.appendChild(iframe);
+        
+        // Style the iframe
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        
+        if (!iframe.hasAttribute('title')) {
+            iframe.setAttribute('title', 'Embedded content');
+        }
+        
+        // Ensure loading attribute is set
+        if (!iframe.hasAttribute('loading')) {
+            iframe.setAttribute('loading', 'lazy');
+        }
+        
+        // Ensure allowfullscreen attribute is preserved
+        if (iframe.hasAttribute('allowfullscreen') && !iframe.hasAttribute('allowFullScreen')) {
+            iframe.setAttribute('allowFullScreen', '');
         }
     });
+    
+    // Extract dimensions for other media types
+    if (globalThis.mediaDimensionExtractor) {
+        element.querySelectorAll('video').forEach(media => {
+            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        });
+    }
 }
 
     #enhanceIframesInElement(element) {
