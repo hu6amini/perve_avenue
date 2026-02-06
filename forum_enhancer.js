@@ -8508,7 +8508,31 @@ class PostModernizer {
         }
     });
     
+    // FIXED: Handle iframes more carefully - don't interfere with existing wrappers
     element.querySelectorAll('iframe, video').forEach(media => {
+        // Check if this iframe already has a responsive wrapper
+        const parent = media.parentElement;
+        const hasExistingWrapper = parent && (
+            (parent.style.position === 'relative' && parent.style.paddingBottom) ||
+            parent.classList.contains('iframe-wrapper') ||
+            (parent.style.height === '0' && parent.style.paddingBottom)
+        );
+        
+        // Don't process iframes that already have proper wrappers
+        if (hasExistingWrapper) {
+            // Ensure the iframe fills the wrapper
+            if (media.style.position !== 'absolute') {
+                media.style.position = 'absolute';
+                media.style.top = '0';
+                media.style.left = '0';
+                media.style.width = '100%';
+                media.style.height = '100%';
+                media.style.border = '0';
+            }
+            return; // Skip further processing
+        }
+        
+        // Only process iframes without proper wrappers
         if (globalThis.mediaDimensionExtractor) {
             globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
         }
