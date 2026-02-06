@@ -8081,7 +8081,14 @@ class PostModernizer {
     if (this.#isInEditor(element)) return;
     
     element.querySelectorAll(':empty').forEach(emptyEl => {
-        if (!['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK'].includes(emptyEl.tagName)) {
+        // Don't remove elements that are iframe wrappers or contain iframes
+        const isIframeWrapper = emptyEl.classList && 
+            (emptyEl.classList.contains('iframe-wrapper') || 
+             emptyEl.style.paddingBottom || 
+             emptyEl.style.position === 'relative');
+        
+        if (!isIframeWrapper && 
+            !['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK', 'IFRAME'].includes(emptyEl.tagName)) {
             emptyEl.remove();
         }
     });
@@ -8098,7 +8105,7 @@ class PostModernizer {
 
     nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
 }
-
+    
  #cleanInvalidAttributes(element) {
     // Skip if in editor
     if (this.#isInEditor(element)) return;
