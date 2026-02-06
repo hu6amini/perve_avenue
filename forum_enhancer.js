@@ -7846,60 +7846,55 @@ class PostModernizer {
         element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
-   #cleanupPostContentStructure(contentElement) {
+#cleanupPostContentStructure(contentElement) {
     // Skip if in editor
     if (this.#isInEditor(contentElement)) {
         return;
     }
     
+    // FIRST: Protect iframe containers before any table cleanup
+    contentElement.querySelectorAll('table.color').forEach(table => {
+        const hasIframe = table.querySelector('iframe');
+        if (hasIframe) {
+            table.setAttribute('data-protected-iframe', 'true');
+        }
+    });
+    
     contentElement.querySelectorAll('.ve-table').forEach(table => {
         this.#protectAndRepairTable(table);
     });
 
-    contentElement.querySelectorAll('.post-main-content > td').forEach(td => {
-        while (td.firstChild) {
-            contentElement.appendChild(td.firstChild);
+    // Don't remove tables that contain iframes
+    contentElement.querySelectorAll('table:not(.ve-table):not([data-protected-iframe])').forEach(table => {
+        // Check if this table contains an iframe
+        const hasIframe = table.querySelector('iframe');
+        if (hasIframe) {
+            // Keep this table - it's an iframe container
+            return;
         }
-        td.remove();
-    });
-
-    contentElement.querySelectorAll('td').forEach(td => {
-        const parent = td.parentNode;
-        if (parent && !td.closest('.ve-table')) {
-            while (td.firstChild) {
-                parent.insertBefore(td.firstChild, td);
-            }
-            td.remove();
-        }
-    });
-
-    contentElement.querySelectorAll('tr').forEach(tr => {
-        const parent = tr.parentNode;
-        if (parent && !tr.closest('.ve-table')) {
-            while (tr.firstChild) {
-                parent.insertBefore(tr.firstChild, tr);
-            }
-            tr.remove();
-        }
-    });
-
-    contentElement.querySelectorAll('tbody').forEach(tbody => {
-        const parent = tbody.parentNode;
-        if (parent && !tbody.closest('.ve-table')) {
-            while (tbody.firstChild) {
-                parent.insertBefore(tbody.firstChild, tbody);
-            }
-            tbody.remove();
-        }
-    });
-
-    contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
+        
         const parent = table.parentNode;
         if (parent) {
             while (table.firstChild) {
                 parent.insertBefore(table.firstChild, table);
             }
             table.remove();
+        }
+    });
+
+    // Clean up other elements but preserve iframe wrappers
+    contentElement.querySelectorAll('tbody, tr, td').forEach(el => {
+        // Skip if this element or its ancestors contain iframes
+        if (el.querySelector('iframe')) {
+            return;
+        }
+        
+        const parent = el.parentNode;
+        if (parent && !el.closest('.ve-table') && !el.closest('[data-protected-iframe]')) {
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            el.remove();
         }
     });
 
