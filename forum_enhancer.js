@@ -7647,41 +7647,18 @@ class PostModernizer {
     this.#cleanInvalidAttributes(contentElement);
 }
 
-#processIframeTables(element) {
+    #processIframeTables(element) {
     element.querySelectorAll('table.color').forEach(table => {
-        // Look for iframes or video wrappers
-        const iframe = table.querySelector('iframe');
-        const videoWrappers = table.querySelectorAll('[style*="padding-bottom"], [style*="height:0"]');
+        const hasIframe = table.querySelector('iframe');
+        const hasVideoWrapper = table.querySelector('[style*="padding-bottom"]');
         
-        if (iframe || videoWrappers.length > 0) {
+        if (hasIframe || hasVideoWrapper) {
             table.setAttribute('data-protected-iframe', 'true');
-            
-            // Process each video wrapper found
-            videoWrappers.forEach(wrapper => {
-                const nestedIframe = wrapper.querySelector('iframe');
-                if (nestedIframe) {
-                    // Extract iframe from wrapper
-                    const wrapperParent = wrapper.parentNode;
-                    if (wrapperParent) {
-                        wrapperParent.insertBefore(nestedIframe, wrapper);
-                        wrapper.remove();
-                        
-                        // Now apply our standard wrapper
-                        this.#createStandardIframeWrapper(nestedIframe);
-                    }
-                }
-            });
-            
-            // Also process any direct iframes
-            if (iframe && !iframe.parentElement.classList.contains('iframe-wrapper')) {
-                this.#createStandardIframeWrapper(iframe);
-            }
         }
     });
 }
 
 #cleanupExtractedTableContent(container) {
-    // Process the content that was extracted from a protected table
     container.querySelectorAll('tbody, tr').forEach(el => {
         const parent = el.parentNode;
         if (parent) {
@@ -7692,34 +7669,16 @@ class PostModernizer {
         }
     });
     
-    // Handle td elements - extract their content
     container.querySelectorAll('td').forEach(td => {
         const parent = td.parentNode;
         if (parent) {
-            // Check if td contains an iframe with wrapper
-            const videoWrapper = td.querySelector('[style*="padding-bottom"], .iframe-wrapper');
-            if (videoWrapper) {
-                // Extract the wrapper/iframe directly
-                while (videoWrapper.firstChild) {
-                    parent.insertBefore(videoWrapper.firstChild, videoWrapper);
-                }
-                videoWrapper.remove();
-            } else {
-                // Move all children out of the td
-                while (td.firstChild) {
-                    parent.insertBefore(td.firstChild, td);
-                }
+            while (td.firstChild) {
+                parent.insertBefore(td.firstChild, td);
             }
             td.remove();
         }
     });
     
-    // Now process any iframes in the extracted content
-    container.querySelectorAll('iframe').forEach(iframe => {
-        this.#createStandardIframeWrapper(iframe);
-    });
-    
-    // Remove the container itself if it's now empty
     if (container.children.length === 0 && !container.textContent.trim()) {
         container.remove();
     }
@@ -8308,132 +8267,84 @@ class PostModernizer {
         }
     });
     
-    // Process iframes and videos
     element.querySelectorAll('iframe, video').forEach(media => {
-        // Find any parent wrapper divs (look for the pattern)
-        let currentParent = media.parentElement;
-        let wrapperToReplace = null;
+        const parent = media.parentElement;
+        const hasExistingWrapper = parent && (
+            (parent.style.position === 'relative' && parent.style.paddingBottom) ||
+            parent.classList.contains('iframe-wrapper') ||
+            (parent.style.height === '0' && parent.style.paddingBottom)
+        );
         
-        // Look for wrapper divs with padding-bottom style
-        while (currentParent && currentParent !== element) {
-            const style = currentParent.style;
-            if ((style.position === 'relative' && style.paddingBottom) ||
-                (style.height === '0' && style.paddingBottom) ||
-                currentParent.classList.contains('iframe-wrapper')) {
-                wrapperToReplace = currentParent;
-                // Also check if this wrapper is inside another wrapper
-                const grandParent = wrapperToReplace.parentElement;
-                if (grandParent && 
-                    ((grandParent.style.position === 'relative' && grandParent.style.paddingBottom) ||
-                     (grandParent.style.height === '0' && grandParent.style.paddingBottom))) {
-                    wrapperToReplace = grandParent; // Replace the outermost wrapper
-                }
-                break;
+        if (hasExistingWrapper) {
+            if (media.style.position !== 'absolute') {
+                media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
             }
-            currentParent = currentParent.parentElement;
-        }
-        
-        // If we found a wrapper to replace, extract the iframe first
-        if (wrapperToReplace) {
-            const parentOfWrapper = wrapperToReplace.parentNode;
-            if (parentOfWrapper) {
-                parentOfWrapper.insertBefore(media, wrapperToReplace);
-                wrapperToReplace.remove();
-            }
-        }
-        
-        // Now create our standard wrapper
-        this.#createStandardIframeWrapper(media);
-    });
-}
-
-#createStandardIframeWrapper(iframe) {
-    // Don't process if it already has our wrapper
-    if (iframe.parentElement && iframe.parentElement.classList.contains('iframe-wrapper')) {
-        return iframe.parentElement;
-    }
-    
-    // Remove any inline styles that might interfere
-    iframe.removeAttribute('style');
-    
-    // Get dimensions
-    let width = iframe.getAttribute('width') || '560';
-    let height = iframe.getAttribute('height') || '315';
-    
-    // Parse to numbers
-    const widthNum = parseInt(width) || 560;
-    const heightNum = parseInt(height) || 315;
-    
-    // Calculate aspect ratio
-    const paddingBottom = (heightNum / widthNum * 100).toFixed(2) + '%';
-    
-    // Create our wrapper
-    const wrapper = document.createElement('div');
-    wrapper.className = 'iframe-wrapper';
-    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;margin:1rem 0;';
-    
-    // Style the iframe
-    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-    
-    // Ensure required attributes
-    if (!iframe.hasAttribute('title')) {
-        iframe.setAttribute('title', 'Embedded content');
-    }
-    if (!iframe.hasAttribute('loading')) {
-        iframe.setAttribute('loading', 'lazy');
-    }
-    
-    // Insert wrapper before iframe and move iframe inside
-    const parent = iframe.parentNode;
-    if (parent) {
-        parent.insertBefore(wrapper, iframe);
-        wrapper.appendChild(iframe);
-    }
-    
-    return wrapper;
-}
-
-#enhanceIframesInElement(element) {
-    element.querySelectorAll('iframe:not(.iframe-wrapper iframe)').forEach(iframe => {
-        // Skip if already in our wrapper
-        if (iframe.parentElement && iframe.parentElement.classList.contains('iframe-wrapper')) {
             return;
         }
         
-        // Check for and remove any nested wrapper structure
-        let current = iframe;
-        let hasComplexWrapper = false;
-        
-        // Look for nested div wrappers
-        while (current.parentElement && 
-               current.parentElement !== element && 
-               current.parentElement.tagName === 'DIV') {
-            const parent = current.parentElement;
-            const style = parent.style;
-            
-            // Check if this is a wrapper div
-            if (style.position === 'relative' || 
-                style.paddingBottom || 
-                style.height === '0' ||
-                parent.classList.contains('iframe-wrapper')) {
-                
-                // Extract iframe from this wrapper
-                const grandParent = parent.parentNode;
-                if (grandParent) {
-                    grandParent.insertBefore(iframe, parent);
-                    parent.remove();
-                    hasComplexWrapper = true;
+        if (globalThis.mediaDimensionExtractor) {
+            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
+        }
+    });
+}
+
+    #enhanceIframesInElement(element) {
+        element.querySelectorAll('iframe').forEach(iframe => {
+            const originalWidth = iframe.getAttribute('width');
+            const originalHeight = iframe.getAttribute('height');
+
+            const commonSizes = {
+                'youtube.com': { width: '560', height: '315' },
+                'youtu.be': { width: '560', height: '315' },
+                'vimeo.com': { width: '640', height: '360' },
+                'soundcloud.com': { width: '100%', height: '166' },
+                'twitter.com': { width: '550', height: '400' },
+                'x.com': { width: '550', height: '400' },
+                'default': { width: '100%', height: '400' }
+            };
+
+            let src = iframe.src || iframe.dataset.src || '';
+            let dimensions = commonSizes.default;
+
+            for (let domain in commonSizes) {
+                if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                    dimensions = commonSizes[domain];
                     break;
                 }
             }
-            current = parent;
-        }
-        
-        // Create our standard wrapper
-        this.#createStandardIframeWrapper(iframe);
-    });
-}
-    
+
+            if (!originalWidth || !originalHeight) {
+                iframe.setAttribute('width', dimensions.width);
+                iframe.setAttribute('height', dimensions.height);
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'iframe-wrapper';
+
+                if (dimensions.width !== '100%') {
+                    const widthNum = parseInt(dimensions.width);
+                    const heightNum = parseInt(dimensions.height);
+                    if (widthNum > 0 && heightNum > 0) {
+                        const paddingBottom = (heightNum / widthNum * 100) + '%';
+                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+                    } else {
+                        wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                    }
+                } else {
+                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                }
+
+                iframe.parentNode.insertBefore(wrapper, iframe);
+                wrapper.appendChild(iframe);
+
+                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            }
+
+            if (!iframe.hasAttribute('title')) {
+                iframe.setAttribute('title', 'Embedded content');
+            }
+        });
+    }
+
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
         const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
