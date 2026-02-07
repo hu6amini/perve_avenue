@@ -7852,27 +7852,42 @@ class PostModernizer {
         return;
     }
     
-    // FIRST: Protect iframe containers before any table cleanup
-    contentElement.querySelectorAll('table.color').forEach(table => {
-        const hasIframe = table.querySelector('iframe');
-        if (hasIframe) {
-            table.setAttribute('data-protected-iframe', 'true');
+    // FIRST: Extract content from tables that contain iframes
+    contentElement.querySelectorAll('table.color[data-protected-iframe]').forEach(table => {
+        // Extract all content from the table while preserving structure
+        const parent = table.parentNode;
+        if (!parent) return;
+        
+        // Create a container for the extracted content
+        const container = document.createElement('div');
+        container.className = 'extracted-content';
+        
+        // Move all children from table to container
+        const tbody = table.querySelector('tbody');
+        if (tbody) {
+            while (tbody.firstChild) {
+                container.appendChild(tbody.firstChild);
+            }
+        } else {
+            while (table.firstChild) {
+                container.appendChild(table.firstChild);
+            }
         }
+        
+        // Insert container before the table, then remove the table
+        parent.insertBefore(container, table);
+        table.remove();
+        
+        // Now cleanup the extracted content
+        this.#cleanupExtractedTableContent(container);
     });
     
+    // Process other tables normally
     contentElement.querySelectorAll('.ve-table').forEach(table => {
         this.#protectAndRepairTable(table);
     });
 
-    // Don't remove tables that contain iframes
-    contentElement.querySelectorAll('table:not(.ve-table):not([data-protected-iframe])').forEach(table => {
-        // Check if this table contains an iframe
-        const hasIframe = table.querySelector('iframe');
-        if (hasIframe) {
-            // Keep this table - it's an iframe container
-            return;
-        }
-        
+    contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
         const parent = table.parentNode;
         if (parent) {
             while (table.firstChild) {
@@ -7884,13 +7899,8 @@ class PostModernizer {
 
     // Clean up other elements but preserve iframe wrappers
     contentElement.querySelectorAll('tbody, tr, td').forEach(el => {
-        // Skip if this element or its ancestors contain iframes
-        if (el.querySelector('iframe')) {
-            return;
-        }
-        
         const parent = el.parentNode;
-        if (parent && !el.closest('.ve-table') && !el.closest('[data-protected-iframe]')) {
+        if (parent && !el.closest('.ve-table')) {
             while (el.firstChild) {
                 parent.insertBefore(el.firstChild, el);
             }
@@ -7906,6 +7916,36 @@ class PostModernizer {
     this.#cleanInvalidAttributes(contentElement);
 }
 
+    #cleanupExtractedTableContent(container) {
+    // Process the content that was extracted from a protected table
+    container.querySelectorAll('tbody, tr').forEach(el => {
+        const parent = el.parentNode;
+        if (parent) {
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            el.remove();
+        }
+    });
+    
+    // Handle td elements - extract their content
+    container.querySelectorAll('td').forEach(td => {
+        const parent = td.parentNode;
+        if (parent) {
+            // Move all children out of the td
+            while (td.firstChild) {
+                parent.insertBefore(td.firstChild, td);
+            }
+            td.remove();
+        }
+    });
+    
+    // Remove the container itself if it's now empty
+    if (container.children.length === 0 && !container.textContent.trim()) {
+        container.remove();
+    }
+}
+    
 #protectAndRepairTable(table) {
     table.setAttribute('data-table-protected', 'true');
     
