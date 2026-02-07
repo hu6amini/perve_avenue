@@ -7648,29 +7648,33 @@ class PostModernizer {
 }
 
 #processIframeTables(element) {
-    // Find tables that contain iframes and unwrap them
     element.querySelectorAll('table.color').forEach(table => {
+        // Look for iframes or video wrappers
         const iframe = table.querySelector('iframe');
-        const videoWrapper = table.querySelector('[style*="padding-bottom"]');
+        const videoWrappers = table.querySelectorAll('[style*="padding-bottom"], [style*="height:0"]');
         
-        if (iframe || videoWrapper) {
-            // Mark for special processing
+        if (iframe || videoWrappers.length > 0) {
             table.setAttribute('data-protected-iframe', 'true');
             
-            // If there's a video wrapper inside, extract the iframe
-            if (videoWrapper) {
-                const nestedIframe = videoWrapper.querySelector('iframe');
+            // Process each video wrapper found
+            videoWrappers.forEach(wrapper => {
+                const nestedIframe = wrapper.querySelector('iframe');
                 if (nestedIframe) {
-                    // Move iframe out of the wrapper and table
-                    const wrapperParent = videoWrapper.parentNode;
+                    // Extract iframe from wrapper
+                    const wrapperParent = wrapper.parentNode;
                     if (wrapperParent) {
-                        wrapperParent.insertBefore(nestedIframe, videoWrapper);
-                        videoWrapper.remove();
+                        wrapperParent.insertBefore(nestedIframe, wrapper);
+                        wrapper.remove();
+                        
+                        // Now apply our standard wrapper
+                        this.#createStandardIframeWrapper(nestedIframe);
                     }
-                    
-                    // Now create our standard wrapper
-                    this.#createStandardIframeWrapper(nestedIframe);
                 }
+            });
+            
+            // Also process any direct iframes
+            if (iframe && !iframe.parentElement.classList.contains('iframe-wrapper')) {
+                this.#createStandardIframeWrapper(iframe);
             }
         }
     });
