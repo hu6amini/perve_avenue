@@ -7920,6 +7920,18 @@ class PostModernizer {
     this.#cleanInvalidAttributes(contentElement);
 }
 
+    #processIframeTables(element) {
+    // Find tables that likely contain iframes and mark them for special processing
+    element.querySelectorAll('table.color').forEach(table => {
+        const hasIframe = table.querySelector('iframe');
+        const hasVideoWrapper = table.querySelector('[style*="padding-bottom"]');
+        
+        if (hasIframe || hasVideoWrapper) {
+            table.setAttribute('data-protected-iframe', 'true');
+        }
+    });
+}
+
     #cleanupExtractedTableContent(container) {
     // Process the content that was extracted from a protected table
     container.querySelectorAll('tbody, tr').forEach(el => {
