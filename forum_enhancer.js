@@ -7647,18 +7647,37 @@ class PostModernizer {
     this.#cleanInvalidAttributes(contentElement);
 }
 
-    #processIframeTables(element) {
+#processIframeTables(element) {
+    // Find tables that contain iframes and unwrap them
     element.querySelectorAll('table.color').forEach(table => {
-        const hasIframe = table.querySelector('iframe');
-        const hasVideoWrapper = table.querySelector('[style*="padding-bottom"]');
+        const iframe = table.querySelector('iframe');
+        const videoWrapper = table.querySelector('[style*="padding-bottom"]');
         
-        if (hasIframe || hasVideoWrapper) {
+        if (iframe || videoWrapper) {
+            // Mark for special processing
             table.setAttribute('data-protected-iframe', 'true');
+            
+            // If there's a video wrapper inside, extract the iframe
+            if (videoWrapper) {
+                const nestedIframe = videoWrapper.querySelector('iframe');
+                if (nestedIframe) {
+                    // Move iframe out of the wrapper and table
+                    const wrapperParent = videoWrapper.parentNode;
+                    if (wrapperParent) {
+                        wrapperParent.insertBefore(nestedIframe, videoWrapper);
+                        videoWrapper.remove();
+                    }
+                    
+                    // Now create our standard wrapper
+                    this.#createStandardIframeWrapper(nestedIframe);
+                }
+            }
         }
     });
 }
 
 #cleanupExtractedTableContent(container) {
+    // Process the content that was extracted from a protected table
     container.querySelectorAll('tbody, tr').forEach(el => {
         const parent = el.parentNode;
         if (parent) {
@@ -7669,16 +7688,34 @@ class PostModernizer {
         }
     });
     
+    // Handle td elements - extract their content
     container.querySelectorAll('td').forEach(td => {
         const parent = td.parentNode;
         if (parent) {
-            while (td.firstChild) {
-                parent.insertBefore(td.firstChild, td);
+            // Check if td contains an iframe with wrapper
+            const videoWrapper = td.querySelector('[style*="padding-bottom"], .iframe-wrapper');
+            if (videoWrapper) {
+                // Extract the wrapper/iframe directly
+                while (videoWrapper.firstChild) {
+                    parent.insertBefore(videoWrapper.firstChild, videoWrapper);
+                }
+                videoWrapper.remove();
+            } else {
+                // Move all children out of the td
+                while (td.firstChild) {
+                    parent.insertBefore(td.firstChild, td);
+                }
             }
             td.remove();
         }
     });
     
+    // Now process any iframes in the extracted content
+    container.querySelectorAll('iframe').forEach(iframe => {
+        this.#createStandardIframeWrapper(iframe);
+    });
+    
+    // Remove the container itself if it's now empty
     if (container.children.length === 0 && !container.textContent.trim()) {
         container.remove();
     }
