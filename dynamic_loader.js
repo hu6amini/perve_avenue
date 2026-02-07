@@ -98,7 +98,7 @@ document.head.appendChild(instantPagePreload);
                 // Add forum_enhacer.js with same attributes as pa_scripts
                 const forumEnhancer = document.createElement("script");
                 Object.assign(forumEnhancer, {
-                    src: "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a9a165b/forum_enhancer.js",
+                    src: "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@213ef3c/forum_enhancer.js",
                     defer: true,
                     crossOrigin: "anonymous",
                     referrerPolicy: "no-referrer"
