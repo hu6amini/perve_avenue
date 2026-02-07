@@ -8162,11 +8162,12 @@ class PostModernizer {
     nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
 }
     
- #cleanInvalidAttributes(element) {
+#cleanInvalidAttributes(element) {
     // Skip if in editor
     if (this.#isInEditor(element)) return;
     
     element.querySelectorAll('[width]').forEach(el => {
+        // Preserve width/height for iframes, videos, and images
         if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
             el.removeAttribute('width');
         }
@@ -8177,6 +8178,11 @@ class PostModernizer {
             el.removeAttribute('cellpadding');
             el.removeAttribute('cellspacing');
         }
+    });
+    
+    // Don't remove style attributes from iframe wrappers
+    element.querySelectorAll('[style*="padding-bottom"]').forEach(el => {
+        // Keep these styles - they're for responsive iframes
     });
 }
 
