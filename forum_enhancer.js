@@ -8325,63 +8325,28 @@ class PostModernizer {
     return wrapper;
 }
 
-    #enhanceIframesInElement(element) {
-        element.querySelectorAll('iframe').forEach(iframe => {
-            const originalWidth = iframe.getAttribute('width');
-            const originalHeight = iframe.getAttribute('height');
-
-            const commonSizes = {
-                'youtube.com': { width: '560', height: '315' },
-                'youtu.be': { width: '560', height: '315' },
-                'vimeo.com': { width: '640', height: '360' },
-                'soundcloud.com': { width: '100%', height: '166' },
-                'twitter.com': { width: '550', height: '400' },
-                'x.com': { width: '550', height: '400' },
-                'default': { width: '100%', height: '400' }
-            };
-
-            let src = iframe.src || iframe.dataset.src || '';
-            let dimensions = commonSizes.default;
-
-            for (let domain in commonSizes) {
-                if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
-                    dimensions = commonSizes[domain];
-                    break;
-                }
+#enhanceIframesInElement(element) {
+    element.querySelectorAll('iframe').forEach(iframe => {
+        // First, clean up any existing wrapper
+        const parent = iframe.parentElement;
+        if (parent && parent.classList.contains('iframe-wrapper')) {
+            return; // Already has our wrapper
+        }
+        
+        // Remove from any other wrapper structure
+        if (parent && (parent.style.position === 'relative' || parent.style.paddingBottom)) {
+            const grandParent = parent.parentNode;
+            if (grandParent) {
+                grandParent.insertBefore(iframe, parent);
+                parent.remove();
             }
-
-            if (!originalWidth || !originalHeight) {
-                iframe.setAttribute('width', dimensions.width);
-                iframe.setAttribute('height', dimensions.height);
-
-                const wrapper = document.createElement('div');
-                wrapper.className = 'iframe-wrapper';
-
-                if (dimensions.width !== '100%') {
-                    const widthNum = parseInt(dimensions.width);
-                    const heightNum = parseInt(dimensions.height);
-                    if (widthNum > 0 && heightNum > 0) {
-                        const paddingBottom = (heightNum / widthNum * 100) + '%';
-                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
-                    } else {
-                        wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-                    }
-                } else {
-                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
-                }
-
-                iframe.parentNode.insertBefore(wrapper, iframe);
-                wrapper.appendChild(iframe);
-
-                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-            }
-
-            if (!iframe.hasAttribute('title')) {
-                iframe.setAttribute('title', 'Embedded content');
-            }
-        });
-    }
-
+        }
+        
+        // Create our standard wrapper
+        this.#createStandardIframeWrapper(iframe);
+    });
+}
+    
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
         const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
