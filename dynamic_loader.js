@@ -9,6 +9,7 @@ const STYLESHEETS = Object.freeze([
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c64ef50/lightgallery@2.7.1/lg-autoplay.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.min.css"
+    // No separate Vimeo CSS needed - it's bundled in the +esm version
 ]);
 
 STYLESHEETS.forEach((e) => {
@@ -46,6 +47,8 @@ document.head.appendChild(instantPagePreload);
             "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180c/lightgallery@2.7.1/lg-hash.min.js",
             "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js",
             "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js",
+            // Add Vimeo ES module - special handling needed
+            "https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm",
             "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.min.js",
             "https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.0/moment-timezone-with-data.min.js"
         ]);
@@ -54,14 +57,29 @@ document.head.appendChild(instantPagePreload);
             // Load main scripts with defer (they need to execute in order)
             const n = e.map((e) => new Promise((n, t) => {
                 const s = document.createElement("script");
-                Object.assign(s, {
-                    src: e,
-                    defer: true,
-                    crossOrigin: "anonymous",
-                    referrerPolicy: "no-referrer",
-                    onload: n,
-                    onerror: t
-                });
+                
+                // Special handling for ES module
+                if (e.includes('+esm')) {
+                    Object.assign(s, {
+                        src: e,
+                        type: 'module', // ES module
+                        crossOrigin: "anonymous",
+                        referrerPolicy: "no-referrer",
+                        onload: n,
+                        onerror: t
+                    });
+                    // ES modules are deferred by default - no need for defer attribute
+                } else {
+                    Object.assign(s, {
+                        src: e,
+                        defer: true, // Regular scripts use defer
+                        crossOrigin: "anonymous",
+                        referrerPolicy: "no-referrer",
+                        onload: n,
+                        onerror: t
+                    });
+                }
+                
                 document.head.appendChild(s);
             }));
             
