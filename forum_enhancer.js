@@ -8304,79 +8304,125 @@ class PostModernizer {
         }
     });
     
-    // FIXED: Always replace iframe wrappers with our standard wrapper
+    // Process iframes and videos
     element.querySelectorAll('iframe, video').forEach(media => {
-        // Check if media already has a wrapper
-        const parent = media.parentElement;
-        const hasExistingWrapper = parent && (
-            parent.classList.contains('iframe-wrapper') ||
-            (parent.style.position === 'relative' && parent.style.paddingBottom) ||
-            (parent.style.height === '0' && parent.style.paddingBottom)
-        );
+        // Find any parent wrapper divs (look for the pattern)
+        let currentParent = media.parentElement;
+        let wrapperToReplace = null;
         
-        // Remove any existing wrapper divs
-        if (hasExistingWrapper) {
-            // Move the iframe out of the wrapper
-            const wrapperParent = parent.parentNode;
-            if (wrapperParent) {
-                wrapperParent.insertBefore(media, parent);
-                parent.remove();
+        // Look for wrapper divs with padding-bottom style
+        while (currentParent && currentParent !== element) {
+            const style = currentParent.style;
+            if ((style.position === 'relative' && style.paddingBottom) ||
+                (style.height === '0' && style.paddingBottom) ||
+                currentParent.classList.contains('iframe-wrapper')) {
+                wrapperToReplace = currentParent;
+                // Also check if this wrapper is inside another wrapper
+                const grandParent = wrapperToReplace.parentElement;
+                if (grandParent && 
+                    ((grandParent.style.position === 'relative' && grandParent.style.paddingBottom) ||
+                     (grandParent.style.height === '0' && grandParent.style.paddingBottom))) {
+                    wrapperToReplace = grandParent; // Replace the outermost wrapper
+                }
+                break;
+            }
+            currentParent = currentParent.parentElement;
+        }
+        
+        // If we found a wrapper to replace, extract the iframe first
+        if (wrapperToReplace) {
+            const parentOfWrapper = wrapperToReplace.parentNode;
+            if (parentOfWrapper) {
+                parentOfWrapper.insertBefore(media, wrapperToReplace);
+                wrapperToReplace.remove();
             }
         }
         
-        // Create our standard wrapper
+        // Now create our standard wrapper
         this.#createStandardIframeWrapper(media);
     });
 }
 
-    #createStandardIframeWrapper(iframe) {
-    // Remove any existing inline styles from iframe
+#createStandardIframeWrapper(iframe) {
+    // Don't process if it already has our wrapper
+    if (iframe.parentElement && iframe.parentElement.classList.contains('iframe-wrapper')) {
+        return iframe.parentElement;
+    }
+    
+    // Remove any inline styles that might interfere
     iframe.removeAttribute('style');
     
-    // Get or calculate dimensions
+    // Get dimensions
     let width = iframe.getAttribute('width') || '560';
     let height = iframe.getAttribute('height') || '315';
     
-    // Parse dimensions to numbers
-    const widthNum = parseInt(width);
-    const heightNum = parseInt(height);
+    // Parse to numbers
+    const widthNum = parseInt(width) || 560;
+    const heightNum = parseInt(height) || 315;
     
-    // Calculate aspect ratio padding
-    const paddingBottom = (heightNum / widthNum * 100) + '%';
+    // Calculate aspect ratio
+    const paddingBottom = (heightNum / widthNum * 100).toFixed(2) + '%';
     
-    // Create wrapper div
+    // Create our wrapper
     const wrapper = document.createElement('div');
     wrapper.className = 'iframe-wrapper';
     wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;margin:1rem 0;';
     
     // Style the iframe
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-    iframe.setAttribute('title', iframe.getAttribute('title') || 'Embedded content');
-    iframe.setAttribute('loading', 'lazy');
-    iframe.setAttribute('allowfullscreen', '');
+    
+    // Ensure required attributes
+    if (!iframe.hasAttribute('title')) {
+        iframe.setAttribute('title', 'Embedded content');
+    }
+    if (!iframe.hasAttribute('loading')) {
+        iframe.setAttribute('loading', 'lazy');
+    }
     
     // Insert wrapper before iframe and move iframe inside
-    iframe.parentNode.insertBefore(wrapper, iframe);
-    wrapper.appendChild(iframe);
+    const parent = iframe.parentNode;
+    if (parent) {
+        parent.insertBefore(wrapper, iframe);
+        wrapper.appendChild(iframe);
+    }
     
     return wrapper;
 }
 
 #enhanceIframesInElement(element) {
-    element.querySelectorAll('iframe').forEach(iframe => {
-        // First, clean up any existing wrapper
-        const parent = iframe.parentElement;
-        if (parent && parent.classList.contains('iframe-wrapper')) {
-            return; // Already has our wrapper
+    element.querySelectorAll('iframe:not(.iframe-wrapper iframe)').forEach(iframe => {
+        // Skip if already in our wrapper
+        if (iframe.parentElement && iframe.parentElement.classList.contains('iframe-wrapper')) {
+            return;
         }
         
-        // Remove from any other wrapper structure
-        if (parent && (parent.style.position === 'relative' || parent.style.paddingBottom)) {
-            const grandParent = parent.parentNode;
-            if (grandParent) {
-                grandParent.insertBefore(iframe, parent);
-                parent.remove();
+        // Check for and remove any nested wrapper structure
+        let current = iframe;
+        let hasComplexWrapper = false;
+        
+        // Look for nested div wrappers
+        while (current.parentElement && 
+               current.parentElement !== element && 
+               current.parentElement.tagName === 'DIV') {
+            const parent = current.parentElement;
+            const style = parent.style;
+            
+            // Check if this is a wrapper div
+            if (style.position === 'relative' || 
+                style.paddingBottom || 
+                style.height === '0' ||
+                parent.classList.contains('iframe-wrapper')) {
+                
+                // Extract iframe from this wrapper
+                const grandParent = parent.parentNode;
+                if (grandParent) {
+                    grandParent.insertBefore(iframe, parent);
+                    parent.remove();
+                    hasComplexWrapper = true;
+                    break;
+                }
             }
+            current = parent;
         }
         
         // Create our standard wrapper
