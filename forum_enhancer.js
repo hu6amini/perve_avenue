@@ -7891,7 +7891,7 @@ class PostModernizer {
         this.#protectAndRepairTable(table);
     });
 
-    contentElement.querySelectorAll('table:not(.ve-table)').forEach(table => {
+    contentElement.querySelectorAll('table:not(.ve-table):not([data-protected-iframe])').forEach(table => {
         const parent = table.parentNode;
         if (parent) {
             while (table.firstChild) {
