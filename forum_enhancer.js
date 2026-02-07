@@ -8292,6 +8292,39 @@ class PostModernizer {
     });
 }
 
+    #createStandardIframeWrapper(iframe) {
+    // Remove any existing inline styles from iframe
+    iframe.removeAttribute('style');
+    
+    // Get or calculate dimensions
+    let width = iframe.getAttribute('width') || '560';
+    let height = iframe.getAttribute('height') || '315';
+    
+    // Parse dimensions to numbers
+    const widthNum = parseInt(width);
+    const heightNum = parseInt(height);
+    
+    // Calculate aspect ratio padding
+    const paddingBottom = (heightNum / widthNum * 100) + '%';
+    
+    // Create wrapper div
+    const wrapper = document.createElement('div');
+    wrapper.className = 'iframe-wrapper';
+    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;margin:1rem 0;';
+    
+    // Style the iframe
+    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+    iframe.setAttribute('title', iframe.getAttribute('title') || 'Embedded content');
+    iframe.setAttribute('loading', 'lazy');
+    iframe.setAttribute('allowfullscreen', '');
+    
+    // Insert wrapper before iframe and move iframe inside
+    iframe.parentNode.insertBefore(wrapper, iframe);
+    wrapper.appendChild(iframe);
+    
+    return wrapper;
+}
+
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
             const originalWidth = iframe.getAttribute('width');
