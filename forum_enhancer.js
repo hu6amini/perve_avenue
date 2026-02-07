@@ -7932,7 +7932,7 @@ class PostModernizer {
     });
 }
 
-    #cleanupExtractedTableContent(container) {
+#cleanupExtractedTableContent(container) {
     // Process the content that was extracted from a protected table
     container.querySelectorAll('tbody, tr').forEach(el => {
         const parent = el.parentNode;
