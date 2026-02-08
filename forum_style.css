@@ -1894,6 +1894,175 @@ display:flex;
 .modern-attachment.image-attachment .attachment-icon {background: var(--primary-color)}
 .modern-attachment.file-attachment .attachment-icon {background: var(--secondary-color)}
 
+/*============================================
+ modern media wrapper styles
+============================================*/
+.media-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  margin: var(--space-md) 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.media-wrapper:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-color);
+  transform: translatey(-1px);
+}
+
+.media-wrapper::before {
+  content: '';
+  display: block;
+  padding-bottom: 56.25%; /* Default 16:9 aspect ratio */
+}
+
+/* Dynamic aspect ratios */
+.media-wrapper[style*="padding-bottom"]::before {
+  display: none; /* Let inline style handle aspect ratio */
+}
+
+.media-wrapper iframe,
+.media-wrapper lite-youtube,
+.media-wrapper lite-vimeo,
+.media-wrapper video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--surface-color);
+}
+
+/* Media wrapper header for better UX */
+.media-wrapper-header {
+  display: none; /* Hidden by default, shown via JS if needed */
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.media-wrapper-source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-weight: 500;
+}
+
+.media-wrapper-source i {
+  color: var(--primary-color);
+  font-size: 10px;
+}
+
+.media-wrapper-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.media-wrapper-expand {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  transition: color 0.3s ease;
+}
+
+.media-wrapper-expand:hover {
+  color: var(--primary-color);
+}
+
+/* Light theme adjustments */
+[data-theme="light"] .media-wrapper {
+  background: var(--surface-color);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .media-wrapper:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .media-wrapper {
+    border-radius: calc(var(--radius) * 0.75);
+    margin: var(--space-sm) 0;
+  }
+  
+  .media-wrapper::before {
+    padding-bottom: 56.25%; /* Maintain aspect ratio on mobile */
+  }
+}
+
+/* Specific platform styling */
+.media-wrapper.youtube-wrapper {
+  border-color: rgba(255, 0, 0, 0.2);
+}
+
+.media-wrapper.youtube-wrapper:hover {
+  border-color: #FF0000;
+}
+
+.media-wrapper.vimeo-wrapper {
+  border-color: rgba(26, 183, 234, 0.2);
+}
+
+.media-wrapper.vimeo-wrapper:hover {
+  border-color: #1AB7EA;
+}
+
+.media-wrapper.soundcloud-wrapper {
+  border-color: rgba(255, 85, 0, 0.2);
+}
+
+.media-wrapper.soundcloud-wrapper:hover {
+  border-color: #FF5500;
+}
+
+.media-wrapper.twitter-wrapper,
+.media-wrapper.x-wrapper {
+  border-color: rgba(29, 161, 242, 0.2);
+}
+
+.media-wrapper.twitter-wrapper:hover,
+.media-wrapper.x-wrapper:hover {
+  border-color: #1DA1F2;
+}
+
+/* Loading state */
+.media-wrapper.loading {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-wrapper.loading::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* =========================================== */
 /* FORUM AVATAR SYSTEM STYLES                  */
 /* =========================================== */
