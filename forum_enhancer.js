@@ -8900,7 +8900,7 @@ class PostModernizer {
         'width: 100%; ' +
         'max-width: ' + maxWidth + 'px; ' +
         'aspect-ratio: ' + aspectRatio + '; ' + // Force 16:9
-        'margin: 1em auto; ' +
+        'margin: var(--space-md) 0; ' +
         'overflow: hidden; ' +
         'background: var(--bg-secondary); ' +
         'border-radius: var(--radius-sm); ' +
