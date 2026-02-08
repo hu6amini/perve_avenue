@@ -1850,235 +1850,256 @@ globalThis.addEventListener('pagehide', () => {
     // ==============================
     // VIDEO-IFRAME
     // ==============================
-'use strict'; 
- 
-// Enhanced replacement function 
-function replaceVideoIframes() { 
- var iframes = document.querySelectorAll('.post .color iframe, #loading .color iframe'); 
- console.log('Found ' + iframes.length + ' iframes to process'); 
- 
- for (var i = 0; i < iframes.length; i++) { 
- var iframe = iframes[i]; 
- 
- // Skip if already processed 
- if (iframe.hasAttribute('data-lite-processed')) continue; 
- 
- var src = iframe.src || iframe.getAttribute('data-src'); 
- if (!src) { 
- console.warn('Iframe ' + i + ' has no src'); 
- continue; 
- } 
- 
- var videoId = null; 
- var element = null; 
- 
- // YouTube 
- if (src.includes('youtube.com/embed/') || src.includes('youtube-nocookie.com/embed/')) { 
- videoId = extractYouTubeId(src); 
- if (videoId) { 
- element = document.createElement('lite-youtube'); 
- element.setAttribute('videoid', videoId); 
- element.setAttribute('params', 'rel=0&modestbranding=1'); 
- } 
- } 
- // Vimeo 
- else if (src.includes('player.vimeo.com/video/')) { 
- videoId = extractVimeoId(src); 
- if (videoId) { 
- element = document.createElement('lite-vimeo'); 
- element.setAttribute('videoid', videoId); 
- } 
- } 
- 
- if (element && videoId) { 
- // Copy attributes 
- copyAttributes(iframe, element); 
- 
- // Mark as processed 
- iframe.setAttribute('data-lite-processed', 'true'); 
- 
- // Replace 
- iframe.parentNode.replaceChild(element, iframe); 
- console.log('&#10003; Replaced iframe ' + i + ' with ' + element.tagName + ' (ID: ' + videoId + ')'); 
- } 
- } 
-} 
- 
-// Helper functions 
-function extractYouTubeId(url) { 
- var match = url.match(/(?:\/embed\/|v=|\/v\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/); 
- return match ? match[1] : null; 
-} 
- 
-function extractVimeoId(url) { 
- var match = url.match(/vimeo\.com\/video\/(\d+)/) || 
- url.match(/player\.vimeo\.com\/video\/(\d+)/); 
- return match ? match[1] : null; 
-} 
- 
-function copyAttributes(source, target) { 
- for (var j = 0; j < source.attributes.length; j++) { 
- var attr = source.attributes[j]; 
- var name = attr.name; 
- var value = attr.value; 
- 
- if (name.startsWith('data-') || 
- name === 'class' || 
- name === 'style' || 
- name === 'title' || 
- name === 'allowfullscreen' || 
- name === 'loading' || 
- name === 'width' || 
- name === 'height') { 
- target.setAttribute(name, value); 
- } 
- } 
-} 
- 
-// Wait for custom elements to be defined before processing 
-function waitForCustomElements() { 
- var checkInterval = 100; 
- var timeout = 5000; 
- var startTime = Date.now(); 
- 
- function check() { 
- var youtubeReady = customElements.get('lite-youtube'); 
- var vimeoReady = customElements.get('lite-vimeo'); 
- 
- if (youtubeReady && vimeoReady) { 
- replaceVideoIframes(); 
- // Register with ForumCoreObserver for dynamic content 
- registerWithObserver(); 
- } else if (Date.now() - startTime < timeout) { 
- setTimeout(check, checkInterval); 
- } else { 
- console.warn('Custom elements not loaded after timeout'); 
- replaceVideoIframes(); 
- registerWithObserver(); 
- } 
- } 
- 
- check(); 
-} 
- 
-// Register with ForumCoreObserver for dynamic content handling 
-function registerWithObserver() { 
- if (typeof forumObserver !== 'undefined' && forumObserver.register) { 
- // Register callback for iframe processing 
- forumObserver.register({ 
- id: 'video-iframe-replacement', 
- callback: function(node) { 
- // Check if this node or its children contain iframes we need to process 
- var iframes = node.querySelectorAll ? 
- node.querySelectorAll('.post .color iframe, #loading .color iframe') : 
- []; 
- 
- // If the node itself is an iframe, add it to the list 
- if (node.matches && node.matches('.post .color iframe, #loading .color iframe')) { 
- var tempArray = Array.from(iframes); 
- tempArray.push(node); 
- iframes = tempArray; 
- } 
- 
- // Process found iframes 
- for (var i = 0; i < iframes.length; i++) { 
- var iframe = iframes[i]; 
- if (iframe.hasAttribute('data-lite-processed')) continue; 
- 
- var src = iframe.src || iframe.getAttribute('data-src'); 
- if (!src) continue; 
- 
- var videoId = null; 
- var element = null; 
- 
- // YouTube 
- if (src.includes('youtube.com/embed/') || src.includes('youtube-nocookie.com/embed/')) { 
- videoId = extractYouTubeId(src); 
- if (videoId) { 
- element = document.createElement('lite-youtube'); 
- element.setAttribute('videoid', videoId); 
- element.setAttribute('params', 'rel=0&modestbranding=1'); 
- } 
- } 
- // Vimeo 
- else if (src.includes('player.vimeo.com/video/')) { 
- videoId = extractVimeoId(src); 
- if (videoId) { 
- element = document.createElement('lite-vimeo'); 
- element.setAttribute('videoid', videoId); 
- } 
- } 
- 
- if (element && videoId) { 
- copyAttributes(iframe, element); 
- iframe.setAttribute('data-lite-processed', 'true'); 
- iframe.parentNode.replaceChild(element, iframe); 
- } 
- } 
- }, 
- selector: '.post .color iframe, #loading .color iframe, .post .color, #loading .color', 
- priority: 'high' 
- }); 
- 
- console.log('&#128221; Registered video iframe replacement with ForumCoreObserver'); 
- } else { 
- console.warn('ForumCoreObserver not available, using fallback MutationObserver'); 
- setupFallbackMutationObserver(); 
- } 
-} 
- 
-// Fallback MutationObserver if ForumCoreObserver is not available 
-function setupFallbackMutationObserver() { 
- if (typeof MutationObserver === 'undefined') return; 
- 
- var observer = new MutationObserver(function(mutations) { 
- var shouldRun = false; 
- 
- for (var k = 0; k < mutations.length; k++) { 
- var mutation = mutations[k]; 
- if (mutation.addedNodes.length) { 
- for (var l = 0; l < mutation.addedNodes.length; l++) { 
- var node = mutation.addedNodes[l]; 
- if (node.nodeType === 1) { 
- if ((node.matches && node.matches('iframe')) || 
- (node.querySelector && node.querySelector('iframe'))) { 
- shouldRun = true; 
- break; 
- } 
- } 
- } 
- } 
- if (shouldRun) break; 
- } 
- 
- if (shouldRun) { 
- setTimeout(replaceVideoIframes, 100); 
- } 
- }); 
- 
- observer.observe(document.body, { 
- childList: true, 
- subtree: true 
- }); 
-} 
- 
-// Initialize 
-function initVideoIframeReplacement() { 
- if (document.readyState === 'loading') { 
- document.addEventListener('DOMContentLoaded', waitForCustomElements); 
- } else { 
- waitForCustomElements(); 
- } 
-} 
- 
-// Start the process 
-initVideoIframeReplacement(); 
- 
-// Manual trigger for testing 
-if (typeof window !== 'undefined') { 
- window.replaceVideoIframes = replaceVideoIframes; 
- window.initVideoIframeReplacement = initVideoIframeReplacement; 
+'use strict';
+
+// Enhanced replacement function
+function replaceVideoIframes() {
+    var iframes = document.querySelectorAll('.post .color iframe, #loading .color iframe');
+    console.log('Found ' + iframes.length + ' iframes to process');
+
+    for (var i = 0; i < iframes.length; i++) {
+        var iframe = iframes[i];
+
+        // Skip if already processed
+        if (iframe.hasAttribute('data-lite-processed')) continue;
+
+        var src = iframe.src || iframe.getAttribute('data-src');
+        if (!src) {
+            console.warn('Iframe ' + i + ' has no src');
+            continue;
+        }
+
+        var videoId = null;
+        var element = null;
+
+        // YouTube
+        if (src.includes('youtube.com/embed/') || src.includes('youtube-nocookie.com/embed/')) {
+            videoId = extractYouTubeId(src);
+            if (videoId) {
+                element = document.createElement('lite-youtube');
+                element.setAttribute('videoid', videoId);
+                element.setAttribute('params', 'rel=0&modestbranding=1');
+            }
+        }
+        // Vimeo
+        else if (src.includes('player.vimeo.com/video/')) {
+            videoId = extractVimeoId(src);
+            if (videoId) {
+                element = document.createElement('lite-vimeo');
+                element.setAttribute('videoid', videoId);
+            }
+        }
+
+        if (element && videoId) {
+            // Copy attributes
+            copyAttributes(iframe, element);
+
+            // Mark as processed
+            iframe.setAttribute('data-lite-processed', 'true');
+
+            // Replace
+            iframe.parentNode.replaceChild(element, iframe);
+            console.log('✓ Replaced iframe ' + i + ' with ' + element.tagName + ' (ID: ' + videoId + ')');
+        }
+    }
 }
+
+// Helper functions
+function extractYouTubeId(url) {
+    var match = url.match(/(?:\/embed\/|v=|\/v\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+}
+
+function extractVimeoId(url) {
+    var match = url.match(/vimeo\.com\/video\/(\d+)/) ||
+                url.match(/player\.vimeo\.com\/video\/(\d+)/);
+    return match ? match[1] : null;
+}
+
+function copyAttributes(source, target) {
+    for (var j = 0; j < source.attributes.length; j++) {
+        var attr = source.attributes[j];
+        var name = attr.name;
+        var value = attr.value;
+
+        if (name.startsWith('data-') ||
+            name === 'class' ||
+            name === 'style' ||
+            name === 'title' ||
+            name === 'allowfullscreen' ||
+            name === 'loading' ||
+            name === 'width' ||
+            name === 'height') {
+            target.setAttribute(name, value);
+        }
+    }
+}
+
+// Wait for custom elements to be defined before processing
+function waitForCustomElements() {
+    var checkInterval = 100;
+    var timeout = 5000;
+    var startTime = Date.now();
+
+    function check() {
+        var youtubeReady = customElements.get('lite-youtube');
+        var vimeoReady = customElements.get('lite-vimeo');
+
+        if (youtubeReady && vimeoReady) {
+            replaceVideoIframes();
+            // Register with ForumCoreObserver for dynamic content
+            registerWithObserver();
+        } else if (Date.now() - startTime < timeout) {
+            setTimeout(check, checkInterval);
+        } else {
+            console.warn('Custom elements not loaded after timeout');
+            replaceVideoIframes();
+            // No fallback observer - rely on ForumCoreObserver or manual triggers
+        }
+    }
+
+    check();
+}
+
+// Register with ForumCoreObserver for dynamic content handling
+function registerWithObserver() {
+    if (typeof forumObserver !== 'undefined' && forumObserver.register) {
+        // Register callback for iframe processing
+        forumObserver.register({
+            id: 'video-iframe-replacement',
+            callback: function(node) {
+                // Quick check if this could contain iframes
+                var isRelevant = false;
+                
+                // Direct iframe match
+                if (node.matches && node.matches('.post .color iframe, #loading .color iframe')) {
+                    isRelevant = true;
+                }
+                // Container that could have iframes
+                else if (node.matches && (node.matches('.post .color') || node.matches('#loading .color'))) {
+                    isRelevant = true;
+                }
+                // New iframe added to body (forumObserver passes the added node)
+                else if (node.matches && node.matches('iframe')) {
+                    // Check if this iframe is in our target areas
+                    var parent = node.parentElement;
+                    while (parent) {
+                        if (parent.matches && 
+                            (parent.matches('.post .color') || parent.matches('#loading .color'))) {
+                            isRelevant = true;
+                            break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                }
+                
+                if (!isRelevant) return;
+                
+                // Process specific iframes
+                var iframes = [];
+                
+                // If node is an iframe
+                if (node.matches && node.matches('iframe')) {
+                    iframes.push(node);
+                }
+                // If node is a container, get its iframes
+                else if (node.querySelectorAll) {
+                    var found = node.querySelectorAll('.post .color iframe, #loading .color iframe');
+                    for (var i = 0; i < found.length; i++) {
+                        iframes.push(found[i]);
+                    }
+                }
+                
+                // Process found iframes
+                for (var j = 0; j < iframes.length; j++) {
+                    var iframe = iframes[j];
+                    if (iframe.hasAttribute('data-lite-processed')) continue;
+
+                    var src = iframe.src || iframe.getAttribute('data-src');
+                    if (!src) continue;
+
+                    var videoId = null;
+                    var element = null;
+
+                    // YouTube
+                    if (src.includes('youtube.com/embed/') || src.includes('youtube-nocookie.com/embed/')) {
+                        videoId = extractYouTubeId(src);
+                        if (videoId) {
+                            element = document.createElement('lite-youtube');
+                            element.setAttribute('videoid', videoId);
+                            element.setAttribute('params', 'rel=0&modestbranding=1');
+                        }
+                    }
+                    // Vimeo
+                    else if (src.includes('player.vimeo.com/video/')) {
+                        videoId = extractVimeoId(src);
+                        if (videoId) {
+                            element = document.createElement('lite-vimeo');
+                            element.setAttribute('videoid', videoId);
+                        }
+                    }
+
+                    if (element && videoId) {
+                        copyAttributes(iframe, element);
+                        iframe.setAttribute('data-lite-processed', 'true');
+                        iframe.parentNode.replaceChild(element, iframe);
+                    }
+                }
+            },
+            // Watch for iframes and their containers
+            selector: 'iframe, .post .color, #loading .color, .color',
+            priority: 'high'
+        });
+        
+        console.log('📝 Registered video iframe replacement with ForumCoreObserver');
+        
+        // Also add a periodic check for missed iframes (just in case)
+        setupPeriodicCheck();
+    } else {
+        console.warn('ForumCoreObserver not available - video iframes will only be replaced on initial load');
+        // No fallback observer - this is intentional to avoid duplicate observers
+    }
+}
+
+// Simple periodic check as a backup (no MutationObserver)
+function setupPeriodicCheck() {
+    // Run once after a delay to catch anything that might have been missed
+    setTimeout(replaceVideoIframes, 1000);
+    
+    // Run again after a longer delay for AJAX content
+    setTimeout(replaceVideoIframes, 3000);
+    
+    // If the page supports it, run on visibility change
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            setTimeout(replaceVideoIframes, 500);
+        }
+    }, { passive: true });
+}
+
+// Initialize
+function initVideoIframeReplacement() {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', waitForCustomElements);
+    } else {
+        waitForCustomElements();
+    }
+}
+
+// Start the process
+initVideoIframeReplacement();
+
+// Manual trigger for testing or manual re-scan
+if (typeof window !== 'undefined') {
+    window.replaceVideoIframes = replaceVideoIframes;
+    window.initVideoIframeReplacement = initVideoIframeReplacement;
+}
+
+// Export for use by other scripts if they need to trigger video processing
+window.videoIframeUtils = {
+    replace: replaceVideoIframes,
+    init: initVideoIframeReplacement
+};
 
 
 //Twemoji
