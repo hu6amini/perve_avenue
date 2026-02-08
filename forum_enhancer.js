@@ -4770,26 +4770,31 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
-        try {
-            const bodyId = document.body.id;
-            
-            if (bodyId === 'search') {
-                this.#transformSearchPostElements();
-                this.#setupSearchPostObserver();
-            } else {
-                this.#transformPostElements();
-                this.#setupObserverCallbacks();
-                this.#setupActiveStateObserver();
-            }
-            
-            this.#enhanceReputationSystem();
-            this.#setupEnhancedAnchorNavigation();
-            this.#enhanceQuoteLinks();
-            this.#modernizeCodeBlocks();
-            this.#modernizeAttachments();
-            this.#modernizeEmbeddedLinks();
-            this.#modernizePolls();
+#init() {
+    try {
+        const bodyId = document.body.id;
+        
+        if (bodyId === 'search') {
+            this.#transformSearchPostElements();
+            this.#setupSearchPostObserver();
+        } else {
+            this.#transformPostElements();
+            this.#setupObserverCallbacks();
+            this.#setupActiveStateObserver();
+        }
+        
+        this.#enhanceReputationSystem();
+        this.#setupEnhancedAnchorNavigation();
+        this.#enhanceQuoteLinks();
+        this.#modernizeCodeBlocks();
+        this.#modernizeAttachments();
+        this.#modernizeEmbeddedLinks();
+        this.#modernizePolls();
+
+        // NEW: Clean up any double-wrapped media from previous runs
+        setTimeout(() => {
+            this.#cleanupAllDoubleWrappedMedia();
+        }, 500);
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
@@ -4806,6 +4811,26 @@ class PostModernizer {
             }
         }
     }
+
+    #cleanupAllDoubleWrappedMedia() {
+    document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
+        const parent = standardWrapper.parentElement;
+        
+        // Check if parent is also a wrapper
+        if (parent && (parent.classList.contains('media-wrapper') || 
+                      parent.classList.contains('iframe-wrapper') ||
+                      (parent.style.position === 'relative' && parent.style.paddingBottom))) {
+            
+            // Move standard wrapper out of the parent wrapper
+            parent.parentNode.insertBefore(standardWrapper, parent);
+            
+            // Remove the old wrapper if it's empty now
+            if (parent.children.length === 0) {
+                parent.remove();
+            }
+        }
+    });
+}
 
     // ==============================
     // EMBEDDED LINK TRANSFORMATION
