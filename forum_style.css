@@ -1793,6 +1793,103 @@ display:flex;
 [data-theme="light"] .code-content.collapsible-content::after {background: linear-gradient(to bottom, transparent, var(--surface-color) 80%)}
 
 /*============================================
+ MODERN MEDIA WRAPPER ENHANCEMENTS
+============================================*/
+
+/* Enhanced media wrapper base - UPDATED */
+.media-wrapper {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* Default 16:9 aspect ratio */
+    overflow: hidden;
+    border-radius: var(--radius);
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    margin: var(--space-md) 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.media-wrapper:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+/* Simple colored top border instead of gradient (no platform classes needed) */
+.media-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--primary-color);
+    border-radius: var(--radius) var(--radius) 0 0;
+    z-index: 2;
+}
+
+/* Media content inside wrapper - EXISTING in your JS */
+.media-wrapper > iframe,
+.media-wrapper > video,
+.media-wrapper > lite-youtube,
+.media-wrapper > lite-vimeo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* Light theme adjustments */
+[data-theme="light"] .media-wrapper {
+    background: var(--surface-color);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .media-wrapper:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.1);
+}
+
+/* Wrapper within quotes/spoilers - EXISTING selectors */
+.modern-quote .media-wrapper,
+.modern-spoiler .media-wrapper,
+.modern-code .media-wrapper {
+    margin: var(--space-sm) 0;
+    border-width: 1px;
+    box-shadow: var(--shadow-sm);
+}
+
+.modern-quote .media-wrapper:hover,
+.modern-spoiler .media-wrapper:hover,
+.modern-code .media-wrapper:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+
+/* Existing iframe-wrapper fallback */
+.iframe-wrapper {
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: var(--space-md) 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .media-wrapper {
+        margin: var(--space-sm) 0;
+        border-radius: calc(var(--radius) * 0.75);
+    }
+    
+    .media-wrapper::before {
+        height: 2px;
+    }
+}
+
+/*============================================
  modern attachment styles============================================*/
 .modern-attachment {background: var(--surface-color);
  border: 1px solid var(--border-color);
