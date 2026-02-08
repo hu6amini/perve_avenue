@@ -8824,38 +8824,69 @@ class PostModernizer {
     const wrapper = document.createElement('div');
     wrapper.className = 'standard-media-wrapper';
     
-    // Default aspect ratio (16:9)
+    // Default max dimensions (YouTube standard)
+    const maxWidth = 560;
+    const maxHeight = 315;
     let aspectRatio = '16 / 9';
     
     // Try to get actual dimensions
-    const width = element.getAttribute('width') || element.offsetWidth;
-    const height = element.getAttribute('height') || element.offsetHeight;
+    let width = parseInt(element.getAttribute('width')) || element.offsetWidth;
+    let height = parseInt(element.getAttribute('height')) || element.offsetHeight;
     
-    if (width && height && width > 0 && height > 0) {
-        // Calculate greatest common divisor for simplified ratio
-        const gcd = (a, b) => {
-            a = Math.abs(a);
-            b = Math.abs(b);
-            while(b) {
-                const t = b;
-                b = a % b;
-                a = t;
-            }
-            return a;
-        };
-        
-        const w = parseInt(width);
-        const h = parseInt(height);
-        const divisor = gcd(w, h);
-        
-        if (divisor > 0) {
-            const simplifiedWidth = w / divisor;
-            const simplifiedHeight = h / divisor;
-            aspectRatio = simplifiedWidth + ' / ' + simplifiedHeight;
-        }
+    // If no dimensions, use defaults
+    if (!width || !height || width <= 0 || height <= 0) {
+        width = maxWidth;
+        height = maxHeight;
     }
     
-    wrapper.style.cssText = 'position: relative; width: 100%; aspect-ratio: ' + aspectRatio + '; margin: 1em 0; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm);';
+    // Calculate aspect ratio
+    const gcd = (a, b) => {
+        a = Math.abs(a);
+        b = Math.abs(b);
+        while(b) {
+            const t = b;
+            b = a % b;
+            a = t;
+        }
+        return a;
+    };
+    
+    const divisor = gcd(width, height);
+    if (divisor > 0) {
+        const simplifiedWidth = width / divisor;
+        const simplifiedHeight = height / divisor;
+        aspectRatio = simplifiedWidth + ' / ' + simplifiedHeight;
+    }
+    
+    // Calculate if dimensions exceed max
+    let finalWidth = width;
+    let finalHeight = height;
+    
+    if (width > maxWidth || height > maxHeight) {
+        const widthRatio = maxWidth / width;
+        const heightRatio = maxHeight / height;
+        const scale = Math.min(widthRatio, heightRatio);
+        
+        finalWidth = Math.floor(width * scale);
+        finalHeight = Math.floor(height * scale);
+    }
+    
+    // Store original dimensions as data attributes
+    wrapper.setAttribute('data-original-width', width);
+    wrapper.setAttribute('data-original-height', height);
+    wrapper.setAttribute('data-max-width', maxWidth);
+    wrapper.setAttribute('data-max-height', maxHeight);
+    
+    wrapper.style.cssText = 
+        'position: relative; ' +
+        'width: 100%; ' +
+        'max-width: ' + maxWidth + 'px; ' +
+        'max-height: ' + maxHeight + 'px; ' +
+        'aspect-ratio: ' + aspectRatio + '; ' +
+        'margin: 1em auto; ' +  /* Changed to auto for centering */
+        'overflow: hidden; ' +
+        'background: var(--bg-secondary); ' +
+        'border-radius: var(--radius-sm);';
     
     // Type-specific styling
     const src = element.src || element.dataset.src || '';
