@@ -8478,7 +8478,7 @@ class PostModernizer {
     }
 
 #preserveMediaDimensions(element) {
-    // Process images
+    // Process images (existing code)
     element.querySelectorAll('img').forEach(img => {
         if (!img.style.maxWidth) {
             img.style.maxWidth = '100%';
@@ -8507,11 +8507,11 @@ class PostModernizer {
         }
     });
     
+    // NEW: Clean up old wrappers first to prevent double-wrapping
+    this.#cleanupOldMediaWrappers(element);
+    
     // Process all media elements with standardized wrappers
     this.#normalizeAllMediaWrappers(element);
-    
-    // Also run the original wrapper methods for compatibility
-    this.#wrapAllMediaElements(element);
 }
 
     #wrapAllMediaElements(element) {
