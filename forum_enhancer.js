@@ -8535,20 +8535,24 @@ class PostModernizer {
     this.#normalizeExistingWrappers(element);
 }
 
-    #wrapIframe(iframe) {
+  #wrapIframe(iframe) {
     // Check if already has a proper wrapper
     const parent = iframe.parentElement;
     const isProperlyWrapped = parent && 
         ((parent.style.position === 'relative' && parent.style.paddingBottom && 
           parent.style.height === '0') ||
-         parent.classList.contains('iframe-wrapper') ||
-         parent.classList.contains('media-wrapper'));
+         parent.classList.contains('media-wrapper') ||
+         parent.classList.contains('iframe-wrapper'));
     
     if (isProperlyWrapped) {
         // Already has a wrapper, just ensure iframe styling
         if (iframe.style.position !== 'absolute') {
             iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
         }
+        
+        // Enhance the existing wrapper
+        this.#enhanceMediaWrapper(iframe, parent);
+        
         iframe.setAttribute('data-wrapped', 'true');
         return;
     }
@@ -8559,6 +8563,7 @@ class PostModernizer {
         const grandparent = parent.parentElement;
         if (grandparent) {
             const newWrapper = this.#createMediaWrapper(iframe);
+            this.#enhanceMediaWrapper(iframe, newWrapper);
             grandparent.insertBefore(newWrapper, parent);
             parent.remove();
             return;
@@ -8577,6 +8582,9 @@ class PostModernizer {
     // Style the iframe
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
     iframe.setAttribute('data-wrapped', 'true');
+    
+    // Enhance the wrapper
+    this.#enhanceMediaWrapper(iframe, wrapper);
 }
 
 #wrapLiteYoutube(liteYoutube) {
@@ -8784,6 +8792,100 @@ class PostModernizer {
             }
         });
     });
+}
+
+    #enhanceMediaWrapper(iframe, wrapper) {
+    try {
+        const src = iframe.src || iframe.dataset.src || '';
+        
+        // Detect platform and add appropriate class
+        if (src.includes('youtube.com') || src.includes('youtu.be')) {
+            wrapper.classList.add('youtube-wrapper');
+        } else if (src.includes('vimeo.com')) {
+            wrapper.classList.add('vimeo-wrapper');
+        } else if (src.includes('soundcloud.com')) {
+            wrapper.classList.add('soundcloud-wrapper');
+        } else if (src.includes('twitter.com') || src.includes('x.com')) {
+            wrapper.classList.add('twitter-wrapper', 'x-wrapper');
+        }
+        
+        // Extract domain for display
+        const domain = this.#extractDomain(src);
+        const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
+        
+        // Create header for better UX
+        const header = document.createElement('div');
+        header.className = 'media-wrapper-header';
+        
+        let platformIcon = 'fa-regular fa-globe';
+        if (wrapper.classList.contains('youtube-wrapper')) {
+            platformIcon = 'fa-brands fa-youtube';
+        } else if (wrapper.classList.contains('vimeo-wrapper')) {
+            platformIcon = 'fa-brands fa-vimeo';
+        } else if (wrapper.classList.contains('soundcloud-wrapper')) {
+            platformIcon = 'fa-brands fa-soundcloud';
+        } else if (wrapper.classList.contains('twitter-wrapper')) {
+            platformIcon = 'fa-brands fa-twitter';
+        }
+        
+        header.innerHTML = `
+            <div class="media-wrapper-source">
+                <i class="${platformIcon}" aria-hidden="true"></i>
+                <span>${this.#escapeHtml(displayDomain)}</span>
+            </div>
+            <div class="media-wrapper-actions">
+                <button class="media-wrapper-expand" title="Open in new tab" aria-label="Open embedded content in new tab">
+                    <i class="fa-regular fa-expand" aria-hidden="true"></i>
+                    <span>Open</span>
+                </button>
+            </div>
+        `;
+        
+        // Insert header before iframe
+        wrapper.insertBefore(header, iframe);
+        
+        // Add expand functionality
+        const expandBtn = header.querySelector('.media-wrapper-expand');
+        if (expandBtn) {
+            expandBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(src, '_blank', 'noopener,noreferrer');
+            });
+        }
+        
+        // Add loading state
+        wrapper.classList.add('loading');
+        iframe.addEventListener('load', () => {
+            wrapper.classList.remove('loading');
+        });
+        
+        // Error handling
+        iframe.addEventListener('error', () => {
+            wrapper.classList.remove('loading');
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'media-wrapper-error';
+            errorMsg.innerHTML = `
+                <i class="fa-regular fa-triangle-exclamation" aria-hidden="true"></i>
+                <span>Content failed to load</span>
+            `;
+            errorMsg.style.cssText = `
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                color: var(--text-tertiary);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: var(--text-sm);
+            `;
+            wrapper.appendChild(errorMsg);
+        });
+        
+    } catch (error) {
+        console.error('Error enhancing media wrapper:', error);
+    }
 }
     
     #enhanceIframesInElement(element) {
