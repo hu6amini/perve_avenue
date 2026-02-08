@@ -1850,6 +1850,235 @@ globalThis.addEventListener('pagehide', () => {
     // ==============================
     // VIDEO-IFRAME
     // ==============================
+'use strict'; 
+ 
+// Enhanced replacement function 
+function replaceVideoIframes() { 
+ var iframes = document.querySelectorAll('.post .color iframe, #loading .color iframe'); 
+ console.log('Found ' + iframes.length + ' iframes to process'); 
+ 
+ for (var i = 0; i < iframes.length; i++) { 
+ var iframe = iframes[i]; 
+ 
+ // Skip if already processed 
+ if (iframe.hasAttribute('data-lite-processed')) continue; 
+ 
+ var src = iframe.src || iframe.getAttribute('data-src'); 
+ if (!src) { 
+ console.warn('Iframe ' + i + ' has no src'); 
+ continue; 
+ } 
+ 
+ var videoId = null; 
+ var element = null; 
+ 
+ // YouTube 
+ if (src.includes('youtube.com/embed/') || src.includes('youtube-nocookie.com/embed/')) { 
+ videoId = extractYouTubeId(src); 
+ if (videoId) { 
+ element = document.createElement('lite-youtube'); 
+ element.setAttribute('videoid', videoId); 
+ element.setAttribute('params', 'rel=0&modestbranding=1'); 
+ } 
+ } 
+ // Vimeo 
+ else if (src.includes('player.vimeo.com/video/')) { 
+ videoId = extractVimeoId(src); 
+ if (videoId) { 
+ element = document.createElement('lite-vimeo'); 
+ element.setAttribute('videoid', videoId); 
+ } 
+ } 
+ 
+ if (element && videoId) { 
+ // Copy attributes 
+ copyAttributes(iframe, element); 
+ 
+ // Mark as processed 
+ iframe.setAttribute('data-lite-processed', 'true'); 
+ 
+ // Replace 
+ iframe.parentNode.replaceChild(element, iframe); 
+ console.log('&#10003; Replaced iframe ' + i + ' with ' + element.tagName + ' (ID: ' + videoId + ')'); 
+ } 
+ } 
+} 
+ 
+// Helper functions 
+function extractYouTubeId(url) { 
+ var match = url.match(/(?:\/embed\/|v=|\/v\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/); 
+ return match ? match[1] : null; 
+} 
+ 
+function extractVimeoId(url) { 
+ var match = url.match(/vimeo\.com\/video\/(\d+)/) || 
+ url.match(/player\.vimeo\.com\/video\/(\d+)/); 
+ return match ? match[1] : null; 
+} 
+ 
+function copyAttributes(source, target) { 
+ for (var j = 0; j < source.attributes.length; j++) { 
+ var attr = source.attributes[j]; 
+ var name = attr.name; 
+ var value = attr.value; 
+ 
+ if (name.startsWith('data-') || 
+ name === 'class' || 
+ name === 'style' || 
+ name === 'title' || 
+ name === 'allowfullscreen' || 
+ name === 'loading' || 
+ name === 'width' || 
+ name === 'height') { 
+ target.setAttribute(name, value); 
+ } 
+ } 
+} 
+ 
+// Wait for custom elements to be defined before processing 
+function waitForCustomElements() { 
+ var checkInterval = 100; 
+ var timeout = 5000; 
+ var startTime = Date.now(); 
+ 
+ function check() { 
+ var youtubeReady = customElements.get('lite-youtube'); 
+ var vimeoReady = customElements.get('lite-vimeo'); 
+ 
+ if (youtubeReady && vimeoReady) { 
+ replaceVideoIframes(); 
+ // Register with ForumCoreObserver for dynamic content 
+ registerWithObserver(); 
+ } else if (Date.now() - startTime < timeout) { 
+ setTimeout(check, checkInterval); 
+ } else { 
+ console.warn('Custom elements not loaded after timeout'); 
+ replaceVideoIframes(); 
+ registerWithObserver(); 
+ } 
+ } 
+ 
+ check(); 
+} 
+ 
+// Register with ForumCoreObserver for dynamic content handling 
+function registerWithObserver() { 
+ if (typeof forumObserver !== 'undefined' && forumObserver.register) { 
+ // Register callback for iframe processing 
+ forumObserver.register({ 
+ id: 'video-iframe-replacement', 
+ callback: function(node) { 
+ // Check if this node or its children contain iframes we need to process 
+ var iframes = node.querySelectorAll ? 
+ node.querySelectorAll('.post .color iframe, #loading .color iframe') : 
+ []; 
+ 
+ // If the node itself is an iframe, add it to the list 
+ if (node.matches && node.matches('.post .color iframe, #loading .color iframe')) { 
+ var tempArray = Array.from(iframes); 
+ tempArray.push(node); 
+ iframes = tempArray; 
+ } 
+ 
+ // Process found iframes 
+ for (var i = 0; i < iframes.length; i++) { 
+ var iframe = iframes[i]; 
+ if (iframe.hasAttribute('data-lite-processed')) continue; 
+ 
+ var src = iframe.src || iframe.getAttribute('data-src'); 
+ if (!src) continue; 
+ 
+ var videoId = null; 
+ var element = null; 
+ 
+ // YouTube 
+ if (src.includes('youtube.com/embed/') || src.includes('youtube-nocookie.com/embed/')) { 
+ videoId = extractYouTubeId(src); 
+ if (videoId) { 
+ element = document.createElement('lite-youtube'); 
+ element.setAttribute('videoid', videoId); 
+ element.setAttribute('params', 'rel=0&modestbranding=1'); 
+ } 
+ } 
+ // Vimeo 
+ else if (src.includes('player.vimeo.com/video/')) { 
+ videoId = extractVimeoId(src); 
+ if (videoId) { 
+ element = document.createElement('lite-vimeo'); 
+ element.setAttribute('videoid', videoId); 
+ } 
+ } 
+ 
+ if (element && videoId) { 
+ copyAttributes(iframe, element); 
+ iframe.setAttribute('data-lite-processed', 'true'); 
+ iframe.parentNode.replaceChild(element, iframe); 
+ } 
+ } 
+ }, 
+ selector: '.post .color iframe, #loading .color iframe, .post .color, #loading .color', 
+ priority: 'high' 
+ }); 
+ 
+ console.log('&#128221; Registered video iframe replacement with ForumCoreObserver'); 
+ } else { 
+ console.warn('ForumCoreObserver not available, using fallback MutationObserver'); 
+ setupFallbackMutationObserver(); 
+ } 
+} 
+ 
+// Fallback MutationObserver if ForumCoreObserver is not available 
+function setupFallbackMutationObserver() { 
+ if (typeof MutationObserver === 'undefined') return; 
+ 
+ var observer = new MutationObserver(function(mutations) { 
+ var shouldRun = false; 
+ 
+ for (var k = 0; k < mutations.length; k++) { 
+ var mutation = mutations[k]; 
+ if (mutation.addedNodes.length) { 
+ for (var l = 0; l < mutation.addedNodes.length; l++) { 
+ var node = mutation.addedNodes[l]; 
+ if (node.nodeType === 1) { 
+ if ((node.matches && node.matches('iframe')) || 
+ (node.querySelector && node.querySelector('iframe'))) { 
+ shouldRun = true; 
+ break; 
+ } 
+ } 
+ } 
+ } 
+ if (shouldRun) break; 
+ } 
+ 
+ if (shouldRun) { 
+ setTimeout(replaceVideoIframes, 100); 
+ } 
+ }); 
+ 
+ observer.observe(document.body, { 
+ childList: true, 
+ subtree: true 
+ }); 
+} 
+ 
+// Initialize 
+function initVideoIframeReplacement() { 
+ if (document.readyState === 'loading') { 
+ document.addEventListener('DOMContentLoaded', waitForCustomElements); 
+ } else { 
+ waitForCustomElements(); 
+ } 
+} 
+ 
+// Start the process 
+initVideoIframeReplacement(); 
+ 
+// Manual trigger for testing 
+if (typeof window !== 'undefined') { 
+ window.replaceVideoIframes = replaceVideoIframes; 
+ window.initVideoIframeReplacement = initVideoIframeReplacement; 
+}
 
 
 //Twemoji
