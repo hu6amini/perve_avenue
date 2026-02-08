@@ -8846,91 +8846,63 @@ class PostModernizer {
         }
     }
 
-   #createStandardMediaWrapper(element) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'standard-media-wrapper';
-    
-    // Default aspect ratio (16:9)
-    let aspectRatio = 56.25;
-    
-    // Try to determine aspect ratio from element attributes
-    const width = element.getAttribute('width') || element.offsetWidth;
-    const height = element.getAttribute('height') || element.offsetHeight;
-    
-    // YouTube/Vimeo specific detection
-    const src = element.src || element.dataset.src || '';
-    const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
-                      element.tagName === 'LITE-YOUTUBE';
-    const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
-    
-    if (width && height && !isNaN(width) && !isNaN(height)) {
-        // Calculate aspect ratio from explicit dimensions
-        aspectRatio = (parseInt(height) / parseInt(width)) * 100;
-    } else if (isYouTube) {
-        // Standard YouTube dimensions (16:9)
-        aspectRatio = 56.25;
-    } else if (isVimeo) {
-        // Standard Vimeo dimensions (typically 16:9)
-        aspectRatio = 56.25;
-    } else if (src.includes('soundcloud.com')) {
-        // SoundCloud embed
-        aspectRatio = 29.64;
-    } else if (src.includes('twitter.com') || src.includes('x.com')) {
-        // Twitter/X embed
-        aspectRatio = 56.25;
-    } else {
-        // Fallback for unknown embeds
-        aspectRatio = 56.25;
+    #createStandardMediaWrapper(element) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'standard-media-wrapper';
+        
+        // Default aspect ratio (16:9)
+        let aspectRatio = 56.25;
+        
+        // Try to determine aspect ratio from element attributes
+        const width = element.getAttribute('width') || element.offsetWidth;
+        const height = element.getAttribute('height') || element.offsetHeight;
+        
+        // YouTube/Vimeo specific detection
+        const src = element.src || element.dataset.src || '';
+        const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
+                          element.tagName === 'LITE-YOUTUBE';
+        const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
+        
+        if (width && height && !isNaN(width) && !isNaN(height)) {
+            // Calculate aspect ratio from explicit dimensions
+            aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+        } else if (isYouTube) {
+            // Standard YouTube dimensions (16:9)
+            aspectRatio = 56.25;
+        } else if (isVimeo) {
+            // Standard Vimeo dimensions (typically 16:9)
+            aspectRatio = 56.25;
+        } else if (src.includes('soundcloud.com')) {
+            // SoundCloud embed
+            aspectRatio = 29.64;
+        } else if (src.includes('twitter.com') || src.includes('x.com')) {
+            // Twitter/X embed
+            aspectRatio = 56.25;
+        } else {
+            // Fallback for unknown embeds
+            aspectRatio = 56.25;
+        }
+        
+        // Clamp aspect ratio
+        aspectRatio = Math.max(30, Math.min(150, aspectRatio));
+        
+        wrapper.style.cssText = 'position: relative;width: 100%;padding-bottom: ' + aspectRatio + '%;margin: 1em 0;overflow: hidden;background: var(--bg-secondary);border-radius: var(--radius-sm);';
+        
+        // Add specific class based on media type
+        if (isYouTube) {
+            wrapper.classList.add('youtube-wrapper');
+            wrapper.style.background = '#000';
+        } else if (isVimeo) {
+            wrapper.classList.add('vimeo-wrapper');
+            wrapper.style.background = '#1ab7ea';
+        } else if (element.tagName === 'VIDEO') {
+            wrapper.classList.add('video-wrapper');
+            wrapper.style.background = '#000';
+        }
+        
+        return wrapper;
     }
-    
-    // Clamp aspect ratio
-    aspectRatio = Math.max(30, Math.min(150, aspectRatio));
-    
-    // Set your desired maximums
-    const maxHeight = 600; // pixels
-    const maxWidth = 800;  // pixels
-    
-    // Calculate the maximum width based on max height and aspect ratio
-    // Formula: maxWidth = (maxHeight * 100) / aspectRatio
-    const calculatedMaxWidth = (maxHeight * 100) / aspectRatio;
-    
-    // Use the smaller of calculated max width or desired max width
-    const finalMaxWidth = Math.min(calculatedMaxWidth, maxWidth);
-    
-    // Now calculate the actual max height that will be used
-    const finalMaxHeight = (finalMaxWidth * aspectRatio) / 100;
-    
-    // Base styling with aspect ratio
-    let style = 'position: relative;' +
-                'width: 100%;' +
-                'padding-bottom: ' + aspectRatio + '%;' +
-                'margin: 1em auto;' + // Center it
-                'overflow: hidden;' +
-                'background: var(--bg-secondary);' +
-                'border-radius: var(--radius-sm);' +
-                'max-width: ' + finalMaxWidth + 'px;' + // Derived from max height
-                'max-height: ' + finalMaxHeight + 'px;'; // This will now work
-    
-    wrapper.style.cssText = style;
-    
-    // Add specific class based on media type
-    if (isYouTube) {
-        wrapper.classList.add('youtube-wrapper');
-        wrapper.style.background = '#000';
-    } else if (isVimeo) {
-        wrapper.classList.add('vimeo-wrapper');
-        wrapper.style.background = '#1ab7ea';
-    } else if (element.tagName === 'VIDEO') {
-        wrapper.classList.add('video-wrapper');
-        wrapper.style.background = '#000';
-    }
-    
-    // Store the aspect ratio for later adjustments
-    wrapper.dataset.aspectRatio = aspectRatio.toString();
-    
-    return wrapper;
-}
-    
+
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
         const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
