@@ -7023,7 +7023,7 @@ class PostModernizer {
         document.querySelectorAll('.mini_buttons.points.Sub').forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
 
-  #transformPostElements() {
+#transformPostElements() {
     const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
     const urlParams = new URLSearchParams(window.location.search);
     const startOffset = parseInt(urlParams.get('st') || '0');
@@ -7286,6 +7286,11 @@ class PostModernizer {
         if (postId && postId.startsWith('ee')) {
             post.setAttribute('data-post-id', postId.replace('ee', ''));
         }
+        
+        // NEW: Clean up double-wrapped media after transformation
+        setTimeout(() => {
+            this.#cleanupOldMediaWrappers(post);
+        }, 100);
     });
 }
 
