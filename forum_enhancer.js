@@ -8678,8 +8678,20 @@ class PostModernizer {
 #wrapIframe(iframe) {
     // Check if already wrapped
     if (iframe.closest('.standard-media-wrapper')) {
-        iframe.style.cssText = 'width: 100%; height: 100%; border: 0; object-fit: contain;';
+        iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; padding: 0 !important;';
         return;
+    }
+    
+    // First, clean up any existing padding on the iframe or its parent
+    iframe.style.padding = '0';
+    iframe.style.margin = '0';
+    iframe.style.boxSizing = 'border-box';
+    
+    // Also check parent for padding
+    const parent = iframe.parentElement;
+    if (parent && (parent.style.padding || parent.style.margin)) {
+        parent.style.padding = '0';
+        parent.style.margin = '0';
     }
     
     const wrapper = this.#createStandardMediaWrapper(iframe);
@@ -8688,7 +8700,7 @@ class PostModernizer {
     const originalWidth = iframe.getAttribute('width') || iframe.offsetWidth;
     const originalHeight = iframe.getAttribute('height') || iframe.offsetHeight;
     
-    // Style iframe to fill wrapper with contain
+    // Style iframe to fill wrapper
     iframe.style.cssText = 
         'position: absolute; ' +
         'top: 0; ' +
@@ -8696,7 +8708,9 @@ class PostModernizer {
         'width: 100%; ' +
         'height: 100%; ' +
         'border: 0; ' +
-        'object-fit: contain;'; // This maintains aspect ratio within container
+        'padding: 0 !important; ' +
+        'margin: 0 !important; ' +
+        'box-sizing: border-box !important;';
     
     // Remove any inline width/height that might conflict
     iframe.removeAttribute('width');
@@ -8708,40 +8722,44 @@ class PostModernizer {
     // Move iframe into wrapper
     wrapper.appendChild(iframe);
     
-    // Store original dimensions as data attributes for debugging
-    wrapper.setAttribute('data-original-width', originalWidth);
-    wrapper.setAttribute('data-original-height', originalHeight);
-    
-    // Add a resize observer to enforce max height
-    const enforceConstraints = () => {
-        const computedWidth = wrapper.offsetWidth;
-        const computedHeight = wrapper.offsetHeight;
+    // Calculate actual dimensions after styling
+    const calculateDimensions = () => {
+        const rect = wrapper.getBoundingClientRect();
+        console.log('Final wrapper dimensions:', rect.width, '×', rect.height);
         
-        console.log('Wrapper dimensions:', computedWidth, '×', computedHeight);
+        // Debug: Check computed styles
+        const computedStyle = window.getComputedStyle(wrapper);
+        console.log('Computed padding:', computedStyle.paddingTop, computedStyle.paddingBottom);
+        console.log('Computed aspect-ratio:', computedStyle.aspectRatio);
         
-        // If height exceeds max, adjust
-        if (computedHeight > 315) {
-            // Calculate the width that gives us 315px height at 16:9
-            const targetWidth = 315 * (16/9); // 560px
-            wrapper.style.maxWidth = targetWidth + 'px';
+        // If still wrong, force dimensions
+        if (rect.height > 315) {
+            console.warn('Height still exceeds 315px, forcing dimensions');
             wrapper.style.height = '315px';
+            wrapper.style.width = '560px';
+            wrapper.style.maxWidth = '560px';
+            wrapper.style.maxHeight = '315px';
+            wrapper.style.aspectRatio = 'none';
         }
     };
     
-    // Run once
-    setTimeout(enforceConstraints, 0);
+    // Run after DOM update
+    setTimeout(calculateDimensions, 100);
     
-    // Run on resize
-    const resizeObserver = new ResizeObserver(enforceConstraints);
+    // Add resize observer
+    const resizeObserver = new ResizeObserver(() => {
+        const rect = wrapper.getBoundingClientRect();
+        if (rect.height > 315) {
+            wrapper.style.height = '315px';
+            wrapper.style.maxHeight = '315px';
+        }
+    });
     resizeObserver.observe(wrapper);
     
     // Store for cleanup
     wrapper._resizeObserver = resizeObserver;
     
     iframe.setAttribute('data-wrapped', 'true');
-    
-    // Debug log
-    console.log('Wrapped iframe. Original:', originalWidth, '×', originalHeight);
 }
     
     #wrapLiteYoutube(liteYoutube) {
@@ -8885,7 +8903,9 @@ class PostModernizer {
         'margin: 1em auto; ' +
         'overflow: hidden; ' +
         'background: var(--bg-secondary); ' +
-        'border-radius: var(--radius-sm);';
+        'border-radius: var(--radius-sm); ' +
+        'padding: 0 !important; ' + // CRITICAL: Remove all padding
+        'box-sizing: border-box !important;'; // Ensure padding doesn't affect dimensions
     
     // Type-specific styling
     const src = element.src || element.dataset.src || '';
