@@ -8731,7 +8731,7 @@ class PostModernizer {
     video.setAttribute('data-wrapped', 'true');
 }
 
-    #createMediaWrapper(element) {
+#createMediaWrapper(element) {
     const wrapper = document.createElement('div');
     wrapper.className = 'media-wrapper';
     
@@ -8743,10 +8743,24 @@ class PostModernizer {
     const height = element.getAttribute('height') || element.offsetHeight;
     
     if (width && height) {
-        aspectRatio = ((parseInt(height) / parseInt(width)) * 100) + '%';
+        const widthNum = parseInt(width);
+        const heightNum = parseInt(height);
+        if (!isNaN(widthNum) && !isNaN(heightNum) && widthNum > 0 && heightNum > 0) {
+            aspectRatio = ((heightNum / widthNum) * 100) + '%';
+        }
     }
     
-    wrapper.style.cssText = `position:relative;width:100%;padding-bottom:${aspectRatio};overflow:hidden;`;
+    wrapper.style.cssText = `
+        position: relative;
+        width: 100%;
+        padding-bottom: ${aspectRatio};
+        overflow: hidden;
+        border-radius: var(--radius);
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        margin: var(--space-md) 0;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    `;
     
     return wrapper;
 }
