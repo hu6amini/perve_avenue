@@ -8675,7 +8675,7 @@ class PostModernizer {
         wrapper.setAttribute('data-standardized', 'true');
     }
 
-   #wrapIframe(iframe) {
+#wrapIframe(iframe) {
     // Check if already wrapped
     if (iframe.closest('.standard-media-wrapper')) {
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0;';
@@ -8855,23 +8855,7 @@ class PostModernizer {
         }
     }
     
-    // Calculate max-height based on max-width and aspect ratio
-    const maxWidth = 560;
-    const maxHeight = 315;
-    
-    // For 16:9 aspect ratio, 560px width = 315px height
-    // But we need to handle different aspect ratios
-    
-    wrapper.style.cssText = 'position: relative; width: 100%; max-width: ' + maxWidth + 'px; aspect-ratio: ' + aspectRatio + '; margin: 1em auto; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm);';
-    
-    // Also set max-height based on aspect ratio and max-width
-    // Calculate: max-height = max-width * (height/width ratio)
-    const ratioParts = aspectRatio.split('/').map(p => parseFloat(p.trim()));
-    const heightRatio = ratioParts[1] / ratioParts[0];
-    const calculatedMaxHeight = maxWidth * heightRatio;
-    
-    // Use the smaller of calculated max-height or specified max-height
-    wrapper.style.maxHeight = Math.min(calculatedMaxHeight, maxHeight) + 'px';
+    wrapper.style.cssText = 'position: relative; width: 100%; aspect-ratio: ' + aspectRatio + '; margin: 1em 0; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm);';
     
     // Type-specific styling
     const src = element.src || element.dataset.src || '';
