@@ -8723,6 +8723,69 @@ class PostModernizer {
     video.setAttribute('data-wrapped', 'true');
 }
 
+    #createMediaWrapper(element) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'media-wrapper';
+    
+    // Default to 16:9 aspect ratio
+    let aspectRatio = '56.25%';
+    
+    // Try to determine aspect ratio from element
+    const width = element.getAttribute('width') || element.offsetWidth;
+    const height = element.getAttribute('height') || element.offsetHeight;
+    
+    if (width && height) {
+        aspectRatio = ((parseInt(height) / parseInt(width)) * 100) + '%';
+    }
+    
+    wrapper.style.cssText = `position:relative;width:100%;padding-bottom:${aspectRatio};overflow:hidden;`;
+    
+    return wrapper;
+}
+
+#normalizeExistingWrappers(element) {
+    // Find all potential wrapper divs
+    const potentialWrappers = element.querySelectorAll('div[style*="padding"], div[style*="position:relative"]');
+    
+    potentialWrappers.forEach(div => {
+        const style = div.style;
+        
+        // Check if this looks like a media wrapper
+        const isMediaWrapper = (
+            (style.position === 'relative' && style.paddingBottom) ||
+            (style.padding && style.padding.includes('%')) ||
+            div.classList.contains('iframe-wrapper')
+        );
+        
+        if (!isMediaWrapper) return;
+        
+        // Ensure it has our standard class
+        if (!div.classList.contains('media-wrapper')) {
+            div.classList.add('media-wrapper');
+        }
+        
+        // Ensure proper styling
+        if (!style.position || style.position !== 'relative') {
+            style.position = 'relative';
+        }
+        
+        if (!style.overflow || style.overflow !== 'hidden') {
+            style.overflow = 'hidden';
+        }
+        
+        if (!style.width || style.width !== '100%') {
+            style.width = '100%';
+        }
+        
+        // Ensure child media elements are absolutely positioned
+        div.querySelectorAll('iframe, lite-youtube, lite-vimeo, video').forEach(media => {
+            if (media.style.position !== 'absolute') {
+                media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            }
+        });
+    });
+}
+    
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
             const originalWidth = iframe.getAttribute('width');
