@@ -8510,6 +8510,31 @@ class PostModernizer {
     this.#wrapAllMediaElements(element);
 }
 
+    #wrapAllMediaElements(element) {
+    // Handle regular iframes
+    element.querySelectorAll('iframe:not([data-wrapped])').forEach(iframe => {
+        this.#wrapIframe(iframe);
+    });
+    
+    // Handle lite-youtube elements (custom web component)
+    element.querySelectorAll('lite-youtube:not([data-wrapped])').forEach(liteYoutube => {
+        this.#wrapLiteYoutube(liteYoutube);
+    });
+    
+    // Handle lite-vimeo elements (custom web component)
+    element.querySelectorAll('lite-vimeo:not([data-wrapped])').forEach(liteVimeo => {
+        this.#wrapLiteVimeo(liteVimeo);
+    });
+    
+    // Handle video elements
+    element.querySelectorAll('video:not([data-wrapped])').forEach(video => {
+        this.#wrapVideo(video);
+    });
+    
+    // Check for existing wrappers that need to be normalized
+    this.#normalizeExistingWrappers(element);
+}
+
     #enhanceIframesInElement(element) {
         element.querySelectorAll('iframe').forEach(iframe => {
             const originalWidth = iframe.getAttribute('width');
