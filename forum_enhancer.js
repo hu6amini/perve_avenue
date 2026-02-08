@@ -624,22 +624,6 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 }
 
-// Optional cleanup (browser handles most cleanup automatically)
-globalThis.addEventListener('pagehide', () => {
-    if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.destroy === 'function') {
-        // Use requestIdleCallback for non-blocking cleanup
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
-                globalThis.mediaDimensionExtractor.destroy();
-            });
-        } else {
-            setTimeout(() => {
-                globalThis.mediaDimensionExtractor.destroy();
-            }, 0);
-        }
-    }
-});
-
 
 // ==============================
 // Complete Working Avatar System - INCLUDING LIKES/DISLIKES
