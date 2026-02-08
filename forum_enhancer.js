@@ -8506,25 +8506,8 @@ class PostModernizer {
         }
     });
     
-    element.querySelectorAll('iframe, video').forEach(media => {
-        const parent = media.parentElement;
-        const hasExistingWrapper = parent && (
-            (parent.style.position === 'relative' && parent.style.paddingBottom) ||
-            parent.classList.contains('iframe-wrapper') ||
-            (parent.style.height === '0' && parent.style.paddingBottom)
-        );
-        
-        if (hasExistingWrapper) {
-            if (media.style.position !== 'absolute') {
-                media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-            }
-            return;
-        }
-        
-        if (globalThis.mediaDimensionExtractor) {
-            globalThis.mediaDimensionExtractor.extractDimensionsForElement(media);
-        }
-    });
+    // Process all media elements that need wrappers
+    this.#wrapAllMediaElements(element);
 }
 
     #enhanceIframesInElement(element) {
