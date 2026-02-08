@@ -8535,38 +8535,80 @@ class PostModernizer {
     this.#normalizeExistingWrappers(element);
 }
 
-    #wrapIframe(iframe) {
+    #createStandardMediaWrapper(element) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'standard-media-wrapper';
+    
+    // Default aspect ratio (16:9)
+    let aspectRatio = 56.25;
+    
+    // Try to determine aspect ratio from element attributes
+    const width = element.getAttribute('width') || element.offsetWidth;
+    const height = element.getAttribute('height') || element.offsetHeight;
+    
+    // YouTube/Vimeo specific detection
+    const src = element.src || element.dataset.src || '';
+    const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
+                      element.tagName === 'LITE-YOUTUBE';
+    const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
+    
+    if (width && height && !isNaN(width) && !isNaN(height)) {
+        // Calculate aspect ratio from explicit dimensions
+        aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+    } else if (isYouTube) {
+        // Standard YouTube dimensions (16:9)
+        aspectRatio = 56.25; // 315/560 * 100
+    } else if (isVimeo) {
+        // Standard Vimeo dimensions (typically 16:9)
+        aspectRatio = 56.25;
+    } else if (src.includes('soundcloud.com')) {
+        // SoundCloud embed standard height
+        aspectRatio = 29.64; // 166/560 * 100
+    } else if (src.includes('twitter.com') || src.includes('x.com')) {
+        // Twitter/X embed (variable, but 16:9 is safe)
+        aspectRatio = 56.25;
+    } else {
+        // Fallback for unknown embeds
+        aspectRatio = 56.25;
+    }
+    
+    // Clamp aspect ratio to reasonable values (30% - 150%)
+    aspectRatio = Math.max(30, Math.min(150, aspectRatio));
+    
+    wrapper.style.cssText = `
+        position: relative;
+        width: 100%;
+        padding-bottom: ${aspectRatio}%;
+        margin: 1em 0;
+        overflow: hidden;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-sm);
+    `;
+    
+    return wrapper;
+}
+
+ #wrapIframe(iframe) {
     // Check if already has a proper wrapper
     const parent = iframe.parentElement;
     const isProperlyWrapped = parent && 
-        ((parent.style.position === 'relative' && parent.style.paddingBottom && 
-          parent.style.height === '0') ||
-         parent.classList.contains('iframe-wrapper') ||
-         parent.classList.contains('media-wrapper'));
+        parent.classList.contains('standard-media-wrapper');
     
     if (isProperlyWrapped) {
-        // Already has a wrapper, just ensure iframe styling
-        if (iframe.style.position !== 'absolute') {
-            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-        }
+        // Already has a standard wrapper
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
         iframe.setAttribute('data-wrapped', 'true');
         return;
     }
     
-    // Remove any existing wrapper that's not correct
-    if (parent && (parent.style.paddingBottom || parent.style.position === 'relative')) {
-        // This is an incorrect wrapper, replace it
-        const grandparent = parent.parentElement;
-        if (grandparent) {
-            const newWrapper = this.#createMediaWrapper(iframe);
-            grandparent.insertBefore(newWrapper, parent);
-            parent.remove();
-            return;
-        }
-    }
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(iframe);
     
-    // Create new wrapper
-    const wrapper = this.#createMediaWrapper(iframe);
+    // Set standard dimensions for iframe
+    if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
+        iframe.setAttribute('width', '100%');
+        iframe.setAttribute('height', '100%');
+    }
     
     // Insert wrapper before iframe
     iframe.parentNode.insertBefore(wrapper, iframe);
@@ -8578,139 +8620,110 @@ class PostModernizer {
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
     iframe.setAttribute('data-wrapped', 'true');
 }
-
+    
 #wrapLiteYoutube(liteYoutube) {
     const parent = liteYoutube.parentElement;
     
-    // Check if already has a proper wrapper
-    const hasWrapper = parent && (
-        (parent.style.position === 'relative' && parent.style.paddingBottom && 
-         parent.style.height === '0') ||
-        parent.classList.contains('media-wrapper')
-    );
+    // Check if already has a standard wrapper
+    const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
     
-    if (hasWrapper) {
+    if (hasStandardWrapper) {
         liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
         liteYoutube.setAttribute('data-wrapped', 'true');
         return;
     }
     
-    // Create wrapper
-    const wrapper = document.createElement('div');
-    wrapper.className = 'media-wrapper lite-youtube-wrapper';
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(liteYoutube);
+    wrapper.classList.add('lite-youtube-wrapper');
     
-    // Calculate aspect ratio from style or default 16:9
-    let aspectRatio = '56.25%'; // Default 16:9
-    
-    // Check for existing background image to get dimensions
-    const bgImage = liteYoutube.style.backgroundImage;
-    if (bgImage) {
-        // Try to extract dimensions from background image URL
-        const match = bgImage.match(/vi\/([^\/]+)\/([^\.]+)\.jpg/);
-        if (match) {
-            // Could fetch image dimensions here, but default to 16:9
-            aspectRatio = '56.25%';
-        }
-    }
-    
-    // Check for height attribute
-    if (liteYoutube.hasAttribute('height')) {
-        const height = parseInt(liteYoutube.getAttribute('height'));
-        const width = liteYoutube.hasAttribute('width') ? 
-            parseInt(liteYoutube.getAttribute('width')) : 560;
-        if (height && width) {
-            aspectRatio = ((height / width) * 100) + '%';
-        }
-    }
-    
-    wrapper.style.cssText = `position:relative;width:100%;padding-bottom:${aspectRatio};overflow:hidden;`;
+    // Add YouTube-specific styling
+    wrapper.style.cssText += `
+        background: #000;
+    `;
     
     // Insert wrapper before lite-youtube
     liteYoutube.parentNode.insertBefore(wrapper, liteYoutube);
     
-    // Move lite-youtube into wrapper
+    // Move element into wrapper
     wrapper.appendChild(liteYoutube);
     
     // Style lite-youtube
     liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
     liteYoutube.setAttribute('data-wrapped', 'true');
+    
+    // Ensure it has proper attributes
+    if (!liteYoutube.hasAttribute('width')) {
+        liteYoutube.setAttribute('width', '100%');
+    }
+    if (!liteYoutube.hasAttribute('height')) {
+        liteYoutube.setAttribute('height', '100%');
+    }
 }
 
 #wrapLiteVimeo(liteVimeo) {
     const parent = liteVimeo.parentElement;
     
-    // Check if already has a proper wrapper (common pattern for Vimeo)
-    const hasWrapper = parent && (
-        (parent.style.padding && parent.style.padding.includes('%')) ||
-        (parent.style.position === 'relative' && parent.style.paddingBottom) ||
-        parent.classList.contains('media-wrapper')
-    );
+    // Check if already has a standard wrapper
+    const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
     
-    if (hasWrapper) {
+    if (hasStandardWrapper) {
         liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
         liteVimeo.setAttribute('data-wrapped', 'true');
         return;
     }
     
-    // Create wrapper
-    const wrapper = document.createElement('div');
-    wrapper.className = 'media-wrapper lite-vimeo-wrapper';
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(liteVimeo);
+    wrapper.classList.add('lite-vimeo-wrapper');
     
-    // Default aspect ratio for Vimeo (often 16:9)
-    let aspectRatio = '56.25%';
-    
-    // Try to get dimensions from background image
-    const bgImage = liteVimeo.style.backgroundImage;
-    if (bgImage) {
-        // Vimeo background images often contain dimensions in URL
-        const match = bgImage.match(/video\/(\d+)x(\d+)/);
-        if (match) {
-            const width = parseInt(match[1]);
-            const height = parseInt(match[2]);
-            if (width && height) {
-                aspectRatio = ((height / width) * 100) + '%';
-            }
-        }
-    }
-    
-    wrapper.style.cssText = `position:relative;width:100%;padding-bottom:${aspectRatio};overflow:hidden;`;
+    // Add Vimeo-specific styling
+    wrapper.style.cssText += `
+        background: #1ab7ea;
+    `;
     
     // Insert wrapper before lite-vimeo
     liteVimeo.parentNode.insertBefore(wrapper, liteVimeo);
     
-    // Move lite-vimeo into wrapper
+    // Move element into wrapper
     wrapper.appendChild(liteVimeo);
     
     // Style lite-vimeo
     liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
     liteVimeo.setAttribute('data-wrapped', 'true');
+    
+    // Ensure it has proper attributes
+    if (!liteVimeo.hasAttribute('width')) {
+        liteVimeo.setAttribute('width', '100%');
+    }
+    if (!liteVimeo.hasAttribute('height')) {
+        liteVimeo.setAttribute('height', '100%');
+    }
 }
 
-    #wrapVideo(video) {
+ #wrapVideo(video) {
     const parent = video.parentElement;
     
-    // Check if already has a proper wrapper
-    const hasWrapper = parent && (
-        (parent.style.position === 'relative' && parent.style.paddingBottom) ||
-        parent.classList.contains('media-wrapper')
-    );
+    // Check if already has a standard wrapper
+    const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
     
-    if (hasWrapper) {
+    if (hasStandardWrapper) {
         video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
         video.setAttribute('data-wrapped', 'true');
         return;
     }
     
-    // Get video dimensions
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(video);
+    wrapper.classList.add('video-wrapper');
+    
+    // Get video dimensions or use defaults
     const width = video.getAttribute('width') || video.videoWidth || 640;
     const height = video.getAttribute('height') || video.videoHeight || 360;
     
-    // Create wrapper
-    const wrapper = this.#createMediaWrapper(video);
-    
-    // Calculate aspect ratio
-    const aspectRatio = ((height / width) * 100) + '%';
-    wrapper.style.paddingBottom = aspectRatio;
+    // Calculate aspect ratio for video specifically
+    const aspectRatio = ((height / width) * 100);
+    wrapper.style.paddingBottom = `${aspectRatio}%`;
     
     // Insert wrapper before video
     video.parentNode.insertBefore(wrapper, video);
@@ -8719,8 +8732,21 @@ class PostModernizer {
     wrapper.appendChild(video);
     
     // Style video
-    video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+    video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
     video.setAttribute('data-wrapped', 'true');
+    
+    // Ensure it has proper attributes
+    if (!video.hasAttribute('width')) {
+        video.setAttribute('width', width);
+    }
+    if (!video.hasAttribute('height')) {
+        video.setAttribute('height', height);
+    }
+    
+    // Add video controls if not present
+    if (!video.hasAttribute('controls')) {
+        video.setAttribute('controls', '');
+    }
 }
 
     #createMediaWrapper(element) {
@@ -8842,6 +8868,90 @@ class PostModernizer {
             }
         });
     }
+
+    #normalizeAllMediaWrappers(element) {
+    // Find all potential media elements
+    const mediaElements = element.querySelectorAll(
+        'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
+    );
+    
+    mediaElements.forEach(media => {
+        // Skip already wrapped elements
+        if (media.getAttribute('data-wrapped') === 'true') return;
+        
+        // Check if element needs wrapping
+        if (media.tagName === 'IFRAME') {
+            this.#wrapIframe(media);
+        } else if (media.tagName === 'LITE-YOUTUBE') {
+            this.#wrapLiteYoutube(media);
+        } else if (media.tagName === 'LITE-VIMEO') {
+            this.#wrapLiteVimeo(media);
+        } else if (media.tagName === 'VIDEO') {
+            this.#wrapVideo(media);
+        } else if (media.classList.contains('media-wrapper') || 
+                   media.classList.contains('iframe-wrapper')) {
+            // This is already a wrapper, ensure it's standardized
+            this.#standardizeExistingWrapper(media);
+        }
+    });
+}
+
+#standardizeExistingWrapper(wrapper) {
+    // Add standard class if not present
+    if (!wrapper.classList.contains('standard-media-wrapper')) {
+        wrapper.classList.add('standard-media-wrapper');
+    }
+    
+    // Ensure proper styling
+    const computedStyle = window.getComputedStyle(wrapper);
+    
+    // Check if padding-bottom is set for aspect ratio
+    if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
+        // Calculate or set default aspect ratio
+        const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
+        if (children.length > 0) {
+            const child = children[0];
+            
+            // Try to get dimensions from child
+            const width = child.getAttribute('width') || child.offsetWidth;
+            const height = child.getAttribute('height') || child.offsetHeight;
+            
+            if (width && height && !isNaN(width) && !isNaN(height)) {
+                const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+                wrapper.style.paddingBottom = `${aspectRatio}%`;
+            } else {
+                // Default to 16:9
+                wrapper.style.paddingBottom = '56.25%';
+            }
+        } else {
+            // Default to 16:9
+            wrapper.style.paddingBottom = '56.25%';
+        }
+    }
+    
+    // Ensure wrapper has relative positioning
+    if (computedStyle.position !== 'relative') {
+        wrapper.style.position = 'relative';
+    }
+    
+    // Ensure overflow hidden
+    if (computedStyle.overflow !== 'hidden') {
+        wrapper.style.overflow = 'hidden';
+    }
+    
+    // Ensure full width
+    if (!wrapper.style.width || wrapper.style.width !== '100%') {
+        wrapper.style.width = '100%';
+    }
+    
+    // Add margin for spacing
+    if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
+        wrapper.style.margin = '1em 0';
+    }
+    
+    // Mark as standardized
+    wrapper.setAttribute('data-standardized', 'true');
+}
 
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
