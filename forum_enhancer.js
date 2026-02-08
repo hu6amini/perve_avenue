@@ -8678,14 +8678,29 @@ class PostModernizer {
 #wrapIframe(iframe) {
     // Check if already wrapped
     if (iframe.closest('.standard-media-wrapper')) {
-        iframe.style.cssText = 'width: 100%; height: 100%; border: 0;';
+        iframe.style.cssText = 'width: 100%; height: 100%; border: 0; object-fit: contain;';
         return;
     }
     
     const wrapper = this.#createStandardMediaWrapper(iframe);
     
-    // Style iframe to fill wrapper
-    iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;';
+    // Store original dimensions before modifying
+    const originalWidth = iframe.getAttribute('width') || iframe.offsetWidth;
+    const originalHeight = iframe.getAttribute('height') || iframe.offsetHeight;
+    
+    // Style iframe to fill wrapper with contain
+    iframe.style.cssText = 
+        'position: absolute; ' +
+        'top: 0; ' +
+        'left: 0; ' +
+        'width: 100%; ' +
+        'height: 100%; ' +
+        'border: 0; ' +
+        'object-fit: contain;'; // This maintains aspect ratio within container
+    
+    // Remove any inline width/height that might conflict
+    iframe.removeAttribute('width');
+    iframe.removeAttribute('height');
     
     // Insert wrapper before iframe
     iframe.parentNode.insertBefore(wrapper, iframe);
@@ -8693,7 +8708,40 @@ class PostModernizer {
     // Move iframe into wrapper
     wrapper.appendChild(iframe);
     
+    // Store original dimensions as data attributes for debugging
+    wrapper.setAttribute('data-original-width', originalWidth);
+    wrapper.setAttribute('data-original-height', originalHeight);
+    
+    // Add a resize observer to enforce max height
+    const enforceConstraints = () => {
+        const computedWidth = wrapper.offsetWidth;
+        const computedHeight = wrapper.offsetHeight;
+        
+        console.log('Wrapper dimensions:', computedWidth, '×', computedHeight);
+        
+        // If height exceeds max, adjust
+        if (computedHeight > 315) {
+            // Calculate the width that gives us 315px height at 16:9
+            const targetWidth = 315 * (16/9); // 560px
+            wrapper.style.maxWidth = targetWidth + 'px';
+            wrapper.style.height = '315px';
+        }
+    };
+    
+    // Run once
+    setTimeout(enforceConstraints, 0);
+    
+    // Run on resize
+    const resizeObserver = new ResizeObserver(enforceConstraints);
+    resizeObserver.observe(wrapper);
+    
+    // Store for cleanup
+    wrapper._resizeObserver = resizeObserver;
+    
     iframe.setAttribute('data-wrapped', 'true');
+    
+    // Debug log
+    console.log('Wrapped iframe. Original:', originalWidth, '×', originalHeight);
 }
     
     #wrapLiteYoutube(liteYoutube) {
@@ -8824,66 +8872,17 @@ class PostModernizer {
     const wrapper = document.createElement('div');
     wrapper.className = 'standard-media-wrapper';
     
-    // Default max dimensions (YouTube standard)
+    // ALWAYS use 16:9 aspect ratio for consistency
+    const aspectRatio = '16 / 9';
     const maxWidth = 560;
     const maxHeight = 315;
-    let aspectRatio = '16 / 9';
-    
-    // Try to get actual dimensions
-    let width = parseInt(element.getAttribute('width')) || element.offsetWidth;
-    let height = parseInt(element.getAttribute('height')) || element.offsetHeight;
-    
-    // If no dimensions, use defaults
-    if (!width || !height || width <= 0 || height <= 0) {
-        width = maxWidth;
-        height = maxHeight;
-    }
-    
-    // Calculate aspect ratio
-    const gcd = (a, b) => {
-        a = Math.abs(a);
-        b = Math.abs(b);
-        while(b) {
-            const t = b;
-            b = a % b;
-            a = t;
-        }
-        return a;
-    };
-    
-    const divisor = gcd(width, height);
-    if (divisor > 0) {
-        const simplifiedWidth = width / divisor;
-        const simplifiedHeight = height / divisor;
-        aspectRatio = simplifiedWidth + ' / ' + simplifiedHeight;
-    }
-    
-    // Calculate if dimensions exceed max
-    let finalWidth = width;
-    let finalHeight = height;
-    
-    if (width > maxWidth || height > maxHeight) {
-        const widthRatio = maxWidth / width;
-        const heightRatio = maxHeight / height;
-        const scale = Math.min(widthRatio, heightRatio);
-        
-        finalWidth = Math.floor(width * scale);
-        finalHeight = Math.floor(height * scale);
-    }
-    
-    // Store original dimensions as data attributes
-    wrapper.setAttribute('data-original-width', width);
-    wrapper.setAttribute('data-original-height', height);
-    wrapper.setAttribute('data-max-width', maxWidth);
-    wrapper.setAttribute('data-max-height', maxHeight);
     
     wrapper.style.cssText = 
         'position: relative; ' +
         'width: 100%; ' +
         'max-width: ' + maxWidth + 'px; ' +
-        'max-height: ' + maxHeight + 'px; ' +
-        'aspect-ratio: ' + aspectRatio + '; ' +
-        'margin: 1em auto; ' +  /* Changed to auto for centering */
+        'aspect-ratio: ' + aspectRatio + '; ' + // Force 16:9
+        'margin: 1em auto; ' +
         'overflow: hidden; ' +
         'background: var(--bg-secondary); ' +
         'border-radius: var(--radius-sm);';
