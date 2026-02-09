@@ -5,23 +5,56 @@
 
 /*============================================
  font face declarations============================================*/
-@font-face {font-family: 'Font Awesome 6 Pro';
- src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
- url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2) format("woff2"),
- url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194774/forum/fonts/Font%20Awesome%206/fa-regular-400_b4lkfb.woff) format("woff");
- font-weight: 400;
- font-style: normal;
- font-display: swap;
- unicode-range: u+f000-ffff}
+/* Regular (400) - for regular icons */
+@font-face {
+  font-family: 'Font Awesome 6 Pro';
+  src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2) format("woff2"),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194774/forum/fonts/Font%20Awesome%206/fa-regular-400_b4lkfb.woff) format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* Font metric overrides to prevent layout shift */
+  size-adjust: 100%;
+  descent-override: 0%;
+  ascent-override: 100%;
+  line-gap-override: 0%;
+  unicode-range: u+f000-ffff;
+}
 
-@font-face {font-family: 'Font Awesome 6 Pro';
- src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
- url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2) format("woff2"),
- url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_qsb9fj.woff) format("woff");
- font-weight: 400;
- font-style: normal;
- font-display: swap;
- unicode-range: u+f000-ffff}
+/* Brands (400) - for brand icons */
+@font-face {
+  font-family: 'Font Awesome 6 Pro';
+  src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2) format("woff2"),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_qsb9fj.woff) format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* Font metric overrides to prevent layout shift */
+  size-adjust: 100%;
+  descent-override: 0%;
+  ascent-override: 100%;
+  line-gap-override: 0%;
+  unicode-range: u+f000-ffff;
+}
+
+/* Solid (900) - for solid icons - THIS WAS MISSING */
+@font-face {
+  font-family: 'Font Awesome 6 Pro';
+  src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2) format("woff2"),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270629/forum/fonts/Font%20Awesome%206/fa-solid-900_lxocva.woff) format("woff");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  /* Font metric overrides to prevent layout shift */
+  size-adjust: 100%;
+  descent-override: 0%;
+  ascent-override: 100%;
+  line-gap-override: 0%;
+  unicode-range: u+f000-ffff;
+}
 
 @font-face {font-family: 'Bree Serif';
  src: local('Bree Serif'), local('BreeSerif-Regular'),
