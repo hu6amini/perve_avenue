@@ -8841,7 +8841,7 @@ class PostModernizer {
     }
     
     // Key change: Use contain: size to respect both max constraints
-    wrapper.style.cssText = 'position: relative; width: 100%; max-width: 560px; max-height: 315px; aspect-ratio: ' + aspectRatio + '; margin: 1em auto; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm); contain: size;';
+    wrapper.style.cssText = 'position: relative; width: 100%; max-width: 560px; max-height: 315px; aspect-ratio: ' + aspectRatio + '; margin: 1em auto; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm); contain: size; padding: 0;';
     
     // Type-specific styling
     const src = element.src || element.dataset.src || '';
