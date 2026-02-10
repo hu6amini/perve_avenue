@@ -9454,21 +9454,27 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
+      #enhanceReputationSystem() {
         document.addEventListener('click', (e) => {
             const pointsUp = e.target.closest('.points_up');
             const pointsDown = e.target.closest('.points_down');
             const emojiPreview = e.target.closest('.st-emoji-preview');
             
-            // Check if clicking on a points link (not the container itself)
-            const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
+            // Check if clicking on a modal link
+            const modalLink = e.target.closest('a[rel="#overlay"], a[href*="CODE=votes"], a[href*="CODE=rep"]');
             
-            if (pointsLink) {
-                // Allow the modal link to work normally
+            if (modalLink) {
+                // Allow modal links to work normally - don't interfere
                 return;
             }
 
             if (pointsUp || pointsDown) {
+                // Check if this is actually a link that should open a modal
+                const isModalLink = e.target.closest('a[href]');
+                if (isModalLink) {
+                    return; // Don't interfere with modal links
+                }
+                
                 const pointsContainer = (pointsUp || pointsDown).closest('.points');
                 const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
