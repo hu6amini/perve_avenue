@@ -4770,31 +4770,31 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
-        try {
-            const bodyId = document.body.id;
-            
-            if (bodyId === 'search') {
-                this.#transformSearchPostElements();
-                this.#setupSearchPostObserver();
-            } else {
-                this.#transformPostElements();
-                this.#setupObserverCallbacks();
-                this.#setupActiveStateObserver();
-            }
-            
-            this.#enhanceReputationSystem();
-            this.#setupEnhancedAnchorNavigation();
-            this.#enhanceQuoteLinks();
-            this.#modernizeCodeBlocks();
-            this.#modernizeAttachments();
-            this.#modernizeEmbeddedLinks();
-            this.#modernizePolls();
+#init() {
+    try {
+        const bodyId = document.body.id;
+        
+        if (bodyId === 'search') {
+            this.#transformSearchPostElements();
+            this.#setupSearchPostObserver();
+        } else {
+            this.#transformPostElements();
+            this.#setupObserverCallbacks();
+            this.#setupActiveStateObserver();
+        }
+        
+        this.#enhanceReputationSystem();
+        this.#setupEnhancedAnchorNavigation();
+        this.#enhanceQuoteLinks();
+        this.#modernizeCodeBlocks();
+        this.#modernizeAttachments();
+        this.#modernizeEmbeddedLinks();
+        this.#modernizePolls();
 
-            // Clean up any double-wrapped media from previous runs
-            setTimeout(() => {
-                this.#cleanupAllDoubleWrappedMedia();
-            }, 500);
+        // NEW: Clean up any double-wrapped media from previous runs
+        setTimeout(() => {
+            this.#cleanupAllDoubleWrappedMedia();
+        }, 500);
 
             console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
@@ -4813,24 +4813,24 @@ class PostModernizer {
     }
 
     #cleanupAllDoubleWrappedMedia() {
-        document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
-            const parent = standardWrapper.parentElement;
+    document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
+        const parent = standardWrapper.parentElement;
+        
+        // Check if parent is also a wrapper
+        if (parent && (parent.classList.contains('media-wrapper') || 
+                      parent.classList.contains('iframe-wrapper') ||
+                      (parent.style.position === 'relative' && parent.style.paddingBottom))) {
             
-            // Check if parent is also a wrapper
-            if (parent && (parent.classList.contains('media-wrapper') || 
-                          parent.classList.contains('iframe-wrapper') ||
-                          (parent.style.position === 'relative' && parent.style.paddingBottom))) {
-                
-                // Move standard wrapper out of the parent wrapper
-                parent.parentNode.insertBefore(standardWrapper, parent);
-                
-                // Remove the old wrapper if it's empty now
-                if (parent.children.length === 0) {
-                    parent.remove();
-                }
+            // Move standard wrapper out of the parent wrapper
+            parent.parentNode.insertBefore(standardWrapper, parent);
+            
+            // Remove the old wrapper if it's empty now
+            if (parent.children.length === 0) {
+                parent.remove();
             }
-        });
-    }
+        }
+    });
+}
 
     // ==============================
     // EMBEDDED LINK TRANSFORMATION
@@ -7023,276 +7023,276 @@ class PostModernizer {
         document.querySelectorAll('.mini_buttons.points.Sub').forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
 
-    #transformPostElements() {
-        const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
-        const urlParams = new URLSearchParams(window.location.search);
-        const startOffset = parseInt(urlParams.get('st') || '0');
+#transformPostElements() {
+    const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
+    const urlParams = new URLSearchParams(window.location.search);
+    const startOffset = parseInt(urlParams.get('st') || '0');
 
-        posts.forEach((post, index) => {
-            if (post.closest('body#search')) return;
+    posts.forEach((post, index) => {
+        if (post.closest('body#search')) return;
 
-            post.classList.add('post-modernized');
-            const fragment = document.createDocumentFragment();
+        post.classList.add('post-modernized');
+        const fragment = document.createDocumentFragment();
 
-            const anchorDiv = post.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
-            }
+        const anchorDiv = post.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            anchorDiv.remove();
+        }
 
-            const title2Top = post.querySelector('.title2.top');
-            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
-            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
+        const title2Top = post.querySelector('.title2.top');
+        const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
+        const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
 
-            const postHeader = document.createElement('div');
-            postHeader.className = 'post-header';
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
 
-            const userInfo = document.createElement('div');
-            userInfo.className = 'user-info';
+        const userInfo = document.createElement('div');
+        userInfo.className = 'user-info';
 
-            const postContent = document.createElement('div');
-            postContent.className = 'post-content';
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content';
 
-            const postFooter = document.createElement('div');
-            postFooter.className = 'post-footer';
+        const postFooter = document.createElement('div');
+        postFooter.className = 'post-footer';
 
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                postHeader.appendChild(anchorContainer);
-            }
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            postHeader.appendChild(anchorContainer);
+        }
 
-            if (!post.classList.contains('post_queue')) {
-                const postNumber = document.createElement('span');
-                postNumber.className = 'post-number';
+        if (!post.classList.contains('post_queue')) {
+            const postNumber = document.createElement('span');
+            postNumber.className = 'post-number';
+            
+            const hashIcon = document.createElement('i');
+            hashIcon.className = 'fa-regular fa-hashtag';
+            hashIcon.setAttribute('aria-hidden', 'true');
+            
+            const numberSpan = document.createElement('span');
+            numberSpan.className = 'post-number-value';
+            numberSpan.textContent = startOffset + index + 1;
+            
+            postNumber.appendChild(hashIcon);
+            postNumber.appendChild(document.createTextNode(' '));
+            postNumber.appendChild(numberSpan);
+            
+            postHeader.appendChild(postNumber);
+        }
+
+        this.#addNewPostBadge(post, postHeader);
+
+        let nickElement = null;
+        let groupValue = '';
+
+        if (title2Top) {
+            const tdWrapper = title2Top.closest('td.left.Item');
+            nickElement = title2Top.querySelector('.nick');
+
+            if (tdWrapper) {
+                const title2TopClone = title2Top.cloneNode(true);
+                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                title2TopClone.querySelector('.left.Item')?.remove();
+                this.#removeBreakAndNbsp(title2TopClone);
                 
-                const hashIcon = document.createElement('i');
-                hashIcon.className = 'fa-regular fa-hashtag';
-                hashIcon.setAttribute('aria-hidden', 'true');
+                this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
                 
-                const numberSpan = document.createElement('span');
-                numberSpan.className = 'post-number-value';
-                numberSpan.textContent = startOffset + index + 1;
+                postHeader.appendChild(title2TopClone);
+                tdWrapper.remove();
+            } else {
+                const title2TopClone = title2Top.cloneNode(true);
+                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                title2TopClone.querySelector('.left.Item')?.remove();
+                this.#removeBreakAndNbsp(title2TopClone);
                 
-                postNumber.appendChild(hashIcon);
-                postNumber.appendChild(document.createTextNode(' '));
-                postNumber.appendChild(numberSpan);
+                this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
                 
-                postHeader.appendChild(postNumber);
+                postHeader.appendChild(title2TopClone);
             }
+        }
 
-            this.#addNewPostBadge(post, postHeader);
+        const centerElements = post.querySelectorAll('tr.center');
+        centerElements.forEach(centerElement => {
+            const leftSection = centerElement.querySelector('.left.Item');
+            const rightSection = centerElement.querySelector('.right.Item');
 
-            let nickElement = null;
-            let groupValue = '';
+            if (leftSection) {
+                const details = leftSection.querySelector('.details');
+                const avatar = leftSection.querySelector('.avatar');
 
-            if (title2Top) {
-                const tdWrapper = title2Top.closest('td.left.Item');
-                nickElement = title2Top.querySelector('.nick');
-
-                if (tdWrapper) {
-                    const title2TopClone = title2Top.cloneNode(true);
-                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                    title2TopClone.querySelector('.left.Item')?.remove();
-                    this.#removeBreakAndNbsp(title2TopClone);
-                    
-                    this.#transformPostHeaderTimestamps(title2TopClone);
-                    this.#transformTimestampElements(title2TopClone);
-                    
-                    postHeader.appendChild(title2TopClone);
-                    tdWrapper.remove();
-                } else {
-                    const title2TopClone = title2Top.cloneNode(true);
-                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                    title2TopClone.querySelector('.left.Item')?.remove();
-                    this.#removeBreakAndNbsp(title2TopClone);
-                    
-                    this.#transformPostHeaderTimestamps(title2TopClone);
-                    this.#transformTimestampElements(title2TopClone);
-                    
-                    postHeader.appendChild(title2TopClone);
-                }
-            }
-
-            const centerElements = post.querySelectorAll('tr.center');
-            centerElements.forEach(centerElement => {
-                const leftSection = centerElement.querySelector('.left.Item');
-                const rightSection = centerElement.querySelector('.right.Item');
-
-                if (leftSection) {
-                    const details = leftSection.querySelector('.details');
-                    const avatar = leftSection.querySelector('.avatar');
-
-                    const isDeletedUser = post.classList.contains('box_visitatore');
-                    
-                    if (isDeletedUser) {
-                        if (details) {
-                            const detailsClone = details.cloneNode(true);
-                            this.#processDeletedUserDetails(detailsClone, nickElement);
-                            userInfo.appendChild(detailsClone);
-                        } else {
-                            userInfo.appendChild(leftSection.cloneNode(true));
-                        }
-                    } 
-                        
-                    else if (details && avatar) {
-                        const groupDd = details.querySelector('dl.u_group dd');
-                        groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
-
-                        userInfo.appendChild(avatar.cloneNode(true));
-
+                const isDeletedUser = post.classList.contains('box_visitatore');
+                
+                if (isDeletedUser) {
+                    if (details) {
                         const detailsClone = details.cloneNode(true);
-                        detailsClone.querySelector('.avatar')?.remove();
-
-                        if (nickElement) {
-                            const nickClone = nickElement.cloneNode(true);
-                            detailsClone.insertBefore(nickClone, detailsClone.firstChild);
-
-                            if (groupValue) {
-                                const badge = document.createElement('div');
-                                badge.className = 'badge';
-                                badge.textContent = groupValue;
-                                nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                            }
-                        }
-
-                        detailsClone.querySelector('span.u_title')?.remove();
-
-                        let rankHTML = '';
-                        const pWithURank = detailsClone.querySelector('p');
-                        if (pWithURank && pWithURank.querySelector('span.u_rank')) {
-                            rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
-                            pWithURank.remove();
-                        }
-
-                        detailsClone.querySelector('br.br_status')?.remove();
-
-                        const userStats = document.createElement('div');
-                        userStats.className = 'user-stats';
-
-                        const originalDetails = details.cloneNode(true);
-
-                        if (rankHTML) {
-                            const rankStat = document.createElement('div');
-                            rankStat.className = 'stat rank';
-                            rankStat.innerHTML = rankHTML;
-                            userStats.appendChild(rankStat);
-                        }
-
-                        const postsDd = originalDetails.querySelector('dl.u_posts dd');
-                        if (postsDd) {
-                            const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
-                            userStats.appendChild(postsStat);
-                        }
-
-                        const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
-                        if (reputationDd) {
-                            const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
-                            userStats.appendChild(reputationStat);
-                        }
-
-                        const statusDl = originalDetails.querySelector('dl.u_status');
-                        if (statusDl) {
-                            const statusDd = statusDl.querySelector('dd');
-                            const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
-                            const isOnline = statusValue.toLowerCase().includes('online');
-                            const originalStatusIcon = statusDl.querySelector('dd i');
-
-                            let statusIconHTML = '';
-                            if (originalStatusIcon) {
-                                statusIconHTML = originalStatusIcon.outerHTML;
-                                if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
-                                    statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
-                                }
-                            } else {
-                                statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
-                            }
-
-                            const statusStat = document.createElement('div');
-                            statusStat.className = 'stat status' + (isOnline ? ' online' : '');
-                            statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
-                            userStats.appendChild(statusStat);
-                        }
-
-                        detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
-
-                        if (userStats.children.length > 0) {
-                            detailsClone.appendChild(userStats);
-                        }
-
+                        this.#processDeletedUserDetails(detailsClone, nickElement);
                         userInfo.appendChild(detailsClone);
                     } else {
                         userInfo.appendChild(leftSection.cloneNode(true));
                     }
+                } 
+                    
+                else if (details && avatar) {
+                    const groupDd = details.querySelector('dl.u_group dd');
+                    groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
+
+                    userInfo.appendChild(avatar.cloneNode(true));
+
+                    const detailsClone = details.cloneNode(true);
+                    detailsClone.querySelector('.avatar')?.remove();
+
+                    if (nickElement) {
+                        const nickClone = nickElement.cloneNode(true);
+                        detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+
+                        if (groupValue) {
+                            const badge = document.createElement('div');
+                            badge.className = 'badge';
+                            badge.textContent = groupValue;
+                            nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
+                        }
+                    }
+
+                    detailsClone.querySelector('span.u_title')?.remove();
+
+                    let rankHTML = '';
+                    const pWithURank = detailsClone.querySelector('p');
+                    if (pWithURank && pWithURank.querySelector('span.u_rank')) {
+                        rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
+                        pWithURank.remove();
+                    }
+
+                    detailsClone.querySelector('br.br_status')?.remove();
+
+                    const userStats = document.createElement('div');
+                    userStats.className = 'user-stats';
+
+                    const originalDetails = details.cloneNode(true);
+
+                    if (rankHTML) {
+                        const rankStat = document.createElement('div');
+                        rankStat.className = 'stat rank';
+                        rankStat.innerHTML = rankHTML;
+                        userStats.appendChild(rankStat);
+                    }
+
+                    const postsDd = originalDetails.querySelector('dl.u_posts dd');
+                    if (postsDd) {
+                        const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
+                        userStats.appendChild(postsStat);
+                    }
+
+                    const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
+                    if (reputationDd) {
+                        const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
+                        userStats.appendChild(reputationStat);
+                    }
+
+                    const statusDl = originalDetails.querySelector('dl.u_status');
+                    if (statusDl) {
+                        const statusDd = statusDl.querySelector('dd');
+                        const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
+                        const isOnline = statusValue.toLowerCase().includes('online');
+                        const originalStatusIcon = statusDl.querySelector('dd i');
+
+                        let statusIconHTML = '';
+                        if (originalStatusIcon) {
+                            statusIconHTML = originalStatusIcon.outerHTML;
+                            if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
+                                statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
+                            }
+                        } else {
+                            statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
+                        }
+
+                        const statusStat = document.createElement('div');
+                        statusStat.className = 'stat status' + (isOnline ? ' online' : '');
+                        statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
+                        userStats.appendChild(statusStat);
+                    }
+
+                    detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
+
+                    if (userStats.children.length > 0) {
+                        detailsClone.appendChild(userStats);
+                    }
+
+                    userInfo.appendChild(detailsClone);
+                } else {
+                    userInfo.appendChild(leftSection.cloneNode(true));
                 }
-
-                if (rightSection) {
-                    const contentWrapper = document.createElement('div');
-                    contentWrapper.className = 'post-main-content';
-
-                    const rightSectionClone = rightSection.cloneNode(true);
-                    this.#removeBottomBorderAndBr(rightSectionClone);
-                    this.#processIframeTables(rightSectionClone);
-                    this.#preserveMediaDimensions(rightSectionClone);
-
-                    contentWrapper.appendChild(rightSectionClone);
-                    this.#cleanupPostContentStructure(contentWrapper);
-                    postContent.appendChild(contentWrapper);
-                    this.#modernizeQuotes(contentWrapper);
-                    this.#modernizeSpoilers(contentWrapper);
-                    this.#modernizeCodeBlocksInContent(contentWrapper);
-                    this.#modernizeAttachmentsInContent(contentWrapper);
-                    this.#modernizeEmbeddedLinksInContent(contentWrapper);
-                }
-            });
-
-            const title2Bottom = post.querySelector('.title2.bottom');
-            
-            if (post.classList.contains('post_queue')) {
-            } else if (title2Bottom) {
-                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
-                this.#modernizeBottomElements(title2Bottom, postFooter);
-                title2Bottom.remove();
-            } else {
-                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
             }
 
-            fragment.appendChild(postHeader);
-            fragment.appendChild(userInfo);
-            fragment.appendChild(postContent);
-            
-            if (!post.classList.contains('post_queue')) {
-                fragment.appendChild(postFooter);
-            }
+            if (rightSection) {
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'post-main-content';
 
-            post.innerHTML = '';
-            post.appendChild(fragment);
+                const rightSectionClone = rightSection.cloneNode(true);
+                this.#removeBottomBorderAndBr(rightSectionClone);
+                this.#processIframeTables(rightSectionClone);
+                this.#preserveMediaDimensions(rightSectionClone);
 
-            if (post.classList.contains('post_queue')) {
-                this.#transformPostQueueButtons(post);
-            } else {
-                this.#convertMiniButtonsToButtons(post);
-                this.#addShareButton(post);
+                contentWrapper.appendChild(rightSectionClone);
+                this.#cleanupPostContentStructure(contentWrapper);
+                postContent.appendChild(contentWrapper);
+                this.#modernizeQuotes(contentWrapper);
+                this.#modernizeSpoilers(contentWrapper);
+                this.#modernizeCodeBlocksInContent(contentWrapper);
+                this.#modernizeAttachmentsInContent(contentWrapper);
+                this.#modernizeEmbeddedLinksInContent(contentWrapper);
             }
-            
-            this.#cleanupPostContent(post);
-
-            const postId = post.id;
-            if (postId && postId.startsWith('ee')) {
-                post.setAttribute('data-post-id', postId.replace('ee', ''));
-            }
-            
-            // Clean up double-wrapped media after transformation
-            setTimeout(() => {
-                this.#cleanupOldMediaWrappers(post);
-            }, 100);
         });
-    }
+
+        const title2Bottom = post.querySelector('.title2.bottom');
+        
+        if (post.classList.contains('post_queue')) {
+        } else if (title2Bottom) {
+            this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+            this.#modernizeBottomElements(title2Bottom, postFooter);
+            title2Bottom.remove();
+        } else {
+            this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+        }
+
+        fragment.appendChild(postHeader);
+        fragment.appendChild(userInfo);
+        fragment.appendChild(postContent);
+        
+        if (!post.classList.contains('post_queue')) {
+            fragment.appendChild(postFooter);
+        }
+
+        post.innerHTML = '';
+        post.appendChild(fragment);
+
+        if (post.classList.contains('post_queue')) {
+            this.#transformPostQueueButtons(post);
+        } else {
+            this.#convertMiniButtonsToButtons(post);
+            this.#addShareButton(post);
+        }
+        
+        this.#cleanupPostContent(post);
+
+        const postId = post.id;
+        if (postId && postId.startsWith('ee')) {
+            post.setAttribute('data-post-id', postId.replace('ee', ''));
+        }
+        
+        // NEW: Clean up double-wrapped media after transformation
+        setTimeout(() => {
+            this.#cleanupOldMediaWrappers(post);
+        }, 100);
+    });
+}
 
     #processDeletedUserDetails(detailsElement, nickElement) {
         if (!detailsElement) return;
@@ -7351,14 +7351,14 @@ class PostModernizer {
         return result;
     }
     
-    #modernizeEmbeddedLinksInContent(contentWrapper) {
-        if (this.#isInEditor(contentWrapper)) return;
-        
-        contentWrapper.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(container => {
-            this.#transformEmbeddedLink(container);
-            container.classList.add('embedded-link-modernized');
-        });
-    }
+   #modernizeEmbeddedLinksInContent(contentWrapper) {
+    if (this.#isInEditor(contentWrapper)) return;
+    
+    contentWrapper.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(container => {
+        this.#transformEmbeddedLink(container);
+        container.classList.add('embedded-link-modernized');
+    });
+}
 
     #transformPostQueueButtons(post) {
         const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
@@ -7431,393 +7431,393 @@ class PostModernizer {
     }
 
     #transformSearchPostElements() {
-        const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
+    const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
 
-        posts.forEach((post, index) => {
-            post.classList.add('post-modernized', 'search-post');
+    posts.forEach((post, index) => {
+        post.classList.add('post-modernized', 'search-post');
 
-            const anchorDiv = post.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
+        const anchorDiv = post.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            anchorDiv.remove();
+        }
+
+        const title2Top = post.querySelector('.title2.top');
+        const pointsElement = post.querySelector('.points');
+
+        let contentHTML = '';
+        const colorTable = post.querySelector('table.color');
+
+        if (colorTable) {
+            const tds = colorTable.querySelectorAll('td');
+            tds.forEach(td => {
+                if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
+                    contentHTML += td.outerHTML;
+                }
+            });
+        }
+
+        if (!contentHTML) {
+            const contentElement = post.querySelector('td.Item table.color td') ||
+                post.querySelector('td.Item td') ||
+                post.querySelector('.color td') ||
+                post.querySelector('td[align]');
+
+            if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
+                contentHTML = contentElement.outerHTML;
+            }
+        }
+
+        const editElement = post.querySelector('span.edit');
+        const rtSub = post.querySelector('.rt.Sub');
+
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
+
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content search-post-content';
+
+        const postFooter = document.createElement('div');
+        postFooter.className = 'post-footer search-post-footer';
+
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            postHeader.appendChild(anchorContainer);
+        }
+
+        if (!post.classList.contains('post_queue')) {
+            const postNumber = document.createElement('span');
+            postNumber.className = 'post-number';
+            
+            const hashIcon = document.createElement('i');
+            hashIcon.className = 'fa-regular fa-hashtag';
+            hashIcon.setAttribute('aria-hidden', 'true');
+            
+            const numberSpan = document.createElement('span');
+            numberSpan.className = 'post-number-value';
+            numberSpan.textContent = index + 1;
+            
+            postNumber.appendChild(hashIcon);
+            postNumber.appendChild(document.createTextNode(' '));
+            postNumber.appendChild(numberSpan);
+            
+            postHeader.appendChild(postNumber);
+        }
+
+        this.#addNewPostBadge(post, postHeader);
+
+        if (title2Top) {
+            const title2TopClone = title2Top.cloneNode(true);
+            const pointsInTitle = title2TopClone.querySelector('.points');
+            pointsInTitle?.remove();
+
+            let locationDiv = null;
+            if (rtSub) {
+                const topicLink = rtSub.querySelector('a[href*="?t="]');
+                const forumLink = rtSub.querySelector('a[href*="?f="]');
+
+                if (topicLink || forumLink) {
+                    locationDiv = document.createElement('div');
+                    locationDiv.className = 'post-location';
+
+                    if (topicLink) {
+                        const topicSpan = document.createElement('span');
+                        topicSpan.className = 'topic-link';
+                        topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
+                        locationDiv.appendChild(topicSpan);
+                    }
+
+                    if (forumLink) {
+                        const forumSpan = document.createElement('span');
+                        forumSpan.className = 'forum-link';
+                        forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
+                        if (topicLink) {
+                            locationDiv.appendChild(document.createTextNode(' - '));
+                        }
+                        locationDiv.appendChild(forumSpan);
+                    }
+
+                    title2TopClone.querySelector('.rt.Sub')?.remove();
+                }
             }
 
-            const title2Top = post.querySelector('.title2.top');
-            const pointsElement = post.querySelector('.points');
+            this.#removeBreakAndNbsp(title2TopClone);
+            title2TopClone.querySelector('.Break.Sub')?.remove();
 
-            let contentHTML = '';
-            const colorTable = post.querySelector('table.color');
+            this.#transformPostHeaderTimestamps(title2TopClone);
+            this.#transformTimestampElements(title2TopClone);
 
-            if (colorTable) {
-                const tds = colorTable.querySelectorAll('td');
-                tds.forEach(td => {
-                    if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
-                        contentHTML += td.outerHTML;
+            const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+            if (tdWrapper) {
+                const divs = tdWrapper.querySelectorAll('div');
+                divs.forEach(div => {
+                    postHeader.appendChild(div.cloneNode(true));
+                });
+                tdWrapper.remove();
+
+                if (locationDiv) {
+                    postHeader.appendChild(locationDiv);
+                }
+            } else {
+                if (locationDiv) {
+                    title2TopClone.appendChild(locationDiv);
+                }
+                postHeader.appendChild(title2TopClone);
+            }
+        }
+
+        if (contentHTML) {
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'post-main-content';
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = contentHTML;
+
+            if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
+                const wrapperDiv = tempDiv.firstElementChild;
+                const hasQuote = wrapperDiv.querySelector('.quote_top');
+
+                if (!hasQuote) {
+                    while (wrapperDiv.firstChild) {
+                        tempDiv.appendChild(wrapperDiv.firstChild);
+                    }
+                    wrapperDiv.remove();
+                }
+            }
+
+            while (tempDiv.firstChild) {
+                contentWrapper.appendChild(tempDiv.firstChild);
+            }
+
+            this.#preserveMediaDimensions(contentWrapper);
+
+            const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let node;
+
+            while ((node = walker.nextNode())) {
+                if (node.textContent.trim() !== '') {
+                    textNodes.push(node);
+                }
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const searchQuery = urlParams.get('q');
+            if (searchQuery) {
+                textNodes.forEach(textNode => {
+                    const text = textNode.textContent;
+                    const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
+                    const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
+
+                    if (highlightedText !== text) {
+                        const span = document.createElement('span');
+                        span.innerHTML = highlightedText;
+                        textNode.parentNode.replaceChild(span, textNode);
                     }
                 });
             }
 
-            if (!contentHTML) {
-                const contentElement = post.querySelector('td.Item table.color td') ||
-                    post.querySelector('td.Item td') ||
-                    post.querySelector('.color td') ||
-                    post.querySelector('td[align]');
+            this.#processTextAndLineBreaks(contentWrapper);
+            this.#cleanupSearchPostContent(contentWrapper);
 
-                if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
-                    contentHTML = contentElement.outerHTML;
-                }
+            const editSpanInContent = contentWrapper.querySelector('span.edit');
+            if (editSpanInContent) {
+                this.#transformEditTimestamp(editSpanInContent);
             }
 
-            const editElement = post.querySelector('span.edit');
-            const rtSub = post.querySelector('.rt.Sub');
+            this.#modernizeQuotes(contentWrapper);
+            this.#modernizeSpoilers(contentWrapper);
+            this.#modernizeCodeBlocksInContent(contentWrapper);
+            this.#modernizeAttachmentsInContent(contentWrapper);
+            this.#modernizeEmbeddedLinksInContent(contentWrapper);
 
-            const postHeader = document.createElement('div');
-            postHeader.className = 'post-header';
+            postContent.appendChild(contentWrapper);
+        }
 
-            const postContent = document.createElement('div');
-            postContent.className = 'post-content search-post-content';
+        const postFooterActions = document.createElement('div');
+        postFooterActions.className = 'post-actions';
 
-            const postFooter = document.createElement('div');
-            postFooter.className = 'post-footer search-post-footer';
+        let pointsFooter;
+        if (pointsElement && pointsElement.innerHTML.trim() !== '') {
+            const pointsClone = pointsElement.cloneNode(true);
+            pointsFooter = pointsClone;
 
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                postHeader.appendChild(anchorContainer);
+            const emElement = pointsFooter.querySelector('em');
+            const linkElement = pointsFooter.querySelector('a');
+            const href = linkElement ? linkElement.getAttribute('href') : null;
+
+            let pointsValue = '0';
+            let pointsClass = 'points_pos';
+
+            if (emElement) {
+                pointsValue = emElement.textContent.trim();
+                pointsClass = emElement.className;
             }
 
-            if (!post.classList.contains('post_queue')) {
-                const postNumber = document.createElement('span');
-                postNumber.className = 'post-number';
-                
-                const hashIcon = document.createElement('i');
-                hashIcon.className = 'fa-regular fa-hashtag';
-                hashIcon.setAttribute('aria-hidden', 'true');
-                
-                const numberSpan = document.createElement('span');
-                numberSpan.className = 'post-number-value';
-                numberSpan.textContent = index + 1;
-                
-                postNumber.appendChild(hashIcon);
-                postNumber.appendChild(document.createTextNode(' '));
-                postNumber.appendChild(numberSpan);
-                
-                postHeader.appendChild(postNumber);
-            }
+            const newPoints = document.createElement('div');
+            newPoints.className = 'points active';
+            newPoints.id = pointsElement.id || '';
 
-            this.#addNewPostBadge(post, postHeader);
-
-            if (title2Top) {
-                const title2TopClone = title2Top.cloneNode(true);
-                const pointsInTitle = title2TopClone.querySelector('.points');
-                pointsInTitle?.remove();
-
-                let locationDiv = null;
-                if (rtSub) {
-                    const topicLink = rtSub.querySelector('a[href*="?t="]');
-                    const forumLink = rtSub.querySelector('a[href*="?f="]');
-
-                    if (topicLink || forumLink) {
-                        locationDiv = document.createElement('div');
-                        locationDiv.className = 'post-location';
-
-                        if (topicLink) {
-                            const topicSpan = document.createElement('span');
-                            topicSpan.className = 'topic-link';
-                            topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
-                            locationDiv.appendChild(topicSpan);
-                        }
-
-                        if (forumLink) {
-                            const forumSpan = document.createElement('span');
-                            forumSpan.className = 'forum-link';
-                            forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
-                            if (topicLink) {
-                                locationDiv.appendChild(document.createTextNode(' - '));
-                            }
-                            locationDiv.appendChild(forumSpan);
-                        }
-
-                        title2TopClone.querySelector('.rt.Sub')?.remove();
-                    }
+            if (href) {
+                const link = document.createElement('a');
+                link.href = href;
+                link.setAttribute('tabindex', '0');
+                if (linkElement && linkElement.getAttribute('rel')) {
+                    link.setAttribute('rel', linkElement.getAttribute('rel'));
                 }
-
-                this.#removeBreakAndNbsp(title2TopClone);
-                title2TopClone.querySelector('.Break.Sub')?.remove();
-
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-
-                const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
-                if (tdWrapper) {
-                    const divs = tdWrapper.querySelectorAll('div');
-                    divs.forEach(div => {
-                        postHeader.appendChild(div.cloneNode(true));
-                    });
-                    tdWrapper.remove();
-
-                    if (locationDiv) {
-                        postHeader.appendChild(locationDiv);
-                    }
-                } else {
-                    if (locationDiv) {
-                        title2TopClone.appendChild(locationDiv);
-                    }
-                    postHeader.appendChild(title2TopClone);
-                }
-            }
-
-            if (contentHTML) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'post-main-content';
-
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = contentHTML;
-
-                if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
-                    const wrapperDiv = tempDiv.firstElementChild;
-                    const hasQuote = wrapperDiv.querySelector('.quote_top');
-
-                    if (!hasQuote) {
-                        while (wrapperDiv.firstChild) {
-                            tempDiv.appendChild(wrapperDiv.firstChild);
-                        }
-                        wrapperDiv.remove();
-                    }
-                }
-
-                while (tempDiv.firstChild) {
-                    contentWrapper.appendChild(tempDiv.firstChild);
-                }
-
-                this.#preserveMediaDimensions(contentWrapper);
-
-                const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
-                const textNodes = [];
-                let node;
-
-                while ((node = walker.nextNode())) {
-                    if (node.textContent.trim() !== '') {
-                        textNodes.push(node);
-                    }
-                }
-
-                const urlParams = new URLSearchParams(window.location.search);
-                const searchQuery = urlParams.get('q');
-                if (searchQuery) {
-                    textNodes.forEach(textNode => {
-                        const text = textNode.textContent;
-                        const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
-                        const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
-
-                        if (highlightedText !== text) {
-                            const span = document.createElement('span');
-                            span.innerHTML = highlightedText;
-                            textNode.parentNode.replaceChild(span, textNode);
-                        }
-                    });
-                }
-
-                this.#processTextAndLineBreaks(contentWrapper);
-                this.#cleanupSearchPostContent(contentWrapper);
-
-                const editSpanInContent = contentWrapper.querySelector('span.edit');
-                if (editSpanInContent) {
-                    this.#transformEditTimestamp(editSpanInContent);
-                }
-
-                this.#modernizeQuotes(contentWrapper);
-                this.#modernizeSpoilers(contentWrapper);
-                this.#modernizeCodeBlocksInContent(contentWrapper);
-                this.#modernizeAttachmentsInContent(contentWrapper);
-                this.#modernizeEmbeddedLinksInContent(contentWrapper);
-
-                postContent.appendChild(contentWrapper);
-            }
-
-            const postFooterActions = document.createElement('div');
-            postFooterActions.className = 'post-actions';
-
-            let pointsFooter;
-            if (pointsElement && pointsElement.innerHTML.trim() !== '') {
-                const pointsClone = pointsElement.cloneNode(true);
-                pointsFooter = pointsClone;
-
-                const emElement = pointsFooter.querySelector('em');
-                const linkElement = pointsFooter.querySelector('a');
-                const href = linkElement ? linkElement.getAttribute('href') : null;
-
-                let pointsValue = '0';
-                let pointsClass = 'points_pos';
-
-                if (emElement) {
-                    pointsValue = emElement.textContent.trim();
-                    pointsClass = emElement.className;
-                }
-
-                const newPoints = document.createElement('div');
-                newPoints.className = 'points active';
-                newPoints.id = pointsElement.id || '';
-
-                if (href) {
-                    const link = document.createElement('a');
-                    link.href = href;
-                    link.setAttribute('tabindex', '0');
-                    if (linkElement && linkElement.getAttribute('rel')) {
-                        link.setAttribute('rel', linkElement.getAttribute('rel'));
-                    }
-
-                    const em = document.createElement('em');
-                    em.className = pointsClass;
-                    em.textContent = pointsValue;
-                    link.appendChild(em);
-                    newPoints.appendChild(link);
-                } else {
-                    const em = document.createElement('em');
-                    em.className = pointsClass;
-                    em.textContent = pointsValue;
-                    newPoints.appendChild(em);
-                }
-
-                const thumbsSpan = document.createElement('span');
-                thumbsSpan.className = 'points_up opacity';
-
-                const icon = document.createElement('i');
-                if (pointsClass === 'points_pos') {
-                    thumbsSpan.classList.add('active');
-                    icon.className = 'fa-regular fa-thumbs-up';
-                } else if (pointsClass === 'points_neg') {
-                    icon.className = 'fa-regular fa-thumbs-down';
-                } else {
-                    icon.className = 'fa-regular fa-thumbs-up';
-                }
-
-                icon.setAttribute('aria-hidden', 'true');
-                thumbsSpan.appendChild(icon);
-                newPoints.appendChild(thumbsSpan);
-
-                pointsFooter = newPoints;
-            } else {
-                const noPoints = document.createElement('div');
-                noPoints.className = 'points no_points';
 
                 const em = document.createElement('em');
-                em.className = 'points_pos';
-                em.textContent = '0';
-                noPoints.appendChild(em);
+                em.className = pointsClass;
+                em.textContent = pointsValue;
+                link.appendChild(em);
+                newPoints.appendChild(link);
+            } else {
+                const em = document.createElement('em');
+                em.className = pointsClass;
+                em.textContent = pointsValue;
+                newPoints.appendChild(em);
+            }
 
-                const thumbsSpan = document.createElement('span');
-                thumbsSpan.className = 'points_up opacity';
+            const thumbsSpan = document.createElement('span');
+            thumbsSpan.className = 'points_up opacity';
 
-                const icon = document.createElement('i');
+            const icon = document.createElement('i');
+            if (pointsClass === 'points_pos') {
+                thumbsSpan.classList.add('active');
                 icon.className = 'fa-regular fa-thumbs-up';
-                icon.setAttribute('aria-hidden', 'true');
-
-                thumbsSpan.appendChild(icon);
-                noPoints.appendChild(thumbsSpan);
-
-                pointsFooter = noPoints;
+            } else if (pointsClass === 'points_neg') {
+                icon.className = 'fa-regular fa-thumbs-down';
+            } else {
+                icon.className = 'fa-regular fa-thumbs-up';
             }
 
-            postFooterActions.appendChild(pointsFooter);
-            postFooter.appendChild(postFooterActions);
+            icon.setAttribute('aria-hidden', 'true');
+            thumbsSpan.appendChild(icon);
+            newPoints.appendChild(thumbsSpan);
 
-            const shareContainer = document.createElement('div');
-            shareContainer.className = 'modern-bottom-actions';
+            pointsFooter = newPoints;
+        } else {
+            const noPoints = document.createElement('div');
+            noPoints.className = 'points no_points';
 
-            const shareButton = document.createElement('button');
-            shareButton.className = 'btn btn-icon btn-share';
-            shareButton.setAttribute('data-action', 'share');
-            shareButton.setAttribute('title', 'Share this post');
-            shareButton.setAttribute('type', 'button');
-            shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+            const em = document.createElement('em');
+            em.className = 'points_pos';
+            em.textContent = '0';
+            noPoints.appendChild(em);
 
-            shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
+            const thumbsSpan = document.createElement('span');
+            thumbsSpan.className = 'points_up opacity';
 
-            shareContainer.appendChild(shareButton);
-            postFooter.appendChild(shareContainer);
+            const icon = document.createElement('i');
+            icon.className = 'fa-regular fa-thumbs-up';
+            icon.setAttribute('aria-hidden', 'true');
 
-            const newPost = document.createElement('div');
-            newPost.className = 'post post-modernized search-post';
-            newPost.id = post.id;
+            thumbsSpan.appendChild(icon);
+            noPoints.appendChild(thumbsSpan);
 
-            Array.from(post.attributes).forEach(attr => {
-                if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
-                    return;
-                }
+            pointsFooter = noPoints;
+        }
+
+        postFooterActions.appendChild(pointsFooter);
+        postFooter.appendChild(postFooterActions);
+
+        const shareContainer = document.createElement('div');
+        shareContainer.className = 'modern-bottom-actions';
+
+        const shareButton = document.createElement('button');
+        shareButton.className = 'btn btn-icon btn-share';
+        shareButton.setAttribute('data-action', 'share');
+        shareButton.setAttribute('title', 'Share this post');
+        shareButton.setAttribute('type', 'button');
+        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+        shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
+
+        shareContainer.appendChild(shareButton);
+        postFooter.appendChild(shareContainer);
+
+        const newPost = document.createElement('div');
+        newPost.className = 'post post-modernized search-post';
+        newPost.id = post.id;
+
+        Array.from(post.attributes).forEach(attr => {
+            if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
+                return;
+            }
+            newPost.setAttribute(attr.name, attr.value);
+        });
+
+        Array.from(post.attributes).forEach(attr => {
+            if (attr.name.startsWith('data-')) {
                 newPost.setAttribute(attr.name, attr.value);
-            });
-
-            Array.from(post.attributes).forEach(attr => {
-                if (attr.name.startsWith('data-')) {
-                    newPost.setAttribute(attr.name, attr.value);
-                }
-            });
-
-            const originalClasses = post.className.split(' ').filter(cls =>
-                !cls.includes('post-modernized') && !cls.includes('search-post')
-            );
-            newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
-
-            newPost.appendChild(postHeader);
-            newPost.appendChild(postContent);
-            newPost.appendChild(postFooter);
-
-            post.parentNode.replaceChild(newPost, post);
-            this.#updatePointsContainerActiveState(pointsFooter);
-            
-            // Clean up double-wrapped media after transformation
-            setTimeout(() => {
-                this.#cleanupOldMediaWrappers(newPost);
-            }, 100);
-        });
-    }
-    
-    #cleanupSearchPostContent(contentWrapper) {
-        if (this.#isInEditor(contentWrapper)) return;
-        
-        contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
-            if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
-                el.remove();
-            } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
-                const parent = el.parentNode;
-                if (parent) {
-                    while (el.firstChild) {
-                        parent.insertBefore(el.firstChild, el);
-                    }
-                    el.remove();
-                }
             }
         });
 
-        contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top):not(.quote-modernized)').forEach(container => {
-            this.#transformQuote(container);
-            container.classList.add('quote-modernized');
-        });
+        const originalClasses = post.className.split(' ').filter(cls =>
+            !cls.includes('post-modernized') && !cls.includes('search-post')
+        );
+        newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
 
-        contentWrapper.querySelectorAll('div[align="center"].spoiler:not(.spoiler-modernized)').forEach(container => {
-            this.#transformSpoiler(container);
-            container.classList.add('spoiler-modernized');
-        });
+        newPost.appendChild(postHeader);
+        newPost.appendChild(postContent);
+        newPost.appendChild(postFooter);
 
-        contentWrapper.querySelectorAll('div[align="center"]:has(.code_top):not(.code-modernized)').forEach(container => {
-            this.#transformCodeBlock(container);
-            container.classList.add('code-modernized');
-        });
+        post.parentNode.replaceChild(newPost, post);
+        this.#updatePointsContainerActiveState(pointsFooter);
+        
+        // NEW: Clean up double-wrapped media after transformation
+        setTimeout(() => {
+            this.#cleanupOldMediaWrappers(newPost);
+        }, 100);
+    });
+}
+    
+   #cleanupSearchPostContent(contentWrapper) {
+    if (this.#isInEditor(contentWrapper)) return;
+    
+    contentWrapper.querySelectorAll('table, tbody, tr, td').forEach(el => {
+        if (el.tagName === 'TD' && el.children.length === 0 && el.textContent.trim() === '') {
+            el.remove();
+        } else if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') {
+            const parent = el.parentNode;
+            if (parent) {
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                el.remove();
+            }
+        }
+    });
 
-        contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder:not(.attachment-modernized)').forEach(container => {
-            this.#transformAttachment(container);
-            container.classList.add('attachment-modernized');
-        });
+    contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top):not(.quote-modernized)').forEach(container => {
+        this.#transformQuote(container);
+        container.classList.add('quote-modernized');
+    });
 
-        contentWrapper.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(container => {
-            this.#transformEmbeddedLink(container);
-            container.classList.add('embedded-link-modernized');
-        });
-    }
+    contentWrapper.querySelectorAll('div[align="center"].spoiler:not(.spoiler-modernized)').forEach(container => {
+        this.#transformSpoiler(container);
+        container.classList.add('spoiler-modernized');
+    });
+
+    contentWrapper.querySelectorAll('div[align="center"]:has(.code_top):not(.code-modernized)').forEach(container => {
+        this.#transformCodeBlock(container);
+        container.classList.add('code-modernized');
+    });
+
+    contentWrapper.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder:not(.attachment-modernized)').forEach(container => {
+        this.#transformAttachment(container);
+        container.classList.add('attachment-modernized');
+    });
+
+    contentWrapper.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(container => {
+        this.#transformEmbeddedLink(container);
+        container.classList.add('embedded-link-modernized');
+    });
+}
 
     #escapeRegex(string) {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -7863,391 +7863,391 @@ class PostModernizer {
         element.querySelectorAll('table.color:empty').forEach(table => table.remove());
     }
 
-    #cleanupPostContentStructure(contentElement) {
-        if (this.#isInEditor(contentElement)) return;
+#cleanupPostContentStructure(contentElement) {
+    if (this.#isInEditor(contentElement)) return;
+    
+    contentElement.querySelectorAll('table.color[data-protected-iframe]').forEach(table => {
+        const parent = table.parentNode;
+        if (!parent) return;
         
-        contentElement.querySelectorAll('table.color[data-protected-iframe]').forEach(table => {
-            const parent = table.parentNode;
-            if (!parent) return;
-            
-            const container = document.createElement('div');
-            container.className = 'extracted-content';
-            
-            const tbody = table.querySelector('tbody');
-            if (tbody) {
-                while (tbody.firstChild) {
-                    container.appendChild(tbody.firstChild);
-                }
-            } else {
-                while (table.firstChild) {
-                    container.appendChild(table.firstChild);
-                }
+        const container = document.createElement('div');
+        container.className = 'extracted-content';
+        
+        const tbody = table.querySelector('tbody');
+        if (tbody) {
+            while (tbody.firstChild) {
+                container.appendChild(tbody.firstChild);
             }
-            
-            parent.insertBefore(container, table);
+        } else {
+            while (table.firstChild) {
+                container.appendChild(table.firstChild);
+            }
+        }
+        
+        parent.insertBefore(container, table);
+        table.remove();
+        this.#cleanupExtractedTableContent(container);
+    });
+    
+    contentElement.querySelectorAll('.ve-table').forEach(table => {
+        this.#protectAndRepairTable(table);
+    });
+
+    contentElement.querySelectorAll('table:not(.ve-table):not([data-protected-iframe])').forEach(table => {
+        const parent = table.parentNode;
+        if (parent) {
+            while (table.firstChild) {
+                parent.insertBefore(table.firstChild, table);
+            }
             table.remove();
-            this.#cleanupExtractedTableContent(container);
-        });
-        
-        contentElement.querySelectorAll('.ve-table').forEach(table => {
-            this.#protectAndRepairTable(table);
-        });
+        }
+    });
 
-        contentElement.querySelectorAll('table:not(.ve-table):not([data-protected-iframe])').forEach(table => {
-            const parent = table.parentNode;
-            if (parent) {
-                while (table.firstChild) {
-                    parent.insertBefore(table.firstChild, table);
-                }
-                table.remove();
+    contentElement.querySelectorAll('tbody, tr, td').forEach(el => {
+        const parent = el.parentNode;
+        if (parent && !el.closest('.ve-table')) {
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
             }
-        });
+            el.remove();
+        }
+    });
 
-        contentElement.querySelectorAll('tbody, tr, td').forEach(el => {
-            const parent = el.parentNode;
-            if (parent && !el.closest('.ve-table')) {
-                while (el.firstChild) {
-                    parent.insertBefore(el.firstChild, el);
-                }
-                el.remove();
-            }
-        });
-
-        this.#cleanUpLineBreaksBetweenBlocks(contentElement);
-        this.#cleanEmptyElements(contentElement);
-        this.#processTextAndLineBreaks(contentElement);
-        this.#cleanupEditSpans(contentElement);
-        this.#processSignature(contentElement);
-        this.#cleanInvalidAttributes(contentElement);
-    }
+    this.#cleanUpLineBreaksBetweenBlocks(contentElement);
+    this.#cleanEmptyElements(contentElement);
+    this.#processTextAndLineBreaks(contentElement);
+    this.#cleanupEditSpans(contentElement);
+    this.#processSignature(contentElement);
+    this.#cleanInvalidAttributes(contentElement);
+}
 
     #processIframeTables(element) {
-        element.querySelectorAll('table.color').forEach(table => {
-            const hasIframe = table.querySelector('iframe');
-            const hasVideoWrapper = table.querySelector('[style*="padding-bottom"]');
-            
-            if (hasIframe || hasVideoWrapper) {
-                table.setAttribute('data-protected-iframe', 'true');
-            }
-        });
-    }
-
-    #cleanupExtractedTableContent(container) {
-        container.querySelectorAll('tbody, tr').forEach(el => {
-            const parent = el.parentNode;
-            if (parent) {
-                while (el.firstChild) {
-                    parent.insertBefore(el.firstChild, el);
-                }
-                el.remove();
-            }
-        });
+    element.querySelectorAll('table.color').forEach(table => {
+        const hasIframe = table.querySelector('iframe');
+        const hasVideoWrapper = table.querySelector('[style*="padding-bottom"]');
         
-        container.querySelectorAll('td').forEach(td => {
-            const parent = td.parentNode;
-            if (parent) {
-                while (td.firstChild) {
-                    parent.insertBefore(td.firstChild, td);
-                }
-                td.remove();
-            }
-        });
-        
-        if (container.children.length === 0 && !container.textContent.trim()) {
-            container.remove();
+        if (hasIframe || hasVideoWrapper) {
+            table.setAttribute('data-protected-iframe', 'true');
         }
+    });
+}
+
+#cleanupExtractedTableContent(container) {
+    container.querySelectorAll('tbody, tr').forEach(el => {
+        const parent = el.parentNode;
+        if (parent) {
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            el.remove();
+        }
+    });
+    
+    container.querySelectorAll('td').forEach(td => {
+        const parent = td.parentNode;
+        if (parent) {
+            while (td.firstChild) {
+                parent.insertBefore(td.firstChild, td);
+            }
+            td.remove();
+        }
+    });
+    
+    if (container.children.length === 0 && !container.textContent.trim()) {
+        container.remove();
+    }
+}
+    
+#protectAndRepairTable(table) {
+    table.setAttribute('data-table-protected', 'true');
+    
+    if (!table.querySelector('tbody')) {
+        const tbody = document.createElement('tbody');
+        const rows = [];
+        let currentRow = null;
+        
+        Array.from(table.children).forEach(child => {
+            if (child.tagName === 'TR') {
+                if (currentRow) {
+                    rows.push(currentRow);
+                    currentRow = null;
+                }
+                rows.push(child);
+            } else if (child.tagName === 'TH' || child.tagName === 'TD') {
+                if (!currentRow) {
+                    currentRow = document.createElement('tr');
+                }
+                currentRow.appendChild(child);
+            } else if (child.tagName === 'TBODY') {
+                tbody = child;
+                return;
+            }
+        });
+        
+        if (currentRow) {
+            rows.push(currentRow);
+        }
+        
+        rows.forEach(row => tbody.appendChild(row));
+        
+        table.innerHTML = '';
+        table.appendChild(tbody);
     }
     
-    #protectAndRepairTable(table) {
-        table.setAttribute('data-table-protected', 'true');
-        
-        if (!table.querySelector('tbody')) {
-            const tbody = document.createElement('tbody');
-            const rows = [];
-            let currentRow = null;
-            
-            Array.from(table.children).forEach(child => {
-                if (child.tagName === 'TR') {
-                    if (currentRow) {
-                        rows.push(currentRow);
-                        currentRow = null;
-                    }
-                    rows.push(child);
-                } else if (child.tagName === 'TH' || child.tagName === 'TD') {
-                    if (!currentRow) {
-                        currentRow = document.createElement('tr');
-                    }
-                    currentRow.appendChild(child);
-                } else if (child.tagName === 'TBODY') {
-                    tbody = child;
-                    return;
-                }
-            });
-            
-            if (currentRow) {
-                rows.push(currentRow);
+    table.querySelectorAll('th, td').forEach(cell => {
+        const existingSpans = cell.querySelectorAll('.post-text');
+        existingSpans.forEach(span => {
+            while (span.firstChild) {
+                cell.insertBefore(span.firstChild, span);
             }
-            
-            rows.forEach(row => tbody.appendChild(row));
-            
-            table.innerHTML = '';
-            table.appendChild(tbody);
-        }
-        
-        table.querySelectorAll('th, td').forEach(cell => {
-            const existingSpans = cell.querySelectorAll('.post-text');
-            existingSpans.forEach(span => {
-                while (span.firstChild) {
-                    cell.insertBefore(span.firstChild, span);
-                }
-                span.remove();
-            });
-            
-            const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            let node;
-            while ((node = walker.nextNode())) {
-                if (node.textContent.trim()) {
-                    textNodes.push(node);
-                }
-            }
-            
-            textNodes.forEach(textNode => {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            });
-            
-            if (cell.children.length === 0 && !cell.textContent.trim()) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                cell.appendChild(span);
-            }
+            span.remove();
         });
         
-        table.removeAttribute('style');
-        table.removeAttribute('cellpadding');
-        table.removeAttribute('cellspacing');
-        table.removeAttribute('border');
-        
-        table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
-            cell.removeAttribute('rowspan');
-        });
-        table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
-            cell.removeAttribute('colspan');
-        });
-        
-        if (!table.parentElement || !table.parentElement.classList.contains('table-container')) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'table-container';
-            
-            const tableClasses = Array.from(table.classList).filter(cls => cls !== 've-table');
-            if (tableClasses.length > 0) {
-                wrapper.classList.add(...tableClasses);
-            }
-            
-            table.parentNode.insertBefore(wrapper, table);
-            wrapper.appendChild(table);
-        }
-        
-        table.classList.add('ve-table');
-    }
-    
-    #cleanupEditSpans(element) {
-        if (this.#isInEditor(element)) return;
-        
-        element.querySelectorAll('span.edit:not(:has(time[datetime]))').forEach(span => {
-            this.#transformEditTimestamp(span);
-        });
-    }
-
-    #cleanUpLineBreaksBetweenBlocks(element) {
-        if (this.#isInEditor(element)) return;
-        
-        const blockSelectors = [
-            '.modern-spoiler',
-            '.modern-code',
-            '.modern-quote',
-            'div[align="center"]:has(.code_top)',
-            'div[align="center"].spoiler',
-            'div[align="center"]:has(.quote_top)',
-            '.modern-attachment',
-            '.modern-embedded-link'
-        ];
-
-        const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
-        blocks.sort((a, b) => {
-            const position = a.compareDocumentPosition(b);
-            return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-        });
-
-        blocks.forEach(block => {
-            let nextSibling = block.nextSibling;
-            while (nextSibling) {
-                if (nextSibling.nodeType === Node.ELEMENT_NODE &&
-                    nextSibling.tagName === 'BR') {
-                    const brToRemove = nextSibling;
-                    nextSibling = nextSibling.nextSibling;
-                    brToRemove.remove();
-                } else if (nextSibling.nodeType === Node.TEXT_NODE &&
-                    /^\s*$/.test(nextSibling.textContent)) {
-                    const textToRemove = nextSibling;
-                    nextSibling = nextSibling.nextSibling;
-                    textToRemove.remove();
-                } else {
-                    break;
-                }
-            }
-        });
-
-        blocks.forEach(block => {
-            let prevSibling = block.previousSibling;
-            while (prevSibling) {
-                if (prevSibling.nodeType === Node.ELEMENT_NODE &&
-                    prevSibling.tagName === 'BR') {
-                    const brToRemove = prevSibling;
-                    prevSibling = prevSibling.previousSibling;
-                    brToRemove.remove();
-                } else if (prevSibling.nodeType === Node.TEXT_NODE &&
-                    /^\s*$/.test(prevSibling.textContent)) {
-                    const textToRemove = prevSibling;
-                    prevSibling = prevSibling.previousSibling;
-                    textToRemove.remove();
-                } else {
-                    break;
-                }
-            }
-        });
-    }
-
-    #cleanEmptyElements(element) {
-        if (this.#isInEditor(element)) return;
-        
-        element.querySelectorAll(':empty').forEach(emptyEl => {
-            const isIframeWrapper = emptyEl.classList && 
-                (emptyEl.classList.contains('iframe-wrapper') || 
-                 emptyEl.style.paddingBottom || 
-                 emptyEl.style.position === 'relative');
-            
-            if (!isIframeWrapper && 
-                !['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK', 'IFRAME'].includes(emptyEl.tagName)) {
-                emptyEl.remove();
-            }
-        });
-
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const nodesToRemove = [];
-        let node;
-
-        while ((node = walker.nextNode())) {
-            if (node.textContent.trim() === '') {
-                nodesToRemove.push(node);
-            }
-        }
-
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
-    }
-    
-    #cleanInvalidAttributes(element) {
-        if (this.#isInEditor(element)) return;
-        
-        element.querySelectorAll('[width]').forEach(el => {
-            if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
-                el.removeAttribute('width');
-            }
-        });
-
-        element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
-            if (el.tagName !== 'TABLE') {
-                el.removeAttribute('cellpadding');
-                el.removeAttribute('cellspacing');
-            }
-        });
-    }
-
-    #processTextAndLineBreaks(element) {
-        if (this.#isInEditor(element)) return;
-        
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
         const textNodes = [];
         let node;
-
         while ((node = walker.nextNode())) {
-            if (node.textContent.trim() !== '') {
+            if (node.textContent.trim()) {
                 textNodes.push(node);
             }
         }
-
+        
         textNodes.forEach(textNode => {
-            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            }
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
         });
+        
+        if (cell.children.length === 0 && !cell.textContent.trim()) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            cell.appendChild(span);
+        }
+    });
+    
+    table.removeAttribute('style');
+    table.removeAttribute('cellpadding');
+    table.removeAttribute('cellspacing');
+    table.removeAttribute('border');
+    
+    table.querySelectorAll('th[rowspan="1"], td[rowspan="1"]').forEach(cell => {
+        cell.removeAttribute('rowspan');
+    });
+    table.querySelectorAll('th[colspan="1"], td[colspan="1"]').forEach(cell => {
+        cell.removeAttribute('colspan');
+    });
+    
+    if (!table.parentElement || !table.parentElement.classList.contains('table-container')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-container';
+        
+        const tableClasses = Array.from(table.classList).filter(cls => cls !== 've-table');
+        if (tableClasses.length > 0) {
+            wrapper.classList.add(...tableClasses);
+        }
+        
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+    }
+    
+    table.classList.add('ve-table');
+}
+    
+  #cleanupEditSpans(element) {
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll('span.edit:not(:has(time[datetime]))').forEach(span => {
+        this.#transformEditTimestamp(span);
+    });
+}
 
-        element.querySelectorAll('br').forEach(br => {
-            const prevSibling = br.previousElementSibling;
-            const nextSibling = br.nextElementSibling;
+#cleanUpLineBreaksBetweenBlocks(element) {
+    if (this.#isInEditor(element)) return;
+    
+    const blockSelectors = [
+        '.modern-spoiler',
+        '.modern-code',
+        '.modern-quote',
+        'div[align="center"]:has(.code_top)',
+        'div[align="center"].spoiler',
+        'div[align="center"]:has(.quote_top)',
+        '.modern-attachment',
+        '.modern-embedded-link'
+    ];
 
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
-                return;
-            }
+    const blocks = Array.from(element.querySelectorAll(blockSelectors.join(', ')));
+    blocks.sort((a, b) => {
+        const position = a.compareDocumentPosition(b);
+        return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
 
-            if (prevSibling && nextSibling) {
-                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
-                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
-
-                if (prevIsPostText && nextIsPostText) {
-                    prevSibling.classList.add('paragraph-end');
-                    br.remove();
-                } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-
-                    if (prevIsModern && nextIsModern) {
-                        br.remove();
-                    } else {
-                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-                    }
-                }
+    blocks.forEach(block => {
+        let nextSibling = block.nextSibling;
+        while (nextSibling) {
+            if (nextSibling.nodeType === Node.ELEMENT_NODE &&
+                nextSibling.tagName === 'BR') {
+                const brToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                brToRemove.remove();
+            } else if (nextSibling.nodeType === Node.TEXT_NODE &&
+                /^\s*$/.test(nextSibling.textContent)) {
+                const textToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                textToRemove.remove();
             } else {
-                br.remove();
+                break;
             }
-        });
+        }
+    });
 
-        const postTextElements = element.querySelectorAll('.post-text');
-        for (let i = 0; i < postTextElements.length - 1; i++) {
-            const current = postTextElements[i];
-            const next = postTextElements[i + 1];
-
-            let nodeBetween = current.nextSibling;
-            let onlyWhitespace = true;
-
-            while (nodeBetween && nodeBetween !== next) {
-                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                    onlyWhitespace = false;
-                    break;
-                }
-                nodeBetween = nodeBetween.nextSibling;
+    blocks.forEach(block => {
+        let prevSibling = block.previousSibling;
+        while (prevSibling) {
+            if (prevSibling.nodeType === Node.ELEMENT_NODE &&
+                prevSibling.tagName === 'BR') {
+                const brToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                brToRemove.remove();
+            } else if (prevSibling.nodeType === Node.TEXT_NODE &&
+                /^\s*$/.test(prevSibling.textContent)) {
+                const textToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                textToRemove.remove();
+            } else {
+                break;
             }
+        }
+    });
+}
 
-            if (onlyWhitespace) {
-                current.classList.add('paragraph-end');
-            }
+#cleanEmptyElements(element) {
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll(':empty').forEach(emptyEl => {
+        const isIframeWrapper = emptyEl.classList && 
+            (emptyEl.classList.contains('iframe-wrapper') || 
+             emptyEl.style.paddingBottom || 
+             emptyEl.style.position === 'relative');
+        
+        if (!isIframeWrapper && 
+            !['IMG', 'BR', 'HR', 'INPUT', 'META', 'LINK', 'IFRAME'].includes(emptyEl.tagName)) {
+            emptyEl.remove();
+        }
+    });
+
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    const nodesToRemove = [];
+    let node;
+
+    while ((node = walker.nextNode())) {
+        if (node.textContent.trim() === '') {
+            nodesToRemove.push(node);
         }
     }
 
-    #processSignature(element) {
-        if (this.#isInEditor(element)) return;
-        
-        element.querySelectorAll('.signature').forEach(sig => {
-            sig.classList.add('post-signature');
-            sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
-        });
+    nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+}
+    
+#cleanInvalidAttributes(element) {
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll('[width]').forEach(el => {
+        if (!['IMG', 'IFRAME', 'VIDEO', 'CANVAS', 'TABLE', 'TD', 'TH'].includes(el.tagName)) {
+            el.removeAttribute('width');
+        }
+    });
+
+    element.querySelectorAll('[cellpadding], [cellspacing]').forEach(el => {
+        if (el.tagName !== 'TABLE') {
+            el.removeAttribute('cellpadding');
+            el.removeAttribute('cellspacing');
+        }
+    });
+}
+
+    #processTextAndLineBreaks(element) {
+    if (this.#isInEditor(element)) return;
+    
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    const textNodes = [];
+    let node;
+
+    while ((node = walker.nextNode())) {
+        if (node.textContent.trim() !== '') {
+            textNodes.push(node);
+        }
     }
+
+    textNodes.forEach(textNode => {
+        if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
+        }
+    });
+
+    element.querySelectorAll('br').forEach(br => {
+        const prevSibling = br.previousElementSibling;
+        const nextSibling = br.nextElementSibling;
+
+        if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
+            return;
+        }
+
+        if (prevSibling && nextSibling) {
+            const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
+            const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+
+            if (prevIsPostText && nextIsPostText) {
+                prevSibling.classList.add('paragraph-end');
+                br.remove();
+            } else {
+                const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+                const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+
+                if (prevIsModern && nextIsModern) {
+                    br.remove();
+                } else {
+                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                }
+            }
+        } else {
+            br.remove();
+        }
+    });
+
+    const postTextElements = element.querySelectorAll('.post-text');
+    for (let i = 0; i < postTextElements.length - 1; i++) {
+        const current = postTextElements[i];
+        const next = postTextElements[i + 1];
+
+        let nodeBetween = current.nextSibling;
+        let onlyWhitespace = true;
+
+        while (nodeBetween && nodeBetween !== next) {
+            if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                onlyWhitespace = false;
+                break;
+            }
+            nodeBetween = nodeBetween.nextSibling;
+        }
+
+        if (onlyWhitespace) {
+            current.classList.add('paragraph-end');
+        }
+    }
+}
+
+ #processSignature(element) {
+    if (this.#isInEditor(element)) return;
+    
+    element.querySelectorAll('.signature').forEach(sig => {
+        sig.classList.add('post-signature');
+        sig.previousElementSibling && sig.previousElementSibling.tagName === 'BR' && sig.previousElementSibling.remove();
+    });
+}
 
     #modernizeQuotes(contentWrapper) {
         contentWrapper.querySelectorAll('div[align="center"]:has(.quote_top):not(.quote-modernized)').forEach(container => {
@@ -8512,407 +8512,155 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-    #preserveMediaDimensions(element) {
-        // Process images (existing code)
-        element.querySelectorAll('img').forEach(img => {
-            if (!img.style.maxWidth) {
-                img.style.maxWidth = '100%';
-            }
-            
-            img.style.removeProperty('height');
-            
-            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                           img.className.includes('emoji');
-            
-            if (isTwemoji || isEmoji) {
-                img.style.cssText = 'display:inline-block;vertical-align:text-bottom;margin:0 2px;';
-            } else if (!img.style.display || img.style.display === 'inline') {
-                img.style.display = 'block';
-            }
-            
-            if (!img.hasAttribute('alt')) {
-                if (isEmoji) {
-                    img.setAttribute('alt', 'Emoji');
-                    img.setAttribute('role', 'img');
-                } else {
-                    img.setAttribute('alt', 'Forum image');
-                }
-            }
-        });
-        
-        // Clean up old wrappers first to prevent double-wrapping
-        this.#cleanupOldMediaWrappers(element);
-        
-        // Process all media elements with standardized wrappers
-        this.#normalizeAllMediaWrappers(element);
-    }
-
-    #cleanupOldMediaWrappers(element) {
-        // Find all old wrapper divs that have standardized wrappers inside them
-        const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
-        
-        oldWrappers.forEach(oldWrapper => {
-            // Check if this old wrapper has a standard-media-wrapper inside it
-            const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
-            
-            if (hasStandardWrapperInside) {
-                // Get the standard wrapper
-                const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
-                
-                // Move the standard wrapper out of the old wrapper
-                oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
-                
-                // Remove the old wrapper
-                oldWrapper.remove();
-            }
-        });
-        
-        // Also clean up empty wrapper divs with specific styling patterns
-        const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
-        
-        emptyWrappers.forEach(wrapper => {
-            // Check if wrapper is empty or only contains whitespace
-            const hasRealContent = Array.from(wrapper.childNodes).some(node => {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    // Check if element is media or has real content
-                    const tagName = node.tagName.toLowerCase();
-                    return !['br', 'span', 'div'].includes(tagName) || 
-                           node.textContent.trim() !== '' ||
-                           node.querySelector('iframe, lite-youtube, lite-vimeo, video, img');
-                }
-                return node.textContent.trim() !== '';
-            });
-            
-            if (!hasRealContent || wrapper.children.length === 0) {
-                wrapper.remove();
-            }
-        });
-    }
-
-    #normalizeAllMediaWrappers(element) {
-        // Find all potential media elements
-        const mediaElements = element.querySelectorAll(
-            'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
-        );
-        
-        mediaElements.forEach(media => {
-            // Skip already wrapped elements
-            if (media.getAttribute('data-wrapped') === 'true') return;
-            
-            // Check if element needs wrapping
-            if (media.tagName === 'IFRAME') {
-                this.#wrapIframe(media);
-            } else if (media.tagName === 'LITE-YOUTUBE') {
-                this.#wrapLiteYoutube(media);
-            } else if (media.tagName === 'LITE-VIMEO') {
-                this.#wrapLiteVimeo(media);
-            } else if (media.tagName === 'VIDEO') {
-                this.#wrapVideo(media);
-            } else if (media.classList.contains('media-wrapper') || 
-                       media.classList.contains('iframe-wrapper')) {
-                // This is already a wrapper, ensure it's standardized
-                this.#standardizeExistingWrapper(media);
-            }
-        });
-    }
-
-    #standardizeExistingWrapper(wrapper) {
-        // Add standard class if not present
-        if (!wrapper.classList.contains('standard-media-wrapper')) {
-            wrapper.classList.add('standard-media-wrapper');
+#preserveMediaDimensions(element) {
+    // Process images (existing code)
+    element.querySelectorAll('img').forEach(img => {
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
         }
         
-        // Ensure proper styling
-        const computedStyle = window.getComputedStyle(wrapper);
+        img.style.removeProperty('height');
         
-        // Check if padding-bottom is set for aspect ratio
-        if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
-            // Calculate or set default aspect ratio
-            const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
-            if (children.length > 0) {
-                const child = children[0];
-                
-                // Try to get dimensions from child
-                const width = child.getAttribute('width') || child.offsetWidth;
-                const height = child.getAttribute('height') || child.offsetHeight;
-                
-                if (width && height && !isNaN(width) && !isNaN(height)) {
-                    const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
-                    wrapper.style.paddingBottom = aspectRatio + '%';
-                } else {
-                    // Default to 16:9
-                    wrapper.style.paddingBottom = '56.25%';
-                }
+        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
+        
+        if (isTwemoji || isEmoji) {
+            img.style.cssText = 'display:inline-block;vertical-align:text-bottom;margin:0 2px;';
+        } else if (!img.style.display || img.style.display === 'inline') {
+            img.style.display = 'block';
+        }
+        
+        if (!img.hasAttribute('alt')) {
+            if (isEmoji) {
+                img.setAttribute('alt', 'Emoji');
+                img.setAttribute('role', 'img');
             } else {
-                // Default to 16:9
-                wrapper.style.paddingBottom = '56.25%';
+                img.setAttribute('alt', 'Forum image');
             }
-        }
-        
-        // Ensure wrapper has relative positioning
-        if (computedStyle.position !== 'relative') {
-            wrapper.style.position = 'relative';
-        }
-        
-        // Ensure overflow hidden
-        if (computedStyle.overflow !== 'hidden') {
-            wrapper.style.overflow = 'hidden';
-        }
-        
-        // Ensure full width
-        if (!wrapper.style.width || wrapper.style.width !== '100%') {
-            wrapper.style.width = '100%';
-        }
-        
-        // Add margin for spacing
-        if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
-            wrapper.style.margin = '1em 0';
-        }
-        
-        // Mark as standardized
-        wrapper.setAttribute('data-standardized', 'true');
-    }
-
-#wrapIframe(iframe) {
-    // Check if already wrapped
-    if (iframe.closest('.standard-media-wrapper')) {
-        iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; padding: 0 !important;';
-        return;
-    }
-    
-    // First, clean up any existing padding on the iframe or its parent
-    iframe.style.padding = '0';
-    iframe.style.margin = '0';
-    iframe.style.boxSizing = 'border-box';
-    
-    // Also check parent for padding
-    const parent = iframe.parentElement;
-    if (parent && (parent.style.padding || parent.style.margin)) {
-        parent.style.padding = '0';
-        parent.style.margin = '0';
-    }
-    
-    const wrapper = this.#createStandardMediaWrapper(iframe);
-    
-    // Store original dimensions before modifying
-    const originalWidth = iframe.getAttribute('width') || iframe.offsetWidth;
-    const originalHeight = iframe.getAttribute('height') || iframe.offsetHeight;
-    
-    // Style iframe to fill wrapper
-    iframe.style.cssText = 
-        'position: absolute; ' +
-        'top: 0; ' +
-        'left: 0; ' +
-        'width: 100%; ' +
-        'height: 100%; ' +
-        'border: 0; ' +
-        'padding: 0 !important; ' +
-        'margin: 0 !important; ' +
-        'box-sizing: border-box !important;';
-    
-    // Remove any inline width/height that might conflict
-    iframe.removeAttribute('width');
-    iframe.removeAttribute('height');
-    
-    // Insert wrapper before iframe
-    iframe.parentNode.insertBefore(wrapper, iframe);
-    
-    // Move iframe into wrapper
-    wrapper.appendChild(iframe);
-    
-    // Calculate actual dimensions after styling
-    const calculateDimensions = () => {
-        const rect = wrapper.getBoundingClientRect();
-        console.log('Final wrapper dimensions:', rect.width, '×', rect.height);
-        
-        // Debug: Check computed styles
-        const computedStyle = window.getComputedStyle(wrapper);
-        console.log('Computed padding:', computedStyle.paddingTop, computedStyle.paddingBottom);
-        console.log('Computed aspect-ratio:', computedStyle.aspectRatio);
-        
-        // If still wrong, force dimensions
-        if (rect.height > 315) {
-            console.warn('Height still exceeds 315px, forcing dimensions');
-            wrapper.style.height = '315px';
-            wrapper.style.width = '560px';
-            wrapper.style.maxWidth = '560px';
-            wrapper.style.maxHeight = '315px';
-            wrapper.style.aspectRatio = 'none';
-        }
-    };
-    
-    // Run after DOM update
-    setTimeout(calculateDimensions, 100);
-    
-    // Add resize observer
-    const resizeObserver = new ResizeObserver(() => {
-        const rect = wrapper.getBoundingClientRect();
-        if (rect.height > 315) {
-            wrapper.style.height = '315px';
-            wrapper.style.maxHeight = '315px';
         }
     });
-    resizeObserver.observe(wrapper);
     
-    // Store for cleanup
-    wrapper._resizeObserver = resizeObserver;
+    // NEW: Clean up old wrappers first to prevent double-wrapping
+    this.#cleanupOldMediaWrappers(element);
     
-    iframe.setAttribute('data-wrapped', 'true');
+    // Process all media elements with standardized wrappers
+    this.#normalizeAllMediaWrappers(element);
 }
+
+    #cleanupOldMediaWrappers(element) {
+    // Find all old wrapper divs that have standardized wrappers inside them
+    const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
     
-    #wrapLiteYoutube(liteYoutube) {
-        const parent = liteYoutube.parentElement;
+    oldWrappers.forEach(oldWrapper => {
+        // Check if this old wrapper has a standard-media-wrapper inside it
+        const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
         
-        // Check if already has a standard wrapper
-        const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
-        
-        if (hasStandardWrapper) {
-            liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
-            liteYoutube.setAttribute('data-wrapped', 'true');
-            return;
+        if (hasStandardWrapperInside) {
+            // Get the standard wrapper
+            const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
+            
+            // Move the standard wrapper out of the old wrapper
+            oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
+            
+            // Remove the old wrapper
+            oldWrapper.remove();
         }
+    });
+    
+    // Also clean up empty wrapper divs with specific styling patterns
+    const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
+    
+    emptyWrappers.forEach(wrapper => {
+        // Check if wrapper is empty or only contains whitespace
+        const hasRealContent = Array.from(wrapper.childNodes).some(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                // Check if element is media or has real content
+                const tagName = node.tagName.toLowerCase();
+                return !['br', 'span', 'div'].includes(tagName) || 
+                       node.textContent.trim() !== '' ||
+                       node.querySelector('iframe, lite-youtube, lite-vimeo, video, img');
+            }
+            return node.textContent.trim() !== '';
+        });
         
-        // Create standard wrapper
-        const wrapper = this.#createStandardMediaWrapper(liteYoutube);
-        wrapper.classList.add('lite-youtube-wrapper');
-        
-        // Add YouTube-specific styling
-        wrapper.style.cssText += 'background: #000;';
-        
-        // Insert wrapper before lite-youtube
-        liteYoutube.parentNode.insertBefore(wrapper, liteYoutube);
-        
-        // Move element into wrapper
-        wrapper.appendChild(liteYoutube);
-        
-        // Style lite-youtube
-        liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
-        liteYoutube.setAttribute('data-wrapped', 'true');
-        
-        // Ensure it has proper attributes
-        if (!liteYoutube.hasAttribute('width')) {
-            liteYoutube.setAttribute('width', '100%');
+        if (!hasRealContent || wrapper.children.length === 0) {
+            wrapper.remove();
         }
-        if (!liteYoutube.hasAttribute('height')) {
-            liteYoutube.setAttribute('height', '100%');
-        }
-    }
+    });
+}
 
-    #wrapLiteVimeo(liteVimeo) {
-        const parent = liteVimeo.parentElement;
-        
-        // Check if already has a standard wrapper
-        const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
-        
-        if (hasStandardWrapper) {
-            liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
-            liteVimeo.setAttribute('data-wrapped', 'true');
-            return;
-        }
-        
-        // Create standard wrapper
-        const wrapper = this.#createStandardMediaWrapper(liteVimeo);
-        wrapper.classList.add('lite-vimeo-wrapper');
-        
-        // Add Vimeo-specific styling
-        wrapper.style.cssText += 'background: #1ab7ea;';
-        
-        // Insert wrapper before lite-vimeo
-        liteVimeo.parentNode.insertBefore(wrapper, liteVimeo);
-        
-        // Move element into wrapper
-        wrapper.appendChild(liteVimeo);
-        
-        // Style lite-vimeo
-        liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
-        liteVimeo.setAttribute('data-wrapped', 'true');
-        
-        // Ensure it has proper attributes
-        if (!liteVimeo.hasAttribute('width')) {
-            liteVimeo.setAttribute('width', '100%');
-        }
-        if (!liteVimeo.hasAttribute('height')) {
-            liteVimeo.setAttribute('height', '100%');
-        }
-    }
+#wrapAllMediaElements(element) {
+    // Skip elements that already have standard wrappers
+    element.querySelectorAll('iframe:not([data-wrapped]):not(.standard-media-wrapper *)').forEach(iframe => {
+        this.#wrapIframe(iframe);
+    });
+    
+    element.querySelectorAll('lite-youtube:not([data-wrapped]):not(.standard-media-wrapper *)').forEach(liteYoutube => {
+        this.#wrapLiteYoutube(liteYoutube);
+    });
+    
+    element.querySelectorAll('lite-vimeo:not([data-wrapped]):not(.standard-media-wrapper *)').forEach(liteVimeo => {
+        this.#wrapLiteVimeo(liteVimeo);
+    });
+    
+    element.querySelectorAll('video:not([data-wrapped]):not(.standard-media-wrapper *)').forEach(video => {
+        this.#wrapVideo(video);
+    });
+}
 
-    #wrapVideo(video) {
-        const parent = video.parentElement;
-        
-        // Check if already has a standard wrapper
-        const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
-        
-        if (hasStandardWrapper) {
-            video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
-            video.setAttribute('data-wrapped', 'true');
-            return;
-        }
-        
-        // Create standard wrapper
-        const wrapper = this.#createStandardMediaWrapper(video);
-        wrapper.classList.add('video-wrapper');
-        
-        // Get video dimensions or use defaults
-        const width = video.getAttribute('width') || video.videoWidth || 640;
-        const height = video.getAttribute('height') || video.videoHeight || 360;
-        
-        // Calculate aspect ratio for video specifically
-        const aspectRatio = ((height / width) * 100);
-        wrapper.style.paddingBottom = aspectRatio + '%';
-        
-        // Insert wrapper before video
-        video.parentNode.insertBefore(wrapper, video);
-        
-        // Move video into wrapper
-        wrapper.appendChild(video);
-        
-        // Style video
-        video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
-        video.setAttribute('data-wrapped', 'true');
-        
-        // Ensure it has proper attributes
-        if (!video.hasAttribute('width')) {
-            video.setAttribute('width', width);
-        }
-        if (!video.hasAttribute('height')) {
-            video.setAttribute('height', height);
-        }
-        
-        // Add video controls if not present
-        if (!video.hasAttribute('controls')) {
-            video.setAttribute('controls', '');
-        }
-    }
-
-#createStandardMediaWrapper(element) {
+ #createStandardMediaWrapper(element) {
     const wrapper = document.createElement('div');
     wrapper.className = 'standard-media-wrapper';
     
-    // ALWAYS use 16:9 aspect ratio for consistency
-    const aspectRatio = '16 / 9';
-    const maxWidth = 560;
-    const maxHeight = 315;
+    // Default aspect ratio (16:9)
+    let aspectRatio = 56.25;
     
-    wrapper.style.cssText = 
-        'position: relative; ' +
-        'width: 100%; ' +
-        'max-width: ' + maxWidth + 'px; ' +
-        'aspect-ratio: ' + aspectRatio + '; ' + // Force 16:9
-        'margin: var(--space-md) 0; ' +
-        'overflow: hidden; ' +
-        'background: var(--bg-secondary); ' +
-        'border-radius: var(--radius-sm); ' +
-        'padding: 0 !important; ' + // CRITICAL: Remove all padding
-        'box-sizing: border-box !important;'; // Ensure padding doesn't affect dimensions
+    // Try to determine aspect ratio from element attributes
+    const width = element.getAttribute('width') || element.offsetWidth;
+    const height = element.getAttribute('height') || element.offsetHeight;
     
-    // Type-specific styling
+    // YouTube/Vimeo specific detection
     const src = element.src || element.dataset.src || '';
     const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
                       element.tagName === 'LITE-YOUTUBE';
     const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
     
+    if (width && height && !isNaN(width) && !isNaN(height)) {
+        // Calculate aspect ratio from explicit dimensions
+        aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+    } else if (isYouTube) {
+        // Standard YouTube dimensions (16:9)
+        aspectRatio = 56.25;
+    } else if (isVimeo) {
+        // Standard Vimeo dimensions (typically 16:9)
+        aspectRatio = 56.25;
+    } else if (src.includes('soundcloud.com')) {
+        // SoundCloud embed
+        aspectRatio = 29.64;
+    } else if (src.includes('twitter.com') || src.includes('x.com')) {
+        // Twitter/X embed
+        aspectRatio = 56.25;
+    } else {
+        // Fallback for unknown embeds
+        aspectRatio = 56.25;
+    }
+    
+    // Clamp aspect ratio
+    aspectRatio = Math.max(30, Math.min(150, aspectRatio));
+    
+    wrapper.style.cssText = `
+        position: relative;
+        width: 100%;
+        padding-bottom: ${aspectRatio}%;
+        margin: 1em 0;
+        overflow: hidden;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-sm);
+    `;
+    
+    // Add specific class based on media type
     if (isYouTube) {
         wrapper.classList.add('youtube-wrapper');
         wrapper.style.background = '#000';
@@ -8925,6 +8673,385 @@ class PostModernizer {
     }
     
     return wrapper;
+}
+
+#wrapIframe(iframe) {
+    // Check if already inside a standard wrapper
+    const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
+    if (isInStandardWrapper) {
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        iframe.setAttribute('data-wrapped', 'true');
+        return;
+    }
+    
+    // Check if already has a wrapper
+    const parent = iframe.parentElement;
+    const hasWrapper = parent && (
+        parent.classList.contains('media-wrapper') || 
+        parent.classList.contains('iframe-wrapper') ||
+        (parent.style.position === 'relative' && parent.style.paddingBottom)
+    );
+    
+    if (hasWrapper) {
+        // This is an old wrapper, replace it with standard wrapper
+        const wrapper = this.#createStandardMediaWrapper(iframe);
+        
+        // Replace the old wrapper with standard wrapper
+        parent.parentNode.insertBefore(wrapper, parent);
+        wrapper.appendChild(iframe);
+        parent.remove();
+    } else {
+        // Create standard wrapper
+        const wrapper = this.#createStandardMediaWrapper(iframe);
+        
+        // Set standard dimensions
+        if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
+            iframe.setAttribute('width', '100%');
+            iframe.setAttribute('height', '100%');
+        }
+        
+        // Insert wrapper before iframe
+        iframe.parentNode.insertBefore(wrapper, iframe);
+        
+        // Move iframe into wrapper
+        wrapper.appendChild(iframe);
+    }
+    
+    // Style the iframe
+    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+    iframe.setAttribute('data-wrapped', 'true');
+}
+    
+#wrapLiteYoutube(liteYoutube) {
+    const parent = liteYoutube.parentElement;
+    
+    // Check if already has a standard wrapper
+    const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
+    
+    if (hasStandardWrapper) {
+        liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+        liteYoutube.setAttribute('data-wrapped', 'true');
+        return;
+    }
+    
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(liteYoutube);
+    wrapper.classList.add('lite-youtube-wrapper');
+    
+    // Add YouTube-specific styling
+    wrapper.style.cssText += `
+        background: #000;
+    `;
+    
+    // Insert wrapper before lite-youtube
+    liteYoutube.parentNode.insertBefore(wrapper, liteYoutube);
+    
+    // Move element into wrapper
+    wrapper.appendChild(liteYoutube);
+    
+    // Style lite-youtube
+    liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+    liteYoutube.setAttribute('data-wrapped', 'true');
+    
+    // Ensure it has proper attributes
+    if (!liteYoutube.hasAttribute('width')) {
+        liteYoutube.setAttribute('width', '100%');
+    }
+    if (!liteYoutube.hasAttribute('height')) {
+        liteYoutube.setAttribute('height', '100%');
+    }
+}
+
+#wrapLiteVimeo(liteVimeo) {
+    const parent = liteVimeo.parentElement;
+    
+    // Check if already has a standard wrapper
+    const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
+    
+    if (hasStandardWrapper) {
+        liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+        liteVimeo.setAttribute('data-wrapped', 'true');
+        return;
+    }
+    
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(liteVimeo);
+    wrapper.classList.add('lite-vimeo-wrapper');
+    
+    // Add Vimeo-specific styling
+    wrapper.style.cssText += `
+        background: #1ab7ea;
+    `;
+    
+    // Insert wrapper before lite-vimeo
+    liteVimeo.parentNode.insertBefore(wrapper, liteVimeo);
+    
+    // Move element into wrapper
+    wrapper.appendChild(liteVimeo);
+    
+    // Style lite-vimeo
+    liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+    liteVimeo.setAttribute('data-wrapped', 'true');
+    
+    // Ensure it has proper attributes
+    if (!liteVimeo.hasAttribute('width')) {
+        liteVimeo.setAttribute('width', '100%');
+    }
+    if (!liteVimeo.hasAttribute('height')) {
+        liteVimeo.setAttribute('height', '100%');
+    }
+}
+
+ #wrapVideo(video) {
+    const parent = video.parentElement;
+    
+    // Check if already has a standard wrapper
+    const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
+    
+    if (hasStandardWrapper) {
+        video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
+        video.setAttribute('data-wrapped', 'true');
+        return;
+    }
+    
+    // Create standard wrapper
+    const wrapper = this.#createStandardMediaWrapper(video);
+    wrapper.classList.add('video-wrapper');
+    
+    // Get video dimensions or use defaults
+    const width = video.getAttribute('width') || video.videoWidth || 640;
+    const height = video.getAttribute('height') || video.videoHeight || 360;
+    
+    // Calculate aspect ratio for video specifically
+    const aspectRatio = ((height / width) * 100);
+    wrapper.style.paddingBottom = `${aspectRatio}%`;
+    
+    // Insert wrapper before video
+    video.parentNode.insertBefore(wrapper, video);
+    
+    // Move video into wrapper
+    wrapper.appendChild(video);
+    
+    // Style video
+    video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
+    video.setAttribute('data-wrapped', 'true');
+    
+    // Ensure it has proper attributes
+    if (!video.hasAttribute('width')) {
+        video.setAttribute('width', width);
+    }
+    if (!video.hasAttribute('height')) {
+        video.setAttribute('height', height);
+    }
+    
+    // Add video controls if not present
+    if (!video.hasAttribute('controls')) {
+        video.setAttribute('controls', '');
+    }
+}
+
+    #createMediaWrapper(element) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'media-wrapper';
+    
+    // Default to 16:9 aspect ratio
+    let aspectRatio = '56.25%';
+    
+    // Try to determine aspect ratio from element
+    const width = element.getAttribute('width') || element.offsetWidth;
+    const height = element.getAttribute('height') || element.offsetHeight;
+    
+    if (width && height) {
+        aspectRatio = ((parseInt(height) / parseInt(width)) * 100) + '%';
+    }
+    
+    wrapper.style.cssText = `position:relative;width:100%;padding-bottom:${aspectRatio};overflow:hidden;`;
+    
+    return wrapper;
+}
+
+#normalizeExistingWrappers(element) {
+    // Find all potential wrapper divs
+    const potentialWrappers = element.querySelectorAll('div[style*="padding"], div[style*="position:relative"]');
+    
+    potentialWrappers.forEach(div => {
+        const style = div.style;
+        
+        // Check if this looks like a media wrapper
+        const isMediaWrapper = (
+            (style.position === 'relative' && style.paddingBottom) ||
+            (style.padding && style.padding.includes('%')) ||
+            div.classList.contains('iframe-wrapper')
+        );
+        
+        if (!isMediaWrapper) return;
+        
+        // Ensure it has our standard class
+        if (!div.classList.contains('media-wrapper')) {
+            div.classList.add('media-wrapper');
+        }
+        
+        // Ensure proper styling
+        if (!style.position || style.position !== 'relative') {
+            style.position = 'relative';
+        }
+        
+        if (!style.overflow || style.overflow !== 'hidden') {
+            style.overflow = 'hidden';
+        }
+        
+        if (!style.width || style.width !== '100%') {
+            style.width = '100%';
+        }
+        
+        // Ensure child media elements are absolutely positioned
+        div.querySelectorAll('iframe, lite-youtube, lite-vimeo, video').forEach(media => {
+            if (media.style.position !== 'absolute') {
+                media.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            }
+        });
+    });
+}
+    
+    #enhanceIframesInElement(element) {
+        element.querySelectorAll('iframe').forEach(iframe => {
+            const originalWidth = iframe.getAttribute('width');
+            const originalHeight = iframe.getAttribute('height');
+
+            const commonSizes = {
+                'youtube.com': { width: '560', height: '315' },
+                'youtu.be': { width: '560', height: '315' },
+                'vimeo.com': { width: '640', height: '360' },
+                'soundcloud.com': { width: '100%', height: '166' },
+                'twitter.com': { width: '550', height: '400' },
+                'x.com': { width: '550', height: '400' },
+                'default': { width: '100%', height: '400' }
+            };
+
+            let src = iframe.src || iframe.dataset.src || '';
+            let dimensions = commonSizes.default;
+
+            for (let domain in commonSizes) {
+                if (commonSizes.hasOwnProperty(domain) && src.includes(domain)) {
+                    dimensions = commonSizes[domain];
+                    break;
+                }
+            }
+
+            if (!originalWidth || !originalHeight) {
+                iframe.setAttribute('width', dimensions.width);
+                iframe.setAttribute('height', dimensions.height);
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'iframe-wrapper';
+
+                if (dimensions.width !== '100%') {
+                    const widthNum = parseInt(dimensions.width);
+                    const heightNum = parseInt(dimensions.height);
+                    if (widthNum > 0 && heightNum > 0) {
+                        const paddingBottom = (heightNum / widthNum * 100) + '%';
+                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden;';
+                    } else {
+                        wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                    }
+                } else {
+                    wrapper.style.cssText = 'position:relative;width:100%;overflow:hidden;';
+                }
+
+                iframe.parentNode.insertBefore(wrapper, iframe);
+                wrapper.appendChild(iframe);
+
+                iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            }
+
+            if (!iframe.hasAttribute('title')) {
+                iframe.setAttribute('title', 'Embedded content');
+            }
+        });
+    }
+
+    #normalizeAllMediaWrappers(element) {
+    // Find all potential media elements
+    const mediaElements = element.querySelectorAll(
+        'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
+    );
+    
+    mediaElements.forEach(media => {
+        // Skip already wrapped elements
+        if (media.getAttribute('data-wrapped') === 'true') return;
+        
+        // Check if element needs wrapping
+        if (media.tagName === 'IFRAME') {
+            this.#wrapIframe(media);
+        } else if (media.tagName === 'LITE-YOUTUBE') {
+            this.#wrapLiteYoutube(media);
+        } else if (media.tagName === 'LITE-VIMEO') {
+            this.#wrapLiteVimeo(media);
+        } else if (media.tagName === 'VIDEO') {
+            this.#wrapVideo(media);
+        } else if (media.classList.contains('media-wrapper') || 
+                   media.classList.contains('iframe-wrapper')) {
+            // This is already a wrapper, ensure it's standardized
+            this.#standardizeExistingWrapper(media);
+        }
+    });
+}
+
+#standardizeExistingWrapper(wrapper) {
+    // Add standard class if not present
+    if (!wrapper.classList.contains('standard-media-wrapper')) {
+        wrapper.classList.add('standard-media-wrapper');
+    }
+    
+    // Ensure proper styling
+    const computedStyle = window.getComputedStyle(wrapper);
+    
+    // Check if padding-bottom is set for aspect ratio
+    if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
+        // Calculate or set default aspect ratio
+        const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
+        if (children.length > 0) {
+            const child = children[0];
+            
+            // Try to get dimensions from child
+            const width = child.getAttribute('width') || child.offsetWidth;
+            const height = child.getAttribute('height') || child.offsetHeight;
+            
+            if (width && height && !isNaN(width) && !isNaN(height)) {
+                const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+                wrapper.style.paddingBottom = `${aspectRatio}%`;
+            } else {
+                // Default to 16:9
+                wrapper.style.paddingBottom = '56.25%';
+            }
+        } else {
+            // Default to 16:9
+            wrapper.style.paddingBottom = '56.25%';
+        }
+    }
+    
+    // Ensure wrapper has relative positioning
+    if (computedStyle.position !== 'relative') {
+        wrapper.style.position = 'relative';
+    }
+    
+    // Ensure overflow hidden
+    if (computedStyle.overflow !== 'hidden') {
+        wrapper.style.overflow = 'hidden';
+    }
+    
+    // Ensure full width
+    if (!wrapper.style.width || wrapper.style.width !== '100%') {
+        wrapper.style.width = '100%';
+    }
+    
+    // Add margin for spacing
+    if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
+        wrapper.style.margin = '1em 0';
+    }
+    
+    // Mark as standardized
+    wrapper.setAttribute('data-standardized', 'true');
 }
 
     #addQuoteEventListeners(quoteElement) {
@@ -9072,60 +9199,39 @@ class PostModernizer {
         });
     }
 
-    #setInitialPointsState(miniButtons) {
-        const pointsContainer = miniButtons.querySelector('.points');
-        if (!pointsContainer) return;
+#setInitialPointsState(miniButtons) {
+    const pointsContainer = miniButtons.querySelector('.points');
+    if (!pointsContainer) return;
 
-        const pointsPos = pointsContainer.querySelector('.points_pos');
-        const pointsNeg = pointsContainer.querySelector('.points_neg');
-        const pointsUp = pointsContainer.querySelector('.points_up');
-        const pointsDown = pointsContainer.querySelector('.points_down');
-        const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+    const pointsPos = pointsContainer.querySelector('.points_pos');
+    const pointsNeg = pointsContainer.querySelector('.points_neg');
+    const pointsUp = pointsContainer.querySelector('.points_up');
+    const pointsDown = pointsContainer.querySelector('.points_down');
+    const bulletDelete = pointsContainer.querySelector('.bullet_delete');
 
-        if (bulletDelete) {
-            if (pointsPos) {
+    if (bulletDelete) {
+        if (pointsPos) {
+            pointsUp && pointsUp.classList.add('active');
+            pointsDown && pointsDown.classList.remove('active');
+        } else if (pointsNeg) {
+            const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
+            const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
+
+            if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
                 pointsUp && pointsUp.classList.add('active');
-                pointsDown && pointsDown.classList.remove('active');
-            } else if (pointsNeg) {
-                const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
-                const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
-
-                if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
-                    pointsUp && pointsUp.classList.add('active');
-                }
-                if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
-                    pointsDown && pointsDown.classList.add('active');
-                }
-
-                if (pointsUp && pointsUp.classList.contains('active')) {
-                    pointsDown && pointsDown.classList.remove('active');
-                } else if (pointsDown && pointsDown.classList.contains('active')) {
-                    pointsUp && pointsUp.classList.remove('active');
-                }
             }
-        } else {
-            if (pointsPos) {
-                pointsUp && pointsUp.classList.add('active');
+            if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
+                pointsDown && pointsDown.classList.add('active');
+            }
+
+            if (pointsUp && pointsUp.classList.contains('active')) {
                 pointsDown && pointsDown.classList.remove('active');
-            } else if (pointsNeg) {
-                const pointsUpIcon = pointsUp ? pointsUp.querySelector('i') : null;
-                const pointsDownIcon = pointsDown ? pointsDown.querySelector('i') : null;
-
-                if (pointsUpIcon && pointsUpIcon.classList.contains('fa-thumbs-down')) {
-                    pointsUp && pointsUp.classList.add('active');
-                }
-                if (pointsDownIcon && pointsDownIcon.classList.contains('fa-thumbs-down')) {
-                    pointsDown && pointsDown.classList.add('active');
-                }
-
-                if (pointsUp && pointsUp.classList.contains('active')) {
-                    pointsDown && pointsDown.classList.remove('active');
-                } else if (pointsDown && pointsDown.classList.contains('active')) {
-                    pointsUp && pointsUp.classList.remove('active');
-                }
+            } else if (pointsDown && pointsDown.classList.contains('active')) {
+                pointsUp && pointsUp.classList.remove('active');
             }
         }
     }
+}
 
     #createModernMultiquote(label, checkbox) {
         const labelText = label.textContent.replace('multiquote »', '').trim();
@@ -9454,63 +9560,49 @@ class PostModernizer {
         });
     }
 
-      #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const emojiPreview = e.target.closest('.st-emoji-preview');
-            
-            // Check if clicking on a modal link
-            const modalLink = e.target.closest('a[rel="#overlay"], a[href*="CODE=votes"], a[href*="CODE=rep"]');
-            
-            if (modalLink) {
-                // Allow modal links to work normally - don't interfere
-                return;
-            }
+   #enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const emojiPreview = e.target.closest('.st-emoji-preview');
 
-            if (pointsUp || pointsDown) {
-                // Check if this is actually a link that should open a modal
-                const isModalLink = e.target.closest('a[href]');
-                if (isModalLink) {
-                    return; // Don't interfere with modal links
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+
+            if (bulletDelete) {
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
                 }
-                
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                if (bulletDelete) {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
+                }
+            } else {
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
 
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
-                } else {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
-
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
                 }
             }
+        }
 
-            if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && 
-                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
-            }
-        });
-    }
+        if (emojiPreview) {
+            emojiPreview.closest('.st-emoji-container') && 
+            emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+        }
+    });
+}
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
