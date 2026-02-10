@@ -9459,6 +9459,14 @@ class PostModernizer {
             const pointsUp = e.target.closest('.points_up');
             const pointsDown = e.target.closest('.points_down');
             const emojiPreview = e.target.closest('.st-emoji-preview');
+            
+            // Check if clicking on a points link (not the container itself)
+            const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
+            
+            if (pointsLink) {
+                // Allow the modal link to work normally
+                return;
+            }
 
             if (pointsUp || pointsDown) {
                 const pointsContainer = (pointsUp || pointsDown).closest('.points');
