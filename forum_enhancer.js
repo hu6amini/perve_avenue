@@ -7430,351 +7430,364 @@ class PostModernizer {
         });
     }
 
-    #transformSearchPostElements() {
-        const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
+#transformSearchPostElements() {
+    const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
 
-        posts.forEach((post, index) => {
-            post.classList.add('post-modernized', 'search-post');
+    posts.forEach((post, index) => {
+        post.classList.add('post-modernized', 'search-post');
 
-            const anchorDiv = post.querySelector('.anchor');
-            let anchorElements = null;
-            if (anchorDiv) {
-                anchorElements = anchorDiv.cloneNode(true);
-                anchorDiv.remove();
+        const anchorDiv = post.querySelector('.anchor');
+        let anchorElements = null;
+        if (anchorDiv) {
+            anchorElements = anchorDiv.cloneNode(true);
+            anchorDiv.remove();
+        }
+
+        const title2Top = post.querySelector('.title2.top');
+        const pointsElement = post.querySelector('.points');
+
+        let contentHTML = '';
+        const colorTable = post.querySelector('table.color');
+
+        if (colorTable) {
+            const tds = colorTable.querySelectorAll('td');
+            tds.forEach(td => {
+                if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
+                    contentHTML += td.outerHTML;
+                }
+            });
+        }
+
+        if (!contentHTML) {
+            const contentElement = post.querySelector('td.Item table.color td') ||
+                post.querySelector('td.Item td') ||
+                post.querySelector('.color td') ||
+                post.querySelector('td[align]');
+
+            if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
+                contentHTML = contentElement.outerHTML;
+            }
+        }
+
+        const editElement = post.querySelector('span.edit');
+        const rtSub = post.querySelector('.rt.Sub');
+
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
+
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content search-post-content';
+
+        const postFooter = document.createElement('div');
+        postFooter.className = 'post-footer search-post-footer';
+
+        if (anchorElements) {
+            const anchorContainer = document.createElement('div');
+            anchorContainer.className = 'anchor-container';
+            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+            anchorContainer.appendChild(anchorElements);
+            postHeader.appendChild(anchorContainer);
+        }
+
+        if (!post.classList.contains('post_queue')) {
+            const postNumber = document.createElement('span');
+            postNumber.className = 'post-number';
+            
+            const hashIcon = document.createElement('i');
+            hashIcon.className = 'fa-regular fa-hashtag';
+            hashIcon.setAttribute('aria-hidden', 'true');
+            
+            const numberSpan = document.createElement('span');
+            numberSpan.className = 'post-number-value';
+            numberSpan.textContent = index + 1;
+            
+            postNumber.appendChild(hashIcon);
+            postNumber.appendChild(document.createTextNode(' '));
+            postNumber.appendChild(numberSpan);
+            
+            postHeader.appendChild(postNumber);
+        }
+
+        this.#addNewPostBadge(post, postHeader);
+
+        if (title2Top) {
+            const title2TopClone = title2Top.cloneNode(true);
+            const pointsInTitle = title2TopClone.querySelector('.points');
+            pointsInTitle?.remove();
+
+            let locationDiv = null;
+            if (rtSub) {
+                const topicLink = rtSub.querySelector('a[href*="?t="]');
+                const forumLink = rtSub.querySelector('a[href*="?f="]');
+
+                if (topicLink || forumLink) {
+                    locationDiv = document.createElement('div');
+                    locationDiv.className = 'post-location';
+
+                    if (topicLink) {
+                        const topicSpan = document.createElement('span');
+                        topicSpan.className = 'topic-link';
+                        topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
+                        locationDiv.appendChild(topicSpan);
+                    }
+
+                    if (forumLink) {
+                        const forumSpan = document.createElement('span');
+                        forumSpan.className = 'forum-link';
+                        forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
+                        if (topicLink) {
+                            locationDiv.appendChild(document.createTextNode(' - '));
+                        }
+                        locationDiv.appendChild(forumSpan);
+                    }
+
+                    title2TopClone.querySelector('.rt.Sub')?.remove();
+                }
             }
 
-            const title2Top = post.querySelector('.title2.top');
-            const pointsElement = post.querySelector('.points');
+            this.#removeBreakAndNbsp(title2TopClone);
+            title2TopClone.querySelector('.Break.Sub')?.remove();
 
-            let contentHTML = '';
-            const colorTable = post.querySelector('table.color');
+            this.#transformPostHeaderTimestamps(title2TopClone);
+            this.#transformTimestampElements(title2TopClone);
 
-            if (colorTable) {
-                const tds = colorTable.querySelectorAll('td');
-                tds.forEach(td => {
-                    if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
-                        contentHTML += td.outerHTML;
+            const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+            if (tdWrapper) {
+                const divs = tdWrapper.querySelectorAll('div');
+                divs.forEach(div => {
+                    postHeader.appendChild(div.cloneNode(true));
+                });
+                tdWrapper.remove();
+
+                if (locationDiv) {
+                    postHeader.appendChild(locationDiv);
+                }
+            } else {
+                if (locationDiv) {
+                    title2TopClone.appendChild(locationDiv);
+                }
+                postHeader.appendChild(title2TopClone);
+            }
+        }
+
+        if (contentHTML) {
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'post-main-content';
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = contentHTML;
+
+            if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
+                const wrapperDiv = tempDiv.firstElementChild;
+                const hasQuote = wrapperDiv.querySelector('.quote_top');
+
+                if (!hasQuote) {
+                    while (wrapperDiv.firstChild) {
+                        tempDiv.appendChild(wrapperDiv.firstChild);
+                    }
+                    wrapperDiv.remove();
+                }
+            }
+
+            while (tempDiv.firstChild) {
+                contentWrapper.appendChild(tempDiv.firstChild);
+            }
+
+            this.#preserveMediaDimensions(contentWrapper);
+
+            const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let node;
+
+            while ((node = walker.nextNode())) {
+                if (node.textContent.trim() !== '') {
+                    textNodes.push(node);
+                }
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const searchQuery = urlParams.get('q');
+            if (searchQuery) {
+                textNodes.forEach(textNode => {
+                    const text = textNode.textContent;
+                    const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
+                    const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
+
+                    if (highlightedText !== text) {
+                        const span = document.createElement('span');
+                        span.innerHTML = highlightedText;
+                        textNode.parentNode.replaceChild(span, textNode);
                     }
                 });
             }
 
-            if (!contentHTML) {
-                const contentElement = post.querySelector('td.Item table.color td') ||
-                    post.querySelector('td.Item td') ||
-                    post.querySelector('.color td') ||
-                    post.querySelector('td[align]');
+            this.#processTextAndLineBreaks(contentWrapper);
+            this.#cleanupSearchPostContent(contentWrapper);
 
-                if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
-                    contentHTML = contentElement.outerHTML;
-                }
+            const editSpanInContent = contentWrapper.querySelector('span.edit');
+            if (editSpanInContent) {
+                this.#transformEditTimestamp(editSpanInContent);
             }
 
-            const editElement = post.querySelector('span.edit');
-            const rtSub = post.querySelector('.rt.Sub');
+            this.#modernizeQuotes(contentWrapper);
+            this.#modernizeSpoilers(contentWrapper);
+            this.#modernizeCodeBlocksInContent(contentWrapper);
+            this.#modernizeAttachmentsInContent(contentWrapper);
+            this.#modernizeEmbeddedLinksInContent(contentWrapper);
 
-            const postHeader = document.createElement('div');
-            postHeader.className = 'post-header';
+            postContent.appendChild(contentWrapper);
+        }
 
-            const postContent = document.createElement('div');
-            postContent.className = 'post-content search-post-content';
+        const postFooterActions = document.createElement('div');
+        postFooterActions.className = 'post-actions';
 
-            const postFooter = document.createElement('div');
-            postFooter.className = 'post-footer search-post-footer';
-
-            if (anchorElements) {
-                const anchorContainer = document.createElement('div');
-                anchorContainer.className = 'anchor-container';
-                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-                anchorContainer.appendChild(anchorElements);
-                postHeader.appendChild(anchorContainer);
-            }
-
-            if (!post.classList.contains('post_queue')) {
-                const postNumber = document.createElement('span');
-                postNumber.className = 'post-number';
-                
-                const hashIcon = document.createElement('i');
-                hashIcon.className = 'fa-regular fa-hashtag';
-                hashIcon.setAttribute('aria-hidden', 'true');
-                
-                const numberSpan = document.createElement('span');
-                numberSpan.className = 'post-number-value';
-                numberSpan.textContent = index + 1;
-                
-                postNumber.appendChild(hashIcon);
-                postNumber.appendChild(document.createTextNode(' '));
-                postNumber.appendChild(numberSpan);
-                
-                postHeader.appendChild(postNumber);
-            }
-
-            this.#addNewPostBadge(post, postHeader);
-
-            if (title2Top) {
-                const title2TopClone = title2Top.cloneNode(true);
-                const pointsInTitle = title2TopClone.querySelector('.points');
-                pointsInTitle?.remove();
-
-                let locationDiv = null;
-                if (rtSub) {
-                    const topicLink = rtSub.querySelector('a[href*="?t="]');
-                    const forumLink = rtSub.querySelector('a[href*="?f="]');
-
-                    if (topicLink || forumLink) {
-                        locationDiv = document.createElement('div');
-                        locationDiv.className = 'post-location';
-
-                        if (topicLink) {
-                            const topicSpan = document.createElement('span');
-                            topicSpan.className = 'topic-link';
-                            topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
-                            locationDiv.appendChild(topicSpan);
-                        }
-
-                        if (forumLink) {
-                            const forumSpan = document.createElement('span');
-                            forumSpan.className = 'forum-link';
-                            forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
-                            if (topicLink) {
-                                locationDiv.appendChild(document.createTextNode(' - '));
-                            }
-                            locationDiv.appendChild(forumSpan);
-                        }
-
-                        title2TopClone.querySelector('.rt.Sub')?.remove();
-                    }
-                }
-
-                this.#removeBreakAndNbsp(title2TopClone);
-                title2TopClone.querySelector('.Break.Sub')?.remove();
-
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-
-                const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
-                if (tdWrapper) {
-                    const divs = tdWrapper.querySelectorAll('div');
-                    divs.forEach(div => {
-                        postHeader.appendChild(div.cloneNode(true));
-                    });
-                    tdWrapper.remove();
-
-                    if (locationDiv) {
-                        postHeader.appendChild(locationDiv);
-                    }
-                } else {
-                    if (locationDiv) {
-                        title2TopClone.appendChild(locationDiv);
-                    }
-                    postHeader.appendChild(title2TopClone);
-                }
-            }
-
-            if (contentHTML) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'post-main-content';
-
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = contentHTML;
-
-                if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
-                    const wrapperDiv = tempDiv.firstElementChild;
-                    const hasQuote = wrapperDiv.querySelector('.quote_top');
-
-                    if (!hasQuote) {
-                        while (wrapperDiv.firstChild) {
-                            tempDiv.appendChild(wrapperDiv.firstChild);
-                        }
-                        wrapperDiv.remove();
-                    }
-                }
-
-                while (tempDiv.firstChild) {
-                    contentWrapper.appendChild(tempDiv.firstChild);
-                }
-
-                this.#preserveMediaDimensions(contentWrapper);
-
-                const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
-                const textNodes = [];
-                let node;
-
-                while ((node = walker.nextNode())) {
-                    if (node.textContent.trim() !== '') {
-                        textNodes.push(node);
-                    }
-                }
-
-                const urlParams = new URLSearchParams(window.location.search);
-                const searchQuery = urlParams.get('q');
-                if (searchQuery) {
-                    textNodes.forEach(textNode => {
-                        const text = textNode.textContent;
-                        const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
-                        const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
-
-                        if (highlightedText !== text) {
-                            const span = document.createElement('span');
-                            span.innerHTML = highlightedText;
-                            textNode.parentNode.replaceChild(span, textNode);
-                        }
-                    });
-                }
-
-                this.#processTextAndLineBreaks(contentWrapper);
-                this.#cleanupSearchPostContent(contentWrapper);
-
-                const editSpanInContent = contentWrapper.querySelector('span.edit');
-                if (editSpanInContent) {
-                    this.#transformEditTimestamp(editSpanInContent);
-                }
-
-                this.#modernizeQuotes(contentWrapper);
-                this.#modernizeSpoilers(contentWrapper);
-                this.#modernizeCodeBlocksInContent(contentWrapper);
-                this.#modernizeAttachmentsInContent(contentWrapper);
-                this.#modernizeEmbeddedLinksInContent(contentWrapper);
-
-                postContent.appendChild(contentWrapper);
-            }
-
-            const postFooterActions = document.createElement('div');
-            postFooterActions.className = 'post-actions';
-
-            let pointsFooter;
-            if (pointsElement && pointsElement.innerHTML.trim() !== '') {
-                const pointsClone = pointsElement.cloneNode(true);
-                pointsFooter = pointsClone;
-
-                const emElement = pointsFooter.querySelector('em');
-                const linkElement = pointsFooter.querySelector('a');
-                const href = linkElement ? linkElement.getAttribute('href') : null;
-
-                let pointsValue = '0';
-                let pointsClass = 'points_pos';
-
-                if (emElement) {
-                    pointsValue = emElement.textContent.trim();
-                    pointsClass = emElement.className;
-                }
-
-                const newPoints = document.createElement('div');
-                newPoints.className = 'points active';
-                newPoints.id = pointsElement.id || '';
-
-                if (href) {
-                    const link = document.createElement('a');
-                    link.href = href;
-                    link.setAttribute('tabindex', '0');
-                    if (linkElement && linkElement.getAttribute('rel')) {
-                        link.setAttribute('rel', linkElement.getAttribute('rel'));
-                    }
-
-                    const em = document.createElement('em');
-                    em.className = pointsClass;
-                    em.textContent = pointsValue;
-                    link.appendChild(em);
-                    newPoints.appendChild(link);
-                } else {
-                    const em = document.createElement('em');
-                    em.className = pointsClass;
-                    em.textContent = pointsValue;
-                    newPoints.appendChild(em);
-                }
-
-                const thumbsSpan = document.createElement('span');
-                thumbsSpan.className = 'points_up opacity';
-
-                const icon = document.createElement('i');
-                if (pointsClass === 'points_pos') {
-                    thumbsSpan.classList.add('active');
-                    icon.className = 'fa-regular fa-thumbs-up';
-                } else if (pointsClass === 'points_neg') {
-                    icon.className = 'fa-regular fa-thumbs-down';
-                } else {
-                    icon.className = 'fa-regular fa-thumbs-up';
-                }
-
-                icon.setAttribute('aria-hidden', 'true');
-                thumbsSpan.appendChild(icon);
-                newPoints.appendChild(thumbsSpan);
-
-                pointsFooter = newPoints;
-            } else {
-                const noPoints = document.createElement('div');
-                noPoints.className = 'points no_points';
-
-                const em = document.createElement('em');
-                em.className = 'points_pos';
-                em.textContent = '0';
-                noPoints.appendChild(em);
-
-                const thumbsSpan = document.createElement('span');
-                thumbsSpan.className = 'points_up opacity';
-
-                const icon = document.createElement('i');
-                icon.className = 'fa-regular fa-thumbs-up';
-                icon.setAttribute('aria-hidden', 'true');
-
-                thumbsSpan.appendChild(icon);
-                noPoints.appendChild(thumbsSpan);
-
-                pointsFooter = noPoints;
-            }
-
-            postFooterActions.appendChild(pointsFooter);
-            postFooter.appendChild(postFooterActions);
-
-            const shareContainer = document.createElement('div');
-            shareContainer.className = 'modern-bottom-actions';
-
-            const shareButton = document.createElement('button');
-            shareButton.className = 'btn btn-icon btn-share';
-            shareButton.setAttribute('data-action', 'share');
-            shareButton.setAttribute('title', 'Share this post');
-            shareButton.setAttribute('type', 'button');
-            shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
-
-            shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
-
-            shareContainer.appendChild(shareButton);
-            postFooter.appendChild(shareContainer);
-
-            const newPost = document.createElement('div');
-            newPost.className = 'post post-modernized search-post';
-            newPost.id = post.id;
-
-            Array.from(post.attributes).forEach(attr => {
-                if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
-                    return;
-                }
-                newPost.setAttribute(attr.name, attr.value);
-            });
-
-            Array.from(post.attributes).forEach(attr => {
-                if (attr.name.startsWith('data-')) {
-                    newPost.setAttribute(attr.name, attr.value);
-                }
-            });
-
-            const originalClasses = post.className.split(' ').filter(cls =>
-                !cls.includes('post-modernized') && !cls.includes('search-post')
-            );
-            newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
-
-            newPost.appendChild(postHeader);
-            newPost.appendChild(postContent);
-            newPost.appendChild(postFooter);
-
-            post.parentNode.replaceChild(newPost, post);
-            this.#updatePointsContainerActiveState(pointsFooter);
+        let pointsFooter;
+        
+        // Store the original points element and preserve its functionality
+        if (pointsElement) {
+            // Instead of rebuilding, clone and preserve all event handlers
+            pointsFooter = pointsElement.cloneNode(true);
             
-            // Clean up double-wrapped media after transformation
-            setTimeout(() => {
-                this.#cleanupOldMediaWrappers(newPost);
-            }, 100);
+            // Ensure the points element has proper classes
+            pointsFooter.classList.add('points');
+            
+            // Check if this is the active state (has bullet_delete)
+            const hasBulletDelete = pointsFooter.querySelector('.bullet_delete') !== null;
+            
+            if (hasBulletDelete) {
+                pointsFooter.classList.add('active');
+                
+                // Preserve the onclick handler for bullet_delete
+                const bulletDelete = pointsFooter.querySelector('.bullet_delete');
+                if (bulletDelete) {
+                    const originalOnClick = bulletDelete.getAttribute('onclick');
+                    if (originalOnClick) {
+                        bulletDelete.setAttribute('onclick', originalOnClick);
+                    }
+                }
+                
+                // Preserve the points_up and points_down state
+                const pointsUp = pointsFooter.querySelector('.points_up');
+                const pointsDown = pointsFooter.querySelector('.points_down');
+                const pointsPos = pointsFooter.querySelector('.points_pos');
+                
+                if (pointsPos && pointsPos.textContent !== '0') {
+                    pointsUp && pointsUp.classList.add('active');
+                    pointsDown && pointsDown.classList.remove('active');
+                }
+            } else {
+                // This is the pre-vote state with thumbs-up and thumbs-down links
+                const pointsUpLink = pointsFooter.querySelector('.points_up');
+                const pointsDownLink = pointsFooter.querySelector('.points_down');
+                
+                // Preserve original onclick handlers
+                if (pointsUpLink) {
+                    const originalOnClick = pointsUpLink.getAttribute('onclick');
+                    if (originalOnClick) {
+                        pointsUpLink.setAttribute('onclick', originalOnClick);
+                    }
+                }
+                
+                if (pointsDownLink) {
+                    const originalOnClick = pointsDownLink.getAttribute('onclick');
+                    if (originalOnClick) {
+                        pointsDownLink.setAttribute('onclick', originalOnClick);
+                    }
+                }
+            }
+            
+            // Preserve the link to vote counts if it exists
+            const pointsLink = pointsFooter.querySelector('a[href*="CODE=votes"]');
+            if (pointsLink) {
+                const originalHref = pointsLink.getAttribute('href');
+                const originalRel = pointsLink.getAttribute('rel');
+                if (originalHref) {
+                    pointsLink.setAttribute('href', originalHref);
+                }
+                if (originalRel) {
+                    pointsLink.setAttribute('rel', originalRel);
+                }
+            }
+        } else {
+            // Fallback: create a default points element
+            const noPoints = document.createElement('div');
+            noPoints.className = 'points no_points';
+
+            const em = document.createElement('em');
+            em.className = 'points_pos';
+            em.textContent = '0';
+            noPoints.appendChild(em);
+
+            const thumbsSpan = document.createElement('span');
+            thumbsSpan.className = 'points_up opacity';
+
+            const icon = document.createElement('i');
+            icon.className = 'fa-regular fa-thumbs-up';
+            icon.setAttribute('aria-hidden', 'true');
+
+            thumbsSpan.appendChild(icon);
+            noPoints.appendChild(thumbsSpan);
+
+            pointsFooter = noPoints;
+        }
+
+        postFooterActions.appendChild(pointsFooter);
+        postFooter.appendChild(postFooterActions);
+
+        const shareContainer = document.createElement('div');
+        shareContainer.className = 'modern-bottom-actions';
+
+        const shareButton = document.createElement('button');
+        shareButton.className = 'btn btn-icon btn-share';
+        shareButton.setAttribute('data-action', 'share');
+        shareButton.setAttribute('title', 'Share this post');
+        shareButton.setAttribute('type', 'button');
+        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+        shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
+
+        shareContainer.appendChild(shareButton);
+        postFooter.appendChild(shareContainer);
+
+        const newPost = document.createElement('div');
+        newPost.className = 'post post-modernized search-post';
+        newPost.id = post.id;
+
+        Array.from(post.attributes).forEach(attr => {
+            if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
+                return;
+            }
+            newPost.setAttribute(attr.name, attr.value);
         });
-    }
+
+        Array.from(post.attributes).forEach(attr => {
+            if (attr.name.startsWith('data-')) {
+                newPost.setAttribute(attr.name, attr.value);
+            }
+        });
+
+        const originalClasses = post.className.split(' ').filter(cls =>
+            !cls.includes('post-modernized') && !cls.includes('search-post')
+        );
+        newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
+
+        newPost.appendChild(postHeader);
+        newPost.appendChild(postContent);
+        newPost.appendChild(postFooter);
+
+        post.parentNode.replaceChild(newPost, post);
+        
+        // Update active states
+        if (pointsFooter) {
+            this.#updatePointsContainerActiveState(pointsFooter);
+        }
+        
+        // Clean up double-wrapped media after transformation
+        setTimeout(() => {
+            this.#cleanupOldMediaWrappers(newPost);
+        }, 100);
+    });
+}
     
     #cleanupSearchPostContent(contentWrapper) {
         if (this.#isInEditor(contentWrapper)) return;
