@@ -8846,63 +8846,46 @@ class PostModernizer {
         }
     }
 
-    #createStandardMediaWrapper(element) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'standard-media-wrapper';
-        
-        // Default aspect ratio (16:9)
-        let aspectRatio = 56.25;
-        
-        // Try to determine aspect ratio from element attributes
-        const width = element.getAttribute('width') || element.offsetWidth;
-        const height = element.getAttribute('height') || element.offsetHeight;
-        
-        // YouTube/Vimeo specific detection
-        const src = element.src || element.dataset.src || '';
-        const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
-                          element.tagName === 'LITE-YOUTUBE';
-        const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
-        
-        if (width && height && !isNaN(width) && !isNaN(height)) {
-            // Calculate aspect ratio from explicit dimensions
-            aspectRatio = (parseInt(height) / parseInt(width)) * 100;
-        } else if (isYouTube) {
-            // Standard YouTube dimensions (16:9)
-            aspectRatio = 56.25;
-        } else if (isVimeo) {
-            // Standard Vimeo dimensions (typically 16:9)
-            aspectRatio = 56.25;
-        } else if (src.includes('soundcloud.com')) {
-            // SoundCloud embed
-            aspectRatio = 29.64;
-        } else if (src.includes('twitter.com') || src.includes('x.com')) {
-            // Twitter/X embed
-            aspectRatio = 56.25;
-        } else {
-            // Fallback for unknown embeds
-            aspectRatio = 56.25;
-        }
-        
-        // Clamp aspect ratio
-        aspectRatio = Math.max(30, Math.min(150, aspectRatio));
-        
-        wrapper.style.cssText = 'position: relative;width: 100%;padding-bottom: ' + aspectRatio + '%;margin: 1em 0;overflow: hidden;background: var(--bg-secondary);border-radius: var(--radius-sm);';
-        
-        // Add specific class based on media type
-        if (isYouTube) {
-            wrapper.classList.add('youtube-wrapper');
-            wrapper.style.background = '#000';
-        } else if (isVimeo) {
-            wrapper.classList.add('vimeo-wrapper');
-            wrapper.style.background = '#1ab7ea';
-        } else if (element.tagName === 'VIDEO') {
-            wrapper.classList.add('video-wrapper');
-            wrapper.style.background = '#000';
-        }
-        
-        return wrapper;
+#createStandardMediaWrapper(element) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'standard-media-wrapper';
+    
+    // ALWAYS use 16:9 aspect ratio for consistency
+    const aspectRatio = '16 / 9';
+    const maxWidth = 560;
+    
+    wrapper.style.cssText = 
+        'position: relative; ' +
+        'width: 100%; ' +
+        'max-width: ' + maxWidth + 'px; ' +
+        'aspect-ratio: ' + aspectRatio + '; ' +
+        'margin: var(--space-md) 0; ' + // Top/bottom: 1rem, Left/right: 0
+        'overflow: hidden; ' +
+        'background: var(--bg-secondary); ' +
+        'border-radius: var(--radius-sm); ' +
+        'padding: 0 !important; ' +
+        'box-sizing: border-box !important;';
+    
+    // Type-specific styling
+    const src = element.src || element.dataset.src || '';
+    const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
+                      element.tagName === 'LITE-YOUTUBE';
+    const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
+    
+    if (isYouTube) {
+        wrapper.classList.add('youtube-wrapper');
+        wrapper.style.background = '#000';
+    } else if (isVimeo) {
+        wrapper.classList.add('vimeo-wrapper');
+        wrapper.style.background = '#1ab7ea';
+    } else if (element.tagName === 'VIDEO') {
+        wrapper.classList.add('video-wrapper');
+        wrapper.style.background = '#000';
     }
-
+    
+    return wrapper;
+}
+    
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
         const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
