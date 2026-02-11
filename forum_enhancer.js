@@ -7023,329 +7023,276 @@ class PostModernizer {
         document.querySelectorAll('.mini_buttons.points.Sub').forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
 
-#transformPostElements() {
-    const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
-    const urlParams = new URLSearchParams(window.location.search);
-    const startOffset = parseInt(urlParams.get('st') || '0');
+    #transformPostElements() {
+        const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
+        const urlParams = new URLSearchParams(window.location.search);
+        const startOffset = parseInt(urlParams.get('st') || '0');
 
-    posts.forEach((post, index) => {
-        if (post.closest('body#search')) return;
+        posts.forEach((post, index) => {
+            if (post.closest('body#search')) return;
 
-        post.classList.add('post-modernized');
-        const fragment = document.createDocumentFragment();
+            post.classList.add('post-modernized');
+            const fragment = document.createDocumentFragment();
 
-        const anchorDiv = post.querySelector('.anchor');
-        let anchorElements = null;
-        if (anchorDiv) {
-            anchorElements = anchorDiv.cloneNode(true);
-            anchorDiv.remove();
-        }
+            const anchorDiv = post.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
+            }
 
-        const title2Top = post.querySelector('.title2.top');
-        
-        // IMPORTANT: Get the ORIGINAL points element and preserve it
-        let originalPointsElement = null;
-        let originalEmojiElement = null;
-        
-        if (title2Top) {
-            // Find the points element in the title2Top
-            const miniButtonsContainer = title2Top.querySelector('.mini_buttons.points.Sub');
-            if (miniButtonsContainer) {
-                originalPointsElement = miniButtonsContainer.querySelector('.points');
-                // Detach it from the container but keep it alive
-                if (originalPointsElement) {
-                    originalPointsElement = originalPointsElement.cloneNode(true);
+            const title2Top = post.querySelector('.title2.top');
+            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
+            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
+
+            const postHeader = document.createElement('div');
+            postHeader.className = 'post-header';
+
+            const userInfo = document.createElement('div');
+            userInfo.className = 'user-info';
+
+            const postContent = document.createElement('div');
+            postContent.className = 'post-content';
+
+            const postFooter = document.createElement('div');
+            postFooter.className = 'post-footer';
+
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                postHeader.appendChild(anchorContainer);
+            }
+
+            if (!post.classList.contains('post_queue')) {
+                const postNumber = document.createElement('span');
+                postNumber.className = 'post-number';
+                
+                const hashIcon = document.createElement('i');
+                hashIcon.className = 'fa-regular fa-hashtag';
+                hashIcon.setAttribute('aria-hidden', 'true');
+                
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'post-number-value';
+                numberSpan.textContent = startOffset + index + 1;
+                
+                postNumber.appendChild(hashIcon);
+                postNumber.appendChild(document.createTextNode(' '));
+                postNumber.appendChild(numberSpan);
+                
+                postHeader.appendChild(postNumber);
+            }
+
+            this.#addNewPostBadge(post, postHeader);
+
+            let nickElement = null;
+            let groupValue = '';
+
+            if (title2Top) {
+                const tdWrapper = title2Top.closest('td.left.Item');
+                nickElement = title2Top.querySelector('.nick');
+
+                if (tdWrapper) {
+                    const title2TopClone = title2Top.cloneNode(true);
+                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                    title2TopClone.querySelector('.left.Item')?.remove();
+                    this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
+                    
+                    postHeader.appendChild(title2TopClone);
+                    tdWrapper.remove();
+                } else {
+                    const title2TopClone = title2Top.cloneNode(true);
+                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                    title2TopClone.querySelector('.left.Item')?.remove();
+                    this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
+                    
+                    postHeader.appendChild(title2TopClone);
                 }
             }
-            
-            originalEmojiElement = title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post');
-            if (originalEmojiElement) {
-                originalEmojiElement = originalEmojiElement.cloneNode(true);
-            }
-        }
 
-        const postHeader = document.createElement('div');
-        postHeader.className = 'post-header';
+            const centerElements = post.querySelectorAll('tr.center');
+            centerElements.forEach(centerElement => {
+                const leftSection = centerElement.querySelector('.left.Item');
+                const rightSection = centerElement.querySelector('.right.Item');
 
-        const userInfo = document.createElement('div');
-        userInfo.className = 'user-info';
+                if (leftSection) {
+                    const details = leftSection.querySelector('.details');
+                    const avatar = leftSection.querySelector('.avatar');
 
-        const postContent = document.createElement('div');
-        postContent.className = 'post-content';
+                    const isDeletedUser = post.classList.contains('box_visitatore');
+                    
+                    if (isDeletedUser) {
+                        if (details) {
+                            const detailsClone = details.cloneNode(true);
+                            this.#processDeletedUserDetails(detailsClone, nickElement);
+                            userInfo.appendChild(detailsClone);
+                        } else {
+                            userInfo.appendChild(leftSection.cloneNode(true));
+                        }
+                    } 
+                        
+                    else if (details && avatar) {
+                        const groupDd = details.querySelector('dl.u_group dd');
+                        groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
 
-        const postFooter = document.createElement('div');
-        postFooter.className = 'post-footer';
+                        userInfo.appendChild(avatar.cloneNode(true));
 
-        if (anchorElements) {
-            const anchorContainer = document.createElement('div');
-            anchorContainer.className = 'anchor-container';
-            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-            anchorContainer.appendChild(anchorElements);
-            postHeader.appendChild(anchorContainer);
-        }
-
-        if (!post.classList.contains('post_queue')) {
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = startOffset + index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
-        }
-
-        this.#addNewPostBadge(post, postHeader);
-
-        let nickElement = null;
-        let groupValue = '';
-
-        if (title2Top) {
-            const tdWrapper = title2Top.closest('td.left.Item');
-            nickElement = title2Top.querySelector('.nick');
-
-            if (tdWrapper) {
-                const title2TopClone = title2Top.cloneNode(true);
-                // Remove the points and emoji from the clone since we'll add them to footer
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                title2TopClone.querySelector('.left.Item')?.remove();
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-                
-                postHeader.appendChild(title2TopClone);
-                tdWrapper.remove();
-            } else {
-                const title2TopClone = title2Top.cloneNode(true);
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                title2TopClone.querySelector('.left.Item')?.remove();
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-                
-                postHeader.appendChild(title2TopClone);
-            }
-        }
-
-        const centerElements = post.querySelectorAll('tr.center');
-        centerElements.forEach(centerElement => {
-            const leftSection = centerElement.querySelector('.left.Item');
-            const rightSection = centerElement.querySelector('.right.Item');
-
-            if (leftSection) {
-                const details = leftSection.querySelector('.details');
-                const avatar = leftSection.querySelector('.avatar');
-
-                const isDeletedUser = post.classList.contains('box_visitatore');
-                
-                if (isDeletedUser) {
-                    if (details) {
                         const detailsClone = details.cloneNode(true);
-                        this.#processDeletedUserDetails(detailsClone, nickElement);
+                        detailsClone.querySelector('.avatar')?.remove();
+
+                        if (nickElement) {
+                            const nickClone = nickElement.cloneNode(true);
+                            detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+
+                            if (groupValue) {
+                                const badge = document.createElement('div');
+                                badge.className = 'badge';
+                                badge.textContent = groupValue;
+                                nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
+                            }
+                        }
+
+                        detailsClone.querySelector('span.u_title')?.remove();
+
+                        let rankHTML = '';
+                        const pWithURank = detailsClone.querySelector('p');
+                        if (pWithURank && pWithURank.querySelector('span.u_rank')) {
+                            rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
+                            pWithURank.remove();
+                        }
+
+                        detailsClone.querySelector('br.br_status')?.remove();
+
+                        const userStats = document.createElement('div');
+                        userStats.className = 'user-stats';
+
+                        const originalDetails = details.cloneNode(true);
+
+                        if (rankHTML) {
+                            const rankStat = document.createElement('div');
+                            rankStat.className = 'stat rank';
+                            rankStat.innerHTML = rankHTML;
+                            userStats.appendChild(rankStat);
+                        }
+
+                        const postsDd = originalDetails.querySelector('dl.u_posts dd');
+                        if (postsDd) {
+                            const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
+                            userStats.appendChild(postsStat);
+                        }
+
+                        const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
+                        if (reputationDd) {
+                            const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
+                            userStats.appendChild(reputationStat);
+                        }
+
+                        const statusDl = originalDetails.querySelector('dl.u_status');
+                        if (statusDl) {
+                            const statusDd = statusDl.querySelector('dd');
+                            const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
+                            const isOnline = statusValue.toLowerCase().includes('online');
+                            const originalStatusIcon = statusDl.querySelector('dd i');
+
+                            let statusIconHTML = '';
+                            if (originalStatusIcon) {
+                                statusIconHTML = originalStatusIcon.outerHTML;
+                                if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
+                                    statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
+                                }
+                            } else {
+                                statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
+                            }
+
+                            const statusStat = document.createElement('div');
+                            statusStat.className = 'stat status' + (isOnline ? ' online' : '');
+                            statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
+                            userStats.appendChild(statusStat);
+                        }
+
+                        detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
+
+                        if (userStats.children.length > 0) {
+                            detailsClone.appendChild(userStats);
+                        }
+
                         userInfo.appendChild(detailsClone);
                     } else {
                         userInfo.appendChild(leftSection.cloneNode(true));
                     }
-                } 
-                    
-                else if (details && avatar) {
-                    const groupDd = details.querySelector('dl.u_group dd');
-                    groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
-
-                    userInfo.appendChild(avatar.cloneNode(true));
-
-                    const detailsClone = details.cloneNode(true);
-                    detailsClone.querySelector('.avatar')?.remove();
-
-                    if (nickElement) {
-                        const nickClone = nickElement.cloneNode(true);
-                        detailsClone.insertBefore(nickClone, detailsClone.firstChild);
-
-                        if (groupValue) {
-                            const badge = document.createElement('div');
-                            badge.className = 'badge';
-                            badge.textContent = groupValue;
-                            nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                        }
-                    }
-
-                    detailsClone.querySelector('span.u_title')?.remove();
-
-                    let rankHTML = '';
-                    const pWithURank = detailsClone.querySelector('p');
-                    if (pWithURank && pWithURank.querySelector('span.u_rank')) {
-                        rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
-                        pWithURank.remove();
-                    }
-
-                    detailsClone.querySelector('br.br_status')?.remove();
-
-                    const userStats = document.createElement('div');
-                    userStats.className = 'user-stats';
-
-                    const originalDetails = details.cloneNode(true);
-
-                    if (rankHTML) {
-                        const rankStat = document.createElement('div');
-                        rankStat.className = 'stat rank';
-                        rankStat.innerHTML = rankHTML;
-                        userStats.appendChild(rankStat);
-                    }
-
-                    const postsDd = originalDetails.querySelector('dl.u_posts dd');
-                    if (postsDd) {
-                        const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
-                        userStats.appendChild(postsStat);
-                    }
-
-                    const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
-                    if (reputationDd) {
-                        const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
-                        userStats.appendChild(reputationStat);
-                    }
-
-                    const statusDl = originalDetails.querySelector('dl.u_status');
-                    if (statusDl) {
-                        const statusDd = statusDl.querySelector('dd');
-                        const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
-                        const isOnline = statusValue.toLowerCase().includes('online');
-                        const originalStatusIcon = statusDl.querySelector('dd i');
-
-                        let statusIconHTML = '';
-                        if (originalStatusIcon) {
-                            statusIconHTML = originalStatusIcon.outerHTML;
-                            if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
-                                statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
-                            }
-                        } else {
-                            statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
-                        }
-
-                        const statusStat = document.createElement('div');
-                        statusStat.className = 'stat status' + (isOnline ? ' online' : '');
-                        statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
-                        userStats.appendChild(statusStat);
-                    }
-
-                    detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
-
-                    if (userStats.children.length > 0) {
-                        detailsClone.appendChild(userStats);
-                    }
-
-                    userInfo.appendChild(detailsClone);
-                } else {
-                    userInfo.appendChild(leftSection.cloneNode(true));
                 }
+
+                if (rightSection) {
+                    const contentWrapper = document.createElement('div');
+                    contentWrapper.className = 'post-main-content';
+
+                    const rightSectionClone = rightSection.cloneNode(true);
+                    this.#removeBottomBorderAndBr(rightSectionClone);
+                    this.#processIframeTables(rightSectionClone);
+                    this.#preserveMediaDimensions(rightSectionClone);
+
+                    contentWrapper.appendChild(rightSectionClone);
+                    this.#cleanupPostContentStructure(contentWrapper);
+                    postContent.appendChild(contentWrapper);
+                    this.#modernizeQuotes(contentWrapper);
+                    this.#modernizeSpoilers(contentWrapper);
+                    this.#modernizeCodeBlocksInContent(contentWrapper);
+                    this.#modernizeAttachmentsInContent(contentWrapper);
+                    this.#modernizeEmbeddedLinksInContent(contentWrapper);
+                }
+            });
+
+            const title2Bottom = post.querySelector('.title2.bottom');
+            
+            if (post.classList.contains('post_queue')) {
+            } else if (title2Bottom) {
+                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+                this.#modernizeBottomElements(title2Bottom, postFooter);
+                title2Bottom.remove();
+            } else {
+                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
             }
 
-            if (rightSection) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'post-main-content';
-
-                const rightSectionClone = rightSection.cloneNode(true);
-                this.#removeBottomBorderAndBr(rightSectionClone);
-                this.#processIframeTables(rightSectionClone);
-                this.#preserveMediaDimensions(rightSectionClone);
-
-                contentWrapper.appendChild(rightSectionClone);
-                this.#cleanupPostContentStructure(contentWrapper);
-                postContent.appendChild(contentWrapper);
-                this.#modernizeQuotes(contentWrapper);
-                this.#modernizeSpoilers(contentWrapper);
-                this.#modernizeCodeBlocksInContent(contentWrapper);
-                this.#modernizeAttachmentsInContent(contentWrapper);
-                this.#modernizeEmbeddedLinksInContent(contentWrapper);
+            fragment.appendChild(postHeader);
+            fragment.appendChild(userInfo);
+            fragment.appendChild(postContent);
+            
+            if (!post.classList.contains('post_queue')) {
+                fragment.appendChild(postFooter);
             }
+
+            post.innerHTML = '';
+            post.appendChild(fragment);
+
+            if (post.classList.contains('post_queue')) {
+                this.#transformPostQueueButtons(post);
+            } else {
+                this.#convertMiniButtonsToButtons(post);
+                this.#addShareButton(post);
+            }
+            
+            this.#cleanupPostContent(post);
+
+            const postId = post.id;
+            if (postId && postId.startsWith('ee')) {
+                post.setAttribute('data-post-id', postId.replace('ee', ''));
+            }
+            
+            // Clean up double-wrapped media after transformation
+            setTimeout(() => {
+                this.#cleanupOldMediaWrappers(post);
+            }, 100);
         });
-
-        const title2Bottom = post.querySelector('.title2.bottom');
-        
-        // Add reputation to footer using the ORIGINAL preserved elements
-        if (originalPointsElement || originalEmojiElement) {
-            const postActions = document.createElement('div');
-            postActions.className = 'post-actions';
-
-            if (originalPointsElement) {
-                // Clean up the points element
-                this.#cleanupMiniButtons(originalPointsElement.parentNode);
-                
-                // Create a container for the points
-                const pointsContainer = document.createElement('div');
-                pointsContainer.className = 'mini_buttons points Sub';
-                pointsContainer.appendChild(originalPointsElement);
-                
-                // Set initial active state
-                this.#setInitialPointsState(pointsContainer);
-                const pointsElem = pointsContainer.querySelector('.points');
-                if (pointsElem) {
-                    this.#updatePointsContainerActiveState(pointsElem);
-                }
-                
-                postActions.appendChild(pointsContainer);
-            }
-
-            if (originalEmojiElement) {
-                const emojiContainer = originalEmojiElement.querySelector('.st-emoji-container');
-                if (emojiContainer) {
-                    this.#updateEmojiContainerActiveState(emojiContainer);
-                }
-                postActions.appendChild(originalEmojiElement);
-            }
-
-            postFooter.insertBefore(postActions, postFooter.firstChild);
-        }
-        
-        if (post.classList.contains('post_queue')) {
-            // Handle post queue
-        } else if (title2Bottom) {
-            this.#modernizeBottomElements(title2Bottom, postFooter);
-            title2Bottom.remove();
-        }
-
-        fragment.appendChild(postHeader);
-        fragment.appendChild(userInfo);
-        fragment.appendChild(postContent);
-        
-        if (!post.classList.contains('post_queue')) {
-            fragment.appendChild(postFooter);
-        }
-
-        post.innerHTML = '';
-        post.appendChild(fragment);
-
-        if (post.classList.contains('post_queue')) {
-            this.#transformPostQueueButtons(post);
-        } else {
-            this.#convertMiniButtonsToButtons(post);
-            this.#addShareButton(post);
-        }
-        
-        this.#cleanupPostContent(post);
-
-        const postId = post.id;
-        if (postId && postId.startsWith('ee')) {
-            post.setAttribute('data-post-id', postId.replace('ee', ''));
-        }
-        
-        // Clean up double-wrapped media after transformation
-        setTimeout(() => {
-            this.#cleanupOldMediaWrappers(post);
-        }, 100);
-    });
-}
+    }
 
     #processDeletedUserDetails(detailsElement, nickElement) {
         if (!detailsElement) return;
@@ -7483,364 +7430,351 @@ class PostModernizer {
         });
     }
 
-#transformSearchPostElements() {
-    const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
+    #transformSearchPostElements() {
+        const posts = document.querySelectorAll('body#search .post:not(.post-modernized), body#search li.post:not(.post-modernized)');
 
-    posts.forEach((post, index) => {
-        post.classList.add('post-modernized', 'search-post');
+        posts.forEach((post, index) => {
+            post.classList.add('post-modernized', 'search-post');
 
-        const anchorDiv = post.querySelector('.anchor');
-        let anchorElements = null;
-        if (anchorDiv) {
-            anchorElements = anchorDiv.cloneNode(true);
-            anchorDiv.remove();
-        }
+            const anchorDiv = post.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
+            }
 
-        const title2Top = post.querySelector('.title2.top');
-        const pointsElement = post.querySelector('.points');
+            const title2Top = post.querySelector('.title2.top');
+            const pointsElement = post.querySelector('.points');
 
-        let contentHTML = '';
-        const colorTable = post.querySelector('table.color');
+            let contentHTML = '';
+            const colorTable = post.querySelector('table.color');
 
-        if (colorTable) {
-            const tds = colorTable.querySelectorAll('td');
-            tds.forEach(td => {
-                if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
-                    contentHTML += td.outerHTML;
+            if (colorTable) {
+                const tds = colorTable.querySelectorAll('td');
+                tds.forEach(td => {
+                    if (td.innerHTML && td.innerHTML.trim() !== '' && td.innerHTML.trim() !== '<br>') {
+                        contentHTML += td.outerHTML;
+                    }
+                });
+            }
+
+            if (!contentHTML) {
+                const contentElement = post.querySelector('td.Item table.color td') ||
+                    post.querySelector('td.Item td') ||
+                    post.querySelector('.color td') ||
+                    post.querySelector('td[align]');
+
+                if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
+                    contentHTML = contentElement.outerHTML;
+                }
+            }
+
+            const editElement = post.querySelector('span.edit');
+            const rtSub = post.querySelector('.rt.Sub');
+
+            const postHeader = document.createElement('div');
+            postHeader.className = 'post-header';
+
+            const postContent = document.createElement('div');
+            postContent.className = 'post-content search-post-content';
+
+            const postFooter = document.createElement('div');
+            postFooter.className = 'post-footer search-post-footer';
+
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                postHeader.appendChild(anchorContainer);
+            }
+
+            if (!post.classList.contains('post_queue')) {
+                const postNumber = document.createElement('span');
+                postNumber.className = 'post-number';
+                
+                const hashIcon = document.createElement('i');
+                hashIcon.className = 'fa-regular fa-hashtag';
+                hashIcon.setAttribute('aria-hidden', 'true');
+                
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'post-number-value';
+                numberSpan.textContent = index + 1;
+                
+                postNumber.appendChild(hashIcon);
+                postNumber.appendChild(document.createTextNode(' '));
+                postNumber.appendChild(numberSpan);
+                
+                postHeader.appendChild(postNumber);
+            }
+
+            this.#addNewPostBadge(post, postHeader);
+
+            if (title2Top) {
+                const title2TopClone = title2Top.cloneNode(true);
+                const pointsInTitle = title2TopClone.querySelector('.points');
+                pointsInTitle?.remove();
+
+                let locationDiv = null;
+                if (rtSub) {
+                    const topicLink = rtSub.querySelector('a[href*="?t="]');
+                    const forumLink = rtSub.querySelector('a[href*="?f="]');
+
+                    if (topicLink || forumLink) {
+                        locationDiv = document.createElement('div');
+                        locationDiv.className = 'post-location';
+
+                        if (topicLink) {
+                            const topicSpan = document.createElement('span');
+                            topicSpan.className = 'topic-link';
+                            topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
+                            locationDiv.appendChild(topicSpan);
+                        }
+
+                        if (forumLink) {
+                            const forumSpan = document.createElement('span');
+                            forumSpan.className = 'forum-link';
+                            forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
+                            if (topicLink) {
+                                locationDiv.appendChild(document.createTextNode(' - '));
+                            }
+                            locationDiv.appendChild(forumSpan);
+                        }
+
+                        title2TopClone.querySelector('.rt.Sub')?.remove();
+                    }
+                }
+
+                this.#removeBreakAndNbsp(title2TopClone);
+                title2TopClone.querySelector('.Break.Sub')?.remove();
+
+                this.#transformPostHeaderTimestamps(title2TopClone);
+                this.#transformTimestampElements(title2TopClone);
+
+                const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
+                if (tdWrapper) {
+                    const divs = tdWrapper.querySelectorAll('div');
+                    divs.forEach(div => {
+                        postHeader.appendChild(div.cloneNode(true));
+                    });
+                    tdWrapper.remove();
+
+                    if (locationDiv) {
+                        postHeader.appendChild(locationDiv);
+                    }
+                } else {
+                    if (locationDiv) {
+                        title2TopClone.appendChild(locationDiv);
+                    }
+                    postHeader.appendChild(title2TopClone);
+                }
+            }
+
+            if (contentHTML) {
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'post-main-content';
+
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = contentHTML;
+
+                if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
+                    const wrapperDiv = tempDiv.firstElementChild;
+                    const hasQuote = wrapperDiv.querySelector('.quote_top');
+
+                    if (!hasQuote) {
+                        while (wrapperDiv.firstChild) {
+                            tempDiv.appendChild(wrapperDiv.firstChild);
+                        }
+                        wrapperDiv.remove();
+                    }
+                }
+
+                while (tempDiv.firstChild) {
+                    contentWrapper.appendChild(tempDiv.firstChild);
+                }
+
+                this.#preserveMediaDimensions(contentWrapper);
+
+                const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
+                const textNodes = [];
+                let node;
+
+                while ((node = walker.nextNode())) {
+                    if (node.textContent.trim() !== '') {
+                        textNodes.push(node);
+                    }
+                }
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const searchQuery = urlParams.get('q');
+                if (searchQuery) {
+                    textNodes.forEach(textNode => {
+                        const text = textNode.textContent;
+                        const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
+                        const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
+
+                        if (highlightedText !== text) {
+                            const span = document.createElement('span');
+                            span.innerHTML = highlightedText;
+                            textNode.parentNode.replaceChild(span, textNode);
+                        }
+                    });
+                }
+
+                this.#processTextAndLineBreaks(contentWrapper);
+                this.#cleanupSearchPostContent(contentWrapper);
+
+                const editSpanInContent = contentWrapper.querySelector('span.edit');
+                if (editSpanInContent) {
+                    this.#transformEditTimestamp(editSpanInContent);
+                }
+
+                this.#modernizeQuotes(contentWrapper);
+                this.#modernizeSpoilers(contentWrapper);
+                this.#modernizeCodeBlocksInContent(contentWrapper);
+                this.#modernizeAttachmentsInContent(contentWrapper);
+                this.#modernizeEmbeddedLinksInContent(contentWrapper);
+
+                postContent.appendChild(contentWrapper);
+            }
+
+            const postFooterActions = document.createElement('div');
+            postFooterActions.className = 'post-actions';
+
+            let pointsFooter;
+            if (pointsElement && pointsElement.innerHTML.trim() !== '') {
+                const pointsClone = pointsElement.cloneNode(true);
+                pointsFooter = pointsClone;
+
+                const emElement = pointsFooter.querySelector('em');
+                const linkElement = pointsFooter.querySelector('a');
+                const href = linkElement ? linkElement.getAttribute('href') : null;
+
+                let pointsValue = '0';
+                let pointsClass = 'points_pos';
+
+                if (emElement) {
+                    pointsValue = emElement.textContent.trim();
+                    pointsClass = emElement.className;
+                }
+
+                const newPoints = document.createElement('div');
+                newPoints.className = 'points active';
+                newPoints.id = pointsElement.id || '';
+
+                if (href) {
+                    const link = document.createElement('a');
+                    link.href = href;
+                    link.setAttribute('tabindex', '0');
+                    if (linkElement && linkElement.getAttribute('rel')) {
+                        link.setAttribute('rel', linkElement.getAttribute('rel'));
+                    }
+
+                    const em = document.createElement('em');
+                    em.className = pointsClass;
+                    em.textContent = pointsValue;
+                    link.appendChild(em);
+                    newPoints.appendChild(link);
+                } else {
+                    const em = document.createElement('em');
+                    em.className = pointsClass;
+                    em.textContent = pointsValue;
+                    newPoints.appendChild(em);
+                }
+
+                const thumbsSpan = document.createElement('span');
+                thumbsSpan.className = 'points_up opacity';
+
+                const icon = document.createElement('i');
+                if (pointsClass === 'points_pos') {
+                    thumbsSpan.classList.add('active');
+                    icon.className = 'fa-regular fa-thumbs-up';
+                } else if (pointsClass === 'points_neg') {
+                    icon.className = 'fa-regular fa-thumbs-down';
+                } else {
+                    icon.className = 'fa-regular fa-thumbs-up';
+                }
+
+                icon.setAttribute('aria-hidden', 'true');
+                thumbsSpan.appendChild(icon);
+                newPoints.appendChild(thumbsSpan);
+
+                pointsFooter = newPoints;
+            } else {
+                const noPoints = document.createElement('div');
+                noPoints.className = 'points no_points';
+
+                const em = document.createElement('em');
+                em.className = 'points_pos';
+                em.textContent = '0';
+                noPoints.appendChild(em);
+
+                const thumbsSpan = document.createElement('span');
+                thumbsSpan.className = 'points_up opacity';
+
+                const icon = document.createElement('i');
+                icon.className = 'fa-regular fa-thumbs-up';
+                icon.setAttribute('aria-hidden', 'true');
+
+                thumbsSpan.appendChild(icon);
+                noPoints.appendChild(thumbsSpan);
+
+                pointsFooter = noPoints;
+            }
+
+            postFooterActions.appendChild(pointsFooter);
+            postFooter.appendChild(postFooterActions);
+
+            const shareContainer = document.createElement('div');
+            shareContainer.className = 'modern-bottom-actions';
+
+            const shareButton = document.createElement('button');
+            shareButton.className = 'btn btn-icon btn-share';
+            shareButton.setAttribute('data-action', 'share');
+            shareButton.setAttribute('title', 'Share this post');
+            shareButton.setAttribute('type', 'button');
+            shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+            shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
+
+            shareContainer.appendChild(shareButton);
+            postFooter.appendChild(shareContainer);
+
+            const newPost = document.createElement('div');
+            newPost.className = 'post post-modernized search-post';
+            newPost.id = post.id;
+
+            Array.from(post.attributes).forEach(attr => {
+                if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
+                    return;
+                }
+                newPost.setAttribute(attr.name, attr.value);
+            });
+
+            Array.from(post.attributes).forEach(attr => {
+                if (attr.name.startsWith('data-')) {
+                    newPost.setAttribute(attr.name, attr.value);
                 }
             });
-        }
 
-        if (!contentHTML) {
-            const contentElement = post.querySelector('td.Item table.color td') ||
-                post.querySelector('td.Item td') ||
-                post.querySelector('.color td') ||
-                post.querySelector('td[align]');
+            const originalClasses = post.className.split(' ').filter(cls =>
+                !cls.includes('post-modernized') && !cls.includes('search-post')
+            );
+            newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
 
-            if (contentElement && contentElement.innerHTML && contentElement.innerHTML.trim() !== '') {
-                contentHTML = contentElement.outerHTML;
-            }
-        }
+            newPost.appendChild(postHeader);
+            newPost.appendChild(postContent);
+            newPost.appendChild(postFooter);
 
-        const editElement = post.querySelector('span.edit');
-        const rtSub = post.querySelector('.rt.Sub');
-
-        const postHeader = document.createElement('div');
-        postHeader.className = 'post-header';
-
-        const postContent = document.createElement('div');
-        postContent.className = 'post-content search-post-content';
-
-        const postFooter = document.createElement('div');
-        postFooter.className = 'post-footer search-post-footer';
-
-        if (anchorElements) {
-            const anchorContainer = document.createElement('div');
-            anchorContainer.className = 'anchor-container';
-            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-            anchorContainer.appendChild(anchorElements);
-            postHeader.appendChild(anchorContainer);
-        }
-
-        if (!post.classList.contains('post_queue')) {
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
-        }
-
-        this.#addNewPostBadge(post, postHeader);
-
-        if (title2Top) {
-            const title2TopClone = title2Top.cloneNode(true);
-            const pointsInTitle = title2TopClone.querySelector('.points');
-            pointsInTitle?.remove();
-
-            let locationDiv = null;
-            if (rtSub) {
-                const topicLink = rtSub.querySelector('a[href*="?t="]');
-                const forumLink = rtSub.querySelector('a[href*="?f="]');
-
-                if (topicLink || forumLink) {
-                    locationDiv = document.createElement('div');
-                    locationDiv.className = 'post-location';
-
-                    if (topicLink) {
-                        const topicSpan = document.createElement('span');
-                        topicSpan.className = 'topic-link';
-                        topicSpan.innerHTML = '<i class="fa-regular fa-file-lines" aria-hidden="true"></i> ' + topicLink.textContent;
-                        locationDiv.appendChild(topicSpan);
-                    }
-
-                    if (forumLink) {
-                        const forumSpan = document.createElement('span');
-                        forumSpan.className = 'forum-link';
-                        forumSpan.innerHTML = '<i class="fa-regular fa-folder" aria-hidden="true"></i> ' + forumLink.textContent;
-                        if (topicLink) {
-                            locationDiv.appendChild(document.createTextNode(' - '));
-                        }
-                        locationDiv.appendChild(forumSpan);
-                    }
-
-                    title2TopClone.querySelector('.rt.Sub')?.remove();
-                }
-            }
-
-            this.#removeBreakAndNbsp(title2TopClone);
-            title2TopClone.querySelector('.Break.Sub')?.remove();
-
-            this.#transformPostHeaderTimestamps(title2TopClone);
-            this.#transformTimestampElements(title2TopClone);
-
-            const tdWrapper = title2TopClone.querySelector('td.Item.Justify');
-            if (tdWrapper) {
-                const divs = tdWrapper.querySelectorAll('div');
-                divs.forEach(div => {
-                    postHeader.appendChild(div.cloneNode(true));
-                });
-                tdWrapper.remove();
-
-                if (locationDiv) {
-                    postHeader.appendChild(locationDiv);
-                }
-            } else {
-                if (locationDiv) {
-                    title2TopClone.appendChild(locationDiv);
-                }
-                postHeader.appendChild(title2TopClone);
-            }
-        }
-
-        if (contentHTML) {
-            const contentWrapper = document.createElement('div');
-            contentWrapper.className = 'post-main-content';
-
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = contentHTML;
-
-            if (tempDiv.children.length === 1 && tempDiv.firstElementChild && tempDiv.firstElementChild.tagName === 'DIV') {
-                const wrapperDiv = tempDiv.firstElementChild;
-                const hasQuote = wrapperDiv.querySelector('.quote_top');
-
-                if (!hasQuote) {
-                    while (wrapperDiv.firstChild) {
-                        tempDiv.appendChild(wrapperDiv.firstChild);
-                    }
-                    wrapperDiv.remove();
-                }
-            }
-
-            while (tempDiv.firstChild) {
-                contentWrapper.appendChild(tempDiv.firstChild);
-            }
-
-            this.#preserveMediaDimensions(contentWrapper);
-
-            const walker = document.createTreeWalker(contentWrapper, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            let node;
-
-            while ((node = walker.nextNode())) {
-                if (node.textContent.trim() !== '') {
-                    textNodes.push(node);
-                }
-            }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const searchQuery = urlParams.get('q');
-            if (searchQuery) {
-                textNodes.forEach(textNode => {
-                    const text = textNode.textContent;
-                    const searchRegex = new RegExp('(' + this.#escapeRegex(searchQuery) + ')', 'gi');
-                    const highlightedText = text.replace(searchRegex, '<mark class="search-highlight">$1</mark>');
-
-                    if (highlightedText !== text) {
-                        const span = document.createElement('span');
-                        span.innerHTML = highlightedText;
-                        textNode.parentNode.replaceChild(span, textNode);
-                    }
-                });
-            }
-
-            this.#processTextAndLineBreaks(contentWrapper);
-            this.#cleanupSearchPostContent(contentWrapper);
-
-            const editSpanInContent = contentWrapper.querySelector('span.edit');
-            if (editSpanInContent) {
-                this.#transformEditTimestamp(editSpanInContent);
-            }
-
-            this.#modernizeQuotes(contentWrapper);
-            this.#modernizeSpoilers(contentWrapper);
-            this.#modernizeCodeBlocksInContent(contentWrapper);
-            this.#modernizeAttachmentsInContent(contentWrapper);
-            this.#modernizeEmbeddedLinksInContent(contentWrapper);
-
-            postContent.appendChild(contentWrapper);
-        }
-
-        const postFooterActions = document.createElement('div');
-        postFooterActions.className = 'post-actions';
-
-        let pointsFooter;
-        
-        // Store the original points element and preserve its functionality
-        if (pointsElement) {
-            // Instead of rebuilding, clone and preserve all event handlers
-            pointsFooter = pointsElement.cloneNode(true);
-            
-            // Ensure the points element has proper classes
-            pointsFooter.classList.add('points');
-            
-            // Check if this is the active state (has bullet_delete)
-            const hasBulletDelete = pointsFooter.querySelector('.bullet_delete') !== null;
-            
-            if (hasBulletDelete) {
-                pointsFooter.classList.add('active');
-                
-                // Preserve the onclick handler for bullet_delete
-                const bulletDelete = pointsFooter.querySelector('.bullet_delete');
-                if (bulletDelete) {
-                    const originalOnClick = bulletDelete.getAttribute('onclick');
-                    if (originalOnClick) {
-                        bulletDelete.setAttribute('onclick', originalOnClick);
-                    }
-                }
-                
-                // Preserve the points_up and points_down state
-                const pointsUp = pointsFooter.querySelector('.points_up');
-                const pointsDown = pointsFooter.querySelector('.points_down');
-                const pointsPos = pointsFooter.querySelector('.points_pos');
-                
-                if (pointsPos && pointsPos.textContent !== '0') {
-                    pointsUp && pointsUp.classList.add('active');
-                    pointsDown && pointsDown.classList.remove('active');
-                }
-            } else {
-                // This is the pre-vote state with thumbs-up and thumbs-down links
-                const pointsUpLink = pointsFooter.querySelector('.points_up');
-                const pointsDownLink = pointsFooter.querySelector('.points_down');
-                
-                // Preserve original onclick handlers
-                if (pointsUpLink) {
-                    const originalOnClick = pointsUpLink.getAttribute('onclick');
-                    if (originalOnClick) {
-                        pointsUpLink.setAttribute('onclick', originalOnClick);
-                    }
-                }
-                
-                if (pointsDownLink) {
-                    const originalOnClick = pointsDownLink.getAttribute('onclick');
-                    if (originalOnClick) {
-                        pointsDownLink.setAttribute('onclick', originalOnClick);
-                    }
-                }
-            }
-            
-            // Preserve the link to vote counts if it exists
-            const pointsLink = pointsFooter.querySelector('a[href*="CODE=votes"]');
-            if (pointsLink) {
-                const originalHref = pointsLink.getAttribute('href');
-                const originalRel = pointsLink.getAttribute('rel');
-                if (originalHref) {
-                    pointsLink.setAttribute('href', originalHref);
-                }
-                if (originalRel) {
-                    pointsLink.setAttribute('rel', originalRel);
-                }
-            }
-        } else {
-            // Fallback: create a default points element
-            const noPoints = document.createElement('div');
-            noPoints.className = 'points no_points';
-
-            const em = document.createElement('em');
-            em.className = 'points_pos';
-            em.textContent = '0';
-            noPoints.appendChild(em);
-
-            const thumbsSpan = document.createElement('span');
-            thumbsSpan.className = 'points_up opacity';
-
-            const icon = document.createElement('i');
-            icon.className = 'fa-regular fa-thumbs-up';
-            icon.setAttribute('aria-hidden', 'true');
-
-            thumbsSpan.appendChild(icon);
-            noPoints.appendChild(thumbsSpan);
-
-            pointsFooter = noPoints;
-        }
-
-        postFooterActions.appendChild(pointsFooter);
-        postFooter.appendChild(postFooterActions);
-
-        const shareContainer = document.createElement('div');
-        shareContainer.className = 'modern-bottom-actions';
-
-        const shareButton = document.createElement('button');
-        shareButton.className = 'btn btn-icon btn-share';
-        shareButton.setAttribute('data-action', 'share');
-        shareButton.setAttribute('title', 'Share this post');
-        shareButton.setAttribute('type', 'button');
-        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
-
-        shareButton.addEventListener('click', () => this.#handleShareSearchPost(post));
-
-        shareContainer.appendChild(shareButton);
-        postFooter.appendChild(shareContainer);
-
-        const newPost = document.createElement('div');
-        newPost.className = 'post post-modernized search-post';
-        newPost.id = post.id;
-
-        Array.from(post.attributes).forEach(attr => {
-            if (attr.name.startsWith('data-') || attr.name === 'class' || attr.name === 'id') {
-                return;
-            }
-            newPost.setAttribute(attr.name, attr.value);
-        });
-
-        Array.from(post.attributes).forEach(attr => {
-            if (attr.name.startsWith('data-')) {
-                newPost.setAttribute(attr.name, attr.value);
-            }
-        });
-
-        const originalClasses = post.className.split(' ').filter(cls =>
-            !cls.includes('post-modernized') && !cls.includes('search-post')
-        );
-        newPost.className = originalClasses.concat(['post', 'post-modernized', 'search-post']).join(' ');
-
-        newPost.appendChild(postHeader);
-        newPost.appendChild(postContent);
-        newPost.appendChild(postFooter);
-
-        post.parentNode.replaceChild(newPost, post);
-        
-        // Update active states
-        if (pointsFooter) {
+            post.parentNode.replaceChild(newPost, post);
             this.#updatePointsContainerActiveState(pointsFooter);
-        }
-        
-        // Clean up double-wrapped media after transformation
-        setTimeout(() => {
-            this.#cleanupOldMediaWrappers(newPost);
-        }, 100);
-    });
-}
+            
+            // Clean up double-wrapped media after transformation
+            setTimeout(() => {
+                this.#cleanupOldMediaWrappers(newPost);
+            }, 100);
+        });
+    }
     
     #cleanupSearchPostContent(contentWrapper) {
         if (this.#isInEditor(contentWrapper)) return;
@@ -8741,26 +8675,52 @@ class PostModernizer {
         wrapper.setAttribute('data-standardized', 'true');
     }
 
-   #wrapIframe(iframe) {
-    // Check if already wrapped
-    if (iframe.closest('.standard-media-wrapper')) {
-        iframe.style.cssText = 'width: 100%; height: 100%; border: 0;';
-        return;
+    #wrapIframe(iframe) {
+        // Check if already inside a standard wrapper
+        const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
+        if (isInStandardWrapper) {
+            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            iframe.setAttribute('data-wrapped', 'true');
+            return;
+        }
+        
+        // Check if already has a wrapper
+        const parent = iframe.parentElement;
+        const hasWrapper = parent && (
+            parent.classList.contains('media-wrapper') || 
+            parent.classList.contains('iframe-wrapper') ||
+            (parent.style.position === 'relative' && parent.style.paddingBottom)
+        );
+        
+        if (hasWrapper) {
+            // This is an old wrapper, replace it with standard wrapper
+            const wrapper = this.#createStandardMediaWrapper(iframe);
+            
+            // Replace the old wrapper with standard wrapper
+            parent.parentNode.insertBefore(wrapper, parent);
+            wrapper.appendChild(iframe);
+            parent.remove();
+        } else {
+            // Create standard wrapper
+            const wrapper = this.#createStandardMediaWrapper(iframe);
+            
+            // Set standard dimensions
+            if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
+                iframe.setAttribute('width', '100%');
+                iframe.setAttribute('height', '100%');
+            }
+            
+            // Insert wrapper before iframe
+            iframe.parentNode.insertBefore(wrapper, iframe);
+            
+            // Move iframe into wrapper
+            wrapper.appendChild(iframe);
+        }
+        
+        // Style the iframe
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        iframe.setAttribute('data-wrapped', 'true');
     }
-    
-    const wrapper = this.#createStandardMediaWrapper(iframe);
-    
-    // Style iframe to fill wrapper
-    iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;';
-    
-    // Insert wrapper before iframe
-    iframe.parentNode.insertBefore(wrapper, iframe);
-    
-    // Move iframe into wrapper
-    wrapper.appendChild(iframe);
-    
-    iframe.setAttribute('data-wrapped', 'true');
-}
     
     #wrapLiteYoutube(liteYoutube) {
         const parent = liteYoutube.parentElement;
@@ -8886,49 +8846,63 @@ class PostModernizer {
         }
     }
 
-   #createStandardMediaWrapper(element) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'standard-media-wrapper';
-    
-    // Calculate aspect ratio
-    let aspectRatio = '16 / 9';
-    const width = element.getAttribute('width') || 560;
-    const height = element.getAttribute('height') || 315;
-    
-    if (width && height && width > 0 && height > 0) {
-        const w = parseInt(width);
-        const h = parseInt(height);
-        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-        const divisor = gcd(w, h);
+    #createStandardMediaWrapper(element) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'standard-media-wrapper';
         
-        if (divisor > 0) {
-            aspectRatio = (w / divisor) + ' / ' + (h / divisor);
+        // Default aspect ratio (16:9)
+        let aspectRatio = 56.25;
+        
+        // Try to determine aspect ratio from element attributes
+        const width = element.getAttribute('width') || element.offsetWidth;
+        const height = element.getAttribute('height') || element.offsetHeight;
+        
+        // YouTube/Vimeo specific detection
+        const src = element.src || element.dataset.src || '';
+        const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
+                          element.tagName === 'LITE-YOUTUBE';
+        const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
+        
+        if (width && height && !isNaN(width) && !isNaN(height)) {
+            // Calculate aspect ratio from explicit dimensions
+            aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+        } else if (isYouTube) {
+            // Standard YouTube dimensions (16:9)
+            aspectRatio = 56.25;
+        } else if (isVimeo) {
+            // Standard Vimeo dimensions (typically 16:9)
+            aspectRatio = 56.25;
+        } else if (src.includes('soundcloud.com')) {
+            // SoundCloud embed
+            aspectRatio = 29.64;
+        } else if (src.includes('twitter.com') || src.includes('x.com')) {
+            // Twitter/X embed
+            aspectRatio = 56.25;
+        } else {
+            // Fallback for unknown embeds
+            aspectRatio = 56.25;
         }
+        
+        // Clamp aspect ratio
+        aspectRatio = Math.max(30, Math.min(150, aspectRatio));
+        
+        wrapper.style.cssText = 'position: relative;width: 100%;padding-bottom: ' + aspectRatio + '%;margin: 1em 0;overflow: hidden;background: var(--bg-secondary);border-radius: var(--radius-sm);';
+        
+        // Add specific class based on media type
+        if (isYouTube) {
+            wrapper.classList.add('youtube-wrapper');
+            wrapper.style.background = '#000';
+        } else if (isVimeo) {
+            wrapper.classList.add('vimeo-wrapper');
+            wrapper.style.background = '#1ab7ea';
+        } else if (element.tagName === 'VIDEO') {
+            wrapper.classList.add('video-wrapper');
+            wrapper.style.background = '#000';
+        }
+        
+        return wrapper;
     }
-    
-    // Key change: Use contain: size to respect both max constraints
-    wrapper.style.cssText = 'position: relative; width: 100%; max-width: 560px; max-height: 315px; aspect-ratio: ' + aspectRatio + '; margin: var(--space-sm) 0; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm); contain: size; padding: 0;';
-    
-    // Type-specific styling
-    const src = element.src || element.dataset.src || '';
-    const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
-                      element.tagName === 'LITE-YOUTUBE';
-    const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
-    
-    if (isYouTube) {
-        wrapper.classList.add('youtube-wrapper');
-        wrapper.style.background = '#000';
-    } else if (isVimeo) {
-        wrapper.classList.add('vimeo-wrapper');
-        wrapper.style.background = '#1ab7ea';
-    } else if (element.tagName === 'VIDEO') {
-        wrapper.classList.add('video-wrapper');
-        wrapper.style.background = '#000';
-    }
-    
-    return wrapper;
-}
-    
+
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
         const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
@@ -9456,55 +9430,49 @@ class PostModernizer {
         });
     }
 
-#enhanceReputationSystem() {
-    document.addEventListener('click', (e) => {
-        const pointsUp = e.target.closest('.points_up');
-        const pointsDown = e.target.closest('.points_down');
-        const emojiPreview = e.target.closest('.st-emoji-preview');
+    #enhanceReputationSystem() {
+        document.addEventListener('click', (e) => {
+            const pointsUp = e.target.closest('.points_up');
+            const pointsDown = e.target.closest('.points_down');
+            const emojiPreview = e.target.closest('.st-emoji-preview');
 
-        // IMPORTANT: Never prevent default or stop propagation
-        // Just update visual states
-        
-        if (pointsUp || pointsDown) {
-            const pointsContainer = (pointsUp || pointsDown).closest('.points');
-            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
-            
-            // Update visual states only - don't interfere with clicks
-            if (bulletDelete) {
-                if (pointsUp) {
-                    const downElement = pointsContainer?.querySelector('.points_down');
-                    if (downElement) downElement.classList.remove('active');
-                    pointsUp.classList.add('active');
-                }
+            if (pointsUp || pointsDown) {
+                const pointsContainer = (pointsUp || pointsDown).closest('.points');
+                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                if (pointsDown) {
-                    const upElement = pointsContainer?.querySelector('.points_up');
-                    if (upElement) upElement.classList.remove('active');
-                    pointsDown.classList.add('active');
-                }
-            } else {
-                if (pointsUp) {
-                    const downElement = pointsContainer?.querySelector('.points_down');
-                    if (downElement) downElement.classList.remove('active');
-                    pointsUp.classList.add('active');
-                }
+                if (bulletDelete) {
+                    if (pointsUp) {
+                        pointsContainer && pointsContainer.querySelector('.points_down') && 
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                        pointsUp.classList.add('active');
+                    }
 
-                if (pointsDown) {
-                    const upElement = pointsContainer?.querySelector('.points_up');
-                    if (upElement) upElement.classList.remove('active');
-                    pointsDown.classList.add('active');
+                    if (pointsDown) {
+                        pointsContainer && pointsContainer.querySelector('.points_up') && 
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                        pointsDown.classList.add('active');
+                    }
+                } else {
+                    if (pointsUp) {
+                        pointsContainer && pointsContainer.querySelector('.points_down') && 
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                        pointsUp.classList.add('active');
+                    }
+
+                    if (pointsDown) {
+                        pointsContainer && pointsContainer.querySelector('.points_up') && 
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                        pointsDown.classList.add('active');
+                    }
                 }
             }
-        }
 
-        if (emojiPreview) {
-            const container = emojiPreview.closest('.st-emoji-container');
-            if (container) {
-                container.classList.toggle('active');
+            if (emojiPreview) {
+                emojiPreview.closest('.st-emoji-container') && 
+                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
             }
-        }
-    });
-}
+        });
+    }
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
