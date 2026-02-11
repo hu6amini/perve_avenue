@@ -8824,38 +8824,24 @@ class PostModernizer {
     const wrapper = document.createElement('div');
     wrapper.className = 'standard-media-wrapper';
     
-    // Default aspect ratio (16:9)
+    // Calculate aspect ratio
     let aspectRatio = '16 / 9';
-    
-    // Try to get actual dimensions
-    const width = element.getAttribute('width') || element.offsetWidth;
-    const height = element.getAttribute('height') || element.offsetHeight;
+    const width = element.getAttribute('width') || 560;
+    const height = element.getAttribute('height') || 315;
     
     if (width && height && width > 0 && height > 0) {
-        // Calculate greatest common divisor for simplified ratio
-        const gcd = (a, b) => {
-            a = Math.abs(a);
-            b = Math.abs(b);
-            while(b) {
-                const t = b;
-                b = a % b;
-                a = t;
-            }
-            return a;
-        };
-        
         const w = parseInt(width);
         const h = parseInt(height);
+        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
         const divisor = gcd(w, h);
         
         if (divisor > 0) {
-            const simplifiedWidth = w / divisor;
-            const simplifiedHeight = h / divisor;
-            aspectRatio = simplifiedWidth + ' / ' + simplifiedHeight;
+            aspectRatio = (w / divisor) + ' / ' + (h / divisor);
         }
     }
     
-    wrapper.style.cssText = 'position: relative; width: 100%; aspect-ratio: ' + aspectRatio + '; margin: var(--space-sm) 0; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm);';
+    // Key change: Use contain: size to respect both max constraints
+    wrapper.style.cssText = 'position: relative; width: 100%; max-width: 560px; max-height: 315px; aspect-ratio: ' + aspectRatio + '; margin: var(--space-sm) 0; overflow: hidden; padding: 0; background: var(--bg-secondary); border-radius: var(--radius-sm); contain: size;';
     
     // Type-specific styling
     const src = element.src || element.dataset.src || '';
@@ -8876,21 +8862,6 @@ class PostModernizer {
     
     return wrapper;
 }
-
-    #addQuoteEventListeners(quoteElement) {
-        const expandBtn = quoteElement.querySelector('.quote-expand-btn');
-        const quoteContent = quoteElement.querySelector('.quote-content.collapsible-content');
-
-        if (expandBtn && quoteContent) {
-            expandBtn.addEventListener('click', () => {
-                quoteContent.style.maxHeight = quoteContent.scrollHeight + 'px';
-                expandBtn.style.display = 'none';
-                setTimeout(() => {
-                    quoteContent.style.maxHeight = 'none';
-                }, 300);
-            });
-        }
-    }
 
     #addReputationToFooter(miniButtons, stEmoji, postFooter) {
         if (miniButtons || stEmoji) {
