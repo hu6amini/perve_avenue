@@ -9403,49 +9403,58 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const emojiPreview = e.target.closest('.st-emoji-preview');
+  #enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const emojiPreview = e.target.closest('.st-emoji-preview');
+        const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
 
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+        // Handle clicks on the vote count link
+        if (pointsLink) {
+            // Let the original click handler work - don't prevent default
+            return;
+        }
 
-                if (bulletDelete) {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+            
+            // Don't prevent default - let the original onclick handlers work
+            // Just update the visual state
+            if (bulletDelete) {
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
 
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
-                } else {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
+                }
+            } else {
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
 
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
                 }
             }
+        }
 
-            if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && 
-                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
-            }
-        });
-    }
+        if (emojiPreview) {
+            emojiPreview.closest('.st-emoji-container') && 
+            emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+        }
+    });
+}
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
