@@ -8855,7 +8855,7 @@ class PostModernizer {
         }
     }
     
-    wrapper.style.cssText = 'position: relative; width: 100%; aspect-ratio: ' + aspectRatio + '; margin: 1em 0; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm);';
+    wrapper.style.cssText = 'position: relative; width: 100%; aspect-ratio: ' + aspectRatio + '; margin: var(--space-sm) 0; overflow: hidden; background: var(--bg-secondary); border-radius: var(--radius-sm);';
     
     // Type-specific styling
     const src = element.src || element.dataset.src || '';
