@@ -9483,49 +9483,55 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const emojiPreview = e.target.closest('.st-emoji-preview');
+#enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const emojiPreview = e.target.closest('.st-emoji-preview');
 
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+        // IMPORTANT: Never prevent default or stop propagation
+        // Just update visual states
+        
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+            
+            // Update visual states only - don't interfere with clicks
+            if (bulletDelete) {
+                if (pointsUp) {
+                    const downElement = pointsContainer?.querySelector('.points_down');
+                    if (downElement) downElement.classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
 
-                if (bulletDelete) {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
+                if (pointsDown) {
+                    const upElement = pointsContainer?.querySelector('.points_up');
+                    if (upElement) upElement.classList.remove('active');
+                    pointsDown.classList.add('active');
+                }
+            } else {
+                if (pointsUp) {
+                    const downElement = pointsContainer?.querySelector('.points_down');
+                    if (downElement) downElement.classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
 
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
-                } else {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
-
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
+                if (pointsDown) {
+                    const upElement = pointsContainer?.querySelector('.points_up');
+                    if (upElement) upElement.classList.remove('active');
+                    pointsDown.classList.add('active');
                 }
             }
+        }
 
-            if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && 
-                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+        if (emojiPreview) {
+            const container = emojiPreview.closest('.st-emoji-container');
+            if (container) {
+                container.classList.toggle('active');
             }
-        });
-    }
+        }
+    });
+}
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
