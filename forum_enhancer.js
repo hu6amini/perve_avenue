@@ -33,14 +33,14 @@ class MediaDimensionExtractor {
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
     // UPDATED CONSTANTS TO MATCH NEW CSS HEADING SIZES:
-static #EMOJI_SIZE_NORMAL = 20;      // Body text: 16px × 1.25 = 20px
-static #EMOJI_SIZE_SMALL = 18;       // Signatures/quotes: 14px × 1.25 ≈ 18px
-static #EMOJI_SIZE_H1 = 35;          // h1: 32px × 1.1 = 35px
-static #EMOJI_SIZE_H2 = 29;          // h2: 25px × 1.15 = 29px
-static #EMOJI_SIZE_H3 = 24;          // h3: 20px × 1.2 = 24px
-static #EMOJI_SIZE_H4 = 20;          // h4: 16px × 1.25 = 20px
-static #EMOJI_SIZE_H5 = 18;          // h5: 14px × 1.3 = 18px
-static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
+    static #EMOJI_SIZE_NORMAL = 20;      // Body text: 16px × 1.25 = 20px
+    static #EMOJI_SIZE_SMALL = 18;       // Signatures/quotes: 14px × 1.25 ≈ 18px
+    static #EMOJI_SIZE_H1 = 35;          // h1: 32px × 1.1 = 35px
+    static #EMOJI_SIZE_H2 = 29;          // h2: 25px × 1.15 = 29px
+    static #EMOJI_SIZE_H3 = 24;          // h3: 20px × 1.2 = 24px
+    static #EMOJI_SIZE_H4 = 20;          // h4: 16px × 1.25 = 20px
+    static #EMOJI_SIZE_H5 = 18;          // h5: 14px × 1.3 = 18px
+    static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
     static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
@@ -128,6 +128,11 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
     }
 
     #processMedia(node) {
+        // Add this check at the beginning
+        if (!node || !node.isConnected) {
+            return;
+        }
+        
         if (this.#processedMedia.has(node)) return;
 
         const tag = node.tagName;
@@ -150,6 +155,9 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
     }
 
     #processNestedMedia(node) {
+        // Skip if node is not in DOM
+        if (!node || !node.isConnected) return;
+        
         const images = node.getElementsByTagName('img');
         const iframes = node.getElementsByTagName('iframe');
         const videos = node.getElementsByTagName('video');
@@ -157,7 +165,7 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
         // Process images
         for (let i = 0, len = images.length; i < len; i++) {
             const img = images[i];
-            if (!this.#processedMedia.has(img)) {
+            if (img.isConnected && !this.#processedMedia.has(img)) {
                 this.#processImage(img);
             }
         }
@@ -165,7 +173,7 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
         // Process iframes
         for (let i = 0, len = iframes.length; i < len; i++) {
             const iframe = iframes[i];
-            if (!this.#processedMedia.has(iframe)) {
+            if (iframe.isConnected && !this.#processedMedia.has(iframe)) {
                 this.#processIframe(iframe);
             }
         }
@@ -173,13 +181,14 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
         // Process videos
         for (let i = 0, len = videos.length; i < len; i++) {
             const video = videos[i];
-            if (!this.#processedMedia.has(video)) {
+            if (video.isConnected && !this.#processedMedia.has(video)) {
                 this.#processVideo(video);
             }
         }
     }
 
     #processSingleMedia(media) {
+        if (!media || !media.isConnected) return;
         if (this.#processedMedia.has(media)) return;
 
         const tag = media.tagName;
@@ -363,35 +372,35 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
     }
 
     #isInSmallContext(img) {
-    // Quick check: if we don't have the cache yet, build it
-    if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
-        this.#cacheContextElements();
-    }
-    
-    // Check all ancestors
-    let element = img;
-    while (element) {
-        // Check if element has any of the signature-related classes
-        if (element.classList) {
-            const classList = element.classList;
-            if (classList.contains('signature') || 
-                classList.contains('post-signature') ||
-                classList.contains('modern-quote') ||
-                classList.contains('quote-content') ||
-                classList.contains('modern-spoiler') ||
-                classList.contains('spoiler-content')) {
-                return true;
-            }
-            
-            // Also check if element matches any in our pre-cached Set
-            if (this.#smallContextElements && this.#smallContextElements.has(element)) {
-                return true;
-            }
+        // Quick check: if we don't have the cache yet, build it
+        if (!this.#smallContextElements || this.#smallContextElements.size === 0) {
+            this.#cacheContextElements();
         }
-        element = element.parentElement;
+        
+        // Check all ancestors
+        let element = img;
+        while (element) {
+            // Check if element has any of the signature-related classes
+            if (element.classList) {
+                const classList = element.classList;
+                if (classList.contains('signature') || 
+                    classList.contains('post-signature') ||
+                    classList.contains('modern-quote') ||
+                    classList.contains('quote-content') ||
+                    classList.contains('modern-spoiler') ||
+                    classList.contains('spoiler-content')) {
+                    return true;
+                }
+                
+                // Also check if element matches any in our pre-cached Set
+                if (this.#smallContextElements && this.#smallContextElements.has(element)) {
+                    return true;
+                }
+            }
+            element = element.parentElement;
+        }
+        return false;
     }
-    return false;
-}
 
     #setupImageLoadListener(img) {
         // Avoid duplicate listeners
@@ -420,28 +429,28 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
         }
     }
 
-#setImageDimensions(img, width, height) {
-    // Only set attributes if they're not already set or are wrong
-    const currentWidth = img.getAttribute('width');
-    const currentHeight = img.getAttribute('height');
-    
-    if (!currentWidth || currentWidth === '0' || currentWidth === 'auto') {
-        img.setAttribute('width', width);
+    #setImageDimensions(img, width, height) {
+        // Only set attributes if they're not already set or are wrong
+        const currentWidth = img.getAttribute('width');
+        const currentHeight = img.getAttribute('height');
+        
+        if (!currentWidth || currentWidth === '0' || currentWidth === 'auto') {
+            img.setAttribute('width', width);
+        }
+        
+        if (!currentHeight || currentHeight === '0' || currentHeight === 'auto') {
+            img.setAttribute('height', height);
+        }
+        
+        // Update aspect ratio WITHOUT overriding height
+        img.style.aspectRatio = width + '/' + height;
+        
+        // IMPORTANT: Remove height: auto if it exists
+        img.style.removeProperty('height');
+        
+        // Cache with LRU management
+        this.#cacheDimension(img.src, width, height);
     }
-    
-    if (!currentHeight || currentHeight === '0' || currentHeight === 'auto') {
-        img.setAttribute('height', height);
-    }
-    
-    // Update aspect ratio WITHOUT overriding height
-    img.style.aspectRatio = width + '/' + height;
-    
-    // IMPORTANT: Remove height: auto if it exists
-    img.style.removeProperty('height');
-    
-    // Cache with LRU management
-    this.#cacheDimension(img.src, width, height);
-}
     
     #cacheDimension(src, width, height) {
         const cacheKey = this.#getCacheKey(src);
@@ -483,18 +492,30 @@ static #EMOJI_SIZE_H6 = 16;          // h6: 12px × 1.35 = 16px
 
             if (widthNum > 0 && heightNum > 0) {
                 const parent = iframe.parentNode;
-                if (!parent || !parent.classList.contains('iframe-wrapper')) {
-                    // Use documentFragment for batch DOM operations
-                    const fragment = document.createDocumentFragment();
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'iframe-wrapper';
-                    const paddingBottom = (heightNum / widthNum * 100) + '%';
-                    wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
+                
+                // FIX: Check if parent exists and if iframe is still in the DOM
+                if (parent && document.contains(iframe) && !parent.classList.contains('iframe-wrapper')) {
+                    // Check if wrapper already exists or if parent is being manipulated
+                    try {
+                        // Use documentFragment for batch DOM operations
+                        const fragment = document.createDocumentFragment();
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'iframe-wrapper';
+                        const paddingBottom = (heightNum / widthNum * 100) + '%';
+                        wrapper.style.cssText = 'position:relative;width:100%;padding-bottom:' + paddingBottom + ';overflow:hidden';
 
-                    fragment.appendChild(wrapper);
-                    parent.insertBefore(fragment, iframe);
-                    wrapper.appendChild(iframe);
-                    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
+                        fragment.appendChild(wrapper);
+                        
+                        // Double-check parent still exists and contains iframe
+                        if (parent && iframe.parentNode === parent) {
+                            parent.insertBefore(fragment, iframe);
+                            wrapper.appendChild(iframe);
+                            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0';
+                        }
+                    } catch (e) {
+                        // Silent fail - iframe was likely removed during processing
+                        console.debug('Iframe wrapper creation failed (expected if iframe was removed):', e.message);
+                    }
                 }
             }
         }
