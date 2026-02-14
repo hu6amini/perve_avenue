@@ -9434,28 +9434,50 @@ class PostModernizer {
         });
     }
 
-#enhanceReputationSystem() {
-    // Use capturing phase to ensure we don't interfere with native handlers
-    document.addEventListener('click', (e) => {
-        const pointsUp = e.target.closest('.points_up');
-        const pointsDown = e.target.closest('.points_down');
-        const bulletDelete = e.target.closest('.bullet_delete');
-        
-        // CRITICAL: Let ALL native handlers execute first
-        // We'll just update visual states after a delay
-        
-        if (pointsUp || pointsDown || bulletDelete) {
-            // Schedule visual updates after native handlers have run
-            setTimeout(() => {
-                // Update all points containers to reflect current state
-                document.querySelectorAll('.mini_buttons.points.Sub .points').forEach(container => {
-                    this.#updatePointsContainerActiveState(container);
-                });
-            }, 100);
-        }
-    }, { passive: true }); // Use passive to not interfere with default behavior
-}
-    
+    #enhanceReputationSystem() {
+        document.addEventListener('click', (e) => {
+            const pointsUp = e.target.closest('.points_up');
+            const pointsDown = e.target.closest('.points_down');
+            const emojiPreview = e.target.closest('.st-emoji-preview');
+
+            if (pointsUp || pointsDown) {
+                const pointsContainer = (pointsUp || pointsDown).closest('.points');
+                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+
+                if (bulletDelete) {
+                    if (pointsUp) {
+                        pointsContainer && pointsContainer.querySelector('.points_down') && 
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                        pointsUp.classList.add('active');
+                    }
+
+                    if (pointsDown) {
+                        pointsContainer && pointsContainer.querySelector('.points_up') && 
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                        pointsDown.classList.add('active');
+                    }
+                } else {
+                    if (pointsUp) {
+                        pointsContainer && pointsContainer.querySelector('.points_down') && 
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                        pointsUp.classList.add('active');
+                    }
+
+                    if (pointsDown) {
+                        pointsContainer && pointsContainer.querySelector('.points_up') && 
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                        pointsDown.classList.add('active');
+                    }
+                }
+            }
+
+            if (emojiPreview) {
+                emojiPreview.closest('.st-emoji-container') && 
+                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+            }
+        });
+    }
+
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
         return unsafe
