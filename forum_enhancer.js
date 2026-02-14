@@ -7044,341 +7044,276 @@ class PostModernizer {
         document.querySelectorAll('.mini_buttons.points.Sub').forEach(buttons => this.#cleanupMiniButtons(buttons));
     }
 
-#transformPostElements() {
-    const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
-    const urlParams = new URLSearchParams(window.location.search);
-    const startOffset = parseInt(urlParams.get('st') || '0');
+    #transformPostElements() {
+        const posts = document.querySelectorAll('body#topic .post:not(.post-modernized), body#blog .post:not(.post-modernized)');
+        const urlParams = new URLSearchParams(window.location.search);
+        const startOffset = parseInt(urlParams.get('st') || '0');
 
-    posts.forEach((post, index) => {
-        if (post.closest('body#search')) return;
+        posts.forEach((post, index) => {
+            if (post.closest('body#search')) return;
 
-        post.classList.add('post-modernized');
-        const fragment = document.createDocumentFragment();
+            post.classList.add('post-modernized');
+            const fragment = document.createDocumentFragment();
 
-        const anchorDiv = post.querySelector('.anchor');
-        let anchorElements = null;
-        if (anchorDiv) {
-            anchorElements = anchorDiv.cloneNode(true);
-            anchorDiv.remove();
-        }
-
-        const title2Top = post.querySelector('.title2.top');
-        const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
-        const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
-
-        const postHeader = document.createElement('div');
-        postHeader.className = 'post-header';
-
-        const userInfo = document.createElement('div');
-        userInfo.className = 'user-info';
-
-        const postContent = document.createElement('div');
-        postContent.className = 'post-content';
-
-        const postFooter = document.createElement('div');
-        postFooter.className = 'post-footer';
-
-        if (anchorElements) {
-            const anchorContainer = document.createElement('div');
-            anchorContainer.className = 'anchor-container';
-            anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
-            anchorContainer.appendChild(anchorElements);
-            postHeader.appendChild(anchorContainer);
-        }
-
-        if (!post.classList.contains('post_queue')) {
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = startOffset + index + 1;
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            postHeader.appendChild(postNumber);
-        }
-
-        this.#addNewPostBadge(post, postHeader);
-
-        let nickElement = null;
-        let groupValue = '';
-
-        if (title2Top) {
-            const tdWrapper = title2Top.closest('td.left.Item');
-            nickElement = title2Top.querySelector('.nick');
-
-            if (tdWrapper) {
-                const title2TopClone = title2Top.cloneNode(true);
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                title2TopClone.querySelector('.left.Item')?.remove();
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-                
-                postHeader.appendChild(title2TopClone);
-                tdWrapper.remove();
-            } else {
-                const title2TopClone = title2Top.cloneNode(true);
-                title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
-                title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
-                title2TopClone.querySelector('.left.Item')?.remove();
-                this.#removeBreakAndNbsp(title2TopClone);
-                
-                this.#transformPostHeaderTimestamps(title2TopClone);
-                this.#transformTimestampElements(title2TopClone);
-                
-                postHeader.appendChild(title2TopClone);
+            const anchorDiv = post.querySelector('.anchor');
+            let anchorElements = null;
+            if (anchorDiv) {
+                anchorElements = anchorDiv.cloneNode(true);
+                anchorDiv.remove();
             }
-        }
 
-        const centerElements = post.querySelectorAll('tr.center');
-        centerElements.forEach(centerElement => {
-            const leftSection = centerElement.querySelector('.left.Item');
-            const rightSection = centerElement.querySelector('.right.Item');
+            const title2Top = post.querySelector('.title2.top');
+            const miniButtons = title2Top ? title2Top.querySelector('.mini_buttons.points.Sub') : null;
+            const stEmoji = title2Top ? title2Top.querySelector('.st-emoji.st-emoji-rep.st-emoji-post') : null;
 
-            if (leftSection) {
-                const details = leftSection.querySelector('.details');
-                const avatar = leftSection.querySelector('.avatar');
+            const postHeader = document.createElement('div');
+            postHeader.className = 'post-header';
 
-                const isDeletedUser = post.classList.contains('box_visitatore');
+            const userInfo = document.createElement('div');
+            userInfo.className = 'user-info';
+
+            const postContent = document.createElement('div');
+            postContent.className = 'post-content';
+
+            const postFooter = document.createElement('div');
+            postFooter.className = 'post-footer';
+
+            if (anchorElements) {
+                const anchorContainer = document.createElement('div');
+                anchorContainer.className = 'anchor-container';
+                anchorContainer.style.cssText = 'position: absolute; width: 0; height: 0; overflow: hidden;';
+                anchorContainer.appendChild(anchorElements);
+                postHeader.appendChild(anchorContainer);
+            }
+
+            if (!post.classList.contains('post_queue')) {
+                const postNumber = document.createElement('span');
+                postNumber.className = 'post-number';
                 
-                if (isDeletedUser) {
-                    if (details) {
+                const hashIcon = document.createElement('i');
+                hashIcon.className = 'fa-regular fa-hashtag';
+                hashIcon.setAttribute('aria-hidden', 'true');
+                
+                const numberSpan = document.createElement('span');
+                numberSpan.className = 'post-number-value';
+                numberSpan.textContent = startOffset + index + 1;
+                
+                postNumber.appendChild(hashIcon);
+                postNumber.appendChild(document.createTextNode(' '));
+                postNumber.appendChild(numberSpan);
+                
+                postHeader.appendChild(postNumber);
+            }
+
+            this.#addNewPostBadge(post, postHeader);
+
+            let nickElement = null;
+            let groupValue = '';
+
+            if (title2Top) {
+                const tdWrapper = title2Top.closest('td.left.Item');
+                nickElement = title2Top.querySelector('.nick');
+
+                if (tdWrapper) {
+                    const title2TopClone = title2Top.cloneNode(true);
+                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                    title2TopClone.querySelector('.left.Item')?.remove();
+                    this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
+                    
+                    postHeader.appendChild(title2TopClone);
+                    tdWrapper.remove();
+                } else {
+                    const title2TopClone = title2Top.cloneNode(true);
+                    title2TopClone.querySelector('.mini_buttons.points.Sub')?.remove();
+                    title2TopClone.querySelector('.st-emoji.st-emoji-rep.st-emoji-post')?.remove();
+                    title2TopClone.querySelector('.left.Item')?.remove();
+                    this.#removeBreakAndNbsp(title2TopClone);
+                    
+                    this.#transformPostHeaderTimestamps(title2TopClone);
+                    this.#transformTimestampElements(title2TopClone);
+                    
+                    postHeader.appendChild(title2TopClone);
+                }
+            }
+
+            const centerElements = post.querySelectorAll('tr.center');
+            centerElements.forEach(centerElement => {
+                const leftSection = centerElement.querySelector('.left.Item');
+                const rightSection = centerElement.querySelector('.right.Item');
+
+                if (leftSection) {
+                    const details = leftSection.querySelector('.details');
+                    const avatar = leftSection.querySelector('.avatar');
+
+                    const isDeletedUser = post.classList.contains('box_visitatore');
+                    
+                    if (isDeletedUser) {
+                        if (details) {
+                            const detailsClone = details.cloneNode(true);
+                            this.#processDeletedUserDetails(detailsClone, nickElement);
+                            userInfo.appendChild(detailsClone);
+                        } else {
+                            userInfo.appendChild(leftSection.cloneNode(true));
+                        }
+                    } 
+                        
+                    else if (details && avatar) {
+                        const groupDd = details.querySelector('dl.u_group dd');
+                        groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
+
+                        userInfo.appendChild(avatar.cloneNode(true));
+
                         const detailsClone = details.cloneNode(true);
-                        this.#processDeletedUserDetails(detailsClone, nickElement);
+                        detailsClone.querySelector('.avatar')?.remove();
+
+                        if (nickElement) {
+                            const nickClone = nickElement.cloneNode(true);
+                            detailsClone.insertBefore(nickClone, detailsClone.firstChild);
+
+                            if (groupValue) {
+                                const badge = document.createElement('div');
+                                badge.className = 'badge';
+                                badge.textContent = groupValue;
+                                nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
+                            }
+                        }
+
+                        detailsClone.querySelector('span.u_title')?.remove();
+
+                        let rankHTML = '';
+                        const pWithURank = detailsClone.querySelector('p');
+                        if (pWithURank && pWithURank.querySelector('span.u_rank')) {
+                            rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
+                            pWithURank.remove();
+                        }
+
+                        detailsClone.querySelector('br.br_status')?.remove();
+
+                        const userStats = document.createElement('div');
+                        userStats.className = 'user-stats';
+
+                        const originalDetails = details.cloneNode(true);
+
+                        if (rankHTML) {
+                            const rankStat = document.createElement('div');
+                            rankStat.className = 'stat rank';
+                            rankStat.innerHTML = rankHTML;
+                            userStats.appendChild(rankStat);
+                        }
+
+                        const postsDd = originalDetails.querySelector('dl.u_posts dd');
+                        if (postsDd) {
+                            const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
+                            userStats.appendChild(postsStat);
+                        }
+
+                        const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
+                        if (reputationDd) {
+                            const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
+                            userStats.appendChild(reputationStat);
+                        }
+
+                        const statusDl = originalDetails.querySelector('dl.u_status');
+                        if (statusDl) {
+                            const statusDd = statusDl.querySelector('dd');
+                            const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
+                            const isOnline = statusValue.toLowerCase().includes('online');
+                            const originalStatusIcon = statusDl.querySelector('dd i');
+
+                            let statusIconHTML = '';
+                            if (originalStatusIcon) {
+                                statusIconHTML = originalStatusIcon.outerHTML;
+                                if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
+                                    statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
+                                }
+                            } else {
+                                statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
+                            }
+
+                            const statusStat = document.createElement('div');
+                            statusStat.className = 'stat status' + (isOnline ? ' online' : '');
+                            statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
+                            userStats.appendChild(statusStat);
+                        }
+
+                        detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
+
+                        if (userStats.children.length > 0) {
+                            detailsClone.appendChild(userStats);
+                        }
+
                         userInfo.appendChild(detailsClone);
                     } else {
                         userInfo.appendChild(leftSection.cloneNode(true));
                     }
-                } 
-                    
-                else if (details && avatar) {
-                    const groupDd = details.querySelector('dl.u_group dd');
-                    groupValue = groupDd && groupDd.textContent ? groupDd.textContent.trim() : '';
-
-                    userInfo.appendChild(avatar.cloneNode(true));
-
-                    const detailsClone = details.cloneNode(true);
-                    detailsClone.querySelector('.avatar')?.remove();
-
-                    if (nickElement) {
-                        const nickClone = nickElement.cloneNode(true);
-                        detailsClone.insertBefore(nickClone, detailsClone.firstChild);
-
-                        if (groupValue) {
-                            const badge = document.createElement('div');
-                            badge.className = 'badge';
-                            badge.textContent = groupValue;
-                            nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                        }
-                    }
-
-                    detailsClone.querySelector('span.u_title')?.remove();
-
-                    let rankHTML = '';
-                    const pWithURank = detailsClone.querySelector('p');
-                    if (pWithURank && pWithURank.querySelector('span.u_rank')) {
-                        rankHTML = pWithURank.querySelector('span.u_rank')?.innerHTML || '';
-                        pWithURank.remove();
-                    }
-
-                    detailsClone.querySelector('br.br_status')?.remove();
-
-                    const userStats = document.createElement('div');
-                    userStats.className = 'user-stats';
-
-                    const originalDetails = details.cloneNode(true);
-
-                    if (rankHTML) {
-                        const rankStat = document.createElement('div');
-                        rankStat.className = 'stat rank';
-                        rankStat.innerHTML = rankHTML;
-                        userStats.appendChild(rankStat);
-                    }
-
-                    const postsDd = originalDetails.querySelector('dl.u_posts dd');
-                    if (postsDd) {
-                        const postsStat = this.#createStatElement('fa-regular fa-comments', postsDd.textContent.trim(), 'posts');
-                        userStats.appendChild(postsStat);
-                    }
-
-                    const reputationDd = originalDetails.querySelector('dl.u_reputation dd');
-                    if (reputationDd) {
-                        const reputationStat = this.#createStatElement('fa-regular fa-thumbs-up', reputationDd.textContent.trim(), 'reputation');
-                        userStats.appendChild(reputationStat);
-                    }
-
-                    const statusDl = originalDetails.querySelector('dl.u_status');
-                    if (statusDl) {
-                        const statusDd = statusDl.querySelector('dd');
-                        const statusValue = statusDd && statusDd.textContent ? statusDd.textContent.trim() : '';
-                        const isOnline = statusValue.toLowerCase().includes('online');
-                        const originalStatusIcon = statusDl.querySelector('dd i');
-
-                        let statusIconHTML = '';
-                        if (originalStatusIcon) {
-                            statusIconHTML = originalStatusIcon.outerHTML;
-                            if (statusIconHTML.includes('<i ') && !statusIconHTML.includes('aria-hidden')) {
-                                statusIconHTML = statusIconHTML.replace('<i ', '<i aria-hidden="true" ');
-                            }
-                        } else {
-                            statusIconHTML = '<i class="fa-regular fa-circle-user" aria-hidden="true"></i>';
-                        }
-
-                        const statusStat = document.createElement('div');
-                        statusStat.className = 'stat status' + (isOnline ? ' online' : '');
-                        statusStat.innerHTML = statusIconHTML + '<span>' + statusValue + '</span>';
-                        userStats.appendChild(statusStat);
-                    }
-
-                    detailsClone.querySelectorAll('dl').forEach(dl => dl.remove());
-
-                    if (userStats.children.length > 0) {
-                        detailsClone.appendChild(userStats);
-                    }
-
-                    userInfo.appendChild(detailsClone);
-                } else {
-                    userInfo.appendChild(leftSection.cloneNode(true));
                 }
+
+                if (rightSection) {
+                    const contentWrapper = document.createElement('div');
+                    contentWrapper.className = 'post-main-content';
+
+                    const rightSectionClone = rightSection.cloneNode(true);
+                    this.#removeBottomBorderAndBr(rightSectionClone);
+                    this.#processIframeTables(rightSectionClone);
+                    this.#preserveMediaDimensions(rightSectionClone);
+
+                    contentWrapper.appendChild(rightSectionClone);
+                    this.#cleanupPostContentStructure(contentWrapper);
+                    postContent.appendChild(contentWrapper);
+                    this.#modernizeQuotes(contentWrapper);
+                    this.#modernizeSpoilers(contentWrapper);
+                    this.#modernizeCodeBlocksInContent(contentWrapper);
+                    this.#modernizeAttachmentsInContent(contentWrapper);
+                    this.#modernizeEmbeddedLinksInContent(contentWrapper);
+                }
+            });
+
+            const title2Bottom = post.querySelector('.title2.bottom');
+            
+            if (post.classList.contains('post_queue')) {
+            } else if (title2Bottom) {
+                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
+                this.#modernizeBottomElements(title2Bottom, postFooter);
+                title2Bottom.remove();
+            } else {
+                this.#addReputationToFooter(miniButtons, stEmoji, postFooter);
             }
 
-            if (rightSection) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'post-main-content';
-
-                const rightSectionClone = rightSection.cloneNode(true);
-                this.#removeBottomBorderAndBr(rightSectionClone);
-                this.#processIframeTables(rightSectionClone);
-                this.#preserveMediaDimensions(rightSectionClone);
-
-                contentWrapper.appendChild(rightSectionClone);
-                this.#cleanupPostContentStructure(contentWrapper);
-                postContent.appendChild(contentWrapper);
-                this.#modernizeQuotes(contentWrapper);
-                this.#modernizeSpoilers(contentWrapper);
-                this.#modernizeCodeBlocksInContent(contentWrapper);
-                this.#modernizeAttachmentsInContent(contentWrapper);
-                this.#modernizeEmbeddedLinksInContent(contentWrapper);
+            fragment.appendChild(postHeader);
+            fragment.appendChild(userInfo);
+            fragment.appendChild(postContent);
+            
+            if (!post.classList.contains('post_queue')) {
+                fragment.appendChild(postFooter);
             }
+
+            post.innerHTML = '';
+            post.appendChild(fragment);
+
+            if (post.classList.contains('post_queue')) {
+                this.#transformPostQueueButtons(post);
+            } else {
+                this.#convertMiniButtonsToButtons(post);
+                this.#addShareButton(post);
+            }
+            
+            this.#cleanupPostContent(post);
+
+            const postId = post.id;
+            if (postId && postId.startsWith('ee')) {
+                post.setAttribute('data-post-id', postId.replace('ee', ''));
+            }
+            
+            // Clean up double-wrapped media after transformation
+            setTimeout(() => {
+                this.#cleanupOldMediaWrappers(post);
+            }, 100);
         });
-
-        const title2Bottom = post.querySelector('.title2.bottom');
-        
-        if (post.classList.contains('post_queue')) {
-            // Post queue handling
-        } else if (title2Bottom) {
-            // Handle reactions - PRESERVE ORIGINAL ELEMENTS
-            const pointsElements = post.querySelectorAll('span.points, .points');
-            const emojiElements = post.querySelectorAll('.st-emoji');
-            
-            if (pointsElements.length > 0 || emojiElements.length > 0) {
-                const reactionsContainer = document.createElement('div');
-                reactionsContainer.className = 'post-actions reactions';
-                
-                // Move points elements (preserve original)
-                pointsElements.forEach(pointsEl => {
-                    // Remove from original location
-                    pointsEl.remove();
-                    // Add to reactions container WITHOUT modifying
-                    reactionsContainer.appendChild(pointsEl);
-                    
-                    // Just update visual state without changing structure
-                    this.#updatePointsContainerActiveState(pointsEl);
-                });
-                
-                // Move emoji elements (preserve original)
-                emojiElements.forEach(emojiEl => {
-                    // Remove from original location
-                    emojiEl.remove();
-                    // Add to reactions container WITHOUT modifying
-                    reactionsContainer.appendChild(emojiEl);
-                    emojiEl.style.display = 'flex';
-                    
-                    // Just update visual state without changing structure
-                    const emojiContainer = emojiEl.querySelector('.st-emoji-container');
-                    if (emojiContainer) {
-                        this.#updateEmojiContainerActiveState(emojiContainer);
-                    }
-                });
-                
-                postFooter.appendChild(reactionsContainer);
-            }
-            
-            this.#modernizeBottomElements(title2Bottom, postFooter);
-            title2Bottom.remove();
-        } else {
-            // Handle reactions when no title2Bottom - PRESERVE ORIGINAL ELEMENTS
-            const pointsElements = post.querySelectorAll('span.points, .points');
-            const emojiElements = post.querySelectorAll('.st-emoji');
-            
-            if (pointsElements.length > 0 || emojiElements.length > 0) {
-                const reactionsContainer = document.createElement('div');
-                reactionsContainer.className = 'post-actions reactions';
-                
-                // Move points elements (preserve original)
-                pointsElements.forEach(pointsEl => {
-                    pointsEl.remove();
-                    reactionsContainer.appendChild(pointsEl);
-                    this.#updatePointsContainerActiveState(pointsEl);
-                });
-                
-                // Move emoji elements (preserve original)
-                emojiElements.forEach(emojiEl => {
-                    emojiEl.remove();
-                    reactionsContainer.appendChild(emojiEl);
-                    emojiEl.style.display = 'flex';
-                    
-                    const emojiContainer = emojiEl.querySelector('.st-emoji-container');
-                    if (emojiContainer) {
-                        this.#updateEmojiContainerActiveState(emojiContainer);
-                    }
-                });
-                
-                postFooter.appendChild(reactionsContainer);
-            }
-        }
-
-        fragment.appendChild(postHeader);
-        fragment.appendChild(userInfo);
-        fragment.appendChild(postContent);
-        
-        if (!post.classList.contains('post_queue')) {
-            fragment.appendChild(postFooter);
-        }
-
-        post.innerHTML = '';
-        post.appendChild(fragment);
-
-        if (post.classList.contains('post_queue')) {
-            this.#transformPostQueueButtons(post);
-        } else {
-            this.#convertMiniButtonsToButtons(post);
-            this.#addShareButton(post);
-        }
-        
-        this.#cleanupPostContent(post);
-
-        const postId = post.id;
-        if (postId && postId.startsWith('ee')) {
-            post.setAttribute('data-post-id', postId.replace('ee', ''));
-        }
-        
-        // Clean up double-wrapped media after transformation
-        setTimeout(() => {
-            this.#cleanupOldMediaWrappers(post);
-        }, 100);
-    });
-}
+    }
 
     #processDeletedUserDetails(detailsElement, nickElement) {
         if (!detailsElement) return;
