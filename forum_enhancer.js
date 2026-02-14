@@ -9434,49 +9434,75 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const emojiPreview = e.target.closest('.st-emoji-preview');
+#enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const bulletDelete = e.target.closest('.bullet_delete');
+        const emojiPreview = e.target.closest('.st-emoji-preview');
 
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+        // Handle bullet_delete (undo vote) separately - let it execute normally
+        if (bulletDelete) {
+            // Don't interfere with bullet_delete clicks
+            return;
+        }
 
-                if (bulletDelete) {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
+        // Handle voting buttons
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            
+            // Get the original element that was clicked
+            const originalElement = pointsUp || pointsDown;
+            
+            // Check if this element has an onclick attribute
+            const hasOnClick = originalElement.hasAttribute('onclick');
+            
+            if (hasOnClick) {
+                // Let the original onclick execute - don't prevent default
+                // Just update visual states after a short delay to allow AJAX to complete
+                setTimeout(() => {
+                    this.#updateAllPointsActiveStates();
+                }, 300);
+                return;
+            }
+            
+            // Only handle visual toggling if there's no onclick (for custom UI)
+            const bulletDeleteElement = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
-                } else {
-                    if (pointsUp) {
-                        pointsContainer && pointsContainer.querySelector('.points_down') && 
-                        pointsContainer.querySelector('.points_down').classList.remove('active');
-                        pointsUp.classList.add('active');
-                    }
+            if (bulletDeleteElement) {
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
 
-                    if (pointsDown) {
-                        pointsContainer && pointsContainer.querySelector('.points_up') && 
-                        pointsContainer.querySelector('.points_up').classList.remove('active');
-                        pointsDown.classList.add('active');
-                    }
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
+                }
+            } else {
+                if (pointsUp) {
+                    pointsContainer && pointsContainer.querySelector('.points_down') && 
+                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsUp.classList.add('active');
+                }
+
+                if (pointsDown) {
+                    pointsContainer && pointsContainer.querySelector('.points_up') && 
+                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsDown.classList.add('active');
                 }
             }
+        }
 
-            if (emojiPreview) {
-                emojiPreview.closest('.st-emoji-container') && 
-                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
-            }
-        });
-    }
+        // Handle emoji preview
+        if (emojiPreview) {
+            emojiPreview.closest('.st-emoji-container') && 
+            emojiPreview.closest('.st-emoji-container').classList.toggle('active');
+        }
+    });
+}
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
