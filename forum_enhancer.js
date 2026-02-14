@@ -6992,30 +6992,12 @@ class PostModernizer {
         emojiContainer.classList.toggle('active', !!hasCount);
     }
 
-#updatePointsContainerActiveState(pointsContainer) {
-    if (!pointsContainer) return;
+    #updatePointsContainerActiveState(pointsContainer) {
+        if (!pointsContainer) return;
 
-    const hasEm = pointsContainer.querySelector('em');
-    const hasBulletDelete = pointsContainer.querySelector('.bullet_delete');
-    
-    // Container is active if it has an em element (showing vote count) OR bullet_delete
-    pointsContainer.classList.toggle('active', !!(hasEm || hasBulletDelete));
-    
-    // Ensure the thumbs up/down have proper active states
-    const pointsUp = pointsContainer.querySelector('.points_up');
-    const pointsDown = pointsContainer.querySelector('.points_down');
-    const bulletDelete = pointsContainer.querySelector('.bullet_delete');
-    
-    if (bulletDelete) {
-        // In results state, determine which thumb was clicked based on em class
-        const em = pointsContainer.querySelector('em');
-        if (em) {
-            const isPositive = em.classList.contains('points_pos');
-            pointsUp?.classList.toggle('active', isPositive);
-            pointsDown?.classList.toggle('active', !isPositive);
-        }
+        const hasEm = pointsContainer.querySelector('em');
+        pointsContainer.classList.toggle('active', !!hasEm);
     }
-}
 
     #handleCleanupTasks(node) {
         if (!node) return;
@@ -9452,139 +9434,49 @@ class PostModernizer {
         });
     }
 
-#enhanceReputationSystem() {
-    // Use event delegation on document to handle dynamically added elements
-    document.addEventListener('click', (e) => {
-        // Handle voting state (thumbs up/down)
-        const pointsUp = e.target.closest('.points_up');
-        const pointsDown = e.target.closest('.points_down');
-        
-        // Handle undo state (bullet_delete after vote)
-        const bulletDelete = e.target.closest('.bullet_delete');
-        
-        // Handle results state (points_up after vote)
-        const resultsPointsUp = e.target.closest('.points.active .points_up');
-        
-        if (pointsUp || pointsDown) {
-            const pointsContainer = (pointsUp || pointsDown).closest('.points');
-            const bulletDeleteInContainer = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
-            
-            // If there's a bullet_delete, we're in the results state
-            if (bulletDeleteInContainer) {
-                // In results state, clicking thumbs up should trigger the undo
-                const undoImg = pointsContainer.querySelector('.bullet_delete');
-                if (undoImg && undoImg.onclick) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Execute the original onclick
-                    if (typeof undoImg.onclick === 'function') {
-                        undoImg.onclick.call(undoImg, e);
-                    } else {
-                        // If onclick is a string attribute, evaluate it
-                        const onclickAttr = undoImg.getAttribute('onclick');
-                        if (onclickAttr) {
-                            try {
-                                // Create a function from the string and call it
-                                new Function('event', onclickAttr).call(undoImg, e);
-                            } catch (error) {
-                                console.error('Error executing undo:', error);
-                            }
-                        }
+    #enhanceReputationSystem() {
+        document.addEventListener('click', (e) => {
+            const pointsUp = e.target.closest('.points_up');
+            const pointsDown = e.target.closest('.points_down');
+            const emojiPreview = e.target.closest('.st-emoji-preview');
+
+            if (pointsUp || pointsDown) {
+                const pointsContainer = (pointsUp || pointsDown).closest('.points');
+                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+
+                if (bulletDelete) {
+                    if (pointsUp) {
+                        pointsContainer && pointsContainer.querySelector('.points_down') && 
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                        pointsUp.classList.add('active');
                     }
-                    
-                    // Visual feedback
-                    pointsUp?.classList.add('active');
-                    pointsDown?.classList.remove('active');
-                }
-            } else {
-                // Regular voting state - handle normally
-                if (pointsUp) {
-                    pointsContainer?.querySelector('.points_down')?.classList.remove('active');
-                    pointsUp.classList.add('active');
-                }
-                
-                if (pointsDown) {
-                    pointsContainer?.querySelector('.points_up')?.classList.remove('active');
-                    pointsDown.classList.add('active');
-                }
-                
-                // Trigger the original click
-                const target = pointsUp || pointsDown;
-                if (target && target.onclick) {
-                    if (typeof target.onclick === 'function') {
-                        target.onclick.call(target, e);
-                    } else {
-                        const onclickAttr = target.getAttribute('onclick');
-                        if (onclickAttr) {
-                            new Function('event', onclickAttr).call(target, e);
-                        }
+
+                    if (pointsDown) {
+                        pointsContainer && pointsContainer.querySelector('.points_up') && 
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                        pointsDown.classList.add('active');
                     }
-                }
-            }
-        }
-        
-        // Handle bullet_delete clicks directly
-        if (bulletDelete) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const pointsContainer = bulletDelete.closest('.points');
-            
-            // Execute the original onclick
-            if (typeof bulletDelete.onclick === 'function') {
-                bulletDelete.onclick.call(bulletDelete, e);
-            } else {
-                const onclickAttr = bulletDelete.getAttribute('onclick');
-                if (onclickAttr) {
-                    try {
-                        new Function('event', onclickAttr).call(bulletDelete, e);
-                    } catch (error) {
-                        console.error('Error executing undo:', error);
-                    }
-                }
-            }
-            
-            // Update visual state
-            pointsContainer?.classList.remove('active');
-            const pointsUp = pointsContainer?.querySelector('.points_up');
-            const pointsDown = pointsContainer?.querySelector('.points_down');
-            pointsUp?.classList.remove('active');
-            pointsDown?.classList.remove('active');
-        }
-        
-        // Handle clicking on the results state thumbs up (should also trigger undo)
-        if (resultsPointsUp && !bulletDelete) {
-            const pointsContainer = resultsPointsUp.closest('.points');
-            const undoImg = pointsContainer?.querySelector('.bullet_delete');
-            
-            if (undoImg) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                if (typeof undoImg.onclick === 'function') {
-                    undoImg.onclick.call(undoImg, e);
                 } else {
-                    const onclickAttr = undoImg.getAttribute('onclick');
-                    if (onclickAttr) {
-                        new Function('event', onclickAttr).call(undoImg, e);
+                    if (pointsUp) {
+                        pointsContainer && pointsContainer.querySelector('.points_down') && 
+                        pointsContainer.querySelector('.points_down').classList.remove('active');
+                        pointsUp.classList.add('active');
+                    }
+
+                    if (pointsDown) {
+                        pointsContainer && pointsContainer.querySelector('.points_up') && 
+                        pointsContainer.querySelector('.points_up').classList.remove('active');
+                        pointsDown.classList.add('active');
                     }
                 }
             }
-        }
-    });
-    
-    // Also handle emoji previews if present
-    document.addEventListener('click', (e) => {
-        const emojiPreview = e.target.closest('.st-emoji-preview');
-        if (emojiPreview) {
-            const emojiContainer = emojiPreview.closest('.st-emoji-container');
-            if (emojiContainer) {
-                emojiContainer.classList.toggle('active');
+
+            if (emojiPreview) {
+                emojiPreview.closest('.st-emoji-container') && 
+                emojiPreview.closest('.st-emoji-container').classList.toggle('active');
             }
-        }
-    });
-}
+        });
+    }
 
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
