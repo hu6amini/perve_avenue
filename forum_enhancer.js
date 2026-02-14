@@ -9435,75 +9435,27 @@ class PostModernizer {
     }
 
 #enhanceReputationSystem() {
+    // Use capturing phase to ensure we don't interfere with native handlers
     document.addEventListener('click', (e) => {
         const pointsUp = e.target.closest('.points_up');
         const pointsDown = e.target.closest('.points_down');
         const bulletDelete = e.target.closest('.bullet_delete');
-        const emojiPreview = e.target.closest('.st-emoji-preview');
-
-        // Handle bullet_delete (undo vote) separately - let it execute normally
-        if (bulletDelete) {
-            // Don't interfere with bullet_delete clicks
-            return;
+        
+        // CRITICAL: Let ALL native handlers execute first
+        // We'll just update visual states after a delay
+        
+        if (pointsUp || pointsDown || bulletDelete) {
+            // Schedule visual updates after native handlers have run
+            setTimeout(() => {
+                // Update all points containers to reflect current state
+                document.querySelectorAll('.mini_buttons.points.Sub .points').forEach(container => {
+                    this.#updatePointsContainerActiveState(container);
+                });
+            }, 100);
         }
-
-        // Handle voting buttons
-        if (pointsUp || pointsDown) {
-            const pointsContainer = (pointsUp || pointsDown).closest('.points');
-            
-            // Get the original element that was clicked
-            const originalElement = pointsUp || pointsDown;
-            
-            // Check if this element has an onclick attribute
-            const hasOnClick = originalElement.hasAttribute('onclick');
-            
-            if (hasOnClick) {
-                // Let the original onclick execute - don't prevent default
-                // Just update visual states after a short delay to allow AJAX to complete
-                setTimeout(() => {
-                    this.#updateAllPointsActiveStates();
-                }, 300);
-                return;
-            }
-            
-            // Only handle visual toggling if there's no onclick (for custom UI)
-            const bulletDeleteElement = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
-
-            if (bulletDeleteElement) {
-                if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && 
-                    pointsContainer.querySelector('.points_down').classList.remove('active');
-                    pointsUp.classList.add('active');
-                }
-
-                if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && 
-                    pointsContainer.querySelector('.points_up').classList.remove('active');
-                    pointsDown.classList.add('active');
-                }
-            } else {
-                if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && 
-                    pointsContainer.querySelector('.points_down').classList.remove('active');
-                    pointsUp.classList.add('active');
-                }
-
-                if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && 
-                    pointsContainer.querySelector('.points_up').classList.remove('active');
-                    pointsDown.classList.add('active');
-                }
-            }
-        }
-
-        // Handle emoji preview
-        if (emojiPreview) {
-            emojiPreview.closest('.st-emoji-container') && 
-            emojiPreview.closest('.st-emoji-container').classList.toggle('active');
-        }
-    });
+    }, { passive: true }); // Use passive to not interfere with default behavior
 }
-
+    
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
         return unsafe
