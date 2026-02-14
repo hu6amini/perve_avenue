@@ -6992,12 +6992,30 @@ class PostModernizer {
         emojiContainer.classList.toggle('active', !!hasCount);
     }
 
-    #updatePointsContainerActiveState(pointsContainer) {
-        if (!pointsContainer) return;
+#updatePointsContainerActiveState(pointsContainer) {
+    if (!pointsContainer) return;
 
-        const hasEm = pointsContainer.querySelector('em');
-        pointsContainer.classList.toggle('active', !!hasEm);
+    const hasEm = pointsContainer.querySelector('em');
+    const hasBulletDelete = pointsContainer.querySelector('.bullet_delete');
+    
+    // Container is active if it has an em element (showing vote count) OR bullet_delete
+    pointsContainer.classList.toggle('active', !!(hasEm || hasBulletDelete));
+    
+    // Ensure the thumbs up/down have proper active states
+    const pointsUp = pointsContainer.querySelector('.points_up');
+    const pointsDown = pointsContainer.querySelector('.points_down');
+    const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+    
+    if (bulletDelete) {
+        // In results state, determine which thumb was clicked based on em class
+        const em = pointsContainer.querySelector('em');
+        if (em) {
+            const isPositive = em.classList.contains('points_pos');
+            pointsUp?.classList.toggle('active', isPositive);
+            pointsDown?.classList.toggle('active', !isPositive);
+        }
     }
+}
 
     #handleCleanupTasks(node) {
         if (!node) return;
