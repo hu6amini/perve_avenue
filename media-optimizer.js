@@ -202,3 +202,74 @@
         setTimeout(h, 0);
     }
 })();
+
+
+  // Function to convert a single image to lossless WebP via CDN
+  function convertToWebP(img) {
+    var originalSrc = img.src;
+    
+    // Skip if not an external image or already processed
+    if (originalSrc.indexOf('http') !== 0 || originalSrc.indexOf('optimized=true') !== -1) {
+      return;
+    }
+    
+    // Skip if it's a data URL or already a WebP
+    if (originalSrc.indexOf('data:') === 0 || originalSrc.indexOf('.webp') !== -1) {
+      return;
+    }
+    
+    // Add a marker to prevent reprocessing
+    img.setAttribute('data-optimized', 'true');
+    img.setAttribute('data-original-src', originalSrc);
+    
+    // Construct CDN URL with lossless WebP conversion
+    // Using images.weserv.nl with lossless parameter
+    var cdnBase = 'https://images.weserv.nl/';
+    var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true';
+    var webpSrc = cdnBase + cdnParams;
+    
+    // Try WebP version, fallback to original if it fails
+    img.onerror = function() {
+      this.src = this.getAttribute('data-original-src');
+    };
+    
+    // Set the new source
+    img.src = webpSrc;
+  }
+  
+  // Process all existing images
+  var images = document.querySelectorAll('img');
+  for (var i = 0; i < images.length; i++) {
+    convertToWebP(images[i]);
+  }
+  
+  // Watch for dynamically added images (for infinite scroll, new posts, etc.)
+  var webpObserver = new MutationObserver(function(mutations) {
+    for (var i = 0; i < mutations.length; i++) {
+      var mutation = mutations[i];
+      var addedNodes = mutation.addedNodes;
+      
+      for (var j = 0; j < addedNodes.length; j++) {
+        var node = addedNodes[j];
+        
+        // If the added node is an image
+        if (node.nodeName === 'IMG') {
+          convertToWebP(node);
+        }
+        
+        // If the added node contains images
+        if (node.querySelectorAll) {
+          var newImages = node.querySelectorAll('img');
+          for (var k = 0; k < newImages.length; k++) {
+            convertToWebP(newImages[k]);
+          }
+        }
+      }
+    }
+  });
+  
+  // Start observing the entire document for changes
+  webpObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
