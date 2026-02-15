@@ -1,29 +1,42 @@
-(() => {
-    "use strict";
+(function() {
+    'use strict';
     
     // ===== PART 1: Constants & Configuration =====
-    const LAZY = "lazy";
-    const ASYNC = "async";
-    const CDN_BASE = 'https://images.weserv.nl/';
+    var LAZY = "lazy";
+    var ASYNC = "async";
+    var CDN_BASE = 'https://images.weserv.nl/';
     
     // Media types that need special handling
-    const SKIP_PATTERNS = [
+    var SKIP_PATTERNS = [
         '.svg', '.gif', '.webp', '.avif',
-        'output=webp', 'output=avif'
-    ].map(function(pattern) { return pattern.toLowerCase(); });
+        'output=webp', 'output=avif',
+        // Skip DiceBear avatars (generated letter avatars)
+        'dicebear.com',
+        'api.dicebear.com',
+        'dicebear',
+        // Skip our forum avatar markers
+        'forum-user-avatar',
+        'forum-likes-avatar',
+        'avatar-size-'
+    ];
+    
+    // Convert patterns to lowercase for comparison
+    for (var sp = 0; sp < SKIP_PATTERNS.length; sp++) {
+        SKIP_PATTERNS[sp] = SKIP_PATTERNS[sp].toLowerCase();
+    }
     
     // Tracking for performance monitoring
-    const loadEvents = [];
-    let successCount = 0;
-    let totalMonitored = 0;
+    var loadEvents = [];
+    var successCount = 0;
+    var totalMonitored = 0;
     
     // ===== PART 2: Lazy Loading & Async Decoding Setup =====
     
     // Cache the original methods
-    const originalAddEventListener = EventTarget.prototype.addEventListener;
-    const originalSetAttribute = Element.prototype.setAttribute;
-    const originalCreateElement = document.createElement;
-    const OriginalImage = window.Image;
+    var originalAddEventListener = EventTarget.prototype.addEventListener;
+    var originalSetAttribute = Element.prototype.setAttribute;
+    var originalCreateElement = document.createElement;
+    var OriginalImage = window.Image;
     
     // Helper functions
     function isMediaElement(el) {
@@ -57,12 +70,12 @@
         if ((event === 'load' || event === 'error') && isMediaElement(this)) {
             totalMonitored++;
             
-            const element = this;
-            const startTime = performance.now();
-            const initialLoading = element.getAttribute('loading');
-            const initialDecoding = element.getAttribute('decoding');
+            var element = this;
+            var startTime = performance.now();
+            var initialLoading = element.getAttribute('loading');
+            var initialDecoding = element.getAttribute('decoding');
             
-            const trackingData = {
+            var trackingData = {
                 element: element.tagName,
                 src: element.src || element.getAttribute('src') || '[no-src]',
                 initialLoading: initialLoading,
@@ -82,9 +95,9 @@
             }
             
             function wrappedListener(evt) {
-                const finalLoading = element.getAttribute('loading');
-                const finalDecoding = element.getAttribute('decoding');
-                const loadTime = performance.now();
+                var finalLoading = element.getAttribute('loading');
+                var finalDecoding = element.getAttribute('decoding');
+                var loadTime = performance.now();
                 
                 trackingData.finalLoading = finalLoading;
                 trackingData.finalDecoding = finalDecoding;
@@ -121,7 +134,7 @@
     function overrideSrcSetter(proto, prop) {
         if (!proto) return;
         
-        const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+        var descriptor = Object.getOwnPropertyDescriptor(proto, prop);
         if (descriptor && descriptor.set) {
             Object.defineProperty(proto, prop, {
                 set: function(value) {
@@ -139,14 +152,14 @@
     
     // Intercept document.createElement
     document.createElement = function(tagName, options) {
-        const element = originalCreateElement.call(this, tagName, options);
+        var element = originalCreateElement.call(this, tagName, options);
         return applyLazyAttributes(element);
     };
     
     // Intercept Image constructor
     if (OriginalImage) {
         window.Image = function(width, height) {
-            const img = new OriginalImage(width, height);
+            var img = new OriginalImage(width, height);
             img.setAttribute('loading', LAZY);
             img.setAttribute('decoding', ASYNC);
             return img;
@@ -156,13 +169,13 @@
     
     // Apply to existing elements without attributes
     function applyToExisting() {
-        const selectors = [
+        var selectors = [
             'img:not([loading]), img[loading=""]', 
             'iframe:not([loading]), iframe[loading=""]', 
             'img:not([decoding]), img[decoding=""]'
         ];
         
-        const elements = document.querySelectorAll(selectors.join(', '));
+        var elements = document.querySelectorAll(selectors.join(', '));
         for (var i = 0; i < elements.length; i++) {
             applyLazyAttributes(elements[i]);
         }
@@ -170,13 +183,30 @@
     
     // ===== PART 3: Format Conversion Functions =====
     
-    function shouldSkipImage(url) {
+    function shouldSkipImage(url, element) {
         if (!url) return true;
         
         var lowerUrl = url.toLowerCase();
         
         // Data URLs
         if (lowerUrl.indexOf('data:') === 0) return true;
+        
+        // Skip if it's our forum avatar (check by class)
+        if (element && element.classList) {
+            if (element.classList.contains('forum-user-avatar') ||
+                element.classList.contains('forum-likes-avatar') ||
+                element.classList.contains('avatar-size-')) {
+                return true;
+            }
+        }
+        
+        // Skip if it has forum avatar data attributes
+        if (element && element.hasAttribute) {
+            if (element.hasAttribute('data-forum-avatar') ||
+                element.hasAttribute('data-username')) {
+                return true;
+            }
+        }
         
         // Check against skip patterns
         for (var i = 0; i < SKIP_PATTERNS.length; i++) {
@@ -210,7 +240,16 @@
             return;
         }
         
-        if (shouldSkipImage(originalSrc)) {
+        // Check if this is our forum avatar (by class or data attribute)
+        if (img.classList.contains('forum-user-avatar') ||
+            img.classList.contains('forum-likes-avatar') ||
+            img.hasAttribute('data-forum-avatar') ||
+            img.getAttribute('data-username')) {
+            img.setAttribute('data-optimized', 'skipped');
+            return;
+        }
+        
+        if (shouldSkipImage(originalSrc, img)) {
             img.setAttribute('data-optimized', 'skipped');
             return;
         }
@@ -265,9 +304,17 @@
                     }
                 }
                 
-                // Then convert images (skips GIFs automatically)
+                // Then convert images - but skip forum avatars
                 if (node.tagName === 'IMG' && !node.getAttribute('data-optimized')) {
-                    convertToOptimalFormat(node);
+                    // Skip if it's a forum avatar
+                    if (!node.classList.contains('forum-user-avatar') &&
+                        !node.classList.contains('forum-likes-avatar') &&
+                        !node.hasAttribute('data-forum-avatar') &&
+                        !node.hasAttribute('data-username')) {
+                        convertToOptimalFormat(node);
+                    } else {
+                        node.setAttribute('data-optimized', 'skipped');
+                    }
                 }
                 
                 if (node.querySelectorAll) {
@@ -275,7 +322,15 @@
                     for (var ni = 0; ni < nestedImages.length; ni++) {
                         var img = nestedImages[ni];
                         if (!img.getAttribute('data-optimized')) {
-                            convertToOptimalFormat(img);
+                            // Skip if it's a forum avatar
+                            if (!img.classList.contains('forum-user-avatar') &&
+                                !img.classList.contains('forum-likes-avatar') &&
+                                !img.hasAttribute('data-forum-avatar') &&
+                                !img.hasAttribute('data-username')) {
+                                convertToOptimalFormat(img);
+                            } else {
+                                img.setAttribute('data-optimized', 'skipped');
+                            }
                         }
                     }
                 }
@@ -305,6 +360,8 @@
         var avifCount = 0;
         var gifCount = 0;
         var svgCount = 0;
+        var dicebearCount = 0;
+        var forumAvatarCount = 0;
         var otherCount = 0;
         
         for (var i = 0; i < images.length; i++) {
@@ -313,22 +370,43 @@
             if (img.getAttribute('decoding') === ASYNC) asyncCount++;
             
             var src = img.src.toLowerCase();
+            var classes = img.className.toLowerCase();
+            var isForumAvatar = false;
             
-            if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
-                gifCount++;
-            } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
-                svgCount++;
-            } else if (src.indexOf('.webp') !== -1 || src.indexOf('output=webp') !== -1) {
-                webpCount++;
-            } else if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) {
-                avifCount++;
-            } else {
-                otherCount++;
+            // Count forum avatars
+            if (classes.indexOf('forum-user-avatar') !== -1 || 
+                classes.indexOf('forum-likes-avatar') !== -1 ||
+                img.hasAttribute('data-username')) {
+                forumAvatarCount++;
+                isForumAvatar = true;
+            }
+            
+            if (!isForumAvatar) {
+                if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
+                    gifCount++;
+                } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
+                    svgCount++;
+                } else if (src.indexOf('dicebear.com') !== -1 || src.indexOf('api.dicebear.com') !== -1) {
+                    dicebearCount++;
+                } else if (src.indexOf('.webp') !== -1 || src.indexOf('output=webp') !== -1) {
+                    webpCount++;
+                } else if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) {
+                    avifCount++;
+                } else {
+                    otherCount++;
+                }
             }
         }
         
         console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
-        console.log('Formats: ' + webpCount + ' WebP, ' + avifCount + ' AVIF, ' + gifCount + ' GIF, ' + svgCount + ' SVG, ' + otherCount + ' other');
+        console.log('Format breakdown:');
+        console.log('  - WebP: ' + webpCount);
+        console.log('  - AVIF: ' + avifCount);
+        console.log('  - GIF (animated): ' + gifCount);
+        console.log('  - SVG: ' + svgCount);
+        console.log('  - DiceBear avatars: ' + dicebearCount);
+        console.log('  - Forum avatars: ' + forumAvatarCount);
+        console.log('  - Other formats: ' + otherCount);
         
         var successRate = totalMonitored > 0 ? Math.round((successCount / totalMonitored) * 100) : 0;
         console.log('Monitored: ' + totalMonitored + ' total, ' + successCount + ' optimized before load (' + successRate + '%)');
