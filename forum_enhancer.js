@@ -9466,14 +9466,15 @@ class PostModernizer {
             return;
         }
         
-        // Handle points link (view votes) clicks
+        // Handle points link (view votes) clicks - LET IT WORK NORMALLY
         if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-            e.preventDefault();
-            // Let the overlay handler work normally
+            // DO NOT prevent default - let the overlay handler work
+            // The overlay is initialized via the onmouseover attribute
             return;
         }
         
         if (pointsUp || pointsDown) {
+            // ... rest of your voting logic remains the same ...
             const pointsContainer = (pointsUp || pointsDown).closest('.points');
             const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
