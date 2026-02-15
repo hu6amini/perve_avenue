@@ -223,7 +223,6 @@
     img.setAttribute('data-original-src', originalSrc);
     
     // Construct CDN URL with lossless WebP conversion
-    // Using images.weserv.nl with lossless parameter
     var cdnBase = 'https://images.weserv.nl/';
     var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true';
     var webpSrc = cdnBase + cdnParams;
@@ -237,39 +236,51 @@
     img.src = webpSrc;
   }
   
-  // Process all existing images
-  var images = document.querySelectorAll('img');
-  for (var i = 0; i < images.length; i++) {
-    convertToWebP(images[i]);
-  }
-  
-  // Watch for dynamically added images (for infinite scroll, new posts, etc.)
-  var webpObserver = new MutationObserver(function(mutations) {
-    for (var i = 0; i < mutations.length; i++) {
-      var mutation = mutations[i];
-      var addedNodes = mutation.addedNodes;
-      
-      for (var j = 0; j < addedNodes.length; j++) {
-        var node = addedNodes[j];
+  // Function to initialize the WebP conversion
+  function initWebPConversion() {
+    // Process all existing images
+    var images = document.querySelectorAll('img');
+    for (var i = 0; i < images.length; i++) {
+      convertToWebP(images[i]);
+    }
+    
+    // Set up mutation observer for dynamically added images
+    var webpObserver = new MutationObserver(function(mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        var mutation = mutations[i];
+        var addedNodes = mutation.addedNodes;
         
-        // If the added node is an image
-        if (node.nodeName === 'IMG') {
-          convertToWebP(node);
-        }
-        
-        // If the added node contains images
-        if (node.querySelectorAll) {
-          var newImages = node.querySelectorAll('img');
-          for (var k = 0; k < newImages.length; k++) {
-            convertToWebP(newImages[k]);
+        for (var j = 0; j < addedNodes.length; j++) {
+          var node = addedNodes[j];
+          
+          // If the added node is an image
+          if (node.nodeName === 'IMG') {
+            convertToWebP(node);
+          }
+          
+          // If the added node contains images
+          if (node.querySelectorAll) {
+            var newImages = node.querySelectorAll('img');
+            for (var k = 0; k < newImages.length; k++) {
+              convertToWebP(newImages[k]);
+            }
           }
         }
       }
-    }
-  });
+    });
+    
+    // Start observing once body exists
+    webpObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
   
-  // Start observing the entire document for changes
-  webpObserver.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    // DOM still loading, wait for DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', initWebPConversion);
+  } else {
+    // DOM already loaded, run immediately
+    initWebPConversion();
+  }
