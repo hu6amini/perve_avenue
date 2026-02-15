@@ -9435,101 +9435,139 @@ class PostModernizer {
     }
 
 #enhanceReputationSystem() {
-    document.addEventListener('click', (e) => {
-        const pointsUp = e.target.closest('.points_up');
-        const pointsDown = e.target.closest('.points_down');
-        const bulletDelete = e.target.closest('.bullet_delete');
-        const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
-        const pointsContainer = e.target.closest('.points');
-        
-        // Handle undo (bullet_delete) clicks
-        if (bulletDelete && pointsContainer) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Find the original onclick attribute and execute it
-            const onclickAttr = bulletDelete.getAttribute('onclick');
-            if (onclickAttr) {
-                try {
-                    // Execute the onclick function
-                    new Function(onclickAttr)();
-                } catch (error) {
-                    console.error('Error executing undo action:', error);
-                }
-            }
-            
-            // Update active states after undo
-            setTimeout(() => {
-                this.#updatePointsContainerActiveState(pointsContainer);
-            }, 100);
-            
-            return;
-        }
-        
-        // Handle points link (view votes) clicks
-        if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-            e.preventDefault();
-            // Let the overlay handler work normally
-            return;
-        }
-        
-        if (pointsUp || pointsDown) {
-            const pointsContainer = (pointsUp || pointsDown).closest('.points');
-            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
-
-            if (bulletDelete) {
-                // Already voted state - handle differently
-                if (pointsUp) {
-                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                    pointsUp.classList.add('active');
-                    
-                    // Trigger undo when clicking active thumbs up?
-                    if (pointsUp.classList.contains('active') && bulletDelete) {
-                        bulletDelete.click();
-                    }
-                }
-
-                if (pointsDown) {
-                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                    pointsDown.classList.add('active');
-                    
-                    // Trigger undo when clicking active thumbs down?
-                    if (pointsDown.classList.contains('active') && bulletDelete) {
-                        bulletDelete.click();
-                    }
-                }
-            } else {
-                // Not voted yet - handle normal voting
-                if (pointsUp) {
-                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                    pointsUp.classList.add('active');
-                    
-                    // Trigger the original vote action
-                    const voteLink = pointsContainer.querySelector('a.points_up');
-                    if (voteLink) {
-                        const onclick = voteLink.getAttribute('onclick');
-                        if (onclick) {
-                            setTimeout(() => new Function(onclick)(), 10);
-                        }
-                    }
-                }
-
-                if (pointsDown) {
-                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                    pointsDown.classList.add('active');
-                    
-                    // Trigger the original vote action
-                    const voteLink = pointsContainer.querySelector('a.points_down');
-                    if (voteLink) {
-                        const onclick = voteLink.getAttribute('onclick');
-                        if (onclick) {
-                            setTimeout(() => new Function(onclick)(), 10);
+    // Don't try to intercept clicks - just ensure the structure is correct
+    // The original onclick attributes will handle the functionality
+    
+    // Monitor for points containers that might need restructuring
+    const pointsObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList') {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Check if this is a points container
+                        if (node.matches?.('.points') || node.querySelector?.('.points')) {
+                            this.#ensurePointsStructure(node);
                         }
                     }
                 }
             }
         }
     });
+    
+    pointsObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    // Initial setup
+    document.querySelectorAll('.points').forEach(container => {
+        this.#ensurePointsStructure(container);
+    });
+    
+    // Also watch for AJAX updates that might replace points containers
+    document.addEventListener('ajaxComplete', (e) => {
+        setTimeout(() => {
+            document.querySelectorAll('.points').forEach(container => {
+                this.#ensurePointsStructure(container);
+            });
+        }, 100);
+    });
+}
+
+#ensurePointsStructure(pointsContainer) {
+    if (!pointsContainer || pointsContainer.dataset.structured === 'true') return;
+    
+    // Make sure the container has the right classes
+    if (!pointsContainer.classList.contains('points')) {
+        pointsContainer.classList.add('points');
+    }
+    
+    // Handle the overlay link (vote count)
+    const voteLink = pointsContainer.querySelector('a[href*="CODE=votes"]');
+    if (voteLink && voteLink.getAttribute('rel') === '#overlay') {
+        // Ensure the overlay link has proper styling
+        voteLink.classList.add('vote-count-link');
+        
+        // Store original mouseover but don't modify it
+        // Just ensure it's accessible
+        if (!voteLink.hasAttribute('onmouseover') && voteLink.dataset.originalMouseover) {
+            voteLink.setAttribute('onmouseover', voteLink.dataset.originalMouseover);
+        }
+    }
+    
+    // Handle thumbs up/down
+    const thumbsUp = pointsContainer.querySelector('.points_up');
+    const thumbsDown = pointsContainer.querySelector('.points_down');
+    
+    if (thumbsUp) {
+        thumbsUp.classList.add('vote-thumb');
+        // Ensure the icon is proper
+        const icon = thumbsUp.querySelector('i');
+        if (icon && !icon.classList.contains('fa-thumbs-up')) {
+            icon.className = 'fa-regular fa-thumbs-up';
+        }
+    }
+    
+    if (thumbsDown) {
+        thumbsDown.classList.add('vote-thumb');
+        // Ensure the icon is proper
+        const icon = thumbsDown.querySelector('i');
+        if (icon && !icon.classList.contains('fa-thumbs-down')) {
+            icon.className = 'fa-regular fa-thumbs-down';
+        }
+    }
+    
+    // Handle undo (bullet_delete)
+    const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+    if (bulletDelete) {
+        bulletDelete.classList.add('vote-undo');
+        // Ensure it has proper alt text for accessibility
+        if (!bulletDelete.hasAttribute('alt')) {
+            bulletDelete.setAttribute('alt', 'Undo vote');
+        }
+    }
+    
+    // Mark as processed
+    pointsContainer.dataset.structured = 'true';
+    
+    // Update active states based on current structure
+    this.#updatePointsContainerActiveState(pointsContainer);
+}
+
+#updatePointsContainerActiveState(pointsContainer) {
+    if (!pointsContainer) return;
+    
+    const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+    const pointsUp = pointsContainer.querySelector('.points_up');
+    const pointsDown = pointsContainer.querySelector('.points_down');
+    const voteLink = pointsContainer.querySelector('a[href*="CODE=votes"]');
+    const voteEm = voteLink ? voteLink.querySelector('em') : null;
+    
+    // Check if there's an active vote
+    const hasVote = bulletDelete !== null;
+    
+    if (hasVote) {
+        pointsContainer.classList.add('has-vote');
+        
+        // Determine which way the vote was
+        if (voteEm && voteEm.classList.contains('points_pos')) {
+            pointsContainer.classList.add('voted-pos');
+            pointsContainer.classList.remove('voted-neg');
+            
+            if (pointsUp) pointsUp.classList.add('active');
+            if (pointsDown) pointsDown.classList.remove('active');
+        } else if (voteEm && voteEm.classList.contains('points_neg')) {
+            pointsContainer.classList.add('voted-neg');
+            pointsContainer.classList.remove('voted-pos');
+            
+            if (pointsDown) pointsDown.classList.add('active');
+            if (pointsUp) pointsUp.classList.remove('active');
+        }
+    } else {
+        pointsContainer.classList.remove('has-vote', 'voted-pos', 'voted-neg');
+        if (pointsUp) pointsUp.classList.remove('active');
+        if (pointsDown) pointsDown.classList.remove('active');
+    }
 }
     
     #escapeHtml(unsafe) {
