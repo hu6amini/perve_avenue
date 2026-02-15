@@ -9438,47 +9438,96 @@ class PostModernizer {
     document.addEventListener('click', (e) => {
         const pointsUp = e.target.closest('.points_up');
         const pointsDown = e.target.closest('.points_down');
-        const emojiPreview = e.target.closest('.st-emoji-preview');
-
+        const bulletDelete = e.target.closest('.bullet_delete');
+        const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
+        const pointsContainer = e.target.closest('.points');
+        
+        // Handle undo (bullet_delete) clicks
+        if (bulletDelete && pointsContainer) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Find the original onclick attribute and execute it
+            const onclickAttr = bulletDelete.getAttribute('onclick');
+            if (onclickAttr) {
+                try {
+                    // Execute the onclick function
+                    new Function(onclickAttr)();
+                } catch (error) {
+                    console.error('Error executing undo action:', error);
+                }
+            }
+            
+            // Update active states after undo
+            setTimeout(() => {
+                this.#updatePointsContainerActiveState(pointsContainer);
+            }, 100);
+            
+            return;
+        }
+        
+        // Handle points link (view votes) clicks
+        if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
+            e.preventDefault();
+            // Let the overlay handler work normally
+            return;
+        }
+        
         if (pointsUp || pointsDown) {
             const pointsContainer = (pointsUp || pointsDown).closest('.points');
             const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-            // Just update UI state, don't interfere with click handling
             if (bulletDelete) {
+                // Already voted state - handle differently
                 if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && 
-                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
                     pointsUp.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs up?
+                    if (pointsUp.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
+                    }
                 }
 
                 if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && 
-                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
                     pointsDown.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs down?
+                    if (pointsDown.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
+                    }
                 }
-                
-                // NO preventDefault, NO stopPropagation, NO custom overlay code
-                // Let the event propagate so the forum's original handler can work
             } else {
-                // If no bulletDelete, just toggle active states
+                // Not voted yet - handle normal voting
                 if (pointsUp) {
-                    pointsContainer && pointsContainer.querySelector('.points_down') && 
-                    pointsContainer.querySelector('.points_down').classList.remove('active');
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
                     pointsUp.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_up');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
+                        }
+                    }
                 }
 
                 if (pointsDown) {
-                    pointsContainer && pointsContainer.querySelector('.points_up') && 
-                    pointsContainer.querySelector('.points_up').classList.remove('active');
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
                     pointsDown.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_down');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
+                        }
+                    }
                 }
             }
-        }
-
-        if (emojiPreview) {
-            emojiPreview.closest('.st-emoji-container') && 
-            emojiPreview.closest('.st-emoji-container').classList.toggle('active');
         }
     });
 }
