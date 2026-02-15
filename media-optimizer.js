@@ -188,55 +188,80 @@
     }
     
     // Function to replace GIF with video
-    function replaceGifWithVideo(img, originalSrc) {
-        // Mark as processed
-        img.setAttribute('data-optimized', 'true');
-        img.setAttribute('data-original-src', originalSrc);
-        img.setAttribute('data-was-gif', 'true');
-        
-        // Create video element
-        var video = document.createElement('video');
-        
-        // Copy useful attributes
-        copyAttributes(img, video);
-        
-        // Video attributes for GIF-like behavior
-        video.setAttribute('autoplay', 'true');
-        video.setAttribute('loop', 'true');
-        video.setAttribute('muted', 'true');
-        video.setAttribute('playsinline', 'true');
-        
-        // Try WebM first (better quality), fallback to MP4
-        var cdnBase = 'https://images.weserv.nl/';
-        var encodedUrl = encodeURIComponent(originalSrc);
-        
-        var webmSrc = cdnBase + '?url=' + encodedUrl + '&output=webm';
-        var mp4Src = cdnBase + '?url=' + encodedUrl + '&output=mp4';
-        
-        // Create source elements
-        var webmSource = document.createElement('source');
-        webmSource.setAttribute('src', webmSrc);
-        webmSource.setAttribute('type', 'video/webm');
-        
-        var mp4Source = document.createElement('source');
-        mp4Source.setAttribute('src', mp4Src);
-        mp4Source.setAttribute('type', 'video/mp4');
-        
-        video.appendChild(webmSource);
-        video.appendChild(mp4Source);
-        
-        // Fallback to original GIF if video fails
-        video.onerror = function() {
-            var fallbackImg = document.createElement('img');
-            fallbackImg.src = originalSrc;
-            copyAttributes(img, fallbackImg);
-            fallbackImg.setAttribute('data-optimized', 'fallback');
-            img.parentNode.replaceChild(fallbackImg, video);
-        };
-        
-        // Replace the img with video
-        img.parentNode.replaceChild(video, img);
+// Function to replace GIF with video
+function replaceGifWithVideo(img, originalSrc) {
+    // Mark as processed
+    img.setAttribute('data-optimized', 'true');
+    img.setAttribute('data-original-src', originalSrc);
+    img.setAttribute('data-was-gif', 'true');
+    
+    // Create video element
+    var video = document.createElement('video');
+    
+    // Copy useful attributes (excluding any wrapper-related ones)
+    var attributes = ['class', 'id', 'alt', 'title', 'width', 'height'];
+    for (var i = 0; i < attributes.length; i++) {
+        var attr = attributes[i];
+        if (img.hasAttribute(attr)) {
+            video.setAttribute(attr, img.getAttribute(attr));
+        }
     }
+    
+    // Copy inline styles but remove any positioning that might break layout
+    if (img.hasAttribute('style')) {
+        var style = img.getAttribute('style');
+        // Keep the style but let the browser handle positioning naturally
+        video.setAttribute('style', style);
+    }
+    
+    // Video attributes for GIF-like behavior - NO CONTROLS
+    video.setAttribute('autoplay', 'true');
+    video.setAttribute('loop', 'true');
+    video.setAttribute('muted', 'true');
+    video.setAttribute('playsinline', 'true');
+    // Explicitly remove controls
+    video.removeAttribute('controls');
+    
+    // Try WebM first (better quality), fallback to MP4
+    var cdnBase = 'https://images.weserv.nl/';
+    var encodedUrl = encodeURIComponent(originalSrc);
+    
+    var webmSrc = cdnBase + '?url=' + encodedUrl + '&output=webm';
+    var mp4Src = cdnBase + '?url=' + encodedUrl + '&output=mp4';
+    
+    // Create source elements
+    var webmSource = document.createElement('source');
+    webmSource.setAttribute('src', webmSrc);
+    webmSource.setAttribute('type', 'video/webm');
+    
+    var mp4Source = document.createElement('source');
+    mp4Source.setAttribute('src', mp4Src);
+    mp4Source.setAttribute('type', 'video/mp4');
+    
+    video.appendChild(webmSource);
+    video.appendChild(mp4Source);
+    
+    // Fallback to original GIF if video fails
+    video.onerror = function() {
+        var fallbackImg = document.createElement('img');
+        fallbackImg.src = originalSrc;
+        // Copy only the safe attributes
+        for (var i = 0; i < attributes.length; i++) {
+            var attr = attributes[i];
+            if (img.hasAttribute(attr)) {
+                fallbackImg.setAttribute(attr, img.getAttribute(attr));
+            }
+        }
+        if (img.hasAttribute('style')) {
+            fallbackImg.setAttribute('style', img.getAttribute('style'));
+        }
+        fallbackImg.setAttribute('data-optimized', 'fallback');
+        img.parentNode.replaceChild(fallbackImg, video);
+    };
+    
+    // Replace the img with video
+    img.parentNode.replaceChild(video, img);
+}
     
     // Function to convert regular images to WebP/AVIF
     function convertImageToOptimizedFormat(img, originalSrc) {
