@@ -4887,196 +4887,230 @@ class PostModernizer {
         });
     }
 
-    #transformEmbeddedLink(container) {
-        if (this.#isInEditor(container) || 
-            container.classList.contains('modern-embedded-link') ||
-            !container) return;
+#transformEmbeddedLink(container) {
+    if (this.#isInEditor(container) || 
+        container.classList.contains('modern-embedded-link') ||
+        !container) return;
 
-        try {
-            const mainLinks = container.querySelectorAll('a[target="_blank"]');
-            const mainLink = mainLinks[0] || null;
-            if (!mainLink) return;
+    try {
+        const mainLinks = container.querySelectorAll('a[target="_blank"]');
+        const mainLink = mainLinks[0] || null;
+        if (!mainLink) return;
 
-            const href = mainLink.href;
-            const domain = this.#extractDomain(href);
-            
-            let title = '';
-            let description = '';
-            let imageUrl = '';
-            let faviconUrl = '';
+        const href = mainLink.href;
+        const domain = this.#extractDomain(href);
+        
+        let title = '';
+        let description = '';
+        let imageUrl = '';
+        let faviconUrl = '';
 
-            const allLinks = container.querySelectorAll('a[target="_blank"]');
-            if (allLinks.length >= 2) {
-                const titleElement = allLinks[1];
-                const titleSpan = titleElement.querySelector('span.post-text');
-                title = titleSpan ? titleSpan.textContent.trim() : titleElement.textContent.trim();
-            }
-
-            if (!title) {
-                container.querySelectorAll('span.post-text').forEach(span => {
-                    const text = span.textContent.trim();
-                    const lowerText = text.toLowerCase();
-                    if (text.length > 20 && text.length < 200 && 
-                        !lowerText.includes(domain.toLowerCase()) && 
-                        !lowerText.includes('leggi altro') &&
-                        !lowerText.includes('read more') &&
-                        !text.includes('>')) {
-                        title = text;
-                    }
-                });
-            }
-
-            if (!title) {
-                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-                const texts = [];
-                let node;
-                while ((node = walker.nextNode())) {
-                    const text = node.textContent.trim();
-                    if (text && 
-                        !text.toLowerCase().includes(domain.toLowerCase()) && 
-                        !text.toLowerCase().includes('leggi altro') &&
-                        !text.toLowerCase().includes('read more') &&
-                        !text.includes('>')) {
-                        texts.push(text);
-                    }
-                }
-                
-                for (let i = 0; i < texts.length; i++) {
-                    if (texts[i].length > 20 && texts[i].length < 200) {
-                        title = texts[i];
-                        break;
-                    }
-                }
-            }
-
-            if (!title) {
-                title = 'Article on ' + domain;
-            }
-
-            if (title !== 'Article on ' + domain) {
-                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-                let foundTitle = false;
-                let node;
-                while ((node = walker.nextNode())) {
-                    const text = node.textContent.trim();
-                    if (!text) continue;
-                    
-                    if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
-                        foundTitle = true;
-                        continue;
-                    }
-                    
-                    if (foundTitle && text && text.length > 30) {
-                        description = text;
-                        break;
-                    }
-                }
-            }
-
-            container.querySelectorAll('img').forEach(img => {
-                const src = img.src || '';
-                const width = img.getAttribute('width') || img.naturalWidth || 0;
-                const height = img.getAttribute('height') || img.naturalHeight || 0;
-                
-                if (!imageUrl && width > 100 || height > 100 || 
-                    src.includes('news/') || 
-                    src.includes('media/') || 
-                    src.includes('wp-content/') || 
-                    src.includes('images/')) {
-                    imageUrl = src;
-                }
-                
-                if (!faviconUrl && (src.includes('favicon') || 
-                    src.includes('touch-icon') || 
-                    src.includes('icon') ||
-                    (src.includes('32x32') && src.includes('.png')))) {
-                    faviconUrl = src;
-                }
-            });
-
-            if (!faviconUrl) {
-                const hiddenDiv = container.querySelector('div[style*="display:none"]');
-                if (hiddenDiv) {
-                    const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"], img[src*="icon"]');
-                    if (hiddenFavicon) {
-                        faviconUrl = hiddenFavicon.src;
-                    }
-                }
-            }
-
-            const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
-            const modernEmbeddedLink = document.createElement('div');
-            modernEmbeddedLink.className = 'modern-embedded-link';
-
-            let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
-            
-            if (imageUrl) {
-                html += '<div class="embedded-link-image">' +
-                    '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
-                    '</div>';
-            }
-            
-            html += '<div class="embedded-link-content">' +
-                '<div class="embedded-link-domain">';
-            
-            if (faviconUrl) {
-                html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
-            }
-            
-            html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
-                '</div>' +
-                '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
-            
-            if (description) {
-                html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
-            }
-            
-            const isItalian = domain.includes('.it') || 
-                             (description && (description.toLowerCase().includes('leggi') || 
-                                             description.toLowerCase().includes('italia')));
-            
-            const readMoreText = isItalian ? 
-                'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
-                'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
-                
-            html += '<div class="embedded-link-meta">' +
-                '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
-                '</div>' +
-                '</div></a>';
-
-            modernEmbeddedLink.innerHTML = html;
-            
-            modernEmbeddedLink.querySelectorAll('img').forEach(img => {
-                img.removeAttribute('style');
-                
-                if (img.classList.contains('embedded-link-favicon')) {
-                    img.style.cssText = 'width:16px;height:16px;object-fit:contain;display:inline-block;vertical-align:middle;';
-                } else {
-                    img.style.maxWidth = '100%';
-                    img.style.objectFit = 'cover';
-                    img.style.display = 'block';
-                    
-                    if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
-                        img.removeAttribute('width');
-                        img.removeAttribute('height');
-                    }
-                }
-            });
-            
-            container.parentNode.replaceChild(modernEmbeddedLink, container);
-
-            const linkElement = modernEmbeddedLink.querySelector('a');
-            if (linkElement) {
-                linkElement.addEventListener('click', () => {
-                    console.log('Embedded link clicked to:', href);
-                });
-            }
-
-        } catch (error) {
-            console.error('Error transforming embedded link:', error);
+        const allLinks = container.querySelectorAll('a[target="_blank"]');
+        if (allLinks.length >= 2) {
+            const titleElement = allLinks[1];
+            const titleSpan = titleElement.querySelector('span.post-text');
+            title = titleSpan ? titleSpan.textContent.trim() : titleElement.textContent.trim();
         }
-    }
 
+        if (!title) {
+            container.querySelectorAll('span.post-text').forEach(span => {
+                const text = span.textContent.trim();
+                const lowerText = text.toLowerCase();
+                if (text.length > 20 && text.length < 200 && 
+                    !lowerText.includes(domain.toLowerCase()) && 
+                    !lowerText.includes('leggi altro') &&
+                    !lowerText.includes('read more') &&
+                    !text.includes('>')) {
+                    title = text;
+                }
+            });
+        }
+
+        if (!title) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const texts = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                if (text && 
+                    !text.toLowerCase().includes(domain.toLowerCase()) && 
+                    !text.toLowerCase().includes('leggi altro') &&
+                    !text.toLowerCase().includes('read more') &&
+                    !text.includes('>')) {
+                    texts.push(text);
+                }
+            }
+            
+            for (let i = 0; i < texts.length; i++) {
+                if (texts[i].length > 20 && texts[i].length < 200) {
+                    title = texts[i];
+                    break;
+                }
+            }
+        }
+
+        if (!title) {
+            title = 'Article on ' + domain;
+        }
+
+        if (title !== 'Article on ' + domain) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            let foundTitle = false;
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                if (!text) continue;
+                
+                if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
+                    foundTitle = true;
+                    continue;
+                }
+                
+                if (foundTitle && text && text.length > 30) {
+                    description = text;
+                    break;
+                }
+            }
+        }
+
+        // ===== FIX: Check for existing WebP-optimized images =====
+        container.querySelectorAll('img').forEach(img => {
+            const src = img.src || '';
+            const width = img.getAttribute('width') || img.naturalWidth || 0;
+            const height = img.getAttribute('height') || img.naturalHeight || 0;
+            
+            // Check if this is a WebP-optimized image (from our script)
+            const isWebPOptimized = src.includes('images.weserv.nl') && 
+                                    (src.includes('output=webp') || src.includes('output=avif'));
+            
+            // Check if it has the data-optimized attribute from our script
+            const hasOptimizedAttr = img.getAttribute('data-optimized') === 'true';
+            
+            // If it's already optimized, use it directly
+            if (isWebPOptimized || hasOptimizedAttr) {
+                if (!imageUrl && width > 100 || height > 100) {
+                    imageUrl = src;
+                    // Preserve the optimized image attributes
+                    img.setAttribute('data-preserved', 'true');
+                }
+                return;
+            }
+            
+            // Fallback to original logic for non-optimized images
+            if (!imageUrl && width > 100 || height > 100 || 
+                src.includes('news/') || 
+                src.includes('media/') || 
+                src.includes('wp-content/') || 
+                src.includes('images/')) {
+                imageUrl = src;
+            }
+            
+            if (!faviconUrl && (src.includes('favicon') || 
+                src.includes('touch-icon') || 
+                src.includes('icon') ||
+                (src.includes('32x32') && src.includes('.png')))) {
+                faviconUrl = src;
+            }
+        });
+
+        if (!faviconUrl) {
+            const hiddenDiv = container.querySelector('div[style*="display:none"]');
+            if (hiddenDiv) {
+                const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"], img[src*="icon"]');
+                if (hiddenFavicon) {
+                    faviconUrl = hiddenFavicon.src;
+                }
+            }
+        }
+
+        const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
+        const modernEmbeddedLink = document.createElement('div');
+        modernEmbeddedLink.className = 'modern-embedded-link';
+
+        let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
+        
+        if (imageUrl) {
+            html += '<div class="embedded-link-image">' +
+                '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async"';
+            
+            // ===== FIX: Preserve optimization attributes =====
+            // Check if this was a preserved optimized image
+            const originalImg = container.querySelector('img[data-preserved="true"]');
+            if (originalImg) {
+                // Copy over optimization attributes
+                if (originalImg.getAttribute('data-optimized') === 'true') {
+                    html += ' data-optimized="true"';
+                }
+                if (originalImg.getAttribute('data-original-src')) {
+                    html += ' data-original-src="' + this.#escapeHtml(originalImg.getAttribute('data-original-src')) + '"';
+                }
+            }
+            
+            html += '>' +
+                '</div>';
+        }
+        
+        html += '<div class="embedded-link-content">' +
+            '<div class="embedded-link-domain">';
+        
+        if (faviconUrl) {
+            html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
+        }
+        
+        html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
+            '</div>' +
+            '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
+        
+        if (description) {
+            html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
+        }
+        
+        const isItalian = domain.includes('.it') || 
+                         (description && (description.toLowerCase().includes('leggi') || 
+                                         description.toLowerCase().includes('italia')));
+        
+        const readMoreText = isItalian ? 
+            'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
+            'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
+            
+        html += '<div class="embedded-link-meta">' +
+            '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
+            '</div>' +
+            '</div></a>';
+
+        modernEmbeddedLink.innerHTML = html;
+        
+        modernEmbeddedLink.querySelectorAll('img').forEach(img => {
+            img.removeAttribute('style');
+            
+            if (img.classList.contains('embedded-link-favicon')) {
+                img.style.cssText = 'width:16px;height:16px;object-fit:contain;display:inline-block;vertical-align:middle;';
+            } else {
+                img.style.maxWidth = '100%';
+                img.style.objectFit = 'cover';
+                img.style.display = 'block';
+                
+                if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
+                    img.removeAttribute('width');
+                    img.removeAttribute('height');
+                }
+            }
+        });
+        
+        container.parentNode.replaceChild(modernEmbeddedLink, container);
+
+        const linkElement = modernEmbeddedLink.querySelector('a');
+        if (linkElement) {
+            linkElement.addEventListener('click', () => {
+                console.log('Embedded link clicked to:', href);
+            });
+        }
+
+    } catch (error) {
+        console.error('Error transforming embedded link:', error);
+    }
+}
+    
     #extractDomain(url) {
         try {
             return new URL(url).hostname.replace('www.', '');
