@@ -4990,38 +4990,83 @@ class PostModernizer {
                 }
             }
             
-            const width = img.getAttribute('width') || img.naturalWidth || 0;
-            const height = img.getAttribute('height') || img.naturalHeight || 0;
+            const width = parseInt(img.getAttribute('width')) || img.naturalWidth || 0;
+            const height = parseInt(img.getAttribute('height')) || img.naturalHeight || 0;
             
-            // Check original URL for image patterns
-            if (!imageUrl && (width > 100 || height > 100 || 
-                originalUrl.includes('news/') || 
-                originalUrl.includes('media/') || 
-                originalUrl.includes('wp-content/') || 
-                originalUrl.includes('images/') ||
-                originalUrl.includes('/display/') ||
-                originalUrl.includes('w:1280') ||
-                originalUrl.includes('16x9'))) {
-                imageUrl = src; // Keep the CDN URL for the image
+            // Determine if this is a favicon
+            const isFavicon = src.includes('favicon') || 
+                              src.includes('touch-icon') || 
+                              src.includes('icon') ||
+                              originalUrl.includes('favicon') || 
+                              originalUrl.includes('touch-icon') || 
+                              originalUrl.includes('icon') ||
+                              (src.includes('32x32') && src.includes('.png')) ||
+                              (width <= 64 && height <= 64) || // Favicons are small
+                              (width === height && width < 100); // Square and small
+            
+            if (isFavicon && !faviconUrl) {
+                faviconUrl = src;
+                return; // Skip further processing for favicons
             }
             
-            // Check for favicon
-            if (!faviconUrl && (src.includes('favicon') || 
-                src.includes('touch-icon') || 
-                src.includes('icon') ||
-                (src.includes('32x32') && src.includes('.png')) ||
-                (originalUrl.includes('favicon') || 
-                 originalUrl.includes('touch-icon') || 
-                 originalUrl.includes('icon')))) {
-                faviconUrl = src; // Keep the CDN URL for favicon
+            // Check if this could be a preview image (larger, not a favicon)
+            const couldBePreview = (width > 100 || height > 100) || // Larger dimensions
+                                  originalUrl.includes('news/') || 
+                                  originalUrl.includes('media/') || 
+                                  originalUrl.includes('wp-content/') || 
+                                  originalUrl.includes('images/') ||
+                                  originalUrl.includes('/display/') ||
+                                  originalUrl.includes('w:1280') ||
+                                  originalUrl.includes('16x9') ||
+                                  originalUrl.match(/\d+x\d+/); // Contains dimensions like 1280x720
+            
+            if (couldBePreview && !imageUrl && !isFavicon) {
+                imageUrl = src;
             }
         });
+
+        // If still no preview image, try to find any image that's not the favicon
+        if (!imageUrl) {
+            container.querySelectorAll('img').forEach(img => {
+                if (img.src !== faviconUrl && !imageUrl) {
+                    const width = parseInt(img.getAttribute('width')) || img.naturalWidth || 0;
+                    const height = parseInt(img.getAttribute('height')) || img.naturalHeight || 0;
+                    
+                    // Use the largest non-favicon image we can find
+                    if (width > 50 || height > 50) {
+                        imageUrl = img.src;
+                    }
+                }
+            });
+        }
+
+        // If still no image, look in hidden divs but skip favicons
+        if (!imageUrl) {
+            const hiddenDiv = container.querySelector('div[style*="display:none"]');
+            if (hiddenDiv) {
+                const hiddenImages = hiddenDiv.querySelectorAll('img');
+                for (let i = 0; i < hiddenImages.length; i++) {
+                    const hiddenImg = hiddenImages[i];
+                    const hiddenSrc = hiddenImg.src;
+                    
+                    // Skip if it's a favicon
+                    if (hiddenSrc.includes('favicon') || 
+                        hiddenSrc.includes('icon') ||
+                        hiddenSrc.includes('32x32')) {
+                        continue;
+                    }
+                    
+                    imageUrl = hiddenSrc;
+                    break;
+                }
+            }
+        }
 
         // If still no favicon, try looking in hidden divs
         if (!faviconUrl) {
             const hiddenDiv = container.querySelector('div[style*="display:none"]');
             if (hiddenDiv) {
-                const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"], img[src*="icon"]');
+                const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"], img[src*="icon"], img[src*="32x32"]');
                 if (hiddenFavicon) {
                     faviconUrl = hiddenFavicon.src;
                 }
