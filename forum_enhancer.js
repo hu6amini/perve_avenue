@@ -9468,8 +9468,7 @@ class PostModernizer {
         
         // Handle points link (view votes) clicks
         if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-            e.preventDefault();
-            // Let the overlay handler work normally
+            // Let the original overlay handler work - don't interfere
             return;
         }
         
