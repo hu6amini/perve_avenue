@@ -129,6 +129,15 @@
     
     // ===== PART 2: Format Conversion Functions =====
     
+    // Function to check if URL is a GIF
+    function isGif(url) {
+        if (!url) return false;
+        var lowerUrl = url.toLowerCase();
+        return lowerUrl.indexOf('.gif') !== -1 || 
+               lowerUrl.indexOf('.gif?') !== -1 || 
+               lowerUrl.indexOf('.gif#') !== -1;
+    }
+    
     // Function to check if URL should be skipped (SVG or already optimized)
     function shouldSkipImage(url) {
         if (!url) return true;
@@ -151,7 +160,7 @@
         }
         
         // Skip if it's already from our CDN
-        if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1) {
+        if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1 || lowerUrl.indexOf('output=gif') !== -1) {
             return true;
         }
         
@@ -160,7 +169,6 @@
     
     // Function to check if browser supports AVIF
     function supportsAVIF() {
-        // Simple but effective AVIF detection
         var canvas = document.createElement('canvas');
         canvas.width = 1;
         canvas.height = 1;
@@ -192,13 +200,23 @@
         img.setAttribute('data-optimized', 'true');
         img.setAttribute('data-original-src', originalSrc);
         
-        // Determine which format to use
-        var useAVIF = supportsAVIF();
-        var format = useAVIF ? 'avif' : 'webp';
+        // Check if it's a GIF
+        var isGifImage = isGif(originalSrc);
         
-        // Construct CDN URL with format selection
         var cdnBase = 'https://images.weserv.nl/';
-        var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
+        var cdnParams;
+        
+        if (isGifImage) {
+            // For GIFs, use animated WebP (which supports animation)
+            // Check if we can use animated WebP or fallback to original GIF
+            cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true&animated=true';
+        } else {
+            // For non-GIFs, use AVIF if supported, otherwise WebP
+            var useAVIF = supportsAVIF();
+            var format = useAVIF ? 'avif' : 'webp';
+            cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
+        }
+        
         var optimizedSrc = cdnBase + cdnParams;
         
         // Try optimized version, fallback to original if it fails
@@ -257,7 +275,7 @@
         }
     });
     
-    // ===== PART 4: Reporting (slightly modified) =====
+    // ===== PART 4: Reporting (modified to track GIFs) =====
     
     const p = () => {
         console.log("=== MEDIA OPTIMIZER REPORT ===");
@@ -272,20 +290,29 @@
         let l = 0;
         let webpCount = 0;
         let avifCount = 0;
+        let gifCount = 0;
+        let animatedWebpCount = 0;
         
         for (let o = 0; o < c.length; o++) {
             var img = c[o];
             if (img.getAttribute("loading") === e) r++;
             if (img.getAttribute("decoding") === t) l++;
             
-            // Count optimized formats
+            // Count formats
             var src = img.src.toLowerCase();
+            var originalSrc = img.getAttribute('data-original-src') || '';
+            
+            if (originalSrc.indexOf('.gif') !== -1) {
+                gifCount++;
+                if (src.indexOf('animated=true') !== -1) animatedWebpCount++;
+            }
             if (src.indexOf('.webp') !== -1 || src.indexOf('output=webp') !== -1) webpCount++;
             if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) avifCount++;
         }
         
         console.log("Existing images: " + r + "/" + c.length + " lazy, " + l + "/" + c.length + " async");
-        console.log("Format conversion: " + webpCount + " WebP, " + avifCount + " AVIF, " + (c.length - webpCount - avifCount) + " original");
+        console.log("Format conversion: " + webpCount + " WebP, " + avifCount + " AVIF");
+        console.log("GIF handling: " + gifCount + " GIFs (" + animatedWebpCount + " converted to animated WebP)");
         console.log("Total elements monitored: " + i);
         
         if (i > 0) {
