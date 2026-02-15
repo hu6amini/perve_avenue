@@ -204,7 +204,7 @@
 })();
 
 
-  // Function to check if URL should be skipped (SVG or already optimized)
+  // Function to check if URL is SVG or WebP
   function shouldSkipImage(url) {
     if (!url) return true;
     
@@ -216,36 +216,21 @@
       return true;
     }
     
-    // Skip WebP files (already optimized)
+    // Skip WebP files
     if (lowerUrl.indexOf('.webp') !== -1 || lowerUrl.indexOf('.webp?') !== -1 || lowerUrl.indexOf('.webp#') !== -1) {
       return true;
     }
     
-    // Skip AVIF files (already optimized)
-    if (lowerUrl.indexOf('.avif') !== -1 || lowerUrl.indexOf('.avif?') !== -1 || lowerUrl.indexOf('.avif#') !== -1) {
-      return true;
-    }
-    
-    // Skip if it's already from our CDN with either format
-    if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1) {
+    // Also skip if it's already a WebP URL from our CDN (has output=webp parameter)
+    if (lowerUrl.indexOf('output=webp') !== -1) {
       return true;
     }
     
     return false;
   }
   
-  // Function to check if browser supports AVIF
-  function supportsAVIF() {
-    var testImage = document.createElement('img');
-    // AVIF support detection - this is a reliable method
-    return testImage.decoding !== undefined && 
-           (testImage.srcset !== undefined || testImage.sizes !== undefined);
-    // Note: This is a simplified detection. For more accuracy, you could use:
-    // return document.createElement('canvas').toDataURL('image/avif').indexOf('image/avif') === 5;
-  }
-  
-  // Function to convert a single image to optimal format
-  function convertToOptimalFormat(img) {
+  // Function to convert a single image to lossless WebP via CDN
+  function convertToWebP(img) {
     var originalSrc = img.src;
     
     // Skip if not an external image or already processed
@@ -253,13 +238,14 @@
       return;
     }
     
-    // Skip SVG and already optimized images
+    // Skip SVG and existing WebP images
     if (shouldSkipImage(originalSrc)) {
+      // Mark as processed so we don't check again
       img.setAttribute('data-optimized', 'skipped');
       return;
     }
     
-    // Skip data URLs
+    // Skip if it's a data URL
     if (originalSrc.indexOf('data:') === 0) {
       img.setAttribute('data-optimized', 'skipped');
       return;
@@ -269,34 +255,30 @@
     img.setAttribute('data-optimized', 'true');
     img.setAttribute('data-original-src', originalSrc);
     
-    // Determine which format to use
-    var useAVIF = supportsAVIF();
-    var format = useAVIF ? 'avif' : 'webp';
-    
-    // Construct CDN URL with format selection
+    // Construct CDN URL with lossless WebP conversion
     var cdnBase = 'https://images.weserv.nl/';
-    var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
-    var optimizedSrc = cdnBase + cdnParams;
+    var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true';
+    var webpSrc = cdnBase + cdnParams;
     
-    // Try optimized version, fallback to original if it fails
+    // Try WebP version, fallback to original if it fails
     img.onerror = function() {
       this.src = this.getAttribute('data-original-src');
     };
     
     // Set the new source
-    img.src = optimizedSrc;
+    img.src = webpSrc;
   }
   
-  // Function to initialize the optimization
-  function initOptimization() {
+  // Function to initialize the WebP conversion
+  function initWebPConversion() {
     // Process all existing images
     var images = document.querySelectorAll('img');
     for (var i = 0; i < images.length; i++) {
-      convertToOptimalFormat(images[i]);
+      convertToWebP(images[i]);
     }
     
     // Set up mutation observer for dynamically added images
-    var formatObserver = new MutationObserver(function(mutations) {
+    var webpObserver = new MutationObserver(function(mutations) {
       for (var i = 0; i < mutations.length; i++) {
         var mutation = mutations[i];
         var addedNodes = mutation.addedNodes;
@@ -306,8 +288,9 @@
           
           // If the added node is an image
           if (node.nodeName === 'IMG') {
+            // Only process if not already marked
             if (node.getAttribute('data-optimized') !== 'true' && node.getAttribute('data-optimized') !== 'skipped') {
-              convertToOptimalFormat(node);
+              convertToWebP(node);
             }
           }
           
@@ -316,8 +299,9 @@
             var newImages = node.querySelectorAll('img');
             for (var k = 0; k < newImages.length; k++) {
               var img = newImages[k];
+              // Only process if not already marked
               if (img.getAttribute('data-optimized') !== 'true' && img.getAttribute('data-optimized') !== 'skipped') {
-                convertToOptimalFormat(img);
+                convertToWebP(img);
               }
             }
           }
@@ -326,7 +310,7 @@
     });
     
     // Start observing once body exists
-    formatObserver.observe(document.body, {
+    webpObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
@@ -334,7 +318,9 @@
   
   // Wait for DOM to be ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initOptimization);
+    // DOM still loading, wait for DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', initWebPConversion);
   } else {
-    initOptimization();
+    // DOM already loaded, run immediately
+    initWebPConversion();
   }
