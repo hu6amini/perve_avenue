@@ -9442,6 +9442,124 @@ class PostModernizer {
         const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
         const pointsContainer = e.target.closest('.points');
         
+        // Handle points link (view votes) clicks - IMPORTANT: This must come first
+        if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
+            e.preventDefault();  // Prevent default navigation
+            e.stopPropagation(); // Stop event bubbling
+            
+            // Trigger the overlay manually
+            try {
+                // Check if jQuery is available and the overlay function exists
+                if (typeof window.$ !== 'undefined' && window.$.fn && window.$.fn.overlay) {
+                    const $ = window.$;
+                    const href = pointsLink.href;
+                    
+                    // Store the original mouseover overlay if it exists
+                    const originalMouseover = pointsLink.getAttribute('onmouseover');
+                    
+                    // If overlay already initialized via mouseover, just trigger it
+                    if (pointsLink._overlayInitialized) {
+                        try {
+                            $(pointsLink).data('overlay')?.load();
+                        } catch {
+                            // If that fails, reinitialize
+                            pointsLink._overlayInitialized = false;
+                        }
+                    }
+                    
+                    // Initialize and show overlay
+                    if (!pointsLink._overlayInitialized) {
+                        $(pointsLink).overlay({
+                            top: Math.max(0, (window.screen.height / 2) - 150),
+                            left: Math.max(0, (window.screen.width / 2) - 150),
+                            fixed: true,
+                            onBeforeLoad: function() {
+                                const overlay = this.getOverlay();
+                                const content = overlay.find('div.content, div.overlay-content, div:first');
+                                
+                                // Show loading spinner
+                                content.html('<div style="text-align:center;padding:20px;">' +
+                                    '<img src="https://img.forumfree.net/index_file/loads3.gif" ' +
+                                    'alt="Loading..." style="display:inline-block;">' +
+                                    '</div>');
+                                
+                                // Load the content
+                                const loadUrl = href + (href.includes('?') ? '&' : '?') + 'popup=1';
+                                content.load(loadUrl, function(response, status, xhr) {
+                                    if (status === 'error') {
+                                        content.html('<div style="padding:20px;color:red;">' +
+                                            'Error loading content. Please try again.</div>');
+                                    }
+                                });
+                            },
+                            onLoad: function() {
+                                // Mark as initialized
+                                pointsLink._overlayInitialized = true;
+                                
+                                // Add close button styling if needed
+                                const overlay = this.getOverlay();
+                                overlay.find('.close').css({
+                                    'position': 'absolute',
+                                    'right': '10px',
+                                    'top': '10px',
+                                    'cursor': 'pointer',
+                                    'font-size': '20px',
+                                    'font-weight': 'bold'
+                                });
+                            },
+                            onClose: function() {
+                                // Optional: cleanup
+                                const overlay = this.getOverlay();
+                                overlay.find('div.content, div.overlay-content, div:first').empty();
+                            }
+                        });
+                    }
+                    
+                    // Trigger the overlay
+                    $(pointsLink).overlay().load();
+                    
+                } else {
+                    // Fallback: execute the onmouseover code directly
+                    const mouseoverCode = pointsLink.getAttribute('onmouseover');
+                    if (mouseoverCode) {
+                        // Create a safe wrapper to execute the code
+                        const executeCode = new Function('event', 'element', `
+                            try {
+                                const self = element;
+                                ${mouseoverCode}
+                            } catch(e) {
+                                console.error('Error in mouseover code:', e);
+                            }
+                        `);
+                        
+                        // Execute with proper context
+                        executeCode.call(pointsLink, e, pointsLink);
+                        
+                        // After mouseover initializes, trigger the overlay via click simulation
+                        setTimeout(() => {
+                            if (typeof window.$ !== 'undefined' && pointsLink._overlayInitialized) {
+                                $(pointsLink).click();
+                            } else {
+                                // If still not initialized, try direct approach
+                                const overlayDiv = document.querySelector('.overlay');
+                                if (overlayDiv) {
+                                    overlayDiv.style.display = 'block';
+                                }
+                            }
+                        }, 100);
+                    } else {
+                        // No mouseover code, try direct overlay
+                        this.#openVotesOverlay(pointsLink);
+                    }
+                }
+            } catch (error) {
+                console.error('Error opening overlay:', error);
+                this.#openVotesOverlay(pointsLink);
+            }
+            
+            return;
+        }
+        
         // Handle undo (bullet_delete) clicks
         if (bulletDelete && pointsContainer) {
             e.preventDefault();
@@ -9452,7 +9570,8 @@ class PostModernizer {
             if (onclickAttr) {
                 try {
                     // Execute the onclick function
-                    new Function(onclickAttr)();
+                    const executeClick = new Function(onclickAttr);
+                    executeClick.call(bulletDelete);
                 } catch (error) {
                     console.error('Error executing undo action:', error);
                 }
@@ -9460,76 +9579,193 @@ class PostModernizer {
             
             // Update active states after undo
             setTimeout(() => {
-                this.#updatePointsContainerActiveState(pointsContainer);
-            }, 100);
+                if (pointsContainer) {
+                    this.#updatePointsContainerActiveState(pointsContainer);
+                }
+            }, 500); // Increased timeout to allow AJAX to complete
             
             return;
         }
         
-        // Handle points link (view votes) clicks
-        if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-            e.preventDefault();
-            // Let the overlay handler work normally
-            return;
-        }
-        
+        // Handle points up/down votes
         if (pointsUp || pointsDown) {
-            const pointsContainer = (pointsUp || pointsDown).closest('.points');
-            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
-
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const clickedElement = pointsUp || pointsDown;
+            const pointsContainer = clickedElement.closest('.points');
+            
+            if (!pointsContainer) return;
+            
+            const bulletDelete = pointsContainer.querySelector('.bullet_delete');
+            
+            // Check if this is a points_up or points_down that should trigger undo
             if (bulletDelete) {
-                // Already voted state - handle differently
-                if (pointsUp) {
-                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                    pointsUp.classList.add('active');
+                // Already voted state - trigger undo when clicking thumbs
+                if ((pointsUp && pointsUp.classList.contains('active')) || 
+                    (pointsDown && pointsDown.classList.contains('active'))) {
                     
-                    // Trigger undo when clicking active thumbs up?
-                    if (pointsUp.classList.contains('active') && bulletDelete) {
-                        bulletDelete.click();
-                    }
-                }
-
-                if (pointsDown) {
-                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                    pointsDown.classList.add('active');
-                    
-                    // Trigger undo when clicking active thumbs down?
-                    if (pointsDown.classList.contains('active') && bulletDelete) {
-                        bulletDelete.click();
-                    }
-                }
-            } else {
-                // Not voted yet - handle normal voting
-                if (pointsUp) {
-                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                    pointsUp.classList.add('active');
-                    
-                    // Trigger the original vote action
-                    const voteLink = pointsContainer.querySelector('a.points_up');
-                    if (voteLink) {
-                        const onclick = voteLink.getAttribute('onclick');
-                        if (onclick) {
-                            setTimeout(() => new Function(onclick)(), 10);
+                    // Find and click the bullet_delete
+                    if (bulletDelete) {
+                        const undoOnclick = bulletDelete.getAttribute('onclick');
+                        if (undoOnclick) {
+                            try {
+                                const executeUndo = new Function(undoOnclick);
+                                executeUndo.call(bulletDelete);
+                            } catch (error) {
+                                console.error('Error executing undo:', error);
+                            }
+                        } else {
+                            bulletDelete.click();
                         }
+                        
+                        // Update active states after undo
+                        setTimeout(() => {
+                            this.#updatePointsContainerActiveState(pointsContainer);
+                        }, 500);
                     }
-                }
-
-                if (pointsDown) {
-                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                    pointsDown.classList.add('active');
                     
-                    // Trigger the original vote action
-                    const voteLink = pointsContainer.querySelector('a.points_down');
-                    if (voteLink) {
-                        const onclick = voteLink.getAttribute('onclick');
-                        if (onclick) {
-                            setTimeout(() => new Function(onclick)(), 10);
-                        }
+                    return;
+                }
+            }
+            
+            // Regular voting (no active vote yet)
+            // Toggle active classes
+            if (pointsUp) {
+                pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                pointsUp.classList.add('active');
+                
+                // Trigger the original vote action
+                const voteLink = pointsContainer.querySelector('a.points_up');
+                if (voteLink) {
+                    const onclick = voteLink.getAttribute('onclick');
+                    if (onclick) {
+                        setTimeout(() => {
+                            try {
+                                const executeVote = new Function(onclick);
+                                executeVote.call(voteLink);
+                            } catch (error) {
+                                console.error('Error executing vote:', error);
+                            }
+                        }, 10);
                     }
                 }
             }
+            
+            if (pointsDown) {
+                pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                pointsDown.classList.add('active');
+                
+                // Trigger the original vote action
+                const voteLink = pointsContainer.querySelector('a.points_down');
+                if (voteLink) {
+                    const onclick = voteLink.getAttribute('onclick');
+                    if (onclick) {
+                        setTimeout(() => {
+                            try {
+                                const executeVote = new Function(onclick);
+                                executeVote.call(voteLink);
+                            } catch (error) {
+                                console.error('Error executing vote:', error);
+                            }
+                        }, 10);
+                    }
+                }
+            }
+            
+            // Update states after voting
+            setTimeout(() => {
+                this.#updatePointsContainerActiveState(pointsContainer);
+            }, 500);
         }
     });
+}
+
+// Helper method for overlay fallback
+#openVotesOverlay(pointsLink) {
+    try {
+        const href = pointsLink.href;
+        const popupUrl = href + (href.includes('?') ? '&' : '?') + 'popup=1';
+        
+        // Try to open in a modal dialog first
+        const overlayDiv = document.createElement('div');
+        overlayDiv.className = 'custom-votes-overlay';
+        overlayDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            max-width: 90%;
+            max-height: 80vh;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10000;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        `;
+        
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 15px 20px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+        `;
+        header.innerHTML = 'Votes <span style="cursor:pointer;font-size:20px;">&times;</span>';
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            text-align: center;
+        `;
+        content.innerHTML = '<img src="https://img.forumfree.net/index_file/loads3.gif" alt="Loading...">';
+        
+        overlayDiv.appendChild(header);
+        overlayDiv.appendChild(content);
+        
+        // Close button functionality
+        header.querySelector('span').onclick = () => {
+            document.body.removeChild(overlayDiv);
+            document.body.style.overflow = '';
+        };
+        
+        // Close on background click
+        overlayDiv.addEventListener('click', (e) => {
+            if (e.target === overlayDiv) {
+                document.body.removeChild(overlayDiv);
+                document.body.style.overflow = '';
+            }
+        });
+        
+        document.body.appendChild(overlayDiv);
+        document.body.style.overflow = 'hidden';
+        
+        // Load content
+        fetch(popupUrl)
+            .then(response => response.text())
+            .then(html => {
+                content.innerHTML = html;
+            })
+            .catch(() => {
+                content.innerHTML = '<div style="color:red;">Error loading votes. ' +
+                    '<a href="' + popupUrl + '" target="_blank">Click here to view</a></div>';
+            });
+            
+    } catch (error) {
+        // Ultimate fallback: open in new window
+        console.error('Error in custom overlay:', error);
+        const href = pointsLink.href;
+        window.open(href + (href.includes('?') ? '&' : '?') + 'popup=1', '_blank', 
+                   'width=600,height=400,scrollbars=yes');
+    }
 }
     
     #escapeHtml(unsafe) {
