@@ -9236,54 +9236,88 @@ class PostModernizer {
         return html;
     }
 
-    #convertMiniButtonsToButtons(post) {
-        const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
-        if (!miniButtonsContainer) return;
+#convertMiniButtonsToButtons(post) {
+    const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
+    if (!miniButtonsContainer) return;
 
-        miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
-            const href = link.getAttribute('href');
-
-            if (href && href.startsWith('javascript:')) {
-                const jsCode = href.replace('javascript:', '');
-                if (jsCode.includes('delete_post')) {
-                    const button = document.createElement('button');
-                    button.className = 'btn btn-icon btn-delete';
-                    button.setAttribute('data-action', 'delete');
-                    button.setAttribute('onclick', jsCode);
-                    button.setAttribute('title', 'Delete');
-                    button.setAttribute('type', 'button');
-
-                    let buttonHTML = link.innerHTML;
-                    buttonHTML = buttonHTML.replace(/<i(?![^>]*aria-hidden)/g, '<i aria-hidden="true" ');
-                    button.innerHTML = buttonHTML;
-
-                    link.parentNode.replaceChild(button, link);
-                }
-            } else if (href && href.includes('CODE=08')) {
-                link.classList.add('btn', 'btn-icon', 'btn-edit');
-                link.setAttribute('data-action', 'edit');
-                link.setAttribute('title', 'Edit');
-
-                const icon = link.querySelector('i');
-                icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-            } else if (href && href.includes('CODE=02')) {
-                link.classList.add('btn', 'btn-icon', 'btn-quote');
-                link.setAttribute('data-action', 'quote');
-                link.setAttribute('title', 'Quote');
-                link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
-
-                const icon = link.querySelector('i');
-                icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-            } else if (href) {
-                link.classList.add('btn', 'btn-icon');
-                link.querySelectorAll('i').forEach(icon => {
-                    !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-                });
-            }
+    // First, preserve any overlay links
+    const overlayLinks = miniButtonsContainer.querySelectorAll('a[rel="#overlay"]');
+    const overlayData = [];
+    
+    overlayLinks.forEach(link => {
+        overlayData.push({
+            element: link,
+            outerHTML: link.outerHTML, // Store the entire HTML to restore if needed
+            onmouseover: link.getAttribute('onmouseover'),
+            href: link.getAttribute('href'),
+            rel: link.getAttribute('rel'),
+            classList: link.className
         });
+    });
 
-        this.#reorderPostButtons(miniButtonsContainer);
-    }
+    miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
+        // Skip overlay links - don't modify them
+        if (link.getAttribute('rel') === '#overlay') {
+            return;
+        }
+        
+        const href = link.getAttribute('href');
+
+        if (href && href.startsWith('javascript:')) {
+            const jsCode = href.replace('javascript:', '');
+            if (jsCode.includes('delete_post')) {
+                const button = document.createElement('button');
+                button.className = 'btn btn-icon btn-delete';
+                button.setAttribute('data-action', 'delete');
+                button.setAttribute('onclick', jsCode);
+                button.setAttribute('title', 'Delete');
+                button.setAttribute('type', 'button');
+
+                let buttonHTML = link.innerHTML;
+                buttonHTML = buttonHTML.replace(/<i(?![^>]*aria-hidden)/g, '<i aria-hidden="true" ');
+                button.innerHTML = buttonHTML;
+
+                link.parentNode.replaceChild(button, link);
+            }
+        } else if (href && href.includes('CODE=08')) {
+            link.classList.add('btn', 'btn-icon', 'btn-edit');
+            link.setAttribute('data-action', 'edit');
+            link.setAttribute('title', 'Edit');
+
+            const icon = link.querySelector('i');
+            icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+        } else if (href && href.includes('CODE=02')) {
+            link.classList.add('btn', 'btn-icon', 'btn-quote');
+            link.setAttribute('data-action', 'quote');
+            link.setAttribute('title', 'Quote');
+            link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+
+            const icon = link.querySelector('i');
+            icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+        } else if (href) {
+            link.classList.add('btn', 'btn-icon');
+            link.querySelectorAll('i').forEach(icon => {
+                !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+            });
+        }
+    });
+
+    // Verify overlay links still have their attributes
+    overlayData.forEach(data => {
+        const currentLink = miniButtonsContainer.querySelector(`a[href="${data.href}"]`);
+        if (currentLink && currentLink !== data.element) {
+            // The link might have been replaced, restore attributes
+            if (!currentLink.hasAttribute('onmouseover') && data.onmouseover) {
+                currentLink.setAttribute('onmouseover', data.onmouseover);
+            }
+            if (!currentLink.hasAttribute('rel') || currentLink.getAttribute('rel') !== '#overlay') {
+                currentLink.setAttribute('rel', '#overlay');
+            }
+        }
+    });
+
+    this.#reorderPostButtons(miniButtonsContainer);
+}
 
     #addShareButton(post) {
         if (post.classList.contains('post_queue')) {
