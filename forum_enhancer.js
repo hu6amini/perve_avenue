@@ -9031,26 +9031,48 @@ class PostModernizer {
         return statDiv;
     }
 
-    #cleanupMiniButtons(miniButtons) {
-        const walker = document.createTreeWalker(miniButtons, NodeFilter.SHOW_TEXT, null, false);
-        const nodesToRemove = [];
-        let node;
+#cleanupMiniButtons(miniButtons) {
+    // Store any important attributes from overlay links before cleanup
+    const overlayLinks = miniButtons.querySelectorAll('a[rel="#overlay"]');
+    const overlayData = [];
+    
+    overlayLinks.forEach(link => {
+        overlayData.push({
+            element: link,
+            onmouseover: link.getAttribute('onmouseover'),
+            href: link.getAttribute('href'),
+            rel: link.getAttribute('rel')
+        });
+    });
+    
+    const walker = document.createTreeWalker(miniButtons, NodeFilter.SHOW_TEXT, null, false);
+    const nodesToRemove = [];
+    let node;
 
-        while ((node = walker.nextNode())) {
-            if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) {
-                nodesToRemove.push(node);
+    while ((node = walker.nextNode())) {
+        if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) {
+            nodesToRemove.push(node);
+        }
+    }
+
+    nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+
+    Array.from(miniButtons.childNodes).forEach(child => {
+        if (child.nodeType === Node.TEXT_NODE &&
+            (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
+            miniButtons.removeChild(child);
+        }
+    });
+    
+    // Restore any overlay attributes that might have been affected
+    overlayData.forEach(data => {
+        if (data.element && data.element.parentNode) {
+            if (!data.element.hasAttribute('onmouseover') && data.onmouseover) {
+                data.element.setAttribute('onmouseover', data.onmouseover);
             }
         }
-
-        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
-
-        Array.from(miniButtons.childNodes).forEach(child => {
-            if (child.nodeType === Node.TEXT_NODE &&
-                (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
-                miniButtons.removeChild(child);
-            }
-        });
-    }
+    });
+}
 
     #setInitialPointsState(miniButtons) {
         const pointsContainer = miniButtons.querySelector('.points');
