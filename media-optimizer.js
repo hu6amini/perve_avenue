@@ -204,17 +204,50 @@
 })();
 
 
+  // Function to check if URL is SVG or WebP
+  function shouldSkipImage(url) {
+    if (!url) return true;
+    
+    // Convert to lowercase for case-insensitive comparison
+    var lowerUrl = url.toLowerCase();
+    
+    // Skip SVG files
+    if (lowerUrl.indexOf('.svg') !== -1 || lowerUrl.indexOf('.svg?') !== -1 || lowerUrl.indexOf('.svg#') !== -1) {
+      return true;
+    }
+    
+    // Skip WebP files
+    if (lowerUrl.indexOf('.webp') !== -1 || lowerUrl.indexOf('.webp?') !== -1 || lowerUrl.indexOf('.webp#') !== -1) {
+      return true;
+    }
+    
+    // Also skip if it's already a WebP URL from our CDN (has output=webp parameter)
+    if (lowerUrl.indexOf('output=webp') !== -1) {
+      return true;
+    }
+    
+    return false;
+  }
+  
   // Function to convert a single image to lossless WebP via CDN
   function convertToWebP(img) {
     var originalSrc = img.src;
     
     // Skip if not an external image or already processed
-    if (originalSrc.indexOf('http') !== 0 || originalSrc.indexOf('optimized=true') !== -1) {
+    if (originalSrc.indexOf('http') !== 0 || img.getAttribute('data-optimized') === 'true') {
       return;
     }
     
-    // Skip if it's a data URL or already a WebP
-    if (originalSrc.indexOf('data:') === 0 || originalSrc.indexOf('.webp') !== -1) {
+    // Skip SVG and existing WebP images
+    if (shouldSkipImage(originalSrc)) {
+      // Mark as processed so we don't check again
+      img.setAttribute('data-optimized', 'skipped');
+      return;
+    }
+    
+    // Skip if it's a data URL
+    if (originalSrc.indexOf('data:') === 0) {
+      img.setAttribute('data-optimized', 'skipped');
       return;
     }
     
@@ -255,14 +288,21 @@
           
           // If the added node is an image
           if (node.nodeName === 'IMG') {
-            convertToWebP(node);
+            // Only process if not already marked
+            if (node.getAttribute('data-optimized') !== 'true' && node.getAttribute('data-optimized') !== 'skipped') {
+              convertToWebP(node);
+            }
           }
           
           // If the added node contains images
           if (node.querySelectorAll) {
             var newImages = node.querySelectorAll('img');
             for (var k = 0; k < newImages.length; k++) {
-              convertToWebP(newImages[k]);
+              var img = newImages[k];
+              // Only process if not already marked
+              if (img.getAttribute('data-optimized') !== 'true' && img.getAttribute('data-optimized') !== 'skipped') {
+                convertToWebP(img);
+              }
             }
           }
         }
