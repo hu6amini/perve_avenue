@@ -1,221 +1,240 @@
 (() => {
     "use strict";
     
-    // ===== PART 1: Lazy Loading & Async Decoding Setup =====
-    const e = "lazy";
-    const t = "async";
-    let o = [];
-    let n = 0;
-    let i = 0;
-    const s = EventTarget.prototype.addEventListener;
-    EventTarget.prototype.addEventListener = function (r, l, d) {
-        if ((r === "load" || r === "error") && c(this)) {
-            i++;
-            const c = this;
-            const a = performance.now();
-            const g = c.getAttribute("loading");
-            const u = c.getAttribute("decoding");
-            const m = {
-                element: c.tagName,
-                src: c.src || c.getAttribute("src") || "[no-src]",
-                initialLoading: g,
-                initialDecoding: u,
-                startTime: a,
+    // ===== PART 1: Constants & Configuration =====
+    const LAZY = "lazy";
+    const ASYNC = "async";
+    const CDN_BASE = 'https://images.weserv.nl/';
+    
+    // Media types that need special handling
+    const SKIP_PATTERNS = [
+        '.svg', '.gif', '.webp', '.avif',
+        'output=webp', 'output=avif'
+    ].map(function(pattern) { return pattern.toLowerCase(); });
+    
+    // Tracking for performance monitoring
+    const loadEvents = [];
+    let successCount = 0;
+    let totalMonitored = 0;
+    
+    // ===== PART 2: Lazy Loading & Async Decoding Setup =====
+    
+    // Cache the original methods
+    const originalAddEventListener = EventTarget.prototype.addEventListener;
+    const originalSetAttribute = Element.prototype.setAttribute;
+    const originalCreateElement = document.createElement;
+    const OriginalImage = window.Image;
+    
+    // Helper functions
+    function isMediaElement(el) {
+        return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME');
+    }
+    
+    function needsLoading(el) {
+        return !el.hasAttribute('loading') || el.getAttribute('loading') === '';
+    }
+    
+    function needsDecoding(el) {
+        return el.tagName === 'IMG' && (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '');
+    }
+    
+    function applyLazyAttributes(el) {
+        if (!isMediaElement(el)) return el;
+        
+        if (needsLoading(el)) {
+            el.setAttribute('loading', LAZY);
+        }
+        
+        if (needsDecoding(el)) {
+            el.setAttribute('decoding', ASYNC);
+        }
+        
+        return el;
+    }
+    
+    // Intercept addEventListener to track load events
+    EventTarget.prototype.addEventListener = function(event, listener, options) {
+        if ((event === 'load' || event === 'error') && isMediaElement(this)) {
+            totalMonitored++;
+            
+            const element = this;
+            const startTime = performance.now();
+            const initialLoading = element.getAttribute('loading');
+            const initialDecoding = element.getAttribute('decoding');
+            
+            const trackingData = {
+                element: element.tagName,
+                src: element.src || element.getAttribute('src') || '[no-src]',
+                initialLoading: initialLoading,
+                initialDecoding: initialDecoding,
+                startTime: startTime,
                 loadEventAttached: true
             };
-            o.push(m);
-            if (g === e && (c.tagName !== "IMG" || u === t)) {
-                n++;
-                m.success = true;
-                m.timing = "before";
+            
+            loadEvents.push(trackingData);
+            
+            if (initialLoading === LAZY && (element.tagName !== 'IMG' || initialDecoding === ASYNC)) {
+                successCount++;
+                trackingData.success = true;
+                trackingData.timing = 'before';
             } else {
-                m.success = false;
+                trackingData.success = false;
             }
-            const f = function (o) {
-                const i = c.getAttribute("loading");
-                const s = c.getAttribute("decoding");
-                const r = performance.now();
-                m.finalLoading = i;
-                m.finalDecoding = s;
-                m.loadTime = r;
-                m.loaded = true;
-                if (!m.success && i === e && (c.tagName !== "IMG" || s === t)) {
-                    n++;
-                    m.success = true;
-                    m.timing = "during";
+            
+            function wrappedListener(evt) {
+                const finalLoading = element.getAttribute('loading');
+                const finalDecoding = element.getAttribute('decoding');
+                const loadTime = performance.now();
+                
+                trackingData.finalLoading = finalLoading;
+                trackingData.finalDecoding = finalDecoding;
+                trackingData.loadTime = loadTime;
+                trackingData.loaded = true;
+                
+                if (!trackingData.success && finalLoading === LAZY && 
+                    (element.tagName !== 'IMG' || finalDecoding === ASYNC)) {
+                    successCount++;
+                    trackingData.success = true;
+                    trackingData.timing = 'during';
                 }
-                if (l && typeof l == "function") {
-                    l.call(this, o);
+                
+                if (listener && typeof listener === 'function') {
+                    listener.call(this, evt);
                 }
-            };
-            return s.call(this, r, f, d);
+            }
+            
+            return originalAddEventListener.call(this, event, wrappedListener, options);
         }
-        return s.call(this, r, l, d);
+        
+        return originalAddEventListener.call(this, event, listener, options);
     };
     
-    const c = (e) => e && (e.tagName === "IMG" || e.tagName === "IFRAME");
-    const r = (e) => !e.hasAttribute("loading") || e.getAttribute("loading") === "";
-    const l = (e) => e.tagName === "IMG" && (!e.hasAttribute("decoding") || e.getAttribute("decoding") === "");
-    
-    const d = (o) => {
-        if (!c(o)) return o;
-        if (r(o)) {
-            o.setAttribute("loading", e);
+    // Intercept setAttribute for src/srcset changes
+    Element.prototype.setAttribute = function(name, value) {
+        if ((name === 'src' || name === 'srcset') && isMediaElement(this)) {
+            applyLazyAttributes(this);
         }
-        if (l(o)) {
-            o.setAttribute("decoding", t);
-        }
-        return o;
+        return originalSetAttribute.call(this, name, value);
     };
     
-    const a = Element.prototype.setAttribute;
-    Element.prototype.setAttribute = function (e, t) {
-        if ((e === "src" || e === "srcset") && c(this)) {
-            d(this);
-        }
-        return a.call(this, e, t);
-    };
-    
-    const g = (e, t) => {
-        if (!e) return;
-        const o = Object.getOwnPropertyDescriptor(e, t);
-        if (o && o.set) {
-            Object.defineProperty(e, t, {
-                set: function (value) {
-                    try {
-                        d(this);
-                    } catch (err) {}
-                    try {
-                        o.set.call(this, value);
-                    } catch (err) {
-                        try {
-                            Object.defineProperty(this, t, { value: value, writable: true });
-                        } catch (err2) {}
-                    }
+    // Intercept src property setters
+    function overrideSrcSetter(proto, prop) {
+        if (!proto) return;
+        
+        const descriptor = Object.getOwnPropertyDescriptor(proto, prop);
+        if (descriptor && descriptor.set) {
+            Object.defineProperty(proto, prop, {
+                set: function(value) {
+                    try { applyLazyAttributes(this); } catch (err) {}
+                    try { descriptor.set.call(this, value); } catch (err) {}
                 },
-                get: o.get,
+                get: descriptor.get,
                 configurable: true
             });
         }
-    };
-    
-    g(HTMLImageElement && HTMLImageElement.prototype, "src");
-    g(HTMLIFrameElement && HTMLIFrameElement.prototype, "src");
-    
-    const u = document.createElement;
-    document.createElement = function (e, t) {
-        const o = u.call(this, e, t);
-        return d(o);
-    };
-    
-    const m = window.Image;
-    if (m) {
-        window.Image = function (o, n) {
-            const i = new m(o, n);
-            i.setAttribute("loading", e);
-            i.setAttribute("decoding", t);
-            return i;
-        };
-        window.Image.prototype = m.prototype;
     }
     
-    const f = () => {
-        const e = ['img:not([loading]), img[loading=""]', 'iframe:not([loading]), iframe[loading=""]', 'img:not([decoding]), img[decoding=""]'];
-        const t = document.querySelectorAll(e.join(", "));
-        for (let e = 0; e < t.length; e++) {
-            d(t[e]);
-        }
+    overrideSrcSetter(HTMLImageElement && HTMLImageElement.prototype, 'src');
+    overrideSrcSetter(HTMLIFrameElement && HTMLIFrameElement.prototype, 'src');
+    
+    // Intercept document.createElement
+    document.createElement = function(tagName, options) {
+        const element = originalCreateElement.call(this, tagName, options);
+        return applyLazyAttributes(element);
     };
     
-    // ===== PART 2: Format Conversion Functions =====
+    // Intercept Image constructor
+    if (OriginalImage) {
+        window.Image = function(width, height) {
+            const img = new OriginalImage(width, height);
+            img.setAttribute('loading', LAZY);
+            img.setAttribute('decoding', ASYNC);
+            return img;
+        };
+        window.Image.prototype = OriginalImage.prototype;
+    }
     
-    // Function to check if URL should be skipped (SVG, GIF, or already optimized)
+    // Apply to existing elements without attributes
+    function applyToExisting() {
+        const selectors = [
+            'img:not([loading]), img[loading=""]', 
+            'iframe:not([loading]), iframe[loading=""]', 
+            'img:not([decoding]), img[decoding=""]'
+        ];
+        
+        const elements = document.querySelectorAll(selectors.join(', '));
+        for (var i = 0; i < elements.length; i++) {
+            applyLazyAttributes(elements[i]);
+        }
+    }
+    
+    // ===== PART 3: Format Conversion Functions =====
+    
     function shouldSkipImage(url) {
         if (!url) return true;
         
         var lowerUrl = url.toLowerCase();
         
-        // Skip SVG files
-        if (lowerUrl.indexOf('.svg') !== -1 || lowerUrl.indexOf('.svg?') !== -1 || lowerUrl.indexOf('.svg#') !== -1) {
-            return true;
-        }
+        // Data URLs
+        if (lowerUrl.indexOf('data:') === 0) return true;
         
-        // Skip GIF files (keep them animated!)
-        if (lowerUrl.indexOf('.gif') !== -1 || lowerUrl.indexOf('.gif?') !== -1 || lowerUrl.indexOf('.gif#') !== -1) {
-            return true;
-        }
-        
-        // Skip WebP files (already optimized)
-        if (lowerUrl.indexOf('.webp') !== -1 || lowerUrl.indexOf('.webp?') !== -1 || lowerUrl.indexOf('.webp#') !== -1) {
-            return true;
-        }
-        
-        // Skip AVIF files (already optimized)
-        if (lowerUrl.indexOf('.avif') !== -1 || lowerUrl.indexOf('.avif?') !== -1 || lowerUrl.indexOf('.avif#') !== -1) {
-            return true;
-        }
-        
-        // Skip if it's already from our CDN
-        if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1) {
-            return true;
+        // Check against skip patterns
+        for (var i = 0; i < SKIP_PATTERNS.length; i++) {
+            if (lowerUrl.indexOf(SKIP_PATTERNS[i]) !== -1) {
+                return true;
+            }
         }
         
         return false;
     }
     
-    // Function to check if browser supports AVIF
     function supportsAVIF() {
-        // Simple but effective AVIF detection
-        var canvas = document.createElement('canvas');
-        canvas.width = 1;
-        canvas.height = 1;
-        return canvas.toDataURL('image/avif').indexOf('image/avif') === 5;
+        try {
+            var canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 1;
+            var dataURL = canvas.toDataURL('image/avif');
+            return dataURL.indexOf('image/avif') !== -1;
+        } catch (err) {
+            return false;
+        }
     }
     
-    // Function to convert a single image to optimal format
     function convertToOptimalFormat(img) {
         var originalSrc = img.src;
         
-        // Skip if not an external image or already processed
-        if (originalSrc.indexOf('http') !== 0 || img.getAttribute('data-optimized') === 'true') {
+        // Skip if not external, already processed, or should be skipped
+        if (originalSrc.indexOf('http') !== 0 || 
+            img.getAttribute('data-optimized') === 'true' || 
+            img.getAttribute('data-optimized') === 'skipped') {
             return;
         }
         
-        // Skip SVG, GIF, and already optimized images
         if (shouldSkipImage(originalSrc)) {
             img.setAttribute('data-optimized', 'skipped');
             return;
         }
         
-        // Skip data URLs
-        if (originalSrc.indexOf('data:') === 0) {
-            img.setAttribute('data-optimized', 'skipped');
-            return;
-        }
-        
-        // Add a marker to prevent reprocessing
+        // Mark as processing
         img.setAttribute('data-optimized', 'true');
         img.setAttribute('data-original-src', originalSrc);
         
-        // Determine which format to use
-        var useAVIF = supportsAVIF();
-        var format = useAVIF ? 'avif' : 'webp';
+        // Choose format based on browser support
+        var format = supportsAVIF() ? 'avif' : 'webp';
         
-        // Construct CDN URL with format selection
-        var cdnBase = 'https://images.weserv.nl/';
-        var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
-        var optimizedSrc = cdnBase + cdnParams;
+        // Construct CDN URL with string concatenation
+        var encodedUrl = encodeURIComponent(originalSrc);
+        var optimizedSrc = CDN_BASE + '?url=' + encodedUrl + '&output=' + format + '&lossless=true';
         
-        // Try optimized version, fallback to original if it fails
+        // Set fallback
         img.onerror = function() {
             this.src = this.getAttribute('data-original-src');
         };
         
-        // Set the new source
+        // Update src
         img.src = optimizedSrc;
     }
     
-    // Process all images (called after lazy loading is set up)
     function processAllImages() {
         var images = document.querySelectorAll('img');
         for (var i = 0; i < images.length; i++) {
@@ -223,37 +242,39 @@
         }
     }
     
-    // ===== PART 3: Unified Mutation Observer =====
+    // ===== PART 4: Unified Mutation Observer =====
     
-    const unifiedObserver = new MutationObserver((mutations) => {
-        for (let t = 0; t < mutations.length; t++) {
-            const mutation = mutations[t];
-            if (mutation.type !== "childList") continue;
+    var unifiedObserver = new MutationObserver(function(mutations) {
+        for (var m = 0; m < mutations.length; m++) {
+            var mutation = mutations[m];
+            if (mutation.type !== 'childList') continue;
             
-            for (let i = 0; i < mutation.addedNodes.length; i++) {
-                const node = mutation.addedNodes[i];
-                if (node.nodeType !== 1) continue;
+            var addedNodes = mutation.addedNodes;
+            for (var n = 0; n < addedNodes.length; n++) {
+                var node = addedNodes[n];
+                if (node.nodeType !== 1) continue; // Node.ELEMENT_NODE = 1
                 
-                // First: Apply lazy loading attributes (applies to ALL images, including GIFs)
-                d(node);
+                // Apply lazy loading attributes first
+                applyLazyAttributes(node);
+                
+                // Check for nested media elements
                 if (node.querySelectorAll) {
-                    const elements = node.querySelectorAll("img, iframe");
-                    for (let j = 0; j < elements.length; j++) {
-                        d(elements[j]);
+                    var mediaElements = node.querySelectorAll('img, iframe');
+                    for (var me = 0; me < mediaElements.length; me++) {
+                        applyLazyAttributes(mediaElements[me]);
                     }
                 }
                 
-                // Second: Convert images to optimal format (skips GIFs automatically)
-                if (node.nodeName === 'IMG') {
-                    if (node.getAttribute('data-optimized') !== 'true' && node.getAttribute('data-optimized') !== 'skipped') {
-                        convertToOptimalFormat(node);
-                    }
+                // Then convert images (skips GIFs automatically)
+                if (node.tagName === 'IMG' && !node.getAttribute('data-optimized')) {
+                    convertToOptimalFormat(node);
                 }
+                
                 if (node.querySelectorAll) {
-                    const newImages = node.querySelectorAll('img');
-                    for (let j = 0; j < newImages.length; j++) {
-                        var img = newImages[j];
-                        if (img.getAttribute('data-optimized') !== 'true' && img.getAttribute('data-optimized') !== 'skipped') {
+                    var nestedImages = node.querySelectorAll('img');
+                    for (var ni = 0; ni < nestedImages.length; ni++) {
+                        var img = nestedImages[ni];
+                        if (!img.getAttribute('data-optimized')) {
                             convertToOptimalFormat(img);
                         }
                     }
@@ -262,32 +283,37 @@
         }
     });
     
-    // ===== PART 4: Reporting (slightly modified) =====
+    // ===== PART 5: Performance Reporting =====
     
-    const p = () => {
-        console.log("=== MEDIA OPTIMIZER REPORT ===");
-        const s = document.createElement("img");
-        console.log("createElement: loading=" + s.getAttribute("loading") + ", decoding=" + s.getAttribute("decoding"));
-        if (window.Image) {
-            const e = new Image();
-            console.log("imageConstructor: loading=" + e.getAttribute("loading") + ", decoding=" + e.getAttribute("decoding"));
-        }
-        const c = document.querySelectorAll("img");
-        let r = 0;
-        let l = 0;
-        let webpCount = 0;
-        let avifCount = 0;
-        let gifCount = 0;
-        let svgCount = 0;
+    function generateReport() {
+        console.log('=== MEDIA OPTIMIZER REPORT ===');
         
-        for (let o = 0; o < c.length; o++) {
-            var img = c[o];
-            if (img.getAttribute("loading") === e) r++;
-            if (img.getAttribute("decoding") === t) l++;
+        // Test element creation
+        var testImg = document.createElement('img');
+        console.log('createElement: loading=' + testImg.getAttribute('loading') + ', decoding=' + testImg.getAttribute('decoding'));
+        
+        if (window.Image) {
+            var imgConst = new Image();
+            console.log('imageConstructor: loading=' + imgConst.getAttribute('loading') + ', decoding=' + imgConst.getAttribute('decoding'));
+        }
+        
+        // Analyze all images
+        var images = document.querySelectorAll('img');
+        var lazyCount = 0;
+        var asyncCount = 0;
+        var webpCount = 0;
+        var avifCount = 0;
+        var gifCount = 0;
+        var svgCount = 0;
+        var otherCount = 0;
+        
+        for (var i = 0; i < images.length; i++) {
+            var img = images[i];
+            if (img.getAttribute('loading') === LAZY) lazyCount++;
+            if (img.getAttribute('decoding') === ASYNC) asyncCount++;
             
             var src = img.src.toLowerCase();
             
-            // Count by format
             if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
                 gifCount++;
             } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
@@ -296,48 +322,57 @@
                 webpCount++;
             } else if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) {
                 avifCount++;
-            }
-        }
-        
-        console.log("Existing images: " + r + "/" + c.length + " lazy, " + l + "/" + c.length + " async");
-        console.log("Format breakdown: " + webpCount + " WebP, " + avifCount + " AVIF, " + gifCount + " GIF (animated), " + svgCount + " SVG, " + (c.length - webpCount - avifCount - gifCount - svgCount) + " other");
-        console.log("Total elements monitored: " + i);
-        
-        if (i > 0) {
-            const e = Math.round((n / i) * 100);
-            console.log("Successfully optimized before load: " + n + "/" + i + " (" + e + "%)");
-            if (n === i) {
-                console.log("✅ All attributes set BEFORE element load");
             } else {
-                console.log("⚠️ " + (i - n) + " elements loaded before optimization");
-                for (let e = 0; e < o.length; e++) {
-                    const t = o[e];
-                    if (!t.success || t.timing === "during") {
-                        console.warn("Late optimization #" + e + ": " + t.element + " - " + t.src);
-                    }
-                }
+                otherCount++;
             }
-        } else {
-            console.log("No load events monitored (static page or no new images)");
-        }
-        console.log("=== REPORT COMPLETE ===");
-    };
-    
-    // ===== PART 5: Unified Initialization =====
-    
-    const h = () => {
-        // Step 1: Apply lazy loading to existing elements
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", f);
-        } else {
-            f();
         }
         
-        // Step 2: Set up unified observer
+        console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
+        console.log('Formats: ' + webpCount + ' WebP, ' + avifCount + ' AVIF, ' + gifCount + ' GIF, ' + svgCount + ' SVG, ' + otherCount + ' other');
+        
+        var successRate = totalMonitored > 0 ? Math.round((successCount / totalMonitored) * 100) : 0;
+        console.log('Monitored: ' + totalMonitored + ' total, ' + successCount + ' optimized before load (' + successRate + '%)');
+        
+        // Check for late optimizations
+        var lateOptimizations = [];
+        for (var j = 0; j < loadEvents.length; j++) {
+            var evt = loadEvents[j];
+            if (!evt.success || evt.timing === 'during') {
+                lateOptimizations.push(evt);
+            }
+        }
+        
+        if (lateOptimizations.length > 0) {
+            console.warn('⚠️ ' + lateOptimizations.length + ' elements optimized late:');
+            var maxShow = Math.min(lateOptimizations.length, 3);
+            for (var k = 0; k < maxShow; k++) {
+                var e = lateOptimizations[k];
+                var shortSrc = e.src.length > 50 ? e.src.substring(0, 47) + '...' : e.src;
+                console.warn('  ' + (k+1) + '. ' + e.element + ' - ' + shortSrc);
+            }
+        } else {
+            console.log('✅ All elements optimized before load');
+        }
+        
+        console.log('=== REPORT COMPLETE ===');
+    }
+    
+    // ===== PART 6: Initialization =====
+    
+    function initialize() {
+        // Apply to existing elements
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyToExisting);
+        } else {
+            applyToExisting();
+        }
+        
+        // Set up observer
         if (document.body) {
             unifiedObserver.observe(document.body, { childList: true, subtree: true });
         } else {
-            const bodyObserver = new MutationObserver(function (mutations, obs) {
+            // Wait for body to exist
+            var bodyObserver = new MutationObserver(function(mutations, obs) {
                 if (document.body) {
                     unifiedObserver.observe(document.body, { childList: true, subtree: true });
                     obs.disconnect();
@@ -346,23 +381,23 @@
             bodyObserver.observe(document.documentElement, { childList: true });
         }
         
-        // Step 3: Process existing images for format conversion (after lazy loading)
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", processAllImages);
+        // Process existing images for format conversion
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', processAllImages);
         } else {
             processAllImages();
         }
         
-        // Step 4: Single report 1 second after page load
-        window.addEventListener("load", function () {
-            setTimeout(p, 1000);
+        // Generate report after load
+        window.addEventListener('load', function() {
+            setTimeout(generateReport, 1000);
         });
-    };
+    }
     
-    // Start everything
-    if (typeof Promise !== "undefined") {
-        Promise.resolve().then(h);
+    // Start
+    if (typeof Promise !== 'undefined') {
+        Promise.resolve().then(initialize);
     } else {
-        setTimeout(h, 0);
+        setTimeout(initialize, 0);
     }
 })();
