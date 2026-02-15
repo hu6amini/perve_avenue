@@ -127,50 +127,52 @@
         }
     };
     
-    // ===== PART 2: Format Conversion with Cloudflare =====
+    // ===== PART 2: Format Conversion Functions =====
     
-    // Check if URL should be skipped (SVG or already optimized)
+    // Function to check if URL should be skipped (SVG, GIF, or already optimized)
     function shouldSkipImage(url) {
         if (!url) return true;
         
         var lowerUrl = url.toLowerCase();
         
-        // Skip SVG files (Cloudflare doesn't resize them anyway)
+        // Skip SVG files
         if (lowerUrl.indexOf('.svg') !== -1 || lowerUrl.indexOf('.svg?') !== -1 || lowerUrl.indexOf('.svg#') !== -1) {
             return true;
         }
         
-        // Skip if it's already a Cloudflare optimized URL
-        if (lowerUrl.indexOf('/cdn-cgi/image/') !== -1) {
+        // Skip GIF files (keep them animated!)
+        if (lowerUrl.indexOf('.gif') !== -1 || lowerUrl.indexOf('.gif?') !== -1 || lowerUrl.indexOf('.gif#') !== -1) {
             return true;
         }
         
-        // Skip data URLs
-        if (lowerUrl.indexOf('data:') === 0) {
+        // Skip WebP files (already optimized)
+        if (lowerUrl.indexOf('.webp') !== -1 || lowerUrl.indexOf('.webp?') !== -1 || lowerUrl.indexOf('.webp#') !== -1) {
+            return true;
+        }
+        
+        // Skip AVIF files (already optimized)
+        if (lowerUrl.indexOf('.avif') !== -1 || lowerUrl.indexOf('.avif?') !== -1 || lowerUrl.indexOf('.avif#') !== -1) {
+            return true;
+        }
+        
+        // Skip if it's already from our CDN
+        if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1) {
             return true;
         }
         
         return false;
     }
     
-    // Check if browser supports AVIF
+    // Function to check if browser supports AVIF
     function supportsAVIF() {
+        // Simple but effective AVIF detection
         var canvas = document.createElement('canvas');
         canvas.width = 1;
         canvas.height = 1;
         return canvas.toDataURL('image/avif').indexOf('image/avif') === 5;
     }
     
-    // Check if URL is a GIF
-    function isGIF(url) {
-        if (!url) return false;
-        var lowerUrl = url.toLowerCase();
-        return lowerUrl.indexOf('.gif') !== -1 || 
-               lowerUrl.indexOf('.gif?') !== -1 || 
-               lowerUrl.indexOf('.gif#') !== -1;
-    }
-    
-    // Convert a single image to optimized format using Cloudflare
+    // Function to convert a single image to optimal format
     function convertToOptimalFormat(img) {
         var originalSrc = img.src;
         
@@ -179,68 +181,41 @@
             return;
         }
         
-        // Skip images that don't need conversion
+        // Skip SVG, GIF, and already optimized images
         if (shouldSkipImage(originalSrc)) {
             img.setAttribute('data-optimized', 'skipped');
             return;
         }
         
-        // Add marker to prevent reprocessing
+        // Skip data URLs
+        if (originalSrc.indexOf('data:') === 0) {
+            img.setAttribute('data-optimized', 'skipped');
+            return;
+        }
+        
+        // Add a marker to prevent reprocessing
         img.setAttribute('data-optimized', 'true');
         img.setAttribute('data-original-src', originalSrc);
         
-        // Extract domain and path for Cloudflare URL
-        // Cloudflare transformations work by prefixing /cdn-cgi/image/options/ to the original URL
-        // Format: https://example.com/cdn-cgi/image/width=800,quality=85,format=auto/path/to/image.jpg
+        // Determine which format to use
+        var useAVIF = supportsAVIF();
+        var format = useAVIF ? 'avif' : 'webp';
         
-        var urlParts = originalSrc.split('://');
-        var protocol = urlParts[0];
-        var restOfUrl = urlParts[1];
+        // Construct CDN URL with format selection
+        var cdnBase = 'https://images.weserv.nl/';
+        var cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
+        var optimizedSrc = cdnBase + cdnParams;
         
-        // Build Cloudflare transformation options
-        var options = [];
-        
-        // For GIFs: preserve animation with animated WebP
-        if (isGIF(originalSrc)) {
-            options.push('format=webp');
-            options.push('anim=true'); // Preserve animation
-            options.push('lossless=true'); // Keep quality
-            options.push('quality=100'); // Max quality for animations
-        } else {
-            // For non-GIFs: use AVIF if supported, otherwise WebP
-            var format = supportsAVIF() ? 'avif' : 'webp';
-            options.push('format=' + format);
-            
-            // Lossless for PNGs, high quality for others
-            if (originalSrc.toLowerCase().indexOf('.png') !== -1) {
-                options.push('lossless=true');
-            } else {
-                options.push('quality=85');
-            }
-        }
-        
-        // Build the Cloudflare URL
-        // We need to insert /cdn-cgi/image/options/ after the domain
-        var domainEndIndex = restOfUrl.indexOf('/');
-        if (domainEndIndex === -1) {
-            // No path, just domain
-            var cloudflareSrc = protocol + '://' + restOfUrl + '/cdn-cgi/image/' + options.join(',') + '/';
-        } else {
-            var domain = restOfUrl.substring(0, domainEndIndex);
-            var path = restOfUrl.substring(domainEndIndex);
-            var cloudflareSrc = protocol + '://' + domain + '/cdn-cgi/image/' + options.join(',') + path;
-        }
-        
-        // Fallback to original if Cloudflare processing fails
+        // Try optimized version, fallback to original if it fails
         img.onerror = function() {
             this.src = this.getAttribute('data-original-src');
         };
         
         // Set the new source
-        img.src = cloudflareSrc;
+        img.src = optimizedSrc;
     }
     
-    // Process all existing images
+    // Process all images (called after lazy loading is set up)
     function processAllImages() {
         var images = document.querySelectorAll('img');
         for (var i = 0; i < images.length; i++) {
@@ -259,7 +234,7 @@
                 const node = mutation.addedNodes[i];
                 if (node.nodeType !== 1) continue;
                 
-                // Apply lazy loading attributes first
+                // First: Apply lazy loading attributes (applies to ALL images, including GIFs)
                 d(node);
                 if (node.querySelectorAll) {
                     const elements = node.querySelectorAll("img, iframe");
@@ -268,7 +243,7 @@
                     }
                 }
                 
-                // Then convert images to optimal format
+                // Second: Convert images to optimal format (skips GIFs automatically)
                 if (node.nodeName === 'IMG') {
                     if (node.getAttribute('data-optimized') !== 'true' && node.getAttribute('data-optimized') !== 'skipped') {
                         convertToOptimalFormat(node);
@@ -287,7 +262,7 @@
         }
     });
     
-    // ===== PART 4: Reporting =====
+    // ===== PART 4: Reporting (slightly modified) =====
     
     const p = () => {
         console.log("=== MEDIA OPTIMIZER REPORT ===");
@@ -303,35 +278,47 @@
         let webpCount = 0;
         let avifCount = 0;
         let gifCount = 0;
-        let originalCount = 0;
+        let svgCount = 0;
         
         for (let o = 0; o < c.length; o++) {
             var img = c[o];
             if (img.getAttribute("loading") === e) r++;
             if (img.getAttribute("decoding") === t) l++;
             
-            // Count formats
             var src = img.src.toLowerCase();
-            var isCloudflare = src.indexOf('/cdn-cgi/image/') !== -1;
             
-            if (isCloudflare) {
-                if (src.indexOf('format=avif') !== -1) avifCount++;
-                else if (src.indexOf('format=webp') !== -1) {
-                    if (src.indexOf('anim=true') !== -1) gifCount++;
-                    else webpCount++;
-                }
-            } else {
-                originalCount++;
+            // Count by format
+            if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
+                gifCount++;
+            } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
+                svgCount++;
+            } else if (src.indexOf('.webp') !== -1 || src.indexOf('output=webp') !== -1) {
+                webpCount++;
+            } else if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) {
+                avifCount++;
             }
         }
         
         console.log("Existing images: " + r + "/" + c.length + " lazy, " + l + "/" + c.length + " async");
-        console.log("Format conversion: " + webpCount + " WebP, " + avifCount + " AVIF, " + gifCount + " Animated, " + originalCount + " original");
+        console.log("Format breakdown: " + webpCount + " WebP, " + avifCount + " AVIF, " + gifCount + " GIF (animated), " + svgCount + " SVG, " + (c.length - webpCount - avifCount - gifCount - svgCount) + " other");
         console.log("Total elements monitored: " + i);
         
         if (i > 0) {
             const e = Math.round((n / i) * 100);
             console.log("Successfully optimized before load: " + n + "/" + i + " (" + e + "%)");
+            if (n === i) {
+                console.log("✅ All attributes set BEFORE element load");
+            } else {
+                console.log("⚠️ " + (i - n) + " elements loaded before optimization");
+                for (let e = 0; e < o.length; e++) {
+                    const t = o[e];
+                    if (!t.success || t.timing === "during") {
+                        console.warn("Late optimization #" + e + ": " + t.element + " - " + t.src);
+                    }
+                }
+            }
+        } else {
+            console.log("No load events monitored (static page or no new images)");
         }
         console.log("=== REPORT COMPLETE ===");
     };
@@ -339,14 +326,14 @@
     // ===== PART 5: Unified Initialization =====
     
     const h = () => {
-        // Apply lazy loading to existing elements
+        // Step 1: Apply lazy loading to existing elements
         if (document.readyState === "loading") {
             document.addEventListener("DOMContentLoaded", f);
         } else {
             f();
         }
         
-        // Set up unified observer
+        // Step 2: Set up unified observer
         if (document.body) {
             unifiedObserver.observe(document.body, { childList: true, subtree: true });
         } else {
@@ -359,14 +346,14 @@
             bodyObserver.observe(document.documentElement, { childList: true });
         }
         
-        // Process existing images for format conversion
+        // Step 3: Process existing images for format conversion (after lazy loading)
         if (document.readyState === "loading") {
             document.addEventListener("DOMContentLoaded", processAllImages);
         } else {
             processAllImages();
         }
         
-        // Report after page load
+        // Step 4: Single report 1 second after page load
         window.addEventListener("load", function () {
             setTimeout(p, 1000);
         });
