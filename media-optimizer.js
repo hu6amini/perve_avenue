@@ -127,10 +127,10 @@
         }
     };
     
-    // ===== PART 2: Format Conversion Functions =====
+    // ===== PART 2: Format Detection and Conversion Functions =====
     
-    // Function to check if URL is a GIF
-    function isGif(url) {
+    // Function to check if URL is an animated GIF
+    function isAnimatedGif(url) {
         if (!url) return false;
         var lowerUrl = url.toLowerCase();
         return lowerUrl.indexOf('.gif') !== -1 || 
@@ -138,7 +138,7 @@
                lowerUrl.indexOf('.gif#') !== -1;
     }
     
-    // Function to check if URL should be skipped (SVG or already optimized)
+    // Function to check if URL should be skipped (already optimized)
     function shouldSkipImage(url) {
         if (!url) return true;
         
@@ -159,9 +159,14 @@
             return true;
         }
         
-        // Skip if it's already from our CDNs
-        if (lowerUrl.indexOf('output=webp') !== -1 || lowerUrl.indexOf('format=webp') !== -1 || 
-            lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('/rs:') !== -1) {
+        // Skip WebM/MP4 video files
+        if (lowerUrl.indexOf('.webm') !== -1 || lowerUrl.indexOf('.mp4') !== -1) {
+            return true;
+        }
+        
+        // Skip if it's already from our CDN
+        if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1 || 
+            lowerUrl.indexOf('output=webm') !== -1 || lowerUrl.indexOf('output=mp4') !== -1) {
             return true;
         }
         
@@ -176,74 +181,112 @@
         return canvas.toDataURL('image/avif').indexOf('image/avif') === 5;
     }
     
-    // Function to convert a single image to optimal format
-   function convertToOptimalFormat(img) {
-    var originalSrc = img.src;
-    
-    // Skip if not an external image or already processed
-    if (originalSrc.indexOf('http') !== 0 || img.getAttribute('data-optimized') === 'true') {
-        return;
-    }
-    
-    // Skip SVG and already optimized images
-    if (shouldSkipImage(originalSrc)) {
-        img.setAttribute('data-optimized', 'skipped');
-        return;
-    }
-    
-    // Skip data URLs
-    if (originalSrc.indexOf('data:') === 0) {
-        img.setAttribute('data-optimized', 'skipped');
-        return;
-    }
-    
-    // Add markers
-    img.setAttribute('data-optimized', 'true');
-    img.setAttribute('data-original-src', originalSrc);
-    
-    var isGifImage = isGif(originalSrc);
-    
-    if (isGifImage) {
-        // Try multiple CDNs with fallback chain
-        tryAnimatedConversion(img, originalSrc, 0);
-    } else {
-        // Non-GIF conversion...
-        var useAVIF = supportsAVIF();
-        var format = useAVIF ? 'avif' : 'webp';
-        var optimizedSrc = 'https://images.weserv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
+    // Function to replace an image with a video element (for GIFs)
+    function replaceGifWithVideo(img, videoSrc, posterSrc) {
+        // Create video element
+        var video = document.createElement('video');
+        video.setAttribute('autoplay', '');
+        video.setAttribute('loop', '');
+        video.setAttribute('muted', '');
+        video.setAttribute('playsinline', '');
         
-        img.onerror = function() {
-            this.src = this.getAttribute('data-original-src');
-        };
-        img.src = optimizedSrc;
+        // Copy relevant attributes from original img
+        if (img.className) video.className = img.className;
+        if (img.id) video.id = img.id;
+        if (img.style.cssText) video.style.cssText = img.style.cssText;
+        if (img.width) video.width = img.width;
+        if (img.height) video.height = img.height;
+        if (img.alt) video.alt = img.alt;
+        
+        // Add loading="lazy" if it was on the original
+        if (img.getAttribute('loading') === 'lazy') {
+            video.setAttribute('loading', 'lazy');
+        }
+        
+        // Set poster image (first frame) - optional
+        if (posterSrc) {
+            video.setAttribute('poster', posterSrc);
+        }
+        
+        // Add source elements
+        var webmSource = document.createElement('source');
+        webmSource.src = videoSrc + '&output=webm';
+        webmSource.type = 'video/webm';
+        
+        var mp4Source = document.createElement('source');
+        mp4Source.src = videoSrc + '&output=mp4';
+        mp4Source.type = 'video/mp4';
+        
+        video.appendChild(webmSource);
+        video.appendChild(mp4Source);
+        
+        // Add fallback text for very old browsers
+        var fallback = document.createTextNode('Your browser does not support the video tag.');
+        video.appendChild(fallback);
+        
+        // Replace img with video
+        img.parentNode.replaceChild(video, img);
+        
+        return video;
     }
-}
-
-// Fallback chain for animated images
-function tryAnimatedConversion(img, originalSrc, attempt) {
-    var cdns = [
-        'https://wsrv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=webp&animated=true',
-        'https://images.weserv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=webp&animated=true',
-        'https://i0.wp.com/' + originalSrc.replace(/^https?:\/\//, '') + '?quality=85',  // Photon
-        null  // End of chain - fallback to original
-    ];
     
-    if (attempt >= cdns.length - 1 || !cdns[attempt]) {
-        console.log('All CDNs failed, using original GIF');
-        img.src = originalSrc;
-        return;
+    // Function to convert a single image to optimal format
+    function convertToOptimalFormat(img) {
+        var originalSrc = img.src;
+        
+        // Skip if not an external image or already processed
+        if (originalSrc.indexOf('http') !== 0 || img.getAttribute('data-optimized') === 'true') {
+            return;
+        }
+        
+        // Skip data URLs
+        if (originalSrc.indexOf('data:') === 0) {
+            img.setAttribute('data-optimized', 'skipped');
+            return;
+        }
+        
+        // Check if it's an animated GIF
+        var isGif = isAnimatedGif(originalSrc);
+        
+        // Skip SVG and already optimized images (but process GIFs separately)
+        if (!isGif && shouldSkipImage(originalSrc)) {
+            img.setAttribute('data-optimized', 'skipped');
+            return;
+        }
+        
+        // Add a marker to prevent reprocessing
+        img.setAttribute('data-optimized', 'true');
+        img.setAttribute('data-original-src', originalSrc);
+        
+        // Construct CDN URL base
+        var cdnBase = 'https://images.weserv.nl/';
+        var cdnParams = '?url=' + encodeURIComponent(originalSrc);
+        
+        if (isGif) {
+            // For GIFs: convert to video format (WebM + MP4) and replace with <video> element
+            console.log('Converting animated GIF to video:', originalSrc);
+            
+            // Optional: Get a static poster image (first frame) as WebP
+            var posterSrc = cdnBase + cdnParams + '&output=webp&lossless=true';
+            
+            // Replace img with video element
+            replaceGifWithVideo(img, cdnBase + cdnParams, posterSrc);
+        } else {
+            // For static images: convert to WebP or AVIF
+            var useAVIF = supportsAVIF();
+            var format = useAVIF ? 'avif' : 'webp';
+            
+            var optimizedSrc = cdnBase + cdnParams + '&output=' + format + '&lossless=true';
+            
+            // Try optimized version, fallback to original if it fails
+            img.onerror = function() {
+                this.src = this.getAttribute('data-original-src');
+            };
+            
+            // Set the new source
+            img.src = optimizedSrc;
+        }
     }
-    
-    console.log('Trying animated conversion attempt', attempt + 1, ':', cdns[attempt]);
-    
-    img.onerror = function() {
-        console.log('Attempt', attempt + 1, 'failed');
-        // Try next CDN
-        tryAnimatedConversion(img, originalSrc, attempt + 1);
-    };
-    
-    img.src = cdns[attempt];
-}
     
     // Process all images (called after lazy loading is set up)
     function processAllImages() {
@@ -292,7 +335,7 @@ function tryAnimatedConversion(img, originalSrc, attempt) {
         }
     });
     
-    // ===== PART 4: Reporting =====
+    // ===== PART 4: Reporting (enhanced) =====
     
     const p = () => {
         console.log("=== MEDIA OPTIMIZER REPORT ===");
@@ -302,34 +345,42 @@ function tryAnimatedConversion(img, originalSrc, attempt) {
             const e = new Image();
             console.log("imageConstructor: loading=" + e.getAttribute("loading") + ", decoding=" + e.getAttribute("decoding"));
         }
-        const c = document.querySelectorAll("img");
+        
+        var allImages = document.querySelectorAll('img');
+        var allVideos = document.querySelectorAll('video');
+        var images = allImages; // For compatibility with existing code
+        
         let r = 0;
         let l = 0;
         let webpCount = 0;
         let avifCount = 0;
-        let gifCount = 0;
-        let animatedWebpCount = 0;
+        let gifToVideoCount = 0;
         
-        for (let o = 0; o < c.length; o++) {
-            var img = c[o];
+        // Count image formats
+        for (let o = 0; o < allImages.length; o++) {
+            var img = allImages[o];
             if (img.getAttribute("loading") === e) r++;
             if (img.getAttribute("decoding") === t) l++;
             
-            // Count formats
-            var src = img.src.toLowerCase();
-            var originalSrc = img.getAttribute('data-original-src') || '';
-            
-            if (originalSrc.indexOf('.gif') !== -1) {
-                gifCount++;
-                if (src.indexOf('animated=true') !== -1) animatedWebpCount++;
-            }
+            var src = (img.src || '').toLowerCase();
             if (src.indexOf('.webp') !== -1 || src.indexOf('output=webp') !== -1) webpCount++;
             if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) avifCount++;
         }
         
-        console.log("Existing images: " + r + "/" + c.length + " lazy, " + l + "/" + c.length + " async");
-        console.log("Format conversion: " + webpCount + " WebP, " + avifCount + " AVIF");
-        console.log("GIF handling: " + gifCount + " GIFs (" + animatedWebpCount + " converted to animated WebP)");
+        // Count videos (converted GIFs)
+        for (let o = 0; o < allVideos.length; o++) {
+            var video = allVideos[o];
+            if (video.getAttribute('data-original-src')) {
+                gifToVideoCount++;
+            }
+        }
+        
+        console.log("Original images: " + allImages.length);
+        console.log("Converted to WebP: " + webpCount);
+        console.log("Converted to AVIF: " + avifCount);
+        console.log("GIFs converted to video: " + gifToVideoCount);
+        console.log("Images with lazy loading: " + r + "/" + allImages.length);
+        console.log("Images with async decoding: " + l + "/" + allImages.length);
         console.log("Total elements monitored: " + i);
         
         if (i > 0) {
@@ -339,12 +390,6 @@ function tryAnimatedConversion(img, originalSrc, attempt) {
                 console.log("✅ All attributes set BEFORE element load");
             } else {
                 console.log("⚠️ " + (i - n) + " elements loaded before optimization");
-                for (let e = 0; e < o.length; e++) {
-                    const t = o[e];
-                    if (!t.success || t.timing === "during") {
-                        console.warn("Late optimization #" + e + ": " + t.element + " - " + t.src);
-                    }
-                }
             }
         } else {
             console.log("No load events monitored (static page or no new images)");
