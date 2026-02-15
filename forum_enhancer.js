@@ -7372,14 +7372,22 @@ class PostModernizer {
         return result;
     }
     
-    #modernizeEmbeddedLinksInContent(contentWrapper) {
-        if (this.#isInEditor(contentWrapper)) return;
-        
-        contentWrapper.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(container => {
-            this.#transformEmbeddedLink(container);
-            container.classList.add('embedded-link-modernized');
+#modernizeEmbeddedLinksInContent(contentWrapper) {
+    if (this.#isInEditor(contentWrapper)) return;
+    
+    // First, ensure WebP conversion has run
+    if (typeof convertToOptimalFormat === 'function') {
+        contentWrapper.querySelectorAll('img:not([data-optimized])').forEach(img => {
+            convertToOptimalFormat(img);
         });
     }
+    
+    // Then transform embedded links
+    contentWrapper.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(container => {
+        this.#transformEmbeddedLink(container);
+        container.classList.add('embedded-link-modernized');
+    });
+}
 
     #transformPostQueueButtons(post) {
         const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
