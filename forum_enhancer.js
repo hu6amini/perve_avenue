@@ -9319,30 +9319,50 @@ class PostModernizer {
     this.#reorderPostButtons(miniButtonsContainer);
 }
 
-    #addShareButton(post) {
-        if (post.classList.contains('post_queue')) {
-            return;
-        }
-
-        const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub');
-        if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return;
-
-        const shareButton = document.createElement('button');
-        shareButton.className = 'btn btn-icon btn-share';
-        shareButton.setAttribute('data-action', 'share');
-        shareButton.setAttribute('title', 'Share this post');
-        shareButton.setAttribute('type', 'button');
-        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
-
-        const deleteButton = miniButtonsContainer.querySelector('.btn-delete, [data-action="delete"]');
-        if (deleteButton) {
-            miniButtonsContainer.insertBefore(shareButton, deleteButton);
-        } else {
-            miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild);
-        }
-
-        shareButton.addEventListener('click', () => this.#handleSharePost(post));
+#addShareButton(post) {
+    if (post.classList.contains('post_queue')) {
+        return;
     }
+
+    const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub');
+    if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return;
+
+    // Store overlay links before adding share button
+    const overlayLinks = [];
+    miniButtonsContainer.querySelectorAll('a[rel="#overlay"]').forEach(link => {
+        overlayLinks.push({
+            element: link,
+            onmouseover: link.getAttribute('onmouseover')
+        });
+    });
+
+    const shareButton = document.createElement('button');
+    shareButton.className = 'btn btn-icon btn-share';
+    shareButton.setAttribute('data-action', 'share');
+    shareButton.setAttribute('title', 'Share this post');
+    shareButton.setAttribute('type', 'button');
+    shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+
+    const deleteButton = miniButtonsContainer.querySelector('.btn-delete, [data-action="delete"]');
+    if (deleteButton) {
+        miniButtonsContainer.insertBefore(shareButton, deleteButton);
+    } else {
+        miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild);
+    }
+
+    shareButton.addEventListener('click', () => this.#handleSharePost(post));
+
+    // Restore overlay attributes
+    setTimeout(() => {
+        overlayLinks.forEach(data => {
+            if (data.element && data.element.parentNode) {
+                if (!data.element.hasAttribute('onmouseover') && data.onmouseover) {
+                    data.element.setAttribute('onmouseover', data.onmouseover);
+                }
+            }
+        });
+    }, 0);
+}
 
 #reorderPostButtons(container) {
     // Store overlay links before reordering
