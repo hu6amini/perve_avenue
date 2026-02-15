@@ -50,7 +50,25 @@
         }
         return s.call(this, r, l, d);
     };
-    const c = (e) => e && (e.tagName === "IMG" || e.tagName === "IFRAME");
+    
+    // Modified to exclude hidden iframes
+    const c = (e) => {
+        if (!e) return false;
+        
+        // Only process IMG and IFRAME elements
+        if (e.tagName !== "IMG" && e.tagName !== "IFRAME") return false;
+        
+        // For iframes, check if they're hidden via style
+        if (e.tagName === "IFRAME") {
+            const style = window.getComputedStyle(e);
+            if (style.display === 'none' || style.visibility === 'hidden') {
+                return false; // Skip hidden iframes
+            }
+        }
+        
+        return true;
+    };
+    
     const r = (e) => !e.hasAttribute("loading") || e.getAttribute("loading") === "";
     const l = (e) => e.tagName === "IMG" && (!e.hasAttribute("decoding") || e.getAttribute("decoding") === "");
     const d = (o) => {
