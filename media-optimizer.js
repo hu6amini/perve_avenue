@@ -159,8 +159,9 @@
             return true;
         }
         
-        // Skip if it's already from our CDN
-        if (lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('output=webp') !== -1 || lowerUrl.indexOf('output=gif') !== -1) {
+        // Skip if it's already from our CDNs
+        if (lowerUrl.indexOf('output=webp') !== -1 || lowerUrl.indexOf('format=webp') !== -1 || 
+            lowerUrl.indexOf('output=avif') !== -1 || lowerUrl.indexOf('/rs:') !== -1) {
             return true;
         }
         
@@ -203,21 +204,18 @@
         // Check if it's a GIF
         var isGifImage = isGif(originalSrc);
         
-        var cdnBase = 'https://images.weserv.nl/';
-        var cdnParams;
+        var optimizedSrc;
         
         if (isGifImage) {
-            // For GIFs, use animated WebP (which supports animation)
-            // Check if we can use animated WebP or fallback to original GIF
-            cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true&animated=true';
+            // Use wsrv.nl (same service, different domain) which handles animated GIFs better
+            // The animated=true parameter ensures GIFs stay animated
+            optimizedSrc = 'https://wsrv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true&animated=true';
         } else {
             // For non-GIFs, use AVIF if supported, otherwise WebP
             var useAVIF = supportsAVIF();
             var format = useAVIF ? 'avif' : 'webp';
-            cdnParams = '?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
+            optimizedSrc = 'https://images.weserv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
         }
-        
-        var optimizedSrc = cdnBase + cdnParams;
         
         // Try optimized version, fallback to original if it fails
         img.onerror = function() {
@@ -275,7 +273,7 @@
         }
     });
     
-    // ===== PART 4: Reporting (modified to track GIFs) =====
+    // ===== PART 4: Reporting =====
     
     const p = () => {
         console.log("=== MEDIA OPTIMIZER REPORT ===");
