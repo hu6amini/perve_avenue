@@ -9031,48 +9031,26 @@ class PostModernizer {
         return statDiv;
     }
 
-#cleanupMiniButtons(miniButtons) {
-    // Store any important attributes from overlay links before cleanup
-    const overlayLinks = miniButtons.querySelectorAll('a[rel="#overlay"]');
-    const overlayData = [];
-    
-    overlayLinks.forEach(link => {
-        overlayData.push({
-            element: link,
-            onmouseover: link.getAttribute('onmouseover'),
-            href: link.getAttribute('href'),
-            rel: link.getAttribute('rel')
-        });
-    });
-    
-    const walker = document.createTreeWalker(miniButtons, NodeFilter.SHOW_TEXT, null, false);
-    const nodesToRemove = [];
-    let node;
+    #cleanupMiniButtons(miniButtons) {
+        const walker = document.createTreeWalker(miniButtons, NodeFilter.SHOW_TEXT, null, false);
+        const nodesToRemove = [];
+        let node;
 
-    while ((node = walker.nextNode())) {
-        if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) {
-            nodesToRemove.push(node);
-        }
-    }
-
-    nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
-
-    Array.from(miniButtons.childNodes).forEach(child => {
-        if (child.nodeType === Node.TEXT_NODE &&
-            (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
-            miniButtons.removeChild(child);
-        }
-    });
-    
-    // Restore any overlay attributes that might have been affected
-    overlayData.forEach(data => {
-        if (data.element && data.element.parentNode) {
-            if (!data.element.hasAttribute('onmouseover') && data.onmouseover) {
-                data.element.setAttribute('onmouseover', data.onmouseover);
+        while ((node = walker.nextNode())) {
+            if (node.textContent.trim() === '' || node.textContent.includes('&nbsp;') || /^\s*$/.test(node.textContent)) {
+                nodesToRemove.push(node);
             }
         }
-    });
-}
+
+        nodesToRemove.forEach(node => node.parentNode && node.parentNode.removeChild(node));
+
+        Array.from(miniButtons.childNodes).forEach(child => {
+            if (child.nodeType === Node.TEXT_NODE &&
+                (child.textContent.trim() === '' || child.textContent.includes('&nbsp;'))) {
+                miniButtons.removeChild(child);
+            }
+        });
+    }
 
     #setInitialPointsState(miniButtons) {
         const pointsContainer = miniButtons.querySelector('.points');
@@ -9236,206 +9214,119 @@ class PostModernizer {
         return html;
     }
 
-#convertMiniButtonsToButtons(post) {
-    const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
-    if (!miniButtonsContainer) return;
+    #convertMiniButtonsToButtons(post) {
+        const miniButtonsContainer = post.querySelector('.mini_buttons.rt.Sub');
+        if (!miniButtonsContainer) return;
 
-    // First, preserve any overlay links
-    const overlayLinks = miniButtonsContainer.querySelectorAll('a[rel="#overlay"]');
-    const overlayData = [];
-    
-    overlayLinks.forEach(link => {
-        overlayData.push({
-            element: link,
-            outerHTML: link.outerHTML, // Store the entire HTML to restore if needed
-            onmouseover: link.getAttribute('onmouseover'),
-            href: link.getAttribute('href'),
-            rel: link.getAttribute('rel'),
-            classList: link.className
+        miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
+            const href = link.getAttribute('href');
+
+            if (href && href.startsWith('javascript:')) {
+                const jsCode = href.replace('javascript:', '');
+                if (jsCode.includes('delete_post')) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-icon btn-delete';
+                    button.setAttribute('data-action', 'delete');
+                    button.setAttribute('onclick', jsCode);
+                    button.setAttribute('title', 'Delete');
+                    button.setAttribute('type', 'button');
+
+                    let buttonHTML = link.innerHTML;
+                    buttonHTML = buttonHTML.replace(/<i(?![^>]*aria-hidden)/g, '<i aria-hidden="true" ');
+                    button.innerHTML = buttonHTML;
+
+                    link.parentNode.replaceChild(button, link);
+                }
+            } else if (href && href.includes('CODE=08')) {
+                link.classList.add('btn', 'btn-icon', 'btn-edit');
+                link.setAttribute('data-action', 'edit');
+                link.setAttribute('title', 'Edit');
+
+                const icon = link.querySelector('i');
+                icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+            } else if (href && href.includes('CODE=02')) {
+                link.classList.add('btn', 'btn-icon', 'btn-quote');
+                link.setAttribute('data-action', 'quote');
+                link.setAttribute('title', 'Quote');
+                link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
+
+                const icon = link.querySelector('i');
+                icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+            } else if (href) {
+                link.classList.add('btn', 'btn-icon');
+                link.querySelectorAll('i').forEach(icon => {
+                    !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
+                });
+            }
         });
-    });
 
-    miniButtonsContainer.querySelectorAll('.mini_buttons.rt.Sub a').forEach(link => {
-        // Skip overlay links - don't modify them
-        if (link.getAttribute('rel') === '#overlay') {
+        this.#reorderPostButtons(miniButtonsContainer);
+    }
+
+    #addShareButton(post) {
+        if (post.classList.contains('post_queue')) {
             return;
         }
-        
-        const href = link.getAttribute('href');
 
-        if (href && href.startsWith('javascript:')) {
-            const jsCode = href.replace('javascript:', '');
-            if (jsCode.includes('delete_post')) {
-                const button = document.createElement('button');
-                button.className = 'btn btn-icon btn-delete';
-                button.setAttribute('data-action', 'delete');
-                button.setAttribute('onclick', jsCode);
-                button.setAttribute('title', 'Delete');
-                button.setAttribute('type', 'button');
+        const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub');
+        if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return;
 
-                let buttonHTML = link.innerHTML;
-                buttonHTML = buttonHTML.replace(/<i(?![^>]*aria-hidden)/g, '<i aria-hidden="true" ');
-                button.innerHTML = buttonHTML;
+        const shareButton = document.createElement('button');
+        shareButton.className = 'btn btn-icon btn-share';
+        shareButton.setAttribute('data-action', 'share');
+        shareButton.setAttribute('title', 'Share this post');
+        shareButton.setAttribute('type', 'button');
+        shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
 
-                link.parentNode.replaceChild(button, link);
-            }
-        } else if (href && href.includes('CODE=08')) {
-            link.classList.add('btn', 'btn-icon', 'btn-edit');
-            link.setAttribute('data-action', 'edit');
-            link.setAttribute('title', 'Edit');
-
-            const icon = link.querySelector('i');
-            icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-        } else if (href && href.includes('CODE=02')) {
-            link.classList.add('btn', 'btn-icon', 'btn-quote');
-            link.setAttribute('data-action', 'quote');
-            link.setAttribute('title', 'Quote');
-            link.getAttribute('rel') && link.setAttribute('rel', link.getAttribute('rel'));
-
-            const icon = link.querySelector('i');
-            icon && !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-        } else if (href) {
-            link.classList.add('btn', 'btn-icon');
-            link.querySelectorAll('i').forEach(icon => {
-                !icon.hasAttribute('aria-hidden') && icon.setAttribute('aria-hidden', 'true');
-            });
+        const deleteButton = miniButtonsContainer.querySelector('.btn-delete, [data-action="delete"]');
+        if (deleteButton) {
+            miniButtonsContainer.insertBefore(shareButton, deleteButton);
+        } else {
+            miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild);
         }
-    });
 
-    // Verify overlay links still have their attributes
-    overlayData.forEach(data => {
-        const currentLink = miniButtonsContainer.querySelector(`a[href="${data.href}"]`);
-        if (currentLink && currentLink !== data.element) {
-            // The link might have been replaced, restore attributes
-            if (!currentLink.hasAttribute('onmouseover') && data.onmouseover) {
-                currentLink.setAttribute('onmouseover', data.onmouseover);
-            }
-            if (!currentLink.hasAttribute('rel') || currentLink.getAttribute('rel') !== '#overlay') {
-                currentLink.setAttribute('rel', '#overlay');
-            }
-        }
-    });
-
-    this.#reorderPostButtons(miniButtonsContainer);
-}
-
-#addShareButton(post) {
-    if (post.classList.contains('post_queue')) {
-        return;
+        shareButton.addEventListener('click', () => this.#handleSharePost(post));
     }
 
-    const miniButtonsContainer = post.querySelector('.post-header .mini_buttons.rt.Sub');
-    if (!miniButtonsContainer || miniButtonsContainer.querySelector('.btn-share')) return;
+    #reorderPostButtons(container) {
+        const elements = Array.from(container.children);
+        const order = ['share', 'quote', 'edit', 'delete'];
 
-    // Store overlay links before adding share button
-    const overlayLinks = [];
-    miniButtonsContainer.querySelectorAll('a[rel="#overlay"]').forEach(link => {
-        overlayLinks.push({
-            element: link,
-            onmouseover: link.getAttribute('onmouseover')
+        elements.sort((a, b) => {
+            const getAction = (element) => {
+                const dataAction = element.getAttribute('data-action');
+                if (dataAction && order.includes(dataAction)) return dataAction;
+
+                if (element.classList.contains('btn-share')) return 'share';
+                if (element.classList.contains('btn-quote')) return 'quote';
+                if (element.classList.contains('btn-edit')) return 'edit';
+                if (element.classList.contains('btn-delete')) return 'delete';
+
+                if (element.href) {
+                    if (element.href.includes('CODE=02')) return 'quote';
+                    if (element.href.includes('CODE=08')) return 'edit';
+                }
+
+                if (element.onclick && element.onclick.toString().includes('delete_post')) return 'delete';
+
+                return 'other';
+            };
+
+            const actionA = getAction(a);
+            const actionB = getAction(b);
+            const indexA = order.indexOf(actionA);
+            const indexB = order.indexOf(actionB);
+
+            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+            if (indexA !== -1) return -1;
+            if (indexB !== -1) return 1;
+            return 0;
         });
-    });
 
-    const shareButton = document.createElement('button');
-    shareButton.className = 'btn btn-icon btn-share';
-    shareButton.setAttribute('data-action', 'share');
-    shareButton.setAttribute('title', 'Share this post');
-    shareButton.setAttribute('type', 'button');
-    shareButton.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
-
-    const deleteButton = miniButtonsContainer.querySelector('.btn-delete, [data-action="delete"]');
-    if (deleteButton) {
-        miniButtonsContainer.insertBefore(shareButton, deleteButton);
-    } else {
-        miniButtonsContainer.insertBefore(shareButton, miniButtonsContainer.firstChild);
+        container.innerHTML = '';
+        elements.forEach(el => container.appendChild(el));
     }
 
-    shareButton.addEventListener('click', () => this.#handleSharePost(post));
-
-    // Restore overlay attributes
-    setTimeout(() => {
-        overlayLinks.forEach(data => {
-            if (data.element && data.element.parentNode) {
-                if (!data.element.hasAttribute('onmouseover') && data.onmouseover) {
-                    data.element.setAttribute('onmouseover', data.onmouseover);
-                }
-            }
-        });
-    }, 0);
-}
-
-#reorderPostButtons(container) {
-    // Store overlay links before reordering
-    const overlayLinks = [];
-    container.querySelectorAll('a[rel="#overlay"]').forEach(link => {
-        overlayLinks.push({
-            element: link,
-            onmouseover: link.getAttribute('onmouseover'),
-            html: link.outerHTML
-        });
-    });
-
-    const elements = Array.from(container.children);
-    const order = ['share', 'quote', 'edit', 'delete'];
-
-    elements.sort((a, b) => {
-        // Always keep overlay links at their original position
-        if (a.getAttribute && a.getAttribute('rel') === '#overlay') return -1;
-        if (b.getAttribute && b.getAttribute('rel') === '#overlay') return 1;
-        
-        const getAction = (element) => {
-            const dataAction = element.getAttribute('data-action');
-            if (dataAction && order.includes(dataAction)) return dataAction;
-
-            if (element.classList.contains('btn-share')) return 'share';
-            if (element.classList.contains('btn-quote')) return 'quote';
-            if (element.classList.contains('btn-edit')) return 'edit';
-            if (element.classList.contains('btn-delete')) return 'delete';
-
-            if (element.href) {
-                if (element.href.includes('CODE=02')) return 'quote';
-                if (element.href.includes('CODE=08')) return 'edit';
-            }
-
-            if (element.onclick && element.onclick.toString().includes('delete_post')) return 'delete';
-
-            return 'other';
-        };
-
-        const actionA = getAction(a);
-        const actionB = getAction(b);
-        const indexA = order.indexOf(actionA);
-        const indexB = order.indexOf(actionB);
-
-        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-        return 0;
-    });
-
-    container.innerHTML = '';
-    elements.forEach(el => container.appendChild(el));
-
-    // Restore overlay attributes after reordering
-    setTimeout(() => {
-        overlayLinks.forEach(data => {
-            // Find the link by its content/href
-            const links = container.querySelectorAll('a');
-            for (let link of links) {
-                if (link.innerHTML.includes('+1') || link.href === data.element.href) {
-                    if (!link.hasAttribute('onmouseover') && data.onmouseover) {
-                        link.setAttribute('onmouseover', data.onmouseover);
-                    }
-                    if (!link.hasAttribute('rel') || link.getAttribute('rel') !== '#overlay') {
-                        link.setAttribute('rel', '#overlay');
-                    }
-                    break;
-                }
-            }
-        });
-    }, 0);
-}
-    
     #handleSharePost(post) {
         let postLink = null;
 
