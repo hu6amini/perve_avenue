@@ -9447,15 +9447,18 @@ class PostModernizer {
             e.preventDefault();
             e.stopPropagation();
             
+            // Find the original onclick attribute and execute it
             const onclickAttr = bulletDelete.getAttribute('onclick');
             if (onclickAttr) {
                 try {
+                    // Execute the onclick function
                     new Function(onclickAttr)();
                 } catch (error) {
                     console.error('Error executing undo action:', error);
                 }
             }
             
+            // Update active states after undo
             setTimeout(() => {
                 this.#updatePointsContainerActiveState(pointsContainer);
             }, 100);
@@ -9463,26 +9466,70 @@ class PostModernizer {
             return;
         }
         
-        // CRITICAL: For points links with overlay, do NOTHING - let the original handlers work
+        // Handle points link (view votes) clicks
         if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-            // Don't prevent default, don't stop propagation, don't do anything
-            // Let the mouseover and click handlers work naturally
+            e.preventDefault();
+            // Let the overlay handler work normally
             return;
         }
         
         if (pointsUp || pointsDown) {
-            // ... rest of your voting logic
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+
+            if (bulletDelete) {
+                // Already voted state - handle differently
+                if (pointsUp) {
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                    pointsUp.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs up?
+                    if (pointsUp.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
+                    }
+                }
+
+                if (pointsDown) {
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                    pointsDown.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs down?
+                    if (pointsDown.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
+                    }
+                }
+            } else {
+                // Not voted yet - handle normal voting
+                if (pointsUp) {
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                    pointsUp.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_up');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
+                        }
+                    }
+                }
+
+                if (pointsDown) {
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                    pointsDown.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_down');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
+                        }
+                    }
+                }
+            }
         }
     });
-
-    // Ensure mouseover events aren't being blocked
-    document.addEventListener('mouseover', (e) => {
-        const overlayLink = e.target.closest('a[rel="#overlay"]');
-        if (overlayLink && overlayLink.getAttribute('onmouseover')) {
-            // Let the original onmouseover execute naturally
-            // Don't interfere
-        }
-    }, true); // Use capture to ensure we don't block
 }
     
     #escapeHtml(unsafe) {
