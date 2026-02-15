@@ -5,11 +5,10 @@
     var LAZY = "lazy";
     var ASYNC = "async";
     var CDN_BASE = 'https://images.weserv.nl/';
-    var CLOUDINARY_CLOUD = 'dbdf6gwgo'; // Your Cloudinary cloud name
     
     // Media types that need special handling
     var SKIP_PATTERNS = [
-        '.svg', '.webp', '.avif',
+        '.svg', '.gif', '.webp', '.avif',
         'output=webp', 'output=avif',
         // Skip DiceBear avatars (generated letter avatars)
         'dicebear.com',
@@ -18,9 +17,7 @@
         // Skip our forum avatar markers
         'forum-user-avatar',
         'forum-likes-avatar',
-        'avatar-size-',
-        // Skip Cloudinary URLs (already optimized)
-        'res.cloudinary.com'
+        'avatar-size-'
     ];
     
     // Convert patterns to lowercase for comparison
@@ -186,31 +183,6 @@
     
     // ===== PART 3: Format Conversion Functions =====
     
-    // New function to handle GIFs with Cloudinary
-    function convertGifWithCloudinary(img, gifUrl) {
-        // Cloudinary URL with automatic format selection for animated images
-        // f_auto:animated - automatically selects best animated format (WebP, AVIF, etc.)
-        // fl_awebp - ensures WebP animation flag
-        // q_auto - automatic quality optimization
-        var cloudinaryUrl = 'https://res.cloudinary.com/' + CLOUDINARY_CLOUD + 
-                            '/image/fetch/f_auto:animated,fl_awebp,fl_animated,q_auto/' + 
-                            encodeURIComponent(gifUrl);
-        
-        // Store original for fallback
-        img.setAttribute('data-original-src', gifUrl);
-        
-        // Set up error fallback
-        img.onerror = function() {
-            console.log('Cloudinary GIF conversion failed, falling back to original:', gifUrl);
-            this.src = this.getAttribute('data-original-src');
-        };
-        
-        // Update src to Cloudinary URL
-        img.src = cloudinaryUrl;
-        
-        console.log('Converted GIF to animated format via Cloudinary:', gifUrl);
-    }
-    
     function shouldSkipImage(url, element) {
         if (!url) return true;
         
@@ -284,14 +256,6 @@
         
         // Mark as processing
         img.setAttribute('data-optimized', 'true');
-        
-        // SPECIAL HANDLING FOR GIFS - Use Cloudinary
-        if (originalSrc.toLowerCase().indexOf('.gif') !== -1) {
-            convertGifWithCloudinary(img, originalSrc);
-            return;
-        }
-        
-        // NON-GIF IMAGES - Use images.weserv.nl
         img.setAttribute('data-original-src', originalSrc);
         
         // Choose format based on browser support
@@ -395,7 +359,6 @@
         var webpCount = 0;
         var avifCount = 0;
         var gifCount = 0;
-        var cloudinaryCount = 0;
         var svgCount = 0;
         var dicebearCount = 0;
         var forumAvatarCount = 0;
@@ -419,9 +382,7 @@
             }
             
             if (!isForumAvatar) {
-                if (src.indexOf('res.cloudinary.com') !== -1) {
-                    cloudinaryCount++;
-                } else if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
+                if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
                     gifCount++;
                 } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
                     svgCount++;
@@ -439,10 +400,9 @@
         
         console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
         console.log('Format breakdown:');
-        console.log('  - WebP (weserv.nl): ' + webpCount);
-        console.log('  - AVIF (weserv.nl): ' + avifCount);
-        console.log('  - Cloudinary (animated): ' + cloudinaryCount);
-        console.log('  - GIF (unoptimized): ' + gifCount);
+        console.log('  - WebP: ' + webpCount);
+        console.log('  - AVIF: ' + avifCount);
+        console.log('  - GIF (animated): ' + gifCount);
         console.log('  - SVG: ' + svgCount);
         console.log('  - DiceBear avatars: ' + dicebearCount);
         console.log('  - Forum avatars: ' + forumAvatarCount);
