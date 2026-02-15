@@ -9344,45 +9344,78 @@ class PostModernizer {
         shareButton.addEventListener('click', () => this.#handleSharePost(post));
     }
 
-    #reorderPostButtons(container) {
-        const elements = Array.from(container.children);
-        const order = ['share', 'quote', 'edit', 'delete'];
-
-        elements.sort((a, b) => {
-            const getAction = (element) => {
-                const dataAction = element.getAttribute('data-action');
-                if (dataAction && order.includes(dataAction)) return dataAction;
-
-                if (element.classList.contains('btn-share')) return 'share';
-                if (element.classList.contains('btn-quote')) return 'quote';
-                if (element.classList.contains('btn-edit')) return 'edit';
-                if (element.classList.contains('btn-delete')) return 'delete';
-
-                if (element.href) {
-                    if (element.href.includes('CODE=02')) return 'quote';
-                    if (element.href.includes('CODE=08')) return 'edit';
-                }
-
-                if (element.onclick && element.onclick.toString().includes('delete_post')) return 'delete';
-
-                return 'other';
-            };
-
-            const actionA = getAction(a);
-            const actionB = getAction(b);
-            const indexA = order.indexOf(actionA);
-            const indexB = order.indexOf(actionB);
-
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-            if (indexA !== -1) return -1;
-            if (indexB !== -1) return 1;
-            return 0;
+#reorderPostButtons(container) {
+    // Store overlay links before reordering
+    const overlayLinks = [];
+    container.querySelectorAll('a[rel="#overlay"]').forEach(link => {
+        overlayLinks.push({
+            element: link,
+            onmouseover: link.getAttribute('onmouseover'),
+            html: link.outerHTML
         });
+    });
 
-        container.innerHTML = '';
-        elements.forEach(el => container.appendChild(el));
-    }
+    const elements = Array.from(container.children);
+    const order = ['share', 'quote', 'edit', 'delete'];
 
+    elements.sort((a, b) => {
+        // Always keep overlay links at their original position
+        if (a.getAttribute && a.getAttribute('rel') === '#overlay') return -1;
+        if (b.getAttribute && b.getAttribute('rel') === '#overlay') return 1;
+        
+        const getAction = (element) => {
+            const dataAction = element.getAttribute('data-action');
+            if (dataAction && order.includes(dataAction)) return dataAction;
+
+            if (element.classList.contains('btn-share')) return 'share';
+            if (element.classList.contains('btn-quote')) return 'quote';
+            if (element.classList.contains('btn-edit')) return 'edit';
+            if (element.classList.contains('btn-delete')) return 'delete';
+
+            if (element.href) {
+                if (element.href.includes('CODE=02')) return 'quote';
+                if (element.href.includes('CODE=08')) return 'edit';
+            }
+
+            if (element.onclick && element.onclick.toString().includes('delete_post')) return 'delete';
+
+            return 'other';
+        };
+
+        const actionA = getAction(a);
+        const actionB = getAction(b);
+        const indexA = order.indexOf(actionA);
+        const indexB = order.indexOf(actionB);
+
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return 0;
+    });
+
+    container.innerHTML = '';
+    elements.forEach(el => container.appendChild(el));
+
+    // Restore overlay attributes after reordering
+    setTimeout(() => {
+        overlayLinks.forEach(data => {
+            // Find the link by its content/href
+            const links = container.querySelectorAll('a');
+            for (let link of links) {
+                if (link.innerHTML.includes('+1') || link.href === data.element.href) {
+                    if (!link.hasAttribute('onmouseover') && data.onmouseover) {
+                        link.setAttribute('onmouseover', data.onmouseover);
+                    }
+                    if (!link.hasAttribute('rel') || link.getAttribute('rel') !== '#overlay') {
+                        link.setAttribute('rel', '#overlay');
+                    }
+                    break;
+                }
+            }
+        });
+    }, 0);
+}
+    
     #handleSharePost(post) {
         let postLink = null;
 
