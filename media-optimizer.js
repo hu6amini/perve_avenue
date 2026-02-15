@@ -177,54 +177,73 @@
     }
     
     // Function to convert a single image to optimal format
-    function convertToOptimalFormat(img) {
-        var originalSrc = img.src;
+   function convertToOptimalFormat(img) {
+    var originalSrc = img.src;
+    
+    // Skip if not an external image or already processed
+    if (originalSrc.indexOf('http') !== 0 || img.getAttribute('data-optimized') === 'true') {
+        return;
+    }
+    
+    // Skip SVG and already optimized images
+    if (shouldSkipImage(originalSrc)) {
+        img.setAttribute('data-optimized', 'skipped');
+        return;
+    }
+    
+    // Skip data URLs
+    if (originalSrc.indexOf('data:') === 0) {
+        img.setAttribute('data-optimized', 'skipped');
+        return;
+    }
+    
+    // Add markers
+    img.setAttribute('data-optimized', 'true');
+    img.setAttribute('data-original-src', originalSrc);
+    
+    var isGifImage = isGif(originalSrc);
+    
+    if (isGifImage) {
+        // Try multiple CDNs with fallback chain
+        tryAnimatedConversion(img, originalSrc, 0);
+    } else {
+        // Non-GIF conversion...
+        var useAVIF = supportsAVIF();
+        var format = useAVIF ? 'avif' : 'webp';
+        var optimizedSrc = 'https://images.weserv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
         
-        // Skip if not an external image or already processed
-        if (originalSrc.indexOf('http') !== 0 || img.getAttribute('data-optimized') === 'true') {
-            return;
-        }
-        
-        // Skip SVG and already optimized images
-        if (shouldSkipImage(originalSrc)) {
-            img.setAttribute('data-optimized', 'skipped');
-            return;
-        }
-        
-        // Skip data URLs
-        if (originalSrc.indexOf('data:') === 0) {
-            img.setAttribute('data-optimized', 'skipped');
-            return;
-        }
-        
-        // Add a marker to prevent reprocessing
-        img.setAttribute('data-optimized', 'true');
-        img.setAttribute('data-original-src', originalSrc);
-        
-        // Check if it's a GIF
-        var isGifImage = isGif(originalSrc);
-        
-        var optimizedSrc;
-        
-        if (isGifImage) {
-            // Use wsrv.nl (same service, different domain) which handles animated GIFs better
-            // The animated=true parameter ensures GIFs stay animated
-            optimizedSrc = 'https://wsrv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=webp&lossless=true&animated=true';
-        } else {
-            // For non-GIFs, use AVIF if supported, otherwise WebP
-            var useAVIF = supportsAVIF();
-            var format = useAVIF ? 'avif' : 'webp';
-            optimizedSrc = 'https://images.weserv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=' + format + '&lossless=true';
-        }
-        
-        // Try optimized version, fallback to original if it fails
         img.onerror = function() {
             this.src = this.getAttribute('data-original-src');
         };
-        
-        // Set the new source
         img.src = optimizedSrc;
     }
+}
+
+// Fallback chain for animated images
+function tryAnimatedConversion(img, originalSrc, attempt) {
+    var cdns = [
+        'https://wsrv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=webp&animated=true',
+        'https://images.weserv.nl/?url=' + encodeURIComponent(originalSrc) + '&output=webp&animated=true',
+        'https://i0.wp.com/' + originalSrc.replace(/^https?:\/\//, '') + '?quality=85',  // Photon
+        null  // End of chain - fallback to original
+    ];
+    
+    if (attempt >= cdns.length - 1 || !cdns[attempt]) {
+        console.log('All CDNs failed, using original GIF');
+        img.src = originalSrc;
+        return;
+    }
+    
+    console.log('Trying animated conversion attempt', attempt + 1, ':', cdns[attempt]);
+    
+    img.onerror = function() {
+        console.log('Attempt', attempt + 1, 'failed');
+        // Try next CDN
+        tryAnimatedConversion(img, originalSrc, attempt + 1);
+    };
+    
+    img.src = cdns[attempt];
+}
     
     // Process all images (called after lazy loading is set up)
     function processAllImages() {
