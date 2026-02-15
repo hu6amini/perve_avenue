@@ -9466,9 +9466,9 @@ class PostModernizer {
             return;
         }
         
-        // Handle points link (view votes) clicks
+        // Handle points link (view votes) clicks - let the overlay work naturally
         if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-            // Let the original overlay handler work - don't interfere
+            // Don't interfere - let the jQuery overlay handle it
             return;
         }
         
