@@ -8684,39 +8684,32 @@ class PostModernizer {
         });
     }
 
-#normalizeAllMediaWrappers(element) {
-    // Find all potential media elements
-    const mediaElements = element.querySelectorAll(
-        'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
-    );
-    
-    mediaElements.forEach(media => {
-        // Skip already wrapped elements
-        if (media.getAttribute('data-wrapped') === 'true') return;
+    #normalizeAllMediaWrappers(element) {
+        // Find all potential media elements
+        const mediaElements = element.querySelectorAll(
+            'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
+        );
         
-        // Skip Twitter settings iframe specifically
-        if (media.tagName === 'IFRAME' && media.title === 'Twitter settings iframe') {
-            console.log('Skipping Twitter settings iframe in normalization');
-            media.setAttribute('data-wrapped', 'true');
-            return;
-        }
-        
-        // Check if element needs wrapping
-        if (media.tagName === 'IFRAME') {
-            this.#wrapIframe(media);
-        } else if (media.tagName === 'LITE-YOUTUBE') {
-            this.#wrapLiteYoutube(media);
-        } else if (media.tagName === 'LITE-VIMEO') {
-            this.#wrapLiteVimeo(media);
-        } else if (media.tagName === 'VIDEO') {
-            this.#wrapVideo(media);
-        } else if (media.classList.contains('media-wrapper') || 
-                   media.classList.contains('iframe-wrapper')) {
-            // This is already a wrapper, ensure it's standardized
-            this.#standardizeExistingWrapper(media);
-        }
-    });
-}
+        mediaElements.forEach(media => {
+            // Skip already wrapped elements
+            if (media.getAttribute('data-wrapped') === 'true') return;
+            
+            // Check if element needs wrapping
+            if (media.tagName === 'IFRAME') {
+                this.#wrapIframe(media);
+            } else if (media.tagName === 'LITE-YOUTUBE') {
+                this.#wrapLiteYoutube(media);
+            } else if (media.tagName === 'LITE-VIMEO') {
+                this.#wrapLiteVimeo(media);
+            } else if (media.tagName === 'VIDEO') {
+                this.#wrapVideo(media);
+            } else if (media.classList.contains('media-wrapper') || 
+                       media.classList.contains('iframe-wrapper')) {
+                // This is already a wrapper, ensure it's standardized
+                this.#standardizeExistingWrapper(media);
+            }
+        });
+    }
 
     #standardizeExistingWrapper(wrapper) {
         // Add standard class if not present
@@ -8775,59 +8768,52 @@ class PostModernizer {
         wrapper.setAttribute('data-standardized', 'true');
     }
 
-#wrapIframe(iframe) {
-    // Skip Twitter settings iframe
-    if (iframe.title === 'Twitter settings iframe') {
-        console.log('Skipping Twitter settings iframe');
-        iframe.setAttribute('data-wrapped', 'true'); // Mark as processed but don't wrap
-        return;
-    }
-
-    // Check if already inside a standard wrapper
-    const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
-    if (isInStandardWrapper) {
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-        iframe.setAttribute('data-wrapped', 'true');
-        return;
-    }
-    
-    // Check if already has a wrapper
-    const parent = iframe.parentElement;
-    const hasWrapper = parent && (
-        parent.classList.contains('media-wrapper') || 
-        parent.classList.contains('iframe-wrapper') ||
-        (parent.style.position === 'relative' && parent.style.paddingBottom)
-    );
-    
-    if (hasWrapper) {
-        // This is an old wrapper, replace it with standard wrapper
-        const wrapper = this.#createStandardMediaWrapper(iframe);
-        
-        // Replace the old wrapper with standard wrapper
-        parent.parentNode.insertBefore(wrapper, parent);
-        wrapper.appendChild(iframe);
-        parent.remove();
-    } else {
-        // Create standard wrapper
-        const wrapper = this.#createStandardMediaWrapper(iframe);
-        
-        // Set standard dimensions
-        if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
-            iframe.setAttribute('width', '100%');
-            iframe.setAttribute('height', '100%');
+    #wrapIframe(iframe) {
+        // Check if already inside a standard wrapper
+        const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
+        if (isInStandardWrapper) {
+            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+            iframe.setAttribute('data-wrapped', 'true');
+            return;
         }
         
-        // Insert wrapper before iframe
-        iframe.parentNode.insertBefore(wrapper, iframe);
+        // Check if already has a wrapper
+        const parent = iframe.parentElement;
+        const hasWrapper = parent && (
+            parent.classList.contains('media-wrapper') || 
+            parent.classList.contains('iframe-wrapper') ||
+            (parent.style.position === 'relative' && parent.style.paddingBottom)
+        );
         
-        // Move iframe into wrapper
-        wrapper.appendChild(iframe);
+        if (hasWrapper) {
+            // This is an old wrapper, replace it with standard wrapper
+            const wrapper = this.#createStandardMediaWrapper(iframe);
+            
+            // Replace the old wrapper with standard wrapper
+            parent.parentNode.insertBefore(wrapper, parent);
+            wrapper.appendChild(iframe);
+            parent.remove();
+        } else {
+            // Create standard wrapper
+            const wrapper = this.#createStandardMediaWrapper(iframe);
+            
+            // Set standard dimensions
+            if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
+                iframe.setAttribute('width', '100%');
+                iframe.setAttribute('height', '100%');
+            }
+            
+            // Insert wrapper before iframe
+            iframe.parentNode.insertBefore(wrapper, iframe);
+            
+            // Move iframe into wrapper
+            wrapper.appendChild(iframe);
+        }
+        
+        // Style the iframe
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+        iframe.setAttribute('data-wrapped', 'true');
     }
-    
-    // Style the iframe
-    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-    iframe.setAttribute('data-wrapped', 'true');
-}
     
     #wrapLiteYoutube(liteYoutube) {
         const parent = liteYoutube.parentElement;
