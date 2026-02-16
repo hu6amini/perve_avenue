@@ -8605,98 +8605,125 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-    #preserveMediaDimensions(element) {
-        // Process images (existing code)
-        element.querySelectorAll('img').forEach(img => {
-            if (!img.style.maxWidth) {
-                img.style.maxWidth = '100%';
-            }
-            
-            img.style.removeProperty('height');
-            
-            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                           img.className.includes('emoji');
-            
-            if (isTwemoji || isEmoji) {
-                img.style.cssText = 'display:inline-block;vertical-align:text-bottom;margin:0 2px;';
-            } else if (!img.style.display || img.style.display === 'inline') {
-                img.style.display = 'block';
-            }
-            
-            if (!img.hasAttribute('alt')) {
-                if (isEmoji) {
-                    img.setAttribute('alt', 'Emoji');
-                    img.setAttribute('role', 'img');
-                } else {
-                    img.setAttribute('alt', 'Forum image');
-                }
-            }
-        });
-        
-        // Clean up old wrappers first to prevent double-wrapping
-        this.#cleanupOldMediaWrappers(element);
-        
-        // Process all media elements with standardized wrappers
-        this.#normalizeAllMediaWrappers(element);
-    }
-
-    #cleanupOldMediaWrappers(element) {
-        // Find all old wrapper divs that have standardized wrappers inside them
-        const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
-        
-        oldWrappers.forEach(oldWrapper => {
-            // Check if this old wrapper has a standard-media-wrapper inside it
-            const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
-            
-            if (hasStandardWrapperInside) {
-                // Get the standard wrapper
-                const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
-                
-                // Move the standard wrapper out of the old wrapper
-                oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
-                
-                // Remove the old wrapper
-                oldWrapper.remove();
-            }
-        });
-        
-        // Also clean up empty wrapper divs with specific styling patterns
-        const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
-        
-        emptyWrappers.forEach(wrapper => {
-            // Check if wrapper is empty or only contains whitespace
-            const hasRealContent = Array.from(wrapper.childNodes).some(node => {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    // Check if element is media or has real content
-                    const tagName = node.tagName.toLowerCase();
-                    return !['br', 'span', 'div'].includes(tagName) || 
-                           node.textContent.trim() !== '' ||
-                           node.querySelector('iframe, lite-youtube, lite-vimeo, video, img');
-                }
-                return node.textContent.trim() !== '';
-            });
-            
-            if (!hasRealContent || wrapper.children.length === 0) {
-                wrapper.remove();
-            }
-        });
-    }
-
-#normalizeAllMediaWrappers(element) {
-    // First, check for and skip the Twitter settings iframe completely
+#preserveMediaDimensions(element) {
+    // CRITICAL: Skip Twitter settings iframe entirely
     const twitterIframe = element.querySelector('iframe[title="Twitter settings iframe"]');
     if (twitterIframe) {
-        console.log('Found Twitter settings iframe, marking as processed');
-        twitterIframe.setAttribute('data-wrapped', 'true');
+        console.log('🔍 Found Twitter settings iframe, completely skipping processing');
+        twitterIframe.setAttribute('data-twitter-skip', 'true');
         
-        // Also mark its parent wrapper if it exists
-        const parentWrapper = twitterIframe.closest('.iframe-wrapper, .media-wrapper, [style*="position: relative"]');
-        if (parentWrapper) {
-            parentWrapper.setAttribute('data-skip-processing', 'true');
-            parentWrapper.classList.add('skip-media-processing');
+        // Find and mark its wrapper
+        const wrapper = twitterIframe.closest('.iframe-wrapper, .media-wrapper, div[style*="position: relative"]');
+        if (wrapper) {
+            wrapper.setAttribute('data-twitter-skip', 'true');
+            wrapper.style.cssText = wrapper.style.cssText; // Preserve original styles
         }
+    }
+    
+    // Process images (existing code)
+    element.querySelectorAll('img').forEach(img => {
+        // Skip if inside Twitter wrapper
+        if (img.closest('[data-twitter-skip="true"]')) return;
+        
+        if (!img.style.maxWidth) {
+            img.style.maxWidth = '100%';
+        }
+        
+        img.style.removeProperty('height');
+        
+        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                       img.className.includes('emoji');
+        
+        if (isTwemoji || isEmoji) {
+            img.style.cssText = 'display:inline-block;vertical-align:text-bottom;margin:0 2px;';
+        } else if (!img.style.display || img.style.display === 'inline') {
+            img.style.display = 'block';
+        }
+        
+        if (!img.hasAttribute('alt')) {
+            if (isEmoji) {
+                img.setAttribute('alt', 'Emoji');
+                img.setAttribute('role', 'img');
+            } else {
+                img.setAttribute('alt', 'Forum image');
+            }
+        }
+    });
+    
+    // Clean up old wrappers first to prevent double-wrapping
+    this.#cleanupOldMediaWrappers(element);
+    
+    // Process all media elements with standardized wrappers - SKIP TWITTER
+    this.#normalizeAllMediaWrappers(element);
+}
+
+#cleanupOldMediaWrappers(element) {
+    // Skip if marked as Twitter
+    if (element.getAttribute && element.getAttribute('data-twitter-skip') === 'true') {
+        return;
+    }
+    
+    // Find all old wrapper divs that have standardized wrappers inside them
+    const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
+    
+    oldWrappers.forEach(oldWrapper => {
+        // Skip Twitter wrapper
+        if (oldWrapper.closest('[data-twitter-skip="true"]') || 
+            oldWrapper.querySelector('iframe[title="Twitter settings iframe"]')) {
+            oldWrapper.setAttribute('data-twitter-skip', 'true');
+            return;
+        }
+        
+        // Check if this old wrapper has a standard-media-wrapper inside it
+        const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
+        
+        if (hasStandardWrapperInside) {
+            // Get the standard wrapper
+            const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
+            
+            // Move the standard wrapper out of the old wrapper
+            oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
+            
+            // Remove the old wrapper
+            oldWrapper.remove();
+        }
+    });
+    
+    // Also clean up empty wrapper divs with specific styling patterns
+    const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
+    
+    emptyWrappers.forEach(wrapper => {
+        // Skip Twitter wrapper
+        if (wrapper.closest('[data-twitter-skip="true"]') || 
+            wrapper.querySelector('iframe[title="Twitter settings iframe"]')) {
+            wrapper.setAttribute('data-twitter-skip', 'true');
+            return;
+        }
+        
+        // Check if wrapper is empty or only contains whitespace
+        const hasRealContent = Array.from(wrapper.childNodes).some(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                // Check if element is media or has real content
+                const tagName = node.tagName.toLowerCase();
+                return !['br', 'span', 'div'].includes(tagName) || 
+                       node.textContent.trim() !== '' ||
+                       node.querySelector('iframe, lite-youtube, lite-vimeo, video, img');
+            }
+            return node.textContent.trim() !== '';
+        });
+        
+        if (!hasRealContent || wrapper.children.length === 0) {
+            wrapper.remove();
+        }
+    });
+}
+
+#normalizeAllMediaWrappers(element) {
+    // Skip elements marked as Twitter
+    if (element.getAttribute && element.getAttribute('data-twitter-skip') === 'true') {
+        return;
     }
     
     // Find all potential media elements
@@ -8705,18 +8732,11 @@ class PostModernizer {
     );
     
     mediaElements.forEach(media => {
+        // Skip if media or its parent is marked as Twitter
+        if (media.closest('[data-twitter-skip="true"]')) return;
+        
         // Skip already wrapped elements
         if (media.getAttribute('data-wrapped') === 'true') return;
-        
-        // Skip if this or its parent is marked to skip
-        if (media.closest('[data-skip-processing="true"]')) return;
-        
-        // Skip Twitter settings iframe specifically
-        if (media.tagName === 'IFRAME' && media.title === 'Twitter settings iframe') {
-            console.log('Skipping Twitter settings iframe in normalization');
-            media.setAttribute('data-wrapped', 'true');
-            return;
-        }
         
         // Check if element needs wrapping
         if (media.tagName === 'IFRAME') {
@@ -8729,10 +8749,6 @@ class PostModernizer {
             this.#wrapVideo(media);
         } else if (media.classList.contains('media-wrapper') || 
                    media.classList.contains('iframe-wrapper')) {
-            // Skip if this wrapper is marked for skipping
-            if (media.getAttribute('data-skip-processing') === 'true') return;
-            
-            // This is already a wrapper, ensure it's standardized
             this.#standardizeExistingWrapper(media);
         }
     });
