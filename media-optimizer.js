@@ -5,10 +5,12 @@
     var LAZY = "lazy";
     var ASYNC = "async";
     var CDN_BASE = 'https://images.weserv.nl/';
+    var DEFAULT_QUALITY = '100'; // Lossless quality for all images
+    var CACHE_DURATION = '1y'; // Cache for up to 1 year
     
     // Media types that need special handling
     var SKIP_PATTERNS = [
-        '.svg', '.gif', '.webp', '.avif',
+        '.svg', '.gif', '.webp', '.avif',  // Note: We'll handle GIFs specially now
         'output=webp', 'output=avif',
         // Skip DiceBear avatars (generated letter avatars)
         'dicebear.com',
@@ -17,7 +19,10 @@
         // Skip our forum avatar markers
         'forum-user-avatar',
         'forum-likes-avatar',
-        'avatar-size-'
+        'avatar-size-',
+        // Skip already optimized images
+        'images.weserv.nl',
+        'wsrv.nl'
     ];
     
     // Convert patterns to lowercase for comparison
@@ -258,16 +263,58 @@
         img.setAttribute('data-optimized', 'true');
         img.setAttribute('data-original-src', originalSrc);
         
-        // Choose format based on browser support
-        var format = supportsAVIF() ? 'avif' : 'webp';
+        // Check if it's a GIF
+        var isGif = originalSrc.toLowerCase().indexOf('.gif') !== -1;
         
-        // Construct CDN URL with string concatenation
+        // Choose format and parameters
+        var format;
+        var params = [];
+        
+        // Add cache control
+        params.push('maxage=' + CACHE_DURATION);
+        
+        // Add lossless quality for all images
+        params.push('q=' + DEFAULT_QUALITY);
+        params.push('lossless=true'); // Ensure lossless for all formats
+        
+        if (isGif) {
+            // For GIFs, we want to preserve animation
+            // Use WebP which has good browser support and supports animation
+            format = 'webp';
+            
+            // Add parameter to preserve all frames for animation
+            params.push('n=-1');
+            
+            // Add interlacing for progressive loading
+            params.push('il');
+            
+        } else {
+            // For non-GIFs, use best available format
+            format = supportsAVIF() ? 'avif' : 'webp';
+            
+            // Add progressive/interlaced for better UX
+            if (format === 'jpg' || format === 'jpeg') {
+                params.push('il'); // Progressive JPEG
+            } else if (format === 'png') {
+                params.push('il'); // Interlaced PNG
+            }
+        }
+        
+        // Construct CDN URL
         var encodedUrl = encodeURIComponent(originalSrc);
-        var optimizedSrc = CDN_BASE + '?url=' + encodedUrl + '&output=' + format + '&lossless=true';
+        var optimizedSrc = CDN_BASE + '?url=' + encodedUrl + '&output=' + format;
+        
+        // Add all parameters
+        if (params.length > 0) {
+            optimizedSrc += '&' + params.join('&');
+        }
         
         // Set fallback
         img.onerror = function() {
+            // If CDN fails, revert to original
             this.src = this.getAttribute('data-original-src');
+            // Mark as failed but don't retry
+            this.setAttribute('data-optimized', 'failed');
         };
         
         // Update src
@@ -341,7 +388,7 @@
     // ===== PART 5: Performance Reporting =====
     
     function generateReport() {
-        console.log('=== MEDIA OPTIMIZER REPORT ===');
+        console.log('=== MEDIA OPTIMIZER REPORT (LOSSLESS QUALITY) ===');
         
         // Test element creation
         var testImg = document.createElement('img');
@@ -359,9 +406,13 @@
         var webpCount = 0;
         var avifCount = 0;
         var gifCount = 0;
+        var gifToWebpCount = 0;
         var svgCount = 0;
         var dicebearCount = 0;
         var forumAvatarCount = 0;
+        var optimizedCount = 0;
+        var failedCount = 0;
+        var losslessCount = 0;
         var otherCount = 0;
         
         for (var i = 0; i < images.length; i++) {
@@ -370,8 +421,19 @@
             if (img.getAttribute('decoding') === ASYNC) asyncCount++;
             
             var src = img.src.toLowerCase();
+            var originalSrc = (img.getAttribute('data-original-src') || '').toLowerCase();
             var classes = img.className.toLowerCase();
             var isForumAvatar = false;
+            var optimized = img.getAttribute('data-optimized');
+            
+            if (optimized === 'true') {
+                optimizedCount++;
+                // Check if lossless parameter is present
+                if (src.indexOf('lossless=true') !== -1) {
+                    losslessCount++;
+                }
+            }
+            if (optimized === 'failed') failedCount++;
             
             // Count forum avatars
             if (classes.indexOf('forum-user-avatar') !== -1 || 
@@ -382,7 +444,10 @@
             }
             
             if (!isForumAvatar) {
-                if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
+                // Check if it was originally a GIF but now WebP
+                if (originalSrc.indexOf('.gif') !== -1 && src.indexOf('output=webp') !== -1) {
+                    gifToWebpCount++;
+                } else if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
                     gifCount++;
                 } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
                     svgCount++;
@@ -399,10 +464,12 @@
         }
         
         console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
+        console.log('Optimization: ' + optimizedCount + ' optimized (lossless: ' + losslessCount + '), ' + failedCount + ' failed');
         console.log('Format breakdown:');
-        console.log('  - WebP: ' + webpCount);
-        console.log('  - AVIF: ' + avifCount);
-        console.log('  - GIF (animated): ' + gifCount);
+        console.log('  - WebP (lossless): ' + webpCount);
+        console.log('  - AVIF (lossless): ' + avifCount);
+        console.log('  - GIF (original): ' + gifCount);
+        console.log('  - GIF → WebP (animated, lossless): ' + gifToWebpCount);
         console.log('  - SVG: ' + svgCount);
         console.log('  - DiceBear avatars: ' + dicebearCount);
         console.log('  - Forum avatars: ' + forumAvatarCount);
