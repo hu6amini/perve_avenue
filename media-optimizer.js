@@ -10,7 +10,7 @@
     
     // Media types that need special handling
     var SKIP_PATTERNS = [
-        '.svg', '.gif', '.webp', '.avif',  // Note: We'll handle GIFs specially now
+        '.svg', '.webp', '.avif',  // REMOVED .gif from here!
         'output=webp', 'output=avif',
         // Skip DiceBear avatars (generated letter avatars)
         'dicebear.com',
