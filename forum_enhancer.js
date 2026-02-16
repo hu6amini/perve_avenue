@@ -8684,32 +8684,39 @@ class PostModernizer {
         });
     }
 
-    #normalizeAllMediaWrappers(element) {
-        // Find all potential media elements
-        const mediaElements = element.querySelectorAll(
-            'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
-        );
+#normalizeAllMediaWrappers(element) {
+    // Find all potential media elements
+    const mediaElements = element.querySelectorAll(
+        'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
+    );
+    
+    mediaElements.forEach(media => {
+        // Skip already wrapped elements
+        if (media.getAttribute('data-wrapped') === 'true') return;
         
-        mediaElements.forEach(media => {
-            // Skip already wrapped elements
-            if (media.getAttribute('data-wrapped') === 'true') return;
-            
-            // Check if element needs wrapping
-            if (media.tagName === 'IFRAME') {
-                this.#wrapIframe(media);
-            } else if (media.tagName === 'LITE-YOUTUBE') {
-                this.#wrapLiteYoutube(media);
-            } else if (media.tagName === 'LITE-VIMEO') {
-                this.#wrapLiteVimeo(media);
-            } else if (media.tagName === 'VIDEO') {
-                this.#wrapVideo(media);
-            } else if (media.classList.contains('media-wrapper') || 
-                       media.classList.contains('iframe-wrapper')) {
-                // This is already a wrapper, ensure it's standardized
-                this.#standardizeExistingWrapper(media);
-            }
-        });
-    }
+        // Skip Twitter settings iframe specifically
+        if (media.tagName === 'IFRAME' && media.title === 'Twitter settings iframe') {
+            console.log('Skipping Twitter settings iframe in normalization');
+            media.setAttribute('data-wrapped', 'true');
+            return;
+        }
+        
+        // Check if element needs wrapping
+        if (media.tagName === 'IFRAME') {
+            this.#wrapIframe(media);
+        } else if (media.tagName === 'LITE-YOUTUBE') {
+            this.#wrapLiteYoutube(media);
+        } else if (media.tagName === 'LITE-VIMEO') {
+            this.#wrapLiteVimeo(media);
+        } else if (media.tagName === 'VIDEO') {
+            this.#wrapVideo(media);
+        } else if (media.classList.contains('media-wrapper') || 
+                   media.classList.contains('iframe-wrapper')) {
+            // This is already a wrapper, ensure it's standardized
+            this.#standardizeExistingWrapper(media);
+        }
+    });
+}
 
     #standardizeExistingWrapper(wrapper) {
         // Add standard class if not present
