@@ -5154,20 +5154,19 @@ class PostModernizer {
         }
     }
 
-#setupEmbeddedLinkObserver() {
-    if (globalThis.forumObserver) {
-        this.#embeddedLinkObserverId = globalThis.forumObserver.registerDebounced({
-            id: 'embedded-link-modernizer',
-            callback: (node) => this.#handleNewEmbeddedLinks(node),
-            selector: '.ffb_embedlink',
-            delay: 300, // Wait 300ms for media script to finish
-            priority: 'normal',
-            pageTypes: ['topic', 'blog', 'send', 'search']
-        });
-    } else {
-        setInterval(() => this.#processExistingEmbeddedLinks(), 2000);
+    #setupEmbeddedLinkObserver() {
+        if (globalThis.forumObserver) {
+            this.#embeddedLinkObserverId = globalThis.forumObserver.register({
+                id: 'embedded-link-modernizer',
+                callback: (node) => this.#handleNewEmbeddedLinks(node),
+                selector: '.ffb_embedlink',
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'send', 'search']
+            });
+        } else {
+            setInterval(() => this.#processExistingEmbeddedLinks(), 2000);
+        }
     }
-}
 
 #handleNewEmbeddedLinks(node) {
     if (this.#isInEditor(node)) return;
