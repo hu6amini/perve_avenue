@@ -4791,47 +4791,60 @@ class PostModernizer {
         this.#init();
     }
 
-    #init() {
-        try {
-            const bodyId = document.body.id;
-            
-            if (bodyId === 'search') {
-                this.#transformSearchPostElements();
-                this.#setupSearchPostObserver();
-            } else {
-                this.#transformPostElements();
-                this.#setupObserverCallbacks();
-                this.#setupActiveStateObserver();
-            }
-            
-            this.#enhanceReputationSystem();
-            this.#setupEnhancedAnchorNavigation();
-            this.#enhanceQuoteLinks();
-            this.#modernizeCodeBlocks();
-            this.#modernizeAttachments();
-            this.#modernizeEmbeddedLinks();
-            this.#modernizePolls();
+#init() {
+    try {
+        const bodyId = document.body.id;
+        
+        if (bodyId === 'search') {
+            this.#transformSearchPostElements();
+            this.#setupSearchPostObserver();
+        } else {
+            this.#transformPostElements();
+            this.#setupObserverCallbacks();
+            this.#setupActiveStateObserver();
+        }
+        
+        this.#enhanceReputationSystem();
+        this.#setupEnhancedAnchorNavigation();
+        this.#enhanceQuoteLinks();
+        this.#modernizeCodeBlocks();
+        this.#modernizeAttachments();
+        this.#modernizeEmbeddedLinks();
+        this.#modernizePolls();
 
-            // Clean up any double-wrapped media from previous runs
-            setTimeout(() => {
-                this.#cleanupAllDoubleWrappedMedia();
-            }, 500);
+        // Clean up any double-wrapped media from previous runs
+        setTimeout(() => {
+            this.#cleanupAllDoubleWrappedMedia();
+        }, 500);
 
-            console.log('✅ Post Modernizer with all optimizations initialized');
-        } catch (error) {
-            console.error('Post Modernizer initialization failed:', error);
-
-            if (this.#retryCount < this.#maxRetries) {
-                this.#retryCount++;
-                const delay = 100 * Math.pow(2, this.#retryCount - 1);
-                console.log('Initialization failed, retrying in ' + delay + 'ms...');
-
+        // 🚀 NEW: Force the observer to rescan embedded links after media script
+        setTimeout(() => {
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
+                console.log('🔍 Forcing observer to rescan embedded links');
+                globalThis.forumObserver.forceScan('.ffb_embedlink');
+                
+                // Second pass after a short delay to catch any stragglers
                 setTimeout(() => {
-                    this.#initWithRetry();
-                }, delay);
+                    globalThis.forumObserver.forceScan('.ffb_embedlink:not(.embedded-link-modernized)');
+                }, 1000);
             }
+        }, 1500);
+
+        console.log('✅ Post Modernizer with all optimizations initialized');
+    } catch (error) {
+        console.error('Post Modernizer initialization failed:', error);
+
+        if (this.#retryCount < this.#maxRetries) {
+            this.#retryCount++;
+            const delay = 100 * Math.pow(2, this.#retryCount - 1);
+            console.log('Initialization failed, retrying in ' + delay + 'ms...');
+
+            setTimeout(() => {
+                this.#initWithRetry();
+            }, delay);
         }
     }
+}
 
     #cleanupAllDoubleWrappedMedia() {
         document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
