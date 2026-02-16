@@ -4791,60 +4791,47 @@ class PostModernizer {
         this.#init();
     }
 
-#init() {
-    try {
-        const bodyId = document.body.id;
-        
-        if (bodyId === 'search') {
-            this.#transformSearchPostElements();
-            this.#setupSearchPostObserver();
-        } else {
-            this.#transformPostElements();
-            this.#setupObserverCallbacks();
-            this.#setupActiveStateObserver();
-        }
-        
-        this.#enhanceReputationSystem();
-        this.#setupEnhancedAnchorNavigation();
-        this.#enhanceQuoteLinks();
-        this.#modernizeCodeBlocks();
-        this.#modernizeAttachments();
-        this.#modernizeEmbeddedLinks();
-        this.#modernizePolls();
-
-        // Clean up any double-wrapped media from previous runs
-        setTimeout(() => {
-            this.#cleanupAllDoubleWrappedMedia();
-        }, 500);
-
-        // 🚀 NEW: Force the observer to rescan embedded links after media script
-        setTimeout(() => {
-            if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
-                console.log('🔍 Forcing observer to rescan embedded links');
-                globalThis.forumObserver.forceScan('.ffb_embedlink');
-                
-                // Second pass after a short delay to catch any stragglers
-                setTimeout(() => {
-                    globalThis.forumObserver.forceScan('.ffb_embedlink:not(.embedded-link-modernized)');
-                }, 1000);
+    #init() {
+        try {
+            const bodyId = document.body.id;
+            
+            if (bodyId === 'search') {
+                this.#transformSearchPostElements();
+                this.#setupSearchPostObserver();
+            } else {
+                this.#transformPostElements();
+                this.#setupObserverCallbacks();
+                this.#setupActiveStateObserver();
             }
-        }, 1500);
+            
+            this.#enhanceReputationSystem();
+            this.#setupEnhancedAnchorNavigation();
+            this.#enhanceQuoteLinks();
+            this.#modernizeCodeBlocks();
+            this.#modernizeAttachments();
+            this.#modernizeEmbeddedLinks();
+            this.#modernizePolls();
 
-        console.log('✅ Post Modernizer with all optimizations initialized');
-    } catch (error) {
-        console.error('Post Modernizer initialization failed:', error);
-
-        if (this.#retryCount < this.#maxRetries) {
-            this.#retryCount++;
-            const delay = 100 * Math.pow(2, this.#retryCount - 1);
-            console.log('Initialization failed, retrying in ' + delay + 'ms...');
-
+            // Clean up any double-wrapped media from previous runs
             setTimeout(() => {
-                this.#initWithRetry();
-            }, delay);
+                this.#cleanupAllDoubleWrappedMedia();
+            }, 500);
+
+            console.log('✅ Post Modernizer with all optimizations initialized');
+        } catch (error) {
+            console.error('Post Modernizer initialization failed:', error);
+
+            if (this.#retryCount < this.#maxRetries) {
+                this.#retryCount++;
+                const delay = 100 * Math.pow(2, this.#retryCount - 1);
+                console.log('Initialization failed, retrying in ' + delay + 'ms...');
+
+                setTimeout(() => {
+                    this.#initWithRetry();
+                }, delay);
+            }
         }
     }
-}
 
     #cleanupAllDoubleWrappedMedia() {
         document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
@@ -4870,32 +4857,10 @@ class PostModernizer {
     // EMBEDDED LINK TRANSFORMATION
     // ==============================
 
-#modernizeEmbeddedLinks() {
-    this.#processExistingEmbeddedLinks();
-    this.#setupEmbeddedLinkObserver();
-    
-    // 🚀 NEW: Use the global observer's force scan
-    if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
-        // Initial scan
-        setTimeout(() => {
-            globalThis.forumObserver.forceScan('.ffb_embedlink');
-        }, 100);
-        
-        // Scan after media script should have run
-        setTimeout(() => {
-            globalThis.forumObserver.forceScan('.ffb_embedlink:not(.embedded-link-modernized)');
-        }, 2000);
-        
-        // Final scan after everything
-        setTimeout(() => {
-            const unprocessed = document.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)');
-            if (unprocessed.length > 0) {
-                console.log(`⚠️ Found ${unprocessed.length} unprocessed embedded links, forcing final scan`);
-                globalThis.forumObserver.forceScan('.ffb_embedlink');
-            }
-        }, 5000);
+    #modernizeEmbeddedLinks() {
+        this.#processExistingEmbeddedLinks();
+        this.#setupEmbeddedLinkObserver();
     }
-}
 
     #isInEditor(element) {
         if (!element || !element.closest) return false;
