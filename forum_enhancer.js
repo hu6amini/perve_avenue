@@ -8768,52 +8768,59 @@ class PostModernizer {
         wrapper.setAttribute('data-standardized', 'true');
     }
 
-    #wrapIframe(iframe) {
-        // Check if already inside a standard wrapper
-        const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
-        if (isInStandardWrapper) {
-            iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
-            iframe.setAttribute('data-wrapped', 'true');
-            return;
-        }
-        
-        // Check if already has a wrapper
-        const parent = iframe.parentElement;
-        const hasWrapper = parent && (
-            parent.classList.contains('media-wrapper') || 
-            parent.classList.contains('iframe-wrapper') ||
-            (parent.style.position === 'relative' && parent.style.paddingBottom)
-        );
-        
-        if (hasWrapper) {
-            // This is an old wrapper, replace it with standard wrapper
-            const wrapper = this.#createStandardMediaWrapper(iframe);
-            
-            // Replace the old wrapper with standard wrapper
-            parent.parentNode.insertBefore(wrapper, parent);
-            wrapper.appendChild(iframe);
-            parent.remove();
-        } else {
-            // Create standard wrapper
-            const wrapper = this.#createStandardMediaWrapper(iframe);
-            
-            // Set standard dimensions
-            if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
-                iframe.setAttribute('width', '100%');
-                iframe.setAttribute('height', '100%');
-            }
-            
-            // Insert wrapper before iframe
-            iframe.parentNode.insertBefore(wrapper, iframe);
-            
-            // Move iframe into wrapper
-            wrapper.appendChild(iframe);
-        }
-        
-        // Style the iframe
+#wrapIframe(iframe) {
+    // Skip Twitter settings iframe
+    if (iframe.title === 'Twitter settings iframe') {
+        console.log('Skipping Twitter settings iframe');
+        iframe.setAttribute('data-wrapped', 'true'); // Mark as processed but don't wrap
+        return;
+    }
+
+    // Check if already inside a standard wrapper
+    const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
+    if (isInStandardWrapper) {
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
         iframe.setAttribute('data-wrapped', 'true');
+        return;
     }
+    
+    // Check if already has a wrapper
+    const parent = iframe.parentElement;
+    const hasWrapper = parent && (
+        parent.classList.contains('media-wrapper') || 
+        parent.classList.contains('iframe-wrapper') ||
+        (parent.style.position === 'relative' && parent.style.paddingBottom)
+    );
+    
+    if (hasWrapper) {
+        // This is an old wrapper, replace it with standard wrapper
+        const wrapper = this.#createStandardMediaWrapper(iframe);
+        
+        // Replace the old wrapper with standard wrapper
+        parent.parentNode.insertBefore(wrapper, parent);
+        wrapper.appendChild(iframe);
+        parent.remove();
+    } else {
+        // Create standard wrapper
+        const wrapper = this.#createStandardMediaWrapper(iframe);
+        
+        // Set standard dimensions
+        if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
+            iframe.setAttribute('width', '100%');
+            iframe.setAttribute('height', '100%');
+        }
+        
+        // Insert wrapper before iframe
+        iframe.parentNode.insertBefore(wrapper, iframe);
+        
+        // Move iframe into wrapper
+        wrapper.appendChild(iframe);
+    }
+    
+    // Style the iframe
+    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
+    iframe.setAttribute('data-wrapped', 'true');
+}
     
     #wrapLiteYoutube(liteYoutube) {
         const parent = liteYoutube.parentElement;
