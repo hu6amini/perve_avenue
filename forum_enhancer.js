@@ -8605,225 +8605,168 @@ class PostModernizer {
         return tempDiv.innerHTML;
     }
 
-#preserveMediaDimensions(element) {
-    // CRITICAL: Skip Twitter settings iframe entirely
-    const twitterIframe = element.querySelector('iframe[title="Twitter settings iframe"]');
-    if (twitterIframe) {
-        console.log('🔍 Found Twitter settings iframe, completely skipping processing');
-        twitterIframe.setAttribute('data-twitter-skip', 'true');
-        
-        // Find and mark its wrapper
-        const wrapper = twitterIframe.closest('.iframe-wrapper, .media-wrapper, div[style*="position: relative"]');
-        if (wrapper) {
-            wrapper.setAttribute('data-twitter-skip', 'true');
-            wrapper.style.cssText = wrapper.style.cssText; // Preserve original styles
-        }
-    }
-    
-    // Process images (existing code)
-    element.querySelectorAll('img').forEach(img => {
-        // Skip if inside Twitter wrapper
-        if (img.closest('[data-twitter-skip="true"]')) return;
-        
-        if (!img.style.maxWidth) {
-            img.style.maxWidth = '100%';
-        }
-        
-        img.style.removeProperty('height');
-        
-        const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
-        const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
-                       (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
-                       img.className.includes('emoji');
-        
-        if (isTwemoji || isEmoji) {
-            img.style.cssText = 'display:inline-block;vertical-align:text-bottom;margin:0 2px;';
-        } else if (!img.style.display || img.style.display === 'inline') {
-            img.style.display = 'block';
-        }
-        
-        if (!img.hasAttribute('alt')) {
-            if (isEmoji) {
-                img.setAttribute('alt', 'Emoji');
-                img.setAttribute('role', 'img');
-            } else {
-                img.setAttribute('alt', 'Forum image');
+    #preserveMediaDimensions(element) {
+        // Process images (existing code)
+        element.querySelectorAll('img').forEach(img => {
+            if (!img.style.maxWidth) {
+                img.style.maxWidth = '100%';
             }
-        }
-    });
-    
-    // Clean up old wrappers first to prevent double-wrapping
-    this.#cleanupOldMediaWrappers(element);
-    
-    // Process all media elements with standardized wrappers - SKIP TWITTER
-    this.#normalizeAllMediaWrappers(element);
-}
-
-#cleanupOldMediaWrappers(element) {
-    // Skip if marked as Twitter
-    if (element.getAttribute && element.getAttribute('data-twitter-skip') === 'true') {
-        return;
-    }
-    
-    // Find all old wrapper divs that have standardized wrappers inside them
-    const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
-    
-    oldWrappers.forEach(oldWrapper => {
-        // Skip Twitter wrapper
-        if (oldWrapper.closest('[data-twitter-skip="true"]') || 
-            oldWrapper.querySelector('iframe[title="Twitter settings iframe"]')) {
-            oldWrapper.setAttribute('data-twitter-skip', 'true');
-            return;
-        }
-        
-        // Check if this old wrapper has a standard-media-wrapper inside it
-        const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
-        
-        if (hasStandardWrapperInside) {
-            // Get the standard wrapper
-            const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
             
-            // Move the standard wrapper out of the old wrapper
-            oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
+            img.style.removeProperty('height');
             
-            // Remove the old wrapper
-            oldWrapper.remove();
-        }
-    });
-    
-    // Also clean up empty wrapper divs with specific styling patterns
-    const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
-    
-    emptyWrappers.forEach(wrapper => {
-        // Skip Twitter wrapper
-        if (wrapper.closest('[data-twitter-skip="true"]') || 
-            wrapper.querySelector('iframe[title="Twitter settings iframe"]')) {
-            wrapper.setAttribute('data-twitter-skip', 'true');
-            return;
-        }
-        
-        // Check if wrapper is empty or only contains whitespace
-        const hasRealContent = Array.from(wrapper.childNodes).some(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                // Check if element is media or has real content
-                const tagName = node.tagName.toLowerCase();
-                return !['br', 'span', 'div'].includes(tagName) || 
-                       node.textContent.trim() !== '' ||
-                       node.querySelector('iframe, lite-youtube, lite-vimeo, video, img');
+            const isTwemoji = img.src.includes('twemoji') || img.classList.contains('twemoji');
+            const isEmoji = img.src.includes('emoji') || img.src.includes('smiley') || 
+                           (img.src.includes('imgbox') && img.alt && img.alt.includes('emoji')) ||
+                           img.className.includes('emoji');
+            
+            if (isTwemoji || isEmoji) {
+                img.style.cssText = 'display:inline-block;vertical-align:text-bottom;margin:0 2px;';
+            } else if (!img.style.display || img.style.display === 'inline') {
+                img.style.display = 'block';
             }
-            return node.textContent.trim() !== '';
+            
+            if (!img.hasAttribute('alt')) {
+                if (isEmoji) {
+                    img.setAttribute('alt', 'Emoji');
+                    img.setAttribute('role', 'img');
+                } else {
+                    img.setAttribute('alt', 'Forum image');
+                }
+            }
         });
         
-        if (!hasRealContent || wrapper.children.length === 0) {
-            wrapper.remove();
-        }
-    });
-}
-
-#normalizeAllMediaWrappers(element) {
-    // Skip elements marked as Twitter
-    if (element.getAttribute && element.getAttribute('data-twitter-skip') === 'true') {
-        return;
-    }
-    
-    // Find all potential media elements
-    const mediaElements = element.querySelectorAll(
-        'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
-    );
-    
-    mediaElements.forEach(media => {
-        // Skip if media or its parent is marked as Twitter
-        if (media.closest('[data-twitter-skip="true"]')) return;
+        // Clean up old wrappers first to prevent double-wrapping
+        this.#cleanupOldMediaWrappers(element);
         
-        // Skip already wrapped elements
-        if (media.getAttribute('data-wrapped') === 'true') return;
-        
-        // Check if element needs wrapping
-        if (media.tagName === 'IFRAME') {
-            this.#wrapIframe(media);
-        } else if (media.tagName === 'LITE-YOUTUBE') {
-            this.#wrapLiteYoutube(media);
-        } else if (media.tagName === 'LITE-VIMEO') {
-            this.#wrapLiteVimeo(media);
-        } else if (media.tagName === 'VIDEO') {
-            this.#wrapVideo(media);
-        } else if (media.classList.contains('media-wrapper') || 
-                   media.classList.contains('iframe-wrapper')) {
-            this.#standardizeExistingWrapper(media);
-        }
-    });
-}
+        // Process all media elements with standardized wrappers
+        this.#normalizeAllMediaWrappers(element);
+    }
 
-#standardizeExistingWrapper(wrapper) {
-    // Skip if marked for skipping
-    if (wrapper.getAttribute('data-skip-processing') === 'true') {
-        wrapper.classList.add('skip-media-processing');
-        return;
-    }
-    
-    // Check if this wrapper contains a Twitter settings iframe
-    if (wrapper.querySelector('iframe[title="Twitter settings iframe"]')) {
-        console.log('Skipping standardization for Twitter settings wrapper');
-        wrapper.setAttribute('data-skip-processing', 'true');
-        wrapper.classList.add('skip-media-processing');
-        return;
-    }
-    
-    // Add standard class if not present
-    if (!wrapper.classList.contains('standard-media-wrapper')) {
-        wrapper.classList.add('standard-media-wrapper');
-    }
-    
-    // Ensure proper styling
-    const computedStyle = window.getComputedStyle(wrapper);
-    
-    // Check if padding-bottom is set for aspect ratio
-    if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
-        // Calculate or set default aspect ratio
-        const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
-        if (children.length > 0) {
-            const child = children[0];
+    #cleanupOldMediaWrappers(element) {
+        // Find all old wrapper divs that have standardized wrappers inside them
+        const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
+        
+        oldWrappers.forEach(oldWrapper => {
+            // Check if this old wrapper has a standard-media-wrapper inside it
+            const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
             
-            // Try to get dimensions from child
-            const width = child.getAttribute('width') || child.offsetWidth;
-            const height = child.getAttribute('height') || child.offsetHeight;
+            if (hasStandardWrapperInside) {
+                // Get the standard wrapper
+                const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
+                
+                // Move the standard wrapper out of the old wrapper
+                oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
+                
+                // Remove the old wrapper
+                oldWrapper.remove();
+            }
+        });
+        
+        // Also clean up empty wrapper divs with specific styling patterns
+        const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
+        
+        emptyWrappers.forEach(wrapper => {
+            // Check if wrapper is empty or only contains whitespace
+            const hasRealContent = Array.from(wrapper.childNodes).some(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    // Check if element is media or has real content
+                    const tagName = node.tagName.toLowerCase();
+                    return !['br', 'span', 'div'].includes(tagName) || 
+                           node.textContent.trim() !== '' ||
+                           node.querySelector('iframe, lite-youtube, lite-vimeo, video, img');
+                }
+                return node.textContent.trim() !== '';
+            });
             
-            if (width && height && !isNaN(width) && !isNaN(height)) {
-                const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
-                wrapper.style.paddingBottom = aspectRatio + '%';
+            if (!hasRealContent || wrapper.children.length === 0) {
+                wrapper.remove();
+            }
+        });
+    }
+
+    #normalizeAllMediaWrappers(element) {
+        // Find all potential media elements
+        const mediaElements = element.querySelectorAll(
+            'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
+        );
+        
+        mediaElements.forEach(media => {
+            // Skip already wrapped elements
+            if (media.getAttribute('data-wrapped') === 'true') return;
+            
+            // Check if element needs wrapping
+            if (media.tagName === 'IFRAME') {
+                this.#wrapIframe(media);
+            } else if (media.tagName === 'LITE-YOUTUBE') {
+                this.#wrapLiteYoutube(media);
+            } else if (media.tagName === 'LITE-VIMEO') {
+                this.#wrapLiteVimeo(media);
+            } else if (media.tagName === 'VIDEO') {
+                this.#wrapVideo(media);
+            } else if (media.classList.contains('media-wrapper') || 
+                       media.classList.contains('iframe-wrapper')) {
+                // This is already a wrapper, ensure it's standardized
+                this.#standardizeExistingWrapper(media);
+            }
+        });
+    }
+
+    #standardizeExistingWrapper(wrapper) {
+        // Add standard class if not present
+        if (!wrapper.classList.contains('standard-media-wrapper')) {
+            wrapper.classList.add('standard-media-wrapper');
+        }
+        
+        // Ensure proper styling
+        const computedStyle = window.getComputedStyle(wrapper);
+        
+        // Check if padding-bottom is set for aspect ratio
+        if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
+            // Calculate or set default aspect ratio
+            const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
+            if (children.length > 0) {
+                const child = children[0];
+                
+                // Try to get dimensions from child
+                const width = child.getAttribute('width') || child.offsetWidth;
+                const height = child.getAttribute('height') || child.offsetHeight;
+                
+                if (width && height && !isNaN(width) && !isNaN(height)) {
+                    const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+                    wrapper.style.paddingBottom = aspectRatio + '%';
+                } else {
+                    // Default to 16:9
+                    wrapper.style.paddingBottom = '56.25%';
+                }
             } else {
                 // Default to 16:9
                 wrapper.style.paddingBottom = '56.25%';
             }
-        } else {
-            // Default to 16:9
-            wrapper.style.paddingBottom = '56.25%';
         }
+        
+        // Ensure wrapper has relative positioning
+        if (computedStyle.position !== 'relative') {
+            wrapper.style.position = 'relative';
+        }
+        
+        // Ensure overflow hidden
+        if (computedStyle.overflow !== 'hidden') {
+            wrapper.style.overflow = 'hidden';
+        }
+        
+        // Ensure full width
+        if (!wrapper.style.width || wrapper.style.width !== '100%') {
+            wrapper.style.width = '100%';
+        }
+        
+        // Add margin for spacing
+        if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
+            wrapper.style.margin = '1em 0';
+        }
+        
+        // Mark as standardized
+        wrapper.setAttribute('data-standardized', 'true');
     }
-    
-    // Ensure wrapper has relative positioning
-    if (computedStyle.position !== 'relative') {
-        wrapper.style.position = 'relative';
-    }
-    
-    // Ensure overflow hidden
-    if (computedStyle.overflow !== 'hidden') {
-        wrapper.style.overflow = 'hidden';
-    }
-    
-    // Ensure full width
-    if (!wrapper.style.width || wrapper.style.width !== '100%') {
-        wrapper.style.width = '100%';
-    }
-    
-    // Add margin for spacing
-    if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
-        wrapper.style.margin = '1em 0';
-    }
-    
-    // Mark as standardized
-    wrapper.setAttribute('data-standardized', 'true');
-}
 
     #wrapIframe(iframe) {
         // Check if already inside a standard wrapper
