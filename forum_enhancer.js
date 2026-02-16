@@ -8684,89 +8684,130 @@ class PostModernizer {
         });
     }
 
-    #normalizeAllMediaWrappers(element) {
-        // Find all potential media elements
-        const mediaElements = element.querySelectorAll(
-            'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
-        );
+#normalizeAllMediaWrappers(element) {
+    // First, check for and skip the Twitter settings iframe completely
+    const twitterIframe = element.querySelector('iframe[title="Twitter settings iframe"]');
+    if (twitterIframe) {
+        console.log('Found Twitter settings iframe, marking as processed');
+        twitterIframe.setAttribute('data-wrapped', 'true');
         
-        mediaElements.forEach(media => {
-            // Skip already wrapped elements
-            if (media.getAttribute('data-wrapped') === 'true') return;
-            
-            // Check if element needs wrapping
-            if (media.tagName === 'IFRAME') {
-                this.#wrapIframe(media);
-            } else if (media.tagName === 'LITE-YOUTUBE') {
-                this.#wrapLiteYoutube(media);
-            } else if (media.tagName === 'LITE-VIMEO') {
-                this.#wrapLiteVimeo(media);
-            } else if (media.tagName === 'VIDEO') {
-                this.#wrapVideo(media);
-            } else if (media.classList.contains('media-wrapper') || 
-                       media.classList.contains('iframe-wrapper')) {
-                // This is already a wrapper, ensure it's standardized
-                this.#standardizeExistingWrapper(media);
-            }
-        });
+        // Also mark its parent wrapper if it exists
+        const parentWrapper = twitterIframe.closest('.iframe-wrapper, .media-wrapper, [style*="position: relative"]');
+        if (parentWrapper) {
+            parentWrapper.setAttribute('data-skip-processing', 'true');
+            parentWrapper.classList.add('skip-media-processing');
+        }
     }
-
-    #standardizeExistingWrapper(wrapper) {
-        // Add standard class if not present
-        if (!wrapper.classList.contains('standard-media-wrapper')) {
-            wrapper.classList.add('standard-media-wrapper');
+    
+    // Find all potential media elements
+    const mediaElements = element.querySelectorAll(
+        'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
+    );
+    
+    mediaElements.forEach(media => {
+        // Skip already wrapped elements
+        if (media.getAttribute('data-wrapped') === 'true') return;
+        
+        // Skip if this or its parent is marked to skip
+        if (media.closest('[data-skip-processing="true"]')) return;
+        
+        // Skip Twitter settings iframe specifically
+        if (media.tagName === 'IFRAME' && media.title === 'Twitter settings iframe') {
+            console.log('Skipping Twitter settings iframe in normalization');
+            media.setAttribute('data-wrapped', 'true');
+            return;
         }
         
-        // Ensure proper styling
-        const computedStyle = window.getComputedStyle(wrapper);
-        
-        // Check if padding-bottom is set for aspect ratio
-        if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
-            // Calculate or set default aspect ratio
-            const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
-            if (children.length > 0) {
-                const child = children[0];
-                
-                // Try to get dimensions from child
-                const width = child.getAttribute('width') || child.offsetWidth;
-                const height = child.getAttribute('height') || child.offsetHeight;
-                
-                if (width && height && !isNaN(width) && !isNaN(height)) {
-                    const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
-                    wrapper.style.paddingBottom = aspectRatio + '%';
-                } else {
-                    // Default to 16:9
-                    wrapper.style.paddingBottom = '56.25%';
-                }
+        // Check if element needs wrapping
+        if (media.tagName === 'IFRAME') {
+            this.#wrapIframe(media);
+        } else if (media.tagName === 'LITE-YOUTUBE') {
+            this.#wrapLiteYoutube(media);
+        } else if (media.tagName === 'LITE-VIMEO') {
+            this.#wrapLiteVimeo(media);
+        } else if (media.tagName === 'VIDEO') {
+            this.#wrapVideo(media);
+        } else if (media.classList.contains('media-wrapper') || 
+                   media.classList.contains('iframe-wrapper')) {
+            // Skip if this wrapper is marked for skipping
+            if (media.getAttribute('data-skip-processing') === 'true') return;
+            
+            // This is already a wrapper, ensure it's standardized
+            this.#standardizeExistingWrapper(media);
+        }
+    });
+}
+
+#standardizeExistingWrapper(wrapper) {
+    // Skip if marked for skipping
+    if (wrapper.getAttribute('data-skip-processing') === 'true') {
+        wrapper.classList.add('skip-media-processing');
+        return;
+    }
+    
+    // Check if this wrapper contains a Twitter settings iframe
+    if (wrapper.querySelector('iframe[title="Twitter settings iframe"]')) {
+        console.log('Skipping standardization for Twitter settings wrapper');
+        wrapper.setAttribute('data-skip-processing', 'true');
+        wrapper.classList.add('skip-media-processing');
+        return;
+    }
+    
+    // Add standard class if not present
+    if (!wrapper.classList.contains('standard-media-wrapper')) {
+        wrapper.classList.add('standard-media-wrapper');
+    }
+    
+    // Ensure proper styling
+    const computedStyle = window.getComputedStyle(wrapper);
+    
+    // Check if padding-bottom is set for aspect ratio
+    if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
+        // Calculate or set default aspect ratio
+        const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
+        if (children.length > 0) {
+            const child = children[0];
+            
+            // Try to get dimensions from child
+            const width = child.getAttribute('width') || child.offsetWidth;
+            const height = child.getAttribute('height') || child.offsetHeight;
+            
+            if (width && height && !isNaN(width) && !isNaN(height)) {
+                const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
+                wrapper.style.paddingBottom = aspectRatio + '%';
             } else {
                 // Default to 16:9
                 wrapper.style.paddingBottom = '56.25%';
             }
+        } else {
+            // Default to 16:9
+            wrapper.style.paddingBottom = '56.25%';
         }
-        
-        // Ensure wrapper has relative positioning
-        if (computedStyle.position !== 'relative') {
-            wrapper.style.position = 'relative';
-        }
-        
-        // Ensure overflow hidden
-        if (computedStyle.overflow !== 'hidden') {
-            wrapper.style.overflow = 'hidden';
-        }
-        
-        // Ensure full width
-        if (!wrapper.style.width || wrapper.style.width !== '100%') {
-            wrapper.style.width = '100%';
-        }
-        
-        // Add margin for spacing
-        if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
-            wrapper.style.margin = '1em 0';
-        }
-        
-        // Mark as standardized
-        wrapper.setAttribute('data-standardized', 'true');
     }
+    
+    // Ensure wrapper has relative positioning
+    if (computedStyle.position !== 'relative') {
+        wrapper.style.position = 'relative';
+    }
+    
+    // Ensure overflow hidden
+    if (computedStyle.overflow !== 'hidden') {
+        wrapper.style.overflow = 'hidden';
+    }
+    
+    // Ensure full width
+    if (!wrapper.style.width || wrapper.style.width !== '100%') {
+        wrapper.style.width = '100%';
+    }
+    
+    // Add margin for spacing
+    if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
+        wrapper.style.margin = '1em 0';
+    }
+    
+    // Mark as standardized
+    wrapper.setAttribute('data-standardized', 'true');
+}
 
     #wrapIframe(iframe) {
         // Check if already inside a standard wrapper
