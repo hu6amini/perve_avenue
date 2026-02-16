@@ -4870,10 +4870,32 @@ class PostModernizer {
     // EMBEDDED LINK TRANSFORMATION
     // ==============================
 
-    #modernizeEmbeddedLinks() {
-        this.#processExistingEmbeddedLinks();
-        this.#setupEmbeddedLinkObserver();
+#modernizeEmbeddedLinks() {
+    this.#processExistingEmbeddedLinks();
+    this.#setupEmbeddedLinkObserver();
+    
+    // 🚀 NEW: Use the global observer's force scan
+    if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
+        // Initial scan
+        setTimeout(() => {
+            globalThis.forumObserver.forceScan('.ffb_embedlink');
+        }, 100);
+        
+        // Scan after media script should have run
+        setTimeout(() => {
+            globalThis.forumObserver.forceScan('.ffb_embedlink:not(.embedded-link-modernized)');
+        }, 2000);
+        
+        // Final scan after everything
+        setTimeout(() => {
+            const unprocessed = document.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)');
+            if (unprocessed.length > 0) {
+                console.log(`⚠️ Found ${unprocessed.length} unprocessed embedded links, forcing final scan`);
+                globalThis.forumObserver.forceScan('.ffb_embedlink');
+            }
+        }, 5000);
     }
+}
 
     #isInEditor(element) {
         if (!element || !element.closest) return false;
