@@ -5183,41 +5183,86 @@ class PostModernizer {
             return;
         }
         
-        // Check if images are ready (either processed by media script or loaded)
+        // Check if images are ready (loaded and have dimensions)
         const areImagesReady = Array.from(images).every(img => {
-            return img.hasAttribute('data-optimized') || 
-                   img.src.includes('images.weserv.nl') ||
-                   img.complete;
+            const hasDimensions = img.naturalWidth > 0 && img.naturalHeight > 0;
+            const isProcessed = img.hasAttribute('data-optimized') || img.src.includes('images.weserv.nl');
+            return (img.complete && hasDimensions) || isProcessed;
         });
         
         if (areImagesReady) {
+            console.log('✅ Images ready immediately, transforming');
             this.#transformEmbeddedLink(link);
-        } else {
-            // Images not ready, wait for them
-            console.log('⏳ Waiting for images to be processed in embedded link');
+            return;
+        }
+        
+        // Images not ready, wait for them to load
+        console.log('⏳ Waiting for images to load in embedded link');
+        
+        let loadedCount = 0;
+        const totalImages = images.length;
+        let timeoutId = null;
+        let checkInterval = null;
+        
+        // Set up load listeners for each image
+        images.forEach(img => {
+            // If already loaded, count it
+            if (img.complete && img.naturalWidth > 0) {
+                loadedCount++;
+                return;
+            }
             
-            let attempts = 0;
-            const maxAttempts = 15; // 1.5 seconds total
-            
-            const waitForImages = setInterval(() => {
-                attempts++;
+            // Otherwise wait for load
+            const loadHandler = () => {
+                loadedCount++;
+                img.removeEventListener('load', loadHandler);
+                img.removeEventListener('error', errorHandler);
                 
-                const currentImages = link.querySelectorAll('img');
-                const nowReady = Array.from(currentImages).every(img => {
-                    return img.hasAttribute('data-optimized') || 
-                           img.src.includes('images.weserv.nl') ||
-                           img.complete;
-                });
-                
-                if (nowReady || attempts >= maxAttempts) {
-                    clearInterval(waitForImages);
+                // If all images loaded, transform
+                if (loadedCount === totalImages) {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    if (checkInterval) clearInterval(checkInterval);
                     if (!link.classList.contains('embedded-link-modernized')) {
-                        console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
+                        console.log('✅ All images loaded, transforming');
                         this.#transformEmbeddedLink(link);
                     }
                 }
-            }, 100);
-        }
+            };
+            
+            const errorHandler = () => {
+                // Count errors as "loaded" to avoid hanging
+                loadedCount++;
+                img.removeEventListener('load', loadHandler);
+                img.removeEventListener('error', errorHandler);
+            };
+            
+            img.addEventListener('load', loadHandler);
+            img.addEventListener('error', errorHandler);
+        });
+        
+        // Check periodically in case load events fire before listeners attached
+        checkInterval = setInterval(() => {
+            const currentImages = link.querySelectorAll('img');
+            const nowReady = Array.from(currentImages).every(img => 
+                img.complete && img.naturalWidth > 0
+            );
+            
+            if (nowReady && !link.classList.contains('embedded-link-modernized')) {
+                console.log('✅ Images ready (polling), transforming');
+                clearInterval(checkInterval);
+                if (timeoutId) clearTimeout(timeoutId);
+                this.#transformEmbeddedLink(link);
+            }
+        }, 100);
+        
+        // Safety timeout - transform anyway after 3 seconds
+        timeoutId = setTimeout(() => {
+            clearInterval(checkInterval);
+            if (!link.classList.contains('embedded-link-modernized')) {
+                console.log('⚠️ Load timeout, transforming with whatever we have');
+                this.#transformEmbeddedLink(link);
+            }
+        }, 3000);
     };
     
     // Process the node
