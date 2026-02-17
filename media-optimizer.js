@@ -6,6 +6,7 @@
     var ASYNC = "async";
     var CDN_BASE = 'https://images.weserv.nl/';
     var DEFAULT_QUALITY = '100';
+    var FOOTER_QUALITY = '80'; // Lower quality for footer images
     var CACHE_DURATION = '1y';
     
     var SKIP_PATTERNS = [
@@ -205,6 +206,42 @@
         return false;
     }
     
+    function isInFooter(element) {
+        // Check if element is in footer or has footer-related classes
+        if (!element) return false;
+        
+        // Check if element itself has footer class
+        if (element.classList) {
+            var classes = element.className.toLowerCase();
+            if (classes.indexOf('footer') !== -1 || 
+                classes.indexOf('foot') !== -1 ||
+                classes.indexOf('ffa-image') !== -1) { // Based on your HTML structure
+                return true;
+            }
+        }
+        
+        // Check parents for footer elements
+        var parent = element.parentElement;
+        var depth = 0;
+        while (parent && depth < 10) { // Limit search depth
+            if (parent.classList) {
+                var parentClasses = parent.className.toLowerCase();
+                if (parentClasses.indexOf('footer') !== -1 || 
+                    parentClasses.indexOf('foot') !== -1) {
+                    return true;
+                }
+            }
+            // Check tag name
+            if (parent.tagName && parent.tagName.toLowerCase() === 'footer') {
+                return true;
+            }
+            parent = parent.parentElement;
+            depth++;
+        }
+        
+        return false;
+    }
+    
     function supportsAVIF() {
         try {
             var canvas = document.createElement('canvas');
@@ -242,6 +279,9 @@
         img.setAttribute('data-optimized', 'true');
         img.setAttribute('data-original-src', originalSrc);
         
+        // Determine quality based on location
+        var quality = isInFooter(img) ? FOOTER_QUALITY : DEFAULT_QUALITY;
+        
         // More precise GIF detection
         var lowerSrc = originalSrc.toLowerCase();
         var isGif = lowerSrc.indexOf('.gif') !== -1 && 
@@ -253,7 +293,7 @@
         var params = [];
         
         params.push('maxage=' + CACHE_DURATION);
-        params.push('q=' + DEFAULT_QUALITY);
+        params.push('q=' + quality);
         params.push('lossless=true');
         
         if (isGif) {
@@ -276,6 +316,9 @@
         if (params.length > 0) {
             optimizedSrc += '&' + params.join('&');
         }
+        
+        // Add quality flag for debugging/reporting
+        img.setAttribute('data-quality', quality);
         
         img.onerror = function() {
             this.src = this.getAttribute('data-original-src');
@@ -370,6 +413,8 @@
         var optimizedCount = 0;
         var failedCount = 0;
         var losslessCount = 0;
+        var footerImagesCount = 0;
+        var footerOptimizedCount = 0;
         var otherCount = 0;
         
         for (var i = 0; i < images.length; i++) {
@@ -382,6 +427,7 @@
             var classes = img.className.toLowerCase();
             var isForumAvatar = false;
             var optimized = img.getAttribute('data-optimized');
+            var quality = img.getAttribute('data-quality');
             
             if (optimized === 'true') {
                 optimizedCount++;
@@ -396,6 +442,14 @@
                 img.hasAttribute('data-username')) {
                 forumAvatarCount++;
                 isForumAvatar = true;
+            }
+            
+            // Check if in footer
+            if (isInFooter(img)) {
+                footerImagesCount++;
+                if (optimized === 'true' && quality === FOOTER_QUALITY) {
+                    footerOptimizedCount++;
+                }
             }
             
             if (!isForumAvatar) {
@@ -419,6 +473,7 @@
         
         console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
         console.log('Optimization: ' + optimizedCount + ' optimized (lossless: ' + losslessCount + '), ' + failedCount + ' failed');
+        console.log('Footer images: ' + footerImagesCount + ' total, ' + footerOptimizedCount + ' with 80% quality');
         console.log('Format breakdown:');
         console.log('  - WebP (lossless): ' + webpCount);
         console.log('  - AVIF (lossless): ' + avifCount);
