@@ -648,7 +648,6 @@ if (!globalThis.mediaDimensionExtractor) {
 
 // ==============================
 // Complete Working Avatar System - INCLUDING LIKES/DISLIKES
-// FIXED: Properly fetches real avatars instead of always generating Dicebear ones
 // ==============================
 
 (function() {
@@ -712,7 +711,7 @@ if (!globalThis.mediaDimensionExtractor) {
         },
         
         cache: {
-            duration: 86400000, // 24 hours
+            duration: 86400000,
             prefix: 'avatar_',
             brokenPrefix: 'broken_avatar_',
             deletedPrefix: 'deleted_avatar_'
@@ -731,33 +730,12 @@ if (!globalThis.mediaDimensionExtractor) {
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
         isInitialized: false,
-        cacheVersion: '2.1' // Incremented cache version to force refresh
+        cacheVersion: '2.0' // Cache version to force refresh
     };
 
     // ==============================
-    // HELPER FUNCTIONS
+    // CORE FUNCTIONS
     // ==============================
-
-    function isDefaultAvatar(url) {
-        if (!url) return true;
-        
-        // Common patterns for default/no avatar
-        var defaultPatterns = [
-            'default_avatar',
-            'noavatar',
-            'default.png',
-            'blank.gif',
-            'unknown.gif',
-            'default.jpg',
-            'no_avatar',
-            'avatar_default'
-        ];
-        
-        return defaultPatterns.some(pattern => url.toLowerCase().includes(pattern)) ||
-               url === 'http' ||
-               url.trim() === '' ||
-               url.includes('forumfree.net/images/') && url.includes('default'); // ForumFree default avatars
-    }
 
     function getCacheKey(userId, size) {
         return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
@@ -782,9 +760,10 @@ if (!globalThis.mediaDimensionExtractor) {
             if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
                 try {
                     var data = JSON.parse(localStorage.getItem(key));
-                    // Clear if it's a generated avatar OR expired
-                    if (data && (data.url.includes('dicebear.com') || 
-                                 (data.timestamp && Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration))) {
+                    if (data && data.url && 
+                        (data.url.includes('dicebear.com') || 
+                         data.url.includes('api.dicebear.com') ||
+                         (data.timestamp && Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration))) {
                         keysToClear.push(key);
                         clearedCount++;
                     }
@@ -829,7 +808,7 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     function isBrokenAvatarUrl(avatarUrl) {
-        if (!avatarUrl || avatarUrl === 'http' || isDefaultAvatar(avatarUrl)) {
+        if (!avatarUrl || avatarUrl === 'http') {
             return true;
         }
         
@@ -866,7 +845,7 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     function testImageUrl(url, callback) {
-        if (!url || url === 'http' || isDefaultAvatar(url)) {
+        if (!url || url === 'http') {
             callback(false);
             return;
         }
@@ -1013,7 +992,7 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     // ==============================
-    // AVATAR FETCHING - FIXED VERSION
+    // AVATAR FETCHING
     // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback, isDeletedUser, isLikesList) {
@@ -1074,167 +1053,152 @@ if (!globalThis.mediaDimensionExtractor) {
         // For active users with ID
         var cacheKey = userId + '_' + size;
         
-        // IMPORTANT: For likes list, ALWAYS skip cache and fetch fresh
-        // This ensures we get real avatars for popups
-        if (isLikesList) {
-            console.log('🔄 Likes list - forcing fresh API fetch for user', userId);
-            // Clear any existing cache for this user in this size
-            delete state.userCache[cacheKey];
-            localStorage.removeItem(getCacheKey(userId, size));
-            // Proceed to API fetch
-        } else {
-            // For non-likes elements, check cache first
-            if (state.userCache[cacheKey]) {
-                var cached = state.userCache[cacheKey];
-                
-                // If it's a real avatar (not dicebear) and not broken, use it
-                if (cached.url && !cached.url.includes('dicebear.com') && !isBrokenAvatarUrl(cached.url) && !isDefaultAvatar(cached.url)) {
-                    console.log('✅ Using cached REAL avatar for user', userId, cached.url);
-                    callback(cached.url, cached.username);
-                    return;
-                } else {
-                    console.log('🗑️ Removing invalid cached avatar for user', userId);
-                    delete state.userCache[cacheKey];
-                }
-            }
+        // Check if we have a valid cached avatar
+        if (state.userCache[cacheKey]) {
+            var cached = state.userCache[cacheKey];
             
-            // Check localStorage
-            var stored = localStorage.getItem(getCacheKey(userId, size));
-            if (stored) {
-                try {
-                    var data = JSON.parse(stored);
-                    
-                    // Only use cache if it's a REAL avatar (not dicebear) and not expired/broken
-                    var isExpired = Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration;
-                    var isGenerated = data.url && data.url.includes('dicebear.com');
-                    var isDefault = isDefaultAvatar(data.url);
-                    
-                    if (!isExpired && !isGenerated && !isDefault && !isBrokenAvatarUrl(data.url)) {
-                        state.userCache[cacheKey] = data;
-                        console.log('✅ Using localStorage REAL avatar for user', userId, data.url);
-                        callback(data.url, data.username);
-                        return;
-                    } else {
-                        // If it's a generated avatar, default avatar, or expired, remove it
-                        console.log('🗑️ Removing cached generated/default/expired avatar for user', userId);
-                        localStorage.removeItem(getCacheKey(userId, size));
-                    }
-                } catch (e) {
+            // Skip cache if it's an old version or generated avatar for likes list
+            if (isLikesList && cached.url && cached.url.includes('dicebear.com')) {
+                console.log('Skipping generated avatar cache for likes list user', userId);
+                delete state.userCache[cacheKey];
+            } else if (!isBrokenAvatarUrl(cached.url)) {
+                console.log('Using cached avatar for user', userId, cached.url);
+                callback(cached.url, cached.username);
+                return;
+            }
+        }
+        
+        // Check localStorage
+        var stored = localStorage.getItem(getCacheKey(userId, size));
+        if (stored) {
+            try {
+                var data = JSON.parse(stored);
+                
+                // Check if cache is expired or old version
+                var isExpired = Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration;
+                var isOldVersion = !data.cacheVersion || data.cacheVersion !== state.cacheVersion;
+                var isGeneratedAvatar = data.url && data.url.includes('dicebear.com');
+                
+                // For likes list, always skip generated avatars
+                if (isLikesList && isGeneratedAvatar) {
+                    console.log('Skipping generated avatar in localStorage for likes list');
                     localStorage.removeItem(getCacheKey(userId, size));
                 }
+                // Use cache only if valid
+                else if (!isExpired && !isOldVersion && !isBrokenAvatarUrl(data.url)) {
+                    state.userCache[cacheKey] = data;
+                    console.log('Using localStorage cached avatar for user', userId, data.url);
+                    callback(data.url, data.username);
+                    return;
+                } else if (isExpired || isOldVersion) {
+                    console.log('Cache expired or old version for user', userId);
+                    localStorage.removeItem(getCacheKey(userId, size));
+                }
+            } catch (e) {
+                console.log('Invalid cache for user', userId);
+                localStorage.removeItem(getCacheKey(userId, size));
             }
         }
         
         console.log('🔄 Fetching from API for user', userId);
-        
-        // Add a small delay to prevent rate limiting (especially for likes lists with multiple users)
-        setTimeout(function() {
-            // Fetch from forum API
-            fetch('/api.php?mid=' + userId)
-                .then(function(response) {
-                    console.log('📡 API response status:', response.status, 'for user', userId);
-                    if (!response.ok) {
-                        throw new Error('API failed with status ' + response.status);
-                    }
-                    return response.json();
-                })
-                .then(function(data) {
-                    console.log('📦 API data received for user', userId, data);
-                    var userKey = 'm' + userId;
-                    var userData = data[userKey];
-                    var finalUsername = username;
-                    var avatarUrl;
+        // Fetch from forum API
+        fetch('/api.php?mid=' + userId)
+            .then(function(response) {
+                console.log('API response status:', response.status, 'for user', userId);
+                if (!response.ok) {
+                    throw new Error('API failed with status ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                console.log('API data received for user', userId, data);
+                var userKey = 'm' + userId;
+                var userData = data[userKey];
+                var finalUsername = username;
+                var avatarUrl;
+                
+                if (userData && userData.nickname) {
+                    finalUsername = cleanUsername(userData.nickname);
+                    console.log('API nickname:', userData.nickname, '-> cleaned:', finalUsername);
+                }
+                
+                if (userData && userData.avatar && 
+                    userData.avatar.trim() !== '' && 
+                    userData.avatar !== 'http') {
                     
-                    if (userData && userData.nickname) {
-                        finalUsername = cleanUsername(userData.nickname);
-                        console.log('👤 API nickname:', userData.nickname, '-> cleaned:', finalUsername);
-                    }
+                    avatarUrl = userData.avatar;
+                    console.log('🎯 REAL AVATAR FOUND from API:', avatarUrl, 'for user', userId);
                     
-                    // CRITICAL: Check if user has a REAL avatar
-                    if (userData && userData.avatar && 
-                        userData.avatar.trim() !== '' && 
-                        userData.avatar !== 'http' &&
-                        !isDefaultAvatar(userData.avatar)) {
-                        
-                        avatarUrl = userData.avatar;
-                        console.log('🎯 REAL AVATAR FOUND from API:', avatarUrl, 'for user', userId);
-                        
-                        // Test if the avatar URL actually works
+                    if (isBrokenAvatarUrl(avatarUrl)) {
+                        console.log('Avatar marked as broken, generating fallback');
+                        avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                        finishAvatar(avatarUrl, finalUsername);
+                    } else {
                         testImageUrl(avatarUrl, function(success) {
                             if (success) {
                                 console.log('✅ Avatar URL test SUCCESS for user', userId);
-                                finishAvatar(avatarUrl, finalUsername, 'forum');
+                                finishAvatar(avatarUrl, finalUsername);
                             } else {
                                 console.log('❌ Avatar URL test FAILED for user', userId);
                                 markAvatarAsBroken(avatarUrl);
-                                // Generate fallback but mark as generated
                                 avatarUrl = generateLetterAvatar(userId, finalUsername, size);
-                                finishAvatar(avatarUrl, finalUsername, 'generated_fallback');
+                                finishAvatar(avatarUrl, finalUsername);
                             }
                         });
-                        return; // Wait for testImageUrl to complete
-                    } else {
-                        console.log('⚠️ No real avatar from API for user', userId, 'generating letter avatar');
-                        avatarUrl = generateLetterAvatar(userId, finalUsername, size);
-                        finishAvatar(avatarUrl, finalUsername, 'generated');
+                        return;
+                    }
+                } else {
+                    console.log('⚠️ No avatar from API for user', userId, 'generating letter avatar');
+                    avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                }
+                
+                finishAvatar(avatarUrl, finalUsername);
+                
+                function finishAvatar(url, name) {
+                    var cacheData = {
+                        url: url,
+                        username: name,
+                        timestamp: Date.now(),
+                        size: size,
+                        cacheVersion: state.cacheVersion,
+                        source: url.includes('dicebear.com') ? 'generated' : 'forum'
+                    };
+                    
+                    console.log('💾 Caching avatar for user', userId, 'Source:', cacheData.source);
+                    try {
+                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    } catch (e) {
+                        clearOldCacheEntries();
+                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
                     }
                     
-                    function finishAvatar(url, name, source) {
-                        var cacheData = {
-                            url: url,
-                            username: name,
-                            timestamp: Date.now(),
-                            size: size,
-                            cacheVersion: state.cacheVersion,
-                            source: source || (url.includes('dicebear.com') ? 'generated' : 'forum')
-                        };
-                        
-                        console.log('💾 Caching avatar for user', userId, 'Source:', cacheData.source);
-                        
-                        // Only cache if it's a real avatar OR we're not in a likes list
-                        // This prevents caching generated avatars for likes lists
-                        if (!url.includes('dicebear.com') || !isLikesList) {
-                            try {
-                                localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-                            } catch (e) {
-                                clearOldCacheEntries();
-                                localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-                            }
-                        }
-                        
-                        state.userCache[cacheKey] = cacheData;
-                        callback(url, name);
-                    }
-                })
-                .catch(function(error) {
-                    console.warn('❌ Avatar fetch failed for user ' + userId + ':', error);
-                    var fallbackUrl = generateLetterAvatar(userId, username, size);
-                    console.log('⚠️ Using fallback generated avatar for user', userId, fallbackUrl);
-                    
-                    // Don't cache failed attempts for likes lists
-                    if (!isLikesList) {
-                        var cacheData = {
-                            url: fallbackUrl,
-                            username: username || 'User',
-                            timestamp: Date.now(),
-                            size: size,
-                            cacheVersion: state.cacheVersion,
-                            source: 'generated_error'
-                        };
-                        
-                        try {
-                            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-                        } catch (e) {
-                            clearOldCacheEntries();
-                            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
-                        }
-                        
-                        state.userCache[cacheKey] = cacheData;
-                    }
-                    
-                    callback(fallbackUrl, username || 'User');
-                });
-        }, isLikesList ? 100 : 0); // Add delay for likes lists to prevent rate limiting
+                    state.userCache[cacheKey] = cacheData;
+                    callback(url, name);
+                }
+            })
+            .catch(function(error) {
+                console.warn('❌ Avatar fetch failed for user ' + userId + ':', error);
+                var fallbackUrl = generateLetterAvatar(userId, username, size);
+                console.log('Using fallback generated avatar for user', userId, fallbackUrl);
+                var cacheData = {
+                    url: fallbackUrl,
+                    username: username || 'User',
+                    timestamp: Date.now(),
+                    size: size,
+                    cacheVersion: state.cacheVersion,
+                    source: 'generated_fallback'
+                };
+                
+                try {
+                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                } catch (e) {
+                    clearOldCacheEntries();
+                    localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                }
+                
+                state.userCache[cacheKey] = cacheData;
+                callback(fallbackUrl, username || 'User');
+            });
     }
 
     // ==============================
@@ -1871,15 +1835,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 console.log('✅ localStorage cleared completely');
                 location.reload();
             }
-        },
-        
-        // New method to force fetch a specific user's avatar
-        fetchUserAvatar: function(userId, callback) {
-            console.log('🔍 Force fetching avatar for user', userId);
-            getOrCreateAvatar(userId, null, 60, function(avatarUrl, username) {
-                console.log('✅ Avatar for user', userId, ':', avatarUrl);
-                if (callback) callback(avatarUrl, username);
-            }, false, true); // Force fresh fetch by setting isLikesList=true
         }
     };
 
