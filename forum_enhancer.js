@@ -647,7 +647,7 @@ if (!globalThis.mediaDimensionExtractor) {
 
 
 // ==============================
-// OPTIMIZED Avatar System - FAST version
+// Complete Working Avatar System - INCLUDING LIKES/DISLIKES - OPTIMIZED VERSION
 // ==============================
 
 (function() {
@@ -659,6 +659,10 @@ if (!globalThis.mediaDimensionExtractor) {
     var AVATAR_THEME = {
         colors: {
             light: [
+                '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
+                '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
+            ],
+            dark: [
                 '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
                 '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
             ]
@@ -680,16 +684,19 @@ if (!globalThis.mediaDimensionExtractor) {
                 size: 'post',
                 extractor: 'class'
             },
+            
             'a.avatar[href*="MID="] .default-avatar': {
                 type: 'default_avatar',
                 size: 'profile_card',
                 extractor: 'href'
             },
+            
             '.post.box_visitatore': {
                 type: 'deleted_user',
                 size: 'deleted_user',
                 extractor: 'visitatore'
             },
+            
             '.popup.pop_points .users li a[href*="MID="]': {
                 type: 'likes_list',
                 size: 'likes_list',
@@ -697,17 +704,28 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         },
         
+        dicebear: {
+            style: 'initials',
+            version: '7.x',
+            format: 'svg'
+        },
+        
         cache: {
-            duration: 7 * 86400000, // 7 days (increased from 24 hours)
+            duration: 86400000, // 24 hours
             prefix: 'avatar_',
             brokenPrefix: 'broken_avatar_',
             deletedPrefix: 'deleted_avatar_'
         },
         
+        // NEW: Performance settings
         performance: {
-            batchDelay: 50, // ms to wait for batching
-            maxBatchSize: 10, // max users per batch request
-            renderDelay: 10 // ms between avatar inserts
+            batchSize: 5,              // Process 5 users at a time
+            batchDelay: 50,             // 50ms between batches
+            prioritySelectors: [        // Elements to prioritize
+                '.popup.pop_points',    // Popups first (they're visible)
+                '.summary'              // Then summary
+            ],
+            maxConcurrentRequests: 3     // Maximum concurrent API requests
         }
     };
 
@@ -715,135 +733,302 @@ if (!globalThis.mediaDimensionExtractor) {
     // STATE MANAGEMENT
     // ==============================
     var state = {
-        userCache: JSON.parse(localStorage.getItem('avatar_cache_v3')) || {},
-        pendingBatch: new Map(), // userIds waiting to be fetched
-        batchTimeout: null,
-        processingQueue: [],
-        queueTimer: null,
+        pendingRequests: {},
+        userCache: {},
+        brokenAvatars: new Set(),
         processedPosts: new WeakSet(),
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
         isInitialized: false,
-        cacheVersion: '3.0'
+        cacheVersion: '2.2', // Updated version
+        
+        // NEW: Performance tracking
+        processingQueue: [],
+        isProcessing: false,
+        activeRequests: 0,
+        processedIds: new Set(), // Track processed user IDs to avoid duplicates
+        pendingBatches: []
     };
 
     // ==============================
-    // CACHE FUNCTIONS
+    // CORE FUNCTIONS
     // ==============================
 
-    function saveCache() {
-        try {
-            // Clean old entries before saving
-            var now = Date.now();
-            var cleanCache = {};
-            var count = 0;
+    function getCacheKey(userId, size) {
+        return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
+    }
+
+    function getDeletedUserCacheKey(username, size) {
+        var hash = 0;
+        for (var i = 0; i < username.length; i++) {
+            hash = ((hash << 5) - hash) + username.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return AVATAR_CONFIG.cache.deletedPrefix + Math.abs(hash) + '_' + size;
+    }
+
+    function clearOldCacheEntries() {
+        var cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
+        var keysToRemove = [];
+        
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                        key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.timestamp < cutoff) {
+                        keysToRemove.push(key);
+                    }
+                } catch (e) {
+                    keysToRemove.push(key);
+                }
+            }
+        }
+        
+        for (var j = 0; j < keysToRemove.length; j++) {
+            localStorage.removeItem(keysToRemove[j]);
+        }
+        
+        return keysToRemove.length;
+    }
+
+    function isBrokenAvatarUrl(avatarUrl) {
+        if (!avatarUrl || avatarUrl === 'http') {
+            return true;
+        }
+        
+        if (avatarUrl.includes('dicebear.com')) {
+            return false;
+        }
+        
+        if (state.brokenAvatars.has(avatarUrl)) {
+            return true;
+        }
+        
+        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        var brokenCache = localStorage.getItem(brokenKey);
+        if (brokenCache) {
+            try {
+                var data = JSON.parse(brokenCache);
+                if (Date.now() - data.timestamp < 3600000) { // 1 hour
+                    state.brokenAvatars.add(avatarUrl);
+                    return true;
+                } else {
+                    localStorage.removeItem(brokenKey);
+                }
+            } catch (e) {}
+        }
+        
+        return false;
+    }
+
+    function markAvatarAsBroken(avatarUrl) {
+        if (!avatarUrl || avatarUrl.includes('dicebear.com')) return;
+        
+        state.brokenAvatars.add(avatarUrl);
+        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        localStorage.setItem(brokenKey, JSON.stringify({
+            url: avatarUrl,
+            timestamp: Date.now()
+        }));
+    }
+
+    function testImageUrl(url, callback) {
+        if (!url || url === 'http') {
+            callback(false);
+            return;
+        }
+        
+        if (url.includes('dicebear.com')) {
+            callback(true);
+            return;
+        }
+        
+        var img = new Image();
+        var timeoutId = setTimeout(function() {
+            img.onload = img.onerror = null;
+            callback(true); // Assume it might work
+        }, 3000); // Reduced to 3 seconds for better performance
+        
+        img.onload = function() {
+            clearTimeout(timeoutId);
+            callback(true);
+        };
+        
+        img.onerror = function() {
+            clearTimeout(timeoutId);
+            callback(false);
+        };
+        
+        var separator = url.includes('?') ? '&' : '?';
+        img.src = url + separator + 't=' + Date.now();
+    }
+
+    // ==============================
+    // NEW: BATCH API REQUEST FUNCTION
+    // ==============================
+
+    function fetchMultipleUsers(userIds, callback) {
+        if (!userIds || userIds.length === 0) {
+            callback({});
+            return;
+        }
+        
+        // Remove duplicates
+        var uniqueIds = [...new Set(userIds)];
+        console.log('📦 Batch fetching', uniqueIds.length, 'users');
+        
+        // Create a single request with multiple IDs (if API supports it)
+        // If not, we'll fall back to individual requests with limits
+        var url = '/api.php?mid=' + uniqueIds.join(',');
+        
+        fetch(url)
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error('Batch API failed');
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                console.log('✅ Batch API response received for', Object.keys(data).length, 'users');
+                callback(data);
+            })
+            .catch(function(error) {
+                console.warn('❌ Batch API failed, falling back to individual requests:', error);
+                // Fall back to individual requests with concurrency limit
+                fetchMultipleUsersIndividual(uniqueIds, callback);
+            });
+    }
+
+    function fetchMultipleUsersIndividual(userIds, callback) {
+        var results = {};
+        var remaining = userIds.length;
+        var maxConcurrent = AVATAR_CONFIG.performance.maxConcurrentRequests;
+        var currentIndex = 0;
+        
+        function processNext() {
+            if (currentIndex >= userIds.length) return;
             
-            for (var key in state.userCache) {
-                var entry = state.userCache[key];
-                if (entry && now - entry.timestamp < AVATAR_CONFIG.cache.duration) {
-                    cleanCache[key] = entry;
-                    count++;
+            var batchEnd = Math.min(currentIndex + maxConcurrent, userIds.length);
+            var batchIds = userIds.slice(currentIndex, batchEnd);
+            currentIndex = batchEnd;
+            
+            batchIds.forEach(function(userId) {
+                fetch('/api.php?mid=' + userId)
+                    .then(function(response) {
+                        if (!response.ok) throw new Error('API failed');
+                        return response.json();
+                    })
+                    .then(function(data) {
+                        Object.assign(results, data);
+                        remaining--;
+                        
+                        if (remaining === 0) {
+                            callback(results);
+                        } else {
+                            processNext();
+                        }
+                    })
+                    .catch(function(error) {
+                        console.warn('❌ API failed for user', userId, error);
+                        remaining--;
+                        
+                        if (remaining === 0) {
+                            callback(results);
+                        } else {
+                            processNext();
+                        }
+                    });
+            });
+        }
+        
+        processNext();
+    }
+
+    // ==============================
+    // USERNAME EXTRACTION
+    // ==============================
+
+    function cleanUsername(username) {
+        if (!username) return 'User';
+        username = username.trim();
+        username = username.replace(/\.{3,}/g, '');
+        username = username.replace(/[\n\t]/g, ' ');
+        username = username.replace(/\s+/g, ' ');
+        
+        if (username.length < 2 || /^[^a-zA-Z0-9]+$/.test(username)) {
+            return 'User';
+        }
+        
+        return username;
+    }
+
+    function extractUsernameFromElement(element, type, userId) {
+        var username = '';
+        
+        if (type === 'post') {
+            var nickname = element.querySelector('.nick a');
+            if (nickname && nickname.textContent) {
+                username = nickname.textContent;
+            }
+            
+            if (!username) {
+                var userClass = element.querySelector('.user' + userId);
+                if (userClass && userClass.textContent) {
+                    username = userClass.textContent;
                 }
             }
             
-            localStorage.setItem('avatar_cache_v3', JSON.stringify(cleanCache));
-            console.log('💾 Cache saved:', count, 'entries');
-        } catch (e) {
-            console.warn('Cache save failed:', e);
-        }
-    }
-
-    function getCachedAvatar(userId, size, isLikesList) {
-        var key = userId + '_' + size;
-        var cached = state.userCache[key];
-        
-        if (!cached) return null;
-        
-        // Check expiration
-        if (Date.now() - cached.timestamp > AVATAR_CONFIG.cache.duration) {
-            delete state.userCache[key];
-            return null;
-        }
-        
-        // For likes list, prefer real avatars
-        if (isLikesList && cached.url && cached.url.includes('dicebear.com')) {
-            return null; // Force refetch for generated avatars in likes lists
-        }
-        
-        return cached;
-    }
-
-    function cacheAvatar(userId, size, url, username, source) {
-        var key = userId + '_' + size;
-        state.userCache[key] = {
-            url: url,
-            username: username,
-            timestamp: Date.now(),
-            source: source,
-            cacheVersion: state.cacheVersion
-        };
-        
-        // Debounce cache save
-        if (state.cacheSaveTimer) clearTimeout(state.cacheSaveTimer);
-        state.cacheSaveTimer = setTimeout(saveCache, 1000);
-    }
-
-    // ==============================
-    // BATCH API REQUESTS
-    // ==============================
-
-    function processBatch() {
-        if (state.pendingBatch.size === 0) return;
-        
-        var userIds = Array.from(state.pendingBatch.keys());
-        var callbacks = Array.from(state.pendingBatch.values());
-        
-        state.pendingBatch.clear();
-        state.batchTimeout = null;
-        
-        console.log('📦 Processing batch of', userIds.length, 'users');
-        
-        // Fetch multiple users in one request (if API supports it)
-        // Since the API might not support multiple users, we'll do parallel requests with a limit
-        var promises = userIds.map(userId => 
-            fetch('/api.php?mid=' + userId)
-                .then(r => r.json())
-                .then(data => ({ userId, data }))
-                .catch(err => ({ userId, error: err }))
-        );
-        
-        Promise.allSettled(promises).then(results => {
-            results.forEach((result, index) => {
-                var userId = userIds[index];
-                var callback = callbacks[index];
-                
-                if (result.status === 'fulfilled' && !result.value.error) {
-                    var data = result.value.data;
-                    var userKey = 'm' + userId;
-                    var userData = data[userKey];
-                    
-                    callback(userData);
-                } else {
-                    callback(null);
+            if (!username) {
+                var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
+                for (var i = 0; i < midLinks.length; i++) {
+                    if (midLinks[i].textContent) {
+                        username = midLinks[i].textContent;
+                        break;
+                    }
                 }
-            });
-        });
-    }
-
-    function queueApiRequest(userId, callback) {
-        state.pendingBatch.set(userId, callback);
-        
-        if (state.pendingBatch.size >= AVATAR_CONFIG.performance.maxBatchSize) {
-            if (state.batchTimeout) clearTimeout(state.batchTimeout);
-            processBatch();
-        } else if (!state.batchTimeout) {
-            state.batchTimeout = setTimeout(processBatch, AVATAR_CONFIG.performance.batchDelay);
+            }
+        } else if (type === 'default_avatar') {
+            var parentLink = element.closest('a[href*="MID="]');
+            if (parentLink) {
+                if (parentLink.title) {
+                    username = parentLink.title;
+                }
+                
+                if (!username && parentLink.textContent) {
+                    username = parentLink.textContent;
+                }
+            }
+        } else if (type === 'deleted_user') {
+            var nickname = element.querySelector('.nick');
+            if (nickname && nickname.textContent) {
+                username = nickname.textContent;
+            }
+        } else if (type === 'likes_list') {
+            if (element.textContent) {
+                username = element.textContent;
+            } else if (element.title) {
+                username = element.title;
+            }
+            
+            if (!username && element.className) {
+                var classMatch = element.className.match(/user\d+/);
+                if (classMatch) {
+                    var userSpan = document.querySelector('.' + classMatch[0]);
+                    if (userSpan && userSpan.textContent) {
+                        username = userSpan.textContent;
+                    }
+                }
+            }
         }
+        
+        return cleanUsername(username);
     }
 
     // ==============================
-    // AVATAR GENERATION (Instant)
+    // AVATAR GENERATION
     // ==============================
 
     function generateLetterAvatar(userId, username, size) {
@@ -859,6 +1044,8 @@ if (!globalThis.mediaDimensionExtractor) {
         
         if (firstLetter >= 'A' && firstLetter <= 'Z') {
             colorIndex = (firstLetter.charCodeAt(0) - 65) % colors.length;
+        } else if (firstLetter >= '0' && firstLetter <= '9') {
+            colorIndex = (parseInt(firstLetter) + 26) % colors.length;
         } else {
             var hash = 0;
             for (var i = 0; i < username.length; i++) {
@@ -868,297 +1055,689 @@ if (!globalThis.mediaDimensionExtractor) {
             colorIndex = Math.abs(hash) % colors.length;
         }
         
-        var backgroundColor = colors[colorIndex].substring(1);
+        var backgroundColor = colors[colorIndex];
+        if (backgroundColor.startsWith('#')) {
+            backgroundColor = backgroundColor.substring(1);
+        }
         
-        return 'https://api.dicebear.com/7.x/initials/svg?seed=' + 
-               encodeURIComponent(firstLetter) + 
-               '&backgroundColor=' + backgroundColor + 
-               '&radius=50&size=' + size;
+        var params = [
+            'seed=' + encodeURIComponent(firstLetter),
+            'backgroundColor=' + backgroundColor,
+            'radius=50',
+            'size=' + size
+        ];
+        
+        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
     }
 
     // ==============================
-    // USERNAME EXTRACTION (Optimized)
+    // OPTIMIZED AVATAR FETCHING
     // ==============================
 
-    var usernameCache = new Map();
-
-    function extractUsernameFromElement(element, type, userId) {
-        var cacheKey = userId + '_' + type;
-        if (usernameCache.has(cacheKey)) {
-            return usernameCache.get(cacheKey);
+    function getAvatarFromCache(userId, size, isLikesList) {
+        var cacheKey = userId + '_' + size;
+        
+        // Check memory cache
+        if (state.userCache[cacheKey]) {
+            var cached = state.userCache[cacheKey];
+            var isGenerated = cached.url && cached.url.includes('dicebear.com');
+            var isBroken = isBrokenAvatarUrl(cached.url);
+            
+            // For likes list, prefer real avatars
+            if (isLikesList && isGenerated) {
+                return null;
+            }
+            
+            if (!isBroken) {
+                return cached;
+            }
+            
+            // If it's a real avatar marked broken, return null to retry
+            if (!isGenerated && isBroken) {
+                return null;
+            }
         }
         
-        var username = '';
-        
-        if (type === 'post' || type === 'deleted_user') {
-            var nickname = element.querySelector('.nick a, .nick');
-            if (nickname) username = nickname.textContent;
-        } else if (type === 'default_avatar') {
-            var parentLink = element.closest('a[href*="MID="]');
-            if (parentLink) username = parentLink.title || parentLink.textContent;
-        } else if (type === 'likes_list') {
-            username = element.textContent || element.title;
+        // Check localStorage
+        var stored = localStorage.getItem(getCacheKey(userId, size));
+        if (stored) {
+            try {
+                var data = JSON.parse(stored);
+                var isExpired = Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration;
+                var isOldVersion = !data.cacheVersion || data.cacheVersion !== state.cacheVersion;
+                var isGenerated = data.url && data.url.includes('dicebear.com');
+                var isBroken = isBrokenAvatarUrl(data.url);
+                
+                if (!isExpired && !isOldVersion) {
+                    if (!isGenerated && isBroken) {
+                        return null; // Retry broken real avatars
+                    }
+                    if (!isBroken) {
+                        state.userCache[cacheKey] = data;
+                        return data;
+                    }
+                }
+            } catch (e) {}
         }
         
-        username = cleanUsername(username);
-        usernameCache.set(cacheKey, username);
-        
-        // Clear cache after 1 minute
-        setTimeout(() => usernameCache.delete(cacheKey), 60000);
-        
-        return username;
+        return null;
     }
 
-    function cleanUsername(username) {
-        if (!username) return 'User';
-        return username.trim().replace(/[\n\t\s]+/g, ' ').substring(0, 30);
-    }
-
-    // ==============================
-    // AVATAR FETCHING (Optimized)
-    // ==============================
-
-    function getOrCreateAvatar(userId, username, size, callback, isDeletedUser, isLikesList) {
-        if (isDeletedUser) {
-            var avatarUrl = generateLetterAvatar(null, username, size);
-            callback(avatarUrl, username);
-            return;
-        }
+    function processAvatarQueue() {
+        if (state.isProcessing || state.processingQueue.length === 0) return;
         
-        // Check cache first (synchronous)
-        var cached = getCachedAvatar(userId, size, isLikesList);
-        if (cached) {
-            callback(cached.url, cached.username);
-            return;
-        }
+        state.isProcessing = true;
         
-        // Show instant generated avatar while waiting for API
-        var tempUrl = generateLetterAvatar(userId, username, size);
+        // Group by type to prioritize popups
+        var popupItems = [];
+        var summaryItems = [];
+        var otherItems = [];
         
-        // Queue API request
-        queueApiRequest(userId, function(userData) {
-            if (userData && userData.avatar && userData.avatar.trim() !== '' && userData.avatar !== 'http') {
-                // Real avatar found
-                var realUrl = userData.avatar;
-                cacheAvatar(userId, size, realUrl, username, 'forum');
-                callback(realUrl, username);
+        state.processingQueue.forEach(function(item) {
+            var element = item.element;
+            if (element.closest('.popup.pop_points')) {
+                popupItems.push(item);
+            } else if (element.closest('.summary')) {
+                summaryItems.push(item);
             } else {
-                // No real avatar, keep using generated
-                cacheAvatar(userId, size, tempUrl, username, 'generated');
-                callback(tempUrl, username);
+                otherItems.push(item);
             }
         });
         
-        // Return temp avatar immediately
-        callback(tempUrl, username);
-    }
-
-    // ==============================
-    // AVATAR INSERTION (Debounced)
-    // ==============================
-
-    function queueAvatarInsert(insertFunction) {
-        state.processingQueue.push(insertFunction);
+        // Combine with priority order
+        var prioritizedQueue = [...popupItems, ...summaryItems, ...otherItems];
+        state.processingQueue = [];
         
-        if (state.queueTimer) return;
-        
-        state.queueTimer = setInterval(function() {
-            if (state.processingQueue.length === 0) {
-                clearInterval(state.queueTimer);
-                state.queueTimer = null;
+        // Process in batches
+        function processBatch(startIndex) {
+            var batch = prioritizedQueue.slice(startIndex, startIndex + AVATAR_CONFIG.performance.batchSize);
+            
+            if (batch.length === 0) {
+                state.isProcessing = false;
                 return;
             }
             
-            // Process one item at a time with delay
-            var next = state.processingQueue.shift();
-            if (next) next();
-        }, AVATAR_CONFIG.performance.renderDelay);
-    }
-
-    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser, isLikesList) {
-        var img = new Image();
-        
-        img.className = isLikesList ? 'forum-likes-avatar' : 'forum-user-avatar';
-        img.className += ' avatar-size-' + size;
-        if (isDeletedUser) img.className += ' deleted-user-avatar';
-        
-        img.alt = username ? 'Avatar for ' + username : '';
-        img.loading = 'lazy';
-        img.width = size;
-        img.height = size;
-        
-        // Pre-calculate styles for better performance
-        var baseStyle = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;' +
-                       'vertical-align:middle;background-color:#f0f0f0;display:inline-block;';
-        
-        if (isLikesList) {
-            img.style.cssText = baseStyle + 'margin-right:8px;margin-left:4px;border:1px solid #ddd;';
-        } else {
-            img.style.cssText = baseStyle + 'border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-right:8px;';
-        }
-        
-        img.src = avatarUrl;
-        
-        if (username) img.dataset.username = username;
-        
-        return img;
-    }
-
-    function insertAvatarForElement(processingInfo) {
-        queueAvatarInsert(function() {
-            var element = processingInfo.element;
-            var userId = processingInfo.userId;
-            var config = processingInfo.config;
-            
-            var username = extractUsernameFromElement(element, config.type, userId);
-            
-            getOrCreateAvatar(userId, username, config.size, 
-                function(avatarUrl, finalUsername) {
-                    if (config.type === 'post') {
-                        insertPostAvatar(element, userId, config.size, avatarUrl, finalUsername);
-                    } else if (config.type === 'likes_list') {
-                        insertLikesListAvatar(element, userId, config.size, avatarUrl, finalUsername);
-                    } else if (config.type === 'default_avatar') {
-                        insertDefaultAvatar(element, userId, config.size, avatarUrl, finalUsername);
-                    } else if (config.type === 'deleted_user') {
-                        insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
+            // Group by user ID for batch API requests
+            var userMap = new Map();
+            batch.forEach(function(item) {
+                if (item.userId && !item.isDeletedUser) {
+                    if (!userMap.has(item.userId)) {
+                        userMap.set(item.userId, {
+                            userId: item.userId,
+                            username: item.username,
+                            elements: [],
+                            isLikesList: item.config.type === 'likes_list',
+                            size: item.config.size
+                        });
                     }
-                }, 
-                config.type === 'deleted_user',
-                config.type === 'likes_list'
-            );
+                    var userData = userMap.get(item.userId);
+                    userData.elements.push({
+                        element: item.element,
+                        config: item.config
+                    });
+                } else {
+                    // Handle deleted users immediately (no API call needed)
+                    var avatarUrl = generateLetterAvatar(null, item.username, item.config.size);
+                    insertAvatarForProcessedItem(item, avatarUrl, item.username);
+                }
+            });
             
-            // Mark as processed
-            if (config.type === 'post') state.processedPosts.add(element);
-            else if (config.type === 'likes_list') state.processedLikesList.add(element);
-            else if (config.type === 'default_avatar') state.processedAvatars.add(element);
-            else if (config.type === 'deleted_user') state.processedDeletedUsers.add(element);
-        });
+            // Fetch real users in batch
+            var realUsers = Array.from(userMap.values());
+            if (realUsers.length > 0) {
+                var userIds = realUsers.map(u => u.userId);
+                
+                fetchMultipleUsers(userIds, function(apiData) {
+                    realUsers.forEach(function(userData) {
+                        var userKey = 'm' + userData.userId;
+                        var userApiData = apiData[userKey];
+                        var finalUsername = userData.username;
+                        var avatarUrl;
+                        
+                        if (userApiData && userApiData.nickname) {
+                            finalUsername = cleanUsername(userApiData.nickname);
+                        }
+                        
+                        if (userApiData && userApiData.avatar && 
+                            userApiData.avatar.trim() !== '' && 
+                            userApiData.avatar !== 'http') {
+                            
+                            avatarUrl = userApiData.avatar;
+                            
+                            // Test image asynchronously
+                            testImageUrl(avatarUrl, function(success) {
+                                if (success) {
+                                    finishUserAvatars(userData, avatarUrl, finalUsername);
+                                } else {
+                                    markAvatarAsBroken(avatarUrl);
+                                    avatarUrl = generateLetterAvatar(userData.userId, finalUsername, userData.size);
+                                    finishUserAvatars(userData, avatarUrl, finalUsername);
+                                }
+                            });
+                        } else {
+                            avatarUrl = generateLetterAvatar(userData.userId, finalUsername, userData.size);
+                            finishUserAvatars(userData, avatarUrl, finalUsername);
+                        }
+                        
+                        function finishUserAvatars(userData, url, name) {
+                            // Cache the avatar
+                            var cacheKey = userData.userId + '_' + userData.size;
+                            var cacheData = {
+                                url: url,
+                                username: name,
+                                timestamp: Date.now(),
+                                size: userData.size,
+                                cacheVersion: state.cacheVersion,
+                                source: url.includes('dicebear.com') ? 'generated' : 'forum'
+                            };
+                            
+                            try {
+                                localStorage.setItem(getCacheKey(userData.userId, userData.size), JSON.stringify(cacheData));
+                            } catch (e) {
+                                clearOldCacheEntries();
+                                localStorage.setItem(getCacheKey(userData.userId, userData.size), JSON.stringify(cacheData));
+                            }
+                            
+                            state.userCache[cacheKey] = cacheData;
+                            
+                            // Insert avatars for all elements of this user
+                            userData.elements.forEach(function(elementInfo) {
+                                insertAvatarForProcessedItem({
+                                    element: elementInfo.element,
+                                    config: elementInfo.config,
+                                    userId: userData.userId,
+                                    username: name
+                                }, url, name);
+                            });
+                        }
+                    });
+                    
+                    // Process next batch after delay
+                    setTimeout(function() {
+                        processBatch(startIndex + AVATAR_CONFIG.performance.batchSize);
+                    }, AVATAR_CONFIG.performance.batchDelay);
+                });
+            } else {
+                // No real users, process next batch
+                setTimeout(function() {
+                    processBatch(startIndex + AVATAR_CONFIG.performance.batchSize);
+                }, AVATAR_CONFIG.performance.batchDelay);
+            }
+        }
+        
+        // Start processing first batch
+        processBatch(0);
     }
 
-    // Insertion functions (unchanged but included for completeness)
-    function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick a, .nick');
-        if (!nickname) return;
+    function insertAvatarForProcessedItem(item, avatarUrl, username) {
+        var element = item.element;
+        var config = item.config;
+        var userId = item.userId;
         
-        if (nickname.previousElementSibling?.classList?.contains('forum-avatar-container')) return;
-        
-        var container = document.createElement('div');
-        container.className = 'forum-avatar-container';
-        container.style.cssText = 'display:inline-block;vertical-align:middle;margin-right:8px;';
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false, false));
-        nickname.parentNode.insertBefore(container, nickname);
-    }
-
-    function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
-        var span = linkElement.closest('span');
-        if (!span || span.querySelector('img.forum-likes-avatar')) return;
-        
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
-        span.insertBefore(avatarImg, linkElement);
-        span.classList.add('has-forum-avatar');
-    }
-
-    function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
-        var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
-        if (!parentLink || parentLink.querySelector('img.forum-user-avatar')) return;
-        
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
-        defaultAvatarElement.parentNode.replaceChild(avatarImg, defaultAvatarElement);
-        parentLink.classList.add('avatar-replaced');
-    }
-
-    function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick');
-        if (!nickname || nickname.previousElementSibling?.classList?.contains('forum-avatar-container')) return;
-        
-        var container = document.createElement('div');
-        container.className = 'forum-avatar-container deleted-user-container';
-        container.style.cssText = 'display:inline-block;vertical-align:middle;margin-right:8px;';
-        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true, false));
-        nickname.parentNode.insertBefore(container, nickname);
+        if (config.type === 'post') {
+            insertPostAvatar(element, userId, config.size, avatarUrl, username);
+            state.processedPosts.add(element);
+        } else if (config.type === 'default_avatar') {
+            insertDefaultAvatar(element, userId, config.size, avatarUrl, username);
+            state.processedAvatars.add(element);
+        } else if (config.type === 'deleted_user') {
+            insertDeletedUserAvatar(element, null, config.size, avatarUrl, username);
+            state.processedDeletedUsers.add(element);
+        } else if (config.type === 'likes_list') {
+            insertLikesListAvatar(element, userId, config.size, avatarUrl, username);
+            state.processedLikesList.add(element);
+        }
     }
 
     // ==============================
-    // PAGE PROCESSING (Optimized)
+    // ELEMENT PROCESSING
     // ==============================
 
-    function findElementsToProcess(root) {
-        var elements = [];
+    function extractUserIdFromElement(element, extractorType) {
+        var userId = null;
         
-        // Use more specific selectors and querySelectorAll for better performance
-        var posts = root.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
-        for (var i = 0; i < posts.length; i++) {
-            var info = shouldProcessElement(posts[i]);
-            if (info) elements.push(info);
+        if (extractorType === 'class') {
+            var classMatch = element.className.match(/\bbox_m(\d+)\b/);
+            if (classMatch) {
+                userId = classMatch[1];
+            } else {
+                var parentBox = element.closest('[class*="box_m"]');
+                if (parentBox) {
+                    classMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
+                    if (classMatch) userId = classMatch[1];
+                }
+            }
+        } else if (extractorType === 'href') {
+            var linkElement = element.closest('a[href*="MID="]');
+            if (linkElement) {
+                var hrefMatch = linkElement.href.match(/MID=(\d+)/);
+                if (hrefMatch) userId = hrefMatch[1];
+            }
+        } else if (extractorType === 'visitatore') {
+            return null;
+        } else if (extractorType === 'likes_href') {
+            if (element.href) {
+                var hrefMatch = element.href.match(/MID=(\d+)/) || 
+                                element.href.match(/[?&]MID=(\d+)/) ||
+                                element.href.match(/MID\%3D(\d+)/);
+                
+                if (hrefMatch) {
+                    userId = hrefMatch[1];
+                } else {
+                    try {
+                        var decodedUrl = decodeURIComponent(element.href);
+                        hrefMatch = decodedUrl.match(/MID=(\d+)/);
+                        if (hrefMatch) userId = hrefMatch[1];
+                    } catch (e) {}
+                }
+            }
         }
         
-        var avatars = root.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
-        for (var j = 0; j < avatars.length; j++) {
-            var info = shouldProcessElement(avatars[j]);
-            if (info) elements.push(info);
-        }
-        
-        var likes = root.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
-        for (var k = 0; k < likes.length; k++) {
-            var info = shouldProcessElement(likes[k]);
-            if (info) elements.push(info);
-        }
-        
-        return elements;
+        return userId;
     }
 
     function shouldProcessElement(element) {
-        if (!element || element.nodeType !== Node.ELEMENT_NODE) return null;
-        
-        var config = null;
-        var type = null;
-        
-        if (element.matches('.summary li[class^="box_"]')) {
-            type = 'post';
-            config = { type: 'post', size: AVATAR_CONFIG.sizes.post, extractor: 'class' };
-        } else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
-            type = 'default_avatar';
-            config = { 
-                type: 'default_avatar', 
-                size: element.closest('.post') ? AVATAR_CONFIG.sizes.post : AVATAR_CONFIG.sizes.profile_card,
-                extractor: 'href' 
-            };
-        } else if (element.matches('.post.box_visitatore')) {
-            type = 'deleted_user';
-            config = { type: 'deleted_user', size: AVATAR_CONFIG.sizes.deleted_user, extractor: 'visitatore' };
-        } else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
-            type = 'likes_list';
-            config = { type: 'likes_list', size: AVATAR_CONFIG.sizes.likes_list, extractor: 'likes_href' };
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+            return null;
         }
         
-        if (!config) return null;
+        var config = null;
         
-        // Check if already processed
-        if ((type === 'post' && state.processedPosts.has(element)) ||
-            (type === 'default_avatar' && state.processedAvatars.has(element)) ||
-            (type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
-            (type === 'likes_list' && state.processedLikesList.has(element))) {
+        if (element.matches('.summary li[class^="box_"]')) {
+            config = {
+                type: 'post',
+                size: AVATAR_CONFIG.sizes.post,
+                extractor: 'class'
+            };
+        }
+        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
+            var postParent = element.closest('.post');
+            if (postParent) {
+                config = {
+                    type: 'default_avatar',
+                    size: AVATAR_CONFIG.sizes.post,
+                    extractor: 'href'
+                };
+            } else {
+                config = {
+                    type: 'default_avatar',
+                    size: AVATAR_CONFIG.sizes.profile_card,
+                    extractor: 'href'
+                };
+            }
+        }
+        else if (element.matches('.post.box_visitatore')) {
+            config = {
+                type: 'deleted_user',
+                size: AVATAR_CONFIG.sizes.deleted_user,
+                extractor: 'visitatore'
+            };
+        }
+        else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
+            if (state.processedLikesList.has(element)) {
+                return null;
+            }
+            
+            config = {
+                type: 'likes_list',
+                size: AVATAR_CONFIG.sizes.likes_list,
+                extractor: 'likes_href'
+            };
+        }
+        
+        if (!config) {
+            return null;
+        }
+        
+        if ((config.type === 'post' && state.processedPosts.has(element)) ||
+            (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
+            (config.type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
+            (config.type === 'likes_list' && state.processedLikesList.has(element))) {
             return null;
         }
         
         var userId = extractUserIdFromElement(element, config.extractor);
         
-        return { element, userId, config };
-    }
-
-    function extractUserIdFromElement(element, extractorType) {
-        if (extractorType === 'class') {
-            var match = element.className.match(/\bbox_m(\d+)\b/);
-            return match ? match[1] : null;
-        } else if (extractorType === 'href' || extractorType === 'likes_href') {
-            var link = extractorType === 'href' ? element.closest('a[href*="MID="]') : element;
-            if (link && link.href) {
-                var match = link.href.match(/MID=(\d+)/);
-                return match ? match[1] : null;
+        // Check if already has avatar
+        if (config.type === 'post' || config.type === 'deleted_user') {
+            var nickname = element.querySelector('.nick');
+            if (!nickname) {
+                return null;
+            }
+            if (nickname.previousElementSibling && 
+                nickname.previousElementSibling.classList && 
+                nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                if (config.type === 'post') {
+                    state.processedPosts.add(element);
+                } else {
+                    state.processedDeletedUsers.add(element);
+                }
+                return null;
+            }
+        } else if (config.type === 'default_avatar') {
+            if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
+                return null;
+            }
+            var parentLink = element.closest('a.avatar[href*="MID="]');
+            if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
+                state.processedAvatars.add(element);
+                return null;
+            }
+        } else if (config.type === 'likes_list') {
+            var span = element.closest('span');
+            if (span && span.querySelector('img.forum-likes-avatar')) {
+                state.processedLikesList.add(element);
+                return null;
             }
         }
-        return null;
+        
+        return {
+            element: element,
+            userId: userId,
+            config: config
+        };
+    }
+
+    function queueElementForProcessing(processingInfo) {
+        if (!processingInfo) return;
+        
+        var element = processingInfo.element;
+        var userId = processingInfo.userId;
+        var config = processingInfo.config;
+        
+        // Extract username now for immediate use if needed
+        var username = extractUsernameFromElement(element, config.type, userId);
+        
+        // Check cache first for immediate insertion
+        if (userId && config.type !== 'deleted_user') {
+            var cached = getAvatarFromCache(userId, config.size, config.type === 'likes_list');
+            if (cached) {
+                // Insert immediately from cache
+                insertAvatarForProcessedItem({
+                    element: element,
+                    config: config,
+                    userId: userId,
+                    username: cached.username
+                }, cached.url, cached.username);
+                return;
+            }
+        } else if (config.type === 'deleted_user') {
+            // Deleted users can be generated immediately
+            var avatarUrl = generateLetterAvatar(null, username, config.size);
+            insertAvatarForProcessedItem({
+                element: element,
+                config: config,
+                userId: null,
+                username: username
+            }, avatarUrl, username);
+            return;
+        }
+        
+        // Add to queue for batch processing
+        state.processingQueue.push({
+            element: element,
+            userId: userId,
+            username: username,
+            config: config,
+            isDeletedUser: config.type === 'deleted_user'
+        });
+        
+        // Start processing queue if not already running
+        if (!state.isProcessing) {
+            setTimeout(function() {
+                processAvatarQueue();
+            }, 10);
+        }
+    }
+
+    // ==============================
+    // AVATAR CREATION & INSERTION
+    // ==============================
+
+    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser, isLikesList) {
+        var img = new Image();
+        
+        if (isLikesList) {
+            img.className = 'forum-likes-avatar avatar-size-' + size;
+        } else {
+            img.className = 'forum-user-avatar avatar-size-' + size;
+        }
+        
+        if (isDeletedUser) {
+            img.className += ' deleted-user-avatar';
+        }
+        
+        img.alt = username ? 'Avatar for ' + username : '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        
+        img.width = size;
+        img.height = size;
+        
+        img.style.cssText = 
+            'width:' + size + 'px;' +
+            'height:' + size + 'px;' +
+            'border-radius:50%;' +
+            'object-fit:cover;' +
+            'vertical-align:middle;' +
+            'border:2px solid #fff;' +
+            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
+            'background-color:#f0f0f0;' +
+            'display:inline-block;';
+        
+        if (isLikesList) {
+            img.style.cssText += 
+                'margin-right:8px;' +
+                'margin-left:4px;' +
+                'border:1px solid #ddd;' +
+                'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
+        }
+        
+        img.src = avatarUrl;
+        
+        if (username) {
+            img.dataset.username = username;
+        }
+        
+        img.addEventListener('error', function onError() {
+            if (!avatarUrl.includes('dicebear.com')) {
+                markAvatarAsBroken(avatarUrl);
+            }
+            
+            if (userId) {
+                var cacheKey = userId + '_' + size;
+                delete state.userCache[cacheKey];
+                localStorage.removeItem(getCacheKey(userId, size));
+                
+                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+                this.src = fallbackUrl;
+            } else if (username) {
+                var cacheKey = 'deleted_' + username + '_' + size;
+                delete state.userCache[cacheKey];
+                localStorage.removeItem(getDeletedUserCacheKey(username, size));
+                
+                var fallbackUrl = generateLetterAvatar(null, username || '', size);
+                this.src = fallbackUrl;
+            }
+            this.removeEventListener('error', onError);
+        }, { once: true });
+        
+        return img;
+    }
+
+    function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
+        var nickname = postElement.querySelector('.nick a, .nick');
+        if (!nickname) return;
+        
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            return;
+        }
+        
+        var container = document.createElement('div');
+        container.className = 'forum-avatar-container';
+        container.style.cssText = 
+            'display:inline-block;' +
+            'vertical-align:middle;' +
+            'position:relative;' +
+            'margin-right:8px;';
+        
+        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false, false));
+        nickname.parentNode.insertBefore(container, nickname);
+    }
+
+    function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
+        var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
+        if (!parentLink) return;
+        
+        if (parentLink.querySelector('img.forum-user-avatar')) {
+            return;
+        }
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
+        
+        var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
+        if (defaultAvatarDiv) {
+            defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
+        } else {
+            parentLink.appendChild(avatarImg);
+        }
+        
+        parentLink.classList.add('avatar-replaced');
+    }
+
+    function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
+        var nickname = postElement.querySelector('.nick');
+        if (!nickname) return;
+        
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            return;
+        }
+        
+        var container = document.createElement('div');
+        container.className = 'forum-avatar-container deleted-user-container';
+        container.style.cssText = 
+            'display:inline-block;' +
+            'vertical-align:middle;' +
+            'position:relative;' +
+            'margin-right:8px;';
+        
+        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true, false));
+        nickname.parentNode.insertBefore(container, nickname);
+    }
+
+    function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
+        var span = linkElement.closest('span');
+        if (!span) return;
+        
+        if (span.querySelector('img.forum-likes-avatar')) {
+            return;
+        }
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
+        
+        span.insertBefore(avatarImg, linkElement);
+        
+        span.classList.add('has-forum-avatar');
+    }
+
+    // ==============================
+    // PAGE PROCESSING
+    // ==============================
+
+    function handleNewElement(node) {
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        
+        // Check the node itself
+        var nodeInfo = shouldProcessElement(node);
+        if (nodeInfo) {
+            queueElementForProcessing(nodeInfo);
+        }
+        
+        // Check for child elements based on priority
+        setTimeout(function() {
+            // Check popups first (highest priority)
+            var popups = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+            for (var k = 0; k < popups.length; k++) {
+                var likesInfo = shouldProcessElement(popups[k]);
+                if (likesInfo) {
+                    queueElementForProcessing(likesInfo);
+                }
+            }
+            
+            // Then check posts
+            var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+            for (var i = 0; i < posts.length; i++) {
+                var postInfo = shouldProcessElement(posts[i]);
+                if (postInfo) {
+                    queueElementForProcessing(postInfo);
+                }
+            }
+            
+            // Finally check default avatars
+            var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+            for (var j = 0; j < defaultAvatars.length; j++) {
+                var avatarInfo = shouldProcessElement(defaultAvatars[j]);
+                if (avatarInfo) {
+                    queueElementForProcessing(avatarInfo);
+                }
+            }
+        }, 0);
+    }
+
+    function processExistingElements() {
+        console.log('🚀 Processing existing elements with priority...');
+        
+        // Process popups first (highest priority)
+        var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+        console.log('Found', likesLinks.length, 'likes links to process');
+        for (var k = 0; k < likesLinks.length; k++) {
+            var likesInfo = shouldProcessElement(likesLinks[k]);
+            if (likesInfo) {
+                queueElementForProcessing(likesInfo);
+            }
+        }
+        
+        // Then process posts
+        var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+        console.log('Found', posts.length, 'posts to process');
+        for (var i = 0; i < posts.length; i++) {
+            var postInfo = shouldProcessElement(posts[i]);
+            if (postInfo) {
+                queueElementForProcessing(postInfo);
+            }
+        }
+        
+        // Finally process default avatars
+        var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        console.log('Found', defaultAvatars.length, 'default avatars to process');
+        for (var j = 0; j < defaultAvatars.length; j++) {
+            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
+            if (avatarInfo) {
+                queueElementForProcessing(avatarInfo);
+            }
+        }
+    }
+
+    // ==============================
+    // OBSERVER INTEGRATION
+    // ==============================
+
+    function setupObserver() {
+        if (window.forumObserver && typeof window.forumObserver.register === 'function') {
+            window.forumObserver.register({
+                id: 'forum_avatars_working',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="]',
+                callback: handleNewElement,
+                priority: 'high'
+            });
+            console.log('Registered with ForumCoreObserver');
+        } else {
+            console.error('ForumCoreObserver not available. Avatar system will not work.');
+        }
     }
 
     // ==============================
@@ -1168,24 +1747,20 @@ if (!globalThis.mediaDimensionExtractor) {
     function initAvatarSystem() {
         if (state.isInitialized) return;
         
-        console.log('🚀 Initializing optimized avatar system');
+        console.log('🚀 Initializing OPTIMIZED avatar system with likes/dislikes support');
         
-        // Load cache
-        try {
-            var saved = localStorage.getItem('avatar_cache_v3');
-            if (saved) state.userCache = JSON.parse(saved);
-        } catch (e) {}
+        // Clear old cache entries
+        var expiredCount = clearOldCacheEntries();
+        console.log('Cleared', expiredCount, 'expired cache entries');
         
-        // Process existing elements
+        setupObserver();
+        
+        // Process existing elements immediately
         setTimeout(function() {
-            var elements = findElementsToProcess(document);
-            console.log('Found', elements.length, 'elements to process');
-            
-            elements.forEach(info => insertAvatarForElement(info));
-            
+            processExistingElements();
             state.isInitialized = true;
             console.log('✅ Avatar system initialized');
-        }, 10);
+        }, 50); // Reduced delay for faster startup
     }
 
     // ==============================
@@ -1198,49 +1773,204 @@ if (!globalThis.mediaDimensionExtractor) {
         refresh: function() {
             console.log('🔄 Refreshing avatars...');
             
-            // Clear DOM elements
-            document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar, .avatar-replaced img').forEach(el => el.remove());
-            document.querySelectorAll('.avatar-replaced, .has-forum-avatar').forEach(el => {
-                el.classList.remove('avatar-replaced', 'has-forum-avatar');
-            });
+            // Remove all avatars
+            var containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
+            for (var i = 0; i < containers.length; i++) {
+                containers[i].remove();
+            }
             
-            // Clear caches
+            var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
+            for (var j = 0; j < replacedAvatars.length; j++) {
+                replacedAvatars[j].remove();
+            }
+            
+            var replacedLinks = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
+            for (var k = 0; k < replacedLinks.length; k++) {
+                replacedLinks[k].classList.remove('avatar-replaced');
+                replacedLinks[k].classList.remove('has-forum-avatar');
+            }
+            
+            // Reset state
             state.userCache = {};
+            state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
             state.processedDeletedUsers = new WeakSet();
             state.processedLikesList = new WeakSet();
+            state.processingQueue = [];
+            state.isProcessing = false;
             state.isInitialized = false;
             
-            localStorage.removeItem('avatar_cache_v3');
+            // Clear localStorage
+            var clearedKeys = [];
+            for (var l = 0; l < localStorage.length; l++) {
+                var key = localStorage.key(l);
+                if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                            key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                    localStorage.removeItem(key);
+                    clearedKeys.push(key);
+                }
+            }
+            console.log('✅ Cleared', clearedKeys.length, 'cache entries');
             
             initAvatarSystem();
         },
         
-        stats: function() {
-            var stats = {
-                cacheSize: Object.keys(state.userCache).length,
-                generated: 0,
-                real: 0
-            };
+        clearCache: function() {
+            console.log('🧹 Clearing avatar cache...');
+            state.userCache = {};
             
-            for (var key in state.userCache) {
-                if (state.userCache[key].url.includes('dicebear.com')) {
-                    stats.generated++;
-                } else {
-                    stats.real++;
+            var clearedCount = 0;
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                            key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                    localStorage.removeItem(key);
+                    clearedCount++;
                 }
             }
             
-            return stats;
+            console.log('✅ Cleared', clearedCount, 'avatars from cache');
+            return clearedCount;
+        },
+        
+        resetBrokenAvatars: function() {
+            console.log('🔄 Resetting broken avatar flags...');
+            
+            state.brokenAvatars.clear();
+            
+            var clearedCount = 0;
+            var keysToRemove = [];
+            
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith(AVATAR_CONFIG.cache.brokenPrefix)) {
+                    keysToRemove.push(key);
+                    clearedCount++;
+                }
+            }
+            
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            console.log('✅ Cleared', clearedCount, 'broken avatar flags');
+            this.refresh();
+            
+            return clearedCount;
+        },
+        
+        stats: function() {
+            var cacheCount = 0;
+            var deletedCacheCount = 0;
+            var generatedCount = 0;
+            var realCount = 0;
+            var brokenCount = 0;
+            
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
+                    cacheCount++;
+                    try {
+                        var data = JSON.parse(localStorage.getItem(key));
+                        if (data && data.url) {
+                            if (data.url.includes('dicebear.com')) {
+                                generatedCount++;
+                            } else {
+                                realCount++;
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (key && key.startsWith(AVATAR_CONFIG.cache.deletedPrefix)) {
+                    deletedCacheCount++;
+                }
+                if (key && key.startsWith(AVATAR_CONFIG.cache.brokenPrefix)) {
+                    brokenCount++;
+                }
+            }
+            
+            var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+            var withAvatars = 0;
+            for (var j = 0; j < posts.length; j++) {
+                var nickname = posts[j].querySelector('.nick a, .nick');
+                if (nickname && nickname.previousElementSibling && 
+                    nickname.previousElementSibling.classList && 
+                    nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                    withAvatars++;
+                }
+            }
+            
+            var likesAvatars = document.querySelectorAll('.forum-likes-avatar').length;
+            
+            return {
+                postsTotal: posts.length,
+                postsWithAvatars: withAvatars,
+                likesAvatars: likesAvatars,
+                memoryCache: Object.keys(state.userCache).length,
+                localStorageCache: cacheCount,
+                realAvatars: realCount,
+                generatedAvatars: generatedCount,
+                deletedUserCache: deletedCacheCount,
+                brokenFlags: brokenCount,
+                brokenInMemory: state.brokenAvatars.size,
+                queueSize: state.processingQueue.length,
+                isProcessing: state.isProcessing,
+                isInitialized: state.isInitialized,
+                cacheVersion: state.cacheVersion
+            };
+        },
+        
+        debugUser: function(userId) {
+            var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
+            console.log('Debug user ' + userId + ':');
+            
+            for (var i = 0; i < posts.length; i++) {
+                var nickname = posts[i].querySelector('.nick a, .nick');
+                console.log('Post ' + (i+1) + ' .nick:', nickname ? nickname.textContent : 'none');
+                
+                var extracted = extractUsernameFromElement(posts[i], 'post', userId);
+                console.log('Extracted username:', extracted);
+            }
+            
+            fetch('/api.php?mid=' + userId)
+                .then(r => r.json())
+                .then(data => {
+                    console.log('API Response for user', userId + ':', data);
+                    console.log('Avatar URL from API:', data['m' + userId]?.avatar);
+                })
+                .catch(err => console.error('API Error:', err));
+        },
+        
+        debugLikes: function() {
+            var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+            console.log('Debug likes links:', likesLinks.length);
+            
+            for (var i = 0; i < likesLinks.length; i++) {
+                var link = likesLinks[i];
+                console.log('Link', i + 1, ':', {
+                    href: link.href,
+                    text: link.textContent,
+                    className: link.className
+                });
+                
+                var userId = extractUserIdFromElement(link, 'likes_href');
+                console.log('Extracted userId:', userId);
+                
+                var username = extractUsernameFromElement(link, 'likes_list', userId);
+                console.log('Extracted username:', username);
+            }
         }
     };
 
-    // Auto-initialize
+    // ==============================
+    // AUTO-INITIALIZE
+    // ==============================
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => setTimeout(initAvatarSystem, 10));
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initAvatarSystem, 50);
+        });
     } else {
-        setTimeout(initAvatarSystem, 10);
+        setTimeout(initAvatarSystem, 50);
     }
 
 })();
