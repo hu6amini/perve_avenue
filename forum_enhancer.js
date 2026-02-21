@@ -5200,237 +5200,266 @@ class PostModernizer {
         });
     }
 
-    #transformPoll(pollContainer) {
-        const pollForm = pollContainer.closest('form#pollform');
-        if (!pollForm || pollContainer.classList.contains('poll-modernized')) return;
+#transformPoll(pollContainer) {
+    const pollForm = pollContainer.closest('form#pollform');
+    if (!pollForm || pollContainer.classList.contains('poll-modernized')) return;
+    
+    try {
+        // STORE THE POPUP BEFORE HIDING ANYTHING
+        const popupElement = pollContainer.querySelector('.popup.pop_points#overlay');
         
-        try {
-            const sunbar = pollContainer.querySelector('.sunbar.top.Item');
-            const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
-            const list = pollContainer.querySelector('ul.list');
-            if (!list) return;
+        const sunbar = pollContainer.querySelector('.sunbar.top.Item');
+        const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
+        const list = pollContainer.querySelector('ul.list');
+        if (!list) return;
 
-            const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
-            const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
-            const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
+        const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
+        const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        
+        const isVotedState = originalCancelBtn !== null;
+        const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
+        const isVoteState = !isVotedState && !isResultsState;
+        
+        const originalPollContent = pollContainer.querySelector('.skin_tbl');
+        if (!originalPollContent) return;
+        
+        // Hide original content BUT DETACH THE POPUP FIRST
+        if (popupElement) {
+            // Move popup outside the poll container before hiding
+            document.body.appendChild(popupElement);
             
-            const isVotedState = originalCancelBtn !== null;
-            const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
-            const isVoteState = !isVotedState && !isResultsState;
+            // Ensure popup has proper styling
+            popupElement.style.cssText = 'display: none; position: absolute; z-index: 9999;';
             
-            const originalPollContent = pollContainer.querySelector('.skin_tbl');
-            if (!originalPollContent) return;
-            
-            originalPollContent.style.cssText = 'opacity:0;height:0;overflow:hidden;position:absolute;pointer-events:none';
-            
-            const modernPoll = document.createElement('div');
-            modernPoll.className = 'modern-poll';
-            modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
-            
-            let html = '<div class="poll-header">' +
-                '<div class="poll-icon">' +
-                '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
-                '</div>' +
-                '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
-                '<div class="poll-stats">';
-            
-            if (isVotedState || isResultsState) {
-                const votersText = pollContainer.querySelector('.darkbar.Item');
-                if (votersText) {
-                    const votersMatch = votersText.textContent.match(/Voters:\s*(\d+)/);
-                    if (votersMatch) {
-                        html += '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
-                            '<span>' + votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '') + '</span>';
-                    }
-                }
-            }
-            
-            html += '</div></div><div class="poll-choices">';
-            
-            if (isVoteState) {
-                const choiceItems = list.querySelectorAll('li.Item[style*="text-align:left"]');
-                choiceItems.forEach((item, index) => {
-                    const label = item.querySelector('label');
-                    const radio = item.querySelector('input[type="radio"]');
-                    if (!label || !radio) return;
-                    
-                    const choiceText = label.textContent.replace(/&nbsp;/g, ' ').trim();
-                    const choiceId = radio.id;
-                    const choiceValue = radio.value;
-                    const choiceName = radio.name;
-                    
-                    html += '<div class="poll-choice" data-choice-index="' + index + '">' +
-                        '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
-                        '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
-                        '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
-                        this.#escapeHtml(choiceText) + '</label>' +
-                        '</div>';
-                });
-            } else {
-                const choiceItems = list.querySelectorAll('li:not(:first-child)');
-                let maxVotes = 0;
-                const choicesData = [];
-                
-                choiceItems.forEach(item => {
-                    const isMax = item.classList.contains('max');
-                    const leftDiv = item.querySelector('.left.Sub.Item');
-                    const centerDiv = item.querySelector('.center.Sub.Item');
-                    const rightDiv = item.querySelector('.right.Sub.Item');
-                    
-                    if (!leftDiv || !centerDiv || !rightDiv) return;
-                    
-                    const choiceText = leftDiv.textContent.replace(/\s+/g, ' ').trim();
-                    const choiceTextClean = choiceText.replace(/^\*+/, '').replace(/\*+$/, '').trim();
-                    
-                    const barDiv = centerDiv.querySelector('.bar div');
-                    const percentageSpan = centerDiv.querySelector('.bar span');
-                    const votesDiv = rightDiv;
-                    
-                    let percentage = 0;
-                    let votes = 0;
-                    
-                    if (barDiv) {
-                        const widthMatch = barDiv.style.width.match(/(\d+(?:\.\d+)?)%/);
-                        if (widthMatch) percentage = parseFloat(widthMatch[1]);
-                    }
-                    
-                    if (percentageSpan) {
-                        const percentageMatch = percentageSpan.textContent.match(/(\d+(?:\.\d+)?)%/);
-                        if (percentageMatch) percentage = parseFloat(percentageMatch[1]);
-                    }
-                    
-                    if (votesDiv) {
-                        const votesText = votesDiv.textContent.replace(/[^\d.]/g, '');
-                        if (votesText) votes = parseInt(votesText);
-                    }
-                    
-                    if (votes > maxVotes) maxVotes = votes;
-                    
-                    choicesData.push({
-                        text: choiceTextClean,
-                        originalText: choiceText,
-                        percentage: percentage,
-                        votes: votes,
-                        isMax: isMax,
-                        isVoted: isMax && leftDiv.querySelector('strong') !== null
-                    });
-                });
-                
-                choicesData.forEach((choice, index) => {
-                    const isVotedChoice = isVotedState && choice.isVoted;
-                    
-                    html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
-                        (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
-                    
-                    if (isVotedState && isVotedChoice) {
-                        html += '<input type="radio" class="choice-radio" checked disabled>';
-                    }
-                    
-                    html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
-                    if (isVotedChoice) {
-                        html += ' <strong>(Your vote)</strong>';
-                    }
-                    html += '</span>';
-                    
-                    html += '<div class="choice-stats">' +
-                        '<div class="choice-bar">' +
-                        '<div class="choice-fill" style="width: ' + choice.percentage.toFixed(2) + '%"></div>' +
-                        '</div>' +
-                        '<span class="choice-percentage">' + choice.percentage.toFixed(2) + '%</span>' +
-                        '<span class="choice-votes">' + choice.votes + ' vote' + (choice.votes !== 1 ? 's' : '') + '</span>' +
-                        '</div>';
-                    
-                    html += '</div>';
-                });
-            }
-            
-            html += '</div><div class="poll-footer">';
-            
-            if (isVoteState) {
-                html += '<p class="poll-message">Select your choice and click Vote</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn vote-btn">' +
-                    '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
-                    'Vote' +
-                    '</button>' +
-                    '<button type="button" class="poll-btn secondary view-results-btn">' +
-                    '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
-                    'View Results' +
-                    '</button>' +
-                    '</div>';
-            } else if (isVotedState) {
-                const darkbar = pollContainer.querySelector('.darkbar.Item');
-                let votedForText = '';
-                
-                if (darkbar) {
-                    const abbr = darkbar.querySelector('abbr');
-                    if (abbr) {
-                        const choiceNumber = abbr.textContent.trim();
-                        const choiceTitle = abbr.getAttribute('title') || '';
-                        votedForText = 'You voted for option <strong>' + choiceNumber + '</strong>';
-                        if (choiceTitle) {
-                            votedForText += ': <span class="poll-choice-name">' + this.#escapeHtml(choiceTitle) + '</span>';
-                        }
-                    }
-                }
-                
-                html += '<p class="poll-message">' + votedForText + '</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn delete cancel-vote-btn">' +
-                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
-                    'Cancel Vote' +
-                    '</button>' +
-                    '</div>';
-            } else if (isResultsState) {
-                const darkbar = pollContainer.querySelector('.darkbar.Item');
-                let votersText = '';
-                
-                if (darkbar) {
-                    const votersMatch = darkbar.textContent.match(/Voters:\s*(\d+)/);
-                    if (votersMatch) {
-                        votersText = votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '');
-                    }
-                }
-                
-                html += '<p class="poll-message">Poll results' + (votersText ? ' • ' + votersText : '') + '</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn secondary" onclick="location.reload()">' +
-                    '<i class="fa-regular fa-rotate" aria-hidden="true"></i>' +
-                    'Refresh' +
-                    '</button>' +
-                    '</div>';
-            }
-            
-            html += '</div>';
-            
-            modernPoll.innerHTML = html;
-            pollContainer.insertBefore(modernPoll, originalPollContent);
-            pollContainer.classList.add('poll-modernized');
-            
-            this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
-                isVoteState: isVoteState,
-                isVotedState: isVotedState,
-                originalCancelBtn: originalCancelBtn,
-                originalVoteBtn: originalVoteBtn,
-                originalViewResultsBtn: originalViewResultsBtn
-            });
-            
-            if (isVotedState || isResultsState) {
+            // Re-initialize the overlay if jQuery is available
+            if (typeof $ !== 'undefined' && $.fn.overlay) {
+                // Small delay to ensure DOM is ready
                 setTimeout(() => {
-                    modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
-                        const width = fill.style.width;
-                        fill.style.width = '0';
-                        setTimeout(() => {
-                            fill.style.width = width;
-                        }, 10);
+                    $("a[rel=#overlay]").overlay({
+                        top: $(window).height() / 2 - 100,
+                        left: $(window).width() / 2 - 150,
+                        onBeforeLoad: function() {
+                            var wrap = this.getOverlay().find("div");
+                            wrap.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif" alt=""></p>')
+                                .load(this.getTrigger().attr("href") + "&popup=1");
+                        }
                     });
                 }, 100);
             }
-            
-        } catch (error) {
-            console.error('Error transforming poll:', error);
         }
+        
+        // Now hide the original content (popup is safely outside)
+        originalPollContent.style.cssText = 'opacity:0;height:0;overflow:hidden;position:absolute;pointer-events:none';
+        
+        const modernPoll = document.createElement('div');
+        modernPoll.className = 'modern-poll';
+        modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
+        
+        let html = '<div class="poll-header">' +
+            '<div class="poll-icon">' +
+            '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+            '</div>' +
+            '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
+            '<div class="poll-stats">';
+        
+        if (isVotedState || isResultsState) {
+            const votersText = pollContainer.querySelector('.darkbar.Item');
+            if (votersText) {
+                const votersMatch = votersText.textContent.match(/Voters:\s*(\d+)/);
+                if (votersMatch) {
+                    html += '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
+                        '<span>' + votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '') + '</span>';
+                }
+            }
+        }
+        
+        html += '</div></div><div class="poll-choices">';
+        
+        if (isVoteState) {
+            const choiceItems = list.querySelectorAll('li.Item[style*="text-align:left"]');
+            choiceItems.forEach((item, index) => {
+                const label = item.querySelector('label');
+                const radio = item.querySelector('input[type="radio"]');
+                if (!label || !radio) return;
+                
+                const choiceText = label.textContent.replace(/&nbsp;/g, ' ').trim();
+                const choiceId = radio.id;
+                const choiceValue = radio.value;
+                const choiceName = radio.name;
+                
+                html += '<div class="poll-choice" data-choice-index="' + index + '">' +
+                    '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
+                    '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
+                    this.#escapeHtml(choiceText) + '</label>' +
+                    '</div>';
+            });
+        } else {
+            const choiceItems = list.querySelectorAll('li:not(:first-child)');
+            let maxVotes = 0;
+            const choicesData = [];
+            
+            choiceItems.forEach(item => {
+                const isMax = item.classList.contains('max');
+                const leftDiv = item.querySelector('.left.Sub.Item');
+                const centerDiv = item.querySelector('.center.Sub.Item');
+                const rightDiv = item.querySelector('.right.Sub.Item');
+                
+                if (!leftDiv || !centerDiv || !rightDiv) return;
+                
+                const choiceText = leftDiv.textContent.replace(/\s+/g, ' ').trim();
+                const choiceTextClean = choiceText.replace(/^\*+/, '').replace(/\*+$/, '').trim();
+                
+                const barDiv = centerDiv.querySelector('.bar div');
+                const percentageSpan = centerDiv.querySelector('.bar span');
+                const votesDiv = rightDiv;
+                
+                let percentage = 0;
+                let votes = 0;
+                
+                if (barDiv) {
+                    const widthMatch = barDiv.style.width.match(/(\d+(?:\.\d+)?)%/);
+                    if (widthMatch) percentage = parseFloat(widthMatch[1]);
+                }
+                
+                if (percentageSpan) {
+                    const percentageMatch = percentageSpan.textContent.match(/(\d+(?:\.\d+)?)%/);
+                    if (percentageMatch) percentage = parseFloat(percentageMatch[1]);
+                }
+                
+                if (votesDiv) {
+                    const votesText = votesDiv.textContent.replace(/[^\d.]/g, '');
+                    if (votesText) votes = parseInt(votesText);
+                }
+                
+                if (votes > maxVotes) maxVotes = votes;
+                
+                choicesData.push({
+                    text: choiceTextClean,
+                    originalText: choiceText,
+                    percentage: percentage,
+                    votes: votes,
+                    isMax: isMax,
+                    isVoted: isMax && leftDiv.querySelector('strong') !== null
+                });
+            });
+            
+            choicesData.forEach((choice, index) => {
+                const isVotedChoice = isVotedState && choice.isVoted;
+                
+                html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
+                    (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
+                
+                if (isVotedState && isVotedChoice) {
+                    html += '<input type="radio" class="choice-radio" checked disabled>';
+                }
+                
+                html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
+                if (isVotedChoice) {
+                    html += ' <strong>(Your vote)</strong>';
+                }
+                html += '</span>';
+                
+                html += '<div class="choice-stats">' +
+                    '<div class="choice-bar">' +
+                    '<div class="choice-fill" style="width: ' + choice.percentage.toFixed(2) + '%"></div>' +
+                    '</div>' +
+                    '<span class="choice-percentage">' + choice.percentage.toFixed(2) + '%</span>' +
+                    '<span class="choice-votes">' + choice.votes + ' vote' + (choice.votes !== 1 ? 's' : '') + '</span>' +
+                    '</div>';
+                
+                html += '</div>';
+            });
+        }
+        
+        html += '</div><div class="poll-footer">';
+        
+        if (isVoteState) {
+            html += '<p class="poll-message">Select your choice and click Vote</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn vote-btn">' +
+                '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
+                'Vote' +
+                '</button>' +
+                '<button type="button" class="poll-btn secondary view-results-btn">' +
+                '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+                'View Results' +
+                '</button>' +
+                '</div>';
+        } else if (isVotedState) {
+            const darkbar = pollContainer.querySelector('.darkbar.Item');
+            let votedForText = '';
+            
+            if (darkbar) {
+                const abbr = darkbar.querySelector('abbr');
+                if (abbr) {
+                    const choiceNumber = abbr.textContent.trim();
+                    const choiceTitle = abbr.getAttribute('title') || '';
+                    votedForText = 'You voted for option <strong>' + choiceNumber + '</strong>';
+                    if (choiceTitle) {
+                        votedForText += ': <span class="poll-choice-name">' + this.#escapeHtml(choiceTitle) + '</span>';
+                    }
+                }
+            }
+            
+            html += '<p class="poll-message">' + votedForText + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn delete cancel-vote-btn">' +
+                '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                'Cancel Vote' +
+                '</button>' +
+                '</div>';
+        } else if (isResultsState) {
+            const darkbar = pollContainer.querySelector('.darkbar.Item');
+            let votersText = '';
+            
+            if (darkbar) {
+                const votersMatch = darkbar.textContent.match(/Voters:\s*(\d+)/);
+                if (votersMatch) {
+                    votersText = votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '');
+                }
+            }
+            
+            html += '<p class="poll-message">Poll results' + (votersText ? ' • ' + votersText : '') + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn secondary" onclick="location.reload()">' +
+                '<i class="fa-regular fa-rotate" aria-hidden="true"></i>' +
+                'Refresh' +
+                '</button>' +
+                '</div>';
+        }
+        
+        html += '</div>';
+        
+        modernPoll.innerHTML = html;
+        pollContainer.insertBefore(modernPoll, originalPollContent);
+        pollContainer.classList.add('poll-modernized');
+        
+        this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
+            isVoteState: isVoteState,
+            isVotedState: isVotedState,
+            originalCancelBtn: originalCancelBtn,
+            originalVoteBtn: originalVoteBtn,
+            originalViewResultsBtn: originalViewResultsBtn
+        });
+        
+        if (isVotedState || isResultsState) {
+            setTimeout(() => {
+                modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
+                    const width = fill.style.width;
+                    fill.style.width = '0';
+                    setTimeout(() => {
+                        fill.style.width = width;
+                    }, 10);
+                });
+            }, 100);
+        }
+        
+    } catch (error) {
+        console.error('Error transforming poll:', error);
     }
+}
     
     #setupPollEventListeners(modernPoll, pollForm, originalPollContent, options) {
         const { isVoteState, isVotedState, originalCancelBtn, originalVoteBtn, originalViewResultsBtn } = options;
