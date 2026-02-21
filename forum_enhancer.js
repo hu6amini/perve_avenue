@@ -1360,6 +1360,754 @@ if (!globalThis.mediaDimensionExtractor) {
         };
     }
 
+// ==============================
+// Complete Working Avatar System - INCLUDING LIKES/DISLIKES
+// ==============================
+
+(function() {
+    'use strict';
+
+    // ==============================
+    // CONFIGURATION
+    // ==============================
+    var AVATAR_THEME = {
+        colors: {
+            light: [
+                '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
+                '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
+            ],
+            dark: [
+                '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
+                '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
+            ]
+        },
+        currentTheme: 'light'
+    };
+
+    var AVATAR_CONFIG = {
+        sizes: {
+            'post': 60,
+            'profile_card': 80,
+            'deleted_user': 60,
+            'likes_list': 30  // Smaller size for likes/dislikes lists
+        },
+        
+        selectors: {
+            '.summary li[class^="box_"]': {
+                type: 'post',
+                size: 'post',
+                extractor: 'class'
+            },
+            
+            'a.avatar[href*="MID="] .default-avatar': {
+                type: 'default_avatar',
+                size: 'profile_card',
+                extractor: 'href'
+            },
+            
+            '.post.box_visitatore': {
+                type: 'deleted_user',
+                size: 'deleted_user',
+                extractor: 'visitatore'
+            },
+            
+            '.popup.pop_points .users li a[href*="MID="]': {
+                type: 'likes_list',
+                size: 'likes_list',
+                extractor: 'likes_href'
+            }
+        },
+        
+        dicebear: {
+            style: 'initials',
+            version: '7.x',
+            format: 'svg'
+        },
+        
+        cache: {
+            duration: 86400000,
+            prefix: 'avatar_',
+            brokenPrefix: 'broken_avatar_',
+            deletedPrefix: 'deleted_avatar_'
+        }
+    };
+
+    // ==============================
+    // STATE MANAGEMENT
+    // ==============================
+    var state = {
+        pendingRequests: {},
+        userCache: {},
+        brokenAvatars: new Set(),
+        processedPosts: new WeakSet(),
+        processedAvatars: new WeakSet(),
+        processedDeletedUsers: new WeakSet(),
+        processedLikesList: new WeakSet(),
+        isInitialized: false,
+        cacheVersion: '2.1' // Updated cache version to force refresh
+    };
+
+    // ==============================
+    // CORE FUNCTIONS
+    // ==============================
+
+    function getCacheKey(userId, size) {
+        return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
+    }
+
+    function getDeletedUserCacheKey(username, size) {
+        var hash = 0;
+        for (var i = 0; i < username.length; i++) {
+            hash = ((hash << 5) - hash) + username.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return AVATAR_CONFIG.cache.deletedPrefix + Math.abs(hash) + '_' + size;
+    }
+
+    function clearGeneratedAvatarsFromCache() {
+        console.log('🔄 Clearing generated avatars from cache...');
+        var keysToClear = [];
+        var clearedCount = 0;
+        
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.url && 
+                        (data.url.includes('dicebear.com') || 
+                         data.url.includes('api.dicebear.com') ||
+                         (data.timestamp && Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration))) {
+                        keysToClear.push(key);
+                        clearedCount++;
+                    }
+                } catch (e) {
+                    keysToClear.push(key);
+                }
+            }
+        }
+        
+        for (var j = 0; j < keysToClear.length; j++) {
+            localStorage.removeItem(keysToClear[j]);
+        }
+        
+        console.log('✅ Cleared', clearedCount, 'generated/expired avatars from cache');
+        return clearedCount;
+    }
+
+    function clearOldCacheEntries() {
+        var cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
+        var keysToRemove = [];
+        
+        for (var i = 0; i < localStorage.length; i++) {
+            var key = localStorage.key(i);
+            if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                        key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                try {
+                    var data = JSON.parse(localStorage.getItem(key));
+                    if (data && data.timestamp < cutoff) {
+                        keysToRemove.push(key);
+                    }
+                } catch (e) {
+                    keysToRemove.push(key);
+                }
+            }
+        }
+        
+        for (var j = 0; j < keysToRemove.length; j++) {
+            localStorage.removeItem(keysToRemove[j]);
+        }
+        
+        return keysToRemove.length;
+    }
+
+    function isBrokenAvatarUrl(avatarUrl) {
+        if (!avatarUrl || avatarUrl === 'http') {
+            return true;
+        }
+        
+        if (state.brokenAvatars.has(avatarUrl)) {
+            return true;
+        }
+        
+        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        var brokenCache = localStorage.getItem(brokenKey);
+        if (brokenCache) {
+            try {
+                var data = JSON.parse(brokenCache);
+                if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                    state.brokenAvatars.add(avatarUrl);
+                    return true;
+                }
+            } catch (e) {
+                // Invalid cache
+            }
+        }
+        
+        return false;
+    }
+
+    function markAvatarAsBroken(avatarUrl) {
+        if (!avatarUrl) return;
+        
+        state.brokenAvatars.add(avatarUrl);
+        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        localStorage.setItem(brokenKey, JSON.stringify({
+            url: avatarUrl,
+            timestamp: Date.now()
+        }));
+    }
+
+    function testImageUrl(url, callback) {
+        if (!url || url === 'http') {
+            callback(false);
+            return;
+        }
+        
+        var img = new Image();
+        var timeoutId = setTimeout(function() {
+            img.onload = img.onerror = null;
+            callback(false);
+        }, 3000);
+        
+        img.onload = function() {
+            clearTimeout(timeoutId);
+            callback(true);
+        };
+        
+        img.onerror = function() {
+            clearTimeout(timeoutId);
+            callback(false);
+        };
+        
+        img.src = url;
+    }
+
+    // ==============================
+    // USERNAME EXTRACTION
+    // ==============================
+
+    function cleanUsername(username) {
+        if (!username) return 'User';
+        username = username.trim();
+        username = username.replace(/\.{3,}/g, '');
+        username = username.replace(/[\n\t]/g, ' ');
+        username = username.replace(/\s+/g, ' ');
+        
+        if (username.length < 2 || /^[^a-zA-Z0-9]+$/.test(username)) {
+            return 'User';
+        }
+        
+        return username;
+    }
+
+    function extractUsernameFromElement(element, type, userId) {
+        var username = '';
+        
+        if (type === 'post') {
+            var nickname = element.querySelector('.nick a');
+            if (nickname && nickname.textContent) {
+                username = nickname.textContent;
+            }
+            
+            if (!username) {
+                var userClass = element.querySelector('.user' + userId);
+                if (userClass && userClass.textContent) {
+                    username = userClass.textContent;
+                }
+            }
+            
+            if (!username) {
+                var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
+                for (var i = 0; i < midLinks.length; i++) {
+                    if (midLinks[i].textContent) {
+                        username = midLinks[i].textContent;
+                        break;
+                    }
+                }
+            }
+        } else if (type === 'default_avatar') {
+            var parentLink = element.closest('a[href*="MID="]');
+            if (parentLink) {
+                if (parentLink.title) {
+                    username = parentLink.title;
+                }
+                
+                if (!username && parentLink.textContent) {
+                    username = parentLink.textContent;
+                }
+            }
+        } else if (type === 'deleted_user') {
+            var nickname = element.querySelector('.nick');
+            if (nickname && nickname.textContent) {
+                username = nickname.textContent;
+            }
+        } else if (type === 'likes_list') {
+            // For likes list, the element IS the link with the username
+            if (element.textContent) {
+                username = element.textContent;
+            } else if (element.title) {
+                username = element.title;
+            }
+            
+            // Also check for class name patterns
+            if (!username && element.className) {
+                var classMatch = element.className.match(/user\d+/);
+                if (classMatch) {
+                    // Try to get username from class
+                    var userSpan = document.querySelector('.' + classMatch[0]);
+                    if (userSpan && userSpan.textContent) {
+                        username = userSpan.textContent;
+                    }
+                }
+            }
+        }
+        
+        return cleanUsername(username);
+    }
+
+    // ==============================
+    // AVATAR GENERATION
+    // ==============================
+
+    function generateLetterAvatar(userId, username, size) {
+        var displayName = username || 'User';
+        var firstLetter = displayName.charAt(0).toUpperCase();
+        
+        var colors = AVATAR_THEME.colors.light;
+        var colorIndex = 0;
+        
+        if (firstLetter >= 'A' && firstLetter <= 'Z') {
+            colorIndex = (firstLetter.charCodeAt(0) - 65) % colors.length;
+        } else if (firstLetter >= '0' && firstLetter <= '9') {
+            colorIndex = (parseInt(firstLetter) + 26) % colors.length;
+        } else {
+            var hash = 0;
+            for (var i = 0; i < username.length; i++) {
+                hash = ((hash << 5) - hash) + username.charCodeAt(i);
+                hash = hash & hash;
+            }
+            colorIndex = Math.abs(hash) % colors.length;
+        }
+        
+        var backgroundColor = colors[colorIndex];
+        if (backgroundColor.startsWith('#')) {
+            backgroundColor = backgroundColor.substring(1);
+        }
+        
+        var params = [
+            'seed=' + encodeURIComponent(firstLetter),
+            'backgroundColor=' + backgroundColor,
+            'radius=50',
+            'size=' + size
+        ];
+        
+        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+    }
+
+    // ==============================
+    // AVATAR FETCHING - UPDATED TO ALWAYS CHECK FORUM API FIRST
+    // ==============================
+
+    function fetchAvatarFromForumAPI(userId, username, size, callback, isDeletedUser, isLikesList) {
+        console.log('🔍 Fetching from forum API for user:', userId);
+        
+        // Fetch from forum API
+        fetch('/api.php?mid=' + userId)
+            .then(function(response) {
+                console.log('API response status:', response.status, 'for user', userId);
+                if (!response.ok) {
+                    throw new Error('API failed with status ' + response.status);
+                }
+                return response.json();
+            })
+            .then(function(data) {
+                console.log('API data received for user', userId, data);
+                var userKey = 'm' + userId;
+                var userData = data[userKey];
+                var finalUsername = username;
+                var avatarUrl;
+                
+                if (userData && userData.nickname) {
+                    finalUsername = cleanUsername(userData.nickname);
+                    console.log('API nickname:', userData.nickname, '-> cleaned:', finalUsername);
+                }
+                
+                if (userData && userData.avatar && 
+                    userData.avatar.trim() !== '' && 
+                    userData.avatar !== 'http') {
+                    
+                    avatarUrl = userData.avatar;
+                    console.log('🎯 REAL AVATAR FOUND from API:', avatarUrl, 'for user', userId);
+                    
+                    if (isBrokenAvatarUrl(avatarUrl)) {
+                        console.log('Avatar marked as broken, generating fallback');
+                        avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                        finishAvatar(avatarUrl, finalUsername, 'real_found_broken');
+                    } else {
+                        testImageUrl(avatarUrl, function(success) {
+                            if (success) {
+                                console.log('✅ Avatar URL test SUCCESS for user', userId);
+                                finishAvatar(avatarUrl, finalUsername, 'real_verified');
+                            } else {
+                                console.log('❌ Avatar URL test FAILED for user', userId);
+                                markAvatarAsBroken(avatarUrl);
+                                avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                                finishAvatar(avatarUrl, finalUsername, 'real_failed_test');
+                            }
+                        });
+                        return;
+                    }
+                } else {
+                    console.log('⚠️ No real avatar from API for user', userId, 'generating letter avatar');
+                    avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                    finishAvatar(avatarUrl, finalUsername, 'generated_from_api');
+                }
+                
+                function finishAvatar(url, name, source) {
+                    var cacheData = {
+                        url: url,
+                        username: name,
+                        timestamp: Date.now(),
+                        size: size,
+                        cacheVersion: state.cacheVersion,
+                        source: source || (url.includes('dicebear.com') ? 'generated' : 'forum')
+                    };
+                    
+                    console.log('💾 Caching avatar for user', userId, 'Source:', cacheData.source);
+                    
+                    // Cache in memory
+                    var cacheKey = userId + '_' + size;
+                    state.userCache[cacheKey] = cacheData;
+                    
+                    // Cache in localStorage
+                    try {
+                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    } catch (e) {
+                        clearOldCacheEntries();
+                        localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+                    }
+                    
+                    callback(url, name);
+                }
+            })
+            .catch(function(error) {
+                console.warn('❌ Avatar fetch failed for user ' + userId + ':', error);
+                var fallbackUrl = generateLetterAvatar(userId, username, size);
+                console.log('Using fallback generated avatar for user', userId, fallbackUrl);
+                finishFallback(userId, fallbackUrl, username || 'User', size, callback);
+            });
+    }
+    
+    function finishFallback(userId, fallbackUrl, username, size, callback) {
+        var cacheData = {
+            url: fallbackUrl,
+            username: username || 'User',
+            timestamp: Date.now(),
+            size: size,
+            cacheVersion: state.cacheVersion,
+            source: 'generated_fallback'
+        };
+        
+        var cacheKey = userId + '_' + size;
+        state.userCache[cacheKey] = cacheData;
+        
+        try {
+            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+        } catch (e) {
+            clearOldCacheEntries();
+            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(cacheData));
+        }
+        
+        callback(fallbackUrl, username || 'User');
+    }
+
+    function getOrCreateAvatar(userId, username, size, callback, isDeletedUser, isLikesList) {
+        console.log('🔍 getOrCreateAvatar called:', { 
+            userId, 
+            username, 
+            size, 
+            isDeletedUser, 
+            isLikesList 
+        });
+        
+        // Handle deleted users separately (no ID)
+        if (isDeletedUser) {
+            var cacheKey = 'deleted_' + username + '_' + size;
+            
+            if (state.userCache[cacheKey]) {
+                var cached = state.userCache[cacheKey];
+                callback(cached.url, cached.username);
+                return;
+            }
+            
+            var stored = localStorage.getItem(getDeletedUserCacheKey(username, size));
+            if (stored) {
+                try {
+                    var data = JSON.parse(stored);
+                    if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                        state.userCache[cacheKey] = data;
+                        callback(data.url, data.username);
+                        return;
+                    }
+                } catch (e) {
+                    // Invalid cache
+                }
+            }
+            
+            var avatarUrl = generateLetterAvatar(null, username, size);
+            console.log('Generated deleted user avatar:', avatarUrl);
+            var cacheData = {
+                url: avatarUrl,
+                username: username,
+                timestamp: Date.now(),
+                size: size,
+                isDeletedUser: true,
+                cacheVersion: state.cacheVersion
+            };
+            
+            try {
+                localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
+            } catch (e) {
+                clearOldCacheEntries();
+                localStorage.setItem(getDeletedUserCacheKey(username, size), JSON.stringify(cacheData));
+            }
+            
+            state.userCache[cacheKey] = cacheData;
+            callback(avatarUrl, username);
+            return;
+        }
+        
+        // For active users with ID - ALWAYS check forum API first
+        var cacheKey = userId + '_' + size;
+        
+        // Check if we have a valid cached REAL avatar (not generated)
+        if (state.userCache[cacheKey]) {
+            var cached = state.userCache[cacheKey];
+            
+            // If we have a real avatar in cache and it's not broken, use it
+            if (cached.source && cached.source.startsWith('real_') && !isBrokenAvatarUrl(cached.url)) {
+                console.log('Using cached REAL avatar for user', userId, cached.url);
+                callback(cached.url, cached.username);
+                return;
+            }
+            
+            // If it's a generated avatar, we should still check API for real one
+            // But only if it's not too recent (avoid hammering API)
+            if (cached.source && cached.source.includes('generated')) {
+                var cacheAge = Date.now() - cached.timestamp;
+                if (cacheAge < 3600000) { // 1 hour cooldown for generated avatars
+                    console.log('Using recent generated avatar for user', userId, '(cache age:', cacheAge, 'ms)');
+                    callback(cached.url, cached.username);
+                    return;
+                }
+                console.log('Generated avatar expired, checking API for real avatar for user', userId);
+                // Continue to API fetch
+            } else if (!isBrokenAvatarUrl(cached.url)) {
+                console.log('Using cached avatar for user', userId, cached.url);
+                callback(cached.url, cached.username);
+                return;
+            }
+        }
+        
+        // Check localStorage for REAL avatars
+        var stored = localStorage.getItem(getCacheKey(userId, size));
+        if (stored) {
+            try {
+                var data = JSON.parse(stored);
+                
+                // Check if cache is expired or old version
+                var isExpired = Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration;
+                var isOldVersion = !data.cacheVersion || data.cacheVersion !== state.cacheVersion;
+                
+                // If we have a REAL avatar in localStorage and it's valid, use it
+                if (data.source && data.source.startsWith('real_') && !isExpired && !isOldVersion && !isBrokenAvatarUrl(data.url)) {
+                    state.userCache[cacheKey] = data;
+                    console.log('Using localStorage cached REAL avatar for user', userId, data.url);
+                    callback(data.url, data.username);
+                    return;
+                }
+                
+                // If it's a generated avatar and recent, use it
+                if (data.source && data.source.includes('generated') && !isExpired) {
+                    var cacheAge = Date.now() - data.timestamp;
+                    if (cacheAge < 3600000) { // 1 hour cooldown
+                        state.userCache[cacheKey] = data;
+                        console.log('Using recent generated avatar from localStorage for user', userId);
+                        callback(data.url, data.username);
+                        return;
+                    }
+                }
+                
+                console.log('Cache expired or invalid for user', userId, '- fetching fresh from API');
+            } catch (e) {
+                console.log('Invalid cache for user', userId);
+            }
+        }
+        
+        // No valid cache found, fetch from forum API
+        fetchAvatarFromForumAPI(userId, username, size, callback, isDeletedUser, isLikesList);
+    }
+
+    // ==============================
+    // ELEMENT PROCESSING
+    // ==============================
+
+    function extractUserIdFromElement(element, extractorType) {
+        var userId = null;
+        
+        if (extractorType === 'class') {
+            var classMatch = element.className.match(/\bbox_m(\d+)\b/);
+            if (classMatch) {
+                userId = classMatch[1];
+            } else {
+                var parentBox = element.closest('[class*="box_m"]');
+                if (parentBox) {
+                    classMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
+                    if (classMatch) userId = classMatch[1];
+                }
+            }
+        } else if (extractorType === 'href') {
+            var linkElement = element.closest('a[href*="MID="]');
+            if (linkElement) {
+                var hrefMatch = linkElement.href.match(/MID=(\d+)/);
+                if (hrefMatch) userId = hrefMatch[1];
+            }
+        } else if (extractorType === 'visitatore') {
+            return null;
+        } else if (extractorType === 'likes_href') {
+            // Check the element's href directly (it's already an <a> tag)
+            if (element.href) {
+                // Try multiple patterns
+                var hrefMatch = element.href.match(/MID=(\d+)/) || 
+                                element.href.match(/[?&]MID=(\d+)/) ||
+                                element.href.match(/MID\%3D(\d+)/);
+                
+                if (hrefMatch) {
+                    userId = hrefMatch[1];
+                } else {
+                    // Try to decode URL and check again
+                    try {
+                        var decodedUrl = decodeURIComponent(element.href);
+                        hrefMatch = decodedUrl.match(/MID=(\d+)/);
+                        if (hrefMatch) userId = hrefMatch[1];
+                    } catch (e) {
+                        console.log('Failed to decode URL:', element.href);
+                    }
+                }
+            }
+        }
+        
+        return userId;
+    }
+
+    function shouldProcessElement(element) {
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+            return null;
+        }
+        
+        var config = null;
+        
+        // Check if it's a summary post
+        if (element.matches('.summary li[class^="box_"]')) {
+            config = {
+                type: 'post',
+                size: AVATAR_CONFIG.sizes.post,
+                extractor: 'class'
+            };
+        }
+        // Check if it's a default avatar inside a post
+        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
+            var postParent = element.closest('.post');
+            if (postParent) {
+                config = {
+                    type: 'default_avatar',
+                    size: AVATAR_CONFIG.sizes.post,
+                    extractor: 'href'
+                };
+            } else {
+                config = {
+                    type: 'default_avatar',
+                    size: AVATAR_CONFIG.sizes.profile_card,
+                    extractor: 'href'
+                };
+            }
+        }
+        // Check if it's a deleted user
+        else if (element.matches('.post.box_visitatore')) {
+            config = {
+                type: 'deleted_user',
+                size: AVATAR_CONFIG.sizes.deleted_user,
+                extractor: 'visitatore'
+            };
+        }
+        // Check if it's a likes/dislikes list item
+        else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
+            if (state.processedLikesList.has(element)) {
+                return null;
+            }
+            
+            config = {
+                type: 'likes_list',
+                size: AVATAR_CONFIG.sizes.likes_list,
+                extractor: 'likes_href'
+            };
+        }
+        
+        if (!config) {
+            return null;
+        }
+        
+        // Check if already processed
+        if ((config.type === 'post' && state.processedPosts.has(element)) ||
+            (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
+            (config.type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
+            (config.type === 'likes_list' && state.processedLikesList.has(element))) {
+            return null;
+        }
+        
+        var userId = extractUserIdFromElement(element, config.extractor);
+        
+        if (config.type === 'post' || config.type === 'deleted_user') {
+            var nickname = element.querySelector('.nick');
+            if (!nickname) {
+                return null;
+            }
+            if (nickname.previousElementSibling && 
+                nickname.previousElementSibling.classList && 
+                nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+                if (config.type === 'post') {
+                    state.processedPosts.add(element);
+                } else {
+                    state.processedDeletedUsers.add(element);
+                }
+                return null;
+            }
+        } else if (config.type === 'default_avatar') {
+            if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
+                return null;
+            }
+            var parentLink = element.closest('a.avatar[href*="MID="]');
+            if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
+                state.processedAvatars.add(element);
+                return null;
+            }
+        } else if (config.type === 'likes_list') {
+            // Check if this link already has an avatar before it
+            var span = element.closest('span');
+            if (span && span.querySelector('img.forum-likes-avatar')) {
+                state.processedLikesList.add(element);
+                return null;
+            }
+        }
+        
+        return {
+            element: element,
+            userId: userId,
+            config: config
+        };
+    }
+
     // ==============================
     // AVATAR CREATION & INSERTION
     // ==============================
@@ -1449,7 +2197,7 @@ if (!globalThis.mediaDimensionExtractor) {
                 return;
             }
             
-            // Special handling for likes list - use forum API
+            // For likes list - ALWAYS check forum API first
             getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
                 console.log('✅ Got avatar for likes list user', userId, ':', 
                     avatarUrl.includes('dicebear.com') ? 'Generated' : 'Real Forum Avatar');
@@ -1851,6 +2599,7 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
 })();
+    
 
     // ==============================
     // VIDEO-IFRAME
