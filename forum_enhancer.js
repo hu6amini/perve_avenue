@@ -647,7 +647,7 @@ if (!globalThis.mediaDimensionExtractor) {
 
 
 // ==============================
-// Complete Working Avatar System - INCLUDING LIKES/DISLIKES
+// Complete Working Avatar System - INCLUDING LIKES/DISLIKES - FIXED VERSION
 // ==============================
 
 (function() {
@@ -675,7 +675,7 @@ if (!globalThis.mediaDimensionExtractor) {
             'post': 60,
             'profile_card': 80,
             'deleted_user': 60,
-            'likes_list': 30  // Smaller size for likes/dislikes lists
+            'likes_list': 30
         },
         
         selectors: {
@@ -711,7 +711,7 @@ if (!globalThis.mediaDimensionExtractor) {
         },
         
         cache: {
-            duration: 86400000,
+            duration: 86400000, // 24 hours
             prefix: 'avatar_',
             brokenPrefix: 'broken_avatar_',
             deletedPrefix: 'deleted_avatar_'
@@ -730,7 +730,7 @@ if (!globalThis.mediaDimensionExtractor) {
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
         isInitialized: false,
-        cacheVersion: '2.0' // Cache version to force refresh
+        cacheVersion: '2.1' // Increased version to force refresh
     };
 
     // ==============================
@@ -748,37 +748,6 @@ if (!globalThis.mediaDimensionExtractor) {
             hash = hash & hash;
         }
         return AVATAR_CONFIG.cache.deletedPrefix + Math.abs(hash) + '_' + size;
-    }
-
-    function clearGeneratedAvatarsFromCache() {
-        console.log('🔄 Clearing generated avatars from cache...');
-        var keysToClear = [];
-        var clearedCount = 0;
-        
-        for (var i = 0; i < localStorage.length; i++) {
-            var key = localStorage.key(i);
-            if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
-                try {
-                    var data = JSON.parse(localStorage.getItem(key));
-                    if (data && data.url && 
-                        (data.url.includes('dicebear.com') || 
-                         data.url.includes('api.dicebear.com') ||
-                         (data.timestamp && Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration))) {
-                        keysToClear.push(key);
-                        clearedCount++;
-                    }
-                } catch (e) {
-                    keysToClear.push(key);
-                }
-            }
-        }
-        
-        for (var j = 0; j < keysToClear.length; j++) {
-            localStorage.removeItem(keysToClear[j]);
-        }
-        
-        console.log('✅ Cleared', clearedCount, 'generated/expired avatars from cache');
-        return clearedCount;
     }
 
     function clearOldCacheEntries() {
@@ -812,6 +781,11 @@ if (!globalThis.mediaDimensionExtractor) {
             return true;
         }
         
+        // Never mark generated avatars as broken
+        if (avatarUrl.includes('dicebear.com')) {
+            return false;
+        }
+        
         if (state.brokenAvatars.has(avatarUrl)) {
             return true;
         }
@@ -821,9 +795,14 @@ if (!globalThis.mediaDimensionExtractor) {
         if (brokenCache) {
             try {
                 var data = JSON.parse(brokenCache);
-                if (Date.now() - data.timestamp < AVATAR_CONFIG.cache.duration) {
+                // Only consider it broken if it's been less than 1 hour
+                // This allows retrying after temporary failures
+                if (Date.now() - data.timestamp < 3600000) { // 1 hour
                     state.brokenAvatars.add(avatarUrl);
                     return true;
+                } else {
+                    // Expired broken flag, remove it
+                    localStorage.removeItem(brokenKey);
                 }
             } catch (e) {
                 // Invalid cache
@@ -834,7 +813,7 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     function markAvatarAsBroken(avatarUrl) {
-        if (!avatarUrl) return;
+        if (!avatarUrl || avatarUrl.includes('dicebear.com')) return;
         
         state.brokenAvatars.add(avatarUrl);
         var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
@@ -850,11 +829,19 @@ if (!globalThis.mediaDimensionExtractor) {
             return;
         }
         
+        // Don't test generated avatars, they always work
+        if (url.includes('dicebear.com')) {
+            callback(true);
+            return;
+        }
+        
         var img = new Image();
         var timeoutId = setTimeout(function() {
             img.onload = img.onerror = null;
-            callback(false);
-        }, 3000);
+            console.log('⚠️ Image test timeout for:', url);
+            // On timeout, assume it might work (don't mark as broken)
+            callback(true);
+        }, 5000); // Increased timeout to 5 seconds
         
         img.onload = function() {
             clearTimeout(timeoutId);
@@ -863,10 +850,13 @@ if (!globalThis.mediaDimensionExtractor) {
         
         img.onerror = function() {
             clearTimeout(timeoutId);
+            console.log('❌ Image failed to load:', url);
             callback(false);
         };
         
-        img.src = url;
+        // Add cache-busting parameter to avoid cached failures
+        var separator = url.includes('?') ? '&' : '?';
+        img.src = url + separator + 't=' + Date.now();
     }
 
     // ==============================
@@ -929,18 +919,15 @@ if (!globalThis.mediaDimensionExtractor) {
                 username = nickname.textContent;
             }
         } else if (type === 'likes_list') {
-            // For likes list, the element IS the link with the username
             if (element.textContent) {
                 username = element.textContent;
             } else if (element.title) {
                 username = element.title;
             }
             
-            // Also check for class name patterns
             if (!username && element.className) {
                 var classMatch = element.className.match(/user\d+/);
                 if (classMatch) {
-                    // Try to get username from class
                     var userSpan = document.querySelector('.' + classMatch[0]);
                     if (userSpan && userSpan.textContent) {
                         username = userSpan.textContent;
@@ -959,6 +946,11 @@ if (!globalThis.mediaDimensionExtractor) {
     function generateLetterAvatar(userId, username, size) {
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
+        
+        // Handle special characters
+        if (!firstLetter.match(/[A-Z0-9]/i)) {
+            firstLetter = '?';
+        }
         
         var colors = AVATAR_THEME.colors.light;
         var colorIndex = 0;
@@ -992,7 +984,7 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     // ==============================
-    // AVATAR FETCHING
+    // AVATAR FETCHING - FIXED VERSION
     // ==============================
 
     function getOrCreateAvatar(userId, username, size, callback, isDeletedUser, isLikesList) {
@@ -1057,14 +1049,24 @@ if (!globalThis.mediaDimensionExtractor) {
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
             
-            // Skip cache if it's an old version or generated avatar for likes list
+            // For likes list, prefer real avatars over generated ones
             if (isLikesList && cached.url && cached.url.includes('dicebear.com')) {
                 console.log('Skipping generated avatar cache for likes list user', userId);
                 delete state.userCache[cacheKey];
-            } else if (!isBrokenAvatarUrl(cached.url)) {
-                console.log('Using cached avatar for user', userId, cached.url);
-                callback(cached.url, cached.username);
-                return;
+            } else {
+                // Check if this is a real avatar that was incorrectly marked as broken
+                var isGenerated = cached.url && cached.url.includes('dicebear.com');
+                var isBroken = isBrokenAvatarUrl(cached.url);
+                
+                // If it's a real avatar but marked broken, try again
+                if (!isGenerated && isBroken) {
+                    console.log('⚠️ Real avatar was marked broken, trying again for user', userId);
+                    delete state.userCache[cacheKey];
+                } else if (!isBroken) {
+                    console.log('Using cached avatar for user', userId, cached.url);
+                    callback(cached.url, cached.username);
+                    return;
+                }
             }
         }
         
@@ -1085,11 +1087,20 @@ if (!globalThis.mediaDimensionExtractor) {
                     localStorage.removeItem(getCacheKey(userId, size));
                 }
                 // Use cache only if valid
-                else if (!isExpired && !isOldVersion && !isBrokenAvatarUrl(data.url)) {
-                    state.userCache[cacheKey] = data;
-                    console.log('Using localStorage cached avatar for user', userId, data.url);
-                    callback(data.url, data.username);
-                    return;
+                else if (!isExpired && !isOldVersion) {
+                    // Check if it's a real avatar that might be broken
+                    var isGenerated = data.url && data.url.includes('dicebear.com');
+                    var isBroken = isBrokenAvatarUrl(data.url);
+                    
+                    if (!isGenerated && isBroken) {
+                        console.log('Real avatar in localStorage is marked broken, retrying for user', userId);
+                        localStorage.removeItem(getCacheKey(userId, size));
+                    } else if (!isBroken) {
+                        state.userCache[cacheKey] = data;
+                        console.log('Using localStorage cached avatar for user', userId, data.url);
+                        callback(data.url, data.username);
+                        return;
+                    }
                 } else if (isExpired || isOldVersion) {
                     console.log('Cache expired or old version for user', userId);
                     localStorage.removeItem(getCacheKey(userId, size));
@@ -1129,24 +1140,19 @@ if (!globalThis.mediaDimensionExtractor) {
                     avatarUrl = userData.avatar;
                     console.log('🎯 REAL AVATAR FOUND from API:', avatarUrl, 'for user', userId);
                     
-                    if (isBrokenAvatarUrl(avatarUrl)) {
-                        console.log('Avatar marked as broken, generating fallback');
-                        avatarUrl = generateLetterAvatar(userId, finalUsername, size);
-                        finishAvatar(avatarUrl, finalUsername);
-                    } else {
-                        testImageUrl(avatarUrl, function(success) {
-                            if (success) {
-                                console.log('✅ Avatar URL test SUCCESS for user', userId);
-                                finishAvatar(avatarUrl, finalUsername);
-                            } else {
-                                console.log('❌ Avatar URL test FAILED for user', userId);
-                                markAvatarAsBroken(avatarUrl);
-                                avatarUrl = generateLetterAvatar(userId, finalUsername, size);
-                                finishAvatar(avatarUrl, finalUsername);
-                            }
-                        });
-                        return;
-                    }
+                    // Always try real avatars, even if previously marked broken
+                    testImageUrl(avatarUrl, function(success) {
+                        if (success) {
+                            console.log('✅ Avatar URL test SUCCESS for user', userId);
+                            finishAvatar(avatarUrl, finalUsername);
+                        } else {
+                            console.log('❌ Avatar URL test FAILED for user', userId);
+                            markAvatarAsBroken(avatarUrl);
+                            avatarUrl = generateLetterAvatar(userId, finalUsername, size);
+                            finishAvatar(avatarUrl, finalUsername);
+                        }
+                    });
+                    return;
                 } else {
                     console.log('⚠️ No avatar from API for user', userId, 'generating letter avatar');
                     avatarUrl = generateLetterAvatar(userId, finalUsername, size);
@@ -1228,9 +1234,7 @@ if (!globalThis.mediaDimensionExtractor) {
         } else if (extractorType === 'visitatore') {
             return null;
         } else if (extractorType === 'likes_href') {
-            // Check the element's href directly (it's already an <a> tag)
             if (element.href) {
-                // Try multiple patterns
                 var hrefMatch = element.href.match(/MID=(\d+)/) || 
                                 element.href.match(/[?&]MID=(\d+)/) ||
                                 element.href.match(/MID\%3D(\d+)/);
@@ -1238,7 +1242,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 if (hrefMatch) {
                     userId = hrefMatch[1];
                 } else {
-                    // Try to decode URL and check again
                     try {
                         var decodedUrl = decodeURIComponent(element.href);
                         hrefMatch = decodedUrl.match(/MID=(\d+)/);
@@ -1260,7 +1263,6 @@ if (!globalThis.mediaDimensionExtractor) {
         
         var config = null;
         
-        // Check if it's a summary post
         if (element.matches('.summary li[class^="box_"]')) {
             config = {
                 type: 'post',
@@ -1268,7 +1270,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 extractor: 'class'
             };
         }
-        // Check if it's a default avatar inside a post
         else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
             var postParent = element.closest('.post');
             if (postParent) {
@@ -1285,7 +1286,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 };
             }
         }
-        // Check if it's a deleted user
         else if (element.matches('.post.box_visitatore')) {
             config = {
                 type: 'deleted_user',
@@ -1293,7 +1293,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 extractor: 'visitatore'
             };
         }
-        // Check if it's a likes/dislikes list item
         else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
             if (state.processedLikesList.has(element)) {
                 return null;
@@ -1310,7 +1309,6 @@ if (!globalThis.mediaDimensionExtractor) {
             return null;
         }
         
-        // Check if already processed
         if ((config.type === 'post' && state.processedPosts.has(element)) ||
             (config.type === 'default_avatar' && state.processedAvatars.has(element)) ||
             (config.type === 'deleted_user' && state.processedDeletedUsers.has(element)) ||
@@ -1345,7 +1343,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 return null;
             }
         } else if (config.type === 'likes_list') {
-            // Check if this link already has an avatar before it
             var span = element.closest('span');
             if (span && span.querySelector('img.forum-likes-avatar')) {
                 state.processedLikesList.add(element);
@@ -1411,7 +1408,12 @@ if (!globalThis.mediaDimensionExtractor) {
         
         img.addEventListener('error', function onError() {
             console.log('Avatar image error for user', userId, avatarUrl);
-            markAvatarAsBroken(avatarUrl);
+            
+            // Only mark as broken if it's a real avatar
+            if (!avatarUrl.includes('dicebear.com')) {
+                markAvatarAsBroken(avatarUrl);
+            }
+            
             if (userId) {
                 var cacheKey = userId + '_' + size;
                 delete state.userCache[cacheKey];
@@ -1449,13 +1451,12 @@ if (!globalThis.mediaDimensionExtractor) {
                 return;
             }
             
-            // Special handling for likes list - use forum API
             getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
                 console.log('✅ Got avatar for likes list user', userId, ':', 
                     avatarUrl.includes('dicebear.com') ? 'Generated' : 'Real Forum Avatar');
                 insertLikesListAvatar(element, userId, config.size, avatarUrl, finalUsername);
                 state.processedLikesList.add(element);
-            }, false, true); // isDeletedUser = false, isLikesList = true
+            }, false, true);
         } else {
             var isDeletedUser = config.type === 'deleted_user';
             getOrCreateAvatar(userId, username, config.size, function(avatarUrl, finalUsername) {
@@ -1469,7 +1470,7 @@ if (!globalThis.mediaDimensionExtractor) {
                     insertDeletedUserAvatar(element, null, config.size, avatarUrl, finalUsername);
                     state.processedDeletedUsers.add(element);
                 }
-            }, isDeletedUser, false); // isLikesList = false for posts
+            }, isDeletedUser, false);
         }
     }
 
@@ -1488,7 +1489,8 @@ if (!globalThis.mediaDimensionExtractor) {
         container.style.cssText = 
             'display:inline-block;' +
             'vertical-align:middle;' +
-            'position:relative;';
+            'position:relative;' +
+            'margin-right:8px;';
         
         container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false, false));
         nickname.parentNode.insertBefore(container, nickname);
@@ -1529,28 +1531,25 @@ if (!globalThis.mediaDimensionExtractor) {
         container.style.cssText = 
             'display:inline-block;' +
             'vertical-align:middle;' +
-            'position:relative;';
+            'position:relative;' +
+            'margin-right:8px;';
         
         container.appendChild(createAvatarElement(avatarUrl, null, size, username, true, false));
         nickname.parentNode.insertBefore(container, nickname);
     }
 
     function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
-        // Find the span container that holds the link
         var span = linkElement.closest('span');
         if (!span) return;
         
-        // Check if avatar already exists
         if (span.querySelector('img.forum-likes-avatar')) {
             return;
         }
         
         var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
         
-        // Insert the avatar before the link
         span.insertBefore(avatarImg, linkElement);
         
-        // Add a class to mark as processed
         span.classList.add('has-forum-avatar');
     }
 
@@ -1561,13 +1560,11 @@ if (!globalThis.mediaDimensionExtractor) {
     function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
-        // Check the node itself
         var nodeInfo = shouldProcessElement(node);
         if (nodeInfo) {
             insertAvatarForElement(nodeInfo);
         }
         
-        // Check for posts
         var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -1576,7 +1573,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        // Check for default avatars
         var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -1585,7 +1581,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        // Check for likes/dislikes lists
         var likesLinks = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         for (var k = 0; k < likesLinks.length; k++) {
             var likesInfo = shouldProcessElement(likesLinks[k]);
@@ -1598,7 +1593,6 @@ if (!globalThis.mediaDimensionExtractor) {
     function processExistingElements() {
         console.log('🚀 Processing existing elements...');
         
-        // Process posts
         var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -1607,7 +1601,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        // Process default avatars
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -1616,7 +1609,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        // Process likes/dislikes lists
         var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         for (var k = 0; k < likesLinks.length; k++) {
             var likesInfo = shouldProcessElement(likesLinks[k]);
@@ -1653,11 +1645,7 @@ if (!globalThis.mediaDimensionExtractor) {
         
         console.log('🚀 Initializing working avatar system with likes/dislikes support');
         
-        // Clear generated avatars from cache on every initialization
-        var clearedCount = clearGeneratedAvatarsFromCache();
-        console.log('Cleared', clearedCount, 'generated avatars from localStorage');
-        
-        // Also clear old cache entries
+        // Clear old cache entries
         var expiredCount = clearOldCacheEntries();
         console.log('Cleared', expiredCount, 'expired cache entries');
         
@@ -1680,7 +1668,6 @@ if (!globalThis.mediaDimensionExtractor) {
         refresh: function() {
             console.log('🔄 Refreshing avatars...');
             
-            // Remove all avatars from DOM
             var containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
             for (var i = 0; i < containers.length; i++) {
                 if (containers[i].classList && containers[i].classList.contains('forum-avatar-container')) {
@@ -1690,20 +1677,17 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }
             
-            // Remove replaced avatars
             var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
             for (var j = 0; j < replacedAvatars.length; j++) {
                 replacedAvatars[j].remove();
             }
             
-            // Remove avatar-replaced class
             var replacedLinks = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
             for (var k = 0; k < replacedLinks.length; k++) {
                 replacedLinks[k].classList.remove('avatar-replaced');
                 replacedLinks[k].classList.remove('has-forum-avatar');
             }
             
-            // Clear state
             state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
@@ -1712,13 +1696,11 @@ if (!globalThis.mediaDimensionExtractor) {
             state.processedLikesList = new WeakSet();
             state.isInitialized = false;
             
-            // Clear localStorage COMPLETELY
-            console.log('🗑️ Clearing ALL avatar cache from localStorage...');
+            console.log('🗑️ Clearing avatar cache from localStorage...');
             var clearedKeys = [];
             for (var l = 0; l < localStorage.length; l++) {
                 var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
-                            key.startsWith(AVATAR_CONFIG.cache.brokenPrefix) ||
                             key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                     localStorage.removeItem(key);
                     clearedKeys.push(key);
@@ -1726,15 +1708,49 @@ if (!globalThis.mediaDimensionExtractor) {
             }
             console.log('✅ Cleared', clearedKeys.length, 'cache entries from localStorage');
             
-            // Reinitialize
             initAvatarSystem();
         },
         
         clearCache: function() {
             console.log('🧹 Manually clearing avatar cache...');
-            var clearedCount = clearGeneratedAvatarsFromCache();
             state.userCache = {};
-            console.log('✅ Cleared', clearedCount, 'generated avatars from cache');
+            
+            var clearedCount = 0;
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
+                            key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
+                    localStorage.removeItem(key);
+                    clearedCount++;
+                }
+            }
+            
+            console.log('✅ Cleared', clearedCount, 'avatars from cache');
+            return clearedCount;
+        },
+        
+        resetBrokenAvatars: function() {
+            console.log('🔄 Resetting broken avatar flags...');
+            
+            state.brokenAvatars.clear();
+            
+            var clearedCount = 0;
+            var keysToRemove = [];
+            
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith(AVATAR_CONFIG.cache.brokenPrefix)) {
+                    keysToRemove.push(key);
+                    clearedCount++;
+                }
+            }
+            
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            console.log('✅ Cleared', clearedCount, 'broken avatar flags');
+            
+            this.refresh();
+            
             return clearedCount;
         },
         
@@ -1743,6 +1759,7 @@ if (!globalThis.mediaDimensionExtractor) {
             var deletedCacheCount = 0;
             var generatedCount = 0;
             var realCount = 0;
+            var brokenCount = 0;
             
             for (var i = 0; i < localStorage.length; i++) {
                 var key = localStorage.key(i);
@@ -1757,12 +1774,13 @@ if (!globalThis.mediaDimensionExtractor) {
                                 realCount++;
                             }
                         }
-                    } catch (e) {
-                        // Skip invalid entries
-                    }
+                    } catch (e) {}
                 }
                 if (key && key.startsWith(AVATAR_CONFIG.cache.deletedPrefix)) {
                     deletedCacheCount++;
+                }
+                if (key && key.startsWith(AVATAR_CONFIG.cache.brokenPrefix)) {
+                    brokenCount++;
                 }
             }
             
@@ -1788,8 +1806,10 @@ if (!globalThis.mediaDimensionExtractor) {
                 realAvatars: realCount,
                 generatedAvatars: generatedCount,
                 deletedUserCache: deletedCacheCount,
-                brokenUrls: state.brokenAvatars.size,
-                isInitialized: state.isInitialized
+                brokenFlags: brokenCount,
+                brokenInMemory: state.brokenAvatars.size,
+                isInitialized: state.isInitialized,
+                cacheVersion: state.cacheVersion
             };
         },
         
@@ -1804,6 +1824,15 @@ if (!globalThis.mediaDimensionExtractor) {
                 var extracted = extractUsernameFromElement(posts[i], 'post', userId);
                 console.log('Extracted username:', extracted);
             }
+            
+            // Check API
+            fetch('/api.php?mid=' + userId)
+                .then(r => r.json())
+                .then(data => {
+                    console.log('API Response for user', userId + ':', data);
+                    console.log('Avatar URL from API:', data['m' + userId]?.avatar);
+                })
+                .catch(err => console.error('API Error:', err));
         },
         
         debugLikes: function() {
@@ -1823,17 +1852,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 
                 var username = extractUsernameFromElement(link, 'likes_list', userId);
                 console.log('Extracted username:', username);
-            }
-        },
-        
-        // Force clear localStorage for this domain
-        clearLocalStorage: function() {
-            console.log('⚠️ WARNING: This will clear ALL localStorage for this domain!');
-            var confirmed = confirm('This will clear ALL localStorage data for this site. Continue?');
-            if (confirmed) {
-                localStorage.clear();
-                console.log('✅ localStorage cleared completely');
-                location.reload();
             }
         }
     };
