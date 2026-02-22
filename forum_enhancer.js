@@ -647,23 +647,37 @@ if (!globalThis.mediaDimensionExtractor) {
 
 
 // ==============================
-// ULTRA-FAST Avatar System
+// FAST & RELIABLE Avatar System
 // ==============================
 
 (function() {
     'use strict';
 
     // ==============================
-    // MINIMAL CONFIG
+    // CONFIGURATION
     // ==============================
     var CONFIG = {
-        sizes: { post:60, profile_card:80, deleted_user:60, likes_list:30 },
-        cache: { duration:86400000, prefix:'avatar_', brokenPrefix:'broken_' },
-        colors: ['#FF6B6B','#4ECDC4','#FFD166','#06D6A0','#118AB2','#EF476F','#073B4C','#7209B7']
+        sizes: {
+            post: 60,
+            profile: 80,
+            deleted: 60,
+            likes: 30
+        },
+        cache: {
+            duration: 86400000, // 24 hours
+            prefix: 'avatar_',
+            brokenPrefix: 'broken_',
+            deletedPrefix: 'deleted_'
+        },
+        performance: {
+            batchSize: 10,        // Process 10 at a time
+            batchDelay: 20,        // 20ms between batches
+            maxConcurrent: 3       // Max 3 concurrent API requests
+        }
     };
 
     // ==============================
-    // SIMPLE STATE
+    // STATE
     // ==============================
     var state = {
         cache: {},
@@ -671,321 +685,660 @@ if (!globalThis.mediaDimensionExtractor) {
         processed: new WeakSet(),
         queue: [],
         processing: false,
-        version: '3.0'
+        activeRequests: 0,
+        version: '3.1'
     };
 
     // ==============================
-    // CORE UTILITIES (OPTIMIZED)
+    // UTILITY FUNCTIONS
     // ==============================
 
-    function getKey(uid, size) { return CONFIG.cache.prefix + uid + '_' + size; }
+    function getCacheKey(userId, size) {
+        return CONFIG.cache.prefix + userId + '_' + size;
+    }
+
+    function getBrokenKey(url) {
+        return CONFIG.cache.brokenPrefix + btoa(url).slice(0, 40);
+    }
 
     function isBroken(url) {
-        if (!url || url.includes('dicebear')) return false;
+        if (!url || url.includes('dicebear.com')) return false;
         if (state.broken.has(url)) return true;
         
-        var key = CONFIG.cache.brokenPrefix + btoa(url).slice(0, 30);
-        var cached = localStorage.getItem(key);
-        if (cached) {
-            try {
-                if (Date.now() - JSON.parse(cached).timestamp < 3600000) {
+        try {
+            var key = getBrokenKey(url);
+            var data = localStorage.getItem(key);
+            if (data) {
+                data = JSON.parse(data);
+                if (Date.now() - data.t < 3600000) { // 1 hour
                     state.broken.add(url);
                     return true;
                 }
                 localStorage.removeItem(key);
-            } catch(e) {}
-        }
+            }
+        } catch(e) {}
         return false;
     }
 
-    // ==============================
-    // FAST USERNAME EXTRACTION
-    // ==============================
-    function getUsername(el, type, uid) {
-        if (type === 'post' || type === 'deleted_user') {
-            var nick = el.querySelector('.nick a, .nick');
-            return nick ? (nick.textContent || '').trim() : 'User';
-        }
-        if (type === 'likes_list') return (el.textContent || '').trim() || 'User';
-        
-        var link = el.closest('a[href*="MID="]');
-        return link ? (link.title || link.textContent || '').trim() : 'User';
+    function markBroken(url) {
+        if (!url || url.includes('dicebear.com')) return;
+        state.broken.add(url);
+        try {
+            localStorage.setItem(getBrokenKey(url), JSON.stringify({
+                url: url,
+                t: Date.now()
+            }));
+        } catch(e) {}
     }
 
     // ==============================
-    // LIGHTNING FAST AVATAR GENERATION
+    // AVATAR GENERATION
     // ==============================
+
+    var colorCache = {};
+    function getColor(seed) {
+        if (colorCache[seed]) return colorCache[seed];
+        var colors = ['FF6B6B','4ECDC4','FFD166','06D6A0','118AB2','EF476F','FFD166','06D6A0','073B4C','7209B7'];
+        var hash = 0;
+        for (var i = 0; i < seed.length; i++) {
+            hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+        }
+        var index = Math.abs(hash) % colors.length;
+        return colorCache[seed] = colors[index];
+    }
+
     function generateAvatar(username, size) {
         var name = username || 'User';
-        var first = name.charAt(0).toUpperCase() || '?';
-        if (!first.match(/[A-Z0-9]/i)) first = '?';
+        var letter = name.charAt(0).toUpperCase();
+        if (!/[A-Z0-9]/.test(letter)) letter = '?';
         
-        var idx = first >= 'A' ? (first.charCodeAt(0)-65) % CONFIG.colors.length : 
-                 (first >= '0' ? (parseInt(first)+26) % CONFIG.colors.length : 
-                 Math.abs(name.split('').reduce((h,c)=>((h<<5)-h)+c.charCodeAt(0),0)) % CONFIG.colors.length);
-        
-        var color = CONFIG.colors[idx].substring(1);
-        return `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(first)}&backgroundColor=${color}&radius=50&size=${size}`;
+        return 'https://api.dicebear.com/7.x/initials/svg?' +
+            'seed=' + encodeURIComponent(letter) +
+            '&backgroundColor=' + getColor(name) +
+            '&radius=50&size=' + size;
     }
 
     // ==============================
-    // BATCH API REQUEST (SINGLE CALL)
+    // CACHE FUNCTIONS
     // ==============================
-    function fetchUsers(ids, callback) {
-        if (!ids.length) return callback({});
+
+    function getCached(userId, size, type) {
+        if (!userId) return null;
         
-        // Single request with all IDs
-        fetch('/api.php?mid=' + ids.join(','))
-            .then(r => r.ok ? r.json() : Promise.reject())
-            .then(data => {
-                console.log(`✅ Batch fetched ${Object.keys(data).length} users`);
-                callback(data);
-            })
-            .catch(() => {
-                // Fast fallback - generate immediately
-                var fallback = {};
-                ids.forEach(id => { fallback['m'+id] = { avatar: null, nickname: null }; });
-                callback(fallback);
-            });
+        var key = userId + '_' + size;
+        
+        // Check memory cache
+        if (state.cache[key]) {
+            var cached = state.cache[key];
+            // For likes, prefer real avatars over generated
+            if (type === 'likes' && cached.url.includes('dicebear.com')) {
+                // Skip generated for likes
+            } else if (!isBroken(cached.url)) {
+                return cached;
+            }
+        }
+        
+        // Check localStorage
+        try {
+            var stored = localStorage.getItem(getCacheKey(userId, size));
+            if (stored) {
+                var data = JSON.parse(stored);
+                if (Date.now() - data.t < CONFIG.cache.duration) {
+                    if (!isBroken(data.url)) {
+                        state.cache[key] = data;
+                        return data;
+                    }
+                }
+            }
+        } catch(e) {}
+        
+        return null;
+    }
+
+    function setCached(userId, size, url, username, source) {
+        if (!userId) return;
+        
+        var key = userId + '_' + size;
+        var data = {
+            url: url,
+            username: username,
+            t: Date.now(),
+            source: source || (url.includes('dicebear.com') ? 'gen' : 'real')
+        };
+        
+        state.cache[key] = data;
+        
+        try {
+            localStorage.setItem(getCacheKey(userId, size), JSON.stringify(data));
+        } catch(e) {
+            // Clear old entries if storage is full
+            for (var i = 0; i < localStorage.length; i++) {
+                var k = localStorage.key(i);
+                if (k && k.startsWith(CONFIG.cache.prefix)) {
+                    localStorage.removeItem(k);
+                    break;
+                }
+            }
+            try {
+                localStorage.setItem(getCacheKey(userId, size), JSON.stringify(data));
+            } catch(e) {}
+        }
     }
 
     // ==============================
-    // RAPID QUEUE PROCESSING
+    // API FUNCTIONS
     // ==============================
-    function processQueue() {
-        if (state.processing || !state.queue.length) return;
-        state.processing = true;
-        
-        var batch = state.queue.splice(0, 15); // Process 15 at once
-        var userMap = new Map();
-        var deletedItems = [];
-        
-        // Group by user ID
-        batch.forEach(item => {
-            if (!item.uid) { deletedItems.push(item); return; }
-            if (!userMap.has(item.uid)) userMap.set(item.uid, []);
-            userMap.get(item.uid).push(item);
-        });
-        
-        // Handle deleted users instantly
-        deletedItems.forEach(item => {
-            var url = generateAvatar(item.username, item.size);
-            insertAvatar(item.el, url, item.username, item.type === 'likes_list');
-            markProcessed(item.el, item.type);
-        });
-        
-        if (!userMap.size) {
-            state.processing = false;
-            if (state.queue.length) setTimeout(processQueue, 10);
+
+    function fetchUser(userId, callback) {
+        if (state.activeRequests >= CONFIG.performance.maxConcurrent) {
+            // Queue for later
+            setTimeout(function() {
+                fetchUser(userId, callback);
+            }, 100);
             return;
         }
         
-        // Batch fetch all at once
-        fetchUsers(Array.from(userMap.keys()), function(apiData) {
-            userMap.forEach((items, uid) => {
-                var userData = apiData['m' + uid];
-                var username = userData?.nickname ? (userData.nickname.trim() || items[0].username) : items[0].username;
-                var avatarUrl;
+        state.activeRequests++;
+        
+        fetch('/api.php?mid=' + userId)
+            .then(function(r) {
+                if (!r.ok) throw new Error('API failed');
+                return r.json();
+            })
+            .then(function(data) {
+                state.activeRequests--;
+                var userData = data['m' + userId];
+                callback(userData ? {
+                    name: userData.nickname,
+                    avatar: userData.avatar && userData.avatar !== 'http' ? userData.avatar : null
+                } : null);
+            })
+            .catch(function() {
+                state.activeRequests--;
+                callback(null);
+            });
+    }
+
+    function batchFetch(userIds, callback) {
+        if (!userIds.length) {
+            callback({});
+            return;
+        }
+        
+        // Try batch API first
+        fetch('/api.php?mid=' + userIds.join(','))
+            .then(function(r) {
+                if (!r.ok) throw new Error('Batch failed');
+                return r.json();
+            })
+            .then(function(data) {
+                var results = {};
+                userIds.forEach(function(id) {
+                    var userData = data['m' + id];
+                    if (userData) {
+                        results[id] = {
+                            name: userData.nickname,
+                            avatar: userData.avatar && userData.avatar !== 'http' ? userData.avatar : null
+                        };
+                    }
+                });
+                callback(results);
+            })
+            .catch(function() {
+                // Fall back to individual requests
+                var results = {};
+                var remaining = userIds.length;
                 
-                if (userData?.avatar && userData.avatar !== 'http' && !isBroken(userData.avatar)) {
-                    avatarUrl = userData.avatar;
-                    // Cache immediately
-                    var cacheData = { url: avatarUrl, username: username, timestamp: Date.now(), version: state.version };
-                    localStorage.setItem(getKey(uid, items[0].size), JSON.stringify(cacheData));
-                    state.cache[uid + '_' + items[0].size] = cacheData;
-                } else {
-                    avatarUrl = generateAvatar(username, items[0].size);
-                }
-                
-                // Insert for all matching elements
-                items.forEach(item => {
-                    insertAvatar(item.el, avatarUrl, username, item.type === 'likes_list');
-                    markProcessed(item.el, item.type);
+                userIds.forEach(function(id) {
+                    fetchUser(id, function(userData) {
+                        if (userData) {
+                            results[id] = userData;
+                        }
+                        remaining--;
+                        if (remaining === 0) {
+                            callback(results);
+                        }
+                    });
                 });
             });
-            
-            state.processing = false;
-            if (state.queue.length) setTimeout(processQueue, 5);
-        });
     }
 
     // ==============================
-    // FAST DOM INSERTION
+    // ELEMENT EXTRACTION
     // ==============================
-    function insertAvatar(el, url, username, isLikes) {
+
+    function extractData(element) {
+        if (!element || element.nodeType !== 1 || state.processed.has(element)) {
+            return null;
+        }
+
+        // Check element type
+        if (element.matches('.summary li[class^="box_"]')) {
+            var idMatch = element.className.match(/box_m(\d+)/);
+            var id = idMatch ? idMatch[1] : null;
+            var nick = element.querySelector('.nick a, .nick');
+            var username = nick ? nick.textContent.trim() : '';
+            
+            // Check if already has avatar
+            if (nick && nick.previousElementSibling?.classList.contains('forum-avatar')) {
+                state.processed.add(element);
+                return null;
+            }
+            
+            return {
+                type: 'post',
+                element: element,
+                id: id,
+                username: username,
+                size: CONFIG.sizes.post,
+                insertPoint: nick
+            };
+        }
+        
+        else if (element.matches('.post.box_visitatore')) {
+            var nick = element.querySelector('.nick');
+            var username = nick ? nick.textContent.trim() : 'Guest';
+            
+            if (nick && nick.previousElementSibling?.classList.contains('forum-avatar')) {
+                state.processed.add(element);
+                return null;
+            }
+            
+            return {
+                type: 'deleted',
+                element: element,
+                id: null,
+                username: username,
+                size: CONFIG.sizes.deleted,
+                insertPoint: nick
+            };
+        }
+        
+        else if (element.matches('.popup.pop_points .users li a[href*="MID="]')) {
+            var span = element.closest('span');
+            if (span && span.querySelector('.forum-avatar')) {
+                state.processed.add(element);
+                return null;
+            }
+            
+            var hrefMatch = element.href ? element.href.match(/MID=(\d+)/) : null;
+            var id = hrefMatch ? hrefMatch[1] : null;
+            var username = element.textContent.trim();
+            
+            return {
+                type: 'likes',
+                element: element,
+                id: id,
+                username: username,
+                size: CONFIG.sizes.likes,
+                container: span
+            };
+        }
+        
+        else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
+            var link = element.closest('a.avatar');
+            if (!link) return null;
+            
+            if (link.querySelector('.forum-avatar')) {
+                state.processed.add(element);
+                return null;
+            }
+            
+            var hrefMatch = link.href ? link.href.match(/MID=(\d+)/) : null;
+            var id = hrefMatch ? hrefMatch[1] : null;
+            
+            return {
+                type: 'avatar',
+                element: element,
+                id: id,
+                size: CONFIG.sizes.profile,
+                link: link,
+                isDefault: true
+            };
+        }
+        
+        return null;
+    }
+
+    // ==============================
+    // AVATAR INSERTION
+    // ==============================
+
+    function insertAvatar(data, url, username) {
+        if (!data || state.processed.has(data.element)) return;
+        
         var img = document.createElement('img');
-        img.className = isLikes ? 'forum-likes-avatar' : 'forum-user-avatar';
+        img.className = 'forum-avatar';
+        img.loading = 'lazy';
+        img.width = img.height = data.size;
         img.src = url;
         img.alt = username || '';
-        img.width = img.height = isLikes ? 30 : 60;
-        img.loading = 'lazy';
-        img.style.cssText = 'width:' + (isLikes?30:60) + 'px;height:' + (isLikes?30:60) + 'px;border-radius:50%;object-fit:cover;vertical-align:middle;display:inline-block;' + 
-                            (isLikes ? 'margin:0 8px 0 4px;border:1px solid #ddd;' : 'border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-right:8px;');
+        img.style.cssText = 'width:' + data.size + 'px;height:' + data.size + 'px;' +
+            'border-radius:50%;object-fit:cover;vertical-align:middle;' +
+            'background-color:#f0f0f0;display:inline-block;';
         
-        if (isLikes) {
-            var span = el.closest('span');
-            if (span && !span.querySelector('img')) span.insertBefore(img, el);
+        // Add type-specific styles
+        if (data.type === 'likes') {
+            img.style.margin = '0 8px 0 4px';
+            img.style.border = '1px solid #ddd';
         } else {
-            var nick = el.querySelector('.nick a, .nick');
-            if (nick && !nick.previousElementSibling?.classList?.contains('forum-user-avatar')) {
-                var container = document.createElement('span');
-                container.className = 'forum-avatar-container';
-                container.style.cssText = 'display:inline-block;vertical-align:middle;margin-right:8px;';
-                container.appendChild(img);
-                nick.parentNode.insertBefore(container, nick);
+            img.style.marginRight = '8px';
+            img.style.border = '2px solid #fff';
+            img.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        }
+        
+        // Insert based on type
+        if (data.type === 'post' || data.type === 'deleted') {
+            if (data.insertPoint) {
+                data.insertPoint.parentNode.insertBefore(img, data.insertPoint);
+            }
+        } else if (data.type === 'likes') {
+            if (data.container) {
+                data.container.insertBefore(img, data.element);
+            }
+        } else if (data.type === 'avatar') {
+            if (data.link) {
+                var defaultAvatar = data.link.querySelector('.default-avatar');
+                if (defaultAvatar) {
+                    defaultAvatar.replaceWith(img);
+                } else {
+                    data.link.appendChild(img);
+                }
             }
         }
-    }
-
-    function markProcessed(el, type) {
-        if (type === 'likes_list') state.processed.add(el);
-        else if (type === 'post' || type === 'deleted_user') {
-            var nick = el.querySelector('.nick');
-            if (nick) state.processed.add(nick);
-        }
+        
+        state.processed.add(data.element);
     }
 
     // ==============================
-    // SUPER FAST ELEMENT DETECTION
+    // QUEUE PROCESSING
     // ==============================
-    function findElements(root) {
-        var items = [];
-        
-        // Likes popup (highest priority)
-        var likes = root.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
-        for (var i = 0; i < likes.length; i++) {
-            var el = likes[i];
-            if (state.processed.has(el)) continue;
-            
-            var span = el.closest('span');
-            if (span?.querySelector('img')) { state.processed.add(el); continue; }
-            
-            var uid = (el.href.match(/MID=(\d+)/) || [])[1];
-            items.push({ el: el, uid: uid, type: 'likes_list', size: 30, username: el.textContent?.trim() });
-        }
-        
-        // Posts
-        var posts = root.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
-        for (var j = 0; j < posts.length; j++) {
-            var post = posts[j];
-            var nick = post.querySelector('.nick');
-            if (!nick || state.processed.has(nick)) continue;
-            if (nick.previousElementSibling?.classList?.contains('forum-avatar-container')) { state.processed.add(nick); continue; }
-            
-            var isDeleted = post.classList.contains('box_visitatore');
-            var uid = isDeleted ? null : (post.className.match(/box_m(\d+)/) || [])[1];
-            var username = nick.textContent?.trim();
-            items.push({ el: post, uid: uid, type: isDeleted ? 'deleted_user' : 'post', size: 60, username: username });
-        }
-        
-        return items;
-    }
 
-    // ==============================
-    // MAIN PROCESSOR
-    // ==============================
-    function processPage() {
-        var items = findElements(document);
-        if (!items.length) return;
+    function processQueue() {
+        if (state.processing || state.queue.length === 0) return;
         
-        // Check cache first for instant display
-        var uncached = [];
-        items.forEach(item => {
-            if (!item.uid) { uncached.push(item); return; }
+        state.processing = true;
+        
+        // Prioritize popups
+        var popups = [];
+        var posts = [];
+        var others = [];
+        
+        state.queue.forEach(function(item) {
+            if (item.element.closest('.popup')) {
+                popups.push(item);
+            } else if (item.element.closest('.summary')) {
+                posts.push(item);
+            } else {
+                others.push(item);
+            }
+        });
+        
+        var prioritized = [...popups, ...posts, ...others];
+        state.queue = [];
+        
+        function processBatch(start) {
+            var batch = prioritized.slice(start, start + CONFIG.performance.batchSize);
             
-            var cached = localStorage.getItem(getKey(item.uid, item.size));
-            if (cached) {
-                try {
-                    var data = JSON.parse(cached);
-                    if (!isBroken(data.url) && Date.now() - data.timestamp < CONFIG.cache.duration) {
-                        insertAvatar(item.el, data.url, data.username || item.username, item.type === 'likes_list');
-                        markProcessed(item.el, item.type);
-                        return;
+            if (batch.length === 0) {
+                state.processing = false;
+                return;
+            }
+            
+            // Group by user ID for batch fetch
+            var userMap = new Map();
+            var immediateItems = [];
+            
+            batch.forEach(function(item) {
+                if (item.type === 'deleted') {
+                    // Deleted users - generate immediately
+                    var url = generateAvatar(item.username, item.size);
+                    insertAvatar(item, url, item.username);
+                    immediateItems.push(item);
+                } else if (item.id) {
+                    // Check cache first
+                    var cached = getCached(item.id, item.size, item.type);
+                    if (cached) {
+                        insertAvatar(item, cached.url, cached.username || item.username);
+                        immediateItems.push(item);
+                    } else {
+                        // Add to batch fetch
+                        if (!userMap.has(item.id)) {
+                            userMap.set(item.id, {
+                                items: [],
+                                username: item.username,
+                                size: item.size
+                            });
+                        }
+                        userMap.get(item.id).items.push(item);
                     }
-                } catch(e) {}
+                } else {
+                    // No ID - generate
+                    var url = generateAvatar(item.username || 'User', item.size);
+                    insertAvatar(item, url, item.username);
+                    immediateItems.push(item);
+                }
+            });
+            
+            // Mark immediate items as processed
+            immediateItems.forEach(function(item) {
+                state.processed.add(item.element);
+            });
+            
+            // Batch fetch remaining users
+            if (userMap.size > 0) {
+                var userIds = Array.from(userMap.keys());
+                
+                batchFetch(userIds, function(results) {
+                    userMap.forEach(function(data, id) {
+                        var result = results[id];
+                        var url;
+                        var username = data.username;
+                        
+                        if (result && result.avatar) {
+                            url = result.avatar;
+                            if (result.name) username = result.name;
+                            
+                            // Cache the real avatar
+                            setCached(id, data.size, url, username, 'real');
+                        } else {
+                            url = generateAvatar(username, data.size);
+                            // Cache the generated avatar
+                            setCached(id, data.size, url, username, 'gen');
+                        }
+                        
+                        // Insert for all items of this user
+                        data.items.forEach(function(item) {
+                            insertAvatar(item, url, username);
+                            state.processed.add(item.element);
+                        });
+                    });
+                    
+                    // Process next batch
+                    setTimeout(function() {
+                        processBatch(start + CONFIG.performance.batchSize);
+                    }, CONFIG.performance.batchDelay);
+                });
+            } else {
+                // No users to fetch, process next batch immediately
+                setTimeout(function() {
+                    processBatch(start + CONFIG.performance.batchSize);
+                }, 1);
             }
-            uncached.push(item);
-        });
+        }
         
-        if (uncached.length) {
-            state.queue.push(...uncached);
-            if (!state.processing) processQueue();
+        processBatch(0);
+    }
+
+    // ==============================
+    // ELEMENT SCANNING
+    // ==============================
+
+    function scanElement(node) {
+        if (!node || node.nodeType !== 1) return;
+        
+        // Check the node itself
+        var data = extractData(node);
+        if (data) {
+            state.queue.push(data);
+        }
+        
+        // Check children - use quick selectors for common containers
+        var selectors = [
+            '.summary li[class^="box_"]',
+            '.post.box_visitatore',
+            '.popup.pop_points .users li a[href*="MID="]',
+            'a.avatar[href*="MID="] .default-avatar'
+        ].join(',');
+        
+        var elements = node.querySelectorAll(selectors);
+        for (var i = 0; i < elements.length; i++) {
+            var childData = extractData(elements[i]);
+            if (childData) {
+                state.queue.push(childData);
+            }
+        }
+        
+        // Start processing if not already
+        if (!state.processing && state.queue.length > 0) {
+            setTimeout(processQueue, 10);
         }
     }
 
     // ==============================
-    // OBSERVER (LIGHTWEIGHT)
+    // OBSERVER SETUP
     // ==============================
+
     function setupObserver() {
-        if (!window.MutationObserver) return;
-        
-        var observer = new MutationObserver(function(mutations) {
-            var hasNew = false;
-            for (var i = 0; i < mutations.length; i++) {
-                if (mutations[i].addedNodes.length) { hasNew = true; break; }
-            }
-            if (hasNew) setTimeout(processPage, 50);
-        });
-        
-        observer.observe(document.body, { childList: true, subtree: true });
-        console.log('👀 Observer active');
+        if (window.forumObserver && typeof window.forumObserver.register === 'function') {
+            window.forumObserver.register({
+                id: 'fast_reliable_avatars',
+                selector: '.summary li[class^="box_"], .post.box_visitatore, .popup.pop_points .users li a[href*="MID="], a.avatar[href*="MID="] .default-avatar',
+                callback: scanElement,
+                priority: 'high'
+            });
+        }
     }
 
     // ==============================
-    // INIT
+    // INITIALIZATION
     // ==============================
+
     function init() {
-        console.log('⚡ Ultra-fast avatar system starting...');
+        if (state.initialized) return;
         
-        // Clear old broken flags
-        for (var i = 0; i < localStorage.length; i++) {
-            var key = localStorage.key(i);
-            if (key?.startsWith(CONFIG.cache.brokenPrefix)) {
-                try {
-                    var data = JSON.parse(localStorage.getItem(key));
-                    if (Date.now() - data.timestamp > 3600000) localStorage.removeItem(key);
-                } catch(e) { localStorage.removeItem(key); }
+        console.log('🚀 Starting fast & reliable avatar system...');
+        
+        // Clear old broken flags in background
+        setTimeout(function() {
+            var cutoff = Date.now() - 3600000; // 1 hour
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith(CONFIG.cache.brokenPrefix)) {
+                    try {
+                        var data = JSON.parse(localStorage.getItem(key));
+                        if (data.t < cutoff) {
+                            localStorage.removeItem(key);
+                        }
+                    } catch(e) {}
+                }
             }
-        }
+        }, 5000);
         
         setupObserver();
-        setTimeout(processPage, 10);
-        setTimeout(processPage, 100); // Double-check
+        
+        // Scan existing elements
+        scanElement(document);
+        
+        state.initialized = true;
+        console.log('✅ Avatar system ready');
+    }
+
+    // Auto-start
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
     }
 
     // ==============================
     // PUBLIC API
     // ==============================
     window.ForumAvatars = {
-        init: init,
-        refresh: function() { 
-            localStorage.clear(); 
-            state.cache = {}; 
-            state.broken.clear(); 
+        refresh: function() {
+            // Remove all avatars
+            document.querySelectorAll('.forum-avatar').forEach(function(el) {
+                el.remove();
+            });
+            
+            // Reset state
+            state.cache = {};
+            state.broken.clear();
             state.processed = new WeakSet();
-            location.reload(); 
-        },
-        stats: function() {
-            var real=0, gen=0;
-            for (var i=0; i<localStorage.length; i++) {
+            state.queue = [];
+            state.processing = false;
+            state.initialized = false;
+            
+            // Clear cache
+            for (var i = 0; i < localStorage.length; i++) {
                 var key = localStorage.key(i);
-                if (key?.startsWith(CONFIG.cache.prefix)) {
+                if (key && key.startsWith(CONFIG.cache.prefix)) {
+                    localStorage.removeItem(key);
+                }
+            }
+            
+            // Restart
+            init();
+        },
+        
+        stats: function() {
+            var cacheCount = 0;
+            var realCount = 0;
+            var genCount = 0;
+            
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key && key.startsWith(CONFIG.cache.prefix)) {
+                    cacheCount++;
                     try {
-                        var d = JSON.parse(localStorage.getItem(key));
-                        if (d.url.includes('dicebear')) gen++; else real++;
+                        var data = JSON.parse(localStorage.getItem(key));
+                        if (data.url && data.url.includes('dicebear.com')) {
+                            genCount++;
+                        } else {
+                            realCount++;
+                        }
                     } catch(e) {}
                 }
             }
-            return { queue: state.queue.length, real: real, generated: gen };
+            
+            return {
+                queueSize: state.queue.length,
+                processing: state.processing,
+                memoryCache: Object.keys(state.cache).length,
+                localStorageCache: cacheCount,
+                realAvatars: realCount,
+                generatedAvatars: genCount,
+                brokenInMemory: state.broken.size
+            };
+        },
+        
+        debug: function() {
+            console.log('State:', {
+                queue: state.queue.length,
+                processing: state.processing,
+                cacheSize: Object.keys(state.cache).length,
+                brokenSize: state.broken.size
+            });
+            
+            // Check API
+            fetch('/api.php?mid=11517378')
+                .then(r => r.json())
+                .then(data => {
+                    console.log('API test:', data.m11517378?.avatar);
+                });
         }
     };
 
-    // Start
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
 })();
     
 
