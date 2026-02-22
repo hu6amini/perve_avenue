@@ -5039,15 +5039,48 @@ class PostModernizer {
     const postContent = document.createElement('div');
     postContent.className = 'post-content';
     
-    // Extract and preserve avatar if it exists
-    const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
+    // ===== FIX 1: Extract and preserve avatar =====
+    // Look for avatar in multiple places
+    let avatarContainer = leftDiv.querySelector('.forum-avatar-container');
+    
+    // If not found directly, look for the avatar image
+    if (!avatarContainer) {
+        const avatarImg = leftDiv.querySelector('img[src*="dicebear.com"], img.forum-user-avatar, img[alt*="Avatar"]');
+        if (avatarImg) {
+            // Create proper avatar container
+            avatarContainer = document.createElement('div');
+            avatarContainer.className = 'forum-avatar-container';
+            avatarContainer.style.cssText = 
+                'display:inline-block;' +
+                'vertical-align:middle;' +
+                'position:relative;' +
+                'margin-right:8px;';
+            
+            // Clone and preserve the avatar image
+            const imgClone = avatarImg.cloneNode(true);
+            imgClone.classList.add('forum-user-avatar', 'avatar-size-60');
+            imgClone.style.cssText = 
+                'width:60px;' +
+                'height:60px;' +
+                'border-radius:50%;' +
+                'object-fit:cover;' +
+                'vertical-align:middle;' +
+                'border:2px solid #fff;' +
+                'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
+                'background-color:#f0f0f0;' +
+                'display:inline-block;';
+            
+            avatarContainer.appendChild(imgClone);
+        }
+    }
+    
     if (avatarContainer) {
         // Clone the avatar container to preserve it
         const avatarClone = avatarContainer.cloneNode(true);
         userInfo.appendChild(avatarClone);
     }
     
-    // Extract nickname
+    // ===== Extract nickname =====
     const nickLink = leftDiv.querySelector('.nick a');
     if (nickLink) {
         const nickClone = nickLink.cloneNode(true);
@@ -5057,23 +5090,51 @@ class PostModernizer {
         userInfo.appendChild(nickDiv);
     }
     
-    // Transform timestamp in right section
-    const whenSpan = rightDiv.querySelector('.when span');
+    // ===== FIX 2: Transform timestamp properly =====
+    // The timestamp is in rightDiv > .top > .when > span
+    const topDiv = rightDiv.querySelector('.top');
+    const whenSpan = topDiv ? topDiv.querySelector('.when span') : rightDiv.querySelector('.when span');
+    
     if (whenSpan && whenSpan.textContent) {
-        const postedText = whenSpan.textContent.replace('Posted', '').replace('on', '').trim();
-        const modernTimestamp = this.#createModernTimestamp(whenSpan, postedText);
+        // Get the full text content
+        let dateText = whenSpan.textContent.trim();
+        
+        // Remove "Posted" or "on" prefixes
+        dateText = dateText.replace(/^Posted\s+/i, '').replace(/^on\s+/i, '').trim();
+        
+        // Try to create modern timestamp
+        const modernTimestamp = this.#createModernTimestamp(whenSpan, dateText);
+        
         if (modernTimestamp) {
-            postHeader.appendChild(modernTimestamp);
+            // If we got a modern timestamp (could be an <a> or <time> element)
+            if (modernTimestamp.tagName === 'A') {
+                postHeader.appendChild(modernTimestamp);
+            } else {
+                // If it's just a time element, wrap it or append directly
+                postHeader.appendChild(modernTimestamp);
+            }
         } else {
-            // If timestamp creation fails, preserve original
-            const originalTimestamp = document.createElement('span');
-            originalTimestamp.className = 'original-timestamp';
-            originalTimestamp.textContent = whenSpan.textContent;
-            postHeader.appendChild(originalTimestamp);
+            // Fallback: create a simple timestamp
+            const timeElement = document.createElement('time');
+            timeElement.className = 'modern-timestamp fallback';
+            timeElement.textContent = dateText;
+            postHeader.appendChild(timeElement);
         }
+    } else {
+        // Try to find any element that might contain the date
+        const possibleDateElements = rightDiv.querySelectorAll('.lt.Sub, .when, [class*="date"]');
+        possibleDateElements.forEach(el => {
+            if (el.textContent && el.textContent.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/)) {
+                const dateText = el.textContent.trim();
+                const modernTimestamp = this.#createModernTimestamp(el, dateText);
+                if (modernTimestamp) {
+                    postHeader.appendChild(modernTimestamp);
+                }
+            }
+        });
     }
     
-    // Extract and clean content
+    // ===== Extract and clean content =====
     const contentDiv = rightDiv.querySelector('.color');
     if (contentDiv) {
         const contentWrapper = document.createElement('div');
@@ -5130,10 +5191,9 @@ class PostModernizer {
     // Replace original
     item.parentNode.replaceChild(modernItem, item);
     
-    // Log success
-    console.log('✅ Transformed summary item with avatar:', modernItem);
+    console.log('✅ Transformed summary item with avatar and timestamp');
 }
-
+    
     // ==============================
     // EMBEDDED LINK TRANSFORMATION
     // ==============================
