@@ -5266,6 +5266,165 @@ class PostModernizer {
         node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
     }
 }
+
+// Add this method to the PostModernizer class (around line 3000-3200 area, with other transformation methods)
+
+#transformSummaryListItems() {
+    // Only run on send page
+    if (document.body.id !== 'send') return;
+    
+    const summaryItems = document.querySelectorAll('.summary ol.list li:not(.summary-item-modernized)');
+    
+    summaryItems.forEach((item, index) => {
+        if (item.classList.contains('summary-item-modernized')) return;
+        
+        item.classList.add('summary-item-modernized');
+        
+        // Clone and restructure the item
+        const modernItem = document.createElement('li');
+        modernItem.className = 'summary-item-modernized';
+        
+        // Copy all original attributes except class
+        Array.from(item.attributes).forEach(attr => {
+            if (attr.name !== 'class') {
+                modernItem.setAttribute(attr.name, attr.value);
+            }
+        });
+        
+        // Get the left (user info) and right (content) sections
+        const leftDiv = item.querySelector('.left.Sub');
+        const rightDiv = item.querySelector('.right.Sub');
+        
+        if (!leftDiv || !rightDiv) return;
+        
+        // Create modern structure
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
+        
+        const userInfo = document.createElement('div');
+        userInfo.className = 'user-info';
+        
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content';
+        
+        // Extract and transform user info
+        const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
+        const nickLink = leftDiv.querySelector('.nick a');
+        
+        if (avatarContainer) {
+            userInfo.appendChild(avatarContainer.cloneNode(true));
+        }
+        
+        if (nickLink) {
+            const nickClone = nickLink.cloneNode(true);
+            const nickDiv = document.createElement('div');
+            nickDiv.className = 'nick';
+            nickDiv.appendChild(nickClone);
+            userInfo.appendChild(nickDiv);
+        }
+        
+        // Transform timestamp in right section
+        const whenSpan = rightDiv.querySelector('.when span');
+        if (whenSpan && whenSpan.textContent) {
+            const postedText = whenSpan.textContent.replace('Posted', '').trim();
+            const modernTimestamp = this.#createModernTimestamp(whenSpan, postedText);
+            if (modernTimestamp) {
+                postHeader.appendChild(modernTimestamp);
+            }
+        }
+        
+        // Extract and clean content
+        const contentDiv = rightDiv.querySelector('.color');
+        if (contentDiv) {
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'post-main-content';
+            
+            const contentClone = contentDiv.cloneNode(true);
+            
+            // Clean up the content
+            contentClone.querySelectorAll('br').forEach(br => {
+                if (!br.closest('.modern-spoiler, .modern-code, .modern-quote')) {
+                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                }
+            });
+            
+            // Process text nodes
+            const walker = document.createTreeWalker(contentClone, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                if (node.textContent.trim() !== '') {
+                    textNodes.push(node);
+                }
+            }
+            
+            textNodes.forEach(textNode => {
+                if (textNode.parentNode && !textNode.parentNode.classList.contains('post-text')) {
+                    const span = document.createElement('span');
+                    span.className = 'post-text';
+                    span.textContent = textNode.textContent;
+                    textNode.parentNode.replaceChild(span, textNode);
+                }
+            });
+            
+            // Transform embedded elements
+            this.#preserveMediaDimensions(contentClone);
+            this.#modernizeQuotes(contentClone);
+            this.#modernizeSpoilers(contentClone);
+            this.#modernizeCodeBlocksInContent(contentClone);
+            this.#modernizeAttachmentsInContent(contentClone);
+            this.#modernizeEmbeddedLinksInContent(contentClone);
+            
+            contentWrapper.appendChild(contentClone);
+            postContent.appendChild(contentWrapper);
+        }
+        
+        // Assemble the modern item
+        modernItem.appendChild(postHeader);
+        modernItem.appendChild(userInfo);
+        modernItem.appendChild(postContent);
+        
+        // Add some basic styling to match post appearance
+        modernItem.style.cssText = 'background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: var(--space-lg); list-style: none;';
+        
+        // Replace original
+        item.parentNode.replaceChild(modernItem, item);
+    });
+}
+
+// Add this initialization method to be called in the constructor
+#setupSummaryListObserver() {
+    if (document.body.id !== 'send') return;
+    
+    // Process existing items
+    this.#transformSummaryListItems();
+    
+    // Set up observer for new items
+    if (globalThis.forumObserver) {
+        const summaryObserverId = globalThis.forumObserver.register({
+            id: 'summary-list-modernizer',
+            callback: (node) => {
+                if (node.matches && node.matches('.summary ol.list li:not(.summary-item-modernized)')) {
+                    this.#transformSummaryListItems();
+                } else if (node.querySelectorAll) {
+                    const items = node.querySelectorAll('.summary ol.list li:not(.summary-item-modernized)');
+                    if (items.length) {
+                        this.#transformSummaryListItems();
+                    }
+                }
+            },
+            selector: '.summary ol.list li',
+            priority: 'normal',
+            pageTypes: ['send'] // Only run on send page
+        });
+        
+        // Store the observer ID if you want to track it
+        this.#summaryObserverId = summaryObserverId;
+    } else {
+        // Fallback polling
+        setInterval(() => this.#transformSummaryListItems(), 2000);
+    }
+}
     
     // ==============================
     // MODERN POLL SYSTEM
