@@ -4978,133 +4978,40 @@ class PostModernizer {
         }
     }
 
-    #transformSummaryListItems() {
-        // Only run on send page
-        if (document.body.id !== 'send') return;
+#transformSummaryListItems() {
+    // Only run on send page
+    if (document.body.id !== 'send') return;
+    
+    const summaryItems = document.querySelectorAll('.summary ol.list li:not(.summary-item-modernized)');
+    
+    summaryItems.forEach((item) => {
+        if (item.classList.contains('summary-item-modernized')) return;
         
-        const summaryItems = document.querySelectorAll('.summary ol.list li:not(.summary-item-modernized)');
+        // Store original item data before modernization
+        const leftDiv = item.querySelector('.left.Sub');
+        const rightDiv = item.querySelector('.right.Sub');
         
-        summaryItems.forEach((item) => {
-            if (item.classList.contains('summary-item-modernized')) return;
-            
-            item.classList.add('summary-item-modernized');
-            
-            // Clone and restructure the item
-            const modernItem = document.createElement('li');
-            modernItem.className = 'summary-item-modernized';
-            
-            // Copy all original attributes except class
-            Array.from(item.attributes).forEach(attr => {
-                if (attr.name !== 'class') {
-                    modernItem.setAttribute(attr.name, attr.value);
+        if (!leftDiv || !rightDiv) return;
+        
+        // Check if avatar is already present
+        const hasAvatar = leftDiv.querySelector('.forum-avatar-container') !== null;
+        
+        // If avatar isn't present yet, wait a bit and retry
+        if (!hasAvatar) {
+            // Set a small timeout to wait for avatar script
+            setTimeout(() => {
+                // Check again if this item hasn't been modernized yet
+                if (!item.classList.contains('summary-item-modernized')) {
+                    this.#transformSingleSummaryItem(item, leftDiv, rightDiv);
                 }
-            });
-            
-            // Get the left (user info) and right (content) sections
-            const leftDiv = item.querySelector('.left.Sub');
-            const rightDiv = item.querySelector('.right.Sub');
-            
-            if (!leftDiv || !rightDiv) {
-                // If structure is different, just clone the item as-is
-                modernItem.innerHTML = item.innerHTML;
-                item.parentNode.replaceChild(modernItem, item);
-                return;
-            }
-            
-            // Create modern structure
-            const postHeader = document.createElement('div');
-            postHeader.className = 'post-header';
-            
-            const userInfo = document.createElement('div');
-            userInfo.className = 'user-info';
-            
-            const postContent = document.createElement('div');
-            postContent.className = 'post-content';
-            
-            // Extract and transform user info
-            const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
-            const nickLink = leftDiv.querySelector('.nick a');
-            
-            if (avatarContainer) {
-                userInfo.appendChild(avatarContainer.cloneNode(true));
-            }
-            
-            if (nickLink) {
-                const nickClone = nickLink.cloneNode(true);
-                const nickDiv = document.createElement('div');
-                nickDiv.className = 'nick';
-                nickDiv.appendChild(nickClone);
-                userInfo.appendChild(nickDiv);
-            }
-            
-            // Transform timestamp in right section
-            const whenSpan = rightDiv.querySelector('.when span');
-            if (whenSpan && whenSpan.textContent) {
-                const postedText = whenSpan.textContent.replace('Posted', '').replace('on', '').trim();
-                const modernTimestamp = this.#createModernTimestamp(whenSpan, postedText);
-                if (modernTimestamp) {
-                    postHeader.appendChild(modernTimestamp);
-                }
-            }
-            
-            // Extract and clean content
-            const contentDiv = rightDiv.querySelector('.color');
-            if (contentDiv) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'post-main-content';
-                
-                const contentClone = contentDiv.cloneNode(true);
-                
-                // Clean up the content
-                contentClone.querySelectorAll('br').forEach(br => {
-                    if (!br.closest('.modern-spoiler, .modern-code, .modern-quote')) {
-                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-                    }
-                });
-                
-                // Process text nodes
-                const walker = document.createTreeWalker(contentClone, NodeFilter.SHOW_TEXT, null, false);
-                const textNodes = [];
-                let node;
-                while ((node = walker.nextNode())) {
-                    if (node.textContent.trim() !== '') {
-                        textNodes.push(node);
-                    }
-                }
-                
-                textNodes.forEach(textNode => {
-                    if (textNode.parentNode && !textNode.parentNode.classList.contains('post-text')) {
-                        const span = document.createElement('span');
-                        span.className = 'post-text';
-                        span.textContent = textNode.textContent;
-                        textNode.parentNode.replaceChild(span, textNode);
-                    }
-                });
-                
-                // Transform embedded elements
-                this.#preserveMediaDimensions(contentClone);
-                this.#modernizeQuotes(contentClone);
-                this.#modernizeSpoilers(contentClone);
-                this.#modernizeCodeBlocksInContent(contentClone);
-                this.#modernizeAttachmentsInContent(contentClone);
-                this.#modernizeEmbeddedLinksInContent(contentClone);
-                
-                contentWrapper.appendChild(contentClone);
-                postContent.appendChild(contentWrapper);
-            }
-            
-            // Assemble the modern item
-            modernItem.appendChild(postHeader);
-            modernItem.appendChild(userInfo);
-            modernItem.appendChild(postContent);
-            
-            // Add basic styling to match post appearance
-            modernItem.style.cssText = 'background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: var(--space-lg); list-style: none; display: block; overflow: hidden;';
-            
-            // Replace original
-            item.parentNode.replaceChild(modernItem, item);
-        });
-    }
+            }, 100);
+            return;
+        }
+        
+        // Avatar is present, transform immediately
+        this.#transformSingleSummaryItem(item, leftDiv, rightDiv);
+    });
+}
 
     // ==============================
     // EMBEDDED LINK TRANSFORMATION
