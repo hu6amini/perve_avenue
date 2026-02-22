@@ -5355,16 +5355,35 @@ class PostModernizer {
         const userInfo = document.createElement('div');
         userInfo.className = 'user-info';
         
-        // Process avatar
-        const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
+        // ===== FIXED AVATAR HANDLING =====
+        // Check if avatar container already exists (from avatar script)
+        let avatarContainer = leftDiv.querySelector('.forum-avatar-container');
+        
         if (avatarContainer) {
+            // Avatar already exists, clone it directly
             userInfo.appendChild(avatarContainer.cloneNode(true));
         } else {
-            // Create default avatar if none exists
-            const defaultAvatar = document.createElement('div');
-            defaultAvatar.className = 'default-avatar';
-            defaultAvatar.textContent = '👤';
-            userInfo.appendChild(defaultAvatar);
+            // No avatar yet, check if there's a default avatar placeholder
+            const defaultAvatar = leftDiv.querySelector('.default-avatar');
+            
+            if (defaultAvatar) {
+                // Default avatar exists, clone it and mark for later processing
+                const avatarClone = defaultAvatar.cloneNode(true);
+                avatarClone.classList.add('avatar-pending'); // Mark as pending
+                userInfo.appendChild(avatarClone);
+                
+                // Queue this element for avatar processing after transformation
+                this.#queueForAvatarProcessing(modernPost, leftDiv, rightDiv);
+            } else {
+                // Create a temporary placeholder
+                const tempAvatar = document.createElement('div');
+                tempAvatar.className = 'default-avatar avatar-pending';
+                tempAvatar.innerHTML = '<img loading="lazy" decoding="async" draggable="false" class="twemoji" alt="👤" src="https://twemoji.maxcdn.com/v/latest/svg/1f464.svg" width="20" height="20">';
+                userInfo.appendChild(tempAvatar);
+                
+                // Queue for avatar processing
+                this.#queueForAvatarProcessing(modernPost, leftDiv, rightDiv);
+            }
         }
         
         // Process nickname
@@ -5375,6 +5394,15 @@ class PostModernizer {
             nickWrapper.className = 'nick';
             nickWrapper.appendChild(nickClone);
             userInfo.appendChild(nickWrapper);
+        } else {
+            // Try to find nickname in other locations
+            const nickSpan = leftDiv.querySelector('.nick');
+            if (nickSpan) {
+                const nickWrapper = document.createElement('strong');
+                nickWrapper.className = 'nick';
+                nickWrapper.innerHTML = nickSpan.innerHTML;
+                userInfo.appendChild(nickWrapper);
+            }
         }
         
         // Post content section
@@ -5425,6 +5453,60 @@ class PostModernizer {
         
     } catch (error) {
         console.error('Error transforming summary post preview:', error);
+    }
+}
+
+// Add this new helper method to queue for avatar processing
+#queueForAvatarProcessing(modernPost, originalLeftDiv, originalRightDiv) {
+    // Try to find the user ID
+    let userId = null;
+    
+    // Check class for box_m pattern
+    const classMatch = originalLeftDiv.className.match(/\bbox_m(\d+)\b/);
+    if (classMatch) {
+        userId = classMatch[1];
+    }
+    
+    if (!userId) {
+        // Check parent
+        const parentBox = originalLeftDiv.closest('[class*="box_m"]');
+        if (parentBox) {
+            const parentMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
+            if (parentMatch) userId = parentMatch[1];
+        }
+    }
+    
+    if (!userId) {
+        // Check for MID in links
+        const midLink = originalLeftDiv.querySelector('a[href*="MID="]');
+        if (midLink) {
+            const hrefMatch = midLink.href.match(/MID=(\d+)/);
+            if (hrefMatch) userId = hrefMatch[1];
+        }
+    }
+    
+    // Get username
+    let username = '';
+    const nickLink = originalLeftDiv.querySelector('.nick a');
+    if (nickLink) {
+        username = nickLink.textContent.trim();
+    }
+    
+    if (userId && window.ForumAvatars && typeof window.ForumAvatars.refresh === 'function') {
+        // If avatar system exists, trigger a refresh for this specific user
+        setTimeout(() => {
+            // Try to find the avatar container in the modernized post
+            const avatarContainer = modernPost.querySelector('.avatar-pending, .default-avatar');
+            if (avatarContainer && avatarContainer.closest('.user-info')) {
+                // Remove the pending avatar
+                avatarContainer.remove();
+                
+                // Re-run avatar processing
+                if (window.ForumAvatars && window.ForumAvatars.refresh) {
+                    window.ForumAvatars.refresh();
+                }
+            }
+        }, 500); // Wait half a second for avatar script to run
     }
 }
 
