@@ -10481,7 +10481,7 @@ class PostModernizer {
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
             this.#codeBlockObserverId, this.#attachmentObserverId,
-            this.#embeddedLinkObserverId];
+            this.#embeddedLinkObserverId], this.#embeddedLinkObserverId, this.#summaryObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
