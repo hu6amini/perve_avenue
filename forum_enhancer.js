@@ -4832,7 +4832,6 @@ class PostModernizer {
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
     #embeddedLinkObserverId = null;
-    #summaryObserverId = null; // Added for summary list
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -4894,9 +4893,6 @@ class PostModernizer {
             this.#modernizeAttachments();
             this.#modernizeEmbeddedLinks();
             this.#modernizePolls();
-            
-            // NEW: Initialize summary list transformation for send page
-            this.#setupSummaryListObserver();
 
             // Clean up any double-wrapped media from previous runs
             setTimeout(() => {
@@ -4940,261 +4936,6 @@ class PostModernizer {
     }
 
     // ==============================
-    // SUMMARY LIST TRANSFORMATION (NEW)
-    // ==============================
-
-    #setupSummaryListObserver() {
-        // Only run on send page
-        if (document.body.id !== 'send') return;
-        
-        // Process existing items
-        this.#transformSummaryListItems();
-        
-        // Set up observer for new items
-        if (globalThis.forumObserver) {
-            this.#summaryObserverId = globalThis.forumObserver.register({
-                id: 'summary-list-modernizer',
-                callback: (node) => this.#handleNewSummaryItems(node),
-                selector: '.summary ol.list li',
-                priority: 'normal',
-                pageTypes: ['send']
-            });
-        } else {
-            // Fallback polling
-            setInterval(() => this.#transformSummaryListItems(), 2000);
-        }
-    }
-
-    #handleNewSummaryItems(node) {
-        if (document.body.id !== 'send') return;
-        
-        if (node.matches && node.matches('.summary ol.list li:not(.summary-item-modernized)')) {
-            this.#transformSummaryListItems();
-        } else if (node.querySelectorAll) {
-            const items = node.querySelectorAll('.summary ol.list li:not(.summary-item-modernized)');
-            if (items.length) {
-                this.#transformSummaryListItems();
-            }
-        }
-    }
-
-#transformSummaryListItems() {
-    // Only run on send page
-    if (document.body.id !== 'send') return;
-    
-    const summaryItems = document.querySelectorAll('.summary ol.list li:not(.summary-item-modernized)');
-    
-    summaryItems.forEach((item) => {
-        if (item.classList.contains('summary-item-modernized')) return;
-        
-        // Store original item data before modernization
-        const leftDiv = item.querySelector('.left.Sub');
-        const rightDiv = item.querySelector('.right.Sub');
-        
-        if (!leftDiv || !rightDiv) return;
-        
-        // Check if avatar is already present
-        const hasAvatar = leftDiv.querySelector('.forum-avatar-container') !== null;
-        
-        // If avatar isn't present yet, wait a bit and retry
-        if (!hasAvatar) {
-            // Set a small timeout to wait for avatar script
-            setTimeout(() => {
-                // Check again if this item hasn't been modernized yet
-                if (!item.classList.contains('summary-item-modernized')) {
-                    this.#transformSingleSummaryItem(item, leftDiv, rightDiv);
-                }
-            }, 100);
-            return;
-        }
-        
-        // Avatar is present, transform immediately
-        this.#transformSingleSummaryItem(item, leftDiv, rightDiv);
-    });
-}
-
-#transformSingleSummaryItem(item, leftDiv, rightDiv) {
-    if (item.classList.contains('summary-item-modernized')) return;
-    
-    item.classList.add('summary-item-modernized');
-    
-    // Clone and restructure the item
-    const modernItem = document.createElement('li');
-    modernItem.className = 'summary-item-modernized';
-    
-    // Copy all original attributes except class
-    Array.from(item.attributes).forEach(attr => {
-        if (attr.name !== 'class') {
-            modernItem.setAttribute(attr.name, attr.value);
-        }
-    });
-    
-    // Create modern structure
-    const postHeader = document.createElement('div');
-    postHeader.className = 'post-header';
-    
-    const userInfo = document.createElement('div');
-    userInfo.className = 'user-info';
-    
-    const postContent = document.createElement('div');
-    postContent.className = 'post-content';
-    
-    // ===== FIX 1: Extract and preserve avatar =====
-    // Look for avatar in multiple places
-    let avatarContainer = leftDiv.querySelector('.forum-avatar-container');
-    
-    // If not found directly, look for the avatar image
-    if (!avatarContainer) {
-        const avatarImg = leftDiv.querySelector('img[src*="dicebear.com"], img.forum-user-avatar, img[alt*="Avatar"]');
-        if (avatarImg) {
-            // Create proper avatar container
-            avatarContainer = document.createElement('div');
-            avatarContainer.className = 'forum-avatar-container';
-            avatarContainer.style.cssText = 
-                'display:inline-block;' +
-                'vertical-align:middle;' +
-                'position:relative;' +
-                'margin-right:8px;';
-            
-            // Clone and preserve the avatar image
-            const imgClone = avatarImg.cloneNode(true);
-            imgClone.classList.add('forum-user-avatar', 'avatar-size-60');
-            imgClone.style.cssText = 
-                'width:60px;' +
-                'height:60px;' +
-                'border-radius:50%;' +
-                'object-fit:cover;' +
-                'vertical-align:middle;' +
-                'border:2px solid #fff;' +
-                'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
-                'background-color:#f0f0f0;' +
-                'display:inline-block;';
-            
-            avatarContainer.appendChild(imgClone);
-        }
-    }
-    
-    if (avatarContainer) {
-        // Clone the avatar container to preserve it
-        const avatarClone = avatarContainer.cloneNode(true);
-        userInfo.appendChild(avatarClone);
-    }
-    
-    // ===== Extract nickname =====
-    const nickLink = leftDiv.querySelector('.nick a');
-    if (nickLink) {
-        const nickClone = nickLink.cloneNode(true);
-        const nickDiv = document.createElement('div');
-        nickDiv.className = 'nick';
-        nickDiv.appendChild(nickClone);
-        userInfo.appendChild(nickDiv);
-    }
-    
-    // ===== FIX 2: Transform timestamp properly =====
-    // The timestamp is in rightDiv > .top > .when > span
-    const topDiv = rightDiv.querySelector('.top');
-    const whenSpan = topDiv ? topDiv.querySelector('.when span') : rightDiv.querySelector('.when span');
-    
-    if (whenSpan && whenSpan.textContent) {
-        // Get the full text content
-        let dateText = whenSpan.textContent.trim();
-        
-        // Remove "Posted" or "on" prefixes
-        dateText = dateText.replace(/^Posted\s+/i, '').replace(/^on\s+/i, '').trim();
-        
-        // Try to create modern timestamp
-        const modernTimestamp = this.#createModernTimestamp(whenSpan, dateText);
-        
-        if (modernTimestamp) {
-            // If we got a modern timestamp (could be an <a> or <time> element)
-            if (modernTimestamp.tagName === 'A') {
-                postHeader.appendChild(modernTimestamp);
-            } else {
-                // If it's just a time element, wrap it or append directly
-                postHeader.appendChild(modernTimestamp);
-            }
-        } else {
-            // Fallback: create a simple timestamp
-            const timeElement = document.createElement('time');
-            timeElement.className = 'modern-timestamp fallback';
-            timeElement.textContent = dateText;
-            postHeader.appendChild(timeElement);
-        }
-    } else {
-        // Try to find any element that might contain the date
-        const possibleDateElements = rightDiv.querySelectorAll('.lt.Sub, .when, [class*="date"]');
-        possibleDateElements.forEach(el => {
-            if (el.textContent && el.textContent.match(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/)) {
-                const dateText = el.textContent.trim();
-                const modernTimestamp = this.#createModernTimestamp(el, dateText);
-                if (modernTimestamp) {
-                    postHeader.appendChild(modernTimestamp);
-                }
-            }
-        });
-    }
-    
-    // ===== Extract and clean content =====
-    const contentDiv = rightDiv.querySelector('.color');
-    if (contentDiv) {
-        const contentWrapper = document.createElement('div');
-        contentWrapper.className = 'post-main-content';
-        
-        const contentClone = contentDiv.cloneNode(true);
-        
-        // Clean up the content
-        contentClone.querySelectorAll('br').forEach(br => {
-            if (!br.closest('.modern-spoiler, .modern-code, .modern-quote')) {
-                br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-            }
-        });
-        
-        // Process text nodes
-        const walker = document.createTreeWalker(contentClone, NodeFilter.SHOW_TEXT, null, false);
-        const textNodes = [];
-        let node;
-        while ((node = walker.nextNode())) {
-            if (node.textContent.trim() !== '') {
-                textNodes.push(node);
-            }
-        }
-        
-        textNodes.forEach(textNode => {
-            if (textNode.parentNode && !textNode.parentNode.classList.contains('post-text')) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            }
-        });
-        
-        // Transform embedded elements
-        this.#preserveMediaDimensions(contentClone);
-        this.#modernizeQuotes(contentClone);
-        this.#modernizeSpoilers(contentClone);
-        this.#modernizeCodeBlocksInContent(contentClone);
-        this.#modernizeAttachmentsInContent(contentClone);
-        this.#modernizeEmbeddedLinksInContent(contentClone);
-        
-        contentWrapper.appendChild(contentClone);
-        postContent.appendChild(contentWrapper);
-    }
-    
-    // Assemble the modern item
-    modernItem.appendChild(postHeader);
-    modernItem.appendChild(userInfo);
-    modernItem.appendChild(postContent);
-    
-    // Add basic styling to match post appearance
-    modernItem.style.cssText = 'background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: var(--space-lg); list-style: none; display: block; overflow: hidden;';
-    
-    // Replace original
-    item.parentNode.replaceChild(modernItem, item);
-    
-    console.log('✅ Transformed summary item with avatar and timestamp');
-}
-    
-    // ==============================
     // EMBEDDED LINK TRANSFORMATION
     // ==============================
 
@@ -5228,221 +4969,221 @@ class PostModernizer {
         });
     }
 
-    #transformEmbeddedLink(container) {
-        if (this.#isInEditor(container) || 
-            container.classList.contains('modern-embedded-link') ||
-            !container) return;
+#transformEmbeddedLink(container) {
+    if (this.#isInEditor(container) || 
+        container.classList.contains('modern-embedded-link') ||
+        !container) return;
 
-        try {
-            const mainLinks = container.querySelectorAll('a[target="_blank"]');
-            const mainLink = mainLinks[0] || null;
-            if (!mainLink) return;
+    try {
+        const mainLinks = container.querySelectorAll('a[target="_blank"]');
+        const mainLink = mainLinks[0] || null;
+        if (!mainLink) return;
 
-            const href = mainLink.href;
-            const domain = this.#extractDomain(href);
-            
-            let title = '';
-            let description = '';
-            let imageUrl = '';
-            let faviconUrl = '';
+        const href = mainLink.href;
+        const domain = this.#extractDomain(href);
+        
+        let title = '';
+        let description = '';
+        let imageUrl = '';
+        let faviconUrl = '';
 
-            const allLinks = container.querySelectorAll('a[target="_blank"]');
-            if (allLinks.length >= 2) {
-                const titleElement = allLinks[1];
-                const titleSpan = titleElement.querySelector('span.post-text');
-                title = titleSpan ? titleSpan.textContent.trim() : titleElement.textContent.trim();
-            }
+        const allLinks = container.querySelectorAll('a[target="_blank"]');
+        if (allLinks.length >= 2) {
+            const titleElement = allLinks[1];
+            const titleSpan = titleElement.querySelector('span.post-text');
+            title = titleSpan ? titleSpan.textContent.trim() : titleElement.textContent.trim();
+        }
 
-            if (!title) {
-                container.querySelectorAll('span.post-text').forEach(span => {
-                    const text = span.textContent.trim();
-                    const lowerText = text.toLowerCase();
-                    if (text.length > 20 && text.length < 200 && 
-                        !lowerText.includes(domain.toLowerCase()) && 
-                        !lowerText.includes('leggi altro') &&
-                        !lowerText.includes('read more') &&
-                        !text.includes('>')) {
-                        title = text;
-                    }
-                });
-            }
-
-            if (!title) {
-                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-                const texts = [];
-                let node;
-                while ((node = walker.nextNode())) {
-                    const text = node.textContent.trim();
-                    if (text && 
-                        !text.toLowerCase().includes(domain.toLowerCase()) && 
-                        !text.toLowerCase().includes('leggi altro') &&
-                        !text.toLowerCase().includes('read more') &&
-                        !text.includes('>')) {
-                        texts.push(text);
-                    }
-                }
-                
-                for (let i = 0; i < texts.length; i++) {
-                    if (texts[i].length > 20 && texts[i].length < 200) {
-                        title = texts[i];
-                        break;
-                    }
-                }
-            }
-
-            if (!title) {
-                title = 'Article on ' + domain;
-            }
-
-            if (title !== 'Article on ' + domain) {
-                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-                let foundTitle = false;
-                let node;
-                while ((node = walker.nextNode())) {
-                    const text = node.textContent.trim();
-                    if (!text) continue;
-                    
-                    if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
-                        foundTitle = true;
-                        continue;
-                    }
-                    
-                    if (foundTitle && text && text.length > 30) {
-                        description = text;
-                        break;
-                    }
-                }
-            }
-
-            // ===== SIMPLIFIED IMAGE DETECTION =====
-            // Look for images - there are only two: favicon and preview
-            
-            container.querySelectorAll('img').forEach(img => {
-                const src = img.src || '';
-                
-                // Check if this is the favicon (contains "favicon" in URL)
-                if (src.includes('favicon')) {
-                    faviconUrl = src;
-                } 
-                // Otherwise, it's the preview image
-                else if (!imageUrl) {
-                    imageUrl = src;
+        if (!title) {
+            container.querySelectorAll('span.post-text').forEach(span => {
+                const text = span.textContent.trim();
+                const lowerText = text.toLowerCase();
+                if (text.length > 20 && text.length < 200 && 
+                    !lowerText.includes(domain.toLowerCase()) && 
+                    !lowerText.includes('leggi altro') &&
+                    !lowerText.includes('read more') &&
+                    !text.includes('>')) {
+                    title = text;
                 }
             });
+        }
 
-            // If we found favicon but no preview, look for the other image
-            if (faviconUrl && !imageUrl) {
-                container.querySelectorAll('img').forEach(img => {
+        if (!title) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const texts = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                if (text && 
+                    !text.toLowerCase().includes(domain.toLowerCase()) && 
+                    !text.toLowerCase().includes('leggi altro') &&
+                    !text.toLowerCase().includes('read more') &&
+                    !text.includes('>')) {
+                    texts.push(text);
+                }
+            }
+            
+            for (let i = 0; i < texts.length; i++) {
+                if (texts[i].length > 20 && texts[i].length < 200) {
+                    title = texts[i];
+                    break;
+                }
+            }
+        }
+
+        if (!title) {
+            title = 'Article on ' + domain;
+        }
+
+        if (title !== 'Article on ' + domain) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            let foundTitle = false;
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                if (!text) continue;
+                
+                if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
+                    foundTitle = true;
+                    continue;
+                }
+                
+                if (foundTitle && text && text.length > 30) {
+                    description = text;
+                    break;
+                }
+            }
+        }
+
+        // ===== SIMPLIFIED IMAGE DETECTION =====
+        // Look for images - there are only two: favicon and preview
+        
+        container.querySelectorAll('img').forEach(img => {
+            const src = img.src || '';
+            
+            // Check if this is the favicon (contains "favicon" in URL)
+            if (src.includes('favicon')) {
+                faviconUrl = src;
+            } 
+            // Otherwise, it's the preview image
+            else if (!imageUrl) {
+                imageUrl = src;
+            }
+        });
+
+        // If we found favicon but no preview, look for the other image
+        if (faviconUrl && !imageUrl) {
+            container.querySelectorAll('img').forEach(img => {
+                if (img.src !== faviconUrl && !imageUrl) {
+                    imageUrl = img.src;
+                }
+            });
+        }
+
+        // Check hidden div for favicon if not found
+        if (!faviconUrl) {
+            const hiddenDiv = container.querySelector('div[style*="display:none"]');
+            if (hiddenDiv) {
+                const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"]');
+                if (hiddenFavicon) {
+                    faviconUrl = hiddenFavicon.src;
+                    
+                    // If we found favicon in hidden div, the visible image must be preview
+                    if (!imageUrl) {
+                        const visibleImg = container.querySelector('img:not([src*="favicon"])');
+                        if (visibleImg) {
+                            imageUrl = visibleImg.src;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Last resort: if we have exactly two images, one must be preview
+        if (!imageUrl) {
+            const allImages = container.querySelectorAll('img');
+            if (allImages.length === 2) {
+                allImages.forEach(img => {
                     if (img.src !== faviconUrl && !imageUrl) {
                         imageUrl = img.src;
                     }
                 });
             }
-
-            // Check hidden div for favicon if not found
-            if (!faviconUrl) {
-                const hiddenDiv = container.querySelector('div[style*="display:none"]');
-                if (hiddenDiv) {
-                    const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"]');
-                    if (hiddenFavicon) {
-                        faviconUrl = hiddenFavicon.src;
-                        
-                        // If we found favicon in hidden div, the visible image must be preview
-                        if (!imageUrl) {
-                            const visibleImg = container.querySelector('img:not([src*="favicon"])');
-                            if (visibleImg) {
-                                imageUrl = visibleImg.src;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Last resort: if we have exactly two images, one must be preview
-            if (!imageUrl) {
-                const allImages = container.querySelectorAll('img');
-                if (allImages.length === 2) {
-                    allImages.forEach(img => {
-                        if (img.src !== faviconUrl && !imageUrl) {
-                            imageUrl = img.src;
-                        }
-                    });
-                }
-            }
-            // ===== END SIMPLIFIED IMAGE DETECTION =====
-
-            const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
-            const modernEmbeddedLink = document.createElement('div');
-            modernEmbeddedLink.className = 'modern-embedded-link';
-
-            let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
-            
-            if (imageUrl) {
-                html += '<div class="embedded-link-image">' +
-                    '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
-                    '</div>';
-            }
-            
-            html += '<div class="embedded-link-content">' +
-                '<div class="embedded-link-domain">';
-            
-            if (faviconUrl) {
-                html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
-            }
-            
-            html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
-                '</div>' +
-                '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
-            
-            if (description) {
-                html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
-            }
-            
-            const isItalian = domain.includes('.it') || 
-                             (description && (description.toLowerCase().includes('leggi') || 
-                                             description.toLowerCase().includes('italia')));
-            
-            const readMoreText = isItalian ? 
-                'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
-                'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
-                
-            html += '<div class="embedded-link-meta">' +
-                '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
-                '</div>' +
-                '</div></a>';
-
-            modernEmbeddedLink.innerHTML = html;
-            
-            modernEmbeddedLink.querySelectorAll('img').forEach(img => {
-                img.removeAttribute('style');
-                
-                if (img.classList.contains('embedded-link-favicon')) {
-                    img.style.cssText = 'width:16px;height:16px;object-fit:contain;display:inline-block;vertical-align:middle;';
-                } else {
-                    img.style.maxWidth = '100%';
-                    img.style.objectFit = 'cover';
-                    img.style.display = 'block';
-                    
-                    if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
-                        img.removeAttribute('width');
-                        img.removeAttribute('height');
-                    }
-                }
-            });
-            
-            container.parentNode.replaceChild(modernEmbeddedLink, container);
-
-            const linkElement = modernEmbeddedLink.querySelector('a');
-            if (linkElement) {
-                linkElement.addEventListener('click', () => {
-                    console.log('Embedded link clicked to:', href);
-                });
-            }
-
-        } catch (error) {
-            console.error('Error transforming embedded link:', error);
         }
+        // ===== END SIMPLIFIED IMAGE DETECTION =====
+
+        const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
+        const modernEmbeddedLink = document.createElement('div');
+        modernEmbeddedLink.className = 'modern-embedded-link';
+
+        let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
+        
+        if (imageUrl) {
+            html += '<div class="embedded-link-image">' +
+                '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
+                '</div>';
+        }
+        
+        html += '<div class="embedded-link-content">' +
+            '<div class="embedded-link-domain">';
+        
+        if (faviconUrl) {
+            html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
+        }
+        
+        html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
+            '</div>' +
+            '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
+        
+        if (description) {
+            html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
+        }
+        
+        const isItalian = domain.includes('.it') || 
+                         (description && (description.toLowerCase().includes('leggi') || 
+                                         description.toLowerCase().includes('italia')));
+        
+        const readMoreText = isItalian ? 
+            'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
+            'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
+            
+        html += '<div class="embedded-link-meta">' +
+            '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
+            '</div>' +
+            '</div></a>';
+
+        modernEmbeddedLink.innerHTML = html;
+        
+        modernEmbeddedLink.querySelectorAll('img').forEach(img => {
+            img.removeAttribute('style');
+            
+            if (img.classList.contains('embedded-link-favicon')) {
+                img.style.cssText = 'width:16px;height:16px;object-fit:contain;display:inline-block;vertical-align:middle;';
+            } else {
+                img.style.maxWidth = '100%';
+                img.style.objectFit = 'cover';
+                img.style.display = 'block';
+                
+                if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
+                    img.removeAttribute('width');
+                    img.removeAttribute('height');
+                }
+            }
+        });
+        
+        container.parentNode.replaceChild(modernEmbeddedLink, container);
+
+        const linkElement = modernEmbeddedLink.querySelector('a');
+        if (linkElement) {
+            linkElement.addEventListener('click', () => {
+                console.log('Embedded link clicked to:', href);
+            });
+        }
+
+    } catch (error) {
+        console.error('Error transforming embedded link:', error);
     }
+}
 
     #extractDomain(url) {
         try {
@@ -5466,65 +5207,65 @@ class PostModernizer {
         }
     }
 
-    #handleNewEmbeddedLinks(node) {
-        if (this.#isInEditor(node)) return;
+#handleNewEmbeddedLinks(node) {
+    if (this.#isInEditor(node)) return;
+    
+    const safeTransform = (link) => {
+        if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
         
-        const safeTransform = (link) => {
-            if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
-            
-            // Check if we should wait for images
-            const images = link.querySelectorAll('img');
-            
-            if (images.length === 0) {
-                // No images to wait for, transform immediately
-                this.#transformEmbeddedLink(link);
-                return;
-            }
-            
-            // Check if images are ready (either processed by media script or loaded)
-            const areImagesReady = Array.from(images).every(img => {
-                return img.hasAttribute('data-optimized') || 
-                       img.src.includes('images.weserv.nl') ||
-                       img.complete;
-            });
-            
-            if (areImagesReady) {
-                this.#transformEmbeddedLink(link);
-            } else {
-                // Images not ready, wait for them
-                console.log('⏳ Waiting for images to be processed in embedded link');
-                
-                let attempts = 0;
-                const maxAttempts = 15; // 1.5 seconds total
-                
-                const waitForImages = setInterval(() => {
-                    attempts++;
-                    
-                    const currentImages = link.querySelectorAll('img');
-                    const nowReady = Array.from(currentImages).every(img => {
-                        return img.hasAttribute('data-optimized') || 
-                               img.src.includes('images.weserv.nl') ||
-                               img.complete;
-                    });
-                    
-                    if (nowReady || attempts >= maxAttempts) {
-                        clearInterval(waitForImages);
-                        if (!link.classList.contains('embedded-link-modernized')) {
-                            console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
-                            this.#transformEmbeddedLink(link);
-                        }
-                    }
-                }, 100);
-            }
-        };
+        // Check if we should wait for images
+        const images = link.querySelectorAll('img');
         
-        // Process the node
-        if (node.matches && node.matches('.ffb_embedlink')) {
-            safeTransform(node);
-        } else if (node.querySelectorAll) {
-            node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
+        if (images.length === 0) {
+            // No images to wait for, transform immediately
+            this.#transformEmbeddedLink(link);
+            return;
         }
+        
+        // Check if images are ready (either processed by media script or loaded)
+        const areImagesReady = Array.from(images).every(img => {
+            return img.hasAttribute('data-optimized') || 
+                   img.src.includes('images.weserv.nl') ||
+                   img.complete;
+        });
+        
+        if (areImagesReady) {
+            this.#transformEmbeddedLink(link);
+        } else {
+            // Images not ready, wait for them
+            console.log('⏳ Waiting for images to be processed in embedded link');
+            
+            let attempts = 0;
+            const maxAttempts = 15; // 1.5 seconds total
+            
+            const waitForImages = setInterval(() => {
+                attempts++;
+                
+                const currentImages = link.querySelectorAll('img');
+                const nowReady = Array.from(currentImages).every(img => {
+                    return img.hasAttribute('data-optimized') || 
+                           img.src.includes('images.weserv.nl') ||
+                           img.complete;
+                });
+                
+                if (nowReady || attempts >= maxAttempts) {
+                    clearInterval(waitForImages);
+                    if (!link.classList.contains('embedded-link-modernized')) {
+                        console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
+                        this.#transformEmbeddedLink(link);
+                    }
+                }
+            }, 100);
+        }
+    };
+    
+    // Process the node
+    if (node.matches && node.matches('.ffb_embedlink')) {
+        safeTransform(node);
+    } else if (node.querySelectorAll) {
+        node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
     }
+}
     
     // ==============================
     // MODERN POLL SYSTEM
@@ -5541,266 +5282,266 @@ class PostModernizer {
         });
     }
 
-    #transformPoll(pollContainer) {
-        const pollForm = pollContainer.closest('form#pollform');
-        if (!pollForm || pollContainer.classList.contains('poll-modernized')) return;
+#transformPoll(pollContainer) {
+    const pollForm = pollContainer.closest('form#pollform');
+    if (!pollForm || pollContainer.classList.contains('poll-modernized')) return;
+    
+    try {
+        // STORE THE POPUP BEFORE HIDING ANYTHING
+        const popupElement = pollContainer.querySelector('.popup.pop_points#overlay');
         
-        try {
-            // STORE THE POPUP BEFORE HIDING ANYTHING
-            const popupElement = pollContainer.querySelector('.popup.pop_points#overlay');
-            
-            const sunbar = pollContainer.querySelector('.sunbar.top.Item');
-            const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
-            const list = pollContainer.querySelector('ul.list');
-            if (!list) return;
+        const sunbar = pollContainer.querySelector('.sunbar.top.Item');
+        const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
+        const list = pollContainer.querySelector('ul.list');
+        if (!list) return;
 
-            const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
-            const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
-            const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
+        const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
+        const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        
+        const isVotedState = originalCancelBtn !== null;
+        const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
+        const isVoteState = !isVotedState && !isResultsState;
+        
+        const originalPollContent = pollContainer.querySelector('.skin_tbl');
+        if (!originalPollContent) return;
+        
+        // Hide original content BUT DETACH THE POPUP FIRST
+        if (popupElement) {
+            // Move popup outside the poll container before hiding
+            document.body.appendChild(popupElement);
             
-            const isVotedState = originalCancelBtn !== null;
-            const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
-            const isVoteState = !isVotedState && !isResultsState;
+            // Ensure popup has proper styling
+            popupElement.style.cssText = 'display: none; position: absolute; z-index: 9999;';
             
-            const originalPollContent = pollContainer.querySelector('.skin_tbl');
-            if (!originalPollContent) return;
-            
-            // Hide original content BUT DETACH THE POPUP FIRST
-            if (popupElement) {
-                // Move popup outside the poll container before hiding
-                document.body.appendChild(popupElement);
-                
-                // Ensure popup has proper styling
-                popupElement.style.cssText = 'display: none; position: absolute; z-index: 9999;';
-                
-                // Re-initialize the overlay if jQuery is available
-                if (typeof $ !== 'undefined' && $.fn.overlay) {
-                    // Small delay to ensure DOM is ready
-                    setTimeout(() => {
-                        $("a[rel=#overlay]").overlay({
-                            top: $(window).height() / 2 - 100,
-                            left: $(window).width() / 2 - 150,
-                            onBeforeLoad: function() {
-                                var wrap = this.getOverlay().find("div");
-                                wrap.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif" alt=""></p>')
-                                    .load(this.getTrigger().attr("href") + "&popup=1");
-                            }
-                        });
-                    }, 100);
-                }
-            }
-            
-            // Now hide the original content (popup is safely outside)
-            originalPollContent.style.cssText = 'opacity:0;height:0;overflow:hidden;position:absolute;pointer-events:none';
-            
-            const modernPoll = document.createElement('div');
-            modernPoll.className = 'modern-poll';
-            modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
-            
-            let html = '<div class="poll-header">' +
-                '<div class="poll-icon">' +
-                '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
-                '</div>' +
-                '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
-                '<div class="poll-stats">';
-            
-            if (isVotedState || isResultsState) {
-                const votersText = pollContainer.querySelector('.darkbar.Item');
-                if (votersText) {
-                    const votersMatch = votersText.textContent.match(/Voters:\s*(\d+)/);
-                    if (votersMatch) {
-                        html += '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
-                            '<span>' + votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '') + '</span>';
-                    }
-                }
-            }
-            
-            html += '</div></div><div class="poll-choices">';
-            
-            if (isVoteState) {
-                const choiceItems = list.querySelectorAll('li.Item[style*="text-align:left"]');
-                choiceItems.forEach((item, index) => {
-                    const label = item.querySelector('label');
-                    const radio = item.querySelector('input[type="radio"]');
-                    if (!label || !radio) return;
-                    
-                    const choiceText = label.textContent.replace(/&nbsp;/g, ' ').trim();
-                    const choiceId = radio.id;
-                    const choiceValue = radio.value;
-                    const choiceName = radio.name;
-                    
-                    html += '<div class="poll-choice" data-choice-index="' + index + '">' +
-                        '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
-                        '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
-                        '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
-                        this.#escapeHtml(choiceText) + '</label>' +
-                        '</div>';
-                });
-            } else {
-                const choiceItems = list.querySelectorAll('li:not(:first-child)');
-                let maxVotes = 0;
-                const choicesData = [];
-                
-                choiceItems.forEach(item => {
-                    const isMax = item.classList.contains('max');
-                    const leftDiv = item.querySelector('.left.Sub.Item');
-                    const centerDiv = item.querySelector('.center.Sub.Item');
-                    const rightDiv = item.querySelector('.right.Sub.Item');
-                    
-                    if (!leftDiv || !centerDiv || !rightDiv) return;
-                    
-                    const choiceText = leftDiv.textContent.replace(/\s+/g, ' ').trim();
-                    const choiceTextClean = choiceText.replace(/^\*+/, '').replace(/\*+$/, '').trim();
-                    
-                    const barDiv = centerDiv.querySelector('.bar div');
-                    const percentageSpan = centerDiv.querySelector('.bar span');
-                    const votesDiv = rightDiv;
-                    
-                    let percentage = 0;
-                    let votes = 0;
-                    
-                    if (barDiv) {
-                        const widthMatch = barDiv.style.width.match(/(\d+(?:\.\d+)?)%/);
-                        if (widthMatch) percentage = parseFloat(widthMatch[1]);
-                    }
-                    
-                    if (percentageSpan) {
-                        const percentageMatch = percentageSpan.textContent.match(/(\d+(?:\.\d+)?)%/);
-                        if (percentageMatch) percentage = parseFloat(percentageMatch[1]);
-                    }
-                    
-                    if (votesDiv) {
-                        const votesText = votesDiv.textContent.replace(/[^\d.]/g, '');
-                        if (votesText) votes = parseInt(votesText);
-                    }
-                    
-                    if (votes > maxVotes) maxVotes = votes;
-                    
-                    choicesData.push({
-                        text: choiceTextClean,
-                        originalText: choiceText,
-                        percentage: percentage,
-                        votes: votes,
-                        isMax: isMax,
-                        isVoted: isMax && leftDiv.querySelector('strong') !== null
-                    });
-                });
-                
-                choicesData.forEach((choice, index) => {
-                    const isVotedChoice = isVotedState && choice.isVoted;
-                    
-                    html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
-                        (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
-                    
-                    if (isVotedState && isVotedChoice) {
-                        html += '<input type="radio" class="choice-radio" checked disabled>';
-                    }
-                    
-                    html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
-                    if (isVotedChoice) {
-                        html += ' <strong>(Your vote)</strong>';
-                    }
-                    html += '</span>';
-                    
-                    html += '<div class="choice-stats">' +
-                        '<div class="choice-bar">' +
-                        '<div class="choice-fill" style="width: ' + choice.percentage.toFixed(2) + '%"></div>' +
-                        '</div>' +
-                        '<span class="choice-percentage">' + choice.percentage.toFixed(2) + '%</span>' +
-                        '<span class="choice-votes">' + choice.votes + ' vote' + (choice.votes !== 1 ? 's' : '') + '</span>' +
-                        '</div>';
-                    
-                    html += '</div>';
-                });
-            }
-            
-            html += '</div><div class="poll-footer">';
-            
-            if (isVoteState) {
-                html += '<p class="poll-message">Select your choice and click Vote</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn vote-btn">' +
-                    '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
-                    'Vote' +
-                    '</button>' +
-                    '<button type="button" class="poll-btn secondary view-results-btn">' +
-                    '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
-                    'View Results' +
-                    '</button>' +
-                    '</div>';
-            } else if (isVotedState) {
-                const darkbar = pollContainer.querySelector('.darkbar.Item');
-                let votedForText = '';
-                
-                if (darkbar) {
-                    const abbr = darkbar.querySelector('abbr');
-                    if (abbr) {
-                        const choiceNumber = abbr.textContent.trim();
-                        const choiceTitle = abbr.getAttribute('title') || '';
-                        votedForText = 'You voted for option <strong>' + choiceNumber + '</strong>';
-                        if (choiceTitle) {
-                            votedForText += ': <span class="poll-choice-name">' + this.#escapeHtml(choiceTitle) + '</span>';
-                        }
-                    }
-                }
-                
-                html += '<p class="poll-message">' + votedForText + '</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn delete cancel-vote-btn">' +
-                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
-                    'Cancel Vote' +
-                    '</button>' +
-                    '</div>';
-            } else if (isResultsState) {
-                const darkbar = pollContainer.querySelector('.darkbar.Item');
-                let votersText = '';
-                
-                if (darkbar) {
-                    const votersMatch = darkbar.textContent.match(/Voters:\s*(\d+)/);
-                    if (votersMatch) {
-                        votersText = votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '');
-                    }
-                }
-                
-                html += '<p class="poll-message">Poll results' + (votersText ? ' • ' + votersText : '') + '</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn secondary" onclick="location.reload()">' +
-                    '<i class="fa-regular fa-rotate" aria-hidden="true"></i>' +
-                    'Refresh' +
-                    '</button>' +
-                    '</div>';
-            }
-            
-            html += '</div>';
-            
-            modernPoll.innerHTML = html;
-            pollContainer.insertBefore(modernPoll, originalPollContent);
-            pollContainer.classList.add('poll-modernized');
-            
-            this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
-                isVoteState: isVoteState,
-                isVotedState: isVotedState,
-                originalCancelBtn: originalCancelBtn,
-                originalVoteBtn: originalVoteBtn,
-                originalViewResultsBtn: originalViewResultsBtn
-            });
-            
-            if (isVotedState || isResultsState) {
+            // Re-initialize the overlay if jQuery is available
+            if (typeof $ !== 'undefined' && $.fn.overlay) {
+                // Small delay to ensure DOM is ready
                 setTimeout(() => {
-                    modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
-                        const width = fill.style.width;
-                        fill.style.width = '0';
-                        setTimeout(() => {
-                            fill.style.width = width;
-                        }, 10);
+                    $("a[rel=#overlay]").overlay({
+                        top: $(window).height() / 2 - 100,
+                        left: $(window).width() / 2 - 150,
+                        onBeforeLoad: function() {
+                            var wrap = this.getOverlay().find("div");
+                            wrap.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif" alt=""></p>')
+                                .load(this.getTrigger().attr("href") + "&popup=1");
+                        }
                     });
                 }, 100);
             }
-            
-        } catch (error) {
-            console.error('Error transforming poll:', error);
         }
+        
+        // Now hide the original content (popup is safely outside)
+        originalPollContent.style.cssText = 'opacity:0;height:0;overflow:hidden;position:absolute;pointer-events:none';
+        
+        const modernPoll = document.createElement('div');
+        modernPoll.className = 'modern-poll';
+        modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
+        
+        let html = '<div class="poll-header">' +
+            '<div class="poll-icon">' +
+            '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+            '</div>' +
+            '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
+            '<div class="poll-stats">';
+        
+        if (isVotedState || isResultsState) {
+            const votersText = pollContainer.querySelector('.darkbar.Item');
+            if (votersText) {
+                const votersMatch = votersText.textContent.match(/Voters:\s*(\d+)/);
+                if (votersMatch) {
+                    html += '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
+                        '<span>' + votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '') + '</span>';
+                }
+            }
+        }
+        
+        html += '</div></div><div class="poll-choices">';
+        
+        if (isVoteState) {
+            const choiceItems = list.querySelectorAll('li.Item[style*="text-align:left"]');
+            choiceItems.forEach((item, index) => {
+                const label = item.querySelector('label');
+                const radio = item.querySelector('input[type="radio"]');
+                if (!label || !radio) return;
+                
+                const choiceText = label.textContent.replace(/&nbsp;/g, ' ').trim();
+                const choiceId = radio.id;
+                const choiceValue = radio.value;
+                const choiceName = radio.name;
+                
+                html += '<div class="poll-choice" data-choice-index="' + index + '">' +
+                    '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
+                    '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
+                    this.#escapeHtml(choiceText) + '</label>' +
+                    '</div>';
+            });
+        } else {
+            const choiceItems = list.querySelectorAll('li:not(:first-child)');
+            let maxVotes = 0;
+            const choicesData = [];
+            
+            choiceItems.forEach(item => {
+                const isMax = item.classList.contains('max');
+                const leftDiv = item.querySelector('.left.Sub.Item');
+                const centerDiv = item.querySelector('.center.Sub.Item');
+                const rightDiv = item.querySelector('.right.Sub.Item');
+                
+                if (!leftDiv || !centerDiv || !rightDiv) return;
+                
+                const choiceText = leftDiv.textContent.replace(/\s+/g, ' ').trim();
+                const choiceTextClean = choiceText.replace(/^\*+/, '').replace(/\*+$/, '').trim();
+                
+                const barDiv = centerDiv.querySelector('.bar div');
+                const percentageSpan = centerDiv.querySelector('.bar span');
+                const votesDiv = rightDiv;
+                
+                let percentage = 0;
+                let votes = 0;
+                
+                if (barDiv) {
+                    const widthMatch = barDiv.style.width.match(/(\d+(?:\.\d+)?)%/);
+                    if (widthMatch) percentage = parseFloat(widthMatch[1]);
+                }
+                
+                if (percentageSpan) {
+                    const percentageMatch = percentageSpan.textContent.match(/(\d+(?:\.\d+)?)%/);
+                    if (percentageMatch) percentage = parseFloat(percentageMatch[1]);
+                }
+                
+                if (votesDiv) {
+                    const votesText = votesDiv.textContent.replace(/[^\d.]/g, '');
+                    if (votesText) votes = parseInt(votesText);
+                }
+                
+                if (votes > maxVotes) maxVotes = votes;
+                
+                choicesData.push({
+                    text: choiceTextClean,
+                    originalText: choiceText,
+                    percentage: percentage,
+                    votes: votes,
+                    isMax: isMax,
+                    isVoted: isMax && leftDiv.querySelector('strong') !== null
+                });
+            });
+            
+            choicesData.forEach((choice, index) => {
+                const isVotedChoice = isVotedState && choice.isVoted;
+                
+                html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
+                    (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
+                
+                if (isVotedState && isVotedChoice) {
+                    html += '<input type="radio" class="choice-radio" checked disabled>';
+                }
+                
+                html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
+                if (isVotedChoice) {
+                    html += ' <strong>(Your vote)</strong>';
+                }
+                html += '</span>';
+                
+                html += '<div class="choice-stats">' +
+                    '<div class="choice-bar">' +
+                    '<div class="choice-fill" style="width: ' + choice.percentage.toFixed(2) + '%"></div>' +
+                    '</div>' +
+                    '<span class="choice-percentage">' + choice.percentage.toFixed(2) + '%</span>' +
+                    '<span class="choice-votes">' + choice.votes + ' vote' + (choice.votes !== 1 ? 's' : '') + '</span>' +
+                    '</div>';
+                
+                html += '</div>';
+            });
+        }
+        
+        html += '</div><div class="poll-footer">';
+        
+        if (isVoteState) {
+            html += '<p class="poll-message">Select your choice and click Vote</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn vote-btn">' +
+                '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
+                'Vote' +
+                '</button>' +
+                '<button type="button" class="poll-btn secondary view-results-btn">' +
+                '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+                'View Results' +
+                '</button>' +
+                '</div>';
+        } else if (isVotedState) {
+            const darkbar = pollContainer.querySelector('.darkbar.Item');
+            let votedForText = '';
+            
+            if (darkbar) {
+                const abbr = darkbar.querySelector('abbr');
+                if (abbr) {
+                    const choiceNumber = abbr.textContent.trim();
+                    const choiceTitle = abbr.getAttribute('title') || '';
+                    votedForText = 'You voted for option <strong>' + choiceNumber + '</strong>';
+                    if (choiceTitle) {
+                        votedForText += ': <span class="poll-choice-name">' + this.#escapeHtml(choiceTitle) + '</span>';
+                    }
+                }
+            }
+            
+            html += '<p class="poll-message">' + votedForText + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn delete cancel-vote-btn">' +
+                '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                'Cancel Vote' +
+                '</button>' +
+                '</div>';
+        } else if (isResultsState) {
+            const darkbar = pollContainer.querySelector('.darkbar.Item');
+            let votersText = '';
+            
+            if (darkbar) {
+                const votersMatch = darkbar.textContent.match(/Voters:\s*(\d+)/);
+                if (votersMatch) {
+                    votersText = votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '');
+                }
+            }
+            
+            html += '<p class="poll-message">Poll results' + (votersText ? ' • ' + votersText : '') + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn secondary" onclick="location.reload()">' +
+                '<i class="fa-regular fa-rotate" aria-hidden="true"></i>' +
+                'Refresh' +
+                '</button>' +
+                '</div>';
+        }
+        
+        html += '</div>';
+        
+        modernPoll.innerHTML = html;
+        pollContainer.insertBefore(modernPoll, originalPollContent);
+        pollContainer.classList.add('poll-modernized');
+        
+        this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
+            isVoteState: isVoteState,
+            isVotedState: isVotedState,
+            originalCancelBtn: originalCancelBtn,
+            originalVoteBtn: originalVoteBtn,
+            originalViewResultsBtn: originalViewResultsBtn
+        });
+        
+        if (isVotedState || isResultsState) {
+            setTimeout(() => {
+                modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
+                    const width = fill.style.width;
+                    fill.style.width = '0';
+                    setTimeout(() => {
+                        fill.style.width = width;
+                    }, 10);
+                });
+            }, 100);
+        }
+        
+    } catch (error) {
+        console.error('Error transforming poll:', error);
     }
+}
     
     #setupPollEventListeners(modernPoll, pollForm, originalPollContent, options) {
         const { isVoteState, isVotedState, originalCancelBtn, originalVoteBtn, originalViewResultsBtn } = options;
@@ -6488,7 +6229,7 @@ class PostModernizer {
                  originalElement.parentElement.hasAttribute('href')) {
             href = originalElement.parentElement.getAttribute('href');
         } else {
-            const postElement = originalElement.closest('.post, .summary-item-modernized');
+            const postElement = originalElement.closest('.post');
             if (postElement && postElement.id) {
                 const postIdMatch = postElement.id.match(/\d+/);
                 if (postIdMatch) {
@@ -9309,45 +9050,45 @@ class PostModernizer {
         }
     }
 
-    #createStandardMediaWrapper(element) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'standard-media-wrapper';
-        
-        // ALWAYS use 16:9 aspect ratio for consistency
-        const aspectRatio = '16 / 9';
-        const maxWidth = 560;
-        
-        wrapper.style.cssText = 
-            'position: relative; ' +
-            'width: 100%; ' +
-            'max-width: ' + maxWidth + 'px; ' +
-            'aspect-ratio: ' + aspectRatio + '; ' +
-            'margin: var(--space-md) 0; ' + // Top/bottom: 1rem, Left/right: 0
-            'overflow: hidden; ' +
-            'background: var(--bg-secondary); ' +
-            'border-radius: var(--radius-sm); ' +
-            'padding: 0 !important; ' +
-            'box-sizing: border-box !important;';
-        
-        // Type-specific styling
-        const src = element.src || element.dataset.src || '';
-        const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
-                          element.tagName === 'LITE-YOUTUBE';
-        const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
-        
-        if (isYouTube) {
-            wrapper.classList.add('youtube-wrapper');
-            wrapper.style.background = '#000';
-        } else if (isVimeo) {
-            wrapper.classList.add('vimeo-wrapper');
-            wrapper.style.background = '#1ab7ea';
-        } else if (element.tagName === 'VIDEO') {
-            wrapper.classList.add('video-wrapper');
-            wrapper.style.background = '#000';
-        }
-        
-        return wrapper;
+#createStandardMediaWrapper(element) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'standard-media-wrapper';
+    
+    // ALWAYS use 16:9 aspect ratio for consistency
+    const aspectRatio = '16 / 9';
+    const maxWidth = 560;
+    
+    wrapper.style.cssText = 
+        'position: relative; ' +
+        'width: 100%; ' +
+        'max-width: ' + maxWidth + 'px; ' +
+        'aspect-ratio: ' + aspectRatio + '; ' +
+        'margin: var(--space-md) 0; ' + // Top/bottom: 1rem, Left/right: 0
+        'overflow: hidden; ' +
+        'background: var(--bg-secondary); ' +
+        'border-radius: var(--radius-sm); ' +
+        'padding: 0 !important; ' +
+        'box-sizing: border-box !important;';
+    
+    // Type-specific styling
+    const src = element.src || element.dataset.src || '';
+    const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
+                      element.tagName === 'LITE-YOUTUBE';
+    const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
+    
+    if (isYouTube) {
+        wrapper.classList.add('youtube-wrapper');
+        wrapper.style.background = '#000';
+    } else if (isVimeo) {
+        wrapper.classList.add('vimeo-wrapper');
+        wrapper.style.background = '#1ab7ea';
+    } else if (element.tagName === 'VIDEO') {
+        wrapper.classList.add('video-wrapper');
+        wrapper.style.background = '#000';
     }
+    
+    return wrapper;
+}
 
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
@@ -9876,103 +9617,103 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const bulletDelete = e.target.closest('.bullet_delete');
-            const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
-            const pointsContainer = e.target.closest('.points');
+#enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const bulletDelete = e.target.closest('.bullet_delete');
+        const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
+        const pointsContainer = e.target.closest('.points');
+        
+        // Handle undo (bullet_delete) clicks
+        if (bulletDelete && pointsContainer) {
+            e.preventDefault();
+            e.stopPropagation();
             
-            // Handle undo (bullet_delete) clicks
-            if (bulletDelete && pointsContainer) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // Find the original onclick attribute and execute it
-                const onclickAttr = bulletDelete.getAttribute('onclick');
-                if (onclickAttr) {
-                    try {
-                        // Execute the onclick function
-                        new Function(onclickAttr)();
-                    } catch (error) {
-                        console.error('Error executing undo action:', error);
+            // Find the original onclick attribute and execute it
+            const onclickAttr = bulletDelete.getAttribute('onclick');
+            if (onclickAttr) {
+                try {
+                    // Execute the onclick function
+                    new Function(onclickAttr)();
+                } catch (error) {
+                    console.error('Error executing undo action:', error);
+                }
+            }
+            
+            // Update active states after undo
+            setTimeout(() => {
+                this.#updatePointsContainerActiveState(pointsContainer);
+            }, 100);
+            
+            return;
+        }
+        
+        // Handle points link (view votes) clicks
+        if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
+            e.preventDefault();
+            // Let the overlay handler work normally
+            return;
+        }
+        
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+
+            if (bulletDelete) {
+                // Already voted state - handle differently
+                if (pointsUp) {
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                    pointsUp.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs up?
+                    if (pointsUp.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
                     }
                 }
-                
-                // Update active states after undo
-                setTimeout(() => {
-                    this.#updatePointsContainerActiveState(pointsContainer);
-                }, 100);
-                
-                return;
-            }
-            
-            // Handle points link (view votes) clicks
-            if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-                e.preventDefault();
-                // Let the overlay handler work normally
-                return;
-            }
-            
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                if (bulletDelete) {
-                    // Already voted state - handle differently
-                    if (pointsUp) {
-                        pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                        pointsUp.classList.add('active');
-                        
-                        // Trigger undo when clicking active thumbs up?
-                        if (pointsUp.classList.contains('active') && bulletDelete) {
-                            bulletDelete.click();
-                        }
+                if (pointsDown) {
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                    pointsDown.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs down?
+                    if (pointsDown.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
                     }
-
-                    if (pointsDown) {
-                        pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                        pointsDown.classList.add('active');
-                        
-                        // Trigger undo when clicking active thumbs down?
-                        if (pointsDown.classList.contains('active') && bulletDelete) {
-                            bulletDelete.click();
-                        }
-                    }
-                } else {
-                    // Not voted yet - handle normal voting
-                    if (pointsUp) {
-                        pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                        pointsUp.classList.add('active');
-                        
-                        // Trigger the original vote action
-                        const voteLink = pointsContainer.querySelector('a.points_up');
-                        if (voteLink) {
-                            const onclick = voteLink.getAttribute('onclick');
-                            if (onclick) {
-                                setTimeout(() => new Function(onclick)(), 10);
-                            }
-                        }
-                    }
-
-                    if (pointsDown) {
-                        pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                        pointsDown.classList.add('active');
-                        
-                        // Trigger the original vote action
-                        const voteLink = pointsContainer.querySelector('a.points_down');
-                        if (voteLink) {
-                            const onclick = voteLink.getAttribute('onclick');
-                            if (onclick) {
-                                setTimeout(() => new Function(onclick)(), 10);
-                            }
+                }
+            } else {
+                // Not voted yet - handle normal voting
+                if (pointsUp) {
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                    pointsUp.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_up');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
                         }
                     }
                 }
+
+                if (pointsDown) {
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                    pointsDown.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_down');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
+                        }
+                    }
+                }
             }
-        });
-    }
+        }
+    });
+}
     
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
@@ -10038,7 +9779,7 @@ class PostModernizer {
             return;
         }
 
-        const postElement = anchorElement.closest('.post, .summary-item-modernized');
+        const postElement = anchorElement.closest('.post');
         if (!postElement) {
             console.warn('Post containing anchor #' + anchorId + ' not found');
             this.#scrollToElementWithOffset(anchorElement);
@@ -10061,7 +9802,7 @@ class PostModernizer {
     }
 
     #focusPost(postElement) {
-        document.querySelectorAll('.post.focus, .summary-item-modernized.focus').forEach(post => {
+        document.querySelectorAll('.post.focus').forEach(post => {
             post.classList.remove('focus');
         });
 
@@ -10243,7 +9984,7 @@ class PostModernizer {
             return;
         }
 
-        const postElement = anchorElement.closest('.post, .summary-item-modernized');
+        const postElement = anchorElement.closest('.post');
 
         if (!postElement) {
             this.#scrollToElementWithOffset(anchorElement);
@@ -10579,7 +10320,7 @@ class PostModernizer {
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
             this.#codeBlockObserverId, this.#attachmentObserverId,
-            this.#embeddedLinkObserverId, this.#summaryObserverId];
+            this.#embeddedLinkObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
