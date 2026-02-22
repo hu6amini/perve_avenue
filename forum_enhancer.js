@@ -4832,6 +4832,7 @@ class PostModernizer {
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
     #embeddedLinkObserverId = null;
+    #summaryObserverId = null;
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -4846,6 +4847,7 @@ class PostModernizer {
 
     constructor() {
         this.#initWithRetry();
+        this.#setupSummaryListObserver();
     }
 
     #initWithRetry() {
