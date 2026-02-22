@@ -5274,6 +5274,35 @@ class PostModernizer {
 // SUMMARY POST PREVIEW TRANSFORMATION (for body#send)
 // ==============================
 
+#waitForSummaryAvatars(postElement, callback, maxAttempts = 20) {
+    let attempts = 0;
+    const checkInterval = 100; // Check every 100ms
+    
+    const checkForAvatars = () => {
+        attempts++;
+        
+        // Look for avatar in the summary post
+        const leftDiv = postElement.querySelector('div.left.Sub.Item');
+        if (!leftDiv) {
+            callback(false);
+            return;
+        }
+        
+        // Check if avatar exists (either forum-avatar-container or default-avatar)
+        const hasAvatar = leftDiv.querySelector('.forum-avatar-container, .default-avatar, img[class*="avatar"]');
+        
+        if (hasAvatar || attempts >= maxAttempts) {
+            // Avatar found or timeout reached
+            callback(!!hasAvatar);
+        } else {
+            // Check again after delay
+            setTimeout(() => checkForAvatars(), checkInterval);
+        }
+    };
+    
+    checkForAvatars();
+}
+    
 #transformSummaryPostPreviews() {
     // Only run on send page
     if (document.body.id !== 'send') return;
@@ -5282,7 +5311,18 @@ class PostModernizer {
     
     summaryPosts.forEach((post, index) => {
         if (post.closest('.summary') && !post.classList.contains('post-preview-modernized')) {
-            this.#transformSingleSummaryPost(post, index);
+            
+            // Wait for avatars to be generated before transforming
+            this.#waitForSummaryAvatars(post, (avatarFound) => {
+                if (avatarFound) {
+                    console.log('✅ Avatar found for summary post, transforming now');
+                } else {
+                    console.log('⚠️ Avatar timeout for summary post, transforming anyway');
+                }
+                
+                // Transform the post regardless (with whatever avatar is there)
+                this.#transformSingleSummaryPost(post, index);
+            });
         }
     });
 }
@@ -5355,16 +5395,40 @@ class PostModernizer {
         const userInfo = document.createElement('div');
         userInfo.className = 'user-info';
         
-        // Process avatar
-        const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
-        if (avatarContainer) {
-            userInfo.appendChild(avatarContainer.cloneNode(true));
+        // Check if avatar already exists (from avatar script)
+        const existingAvatar = leftDiv.querySelector('.forum-avatar-container, .default-avatar, img[class*="avatar"]');
+        
+        if (existingAvatar) {
+            // Clone and preserve the existing avatar
+            const avatarClone = existingAvatar.cloneNode(true);
+            
+            // Fix any styling issues
+            if (avatarClone.classList.contains('forum-avatar-container')) {
+                avatarClone.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
+                
+                const avatarImg = avatarClone.querySelector('img');
+                if (avatarImg && !avatarImg.style.aspectRatio) {
+                    avatarImg.style.aspectRatio = avatarImg.width + ' / ' + avatarImg.height;
+                }
+            }
+            
+            userInfo.appendChild(avatarClone);
         } else {
-            // Create default avatar if none exists
-            const defaultAvatar = document.createElement('div');
-            defaultAvatar.className = 'default-avatar';
-            defaultAvatar.textContent = '👤';
-            userInfo.appendChild(defaultAvatar);
+            // Create minimal placeholder (avatar script will eventually fill this)
+            const placeholder = document.createElement('div');
+            placeholder.className = 'forum-avatar-container';
+            placeholder.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
+            
+            const placeholderImg = document.createElement('img');
+            placeholderImg.className = 'forum-user-avatar avatar-size-60';
+            placeholderImg.width = 60;
+            placeholderImg.height = 60;
+            placeholderImg.alt = 'Loading avatar...';
+            placeholderImg.src = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'60\' height=\'60\' viewBox=\'0 0 60 60\'%3E%3Crect width=\'60\' height=\'60\' fill=\'%23f0f0f0\'/%3E%3C/svg%3E';
+            placeholderImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;vertical-align:middle;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.1);background-color:#f0f0f0;display:inline-block;';
+            
+            placeholder.appendChild(placeholderImg);
+            userInfo.appendChild(placeholder);
         }
         
         // Process nickname
@@ -5466,14 +5530,29 @@ class PostModernizer {
         // Calculate index based on position
         const allPosts = document.querySelectorAll('.summary ol.list li');
         const index = Array.from(allPosts).indexOf(node);
-        this.#transformSingleSummaryPost(node, index);
+        
+        // Wait for avatars
+        this.#waitForSummaryAvatars(node, (avatarFound) => {
+            if (avatarFound) {
+                console.log('✅ Avatar found for new summary post, transforming');
+            }
+            this.#transformSingleSummaryPost(node, index);
+        });
+        
     } else if (node.querySelectorAll) {
         const posts = node.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
         posts.forEach((post, idx) => {
             // Calculate global index
             const allPosts = document.querySelectorAll('.summary ol.list li');
             const globalIndex = Array.from(allPosts).indexOf(post);
-            this.#transformSingleSummaryPost(post, globalIndex);
+            
+            // Wait for avatars
+            this.#waitForSummaryAvatars(post, (avatarFound) => {
+                if (avatarFound) {
+                    console.log('✅ Avatar found for new summary post, transforming');
+                }
+                this.#transformSingleSummaryPost(post, globalIndex);
+            });
         });
     }
 }
