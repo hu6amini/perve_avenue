@@ -5274,9 +5274,9 @@ class PostModernizer {
 // SUMMARY POST PREVIEW TRANSFORMATION (for body#send)
 // ==============================
 
-#waitForSummaryAvatars(postElement, callback, maxAttempts = 20) {
+#waitForSummaryAvatars(postElement, callback, maxAttempts = 30) { // Increased from 20 to 30
     let attempts = 0;
-    const checkInterval = 100; // Check every 100ms
+    const checkInterval = 100; // Check every 100ms (3 seconds total)
     
     const checkForAvatars = () => {
         attempts++;
@@ -5288,8 +5288,8 @@ class PostModernizer {
             return;
         }
         
-        // Check if avatar exists (either forum-avatar-container or default-avatar)
-        const hasAvatar = leftDiv.querySelector('.forum-avatar-container, .default-avatar, img[class*="avatar"]');
+        // Check if avatar exists (either forum-avatar-container or any avatar image)
+        const hasAvatar = leftDiv.querySelector('.forum-avatar-container, img[class*="avatar"], .default-avatar, .fa-user');
         
         if (hasAvatar || attempts >= maxAttempts) {
             // Avatar found or timeout reached
@@ -5395,40 +5395,90 @@ class PostModernizer {
         const userInfo = document.createElement('div');
         userInfo.className = 'user-info';
         
-        // Check if avatar already exists (from avatar script)
-        const existingAvatar = leftDiv.querySelector('.forum-avatar-container, .default-avatar, img[class*="avatar"]');
+        // CRITICAL FIX: Look for avatar in multiple places
+        // First, check if there's already a forum-avatar-container (from avatar script)
+        const existingAvatarContainer = leftDiv.querySelector('.forum-avatar-container');
         
-        if (existingAvatar) {
-            // Clone and preserve the existing avatar
-            const avatarClone = existingAvatar.cloneNode(true);
+        // Second, check for any avatar image
+        const existingAvatarImg = leftDiv.querySelector('img[class*="avatar"]');
+        
+        // Third, check for default-avatar (from avatar script)
+        const existingDefaultAvatar = leftDiv.querySelector('.default-avatar');
+        
+        if (existingAvatarContainer) {
+            // Avatar script has already created a container - preserve it exactly
+            console.log('✅ Preserving existing avatar container');
+            const avatarClone = existingAvatarContainer.cloneNode(true);
             
-            // Fix any styling issues
-            if (avatarClone.classList.contains('forum-avatar-container')) {
+            // Ensure it has proper styling
+            if (!avatarClone.style.cssText.includes('margin-right')) {
                 avatarClone.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
-                
-                const avatarImg = avatarClone.querySelector('img');
-                if (avatarImg && !avatarImg.style.aspectRatio) {
-                    avatarImg.style.aspectRatio = avatarImg.width + ' / ' + avatarImg.height;
-                }
             }
             
             userInfo.appendChild(avatarClone);
-        } else {
-            // Create minimal placeholder (avatar script will eventually fill this)
-            const placeholder = document.createElement('div');
-            placeholder.className = 'forum-avatar-container';
-            placeholder.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
+        } 
+        else if (existingAvatarImg) {
+            // There's an avatar image but not in a container - wrap it properly
+            console.log('✅ Found avatar image, wrapping in container');
+            const container = document.createElement('div');
+            container.className = 'forum-avatar-container';
+            container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
             
-            const placeholderImg = document.createElement('img');
-            placeholderImg.className = 'forum-user-avatar avatar-size-60';
-            placeholderImg.width = 60;
-            placeholderImg.height = 60;
-            placeholderImg.alt = 'Loading avatar...';
-            placeholderImg.src = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'60\' height=\'60\' viewBox=\'0 0 60 60\'%3E%3Crect width=\'60\' height=\'60\' fill=\'%23f0f0f0\'/%3E%3C/svg%3E';
-            placeholderImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;vertical-align:middle;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.1);background-color:#f0f0f0;display:inline-block;';
+            const imgClone = existingAvatarImg.cloneNode(true);
+            container.appendChild(imgClone);
+            userInfo.appendChild(container);
+        }
+        else if (existingDefaultAvatar) {
+            // Default avatar from avatar script
+            console.log('✅ Found default avatar');
+            const avatarClone = existingDefaultAvatar.cloneNode(true);
             
-            placeholder.appendChild(placeholderImg);
-            userInfo.appendChild(placeholder);
+            // Wrap in container if needed
+            if (!avatarClone.classList.contains('forum-avatar-container')) {
+                const container = document.createElement('div');
+                container.className = 'forum-avatar-container';
+                container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
+                container.appendChild(avatarClone);
+                userInfo.appendChild(container);
+            } else {
+                userInfo.appendChild(avatarClone);
+            }
+        }
+        else {
+            // NO AVATAR YET - Instead of creating a placeholder, look at the original structure
+            console.log('⚠️ No avatar found, checking original structure');
+            
+            // Look for any avatar-related elements in the original leftDiv
+            const possibleAvatar = leftDiv.querySelector('img, .fa-user, .fa-regular.fa-user, .fas.fa-user, [class*="avatar"]');
+            
+            if (possibleAvatar) {
+                // Clone whatever we found
+                const avatarClone = possibleAvatar.cloneNode(true);
+                
+                const container = document.createElement('div');
+                container.className = 'forum-avatar-container';
+                container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
+                container.appendChild(avatarClone);
+                userInfo.appendChild(container);
+                
+                console.log('✅ Preserved original avatar element');
+            } else {
+                // ABSOLUTELY NO AVATAR - Create a minimal container that the avatar script can fill
+                console.log('ℹ️ Creating empty avatar container for avatar script to fill');
+                
+                const container = document.createElement('div');
+                container.className = 'forum-avatar-container';
+                container.setAttribute('data-avatar-waiting', 'true');
+                container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;min-width:60px;min-height:60px;';
+                
+                // Add a tiny transparent placeholder that won't be visible
+                const transparentPlaceholder = document.createElement('img');
+                transparentPlaceholder.style.cssText = 'width:60px;height:60px;opacity:0;display:block;';
+                transparentPlaceholder.alt = '';
+                container.appendChild(transparentPlaceholder);
+                
+                userInfo.appendChild(container);
+            }
         }
         
         // Process nickname
