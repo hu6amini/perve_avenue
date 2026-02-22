@@ -5266,6 +5266,303 @@ class PostModernizer {
         node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
     }
 }
+
+// ==============================
+// SUMMARY LIST TRANSFORMATION (body#send)
+// ==============================
+
+#modernizeSummaryList() {
+    if (document.body.id !== 'send') return;
+    
+    this.#processExistingSummaryList();
+    this.#setupSummaryListObserver();
+}
+
+#processExistingSummaryList() {
+    const summaryItems = document.querySelectorAll('.summary .list > li:not(.summary-item-modernized)');
+    
+    summaryItems.forEach((item, index) => {
+        this.#transformSummaryItem(item, index);
+        item.classList.add('summary-item-modernized');
+    });
+}
+
+#transformSummaryItem(item, index) {
+    if (this.#isInEditor(item)) return;
+    
+    try {
+        // Extract the main components
+        const leftDiv = item.querySelector('.left.Sub.Item');
+        const rightDiv = item.querySelector('.right.Sub');
+        
+        if (!leftDiv || !rightDiv) return;
+        
+        // Get user info from left div
+        const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
+        const nickLink = leftDiv.querySelector('.nick a');
+        const nickText = leftDiv.querySelector('.nick');
+        
+        // Get post content from right div
+        const topDiv = rightDiv.querySelector('.top');
+        const bottomDiv = rightDiv.querySelector('.bottom');
+        const whenSpan = topDiv ? topDiv.querySelector('.when') : null;
+        const colorDiv = bottomDiv ? bottomDiv.querySelector('.color.Item') : null;
+        
+        // Extract post link from timestamp
+        let postLink = null;
+        let postId = null;
+        
+        if (whenSpan) {
+            const postLinkElement = whenSpan.querySelector('a[href*="#entry"]');
+            if (postLinkElement) {
+                postLink = postLinkElement.href;
+                const entryMatch = postLink.match(/#entry(\d+)/);
+                if (entryMatch) {
+                    postId = entryMatch[1];
+                }
+            }
+        }
+        
+        // Create modern summary post structure
+        const summaryPost = document.createElement('li');
+        summaryPost.className = 'post summary-post summary-item-modernized';
+        if (postId) {
+            summaryPost.id = 'entry' + postId;
+            summaryPost.setAttribute('data-post-id', postId);
+        }
+        
+        // Create post header
+        const postHeader = document.createElement('div');
+        postHeader.className = 'post-header';
+        
+        // Add post number
+        const postNumber = document.createElement('span');
+        postNumber.className = 'post-number';
+        
+        const hashIcon = document.createElement('i');
+        hashIcon.className = 'fa-regular fa-hashtag';
+        hashIcon.setAttribute('aria-hidden', 'true');
+        
+        const numberSpan = document.createElement('span');
+        numberSpan.className = 'post-number-value';
+        numberSpan.textContent = index + 1;
+        
+        postNumber.appendChild(hashIcon);
+        postNumber.appendChild(document.createTextNode(' '));
+        postNumber.appendChild(numberSpan);
+        postHeader.appendChild(postNumber);
+        
+        // Add timestamp to header
+        if (whenSpan) {
+            const dateString = this.#extractDateFromElement(whenSpan);
+            if (dateString) {
+                const modernTimestamp = this.#createModernTimestamp(whenSpan, dateString);
+                if (modernTimestamp && modernTimestamp !== whenSpan) {
+                    postHeader.appendChild(modernTimestamp);
+                } else {
+                    // Fallback if timestamp transformation fails
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'when modern-timestamp';
+                    timeSpan.textContent = whenSpan.textContent.replace('Posted', '').trim();
+                    postHeader.appendChild(timeSpan);
+                }
+            }
+        }
+        
+        // Create user info section
+        const userInfo = document.createElement('div');
+        userInfo.className = 'user-info';
+        
+        // Add avatar
+        if (avatarContainer) {
+            const avatarClone = avatarContainer.cloneNode(true);
+            userInfo.appendChild(avatarClone);
+        } else {
+            // Create default avatar if none exists
+            const defaultAvatar = document.createElement('div');
+            defaultAvatar.className = 'forum-avatar-container';
+            
+            const avatarImg = document.createElement('img');
+            avatarImg.className = 'forum-user-avatar avatar-size-60 default-avatar';
+            avatarImg.loading = 'lazy';
+            avatarImg.decoding = 'async';
+            avatarImg.alt = 'Avatar';
+            
+            // Get username for initials
+            let username = '';
+            if (nickLink) {
+                username = nickLink.textContent.trim();
+            } else if (nickText) {
+                username = nickText.textContent.trim().replace('»', '').trim();
+            }
+            
+            // Use initials avatar
+            const initial = username.charAt(0) || 'U';
+            avatarImg.src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(initial)}&backgroundColor=059669&radius=50&size=60`;
+            avatarImg.width = 60;
+            avatarImg.height = 60;
+            avatarImg.style.cssText = 'width:60px;height:60px;border-radius:50%;object-fit:cover;';
+            
+            defaultAvatar.appendChild(avatarImg);
+            userInfo.appendChild(defaultAvatar);
+        }
+        
+        // Add user details
+        const userDetails = document.createElement('div');
+        userDetails.className = 'details';
+        
+        // Add nick
+        if (nickLink) {
+            const nickClone = nickLink.cloneNode(true);
+            nickClone.classList.add('nick');
+            userDetails.appendChild(nickClone);
+        } else if (nickText) {
+            const nickSpan = document.createElement('span');
+            nickSpan.className = 'nick';
+            nickSpan.innerHTML = nickText.innerHTML;
+            userDetails.appendChild(nickSpan);
+        }
+        
+        // Add user stats (minimal for summary)
+        const userStats = document.createElement('div');
+        userStats.className = 'user-stats';
+        
+        const previewStat = document.createElement('div');
+        previewStat.className = 'stat';
+        previewStat.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i><span>Post Preview</span>';
+        userStats.appendChild(previewStat);
+        
+        userDetails.appendChild(userStats);
+        userInfo.appendChild(userDetails);
+        
+        // Create post content
+        const postContent = document.createElement('div');
+        postContent.className = 'post-content';
+        
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'post-main-content';
+        
+        if (colorDiv) {
+            // Process the content
+            const contentClone = colorDiv.cloneNode(true);
+            
+            // Remove any problematic elements
+            contentClone.querySelectorAll('script, style, iframe').forEach(el => el.remove());
+            
+            // Transform any embedded content
+            this.#modernizeQuotes(contentClone);
+            this.#modernizeSpoilers(contentClone);
+            this.#modernizeCodeBlocksInContent(contentClone);
+            this.#modernizeAttachmentsInContent(contentClone);
+            this.#modernizeEmbeddedLinksInContent(contentClone);
+            
+            // Process images
+            contentClone.querySelectorAll('img').forEach(img => {
+                if (!img.style.maxWidth) {
+                    img.style.maxWidth = '100%';
+                }
+                if (!img.hasAttribute('alt')) {
+                    img.setAttribute('alt', 'Post image');
+                }
+                img.loading = 'lazy';
+                img.decoding = 'async';
+            });
+            
+            contentWrapper.appendChild(contentClone);
+        } else {
+            // Fallback: add a simple message
+            const textSpan = document.createElement('span');
+            textSpan.className = 'post-text';
+            textSpan.textContent = 'View post content...';
+            contentWrapper.appendChild(textSpan);
+        }
+        
+        postContent.appendChild(contentWrapper);
+        
+        // Create post footer with link to full post
+        const postFooter = document.createElement('div');
+        postFooter.className = 'post-footer summary-footer';
+        
+        const postActions = document.createElement('div');
+        postActions.className = 'post-actions';
+        
+        // Add "View Full Post" button
+        if (postLink) {
+            const viewBtn = document.createElement('a');
+            viewBtn.href = postLink;
+            viewBtn.className = 'btn btn-primary btn-sm';
+            viewBtn.innerHTML = '<i class="fa-regular fa-eye" aria-hidden="true"></i> View Full Post';
+            postActions.appendChild(viewBtn);
+        }
+        
+        // Add share button
+        const shareBtn = document.createElement('button');
+        shareBtn.className = 'btn btn-icon btn-share';
+        shareBtn.setAttribute('data-action', 'share');
+        shareBtn.setAttribute('title', 'Share this post');
+        shareBtn.setAttribute('type', 'button');
+        shareBtn.innerHTML = '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>';
+        
+        shareBtn.addEventListener('click', () => {
+            if (postLink) {
+                this.#copyPostLinkToClipboard(postLink);
+            } else {
+                this.#showCopyNotification('Could not find post link');
+            }
+        });
+        
+        postActions.appendChild(shareBtn);
+        postFooter.appendChild(postActions);
+        
+        // Assemble the summary post
+        summaryPost.appendChild(postHeader);
+        summaryPost.appendChild(userInfo);
+        summaryPost.appendChild(postContent);
+        summaryPost.appendChild(postFooter);
+        
+        // Replace the original item
+        item.parentNode.replaceChild(summaryPost, item);
+        
+        // Clean up media wrappers
+        setTimeout(() => {
+            this.#cleanupOldMediaWrappers(summaryPost);
+        }, 100);
+        
+    } catch (error) {
+        console.error('Error transforming summary item:', error);
+    }
+}
+
+#setupSummaryListObserver() {
+    if (globalThis.forumObserver) {
+        const summaryObserverId = globalThis.forumObserver.register({
+            id: 'summary-list-modernizer',
+            callback: (node) => this.#handleNewSummaryItems(node),
+            selector: '.summary .list > li',
+            priority: 'high',
+            pageTypes: ['send'] // Only run on send page
+        });
+    } else {
+        // Fallback: check periodically
+        setInterval(() => this.#processExistingSummaryList(), 2000);
+    }
+}
+
+#handleNewSummaryItems(node) {
+    if (this.#isInEditor(node)) return;
+    
+    if (node.matches && node.matches('.summary .list > li:not(.summary-item-modernized)')) {
+        const items = node.parentNode ? [node] : [];
+        items.forEach((item, index) => {
+            this.#transformSummaryItem(item, index);
+        });
+    } else if (node.querySelectorAll) {
+        const items = node.querySelectorAll('.summary .list > li:not(.summary-item-modernized)');
+        items.forEach((item, index) => {
+            this.#transformSummaryItem(item, index);
+        });
+    }
+}
     
     // ==============================
     // MODERN POLL SYSTEM
