@@ -4822,7 +4822,6 @@ globalThis.addEventListener('pagehide', () => {
 
 // Enhanced Post Transformation and Modernization System with CSS-First Image Fixes
 // Optimized for performance and modern JavaScript patterns
-// UPDATED: Now includes .summary ol.list li transformation for body#send
 class PostModernizer {
     #postModernizerId = null;
     #activeStateObserverId = null;
@@ -4833,7 +4832,6 @@ class PostModernizer {
     #codeBlockObserverId = null;
     #attachmentObserverId = null;
     #embeddedLinkObserverId = null;
-    #summaryListObserverId = null; // NEW: Observer for summary list items
     #retryTimeoutId = null;
     #maxRetries = 10;
     #retryCount = 0;
@@ -4882,11 +4880,6 @@ class PostModernizer {
             if (bodyId === 'search') {
                 this.#transformSearchPostElements();
                 this.#setupSearchPostObserver();
-            } else if (bodyId === 'send') {
-                // NEW: Transform summary list items on send page
-                this.#transformSummaryListItems();
-                this.#setupSummaryListObserver();
-                this.#transformPostElements(); // Also transform regular posts if any
             } else {
                 this.#transformPostElements();
                 this.#setupObserverCallbacks();
@@ -4906,7 +4899,7 @@ class PostModernizer {
                 this.#cleanupAllDoubleWrappedMedia();
             }, 500);
 
-            console.log('✅ Post Modernizer with all optimizations initialized (including summary list support)');
+            console.log('✅ Post Modernizer with all optimizations initialized');
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
 
@@ -4922,229 +4915,24 @@ class PostModernizer {
         }
     }
 
-    // ==============================
-    // NEW: SUMMARY LIST ITEM TRANSFORMATION (for body#send)
-    // ==============================
-
-    #transformSummaryListItems() {
-        console.log('📋 Transforming summary list items on send page');
-        const summaryLists = document.querySelectorAll('.summary ol.list, .summary ul.list');
-        
-        summaryLists.forEach(list => {
-            list.classList.add('modern-summary-list');
+    #cleanupAllDoubleWrappedMedia() {
+        document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
+            const parent = standardWrapper.parentElement;
             
-            const items = list.querySelectorAll('li');
-            items.forEach((item, index) => {
-                if (!item.classList.contains('summary-item-modernized')) {
-                    this.#transformSummaryListItem(item, index);
+            // Check if parent is also a wrapper
+            if (parent && (parent.classList.contains('media-wrapper') || 
+                          parent.classList.contains('iframe-wrapper') ||
+                          (parent.style.position === 'relative' && parent.style.paddingBottom))) {
+                
+                // Move standard wrapper out of the parent wrapper
+                parent.parentNode.insertBefore(standardWrapper, parent);
+                
+                // Remove the old wrapper if it's empty now
+                if (parent.children.length === 0) {
+                    parent.remove();
                 }
-            });
+            }
         });
-    }
-
-    #transformSummaryListItem(item, index) {
-        if (item.classList.contains('summary-item-modernized')) return;
-        
-        try {
-            // Store original classes for user group styling
-            const originalClasses = item.className;
-            
-            // Create modern summary item container
-            const modernItem = document.createElement('div');
-            modernItem.className = 'modern-summary-item ' + originalClasses;
-            modernItem.setAttribute('data-summary-index', index);
-            
-            // Find the left and right sections
-            const leftDiv = item.querySelector('.left.Sub.Item');
-            const rightDiv = item.querySelector('.right.Sub.Item');
-            
-            if (!leftDiv || !rightDiv) {
-                console.warn('Summary item missing required structure:', item);
-                return;
-            }
-            
-            // Extract user info from left div
-            const avatarContainer = leftDiv.querySelector('.forum-avatar-container');
-            const nickElement = leftDiv.querySelector('.nick');
-            
-            // Extract content from right div
-            const topDiv = rightDiv.querySelector('.top');
-            const bottomDiv = rightDiv.querySelector('.bottom');
-            
-            // Create header section
-            const itemHeader = document.createElement('div');
-            itemHeader.className = 'summary-item-header';
-            
-            // Add post number/index
-            const postNumber = document.createElement('span');
-            postNumber.className = 'post-number';
-            
-            const hashIcon = document.createElement('i');
-            hashIcon.className = 'fa-regular fa-hashtag';
-            hashIcon.setAttribute('aria-hidden', 'true');
-            
-            const numberSpan = document.createElement('span');
-            numberSpan.className = 'post-number-value';
-            numberSpan.textContent = (index + 1).toString();
-            
-            postNumber.appendChild(hashIcon);
-            postNumber.appendChild(document.createTextNode(' '));
-            postNumber.appendChild(numberSpan);
-            
-            itemHeader.appendChild(postNumber);
-            
-            // Extract and transform timestamp
-            if (topDiv) {
-                const whenSpan = topDiv.querySelector('.when.Item');
-                if (whenSpan) {
-                    const whenClone = whenSpan.cloneNode(true);
-                    this.#transformPostHeaderTimestamps(whenClone);
-                    this.#transformTimestampElements(whenClone);
-                    itemHeader.appendChild(whenClone);
-                }
-            }
-            
-            // Create user info section
-            const userInfo = document.createElement('div');
-            userInfo.className = 'user-info summary-user-info';
-            
-            if (avatarContainer) {
-                userInfo.appendChild(avatarContainer.cloneNode(true));
-            }
-            
-            if (nickElement) {
-                const nickClone = nickElement.cloneNode(true);
-                
-                // Extract user group from class for badge
-                const groupMatch = originalClasses.match(/box_([a-zA-Z0-9_]+)/g);
-                if (groupMatch) {
-                    const badge = document.createElement('div');
-                    badge.className = 'badge summary-badge';
-                    
-                    // Map common groups to readable names
-                    const groupName = this.#mapGroupToName(groupMatch[0]);
-                    badge.textContent = groupName;
-                    
-                    // Add group-specific class
-                    if (groupMatch[0].includes('amministratore')) {
-                        badge.classList.add('admin-badge');
-                    } else if (groupMatch[0].includes('moderatore')) {
-                        badge.classList.add('mod-badge');
-                    }
-                    
-                    nickClone.parentNode.insertBefore(badge, nickClone.nextSibling);
-                }
-                
-                userInfo.appendChild(nickClone);
-            }
-            
-            // Create content section
-            const contentSection = document.createElement('div');
-            contentSection.className = 'summary-content';
-            
-            if (bottomDiv) {
-                const colorItem = bottomDiv.querySelector('.color.Item');
-                if (colorItem) {
-                    const contentClone = colorItem.cloneNode(true);
-                    
-                    // Process media in content
-                    this.#preserveMediaDimensions(contentClone);
-                    this.#modernizeQuotes(contentClone);
-                    this.#modernizeSpoilers(contentClone);
-                    this.#modernizeCodeBlocksInContent(contentClone);
-                    this.#modernizeAttachmentsInContent(contentClone);
-                    this.#modernizeEmbeddedLinksInContent(contentClone);
-                    
-                    contentSection.appendChild(contentClone);
-                }
-            }
-            
-            // Assemble modern summary item
-            modernItem.appendChild(itemHeader);
-            modernItem.appendChild(userInfo);
-            modernItem.appendChild(contentSection);
-            
-            // Replace original item with modern version
-            item.parentNode.replaceChild(modernItem, item);
-            
-            // Mark as modernized
-            modernItem.classList.add('summary-item-modernized');
-            
-            console.log('✅ Transformed summary item:', index);
-            
-        } catch (error) {
-            console.error('Error transforming summary list item:', error);
-        }
-    }
-
-    #mapGroupToName(groupClass) {
-        const groupMap = {
-            'box_amministratore': 'Admin',
-            'box_gruppo1': 'Admin',
-            'box_founder': 'Founder',
-            'box_moderatore': 'Moderator',
-            'box_gruppo2': 'Moderator',
-            'box_gruppo3': 'Member',
-            'box_gruppo4': 'Member',
-            'box_visitatore': 'Guest',
-            'box_male': 'Member',
-            'box_female': 'Member'
-        };
-        
-        for (const [key, value] of Object.entries(groupMap)) {
-            if (groupClass.includes(key)) {
-                return value;
-            }
-        }
-        
-        return 'Member';
-    }
-
-    #setupSummaryListObserver() {
-        if (globalThis.forumObserver) {
-            this.#summaryListObserverId = globalThis.forumObserver.register({
-                id: 'summary-list-modernizer',
-                callback: (node) => this.#handleNewSummaryItems(node),
-                selector: '.summary ol.list li, .summary ul.list li',
-                priority: 'high',
-                pageTypes: ['send'] // Will be processed on send page
-            });
-            
-            console.log('📋 Summary list observer registered');
-        } else {
-            // Fallback: periodic check
-            setInterval(() => {
-                if (document.body.id === 'send') {
-                    this.#transformSummaryListItems();
-                }
-            }, 2000);
-        }
-    }
-
-    #handleNewSummaryItems(node) {
-        if (document.body.id !== 'send') return;
-        
-        if (node.matches && node.matches('.summary ol.list li, .summary ul.list li')) {
-            this.#transformSummaryListItem(node, this.#getItemIndex(node));
-        } else if (node.querySelectorAll) {
-            const items = node.querySelectorAll('.summary ol.list li, .summary ul.list li');
-            items.forEach((item, index) => {
-                if (!item.classList.contains('summary-item-modernized')) {
-                    this.#transformSummaryListItem(item, index);
-                }
-            });
-        }
-    }
-
-    #getItemIndex(item) {
-        const parent = item.parentNode;
-        if (parent) {
-            const items = parent.children;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i] === item) return i;
-            }
-        }
-        return 0;
     }
 
     // ==============================
@@ -5181,211 +4969,221 @@ class PostModernizer {
         });
     }
 
-    #transformEmbeddedLink(container) {
-        if (this.#isInEditor(container) || 
-            container.classList.contains('modern-embedded-link') ||
-            !container) return;
+#transformEmbeddedLink(container) {
+    if (this.#isInEditor(container) || 
+        container.classList.contains('modern-embedded-link') ||
+        !container) return;
 
-        try {
-            const mainLinks = container.querySelectorAll('a[target="_blank"]');
-            const mainLink = mainLinks[0] || null;
-            if (!mainLink) return;
+    try {
+        const mainLinks = container.querySelectorAll('a[target="_blank"]');
+        const mainLink = mainLinks[0] || null;
+        if (!mainLink) return;
 
-            const href = mainLink.href;
-            const domain = this.#extractDomain(href);
-            
-            let title = '';
-            let description = '';
-            let imageUrl = '';
-            let faviconUrl = '';
+        const href = mainLink.href;
+        const domain = this.#extractDomain(href);
+        
+        let title = '';
+        let description = '';
+        let imageUrl = '';
+        let faviconUrl = '';
 
-            const allLinks = container.querySelectorAll('a[target="_blank"]');
-            if (allLinks.length >= 2) {
-                const titleElement = allLinks[1];
-                const titleSpan = titleElement.querySelector('span.post-text');
-                title = titleSpan ? titleSpan.textContent.trim() : titleElement.textContent.trim();
-            }
+        const allLinks = container.querySelectorAll('a[target="_blank"]');
+        if (allLinks.length >= 2) {
+            const titleElement = allLinks[1];
+            const titleSpan = titleElement.querySelector('span.post-text');
+            title = titleSpan ? titleSpan.textContent.trim() : titleElement.textContent.trim();
+        }
 
-            if (!title) {
-                container.querySelectorAll('span.post-text').forEach(span => {
-                    const text = span.textContent.trim();
-                    const lowerText = text.toLowerCase();
-                    if (text.length > 20 && text.length < 200 && 
-                        !lowerText.includes(domain.toLowerCase()) && 
-                        !lowerText.includes('leggi altro') &&
-                        !lowerText.includes('read more') &&
-                        !text.includes('>')) {
-                        title = text;
-                    }
-                });
-            }
-
-            if (!title) {
-                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-                const texts = [];
-                let node;
-                while ((node = walker.nextNode())) {
-                    const text = node.textContent.trim();
-                    if (text && 
-                        !text.toLowerCase().includes(domain.toLowerCase()) && 
-                        !text.toLowerCase().includes('leggi altro') &&
-                        !text.toLowerCase().includes('read more') &&
-                        !text.includes('>')) {
-                        texts.push(text);
-                    }
-                }
-                
-                for (let i = 0; i < texts.length; i++) {
-                    if (texts[i].length > 20 && texts[i].length < 200) {
-                        title = texts[i];
-                        break;
-                    }
-                }
-            }
-
-            if (!title) {
-                title = 'Article on ' + domain;
-            }
-
-            if (title !== 'Article on ' + domain) {
-                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-                let foundTitle = false;
-                let node;
-                while ((node = walker.nextNode())) {
-                    const text = node.textContent.trim();
-                    if (!text) continue;
-                    
-                    if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
-                        foundTitle = true;
-                        continue;
-                    }
-                    
-                    if (foundTitle && text && text.length > 30) {
-                        description = text;
-                        break;
-                    }
-                }
-            }
-
-            // Simplified image detection
-            container.querySelectorAll('img').forEach(img => {
-                const src = img.src || '';
-                
-                if (src.includes('favicon')) {
-                    faviconUrl = src;
-                } else if (!imageUrl) {
-                    imageUrl = src;
+        if (!title) {
+            container.querySelectorAll('span.post-text').forEach(span => {
+                const text = span.textContent.trim();
+                const lowerText = text.toLowerCase();
+                if (text.length > 20 && text.length < 200 && 
+                    !lowerText.includes(domain.toLowerCase()) && 
+                    !lowerText.includes('leggi altro') &&
+                    !lowerText.includes('read more') &&
+                    !text.includes('>')) {
+                    title = text;
                 }
             });
+        }
 
-            if (faviconUrl && !imageUrl) {
-                container.querySelectorAll('img').forEach(img => {
+        if (!title) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const texts = [];
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                if (text && 
+                    !text.toLowerCase().includes(domain.toLowerCase()) && 
+                    !text.toLowerCase().includes('leggi altro') &&
+                    !text.toLowerCase().includes('read more') &&
+                    !text.includes('>')) {
+                    texts.push(text);
+                }
+            }
+            
+            for (let i = 0; i < texts.length; i++) {
+                if (texts[i].length > 20 && texts[i].length < 200) {
+                    title = texts[i];
+                    break;
+                }
+            }
+        }
+
+        if (!title) {
+            title = 'Article on ' + domain;
+        }
+
+        if (title !== 'Article on ' + domain) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            let foundTitle = false;
+            let node;
+            while ((node = walker.nextNode())) {
+                const text = node.textContent.trim();
+                if (!text) continue;
+                
+                if (!foundTitle && (text === title || text.includes(title.substring(0, 20)))) {
+                    foundTitle = true;
+                    continue;
+                }
+                
+                if (foundTitle && text && text.length > 30) {
+                    description = text;
+                    break;
+                }
+            }
+        }
+
+        // ===== SIMPLIFIED IMAGE DETECTION =====
+        // Look for images - there are only two: favicon and preview
+        
+        container.querySelectorAll('img').forEach(img => {
+            const src = img.src || '';
+            
+            // Check if this is the favicon (contains "favicon" in URL)
+            if (src.includes('favicon')) {
+                faviconUrl = src;
+            } 
+            // Otherwise, it's the preview image
+            else if (!imageUrl) {
+                imageUrl = src;
+            }
+        });
+
+        // If we found favicon but no preview, look for the other image
+        if (faviconUrl && !imageUrl) {
+            container.querySelectorAll('img').forEach(img => {
+                if (img.src !== faviconUrl && !imageUrl) {
+                    imageUrl = img.src;
+                }
+            });
+        }
+
+        // Check hidden div for favicon if not found
+        if (!faviconUrl) {
+            const hiddenDiv = container.querySelector('div[style*="display:none"]');
+            if (hiddenDiv) {
+                const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"]');
+                if (hiddenFavicon) {
+                    faviconUrl = hiddenFavicon.src;
+                    
+                    // If we found favicon in hidden div, the visible image must be preview
+                    if (!imageUrl) {
+                        const visibleImg = container.querySelector('img:not([src*="favicon"])');
+                        if (visibleImg) {
+                            imageUrl = visibleImg.src;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Last resort: if we have exactly two images, one must be preview
+        if (!imageUrl) {
+            const allImages = container.querySelectorAll('img');
+            if (allImages.length === 2) {
+                allImages.forEach(img => {
                     if (img.src !== faviconUrl && !imageUrl) {
                         imageUrl = img.src;
                     }
                 });
             }
-
-            if (!faviconUrl) {
-                const hiddenDiv = container.querySelector('div[style*="display:none"]');
-                if (hiddenDiv) {
-                    const hiddenFavicon = hiddenDiv.querySelector('img[src*="favicon"]');
-                    if (hiddenFavicon) {
-                        faviconUrl = hiddenFavicon.src;
-                        
-                        if (!imageUrl) {
-                            const visibleImg = container.querySelector('img:not([src*="favicon"])');
-                            if (visibleImg) {
-                                imageUrl = visibleImg.src;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!imageUrl) {
-                const allImages = container.querySelectorAll('img');
-                if (allImages.length === 2) {
-                    allImages.forEach(img => {
-                        if (img.src !== faviconUrl && !imageUrl) {
-                            imageUrl = img.src;
-                        }
-                    });
-                }
-            }
-
-            const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
-            const modernEmbeddedLink = document.createElement('div');
-            modernEmbeddedLink.className = 'modern-embedded-link';
-
-            let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
-            
-            if (imageUrl) {
-                html += '<div class="embedded-link-image">' +
-                    '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
-                    '</div>';
-            }
-            
-            html += '<div class="embedded-link-content">' +
-                '<div class="embedded-link-domain">';
-            
-            if (faviconUrl) {
-                html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
-            }
-            
-            html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
-                '</div>' +
-                '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
-            
-            if (description) {
-                html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
-            }
-            
-            const isItalian = domain.includes('.it') || 
-                             (description && (description.toLowerCase().includes('leggi') || 
-                                             description.toLowerCase().includes('italia')));
-            
-            const readMoreText = isItalian ? 
-                'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
-                'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
-                
-            html += '<div class="embedded-link-meta">' +
-                '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
-                '</div>' +
-                '</div></a>';
-
-            modernEmbeddedLink.innerHTML = html;
-            
-            modernEmbeddedLink.querySelectorAll('img').forEach(img => {
-                img.removeAttribute('style');
-                
-                if (img.classList.contains('embedded-link-favicon')) {
-                    img.style.cssText = 'width:16px;height:16px;object-fit:contain;display:inline-block;vertical-align:middle;';
-                } else {
-                    img.style.maxWidth = '100%';
-                    img.style.objectFit = 'cover';
-                    img.style.display = 'block';
-                    
-                    if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
-                        img.removeAttribute('width');
-                        img.removeAttribute('height');
-                    }
-                }
-            });
-            
-            container.parentNode.replaceChild(modernEmbeddedLink, container);
-
-            const linkElement = modernEmbeddedLink.querySelector('a');
-            if (linkElement) {
-                linkElement.addEventListener('click', () => {
-                    console.log('Embedded link clicked to:', href);
-                });
-            }
-
-        } catch (error) {
-            console.error('Error transforming embedded link:', error);
         }
+        // ===== END SIMPLIFIED IMAGE DETECTION =====
+
+        const displayDomain = domain.toLowerCase().replace(/www\d?\./g, '');
+        const modernEmbeddedLink = document.createElement('div');
+        modernEmbeddedLink.className = 'modern-embedded-link';
+
+        let html = '<a href="' + this.#escapeHtml(href) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + this.#escapeHtml(title) + '">';
+        
+        if (imageUrl) {
+            html += '<div class="embedded-link-image">' +
+                '<img src="' + this.#escapeHtml(imageUrl) + '" alt="' + this.#escapeHtml(title) + '" loading="lazy" decoding="async">' +
+                '</div>';
+        }
+        
+        html += '<div class="embedded-link-content">' +
+            '<div class="embedded-link-domain">';
+        
+        if (faviconUrl) {
+            html += '<img src="' + this.#escapeHtml(faviconUrl) + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16">';
+        }
+        
+        html += '<span>' + this.#escapeHtml(displayDomain) + '</span>' +
+            '</div>' +
+            '<h3 class="embedded-link-title">' + this.#escapeHtml(title) + '</h3>';
+        
+        if (description) {
+            html += '<p class="embedded-link-description">' + this.#escapeHtml(description) + '</p>';
+        }
+        
+        const isItalian = domain.includes('.it') || 
+                         (description && (description.toLowerCase().includes('leggi') || 
+                                         description.toLowerCase().includes('italia')));
+        
+        const readMoreText = isItalian ? 
+            'Leggi altro su ' + this.#escapeHtml(displayDomain) + ' &gt;' :
+            'Read more on ' + this.#escapeHtml(displayDomain) + ' &gt;';
+            
+        html += '<div class="embedded-link-meta">' +
+            '<span class="embedded-link-read-more">' + readMoreText + '</span>' +
+            '</div>' +
+            '</div></a>';
+
+        modernEmbeddedLink.innerHTML = html;
+        
+        modernEmbeddedLink.querySelectorAll('img').forEach(img => {
+            img.removeAttribute('style');
+            
+            if (img.classList.contains('embedded-link-favicon')) {
+                img.style.cssText = 'width:16px;height:16px;object-fit:contain;display:inline-block;vertical-align:middle;';
+            } else {
+                img.style.maxWidth = '100%';
+                img.style.objectFit = 'cover';
+                img.style.display = 'block';
+                
+                if (img.hasAttribute('width') && parseInt(img.getAttribute('width')) > 800) {
+                    img.removeAttribute('width');
+                    img.removeAttribute('height');
+                }
+            }
+        });
+        
+        container.parentNode.replaceChild(modernEmbeddedLink, container);
+
+        const linkElement = modernEmbeddedLink.querySelector('a');
+        if (linkElement) {
+            linkElement.addEventListener('click', () => {
+                console.log('Embedded link clicked to:', href);
+            });
+        }
+
+    } catch (error) {
+        console.error('Error transforming embedded link:', error);
     }
+}
 
     #extractDomain(url) {
         try {
@@ -5409,60 +5207,65 @@ class PostModernizer {
         }
     }
 
-    #handleNewEmbeddedLinks(node) {
-        if (this.#isInEditor(node)) return;
+#handleNewEmbeddedLinks(node) {
+    if (this.#isInEditor(node)) return;
+    
+    const safeTransform = (link) => {
+        if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
         
-        const safeTransform = (link) => {
-            if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
-            
-            const images = link.querySelectorAll('img');
-            
-            if (images.length === 0) {
-                this.#transformEmbeddedLink(link);
-                return;
-            }
-            
-            const areImagesReady = Array.from(images).every(img => {
-                return img.hasAttribute('data-optimized') || 
-                       img.src.includes('images.weserv.nl') ||
-                       img.complete;
-            });
-            
-            if (areImagesReady) {
-                this.#transformEmbeddedLink(link);
-            } else {
-                console.log('⏳ Waiting for images to be processed in embedded link');
-                
-                let attempts = 0;
-                const maxAttempts = 15;
-                
-                const waitForImages = setInterval(() => {
-                    attempts++;
-                    
-                    const currentImages = link.querySelectorAll('img');
-                    const nowReady = Array.from(currentImages).every(img => {
-                        return img.hasAttribute('data-optimized') || 
-                               img.src.includes('images.weserv.nl') ||
-                               img.complete;
-                    });
-                    
-                    if (nowReady || attempts >= maxAttempts) {
-                        clearInterval(waitForImages);
-                        if (!link.classList.contains('embedded-link-modernized')) {
-                            console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
-                            this.#transformEmbeddedLink(link);
-                        }
-                    }
-                }, 100);
-            }
-        };
+        // Check if we should wait for images
+        const images = link.querySelectorAll('img');
         
-        if (node.matches && node.matches('.ffb_embedlink')) {
-            safeTransform(node);
-        } else if (node.querySelectorAll) {
-            node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
+        if (images.length === 0) {
+            // No images to wait for, transform immediately
+            this.#transformEmbeddedLink(link);
+            return;
         }
+        
+        // Check if images are ready (either processed by media script or loaded)
+        const areImagesReady = Array.from(images).every(img => {
+            return img.hasAttribute('data-optimized') || 
+                   img.src.includes('images.weserv.nl') ||
+                   img.complete;
+        });
+        
+        if (areImagesReady) {
+            this.#transformEmbeddedLink(link);
+        } else {
+            // Images not ready, wait for them
+            console.log('⏳ Waiting for images to be processed in embedded link');
+            
+            let attempts = 0;
+            const maxAttempts = 15; // 1.5 seconds total
+            
+            const waitForImages = setInterval(() => {
+                attempts++;
+                
+                const currentImages = link.querySelectorAll('img');
+                const nowReady = Array.from(currentImages).every(img => {
+                    return img.hasAttribute('data-optimized') || 
+                           img.src.includes('images.weserv.nl') ||
+                           img.complete;
+                });
+                
+                if (nowReady || attempts >= maxAttempts) {
+                    clearInterval(waitForImages);
+                    if (!link.classList.contains('embedded-link-modernized')) {
+                        console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
+                        this.#transformEmbeddedLink(link);
+                    }
+                }
+            }, 100);
+        }
+    };
+    
+    // Process the node
+    if (node.matches && node.matches('.ffb_embedlink')) {
+        safeTransform(node);
+    } else if (node.querySelectorAll) {
+        node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
     }
+}
     
     // ==============================
     // MODERN POLL SYSTEM
@@ -5479,258 +5282,266 @@ class PostModernizer {
         });
     }
 
-    #transformPoll(pollContainer) {
-        const pollForm = pollContainer.closest('form#pollform');
-        if (!pollForm || pollContainer.classList.contains('poll-modernized')) return;
+#transformPoll(pollContainer) {
+    const pollForm = pollContainer.closest('form#pollform');
+    if (!pollForm || pollContainer.classList.contains('poll-modernized')) return;
+    
+    try {
+        // STORE THE POPUP BEFORE HIDING ANYTHING
+        const popupElement = pollContainer.querySelector('.popup.pop_points#overlay');
         
-        try {
-            const popupElement = pollContainer.querySelector('.popup.pop_points#overlay');
-            
-            const sunbar = pollContainer.querySelector('.sunbar.top.Item');
-            const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
-            const list = pollContainer.querySelector('ul.list');
-            if (!list) return;
+        const sunbar = pollContainer.querySelector('.sunbar.top.Item');
+        const pollTitle = sunbar ? sunbar.textContent.trim() : 'Poll';
+        const list = pollContainer.querySelector('ul.list');
+        if (!list) return;
 
-            const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
-            const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
-            const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        const originalCancelBtn = pollContainer.querySelector('input[name="delvote"]');
+        const originalVoteBtn = pollContainer.querySelector('input[name="submit"]');
+        const originalViewResultsBtn = pollContainer.querySelector('button[name="nullvote"]');
+        
+        const isVotedState = originalCancelBtn !== null;
+        const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
+        const isVoteState = !isVotedState && !isResultsState;
+        
+        const originalPollContent = pollContainer.querySelector('.skin_tbl');
+        if (!originalPollContent) return;
+        
+        // Hide original content BUT DETACH THE POPUP FIRST
+        if (popupElement) {
+            // Move popup outside the poll container before hiding
+            document.body.appendChild(popupElement);
             
-            const isVotedState = originalCancelBtn !== null;
-            const isResultsState = !isVotedState && pollContainer.querySelector('.bar') !== null;
-            const isVoteState = !isVotedState && !isResultsState;
+            // Ensure popup has proper styling
+            popupElement.style.cssText = 'display: none; position: absolute; z-index: 9999;';
             
-            const originalPollContent = pollContainer.querySelector('.skin_tbl');
-            if (!originalPollContent) return;
-            
-            if (popupElement) {
-                document.body.appendChild(popupElement);
-                popupElement.style.cssText = 'display: none; position: absolute; z-index: 9999;';
-                
-                if (typeof $ !== 'undefined' && $.fn.overlay) {
-                    setTimeout(() => {
-                        $("a[rel=#overlay]").overlay({
-                            top: $(window).height() / 2 - 100,
-                            left: $(window).width() / 2 - 150,
-                            onBeforeLoad: function() {
-                                var wrap = this.getOverlay().find("div");
-                                wrap.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif" alt=""></p>')
-                                    .load(this.getTrigger().attr("href") + "&popup=1");
-                            }
-                        });
-                    }, 100);
-                }
-            }
-            
-            originalPollContent.style.cssText = 'opacity:0;height:0;overflow:hidden;position:absolute;pointer-events:none';
-            
-            const modernPoll = document.createElement('div');
-            modernPoll.className = 'modern-poll';
-            modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
-            
-            let html = '<div class="poll-header">' +
-                '<div class="poll-icon">' +
-                '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
-                '</div>' +
-                '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
-                '<div class="poll-stats">';
-            
-            if (isVotedState || isResultsState) {
-                const votersText = pollContainer.querySelector('.darkbar.Item');
-                if (votersText) {
-                    const votersMatch = votersText.textContent.match(/Voters:\s*(\d+)/);
-                    if (votersMatch) {
-                        html += '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
-                            '<span>' + votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '') + '</span>';
-                    }
-                }
-            }
-            
-            html += '</div></div><div class="poll-choices">';
-            
-            if (isVoteState) {
-                const choiceItems = list.querySelectorAll('li.Item[style*="text-align:left"]');
-                choiceItems.forEach((item, index) => {
-                    const label = item.querySelector('label');
-                    const radio = item.querySelector('input[type="radio"]');
-                    if (!label || !radio) return;
-                    
-                    const choiceText = label.textContent.replace(/&nbsp;/g, ' ').trim();
-                    const choiceId = radio.id;
-                    const choiceValue = radio.value;
-                    const choiceName = radio.name;
-                    
-                    html += '<div class="poll-choice" data-choice-index="' + index + '">' +
-                        '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
-                        '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
-                        '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
-                        this.#escapeHtml(choiceText) + '</label>' +
-                        '</div>';
-                });
-            } else {
-                const choiceItems = list.querySelectorAll('li:not(:first-child)');
-                let maxVotes = 0;
-                const choicesData = [];
-                
-                choiceItems.forEach(item => {
-                    const isMax = item.classList.contains('max');
-                    const leftDiv = item.querySelector('.left.Sub.Item');
-                    const centerDiv = item.querySelector('.center.Sub.Item');
-                    const rightDiv = item.querySelector('.right.Sub.Item');
-                    
-                    if (!leftDiv || !centerDiv || !rightDiv) return;
-                    
-                    const choiceText = leftDiv.textContent.replace(/\s+/g, ' ').trim();
-                    const choiceTextClean = choiceText.replace(/^\*+/, '').replace(/\*+$/, '').trim();
-                    
-                    const barDiv = centerDiv.querySelector('.bar div');
-                    const percentageSpan = centerDiv.querySelector('.bar span');
-                    const votesDiv = rightDiv;
-                    
-                    let percentage = 0;
-                    let votes = 0;
-                    
-                    if (barDiv) {
-                        const widthMatch = barDiv.style.width.match(/(\d+(?:\.\d+)?)%/);
-                        if (widthMatch) percentage = parseFloat(widthMatch[1]);
-                    }
-                    
-                    if (percentageSpan) {
-                        const percentageMatch = percentageSpan.textContent.match(/(\d+(?:\.\d+)?)%/);
-                        if (percentageMatch) percentage = parseFloat(percentageMatch[1]);
-                    }
-                    
-                    if (votesDiv) {
-                        const votesText = votesDiv.textContent.replace(/[^\d.]/g, '');
-                        if (votesText) votes = parseInt(votesText);
-                    }
-                    
-                    if (votes > maxVotes) maxVotes = votes;
-                    
-                    choicesData.push({
-                        text: choiceTextClean,
-                        originalText: choiceText,
-                        percentage: percentage,
-                        votes: votes,
-                        isMax: isMax,
-                        isVoted: isMax && leftDiv.querySelector('strong') !== null
-                    });
-                });
-                
-                choicesData.forEach((choice, index) => {
-                    const isVotedChoice = isVotedState && choice.isVoted;
-                    
-                    html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
-                        (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
-                    
-                    if (isVotedState && isVotedChoice) {
-                        html += '<input type="radio" class="choice-radio" checked disabled>';
-                    }
-                    
-                    html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
-                    if (isVotedChoice) {
-                        html += ' <strong>(Your vote)</strong>';
-                    }
-                    html += '</span>';
-                    
-                    html += '<div class="choice-stats">' +
-                        '<div class="choice-bar">' +
-                        '<div class="choice-fill" style="width: ' + choice.percentage.toFixed(2) + '%"></div>' +
-                        '</div>' +
-                        '<span class="choice-percentage">' + choice.percentage.toFixed(2) + '%</span>' +
-                        '<span class="choice-votes">' + choice.votes + ' vote' + (choice.votes !== 1 ? 's' : '') + '</span>' +
-                        '</div>';
-                    
-                    html += '</div>';
-                });
-            }
-            
-            html += '</div><div class="poll-footer">';
-            
-            if (isVoteState) {
-                html += '<p class="poll-message">Select your choice and click Vote</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn vote-btn">' +
-                    '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
-                    'Vote' +
-                    '</button>' +
-                    '<button type="button" class="poll-btn secondary view-results-btn">' +
-                    '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
-                    'View Results' +
-                    '</button>' +
-                    '</div>';
-            } else if (isVotedState) {
-                const darkbar = pollContainer.querySelector('.darkbar.Item');
-                let votedForText = '';
-                
-                if (darkbar) {
-                    const abbr = darkbar.querySelector('abbr');
-                    if (abbr) {
-                        const choiceNumber = abbr.textContent.trim();
-                        const choiceTitle = abbr.getAttribute('title') || '';
-                        votedForText = 'You voted for option <strong>' + choiceNumber + '</strong>';
-                        if (choiceTitle) {
-                            votedForText += ': <span class="poll-choice-name">' + this.#escapeHtml(choiceTitle) + '</span>';
-                        }
-                    }
-                }
-                
-                html += '<p class="poll-message">' + votedForText + '</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn delete cancel-vote-btn">' +
-                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
-                    'Cancel Vote' +
-                    '</button>' +
-                    '</div>';
-            } else if (isResultsState) {
-                const darkbar = pollContainer.querySelector('.darkbar.Item');
-                let votersText = '';
-                
-                if (darkbar) {
-                    const votersMatch = darkbar.textContent.match(/Voters:\s*(\d+)/);
-                    if (votersMatch) {
-                        votersText = votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '');
-                    }
-                }
-                
-                html += '<p class="poll-message">Poll results' + (votersText ? ' • ' + votersText : '') + '</p>' +
-                    '<div class="poll-actions">' +
-                    '<button type="button" class="poll-btn secondary" onclick="location.reload()">' +
-                    '<i class="fa-regular fa-rotate" aria-hidden="true"></i>' +
-                    'Refresh' +
-                    '</button>' +
-                    '</div>';
-            }
-            
-            html += '</div>';
-            
-            modernPoll.innerHTML = html;
-            pollContainer.insertBefore(modernPoll, originalPollContent);
-            pollContainer.classList.add('poll-modernized');
-            
-            this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
-                isVoteState: isVoteState,
-                isVotedState: isVotedState,
-                originalCancelBtn: originalCancelBtn,
-                originalVoteBtn: originalVoteBtn,
-                originalViewResultsBtn: originalViewResultsBtn
-            });
-            
-            if (isVotedState || isResultsState) {
+            // Re-initialize the overlay if jQuery is available
+            if (typeof $ !== 'undefined' && $.fn.overlay) {
+                // Small delay to ensure DOM is ready
                 setTimeout(() => {
-                    modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
-                        const width = fill.style.width;
-                        fill.style.width = '0';
-                        setTimeout(() => {
-                            fill.style.width = width;
-                        }, 10);
+                    $("a[rel=#overlay]").overlay({
+                        top: $(window).height() / 2 - 100,
+                        left: $(window).width() / 2 - 150,
+                        onBeforeLoad: function() {
+                            var wrap = this.getOverlay().find("div");
+                            wrap.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif" alt=""></p>')
+                                .load(this.getTrigger().attr("href") + "&popup=1");
+                        }
                     });
                 }, 100);
             }
-            
-        } catch (error) {
-            console.error('Error transforming poll:', error);
         }
+        
+        // Now hide the original content (popup is safely outside)
+        originalPollContent.style.cssText = 'opacity:0;height:0;overflow:hidden;position:absolute;pointer-events:none';
+        
+        const modernPoll = document.createElement('div');
+        modernPoll.className = 'modern-poll';
+        modernPoll.setAttribute('data-poll-state', isVotedState ? 'voted' : isResultsState ? 'results' : 'vote');
+        
+        let html = '<div class="poll-header">' +
+            '<div class="poll-icon">' +
+            '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+            '</div>' +
+            '<h3 class="poll-title">' + this.#escapeHtml(pollTitle) + '</h3>' +
+            '<div class="poll-stats">';
+        
+        if (isVotedState || isResultsState) {
+            const votersText = pollContainer.querySelector('.darkbar.Item');
+            if (votersText) {
+                const votersMatch = votersText.textContent.match(/Voters:\s*(\d+)/);
+                if (votersMatch) {
+                    html += '<i class="fa-regular fa-users" aria-hidden="true"></i>' +
+                        '<span>' + votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '') + '</span>';
+                }
+            }
+        }
+        
+        html += '</div></div><div class="poll-choices">';
+        
+        if (isVoteState) {
+            const choiceItems = list.querySelectorAll('li.Item[style*="text-align:left"]');
+            choiceItems.forEach((item, index) => {
+                const label = item.querySelector('label');
+                const radio = item.querySelector('input[type="radio"]');
+                if (!label || !radio) return;
+                
+                const choiceText = label.textContent.replace(/&nbsp;/g, ' ').trim();
+                const choiceId = radio.id;
+                const choiceValue = radio.value;
+                const choiceName = radio.name;
+                
+                html += '<div class="poll-choice" data-choice-index="' + index + '">' +
+                    '<input type="radio" class="choice-radio" id="modern_' + this.#escapeHtml(choiceId) + 
+                    '" name="' + this.#escapeHtml(choiceName) + '" value="' + this.#escapeHtml(choiceValue) + '" onclick="event.stopPropagation()">' +
+                    '<label for="modern_' + this.#escapeHtml(choiceId) + '" class="choice-label">' + 
+                    this.#escapeHtml(choiceText) + '</label>' +
+                    '</div>';
+            });
+        } else {
+            const choiceItems = list.querySelectorAll('li:not(:first-child)');
+            let maxVotes = 0;
+            const choicesData = [];
+            
+            choiceItems.forEach(item => {
+                const isMax = item.classList.contains('max');
+                const leftDiv = item.querySelector('.left.Sub.Item');
+                const centerDiv = item.querySelector('.center.Sub.Item');
+                const rightDiv = item.querySelector('.right.Sub.Item');
+                
+                if (!leftDiv || !centerDiv || !rightDiv) return;
+                
+                const choiceText = leftDiv.textContent.replace(/\s+/g, ' ').trim();
+                const choiceTextClean = choiceText.replace(/^\*+/, '').replace(/\*+$/, '').trim();
+                
+                const barDiv = centerDiv.querySelector('.bar div');
+                const percentageSpan = centerDiv.querySelector('.bar span');
+                const votesDiv = rightDiv;
+                
+                let percentage = 0;
+                let votes = 0;
+                
+                if (barDiv) {
+                    const widthMatch = barDiv.style.width.match(/(\d+(?:\.\d+)?)%/);
+                    if (widthMatch) percentage = parseFloat(widthMatch[1]);
+                }
+                
+                if (percentageSpan) {
+                    const percentageMatch = percentageSpan.textContent.match(/(\d+(?:\.\d+)?)%/);
+                    if (percentageMatch) percentage = parseFloat(percentageMatch[1]);
+                }
+                
+                if (votesDiv) {
+                    const votesText = votesDiv.textContent.replace(/[^\d.]/g, '');
+                    if (votesText) votes = parseInt(votesText);
+                }
+                
+                if (votes > maxVotes) maxVotes = votes;
+                
+                choicesData.push({
+                    text: choiceTextClean,
+                    originalText: choiceText,
+                    percentage: percentage,
+                    votes: votes,
+                    isMax: isMax,
+                    isVoted: isMax && leftDiv.querySelector('strong') !== null
+                });
+            });
+            
+            choicesData.forEach((choice, index) => {
+                const isVotedChoice = isVotedState && choice.isVoted;
+                
+                html += '<div class="poll-choice' + (choice.isMax ? ' max' : '') + 
+                    (isVotedChoice ? ' selected' : '') + '" data-choice-index="' + index + '">';
+                
+                if (isVotedState && isVotedChoice) {
+                    html += '<input type="radio" class="choice-radio" checked disabled>';
+                }
+                
+                html += '<span class="choice-label">' + this.#escapeHtml(choice.text);
+                if (isVotedChoice) {
+                    html += ' <strong>(Your vote)</strong>';
+                }
+                html += '</span>';
+                
+                html += '<div class="choice-stats">' +
+                    '<div class="choice-bar">' +
+                    '<div class="choice-fill" style="width: ' + choice.percentage.toFixed(2) + '%"></div>' +
+                    '</div>' +
+                    '<span class="choice-percentage">' + choice.percentage.toFixed(2) + '%</span>' +
+                    '<span class="choice-votes">' + choice.votes + ' vote' + (choice.votes !== 1 ? 's' : '') + '</span>' +
+                    '</div>';
+                
+                html += '</div>';
+            });
+        }
+        
+        html += '</div><div class="poll-footer">';
+        
+        if (isVoteState) {
+            html += '<p class="poll-message">Select your choice and click Vote</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn vote-btn">' +
+                '<i class="fa-regular fa-check" aria-hidden="true"></i>' +
+                'Vote' +
+                '</button>' +
+                '<button type="button" class="poll-btn secondary view-results-btn">' +
+                '<i class="fa-regular fa-chart-bar" aria-hidden="true"></i>' +
+                'View Results' +
+                '</button>' +
+                '</div>';
+        } else if (isVotedState) {
+            const darkbar = pollContainer.querySelector('.darkbar.Item');
+            let votedForText = '';
+            
+            if (darkbar) {
+                const abbr = darkbar.querySelector('abbr');
+                if (abbr) {
+                    const choiceNumber = abbr.textContent.trim();
+                    const choiceTitle = abbr.getAttribute('title') || '';
+                    votedForText = 'You voted for option <strong>' + choiceNumber + '</strong>';
+                    if (choiceTitle) {
+                        votedForText += ': <span class="poll-choice-name">' + this.#escapeHtml(choiceTitle) + '</span>';
+                    }
+                }
+            }
+            
+            html += '<p class="poll-message">' + votedForText + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn delete cancel-vote-btn">' +
+                '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                'Cancel Vote' +
+                '</button>' +
+                '</div>';
+        } else if (isResultsState) {
+            const darkbar = pollContainer.querySelector('.darkbar.Item');
+            let votersText = '';
+            
+            if (darkbar) {
+                const votersMatch = darkbar.textContent.match(/Voters:\s*(\d+)/);
+                if (votersMatch) {
+                    votersText = votersMatch[1] + ' voter' + (parseInt(votersMatch[1]) !== 1 ? 's' : '');
+                }
+            }
+            
+            html += '<p class="poll-message">Poll results' + (votersText ? ' • ' + votersText : '') + '</p>' +
+                '<div class="poll-actions">' +
+                '<button type="button" class="poll-btn secondary" onclick="location.reload()">' +
+                '<i class="fa-regular fa-rotate" aria-hidden="true"></i>' +
+                'Refresh' +
+                '</button>' +
+                '</div>';
+        }
+        
+        html += '</div>';
+        
+        modernPoll.innerHTML = html;
+        pollContainer.insertBefore(modernPoll, originalPollContent);
+        pollContainer.classList.add('poll-modernized');
+        
+        this.#setupPollEventListeners(modernPoll, pollForm, originalPollContent, {
+            isVoteState: isVoteState,
+            isVotedState: isVotedState,
+            originalCancelBtn: originalCancelBtn,
+            originalVoteBtn: originalVoteBtn,
+            originalViewResultsBtn: originalViewResultsBtn
+        });
+        
+        if (isVotedState || isResultsState) {
+            setTimeout(() => {
+                modernPoll.querySelectorAll('.choice-fill').forEach(fill => {
+                    const width = fill.style.width;
+                    fill.style.width = '0';
+                    setTimeout(() => {
+                        fill.style.width = width;
+                    }, 10);
+                });
+            }, 100);
+        }
+        
+    } catch (error) {
+        console.error('Error transforming poll:', error);
     }
+}
     
     #setupPollEventListeners(modernPoll, pollForm, originalPollContent, options) {
         const { isVoteState, isVotedState, originalCancelBtn, originalVoteBtn, originalViewResultsBtn } = options;
@@ -7680,6 +7491,7 @@ class PostModernizer {
                 post.setAttribute('data-post-id', postId.replace('ee', ''));
             }
             
+            // Clean up double-wrapped media after transformation
             setTimeout(() => {
                 this.#cleanupOldMediaWrappers(post);
             }, 100);
@@ -8161,6 +7973,7 @@ class PostModernizer {
             post.parentNode.replaceChild(newPost, post);
             this.#updatePointsContainerActiveState(pointsFooter);
             
+            // Clean up double-wrapped media after transformation
             setTimeout(() => {
                 this.#cleanupOldMediaWrappers(newPost);
             }, 100);
@@ -8904,6 +8717,7 @@ class PostModernizer {
     }
 
     #preserveMediaDimensions(element) {
+        // Process images (existing code)
         element.querySelectorAll('img').forEach(img => {
             if (!img.style.maxWidth) {
                 img.style.maxWidth = '100%';
@@ -8932,28 +8746,41 @@ class PostModernizer {
             }
         });
         
+        // Clean up old wrappers first to prevent double-wrapping
         this.#cleanupOldMediaWrappers(element);
+        
+        // Process all media elements with standardized wrappers
         this.#normalizeAllMediaWrappers(element);
     }
 
     #cleanupOldMediaWrappers(element) {
+        // Find all old wrapper divs that have standardized wrappers inside them
         const oldWrappers = element.querySelectorAll('.media-wrapper, .iframe-wrapper');
         
         oldWrappers.forEach(oldWrapper => {
+            // Check if this old wrapper has a standard-media-wrapper inside it
             const hasStandardWrapperInside = oldWrapper.querySelector('.standard-media-wrapper');
             
             if (hasStandardWrapperInside) {
+                // Get the standard wrapper
                 const standardWrapper = oldWrapper.querySelector('.standard-media-wrapper');
+                
+                // Move the standard wrapper out of the old wrapper
                 oldWrapper.parentNode.insertBefore(standardWrapper, oldWrapper);
+                
+                // Remove the old wrapper
                 oldWrapper.remove();
             }
         });
         
+        // Also clean up empty wrapper divs with specific styling patterns
         const emptyWrappers = element.querySelectorAll('div[style*="padding"][style*="position:relative"]');
         
         emptyWrappers.forEach(wrapper => {
+            // Check if wrapper is empty or only contains whitespace
             const hasRealContent = Array.from(wrapper.childNodes).some(node => {
                 if (node.nodeType === Node.ELEMENT_NODE) {
+                    // Check if element is media or has real content
                     const tagName = node.tagName.toLowerCase();
                     return !['br', 'span', 'div'].includes(tagName) || 
                            node.textContent.trim() !== '' ||
@@ -8969,13 +8796,16 @@ class PostModernizer {
     }
 
     #normalizeAllMediaWrappers(element) {
+        // Find all potential media elements
         const mediaElements = element.querySelectorAll(
             'iframe, lite-youtube, lite-vimeo, video, [class*="media-wrapper"], [class*="iframe-wrapper"]'
         );
         
         mediaElements.forEach(media => {
+            // Skip already wrapped elements
             if (media.getAttribute('data-wrapped') === 'true') return;
             
+            // Check if element needs wrapping
             if (media.tagName === 'IFRAME') {
                 this.#wrapIframe(media);
             } else if (media.tagName === 'LITE-YOUTUBE') {
@@ -8986,23 +8816,29 @@ class PostModernizer {
                 this.#wrapVideo(media);
             } else if (media.classList.contains('media-wrapper') || 
                        media.classList.contains('iframe-wrapper')) {
+                // This is already a wrapper, ensure it's standardized
                 this.#standardizeExistingWrapper(media);
             }
         });
     }
 
     #standardizeExistingWrapper(wrapper) {
+        // Add standard class if not present
         if (!wrapper.classList.contains('standard-media-wrapper')) {
             wrapper.classList.add('standard-media-wrapper');
         }
         
+        // Ensure proper styling
         const computedStyle = window.getComputedStyle(wrapper);
         
+        // Check if padding-bottom is set for aspect ratio
         if (!computedStyle.paddingBottom || computedStyle.paddingBottom === '0px') {
+            // Calculate or set default aspect ratio
             const children = wrapper.querySelectorAll('iframe, lite-youtube, lite-vimeo, video');
             if (children.length > 0) {
                 const child = children[0];
                 
+                // Try to get dimensions from child
                 const width = child.getAttribute('width') || child.offsetWidth;
                 const height = child.getAttribute('height') || child.offsetHeight;
                 
@@ -9010,33 +8846,41 @@ class PostModernizer {
                     const aspectRatio = (parseInt(height) / parseInt(width)) * 100;
                     wrapper.style.paddingBottom = aspectRatio + '%';
                 } else {
+                    // Default to 16:9
                     wrapper.style.paddingBottom = '56.25%';
                 }
             } else {
+                // Default to 16:9
                 wrapper.style.paddingBottom = '56.25%';
             }
         }
         
+        // Ensure wrapper has relative positioning
         if (computedStyle.position !== 'relative') {
             wrapper.style.position = 'relative';
         }
         
+        // Ensure overflow hidden
         if (computedStyle.overflow !== 'hidden') {
             wrapper.style.overflow = 'hidden';
         }
         
+        // Ensure full width
         if (!wrapper.style.width || wrapper.style.width !== '100%') {
             wrapper.style.width = '100%';
         }
         
+        // Add margin for spacing
         if (!wrapper.style.margin || !wrapper.style.margin.includes('1em')) {
             wrapper.style.margin = '1em 0';
         }
         
+        // Mark as standardized
         wrapper.setAttribute('data-standardized', 'true');
     }
 
     #wrapIframe(iframe) {
+        // Check if already inside a standard wrapper
         const isInStandardWrapper = iframe.closest('.standard-media-wrapper');
         if (isInStandardWrapper) {
             iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
@@ -9044,6 +8888,7 @@ class PostModernizer {
             return;
         }
         
+        // Check if already has a wrapper
         const parent = iframe.parentElement;
         const hasWrapper = parent && (
             parent.classList.contains('media-wrapper') || 
@@ -9052,22 +8897,31 @@ class PostModernizer {
         );
         
         if (hasWrapper) {
+            // This is an old wrapper, replace it with standard wrapper
             const wrapper = this.#createStandardMediaWrapper(iframe);
+            
+            // Replace the old wrapper with standard wrapper
             parent.parentNode.insertBefore(wrapper, parent);
             wrapper.appendChild(iframe);
             parent.remove();
         } else {
+            // Create standard wrapper
             const wrapper = this.#createStandardMediaWrapper(iframe);
             
+            // Set standard dimensions
             if (!iframe.hasAttribute('width') || !iframe.hasAttribute('height')) {
                 iframe.setAttribute('width', '100%');
                 iframe.setAttribute('height', '100%');
             }
             
+            // Insert wrapper before iframe
             iframe.parentNode.insertBefore(wrapper, iframe);
+            
+            // Move iframe into wrapper
             wrapper.appendChild(iframe);
         }
         
+        // Style the iframe
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:0;';
         iframe.setAttribute('data-wrapped', 'true');
     }
@@ -9075,6 +8929,7 @@ class PostModernizer {
     #wrapLiteYoutube(liteYoutube) {
         const parent = liteYoutube.parentElement;
         
+        // Check if already has a standard wrapper
         const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
         
         if (hasStandardWrapper) {
@@ -9083,16 +8938,24 @@ class PostModernizer {
             return;
         }
         
+        // Create standard wrapper
         const wrapper = this.#createStandardMediaWrapper(liteYoutube);
         wrapper.classList.add('lite-youtube-wrapper');
+        
+        // Add YouTube-specific styling
         wrapper.style.cssText += 'background: #000;';
         
+        // Insert wrapper before lite-youtube
         liteYoutube.parentNode.insertBefore(wrapper, liteYoutube);
+        
+        // Move element into wrapper
         wrapper.appendChild(liteYoutube);
         
+        // Style lite-youtube
         liteYoutube.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
         liteYoutube.setAttribute('data-wrapped', 'true');
         
+        // Ensure it has proper attributes
         if (!liteYoutube.hasAttribute('width')) {
             liteYoutube.setAttribute('width', '100%');
         }
@@ -9104,6 +8967,7 @@ class PostModernizer {
     #wrapLiteVimeo(liteVimeo) {
         const parent = liteVimeo.parentElement;
         
+        // Check if already has a standard wrapper
         const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
         
         if (hasStandardWrapper) {
@@ -9112,16 +8976,24 @@ class PostModernizer {
             return;
         }
         
+        // Create standard wrapper
         const wrapper = this.#createStandardMediaWrapper(liteVimeo);
         wrapper.classList.add('lite-vimeo-wrapper');
+        
+        // Add Vimeo-specific styling
         wrapper.style.cssText += 'background: #1ab7ea;';
         
+        // Insert wrapper before lite-vimeo
         liteVimeo.parentNode.insertBefore(wrapper, liteVimeo);
+        
+        // Move element into wrapper
         wrapper.appendChild(liteVimeo);
         
+        // Style lite-vimeo
         liteVimeo.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
         liteVimeo.setAttribute('data-wrapped', 'true');
         
+        // Ensure it has proper attributes
         if (!liteVimeo.hasAttribute('width')) {
             liteVimeo.setAttribute('width', '100%');
         }
@@ -9133,6 +9005,7 @@ class PostModernizer {
     #wrapVideo(video) {
         const parent = video.parentElement;
         
+        // Check if already has a standard wrapper
         const hasStandardWrapper = parent && parent.classList.contains('standard-media-wrapper');
         
         if (hasStandardWrapper) {
@@ -9141,21 +9014,29 @@ class PostModernizer {
             return;
         }
         
+        // Create standard wrapper
         const wrapper = this.#createStandardMediaWrapper(video);
         wrapper.classList.add('video-wrapper');
         
+        // Get video dimensions or use defaults
         const width = video.getAttribute('width') || video.videoWidth || 640;
         const height = video.getAttribute('height') || video.videoHeight || 360;
         
+        // Calculate aspect ratio for video specifically
         const aspectRatio = ((height / width) * 100);
         wrapper.style.paddingBottom = aspectRatio + '%';
         
+        // Insert wrapper before video
         video.parentNode.insertBefore(wrapper, video);
+        
+        // Move video into wrapper
         wrapper.appendChild(video);
         
+        // Style video
         video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
         video.setAttribute('data-wrapped', 'true');
         
+        // Ensure it has proper attributes
         if (!video.hasAttribute('width')) {
             video.setAttribute('width', width);
         }
@@ -9163,48 +9044,51 @@ class PostModernizer {
             video.setAttribute('height', height);
         }
         
+        // Add video controls if not present
         if (!video.hasAttribute('controls')) {
             video.setAttribute('controls', '');
         }
     }
 
-    #createStandardMediaWrapper(element) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'standard-media-wrapper';
-        
-        const aspectRatio = '16 / 9';
-        const maxWidth = 560;
-        
-        wrapper.style.cssText = 
-            'position: relative; ' +
-            'width: 100%; ' +
-            'max-width: ' + maxWidth + 'px; ' +
-            'aspect-ratio: ' + aspectRatio + '; ' +
-            'margin: var(--space-md) 0; ' +
-            'overflow: hidden; ' +
-            'background: var(--bg-secondary); ' +
-            'border-radius: var(--radius-sm); ' +
-            'padding: 0 !important; ' +
-            'box-sizing: border-box !important;';
-        
-        const src = element.src || element.dataset.src || '';
-        const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
-                          element.tagName === 'LITE-YOUTUBE';
-        const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
-        
-        if (isYouTube) {
-            wrapper.classList.add('youtube-wrapper');
-            wrapper.style.background = '#000';
-        } else if (isVimeo) {
-            wrapper.classList.add('vimeo-wrapper');
-            wrapper.style.background = '#1ab7ea';
-        } else if (element.tagName === 'VIDEO') {
-            wrapper.classList.add('video-wrapper');
-            wrapper.style.background = '#000';
-        }
-        
-        return wrapper;
+#createStandardMediaWrapper(element) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'standard-media-wrapper';
+    
+    // ALWAYS use 16:9 aspect ratio for consistency
+    const aspectRatio = '16 / 9';
+    const maxWidth = 560;
+    
+    wrapper.style.cssText = 
+        'position: relative; ' +
+        'width: 100%; ' +
+        'max-width: ' + maxWidth + 'px; ' +
+        'aspect-ratio: ' + aspectRatio + '; ' +
+        'margin: var(--space-md) 0; ' + // Top/bottom: 1rem, Left/right: 0
+        'overflow: hidden; ' +
+        'background: var(--bg-secondary); ' +
+        'border-radius: var(--radius-sm); ' +
+        'padding: 0 !important; ' +
+        'box-sizing: border-box !important;';
+    
+    // Type-specific styling
+    const src = element.src || element.dataset.src || '';
+    const isYouTube = src.includes('youtube.com') || src.includes('youtu.be') || 
+                      element.tagName === 'LITE-YOUTUBE';
+    const isVimeo = src.includes('vimeo.com') || element.tagName === 'LITE-VIMEO';
+    
+    if (isYouTube) {
+        wrapper.classList.add('youtube-wrapper');
+        wrapper.style.background = '#000';
+    } else if (isVimeo) {
+        wrapper.classList.add('vimeo-wrapper');
+        wrapper.style.background = '#1ab7ea';
+    } else if (element.tagName === 'VIDEO') {
+        wrapper.classList.add('video-wrapper');
+        wrapper.style.background = '#000';
     }
+    
+    return wrapper;
+}
 
     #addQuoteEventListeners(quoteElement) {
         const expandBtn = quoteElement.querySelector('.quote-expand-btn');
@@ -9733,91 +9617,103 @@ class PostModernizer {
         });
     }
 
-    #enhanceReputationSystem() {
-        document.addEventListener('click', (e) => {
-            const pointsUp = e.target.closest('.points_up');
-            const pointsDown = e.target.closest('.points_down');
-            const bulletDelete = e.target.closest('.bullet_delete');
-            const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
-            const pointsContainer = e.target.closest('.points');
+#enhanceReputationSystem() {
+    document.addEventListener('click', (e) => {
+        const pointsUp = e.target.closest('.points_up');
+        const pointsDown = e.target.closest('.points_down');
+        const bulletDelete = e.target.closest('.bullet_delete');
+        const pointsLink = e.target.closest('.points a[href*="CODE=votes"]');
+        const pointsContainer = e.target.closest('.points');
+        
+        // Handle undo (bullet_delete) clicks
+        if (bulletDelete && pointsContainer) {
+            e.preventDefault();
+            e.stopPropagation();
             
-            if (bulletDelete && pointsContainer) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const onclickAttr = bulletDelete.getAttribute('onclick');
-                if (onclickAttr) {
-                    try {
-                        new Function(onclickAttr)();
-                    } catch (error) {
-                        console.error('Error executing undo action:', error);
+            // Find the original onclick attribute and execute it
+            const onclickAttr = bulletDelete.getAttribute('onclick');
+            if (onclickAttr) {
+                try {
+                    // Execute the onclick function
+                    new Function(onclickAttr)();
+                } catch (error) {
+                    console.error('Error executing undo action:', error);
+                }
+            }
+            
+            // Update active states after undo
+            setTimeout(() => {
+                this.#updatePointsContainerActiveState(pointsContainer);
+            }, 100);
+            
+            return;
+        }
+        
+        // Handle points link (view votes) clicks
+        if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
+            e.preventDefault();
+            // Let the overlay handler work normally
+            return;
+        }
+        
+        if (pointsUp || pointsDown) {
+            const pointsContainer = (pointsUp || pointsDown).closest('.points');
+            const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
+
+            if (bulletDelete) {
+                // Already voted state - handle differently
+                if (pointsUp) {
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                    pointsUp.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs up?
+                    if (pointsUp.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
                     }
                 }
-                
-                setTimeout(() => {
-                    this.#updatePointsContainerActiveState(pointsContainer);
-                }, 100);
-                
-                return;
-            }
-            
-            if (pointsLink && pointsLink.getAttribute('rel') === '#overlay') {
-                e.preventDefault();
-                return;
-            }
-            
-            if (pointsUp || pointsDown) {
-                const pointsContainer = (pointsUp || pointsDown).closest('.points');
-                const bulletDelete = pointsContainer ? pointsContainer.querySelector('.bullet_delete') : null;
 
-                if (bulletDelete) {
-                    if (pointsUp) {
-                        pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                        pointsUp.classList.add('active');
-                        
-                        if (pointsUp.classList.contains('active') && bulletDelete) {
-                            bulletDelete.click();
-                        }
+                if (pointsDown) {
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                    pointsDown.classList.add('active');
+                    
+                    // Trigger undo when clicking active thumbs down?
+                    if (pointsDown.classList.contains('active') && bulletDelete) {
+                        bulletDelete.click();
                     }
-
-                    if (pointsDown) {
-                        pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                        pointsDown.classList.add('active');
-                        
-                        if (pointsDown.classList.contains('active') && bulletDelete) {
-                            bulletDelete.click();
-                        }
-                    }
-                } else {
-                    if (pointsUp) {
-                        pointsContainer.querySelector('.points_down')?.classList.remove('active');
-                        pointsUp.classList.add('active');
-                        
-                        const voteLink = pointsContainer.querySelector('a.points_up');
-                        if (voteLink) {
-                            const onclick = voteLink.getAttribute('onclick');
-                            if (onclick) {
-                                setTimeout(() => new Function(onclick)(), 10);
-                            }
-                        }
-                    }
-
-                    if (pointsDown) {
-                        pointsContainer.querySelector('.points_up')?.classList.remove('active');
-                        pointsDown.classList.add('active');
-                        
-                        const voteLink = pointsContainer.querySelector('a.points_down');
-                        if (voteLink) {
-                            const onclick = voteLink.getAttribute('onclick');
-                            if (onclick) {
-                                setTimeout(() => new Function(onclick)(), 10);
-                            }
+                }
+            } else {
+                // Not voted yet - handle normal voting
+                if (pointsUp) {
+                    pointsContainer.querySelector('.points_down')?.classList.remove('active');
+                    pointsUp.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_up');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
                         }
                     }
                 }
+
+                if (pointsDown) {
+                    pointsContainer.querySelector('.points_up')?.classList.remove('active');
+                    pointsDown.classList.add('active');
+                    
+                    // Trigger the original vote action
+                    const voteLink = pointsContainer.querySelector('a.points_down');
+                    if (voteLink) {
+                        const onclick = voteLink.getAttribute('onclick');
+                        if (onclick) {
+                            setTimeout(() => new Function(onclick)(), 10);
+                        }
+                    }
+                }
             }
-        });
-    }
+        }
+    });
+}
     
     #escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;
@@ -10424,7 +10320,7 @@ class PostModernizer {
         this.#debouncedObserverId, this.#cleanupObserverId,
         this.#searchPostObserverId, this.#quoteLinkObserverId,
             this.#codeBlockObserverId, this.#attachmentObserverId,
-            this.#embeddedLinkObserverId, this.#summaryListObserverId]; // Added summaryListObserverId
+            this.#embeddedLinkObserverId];
 
         ids.forEach(id => id && globalThis.forumObserver && globalThis.forumObserver.unregister(id));
 
