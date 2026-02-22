@@ -647,7 +647,7 @@ if (!globalThis.mediaDimensionExtractor) {
 
 
 // ==============================
-// Complete Working Avatar System - INCLUDING LIKES/DISLIKES - OPTIMIZED VERSION
+// Complete Working Avatar System - INCLUDING LIKES/DISLIKES - ULTRA OPTIMIZED VERSION
 // ==============================
 
 (function() {
@@ -656,7 +656,7 @@ if (!globalThis.mediaDimensionExtractor) {
     // ==============================
     // CONFIGURATION
     // ==============================
-    var AVATAR_THEME = {
+    const AVATAR_THEME = {
         colors: {
             light: [
                 '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
@@ -670,7 +670,7 @@ if (!globalThis.mediaDimensionExtractor) {
         currentTheme: 'light'
     };
 
-    var AVATAR_CONFIG = {
+    const AVATAR_CONFIG = {
         sizes: {
             'post': 60,
             'profile_card': 80,
@@ -717,23 +717,33 @@ if (!globalThis.mediaDimensionExtractor) {
             deletedPrefix: 'deleted_avatar_'
         },
         
-        // NEW: Performance settings
         performance: {
-            batchSize: 5,              // Process 5 users at a time
-            batchDelay: 50,             // 50ms between batches
-            prioritySelectors: [        // Elements to prioritize
-                '.popup.pop_points',    // Popups first (they're visible)
-                '.summary'              // Then summary
+            batchSize: 5,
+            batchDelay: 50,
+            prioritySelectors: [
+                '.popup.pop_points',
+                '.summary'
             ],
-            maxConcurrentRequests: 3     // Maximum concurrent API requests
+            maxConcurrentRequests: 3,
+            
+            // NEW: Intersection Observer config
+            lazyLoad: {
+                enabled: true,
+                rootMargin: '50px',
+                threshold: 0.01
+            },
+            
+            // NEW: Memory optimization
+            memoryCleanupInterval: 300000, // 5 minutes
+            maxCacheSize: 500 // Max items in memory cache
         }
     };
 
     // ==============================
     // STATE MANAGEMENT
     // ==============================
-    var state = {
-        pendingRequests: {},
+    const state = {
+        pendingRequests: new Map(), // Track in-flight requests
         userCache: {},
         brokenAvatars: new Set(),
         processedPosts: new WeakSet(),
@@ -741,43 +751,54 @@ if (!globalThis.mediaDimensionExtractor) {
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
         isInitialized: false,
-        cacheVersion: '2.2', // Updated version
+        cacheVersion: '2.3', // Updated version
         
-        // NEW: Performance tracking
         processingQueue: [],
         isProcessing: false,
         activeRequests: 0,
-        processedIds: new Set(), // Track processed user IDs to avoid duplicates
-        pendingBatches: []
+        processedIds: new Set(),
+        pendingBatches: [],
+        
+        // NEW: Intersection Observer
+        intersectionObserver: null,
+        lazyQueue: new Set(),
+        
+        // NEW: Request deduplication
+        activeApiCalls: new Map(),
+        
+        // NEW: Cache stats
+        cacheHits: 0,
+        cacheMisses: 0,
+        apiCalls: 0
     };
 
     // ==============================
     // CORE FUNCTIONS
     // ==============================
 
-    function getCacheKey(userId, size) {
+    const getCacheKey = (userId, size) => {
         return AVATAR_CONFIG.cache.prefix + userId + '_' + size;
-    }
+    };
 
-    function getDeletedUserCacheKey(username, size) {
-        var hash = 0;
-        for (var i = 0; i < username.length; i++) {
+    const getDeletedUserCacheKey = (username, size) => {
+        let hash = 0;
+        for (let i = 0; i < username.length; i++) {
             hash = ((hash << 5) - hash) + username.charCodeAt(i);
             hash = hash & hash;
         }
         return AVATAR_CONFIG.cache.deletedPrefix + Math.abs(hash) + '_' + size;
-    }
+    };
 
-    function clearOldCacheEntries() {
-        var cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
-        var keysToRemove = [];
+    const clearOldCacheEntries = () => {
+        const cutoff = Date.now() - AVATAR_CONFIG.cache.duration;
+        const keysToRemove = [];
         
-        for (var i = 0; i < localStorage.length; i++) {
-            var key = localStorage.key(i);
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
             if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
                         key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                 try {
-                    var data = JSON.parse(localStorage.getItem(key));
+                    const data = JSON.parse(localStorage.getItem(key));
                     if (data && data.timestamp < cutoff) {
                         keysToRemove.push(key);
                     }
@@ -787,14 +808,29 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        for (var j = 0; j < keysToRemove.length; j++) {
-            localStorage.removeItem(keysToRemove[j]);
-        }
-        
+        keysToRemove.forEach(key => localStorage.removeItem(key));
         return keysToRemove.length;
-    }
+    };
 
-    function isBrokenAvatarUrl(avatarUrl) {
+    // NEW: Memory cache cleanup
+    const cleanupMemoryCache = () => {
+        const cacheKeys = Object.keys(state.userCache);
+        if (cacheKeys.length > AVATAR_CONFIG.performance.maxCacheSize) {
+            // Sort by timestamp and keep newest
+            const sorted = cacheKeys
+                .map(key => ({ key, timestamp: state.userCache[key].timestamp || 0 }))
+                .sort((a, b) => b.timestamp - a.timestamp);
+            
+            const toRemove = sorted.slice(AVATAR_CONFIG.performance.maxCacheSize);
+            toRemove.forEach(item => {
+                delete state.userCache[item.key];
+            });
+            
+            console.log(`🧹 Memory cache cleaned: removed ${toRemove.length} items`);
+        }
+    };
+
+    const isBrokenAvatarUrl = (avatarUrl) => {
         if (!avatarUrl || avatarUrl === 'http') {
             return true;
         }
@@ -807,11 +843,11 @@ if (!globalThis.mediaDimensionExtractor) {
             return true;
         }
         
-        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
-        var brokenCache = localStorage.getItem(brokenKey);
+        const brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        const brokenCache = localStorage.getItem(brokenKey);
         if (brokenCache) {
             try {
-                var data = JSON.parse(brokenCache);
+                const data = JSON.parse(brokenCache);
                 if (Date.now() - data.timestamp < 3600000) { // 1 hour
                     state.brokenAvatars.add(avatarUrl);
                     return true;
@@ -822,20 +858,20 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         return false;
-    }
+    };
 
-    function markAvatarAsBroken(avatarUrl) {
+    const markAvatarAsBroken = (avatarUrl) => {
         if (!avatarUrl || avatarUrl.includes('dicebear.com')) return;
         
         state.brokenAvatars.add(avatarUrl);
-        var brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
+        const brokenKey = AVATAR_CONFIG.cache.brokenPrefix + btoa(avatarUrl).slice(0, 50);
         localStorage.setItem(brokenKey, JSON.stringify({
             url: avatarUrl,
             timestamp: Date.now()
         }));
-    }
+    };
 
-    function testImageUrl(url, callback) {
+    const testImageUrl = (url, callback) => {
         if (!url || url === 'http') {
             callback(false);
             return;
@@ -846,112 +882,176 @@ if (!globalThis.mediaDimensionExtractor) {
             return;
         }
         
-        var img = new Image();
-        var timeoutId = setTimeout(function() {
+        const img = new Image();
+        const timeoutId = setTimeout(() => {
             img.onload = img.onerror = null;
-            callback(true); // Assume it might work
-        }, 3000); // Reduced to 3 seconds for better performance
+            callback(true);
+        }, 3000);
         
-        img.onload = function() {
+        img.onload = () => {
             clearTimeout(timeoutId);
             callback(true);
         };
         
-        img.onerror = function() {
+        img.onerror = () => {
             clearTimeout(timeoutId);
             callback(false);
         };
         
-        var separator = url.includes('?') ? '&' : '?';
+        const separator = url.includes('?') ? '&' : '?';
         img.src = url + separator + 't=' + Date.now();
-    }
+    };
 
     // ==============================
-    // NEW: BATCH API REQUEST FUNCTION
+    // OPTIMIZED BATCH API WITH DEDUPLICATION
     // ==============================
 
-    function fetchMultipleUsers(userIds, callback) {
+    const fetchMultipleUsers = (userIds, callback) => {
         if (!userIds || userIds.length === 0) {
             callback({});
             return;
         }
         
-        // Remove duplicates
-        var uniqueIds = [...new Set(userIds)];
-        console.log('📦 Batch fetching', uniqueIds.length, 'users');
+        // Remove duplicates and filter out already in-flight requests
+        const uniqueIds = [...new Set(userIds)];
+        const newIds = [];
+        const pendingPromises = [];
         
-        // Create a single request with multiple IDs (if API supports it)
-        // If not, we'll fall back to individual requests with limits
-        var url = '/api.php?mid=' + uniqueIds.join(',');
+        uniqueIds.forEach(id => {
+            if (state.pendingRequests.has(id)) {
+                // Add to existing promise
+                pendingPromises.push(state.pendingRequests.get(id));
+            } else {
+                newIds.push(id);
+            }
+        });
         
-        fetch(url)
-            .then(function(response) {
+        if (newIds.length === 0) {
+            // All requests are already in flight
+            Promise.all(pendingPromises).then(results => {
+                const combined = {};
+                results.forEach(result => Object.assign(combined, result));
+                callback(combined);
+            });
+            return;
+        }
+        
+        console.log('📦 Batch fetching', newIds.length, 'new users');
+        state.apiCalls++;
+        
+        // Create new promise for this batch
+        const url = '/api.php?mid=' + newIds.join(',');
+        const fetchPromise = fetch(url)
+            .then(response => {
                 if (!response.ok) {
                     throw new Error('Batch API failed');
                 }
                 return response.json();
             })
-            .then(function(data) {
+            .then(data => {
                 console.log('✅ Batch API response received for', Object.keys(data).length, 'users');
+                
+                // Remove from pending requests
+                newIds.forEach(id => state.pendingRequests.delete(id));
+                
                 callback(data);
+                return data;
             })
-            .catch(function(error) {
+            .catch(error => {
                 console.warn('❌ Batch API failed, falling back to individual requests:', error);
-                // Fall back to individual requests with concurrency limit
-                fetchMultipleUsersIndividual(uniqueIds, callback);
+                
+                // Remove from pending requests
+                newIds.forEach(id => state.pendingRequests.delete(id));
+                
+                // Fall back to individual requests
+                fetchMultipleUsersIndividual(newIds, callback);
             });
-    }
-
-    function fetchMultipleUsersIndividual(userIds, callback) {
-        var results = {};
-        var remaining = userIds.length;
-        var maxConcurrent = AVATAR_CONFIG.performance.maxConcurrentRequests;
-        var currentIndex = 0;
         
-        function processNext() {
-            if (currentIndex >= userIds.length) return;
-            
-            var batchEnd = Math.min(currentIndex + maxConcurrent, userIds.length);
-            var batchIds = userIds.slice(currentIndex, batchEnd);
-            currentIndex = batchEnd;
-            
-            batchIds.forEach(function(userId) {
-                fetch('/api.php?mid=' + userId)
-                    .then(function(response) {
-                        if (!response.ok) throw new Error('API failed');
-                        return response.json();
-                    })
-                    .then(function(data) {
-                        Object.assign(results, data);
-                        remaining--;
-                        
-                        if (remaining === 0) {
-                            callback(results);
-                        } else {
-                            processNext();
-                        }
-                    })
-                    .catch(function(error) {
-                        console.warn('❌ API failed for user', userId, error);
-                        remaining--;
-                        
-                        if (remaining === 0) {
-                            callback(results);
-                        } else {
-                            processNext();
-                        }
-                    });
+        // Store promise for each ID
+        newIds.forEach(id => {
+            state.pendingRequests.set(id, fetchPromise);
+        });
+        
+        // Add pending promises to the mix
+        if (pendingPromises.length > 0) {
+            Promise.all([fetchPromise, ...pendingPromises]).then(results => {
+                const combined = {};
+                results.forEach(result => Object.assign(combined, result));
+                callback(combined);
             });
         }
+    };
+
+    const fetchMultipleUsersIndividual = (userIds, callback) => {
+        const results = {};
+        let remaining = userIds.length;
+        const maxConcurrent = AVATAR_CONFIG.performance.maxConcurrentRequests;
+        let currentIndex = 0;
+        
+        const processNext = () => {
+            if (currentIndex >= userIds.length) return;
+            
+            const batchEnd = Math.min(currentIndex + maxConcurrent, userIds.length);
+            const batchIds = userIds.slice(currentIndex, batchEnd);
+            currentIndex = batchEnd;
+            
+            batchIds.forEach(userId => {
+                if (state.pendingRequests.has(userId)) {
+                    state.pendingRequests.get(userId)
+                        .then(data => {
+                            Object.assign(results, data);
+                            remaining--;
+                            
+                            if (remaining === 0) {
+                                callback(results);
+                            } else {
+                                processNext();
+                            }
+                        });
+                } else {
+                    const fetchPromise = fetch('/api.php?mid=' + userId)
+                        .then(response => {
+                            if (!response.ok) throw new Error('API failed');
+                            return response.json();
+                        })
+                        .then(data => {
+                            Object.assign(results, data);
+                            remaining--;
+                            
+                            if (remaining === 0) {
+                                callback(results);
+                            } else {
+                                processNext();
+                            }
+                            
+                            return data;
+                        })
+                        .catch(error => {
+                            console.warn('❌ API failed for user', userId, error);
+                            remaining--;
+                            
+                            if (remaining === 0) {
+                                callback(results);
+                            } else {
+                                processNext();
+                            }
+                            
+                            return {};
+                        });
+                    
+                    state.pendingRequests.set(userId, fetchPromise);
+                }
+            });
+        };
         
         processNext();
-    }
+    };
 
     // ==============================
     // USERNAME EXTRACTION
     // ==============================
 
-    function cleanUsername(username) {
+    const cleanUsername = (username) => {
         if (!username) return 'User';
         username = username.trim();
         username = username.replace(/\.{3,}/g, '');
@@ -963,27 +1063,27 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         return username;
-    }
+    };
 
-    function extractUsernameFromElement(element, type, userId) {
-        var username = '';
+    const extractUsernameFromElement = (element, type, userId) => {
+        let username = '';
         
         if (type === 'post') {
-            var nickname = element.querySelector('.nick a');
+            const nickname = element.querySelector('.nick a');
             if (nickname && nickname.textContent) {
                 username = nickname.textContent;
             }
             
             if (!username) {
-                var userClass = element.querySelector('.user' + userId);
+                const userClass = element.querySelector('.user' + userId);
                 if (userClass && userClass.textContent) {
                     username = userClass.textContent;
                 }
             }
             
             if (!username) {
-                var midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
-                for (var i = 0; i < midLinks.length; i++) {
+                const midLinks = element.querySelectorAll('a[href*="MID=' + userId + '"]');
+                for (let i = 0; i < midLinks.length; i++) {
                     if (midLinks[i].textContent) {
                         username = midLinks[i].textContent;
                         break;
@@ -991,7 +1091,7 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }
         } else if (type === 'default_avatar') {
-            var parentLink = element.closest('a[href*="MID="]');
+            const parentLink = element.closest('a[href*="MID="]');
             if (parentLink) {
                 if (parentLink.title) {
                     username = parentLink.title;
@@ -1002,7 +1102,7 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }
         } else if (type === 'deleted_user') {
-            var nickname = element.querySelector('.nick');
+            const nickname = element.querySelector('.nick');
             if (nickname && nickname.textContent) {
                 username = nickname.textContent;
             }
@@ -1014,9 +1114,9 @@ if (!globalThis.mediaDimensionExtractor) {
             }
             
             if (!username && element.className) {
-                var classMatch = element.className.match(/user\d+/);
+                const classMatch = element.className.match(/user\d+/);
                 if (classMatch) {
-                    var userSpan = document.querySelector('.' + classMatch[0]);
+                    const userSpan = document.querySelector('.' + classMatch[0]);
                     if (userSpan && userSpan.textContent) {
                         username = userSpan.textContent;
                     }
@@ -1025,42 +1125,42 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         return cleanUsername(username);
-    }
+    };
 
     // ==============================
     // AVATAR GENERATION
     // ==============================
 
-    function generateLetterAvatar(userId, username, size) {
-        var displayName = username || 'User';
-        var firstLetter = displayName.charAt(0).toUpperCase();
+    const generateLetterAvatar = (userId, username, size) => {
+        const displayName = username || 'User';
+        const firstLetter = displayName.charAt(0).toUpperCase();
         
         if (!firstLetter.match(/[A-Z0-9]/i)) {
             firstLetter = '?';
         }
         
-        var colors = AVATAR_THEME.colors.light;
-        var colorIndex = 0;
+        const colors = AVATAR_THEME.colors.light;
+        let colorIndex = 0;
         
         if (firstLetter >= 'A' && firstLetter <= 'Z') {
             colorIndex = (firstLetter.charCodeAt(0) - 65) % colors.length;
         } else if (firstLetter >= '0' && firstLetter <= '9') {
             colorIndex = (parseInt(firstLetter) + 26) % colors.length;
         } else {
-            var hash = 0;
-            for (var i = 0; i < username.length; i++) {
+            let hash = 0;
+            for (let i = 0; i < username.length; i++) {
                 hash = ((hash << 5) - hash) + username.charCodeAt(i);
                 hash = hash & hash;
             }
             colorIndex = Math.abs(hash) % colors.length;
         }
         
-        var backgroundColor = colors[colorIndex];
+        let backgroundColor = colors[colorIndex];
         if (backgroundColor.startsWith('#')) {
             backgroundColor = backgroundColor.substring(1);
         }
         
-        var params = [
+        const params = [
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
             'radius=50',
@@ -1068,20 +1168,20 @@ if (!globalThis.mediaDimensionExtractor) {
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
-    }
+    };
 
     // ==============================
-    // OPTIMIZED AVATAR FETCHING
+    // OPTIMIZED AVATAR FETCHING WITH CACHE
     // ==============================
 
-    function getAvatarFromCache(userId, size, isLikesList) {
-        var cacheKey = userId + '_' + size;
+    const getAvatarFromCache = (userId, size, isLikesList) => {
+        const cacheKey = userId + '_' + size;
         
         // Check memory cache
         if (state.userCache[cacheKey]) {
-            var cached = state.userCache[cacheKey];
-            var isGenerated = cached.url && cached.url.includes('dicebear.com');
-            var isBroken = isBrokenAvatarUrl(cached.url);
+            const cached = state.userCache[cacheKey];
+            const isGenerated = cached.url && cached.url.includes('dicebear.com');
+            const isBroken = isBrokenAvatarUrl(cached.url);
             
             // For likes list, prefer real avatars
             if (isLikesList && isGenerated) {
@@ -1089,6 +1189,7 @@ if (!globalThis.mediaDimensionExtractor) {
             }
             
             if (!isBroken) {
+                state.cacheHits++;
                 return cached;
             }
             
@@ -1099,42 +1200,93 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         // Check localStorage
-        var stored = localStorage.getItem(getCacheKey(userId, size));
+        const stored = localStorage.getItem(getCacheKey(userId, size));
         if (stored) {
             try {
-                var data = JSON.parse(stored);
-                var isExpired = Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration;
-                var isOldVersion = !data.cacheVersion || data.cacheVersion !== state.cacheVersion;
-                var isGenerated = data.url && data.url.includes('dicebear.com');
-                var isBroken = isBrokenAvatarUrl(data.url);
+                const data = JSON.parse(stored);
+                const isExpired = Date.now() - data.timestamp > AVATAR_CONFIG.cache.duration;
+                const isOldVersion = !data.cacheVersion || data.cacheVersion !== state.cacheVersion;
+                const isGenerated = data.url && data.url.includes('dicebear.com');
+                const isBroken = isBrokenAvatarUrl(data.url);
                 
                 if (!isExpired && !isOldVersion) {
                     if (!isGenerated && isBroken) {
-                        return null; // Retry broken real avatars
+                        return null;
                     }
                     if (!isBroken) {
                         state.userCache[cacheKey] = data;
+                        state.cacheHits++;
                         return data;
                     }
                 }
             } catch (e) {}
         }
         
+        state.cacheMisses++;
         return null;
-    }
+    };
 
-    function processAvatarQueue() {
+    // ==============================
+    // INTERSECTION OBSERVER FOR LAZY LOADING
+    // ==============================
+
+    const setupIntersectionObserver = () => {
+        if (!AVATAR_CONFIG.performance.lazyLoad.enabled) return;
+        
+        state.intersectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const element = entry.target;
+                    state.lazyQueue.delete(element);
+                    
+                    // Process the element
+                    const nodeInfo = shouldProcessElement(element);
+                    if (nodeInfo) {
+                        queueElementForProcessing(nodeInfo);
+                    }
+                    
+                    // Unobserve after processing
+                    state.intersectionObserver.unobserve(element);
+                }
+            });
+        }, {
+            rootMargin: AVATAR_CONFIG.performance.lazyLoad.rootMargin,
+            threshold: AVATAR_CONFIG.performance.lazyLoad.threshold
+        });
+    };
+
+    const observeElementLazy = (element) => {
+        if (!state.intersectionObserver || !AVATAR_CONFIG.performance.lazyLoad.enabled) {
+            // If lazy loading not available, process immediately
+            const nodeInfo = shouldProcessElement(element);
+            if (nodeInfo) {
+                queueElementForProcessing(nodeInfo);
+            }
+            return;
+        }
+        
+        if (!state.lazyQueue.has(element)) {
+            state.lazyQueue.add(element);
+            state.intersectionObserver.observe(element);
+        }
+    };
+
+    // ==============================
+    // PROCESSING QUEUE MANAGEMENT
+    // ==============================
+
+    const processAvatarQueue = () => {
         if (state.isProcessing || state.processingQueue.length === 0) return;
         
         state.isProcessing = true;
         
         // Group by type to prioritize popups
-        var popupItems = [];
-        var summaryItems = [];
-        var otherItems = [];
+        const popupItems = [];
+        const summaryItems = [];
+        const otherItems = [];
         
-        state.processingQueue.forEach(function(item) {
-            var element = item.element;
+        state.processingQueue.forEach(item => {
+            const element = item.element;
             if (element.closest('.popup.pop_points')) {
                 popupItems.push(item);
             } else if (element.closest('.summary')) {
@@ -1145,21 +1297,21 @@ if (!globalThis.mediaDimensionExtractor) {
         });
         
         // Combine with priority order
-        var prioritizedQueue = [...popupItems, ...summaryItems, ...otherItems];
+        const prioritizedQueue = [...popupItems, ...summaryItems, ...otherItems];
         state.processingQueue = [];
         
-        // Process in batches
-        function processBatch(startIndex) {
-            var batch = prioritizedQueue.slice(startIndex, startIndex + AVATAR_CONFIG.performance.batchSize);
+        const processBatch = (startIndex) => {
+            const batch = prioritizedQueue.slice(startIndex, startIndex + AVATAR_CONFIG.performance.batchSize);
             
             if (batch.length === 0) {
                 state.isProcessing = false;
+                cleanupMemoryCache(); // Periodic cleanup
                 return;
             }
             
             // Group by user ID for batch API requests
-            var userMap = new Map();
-            batch.forEach(function(item) {
+            const userMap = new Map();
+            batch.forEach(item => {
                 if (item.userId && !item.isDeletedUser) {
                     if (!userMap.has(item.userId)) {
                         userMap.set(item.userId, {
@@ -1170,29 +1322,29 @@ if (!globalThis.mediaDimensionExtractor) {
                             size: item.config.size
                         });
                     }
-                    var userData = userMap.get(item.userId);
+                    const userData = userMap.get(item.userId);
                     userData.elements.push({
                         element: item.element,
                         config: item.config
                     });
                 } else {
-                    // Handle deleted users immediately (no API call needed)
-                    var avatarUrl = generateLetterAvatar(null, item.username, item.config.size);
+                    // Handle deleted users immediately
+                    const avatarUrl = generateLetterAvatar(null, item.username, item.config.size);
                     insertAvatarForProcessedItem(item, avatarUrl, item.username);
                 }
             });
             
             // Fetch real users in batch
-            var realUsers = Array.from(userMap.values());
+            const realUsers = Array.from(userMap.values());
             if (realUsers.length > 0) {
-                var userIds = realUsers.map(u => u.userId);
+                const userIds = realUsers.map(u => u.userId);
                 
-                fetchMultipleUsers(userIds, function(apiData) {
-                    realUsers.forEach(function(userData) {
-                        var userKey = 'm' + userData.userId;
-                        var userApiData = apiData[userKey];
-                        var finalUsername = userData.username;
-                        var avatarUrl;
+                fetchMultipleUsers(userIds, (apiData) => {
+                    realUsers.forEach(userData => {
+                        const userKey = 'm' + userData.userId;
+                        const userApiData = apiData[userKey];
+                        let finalUsername = userData.username;
+                        let avatarUrl;
                         
                         if (userApiData && userApiData.nickname) {
                             finalUsername = cleanUsername(userApiData.nickname);
@@ -1205,7 +1357,7 @@ if (!globalThis.mediaDimensionExtractor) {
                             avatarUrl = userApiData.avatar;
                             
                             // Test image asynchronously
-                            testImageUrl(avatarUrl, function(success) {
+                            testImageUrl(avatarUrl, (success) => {
                                 if (success) {
                                     finishUserAvatars(userData, avatarUrl, finalUsername);
                                 } else {
@@ -1221,8 +1373,8 @@ if (!globalThis.mediaDimensionExtractor) {
                         
                         function finishUserAvatars(userData, url, name) {
                             // Cache the avatar
-                            var cacheKey = userData.userId + '_' + userData.size;
-                            var cacheData = {
+                            const cacheKey = userData.userId + '_' + userData.size;
+                            const cacheData = {
                                 url: url,
                                 username: name,
                                 timestamp: Date.now(),
@@ -1241,7 +1393,7 @@ if (!globalThis.mediaDimensionExtractor) {
                             state.userCache[cacheKey] = cacheData;
                             
                             // Insert avatars for all elements of this user
-                            userData.elements.forEach(function(elementInfo) {
+                            userData.elements.forEach(elementInfo => {
                                 insertAvatarForProcessedItem({
                                     element: elementInfo.element,
                                     config: elementInfo.config,
@@ -1253,26 +1405,26 @@ if (!globalThis.mediaDimensionExtractor) {
                     });
                     
                     // Process next batch after delay
-                    setTimeout(function() {
+                    setTimeout(() => {
                         processBatch(startIndex + AVATAR_CONFIG.performance.batchSize);
                     }, AVATAR_CONFIG.performance.batchDelay);
                 });
             } else {
                 // No real users, process next batch
-                setTimeout(function() {
+                setTimeout(() => {
                     processBatch(startIndex + AVATAR_CONFIG.performance.batchSize);
                 }, AVATAR_CONFIG.performance.batchDelay);
             }
-        }
+        };
         
         // Start processing first batch
         processBatch(0);
-    }
+    };
 
-    function insertAvatarForProcessedItem(item, avatarUrl, username) {
-        var element = item.element;
-        var config = item.config;
-        var userId = item.userId;
+    const insertAvatarForProcessedItem = (item, avatarUrl, username) => {
+        const element = item.element;
+        const config = item.config;
+        const userId = item.userId;
         
         if (config.type === 'post') {
             insertPostAvatar(element, userId, config.size, avatarUrl, username);
@@ -1287,37 +1439,37 @@ if (!globalThis.mediaDimensionExtractor) {
             insertLikesListAvatar(element, userId, config.size, avatarUrl, username);
             state.processedLikesList.add(element);
         }
-    }
+    };
 
     // ==============================
     // ELEMENT PROCESSING
     // ==============================
 
-    function extractUserIdFromElement(element, extractorType) {
-        var userId = null;
+    const extractUserIdFromElement = (element, extractorType) => {
+        let userId = null;
         
         if (extractorType === 'class') {
-            var classMatch = element.className.match(/\bbox_m(\d+)\b/);
+            const classMatch = element.className.match(/\bbox_m(\d+)\b/);
             if (classMatch) {
                 userId = classMatch[1];
             } else {
-                var parentBox = element.closest('[class*="box_m"]');
+                const parentBox = element.closest('[class*="box_m"]');
                 if (parentBox) {
                     classMatch = parentBox.className.match(/\bbox_m(\d+)\b/);
                     if (classMatch) userId = classMatch[1];
                 }
             }
         } else if (extractorType === 'href') {
-            var linkElement = element.closest('a[href*="MID="]');
+            const linkElement = element.closest('a[href*="MID="]');
             if (linkElement) {
-                var hrefMatch = linkElement.href.match(/MID=(\d+)/);
+                const hrefMatch = linkElement.href.match(/MID=(\d+)/);
                 if (hrefMatch) userId = hrefMatch[1];
             }
         } else if (extractorType === 'visitatore') {
             return null;
         } else if (extractorType === 'likes_href') {
             if (element.href) {
-                var hrefMatch = element.href.match(/MID=(\d+)/) || 
+                const hrefMatch = element.href.match(/MID=(\d+)/) || 
                                 element.href.match(/[?&]MID=(\d+)/) ||
                                 element.href.match(/MID\%3D(\d+)/);
                 
@@ -1325,7 +1477,7 @@ if (!globalThis.mediaDimensionExtractor) {
                     userId = hrefMatch[1];
                 } else {
                     try {
-                        var decodedUrl = decodeURIComponent(element.href);
+                        const decodedUrl = decodeURIComponent(element.href);
                         hrefMatch = decodedUrl.match(/MID=(\d+)/);
                         if (hrefMatch) userId = hrefMatch[1];
                     } catch (e) {}
@@ -1334,14 +1486,14 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         return userId;
-    }
+    };
 
-    function shouldProcessElement(element) {
+    const shouldProcessElement = (element) => {
         if (!element || element.nodeType !== Node.ELEMENT_NODE) {
             return null;
         }
         
-        var config = null;
+        let config = null;
         
         if (element.matches('.summary li[class^="box_"]')) {
             config = {
@@ -1351,7 +1503,7 @@ if (!globalThis.mediaDimensionExtractor) {
             };
         }
         else if (element.matches('a.avatar[href*="MID="] .default-avatar')) {
-            var postParent = element.closest('.post');
+            const postParent = element.closest('.post');
             if (postParent) {
                 config = {
                     type: 'default_avatar',
@@ -1396,11 +1548,11 @@ if (!globalThis.mediaDimensionExtractor) {
             return null;
         }
         
-        var userId = extractUserIdFromElement(element, config.extractor);
+        const userId = extractUserIdFromElement(element, config.extractor);
         
         // Check if already has avatar
         if (config.type === 'post' || config.type === 'deleted_user') {
-            var nickname = element.querySelector('.nick');
+            const nickname = element.querySelector('.nick');
             if (!nickname) {
                 return null;
             }
@@ -1418,13 +1570,13 @@ if (!globalThis.mediaDimensionExtractor) {
             if (!element.querySelector('.fa-user, .fa-regular.fa-user, .fas.fa-user')) {
                 return null;
             }
-            var parentLink = element.closest('a.avatar[href*="MID="]');
+            const parentLink = element.closest('a.avatar[href*="MID="]');
             if (parentLink && parentLink.querySelector('img.forum-user-avatar')) {
                 state.processedAvatars.add(element);
                 return null;
             }
         } else if (config.type === 'likes_list') {
-            var span = element.closest('span');
+            const span = element.closest('span');
             if (span && span.querySelector('img.forum-likes-avatar')) {
                 state.processedLikesList.add(element);
                 return null;
@@ -1436,21 +1588,21 @@ if (!globalThis.mediaDimensionExtractor) {
             userId: userId,
             config: config
         };
-    }
+    };
 
-    function queueElementForProcessing(processingInfo) {
+    const queueElementForProcessing = (processingInfo) => {
         if (!processingInfo) return;
         
-        var element = processingInfo.element;
-        var userId = processingInfo.userId;
-        var config = processingInfo.config;
+        const element = processingInfo.element;
+        const userId = processingInfo.userId;
+        const config = processingInfo.config;
         
         // Extract username now for immediate use if needed
-        var username = extractUsernameFromElement(element, config.type, userId);
+        const username = extractUsernameFromElement(element, config.type, userId);
         
         // Check cache first for immediate insertion
         if (userId && config.type !== 'deleted_user') {
-            var cached = getAvatarFromCache(userId, config.size, config.type === 'likes_list');
+            const cached = getAvatarFromCache(userId, config.size, config.type === 'likes_list');
             if (cached) {
                 // Insert immediately from cache
                 insertAvatarForProcessedItem({
@@ -1463,7 +1615,7 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         } else if (config.type === 'deleted_user') {
             // Deleted users can be generated immediately
-            var avatarUrl = generateLetterAvatar(null, username, config.size);
+            const avatarUrl = generateLetterAvatar(null, username, config.size);
             insertAvatarForProcessedItem({
                 element: element,
                 config: config,
@@ -1484,18 +1636,18 @@ if (!globalThis.mediaDimensionExtractor) {
         
         // Start processing queue if not already running
         if (!state.isProcessing) {
-            setTimeout(function() {
+            setTimeout(() => {
                 processAvatarQueue();
             }, 10);
         }
-    }
+    };
 
     // ==============================
     // AVATAR CREATION & INSERTION
     // ==============================
 
-    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser, isLikesList) {
-        var img = new Image();
+    const createAvatarElement = (avatarUrl, userId, size, username, isDeletedUser, isLikesList) => {
+        const img = new Image();
         
         if (isLikesList) {
             img.className = 'forum-likes-avatar avatar-size-' + size;
@@ -1545,28 +1697,28 @@ if (!globalThis.mediaDimensionExtractor) {
             }
             
             if (userId) {
-                var cacheKey = userId + '_' + size;
+                const cacheKey = userId + '_' + size;
                 delete state.userCache[cacheKey];
                 localStorage.removeItem(getCacheKey(userId, size));
                 
-                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+                const fallbackUrl = generateLetterAvatar(userId, username || '', size);
                 this.src = fallbackUrl;
             } else if (username) {
-                var cacheKey = 'deleted_' + username + '_' + size;
+                const cacheKey = 'deleted_' + username + '_' + size;
                 delete state.userCache[cacheKey];
                 localStorage.removeItem(getDeletedUserCacheKey(username, size));
                 
-                var fallbackUrl = generateLetterAvatar(null, username || '', size);
+                const fallbackUrl = generateLetterAvatar(null, username || '', size);
                 this.src = fallbackUrl;
             }
             this.removeEventListener('error', onError);
         }, { once: true });
         
         return img;
-    }
+    };
 
-    function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick a, .nick');
+    const insertPostAvatar = (postElement, userId, size, avatarUrl, username) => {
+        const nickname = postElement.querySelector('.nick a, .nick');
         if (!nickname) return;
         
         if (nickname.previousElementSibling && 
@@ -1575,7 +1727,7 @@ if (!globalThis.mediaDimensionExtractor) {
             return;
         }
         
-        var container = document.createElement('div');
+        const container = document.createElement('div');
         container.className = 'forum-avatar-container';
         container.style.cssText = 
             'display:inline-block;' +
@@ -1585,19 +1737,19 @@ if (!globalThis.mediaDimensionExtractor) {
         
         container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false, false));
         nickname.parentNode.insertBefore(container, nickname);
-    }
+    };
 
-    function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
-        var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
+    const insertDefaultAvatar = (defaultAvatarElement, userId, size, avatarUrl, username) => {
+        const parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
         if (!parentLink) return;
         
         if (parentLink.querySelector('img.forum-user-avatar')) {
             return;
         }
         
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
+        const avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
         
-        var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
+        const defaultAvatarDiv = parentLink.querySelector('.default-avatar');
         if (defaultAvatarDiv) {
             defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
         } else {
@@ -1605,10 +1757,10 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         parentLink.classList.add('avatar-replaced');
-    }
+    };
 
-    function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick');
+    const insertDeletedUserAvatar = (postElement, userId, size, avatarUrl, username) => {
+        const nickname = postElement.querySelector('.nick');
         if (!nickname) return;
         
         if (nickname.previousElementSibling && 
@@ -1617,7 +1769,7 @@ if (!globalThis.mediaDimensionExtractor) {
             return;
         }
         
-        var container = document.createElement('div');
+        const container = document.createElement('div');
         container.className = 'forum-avatar-container deleted-user-container';
         container.style.cssText = 
             'display:inline-block;' +
@@ -1627,106 +1779,99 @@ if (!globalThis.mediaDimensionExtractor) {
         
         container.appendChild(createAvatarElement(avatarUrl, null, size, username, true, false));
         nickname.parentNode.insertBefore(container, nickname);
-    }
+    };
 
-    function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
-        var span = linkElement.closest('span');
+    const insertLikesListAvatar = (linkElement, userId, size, avatarUrl, username) => {
+        const span = linkElement.closest('span');
         if (!span) return;
         
         if (span.querySelector('img.forum-likes-avatar')) {
             return;
         }
         
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
+        const avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
         
         span.insertBefore(avatarImg, linkElement);
         
         span.classList.add('has-forum-avatar');
-    }
+    };
 
     // ==============================
-    // PAGE PROCESSING
+    // PAGE PROCESSING (USING MASTER OBSERVER)
     // ==============================
 
-    function handleNewElement(node) {
+    const handleNewElement = (node) => {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
-        // Check the node itself
-        var nodeInfo = shouldProcessElement(node);
-        if (nodeInfo) {
-            queueElementForProcessing(nodeInfo);
+        // Use lazy loading for non-critical elements
+        if (node.closest('.popup.pop_points')) {
+            // Popups are critical - process immediately
+            const nodeInfo = shouldProcessElement(node);
+            if (nodeInfo) {
+                queueElementForProcessing(nodeInfo);
+            }
+        } else {
+            // Other elements can be lazy loaded
+            observeElementLazy(node);
         }
         
-        // Check for child elements based on priority
-        setTimeout(function() {
-            // Check popups first (highest priority)
-            var popups = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
-            for (var k = 0; k < popups.length; k++) {
-                var likesInfo = shouldProcessElement(popups[k]);
+        // Check for child elements
+        setTimeout(() => {
+            // Check popups first
+            const popups = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+            for (let k = 0; k < popups.length; k++) {
+                const likesInfo = shouldProcessElement(popups[k]);
                 if (likesInfo) {
                     queueElementForProcessing(likesInfo);
                 }
             }
             
-            // Then check posts
-            var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
-            for (var i = 0; i < posts.length; i++) {
-                var postInfo = shouldProcessElement(posts[i]);
-                if (postInfo) {
-                    queueElementForProcessing(postInfo);
-                }
+            // Check posts
+            const posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+            for (let i = 0; i < posts.length; i++) {
+                observeElementLazy(posts[i]);
             }
             
-            // Finally check default avatars
-            var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
-            for (var j = 0; j < defaultAvatars.length; j++) {
-                var avatarInfo = shouldProcessElement(defaultAvatars[j]);
-                if (avatarInfo) {
-                    queueElementForProcessing(avatarInfo);
-                }
+            // Check default avatars
+            const defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+            for (let j = 0; j < defaultAvatars.length; j++) {
+                observeElementLazy(defaultAvatars[j]);
             }
         }, 0);
-    }
+    };
 
-    function processExistingElements() {
+    const processExistingElements = () => {
         console.log('🚀 Processing existing elements with priority...');
         
         // Process popups first (highest priority)
-        var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+        const likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         console.log('Found', likesLinks.length, 'likes links to process');
-        for (var k = 0; k < likesLinks.length; k++) {
-            var likesInfo = shouldProcessElement(likesLinks[k]);
+        for (let k = 0; k < likesLinks.length; k++) {
+            const likesInfo = shouldProcessElement(likesLinks[k]);
             if (likesInfo) {
                 queueElementForProcessing(likesInfo);
             }
         }
         
-        // Then process posts
-        var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+        // For posts and avatars, use lazy loading
+        const posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         console.log('Found', posts.length, 'posts to process');
-        for (var i = 0; i < posts.length; i++) {
-            var postInfo = shouldProcessElement(posts[i]);
-            if (postInfo) {
-                queueElementForProcessing(postInfo);
-            }
+        for (let i = 0; i < posts.length; i++) {
+            observeElementLazy(posts[i]);
         }
         
-        // Finally process default avatars
-        var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+        const defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         console.log('Found', defaultAvatars.length, 'default avatars to process');
-        for (var j = 0; j < defaultAvatars.length; j++) {
-            var avatarInfo = shouldProcessElement(defaultAvatars[j]);
-            if (avatarInfo) {
-                queueElementForProcessing(avatarInfo);
-            }
+        for (let j = 0; j < defaultAvatars.length; j++) {
+            observeElementLazy(defaultAvatars[j]);
         }
-    }
+    };
 
     // ==============================
-    // OBSERVER INTEGRATION
+    // MASTER OBSERVER INTEGRATION
     // ==============================
 
-    function setupObserver() {
+    const setupObserver = () => {
         if (window.forumObserver && typeof window.forumObserver.register === 'function') {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
@@ -1734,34 +1879,46 @@ if (!globalThis.mediaDimensionExtractor) {
                 callback: handleNewElement,
                 priority: 'high'
             });
-            console.log('Registered with ForumCoreObserver');
+            console.log('✅ Registered with ForumCoreObserver');
         } else {
-            console.error('ForumCoreObserver not available. Avatar system will not work.');
+            console.error('❌ ForumCoreObserver not available. Avatar system will not work.');
         }
-    }
+    };
 
     // ==============================
     // INITIALIZATION
     // ==============================
 
-    function initAvatarSystem() {
+    const initAvatarSystem = () => {
         if (state.isInitialized) return;
         
-        console.log('🚀 Initializing OPTIMIZED avatar system with likes/dislikes support');
+        console.log('🚀 Initializing ULTRA OPTIMIZED avatar system');
         
         // Clear old cache entries
-        var expiredCount = clearOldCacheEntries();
+        const expiredCount = clearOldCacheEntries();
         console.log('Cleared', expiredCount, 'expired cache entries');
+        
+        // Setup Intersection Observer for lazy loading
+        setupIntersectionObserver();
+        
+        // Setup memory cleanup interval
+        setInterval(() => {
+            cleanupMemoryCache();
+        }, AVATAR_CONFIG.performance.memoryCleanupInterval);
         
         setupObserver();
         
         // Process existing elements immediately
-        setTimeout(function() {
+        setTimeout(() => {
             processExistingElements();
             state.isInitialized = true;
-            console.log('✅ Avatar system initialized');
-        }, 50); // Reduced delay for faster startup
-    }
+            console.log('✅ Avatar system initialized with stats:', {
+                cacheHits: state.cacheHits,
+                cacheMisses: state.cacheMisses,
+                pendingRequests: state.pendingRequests.size
+            });
+        }, 50);
+    };
 
     // ==============================
     // PUBLIC API
@@ -1770,25 +1927,21 @@ if (!globalThis.mediaDimensionExtractor) {
     window.ForumAvatars = {
         init: initAvatarSystem,
         
-        refresh: function() {
+        refresh: () => {
             console.log('🔄 Refreshing avatars...');
             
             // Remove all avatars
-            var containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
-            for (var i = 0; i < containers.length; i++) {
-                containers[i].remove();
-            }
+            const containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
+            containers.forEach(el => el.remove());
             
-            var replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
-            for (var j = 0; j < replacedAvatars.length; j++) {
-                replacedAvatars[j].remove();
-            }
+            const replacedAvatars = document.querySelectorAll('.avatar-replaced img.forum-user-avatar');
+            replacedAvatars.forEach(el => el.remove());
             
-            var replacedLinks = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
-            for (var k = 0; k < replacedLinks.length; k++) {
-                replacedLinks[k].classList.remove('avatar-replaced');
-                replacedLinks[k].classList.remove('has-forum-avatar');
-            }
+            const replacedLinks = document.querySelectorAll('.avatar-replaced, .has-forum-avatar');
+            replacedLinks.forEach(el => {
+                el.classList.remove('avatar-replaced');
+                el.classList.remove('has-forum-avatar');
+            });
             
             // Reset state
             state.userCache = {};
@@ -1800,11 +1953,13 @@ if (!globalThis.mediaDimensionExtractor) {
             state.processingQueue = [];
             state.isProcessing = false;
             state.isInitialized = false;
+            state.pendingRequests.clear();
+            state.lazyQueue.clear();
             
             // Clear localStorage
-            var clearedKeys = [];
-            for (var l = 0; l < localStorage.length; l++) {
-                var key = localStorage.key(l);
+            const clearedKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
                             key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                     localStorage.removeItem(key);
@@ -1816,13 +1971,13 @@ if (!globalThis.mediaDimensionExtractor) {
             initAvatarSystem();
         },
         
-        clearCache: function() {
+        clearCache: () => {
             console.log('🧹 Clearing avatar cache...');
             state.userCache = {};
             
-            var clearedCount = 0;
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
+            let clearedCount = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
                             key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                     localStorage.removeItem(key);
@@ -1834,43 +1989,40 @@ if (!globalThis.mediaDimensionExtractor) {
             return clearedCount;
         },
         
-        resetBrokenAvatars: function() {
+        resetBrokenAvatars: () => {
             console.log('🔄 Resetting broken avatar flags...');
             
             state.brokenAvatars.clear();
             
-            var clearedCount = 0;
-            var keysToRemove = [];
-            
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
                 if (key && key.startsWith(AVATAR_CONFIG.cache.brokenPrefix)) {
                     keysToRemove.push(key);
-                    clearedCount++;
                 }
             }
             
             keysToRemove.forEach(key => localStorage.removeItem(key));
             
-            console.log('✅ Cleared', clearedCount, 'broken avatar flags');
+            console.log('✅ Cleared', keysToRemove.length, 'broken avatar flags');
             this.refresh();
             
-            return clearedCount;
+            return keysToRemove.length;
         },
         
-        stats: function() {
-            var cacheCount = 0;
-            var deletedCacheCount = 0;
-            var generatedCount = 0;
-            var realCount = 0;
-            var brokenCount = 0;
+        stats: () => {
+            let cacheCount = 0;
+            let deletedCacheCount = 0;
+            let generatedCount = 0;
+            let realCount = 0;
+            let brokenCount = 0;
             
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
                 if (key && key.startsWith(AVATAR_CONFIG.cache.prefix)) {
                     cacheCount++;
                     try {
-                        var data = JSON.parse(localStorage.getItem(key));
+                        const data = JSON.parse(localStorage.getItem(key));
                         if (data && data.url) {
                             if (data.url.includes('dicebear.com')) {
                                 generatedCount++;
@@ -1888,18 +2040,18 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }
             
-            var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
-            var withAvatars = 0;
-            for (var j = 0; j < posts.length; j++) {
-                var nickname = posts[j].querySelector('.nick a, .nick');
+            const posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+            let withAvatars = 0;
+            posts.forEach(post => {
+                const nickname = post.querySelector('.nick a, .nick');
                 if (nickname && nickname.previousElementSibling && 
                     nickname.previousElementSibling.classList && 
                     nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
                     withAvatars++;
                 }
-            }
+            });
             
-            var likesAvatars = document.querySelectorAll('.forum-likes-avatar').length;
+            const likesAvatars = document.querySelectorAll('.forum-likes-avatar').length;
             
             return {
                 postsTotal: posts.length,
@@ -1913,23 +2065,31 @@ if (!globalThis.mediaDimensionExtractor) {
                 brokenFlags: brokenCount,
                 brokenInMemory: state.brokenAvatars.size,
                 queueSize: state.processingQueue.length,
+                pendingRequests: state.pendingRequests.size,
+                lazyQueueSize: state.lazyQueue.size,
                 isProcessing: state.isProcessing,
                 isInitialized: state.isInitialized,
-                cacheVersion: state.cacheVersion
+                cacheVersion: state.cacheVersion,
+                cacheHits: state.cacheHits,
+                cacheMisses: state.cacheMisses,
+                apiCalls: state.apiCalls,
+                cacheHitRate: state.cacheHits + state.cacheMisses > 0 
+                    ? Math.round((state.cacheHits / (state.cacheHits + state.cacheMisses)) * 100) + '%'
+                    : 'N/A'
             };
         },
         
-        debugUser: function(userId) {
-            var posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
+        debugUser: (userId) => {
+            const posts = document.querySelectorAll('.summary li[class*="box_m' + userId + '"]');
             console.log('Debug user ' + userId + ':');
             
-            for (var i = 0; i < posts.length; i++) {
-                var nickname = posts[i].querySelector('.nick a, .nick');
+            posts.forEach((post, i) => {
+                const nickname = post.querySelector('.nick a, .nick');
                 console.log('Post ' + (i+1) + ' .nick:', nickname ? nickname.textContent : 'none');
                 
-                var extracted = extractUsernameFromElement(posts[i], 'post', userId);
+                const extracted = extractUsernameFromElement(post, 'post', userId);
                 console.log('Extracted username:', extracted);
-            }
+            });
             
             fetch('/api.php?mid=' + userId)
                 .then(r => r.json())
@@ -1940,24 +2100,52 @@ if (!globalThis.mediaDimensionExtractor) {
                 .catch(err => console.error('API Error:', err));
         },
         
-        debugLikes: function() {
-            var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+        debugLikes: () => {
+            const likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
             console.log('Debug likes links:', likesLinks.length);
             
-            for (var i = 0; i < likesLinks.length; i++) {
-                var link = likesLinks[i];
+            likesLinks.forEach((link, i) => {
                 console.log('Link', i + 1, ':', {
                     href: link.href,
                     text: link.textContent,
                     className: link.className
                 });
                 
-                var userId = extractUserIdFromElement(link, 'likes_href');
+                const userId = extractUserIdFromElement(link, 'likes_href');
                 console.log('Extracted userId:', userId);
                 
-                var username = extractUsernameFromElement(link, 'likes_list', userId);
+                const username = extractUsernameFromElement(link, 'likes_list', userId);
                 console.log('Extracted username:', username);
+            });
+        },
+        
+        // NEW: Force process visible elements now
+        processVisibleNow: () => {
+            console.log('⚡ Force processing visible elements');
+            processExistingElements();
+        },
+        
+        // NEW: Clear specific user from cache
+        clearUserCache: (userId) => {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('avatar_' + userId + '_')) {
+                    keysToRemove.push(key);
+                }
             }
+            
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            // Clear from memory cache
+            Object.keys(state.userCache).forEach(key => {
+                if (key.startsWith(userId + '_')) {
+                    delete state.userCache[key];
+                }
+            });
+            
+            console.log(`✅ Cleared cache for user ${userId} (${keysToRemove.length} entries)`);
+            return keysToRemove.length;
         }
     };
 
@@ -1966,7 +2154,7 @@ if (!globalThis.mediaDimensionExtractor) {
     // ==============================
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             setTimeout(initAvatarSystem, 50);
         });
     } else {
