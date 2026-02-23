@@ -31,7 +31,6 @@
     
     // ===== PART 2: Lazy Loading & Async Decoding =====
     
-    var originalAddEventListener = EventTarget.prototype.addEventListener;
     var originalSetAttribute = Element.prototype.setAttribute;
     var originalCreateElement = document.createElement;
     var OriginalImage = window.Image;
@@ -62,61 +61,60 @@
         return el;
     }
     
-    EventTarget.prototype.addEventListener = function(event, listener, options) {
-        if ((event === 'load' || event === 'error') && isMediaElement(this)) {
-            totalMonitored++;
-            
-            var element = this;
-            var startTime = performance.now();
-            var initialLoading = element.getAttribute('loading');
-            var initialDecoding = element.getAttribute('decoding');
-            
-            var trackingData = {
-                element: element.tagName,
-                src: element.src || element.getAttribute('src') || '[no-src]',
-                initialLoading: initialLoading,
-                initialDecoding: initialDecoding,
-                startTime: startTime,
-                loadEventAttached: true
-            };
-            
-            loadEvents.push(trackingData);
-            
-            if (initialLoading === LAZY && (element.tagName !== 'IMG' || initialDecoding === ASYNC)) {
-                successCount++;
-                trackingData.success = true;
-                trackingData.timing = 'before';
-            } else {
-                trackingData.success = false;
-            }
-            
-            function wrappedListener(evt) {
-                var finalLoading = element.getAttribute('loading');
-                var finalDecoding = element.getAttribute('decoding');
-                var loadTime = performance.now();
-                
-                trackingData.finalLoading = finalLoading;
-                trackingData.finalDecoding = finalDecoding;
-                trackingData.loadTime = loadTime;
-                trackingData.loaded = true;
-                
-                if (!trackingData.success && finalLoading === LAZY && 
-                    (element.tagName !== 'IMG' || finalDecoding === ASYNC)) {
-                    successCount++;
-                    trackingData.success = true;
-                    trackingData.timing = 'during';
-                }
-                
-                if (listener && typeof listener === 'function') {
-                    listener.call(this, evt);
-                }
-            }
-            
-            return originalAddEventListener.call(this, event, wrappedListener, options);
+    // New monitoring function - attaches passive listeners instead of overriding addEventListener
+    function monitorMediaLoad(element) {
+        if (!isMediaElement(element)) return;
+        
+        totalMonitored++;
+        
+        // Check initial attributes
+        var initialLoading = element.getAttribute('loading');
+        var initialDecoding = element.getAttribute('decoding');
+        
+        var trackingData = {
+            element: element.tagName,
+            src: element.src || element.getAttribute('src') || '[no-src]',
+            initialLoading: initialLoading,
+            initialDecoding: initialDecoding,
+            startTime: performance.now()
+        };
+        
+        loadEvents.push(trackingData);
+        
+        if (initialLoading === LAZY && (element.tagName !== 'IMG' || initialDecoding === ASYNC)) {
+            successCount++;
+            trackingData.success = true;
+            trackingData.timing = 'before';
+        } else {
+            trackingData.success = false;
         }
         
-        return originalAddEventListener.call(this, event, listener, options);
-    };
+        // Add passive load listeners (doesn't override native methods)
+        element.addEventListener('load', function onLoad(evt) {
+            var finalLoading = element.getAttribute('loading');
+            var finalDecoding = element.getAttribute('decoding');
+            var loadTime = performance.now();
+            
+            trackingData.finalLoading = finalLoading;
+            trackingData.finalDecoding = finalDecoding;
+            trackingData.loadTime = loadTime;
+            trackingData.loaded = true;
+            
+            if (!trackingData.success && finalLoading === LAZY && 
+                (element.tagName !== 'IMG' || finalDecoding === ASYNC)) {
+                successCount++;
+                trackingData.success = true;
+                trackingData.timing = 'during';
+            }
+            
+            element.removeEventListener('load', onLoad);
+        }, { once: true });
+        
+        element.addEventListener('error', function onError() {
+            trackingData.error = true;
+            element.removeEventListener('error', onError);
+        }, { once: true });
+    }
     
     Element.prototype.setAttribute = function(name, value) {
         if ((name === 'src' || name === 'srcset') && isMediaElement(this)) {
@@ -146,7 +144,9 @@
     
     document.createElement = function(tagName, options) {
         var element = originalCreateElement.call(this, tagName, options);
-        return applyLazyAttributes(element);
+        applyLazyAttributes(element);
+        monitorMediaLoad(element); // Monitor newly created elements
+        return element;
     };
     
     if (OriginalImage) {
@@ -154,6 +154,7 @@
             var img = new OriginalImage(width, height);
             img.setAttribute('loading', LAZY);
             img.setAttribute('decoding', ASYNC);
+            monitorMediaLoad(img); // Monitor Image constructor created elements
             return img;
         };
         window.Image.prototype = OriginalImage.prototype;
@@ -169,6 +170,12 @@
         var elements = document.querySelectorAll(selectors.join(', '));
         for (var i = 0; i < elements.length; i++) {
             applyLazyAttributes(elements[i]);
+        }
+        
+        // Monitor all existing media elements
+        var allMedia = document.querySelectorAll('img, iframe');
+        for (var j = 0; j < allMedia.length; j++) {
+            monitorMediaLoad(allMedia[j]);
         }
     }
     
@@ -305,11 +312,13 @@
                 if (node.nodeType !== 1) continue;
                 
                 applyLazyAttributes(node);
+                monitorMediaLoad(node); // Monitor the node itself if it's media
                 
                 if (node.querySelectorAll) {
                     var mediaElements = node.querySelectorAll('img, iframe');
                     for (var me = 0; me < mediaElements.length; me++) {
                         applyLazyAttributes(mediaElements[me]);
+                        monitorMediaLoad(mediaElements[me]); // Monitor nested media
                     }
                 }
                 
