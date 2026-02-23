@@ -5395,19 +5395,13 @@ class PostModernizer {
         const userInfo = document.createElement('div');
         userInfo.className = 'user-info';
         
-        // CRITICAL FIX: Look for avatar in multiple places
-        // First, check if there's already a forum-avatar-container (from avatar script)
+        // Look for avatar in multiple places
         const existingAvatarContainer = leftDiv.querySelector('.forum-avatar-container');
-        
-        // Second, check for any avatar image
         const existingAvatarImg = leftDiv.querySelector('img[class*="avatar"]');
-        
-        // Third, check for default-avatar (from avatar script)
         const existingDefaultAvatar = leftDiv.querySelector('.default-avatar');
         
         if (existingAvatarContainer) {
             // Avatar script has already created a container - preserve it exactly
-            console.log('✅ Preserving existing avatar container');
             const avatarClone = existingAvatarContainer.cloneNode(true);
             
             // Ensure it has proper styling
@@ -5419,7 +5413,6 @@ class PostModernizer {
         } 
         else if (existingAvatarImg) {
             // There's an avatar image but not in a container - wrap it properly
-            console.log('✅ Found avatar image, wrapping in container');
             const container = document.createElement('div');
             container.className = 'forum-avatar-container';
             container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
@@ -5430,7 +5423,6 @@ class PostModernizer {
         }
         else if (existingDefaultAvatar) {
             // Default avatar from avatar script
-            console.log('✅ Found default avatar');
             const avatarClone = existingDefaultAvatar.cloneNode(true);
             
             // Wrap in container if needed
@@ -5445,9 +5437,6 @@ class PostModernizer {
             }
         }
         else {
-            // NO AVATAR YET - Instead of creating a placeholder, look at the original structure
-            console.log('⚠️ No avatar found, checking original structure');
-            
             // Look for any avatar-related elements in the original leftDiv
             const possibleAvatar = leftDiv.querySelector('img, .fa-user, .fa-regular.fa-user, .fas.fa-user, [class*="avatar"]');
             
@@ -5460,18 +5449,14 @@ class PostModernizer {
                 container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;';
                 container.appendChild(avatarClone);
                 userInfo.appendChild(container);
-                
-                console.log('✅ Preserved original avatar element');
             } else {
-                // ABSOLUTELY NO AVATAR - Create a minimal container that the avatar script can fill
-                console.log('ℹ️ Creating empty avatar container for avatar script to fill');
-                
+                // Create empty container for avatar script to fill
                 const container = document.createElement('div');
                 container.className = 'forum-avatar-container';
                 container.setAttribute('data-avatar-waiting', 'true');
                 container.style.cssText = 'display:inline-block;vertical-align:middle;position:relative;margin-right:8px;min-width:60px;min-height:60px;';
                 
-                // Add a tiny transparent placeholder that won't be visible
+                // Add a tiny transparent placeholder
                 const transparentPlaceholder = document.createElement('img');
                 transparentPlaceholder.style.cssText = 'width:60px;height:60px;opacity:0;display:block;';
                 transparentPlaceholder.alt = '';
@@ -5498,33 +5483,39 @@ class PostModernizer {
         const contentWrapper = document.createElement('div');
         contentWrapper.className = 'post-main-content';
         
-        // Move content from right section
+        // FIX: Extract content without the .color.Item wrapper
         const contentDiv = rightDiv.querySelector('.color.Item, .bottom .color.Item');
         if (contentDiv) {
-            // Clone and clean content
-            const contentClone = contentDiv.cloneNode(true);
+            // Instead of cloning the .color.Item div, clone its children directly
+            const fragment = document.createDocumentFragment();
+            
+            // Clone all child nodes of the contentDiv
+            Array.from(contentDiv.childNodes).forEach(child => {
+                const clonedChild = child.cloneNode(true);
+                fragment.appendChild(clonedChild);
+            });
             
             // Remove timestamp from content if it was cloned
-            const clonedWhen = contentClone.querySelector('.when.Item');
+            const clonedWhen = fragment.querySelector('.when.Item');
             if (clonedWhen) clonedWhen.remove();
             
             // Remove any empty divs or line breaks
-            this.#cleanEmptyElements(contentClone);
+            this.#cleanEmptyElements(fragment);
             
             // Process media in content
-            this.#preserveMediaDimensions(contentClone);
+            this.#preserveMediaDimensions(fragment);
             
             // Transform any quotes, spoilers, code blocks, attachments, embedded links
-            this.#modernizeQuotesInContent(contentClone);
-            this.#modernizeSpoilersInContent(contentClone);
-            this.#modernizeCodeBlocksInContent(contentClone);
-            this.#modernizeAttachmentsInContent(contentClone);
-            this.#modernizeEmbeddedLinksInContent(contentClone);
+            this.#modernizeQuotesInContent(fragment);
+            this.#modernizeSpoilersInContent(fragment);
+            this.#modernizeCodeBlocksInContent(fragment);
+            this.#modernizeAttachmentsInContent(fragment);
+            this.#modernizeEmbeddedLinksInContent(fragment);
             
             // Process text nodes and line breaks
-            this.#processTextAndLineBreaks(contentClone);
+            this.#processTextAndLineBreaks(fragment);
             
-            contentWrapper.appendChild(contentClone);
+            contentWrapper.appendChild(fragment);
         }
         
         postContent.appendChild(contentWrapper);
