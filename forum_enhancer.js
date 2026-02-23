@@ -5585,7 +5585,7 @@ class PostModernizer {
     if (document.body.id !== 'send') return;
     
     const processPost = (post, idx) => {
-        // Calculate global index
+        // Calculate the correct global index
         const allPosts = document.querySelectorAll('.summary ol.list li');
         const globalIndex = Array.from(allPosts).indexOf(post);
         
