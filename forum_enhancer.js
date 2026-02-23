@@ -5274,12 +5274,18 @@ class PostModernizer {
 // SUMMARY POST PREVIEW TRANSFORMATION (for body#send)
 // ==============================
 
-#waitForSummaryAvatars(postElement, callback, maxAttempts = 30) { // Increased from 20 to 30
+#waitForSummaryAvatars(postElement, callback, maxAttempts = 30) {
     let attempts = 0;
     const checkInterval = 100; // Check every 100ms (3 seconds total)
     
     const checkForAvatars = () => {
         attempts++;
+        
+        // Check if element still exists in DOM
+        if (!postElement || !postElement.parentNode) {
+            callback(false);
+            return;
+        }
         
         // Look for avatar in the summary post
         const leftDiv = postElement.querySelector('div.left.Sub.Item');
@@ -5329,6 +5335,12 @@ class PostModernizer {
 
 #transformSingleSummaryPost(postElement, index) {
     try {
+        // Add safety check - verify element is still in DOM
+        if (!postElement || !postElement.parentNode) {
+            console.log('Summary post element no longer in DOM, skipping transformation');
+            return;
+        }
+        
         postElement.classList.add('post-preview-modernized');
         
         // Extract the left section (user info/avatar)
@@ -5525,14 +5537,19 @@ class PostModernizer {
         modernPost.appendChild(userInfo);
         modernPost.appendChild(postContent);
         
-        // Replace original element
-        postElement.parentNode.replaceChild(modernPost, postElement);
+        // Replace original element - with null check
+        const parent = postElement.parentNode;
+        if (parent) {
+            parent.replaceChild(modernPost, postElement);
+        } else {
+            console.log('Parent node no longer available for summary post replacement');
+        }
         
     } catch (error) {
         console.error('Error transforming summary post preview:', error);
     }
 }
-
+    
 #modernizeQuotesInContent(element) {
     if (this.#isInEditor(element)) return;
     element.querySelectorAll('div[align="center"]:has(.quote_top):not(.quote-modernized)').forEach(container => {
@@ -5567,33 +5584,35 @@ class PostModernizer {
 #handleNewSummaryPosts(node) {
     if (document.body.id !== 'send') return;
     
-    if (node.matches && node.matches('.summary ol.list li')) {
-        // Calculate index based on position
+    const processPost = (post, idx) => {
+        // Calculate global index
         const allPosts = document.querySelectorAll('.summary ol.list li');
-        const index = Array.from(allPosts).indexOf(node);
+        const globalIndex = Array.from(allPosts).indexOf(post);
+        
+        // Check if post still exists before waiting for avatars
+        if (!post || !post.parentNode) return;
         
         // Wait for avatars
-        this.#waitForSummaryAvatars(node, (avatarFound) => {
+        this.#waitForSummaryAvatars(post, (avatarFound) => {
+            // Double-check the post still exists after the delay
+            if (!post || !post.parentNode) {
+                console.log('Summary post disappeared during avatar waiting, skipping');
+                return;
+            }
+            
             if (avatarFound) {
                 console.log('✅ Avatar found for new summary post, transforming');
             }
-            this.#transformSingleSummaryPost(node, index);
+            this.#transformSingleSummaryPost(post, globalIndex);
         });
-        
+    };
+    
+    if (node.matches && node.matches('.summary ol.list li')) {
+        processPost(node, 0);
     } else if (node.querySelectorAll) {
         const posts = node.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
         posts.forEach((post, idx) => {
-            // Calculate global index
-            const allPosts = document.querySelectorAll('.summary ol.list li');
-            const globalIndex = Array.from(allPosts).indexOf(post);
-            
-            // Wait for avatars
-            this.#waitForSummaryAvatars(post, (avatarFound) => {
-                if (avatarFound) {
-                    console.log('✅ Avatar found for new summary post, transforming');
-                }
-                this.#transformSingleSummaryPost(post, globalIndex);
-            });
+            processPost(post, idx);
         });
     }
 }
