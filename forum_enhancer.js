@@ -5584,10 +5584,13 @@ class PostModernizer {
 #handleNewSummaryPosts(node) {
     if (document.body.id !== 'send') return;
     
-    const processPost = (post, idx) => {
-        // Calculate the correct global index
-        const allPosts = document.querySelectorAll('.summary ol.list li');
-        const globalIndex = Array.from(allPosts).indexOf(post);
+    const processPost = (post) => {
+        // Calculate the global index based on ALL posts in the list
+        const allPosts = Array.from(document.querySelectorAll('.summary ol.list li'));
+        const globalIndex = allPosts.indexOf(post);
+        
+        // If globalIndex is -1, post is not in the list anymore
+        if (globalIndex === -1) return;
         
         // Check if post still exists before waiting for avatars
         if (!post || !post.parentNode) return;
@@ -5607,12 +5610,13 @@ class PostModernizer {
         });
     };
     
+    // Process the node
     if (node.matches && node.matches('.summary ol.list li')) {
-        processPost(node, 0);
+        processPost(node);
     } else if (node.querySelectorAll) {
         const posts = node.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
-        posts.forEach((post, idx) => {
-            processPost(post, idx);
+        posts.forEach(post => {
+            processPost(post);
         });
     }
 }
