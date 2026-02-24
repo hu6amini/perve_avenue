@@ -5315,7 +5315,7 @@ class PostModernizer {
     
     const summaryPosts = document.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
     
-    summaryPosts.forEach((post, index) => {
+    summaryPosts.forEach((post, originalIndex) => {
         if (post.closest('.summary') && !post.classList.contains('post-preview-modernized')) {
             
             // Wait for avatars to be generated before transforming
@@ -5327,7 +5327,8 @@ class PostModernizer {
                 }
                 
                 // Transform the post regardless (with whatever avatar is there)
-                this.#transformSingleSummaryPost(post, index);
+                // Pass the original index instead of recalculating
+                this.#transformSingleSummaryPost(post, originalIndex);
             });
         }
     });
@@ -5365,7 +5366,7 @@ class PostModernizer {
         const postHeader = document.createElement('div');
         postHeader.className = 'post-header';
         
-        // Add post number - FIXED: Calculate based on position among top-level summary posts only
+        // Add post number
         const postNumber = document.createElement('span');
         postNumber.className = 'post-number';
         
@@ -5375,12 +5376,7 @@ class PostModernizer {
         
         const numberSpan = document.createElement('span');
         numberSpan.className = 'post-number-value';
-        
-        // FIXED: Count only direct children of the ol.list that have the summary-post class
-        // or filter to only include posts that haven't been processed yet at this point
-        const allTopLevelPosts = document.querySelectorAll('.summary ol.list > li');
-        const postIndex = Array.from(allTopLevelPosts).indexOf(postElement);
-        numberSpan.textContent = (postIndex + 1).toString();
+        numberSpan.textContent = (index + 1).toString();
         
         postNumber.appendChild(hashIcon);
         postNumber.appendChild(document.createTextNode(' '));
@@ -5590,9 +5586,8 @@ class PostModernizer {
     if (document.body.id !== 'send') return;
     
     const processPost = (post, idx) => {
-        // FIXED: Calculate global index based on top-level position only
-        const allTopLevelPosts = document.querySelectorAll('.summary ol.list > li');
-        const globalIndex = Array.from(allTopLevelPosts).indexOf(post);
+        // Use the index from the loop, don't recalculate
+        const originalIndex = idx;
         
         // Check if post still exists before waiting for avatars
         if (!post || !post.parentNode) return;
@@ -5608,14 +5603,13 @@ class PostModernizer {
             if (avatarFound) {
                 console.log('✅ Avatar found for new summary post, transforming');
             }
-            this.#transformSingleSummaryPost(post, globalIndex);
+            this.#transformSingleSummaryPost(post, originalIndex);
         });
     };
     
     if (node.matches && node.matches('.summary ol.list li')) {
         processPost(node, 0);
     } else if (node.querySelectorAll) {
-        // FIXED: Only select top-level li elements
         const posts = node.querySelectorAll(':scope > .summary ol.list > li:not(.post-preview-modernized)');
         posts.forEach((post, idx) => {
             processPost(post, idx);
