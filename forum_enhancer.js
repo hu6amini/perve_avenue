@@ -5365,7 +5365,7 @@ class PostModernizer {
         const postHeader = document.createElement('div');
         postHeader.className = 'post-header';
         
-        // Add post number
+        // Add post number - FIXED: Calculate based on position among top-level summary posts only
         const postNumber = document.createElement('span');
         postNumber.className = 'post-number';
         
@@ -5375,7 +5375,12 @@ class PostModernizer {
         
         const numberSpan = document.createElement('span');
         numberSpan.className = 'post-number-value';
-        numberSpan.textContent = (index + 1).toString();
+        
+        // FIXED: Count only direct children of the ol.list that have the summary-post class
+        // or filter to only include posts that haven't been processed yet at this point
+        const allTopLevelPosts = document.querySelectorAll('.summary ol.list > li');
+        const postIndex = Array.from(allTopLevelPosts).indexOf(postElement);
+        numberSpan.textContent = (postIndex + 1).toString();
         
         postNumber.appendChild(hashIcon);
         postNumber.appendChild(document.createTextNode(' '));
@@ -5584,13 +5589,10 @@ class PostModernizer {
 #handleNewSummaryPosts(node) {
     if (document.body.id !== 'send') return;
     
-    const processPost = (post) => {
-        // Calculate the global index based on ALL posts in the list
-        const allPosts = Array.from(document.querySelectorAll('.summary ol.list li'));
-        const globalIndex = allPosts.indexOf(post);
-        
-        // If globalIndex is -1, post is not in the list anymore
-        if (globalIndex === -1) return;
+    const processPost = (post, idx) => {
+        // FIXED: Calculate global index based on top-level position only
+        const allTopLevelPosts = document.querySelectorAll('.summary ol.list > li');
+        const globalIndex = Array.from(allTopLevelPosts).indexOf(post);
         
         // Check if post still exists before waiting for avatars
         if (!post || !post.parentNode) return;
@@ -5610,13 +5612,13 @@ class PostModernizer {
         });
     };
     
-    // Process the node
     if (node.matches && node.matches('.summary ol.list li')) {
-        processPost(node);
+        processPost(node, 0);
     } else if (node.querySelectorAll) {
-        const posts = node.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
-        posts.forEach(post => {
-            processPost(post);
+        // FIXED: Only select top-level li elements
+        const posts = node.querySelectorAll(':scope > .summary ol.list > li:not(.post-preview-modernized)');
+        posts.forEach((post, idx) => {
+            processPost(post, idx);
         });
     }
 }
