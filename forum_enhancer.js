@@ -5315,7 +5315,7 @@ class PostModernizer {
     
     const summaryPosts = document.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
     
-    summaryPosts.forEach((post, originalIndex) => {
+    summaryPosts.forEach((post, index) => {
         if (post.closest('.summary') && !post.classList.contains('post-preview-modernized')) {
             
             // Wait for avatars to be generated before transforming
@@ -5327,8 +5327,7 @@ class PostModernizer {
                 }
                 
                 // Transform the post regardless (with whatever avatar is there)
-                // Pass the original index instead of recalculating
-                this.#transformSingleSummaryPost(post, originalIndex);
+                this.#transformSingleSummaryPost(post, index);
             });
         }
     });
@@ -5586,8 +5585,9 @@ class PostModernizer {
     if (document.body.id !== 'send') return;
     
     const processPost = (post, idx) => {
-        // Use the index from the loop, don't recalculate
-        const originalIndex = idx;
+        // Calculate global index
+        const allPosts = document.querySelectorAll('.summary ol.list li');
+        const globalIndex = Array.from(allPosts).indexOf(post);
         
         // Check if post still exists before waiting for avatars
         if (!post || !post.parentNode) return;
@@ -5603,14 +5603,14 @@ class PostModernizer {
             if (avatarFound) {
                 console.log('✅ Avatar found for new summary post, transforming');
             }
-            this.#transformSingleSummaryPost(post, originalIndex);
+            this.#transformSingleSummaryPost(post, globalIndex);
         });
     };
     
     if (node.matches && node.matches('.summary ol.list li')) {
         processPost(node, 0);
     } else if (node.querySelectorAll) {
-        const posts = node.querySelectorAll(':scope > .summary ol.list > li:not(.post-preview-modernized)');
+        const posts = node.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
         posts.forEach((post, idx) => {
             processPost(post, idx);
         });
