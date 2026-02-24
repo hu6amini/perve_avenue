@@ -1,600 +1,380 @@
 (function() {
     'use strict';
     
-    // ===== PART 1: Constants & Configuration =====
-    var LAZY = "lazy";
-    var ASYNC = "async";
-    var CDN_BASE = 'https://images.weserv.nl/';
-    var CACHE_DURATION = '1y';
-    
-    // Quality settings by format (optimized for quality vs size)
-    var QUALITY_SETTINGS = {
-        'jpg': '90',      // High quality JPEG
-        'jpeg': '90',     
-        'webp': '90',     // WebP handles quality differently
-        'avif': '85',     // AVIF is more efficient
-        'png': '100',     // PNG needs max for lossless
-        'gif': '100'      // GIF should be lossless
+    // ===== CONSTANTS & CONFIGURATION =====
+    var CONFIG = {
+        cdn: 'https://images.weserv.nl/',
+        lazy: 'lazy',
+        async: 'async',
+        cache: '1y',
+        quality: {
+            jpg: '90',      // High quality JPEG
+            jpeg: '90',     
+            webp: '90',     // WebP handles quality differently
+            avif: '85',     // AVIF is more efficient
+            png: '100',     // PNG needs max for lossless
+            gif: '100',     // GIF should be lossless
+            unknown: '90'
+        },
+        skipPatterns: [
+            '.svg', '.webp', '.avif', '.ico',
+            'output=webp', 'output=avif',
+            'dicebear.com', 'api.dicebear.com',
+            'forum-user-avatar', 'forum-likes-avatar',
+            'avatar-size-', 'images.weserv.nl', 'wsrv.nl',
+            'data:image'
+        ].map(function(p) { return p.toLowerCase(); })
     };
     
-    var DEFAULT_QUALITY = '90'; // Slightly reduced from 100 for better balance
+    // ===== STATE MANAGEMENT =====
+    var state = {
+        processed: new WeakSet(),
+        stats: {
+            total: 0,
+            optimized: 0,
+            failed: 0,
+            byFormat: {},
+            byQuality: {}
+        },
+        initDone: false
+    };
     
-    var SKIP_PATTERNS = [
-        '.svg', '.webp', '.avif',
-        'output=webp', 'output=avif',
-        'dicebear.com',
-        'api.dicebear.com',
-        'dicebear',
-        'forum-user-avatar',
-        'forum-likes-avatar',
-        'avatar-size-',
-        'images.weserv.nl',
-        'wsrv.nl',
-        'data:image/svg'  // Skip inline SVGs
-    ];
-    
-    for (var sp = 0; sp < SKIP_PATTERNS.length; sp++) {
-        SKIP_PATTERNS[sp] = SKIP_PATTERNS[sp].toLowerCase();
-    }
-    
-    var loadEvents = [];
-    var successCount = 0;
-    var totalMonitored = 0;
-    
-    // ===== PART 2: Lazy Loading & Async Decoding =====
-    
-    var originalSetAttribute = Element.prototype.setAttribute;
-    var originalCreateElement = document.createElement;
-    var OriginalImage = window.Image;
-    
+    // ===== UTILITY FUNCTIONS =====
     function isMediaElement(el) {
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME');
     }
     
-    function needsLoading(el) {
-        return !el.hasAttribute('loading') || el.getAttribute('loading') === '';
-    }
-    
-    function needsDecoding(el) {
-        return el.tagName === 'IMG' && (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '');
-    }
-    
-    function applyLazyAttributes(el) {
-        if (!isMediaElement(el)) return el;
+    function shouldSkip(url, el) {
+        if (!url || url.indexOf('data:') === 0) return true;
         
-        if (needsLoading(el)) {
-            el.setAttribute('loading', LAZY);
+        var lower = url.toLowerCase();
+        
+        // Check patterns
+        for (var i = 0; i < CONFIG.skipPatterns.length; i++) {
+            if (lower.indexOf(CONFIG.skipPatterns[i]) !== -1) return true;
         }
         
-        if (needsDecoding(el)) {
-            el.setAttribute('decoding', ASYNC);
-        }
-        
-        return el;
-    }
-    
-    // New monitoring function - attaches passive listeners instead of overriding addEventListener
-    function monitorMediaLoad(element) {
-        if (!isMediaElement(element)) return;
-        
-        totalMonitored++;
-        
-        // Check initial attributes
-        var initialLoading = element.getAttribute('loading');
-        var initialDecoding = element.getAttribute('decoding');
-        
-        var trackingData = {
-            element: element.tagName,
-            src: element.src || element.getAttribute('src') || '[no-src]',
-            initialLoading: initialLoading,
-            initialDecoding: initialDecoding,
-            startTime: performance.now()
-        };
-        
-        loadEvents.push(trackingData);
-        
-        if (initialLoading === LAZY && (element.tagName !== 'IMG' || initialDecoding === ASYNC)) {
-            successCount++;
-            trackingData.success = true;
-            trackingData.timing = 'before';
-        } else {
-            trackingData.success = false;
-        }
-        
-        // Add passive load listeners (doesn't override native methods)
-        element.addEventListener('load', function onLoad(evt) {
-            var finalLoading = element.getAttribute('loading');
-            var finalDecoding = element.getAttribute('decoding');
-            var loadTime = performance.now();
-            
-            trackingData.finalLoading = finalLoading;
-            trackingData.finalDecoding = finalDecoding;
-            trackingData.loadTime = loadTime;
-            trackingData.loaded = true;
-            
-            if (!trackingData.success && finalLoading === LAZY && 
-                (element.tagName !== 'IMG' || finalDecoding === ASYNC)) {
-                successCount++;
-                trackingData.success = true;
-                trackingData.timing = 'during';
-            }
-            
-            element.removeEventListener('load', onLoad);
-        }, { once: true });
-        
-        element.addEventListener('error', function onError() {
-            trackingData.error = true;
-            element.removeEventListener('error', onError);
-        }, { once: true });
-    }
-    
-    Element.prototype.setAttribute = function(name, value) {
-        if ((name === 'src' || name === 'srcset') && isMediaElement(this)) {
-            applyLazyAttributes(this);
-        }
-        return originalSetAttribute.call(this, name, value);
-    };
-    
-    function overrideSrcSetter(proto, prop) {
-        if (!proto) return;
-        
-        var descriptor = Object.getOwnPropertyDescriptor(proto, prop);
-        if (descriptor && descriptor.set) {
-            Object.defineProperty(proto, prop, {
-                set: function(value) {
-                    try { applyLazyAttributes(this); } catch (err) {}
-                    try { descriptor.set.call(this, value); } catch (err) {}
-                },
-                get: descriptor.get,
-                configurable: true
-            });
-        }
-    }
-    
-    overrideSrcSetter(HTMLImageElement && HTMLImageElement.prototype, 'src');
-    overrideSrcSetter(HTMLIFrameElement && HTMLIFrameElement.prototype, 'src');
-    
-    document.createElement = function(tagName, options) {
-        var element = originalCreateElement.call(this, tagName, options);
-        applyLazyAttributes(element);
-        monitorMediaLoad(element); // Monitor newly created elements
-        return element;
-    };
-    
-    if (OriginalImage) {
-        window.Image = function(width, height) {
-            var img = new OriginalImage(width, height);
-            img.setAttribute('loading', LAZY);
-            img.setAttribute('decoding', ASYNC);
-            monitorMediaLoad(img); // Monitor Image constructor created elements
-            return img;
-        };
-        window.Image.prototype = OriginalImage.prototype;
-    }
-    
-    function applyToExisting() {
-        var selectors = [
-            'img:not([loading]), img[loading=""]', 
-            'iframe:not([loading]), iframe[loading=""]', 
-            'img:not([decoding]), img[decoding=""]'
-        ];
-        
-        var elements = document.querySelectorAll(selectors.join(', '));
-        for (var i = 0; i < elements.length; i++) {
-            applyLazyAttributes(elements[i]);
-        }
-        
-        // Monitor all existing media elements
-        var allMedia = document.querySelectorAll('img, iframe');
-        for (var j = 0; j < allMedia.length; j++) {
-            monitorMediaLoad(allMedia[j]);
-        }
-    }
-    
-    // ===== PART 3: Format Conversion with Quality Optimization =====
-    
-    function shouldSkipImage(url, element) {
-        if (!url) return true;
-        
-        var lowerUrl = url.toLowerCase();
-        
-        if (lowerUrl.indexOf('data:') === 0) return true;
-        
-        if (element && element.classList) {
-            if (element.classList.contains('forum-user-avatar') ||
-                element.classList.contains('forum-likes-avatar') ||
-                element.classList.contains('avatar-size-')) {
-                return true;
-            }
-        }
-        
-        if (element && element.hasAttribute) {
-            if (element.hasAttribute('data-forum-avatar') ||
-                element.hasAttribute('data-username')) {
-                return true;
-            }
-        }
-        
-        for (var i = 0; i < SKIP_PATTERNS.length; i++) {
-            if (lowerUrl.indexOf(SKIP_PATTERNS[i]) !== -1) {
-                return true;
-            }
+        // Check element attributes/classes
+        if (el) {
+            var classes = el.className.toLowerCase();
+            if (classes.indexOf('forum-') !== -1) return true;
+            if (el.hasAttribute('data-forum-avatar')) return true;
+            if (el.hasAttribute('data-username')) return true;
         }
         
         return false;
     }
     
-    function supportsAVIF() {
+    function supportsFormat(format) {
         try {
             var canvas = document.createElement('canvas');
             canvas.width = 1;
             canvas.height = 1;
-            var dataURL = canvas.toDataURL('image/avif');
-            return dataURL.indexOf('image/avif') !== -1;
-        } catch (err) {
+            return canvas.toDataURL('image/' + format).indexOf('image/' + format) !== -1;
+        } catch (e) {
             return false;
         }
     }
     
-    function getOptimalFormatForImage(src, isGif) {
-        if (isGif) {
-            return {
-                format: 'webp',
-                isAnimated: true
-            };
-        }
-        
-        // Check if browser supports AVIF (better quality than WebP)
-        var supportsAvif = supportsAVIF();
-        
-        return {
-            format: supportsAvif ? 'avif' : 'webp',
-            isAnimated: false
-        };
+    function detectFormat(url) {
+        var lower = url.toLowerCase();
+        if (lower.indexOf('.jpg') !== -1 || lower.indexOf('.jpeg') !== -1) return 'jpeg';
+        if (lower.indexOf('.png') !== -1) return 'png';
+        if (lower.indexOf('.gif') !== -1 && 
+            (lower.indexOf('.gif?') !== -1 || lower.lastIndexOf('.gif') === lower.length - 4)) return 'gif';
+        if (lower.indexOf('.webp') !== -1) return 'webp';
+        if (lower.indexOf('.avif') !== -1) return 'avif';
+        return 'unknown';
     }
     
-    function buildWeservParams(format, isGif, originalSrc, quality) {
-        var params = [];
+    // ===== WESERV OPTIMIZATION =====
+    function buildWeservUrl(img) {
+        var originalSrc = img.src;
+        var originalFormat = detectFormat(originalSrc);
+        var isGif = originalFormat === 'gif';
         
-        // Cache control
-        params.push('maxage=' + CACHE_DURATION);
+        // Determine output format
+        var outputFormat;
+        if (isGif) {
+            outputFormat = 'webp'; // Convert GIF to WebP for animation support
+        } else {
+            outputFormat = supportsFormat('avif') ? 'avif' : 'webp';
+        }
         
-        // Quality setting - use format-specific quality
-        params.push('q=' + quality);
+        // Get quality setting
+        var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
         
-        // Format-specific optimizations
-        switch(format) {
+        // Build parameters
+        var params = [
+            'maxage=' + CONFIG.cache,
+            'q=' + quality
+        ];
+        
+        // Format-specific optimizations (using ALL available weserv features)
+        switch (outputFormat) {
             case 'png':
-                // PNG: Enable adaptive filtering for better compression without quality loss
-                params.push('af'); // Adaptive filter
-                params.push('l=9'); // Maximum compression level
-                break;
-                
-            case 'webp':
-            case 'avif':
-                // WebP/AVIF: Lossless compression when appropriate
+                params.push('af');      // Adaptive filter for PNG
+                params.push('l=9');     // Max compression
                 params.push('lossless=true');
                 break;
-                
-            case 'jpg':
+            case 'webp':
+            case 'avif':
+                params.push('lossless=true');
+                params.push('il');       // Progressive/Interlace
+                break;
             case 'jpeg':
-                // JPEG: Progressive for better perceived quality
-                params.push('il'); // Interlace/progressive
+            case 'jpg':
+                params.push('il');       // Progressive JPEG
                 break;
         }
         
-        // Handle animated GIFs specially
+        // Special handling for animated GIFs
         if (isGif) {
-            params.push('n=-1'); // Render all frames
-            params.push('lossless=true'); // Keep lossless
-            // Don't add interlace for animated
-        } else {
-            // Add interlace for non-animated images (better progressive loading)
-            // But skip for PNG as it increases file size
-            if (format !== 'png') {
-                params.push('il');
-            }
+            params.push('n=-1');         // All frames
+            params.push('lossless=true'); // Keep quality
+        } else if (originalFormat === 'png') {
+            // PNG specific
+            params.push('af');
+            params.push('l=9');
         }
         
-        return params;
-    }
-    
-    function convertToOptimalFormat(img) {
-        var originalSrc = img.src;
-        
-        if (originalSrc.indexOf('http') !== 0 || 
-            img.getAttribute('data-optimized') === 'true' || 
-            img.getAttribute('data-optimized') === 'skipped') {
-            return;
+        // Always add filename if possible (better CDN caching)
+        var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
+        if (filename && /^[a-zA-Z0-9.]+$/.test(filename)) {
+            params.push('filename=' + filename);
         }
-        
-        if (img.classList.contains('forum-user-avatar') ||
-            img.classList.contains('forum-likes-avatar') ||
-            img.hasAttribute('data-forum-avatar') ||
-            img.getAttribute('data-username')) {
-            img.setAttribute('data-optimized', 'skipped');
-            return;
-        }
-        
-        if (shouldSkipImage(originalSrc, img)) {
-            img.setAttribute('data-optimized', 'skipped');
-            return;
-        }
-        
-        img.setAttribute('data-optimized', 'true');
-        img.setAttribute('data-original-src', originalSrc);
-        
-        // More precise GIF detection
-        var lowerSrc = originalSrc.toLowerCase();
-        var isGif = lowerSrc.indexOf('.gif') !== -1 && 
-                   (lowerSrc.indexOf('.gif?') !== -1 || 
-                    lowerSrc.indexOf('.gif#') !== -1 || 
-                    lowerSrc.lastIndexOf('.gif') === lowerSrc.length - 4);
-        
-        // Get original format for quality detection
-        var originalFormat = 'unknown';
-        if (lowerSrc.indexOf('.jpg') !== -1 || lowerSrc.indexOf('.jpeg') !== -1) originalFormat = 'jpg';
-        else if (lowerSrc.indexOf('.png') !== -1) originalFormat = 'png';
-        else if (lowerSrc.indexOf('.gif') !== -1) originalFormat = 'gif';
-        else if (lowerSrc.indexOf('.webp') !== -1) originalFormat = 'webp';
-        
-        // Determine optimal format
-        var formatInfo = getOptimalFormatForImage(originalSrc, isGif);
-        var format = formatInfo.format;
-        
-        // Get quality setting for this format
-        var quality = QUALITY_SETTINGS[format] || DEFAULT_QUALITY;
-        
-        // Build weserv parameters
-        var params = buildWeservParams(format, isGif, originalSrc, quality);
         
         var encodedUrl = encodeURIComponent(originalSrc);
-        var optimizedSrc = CDN_BASE + '?url=' + encodedUrl + '&output=' + format;
+        var optimizedSrc = CONFIG.cdn + '?url=' + encodedUrl + '&output=' + outputFormat;
         
-        if (params.length > 0) {
-            optimizedSrc += '&' + params.join('&');
+        if (params.length) {
+            optimizedSrc = optimizedSrc + '&' + params.join('&');
         }
         
-        // Store conversion info for debugging
-        img.setAttribute('data-conversion', originalFormat + '→' + format);
-        img.setAttribute('data-quality', quality);
+        return {
+            url: optimizedSrc,
+            format: outputFormat,
+            quality: quality,
+            params: params
+        };
+    }
+    
+    function optimizeImage(img) {
+        // Skip if already processed or should be skipped
+        if (state.processed.has(img)) return;
+        if (shouldSkip(img.src, img)) {
+            state.processed.add(img);
+            return;
+        }
         
+        // Mark as processed
+        state.processed.add(img);
+        state.stats.total++;
+        
+        // Store original
+        var originalSrc = img.src;
+        img.setAttribute('data-original', originalSrc);
+        
+        // Build optimized URL
+        var optimization = buildWeservUrl(img);
+        
+        // Update stats
+        state.stats.optimized++;
+        state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
+        state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
+        
+        // Set optimized source with error fallback
         img.onerror = function() {
-            console.warn('Weserv optimization failed for:', originalSrc);
-            this.src = this.getAttribute('data-original-src');
-            this.setAttribute('data-optimized', 'failed');
+            state.stats.failed++;
+            img.setAttribute('data-optimized', 'failed');
+            img.src = originalSrc; // Revert to original on error
+            img.onerror = null; // Prevent infinite loop
         };
         
-        img.src = optimizedSrc;
+        img.src = optimization.url;
+        img.setAttribute('data-optimized', 'true');
+        img.setAttribute('data-format', optimization.format);
+        img.setAttribute('data-quality', optimization.quality);
     }
     
-    function processAllImages() {
-        var images = document.querySelectorAll('img');
-        for (var i = 0; i < images.length; i++) {
-            convertToOptimalFormat(images[i]);
+    // ===== LAZY LOADING & DECODING =====
+    function applyLazyAttributes(el) {
+        if (!isMediaElement(el)) return el;
+        
+        if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
+            el.setAttribute('loading', CONFIG.lazy);
         }
+        
+        if (el.tagName === 'IMG' && (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '')) {
+            el.setAttribute('decoding', CONFIG.async);
+        }
+        
+        return el;
     }
     
-    // ===== PART 4: Mutation Observer =====
-    
-    var unifiedObserver = new MutationObserver(function(mutations) {
-        for (var m = 0; m < mutations.length; m++) {
-            var mutation = mutations[m];
-            if (mutation.type !== 'childList') continue;
+    // ===== MUTATION OBSERVER (removed IntersectionObserver) =====
+    var mutationObserver = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type !== 'childList') return;
             
-            var addedNodes = mutation.addedNodes;
-            for (var n = 0; n < addedNodes.length; n++) {
-                var node = addedNodes[n];
+            var nodes = mutation.addedNodes;
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
+                // Apply lazy attributes
                 applyLazyAttributes(node);
-                monitorMediaLoad(node); // Monitor the node itself if it's media
                 
-                if (node.querySelectorAll) {
-                    var mediaElements = node.querySelectorAll('img, iframe');
-                    for (var me = 0; me < mediaElements.length; me++) {
-                        applyLazyAttributes(mediaElements[me]);
-                        monitorMediaLoad(mediaElements[me]); // Monitor nested media
-                    }
+                // Handle images
+                if (node.tagName === 'IMG') {
+                    optimizeImage(node);
                 }
                 
-                if (node.tagName === 'IMG' && !node.getAttribute('data-optimized')) {
-                    if (!node.classList.contains('forum-user-avatar') &&
-                        !node.classList.contains('forum-likes-avatar') &&
-                        !node.hasAttribute('data-forum-avatar') &&
-                        !node.hasAttribute('data-username')) {
-                        convertToOptimalFormat(node);
-                    } else {
-                        node.setAttribute('data-optimized', 'skipped');
-                    }
-                }
-                
+                // Handle nested images
                 if (node.querySelectorAll) {
-                    var nestedImages = node.querySelectorAll('img');
-                    for (var ni = 0; ni < nestedImages.length; ni++) {
-                        var img = nestedImages[ni];
-                        if (!img.getAttribute('data-optimized')) {
-                            if (!img.classList.contains('forum-user-avatar') &&
-                                !img.classList.contains('forum-likes-avatar') &&
-                                !img.hasAttribute('data-forum-avatar') &&
-                                !img.hasAttribute('data-username')) {
-                                convertToOptimalFormat(img);
-                            } else {
-                                img.setAttribute('data-optimized', 'skipped');
-                            }
-                        }
+                    var images = node.querySelectorAll('img');
+                    for (var j = 0; j < images.length; j++) {
+                        optimizeImage(images[j]);
                     }
                 }
             }
-        }
+        });
     });
     
-    // ===== PART 5: Performance Reporting =====
-    
-    function generateReport() {
-        console.log('=== MEDIA OPTIMIZER REPORT (QUALITY OPTIMIZED) ===');
+    // ===== PROXY PATTERNS FOR DYNAMIC IMAGES =====
+    var OriginalImage = window.Image;
+    window.Image = function(width, height) {
+        var img = new OriginalImage(width, height);
+        img.setAttribute('loading', CONFIG.lazy);
+        img.setAttribute('decoding', CONFIG.async);
         
-        var testImg = document.createElement('img');
-        console.log('createElement: loading=' + testImg.getAttribute('loading') + ', decoding=' + testImg.getAttribute('decoding'));
-        
-        if (window.Image) {
-            var imgConst = new Image();
-            console.log('imageConstructor: loading=' + imgConst.getAttribute('loading') + ', decoding=' + imgConst.getAttribute('decoding'));
-        }
-        
-        var images = document.querySelectorAll('img');
-        var lazyCount = 0;
-        var asyncCount = 0;
-        var webpCount = 0;
-        var avifCount = 0;
-        var pngOptimized = 0;
-        var gifCount = 0;
-        var gifToWebpCount = 0;
-        var svgCount = 0;
-        var dicebearCount = 0;
-        var forumAvatarCount = 0;
-        var optimizedCount = 0;
-        var failedCount = 0;
-        var losslessCount = 0;
-        var progressiveCount = 0;
-        var otherCount = 0;
-        var qualityTotals = {};
-        
-        for (var i = 0; i < images.length; i++) {
-            var img = images[i];
-            if (img.getAttribute('loading') === LAZY) lazyCount++;
-            if (img.getAttribute('decoding') === ASYNC) asyncCount++;
-            
-            var src = img.src.toLowerCase();
-            var originalSrc = (img.getAttribute('data-original-src') || '').toLowerCase();
-            var classes = img.className.toLowerCase();
-            var isForumAvatar = false;
-            var optimized = img.getAttribute('data-optimized');
-            var conversion = img.getAttribute('data-conversion');
-            var quality = img.getAttribute('data-quality');
-            
-            if (quality) {
-                qualityTotals[quality] = (qualityTotals[quality] || 0) + 1;
-            }
-            
-            if (optimized === 'true') {
-                optimizedCount++;
-                if (src.indexOf('lossless=true') !== -1) {
-                    losslessCount++;
-                }
-                if (src.indexOf('&il') !== -1 || src.indexOf('?il') !== -1) {
-                    progressiveCount++;
-                }
-                if (src.indexOf('&af') !== -1) {
-                    pngOptimized++;
-                }
-            }
-            if (optimized === 'failed') failedCount++;
-            
-            if (classes.indexOf('forum-user-avatar') !== -1 || 
-                classes.indexOf('forum-likes-avatar') !== -1 ||
-                img.hasAttribute('data-username')) {
-                forumAvatarCount++;
-                isForumAvatar = true;
-            }
-            
-            if (!isForumAvatar) {
-                if (originalSrc.indexOf('.gif') !== -1 && src.indexOf('output=webp') !== -1) {
-                    gifToWebpCount++;
-                } else if (src.indexOf('.gif') !== -1 || src.indexOf('.gif?') !== -1) {
-                    gifCount++;
-                } else if (src.indexOf('.svg') !== -1 || src.indexOf('.svg?') !== -1) {
-                    svgCount++;
-                } else if (src.indexOf('dicebear.com') !== -1 || src.indexOf('api.dicebear.com') !== -1) {
-                    dicebearCount++;
-                } else if (src.indexOf('.webp') !== -1 || src.indexOf('output=webp') !== -1) {
-                    webpCount++;
-                } else if (src.indexOf('.avif') !== -1 || src.indexOf('output=avif') !== -1) {
-                    avifCount++;
-                } else {
-                    otherCount++;
-                }
-            }
-        }
-        
-        console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
-        console.log('Optimization: ' + optimizedCount + ' optimized, ' + failedCount + ' failed');
-        console.log('Quality features:');
-        console.log('  - Lossless: ' + losslessCount);
-        console.log('  - Progressive: ' + progressiveCount);
-        console.log('  - PNG adaptive: ' + pngOptimized);
-        console.log('Quality distribution:', qualityTotals);
-        console.log('Format breakdown:');
-        console.log('  - WebP: ' + webpCount);
-        console.log('  - AVIF: ' + avifCount);
-        console.log('  - GIF (original): ' + gifCount);
-        console.log('  - GIF → WebP: ' + gifToWebpCount);
-        console.log('  - SVG: ' + svgCount);
-        console.log('  - DiceBear avatars: ' + dicebearCount);
-        console.log('  - Forum avatars: ' + forumAvatarCount);
-        console.log('  - Other formats: ' + otherCount);
-        
-        var successRate = totalMonitored > 0 ? Math.round((successCount / totalMonitored) * 100) : 0;
-        console.log('Monitored: ' + totalMonitored + ' total, ' + successCount + ' optimized before load (' + successRate + '%)');
-        
-        var lateOptimizations = [];
-        for (var j = 0; j < loadEvents.length; j++) {
-            var evt = loadEvents[j];
-            if (!evt.success || evt.timing === 'during') {
-                lateOptimizations.push(evt);
-            }
-        }
-        
-        if (lateOptimizations.length > 0) {
-            console.warn('⚠️ ' + lateOptimizations.length + ' elements optimized late:');
-            var maxShow = Math.min(lateOptimizations.length, 3);
-            for (var k = 0; k < maxShow; k++) {
-                var e = lateOptimizations[k];
-                var shortSrc = e.src.length > 50 ? e.src.substring(0, 47) + '...' : e.src;
-                console.warn('  ' + (k+1) + '. ' + e.element + ' - ' + shortSrc);
-            }
-        } else {
-            console.log('✅ All elements optimized before load');
-        }
-        
-        console.log('=== REPORT COMPLETE ===');
-    }
-    
-    // ===== PART 6: Initialization =====
-    
-    function initialize() {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', applyToExisting);
-        } else {
-            applyToExisting();
-        }
-        
-        if (document.body) {
-            unifiedObserver.observe(document.body, { childList: true, subtree: true });
-        } else {
-            var bodyObserver = new MutationObserver(function(mutations, obs) {
-                if (document.body) {
-                    unifiedObserver.observe(document.body, { childList: true, subtree: true });
-                    obs.disconnect();
-                }
+        // Store original src setter
+        var originalSrcDesc = Object.getOwnPropertyDescriptor(img, 'src');
+        if (originalSrcDesc && originalSrcDesc.set) {
+            Object.defineProperty(img, 'src', {
+                set: function(value) {
+                    originalSrcDesc.set.call(this, value);
+                    if (value && !value.startsWith('data:')) {
+                        optimizeImage(this);
+                    }
+                },
+                get: originalSrcDesc.get,
+                configurable: true
             });
-            bodyObserver.observe(document.documentElement, { childList: true });
         }
         
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', processAllImages);
-        } else {
-            processAllImages();
-        }
-        
-        window.addEventListener('load', function() {
-            setTimeout(generateReport, 1000);
+        return img;
+    };
+    window.Image.prototype = OriginalImage.prototype;
+    
+    // Override src setter for all images
+    var srcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (srcDescriptor && srcDescriptor.set) {
+        Object.defineProperty(HTMLImageElement.prototype, 'src', {
+            set: function(value) {
+                srcDescriptor.set.call(this, value);
+                if (value && !value.startsWith('data:') && this.isConnected) {
+                    optimizeImage(this);
+                }
+            },
+            get: srcDescriptor.get,
+            configurable: true
         });
     }
     
-    if (typeof Promise !== 'undefined') {
-        Promise.resolve().then(initialize);
+    // Override setAttribute for dynamic src changes
+    var originalSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function(name, value) {
+        originalSetAttribute.call(this, name, value);
+        
+        if (name === 'src' && this.tagName === 'IMG' && value && !value.startsWith('data:')) {
+            optimizeImage(this);
+        }
+    };
+    
+    // Override createElement
+    var originalCreateElement = document.createElement;
+    document.createElement = function(tagName, options) {
+        var element = originalCreateElement.call(this, tagName, options);
+        
+        if (tagName.toLowerCase() === 'img') {
+            applyLazyAttributes(element);
+        }
+        
+        return element;
+    };
+    
+    // ===== INITIALIZATION =====
+    function init() {
+        if (state.initDone) return;
+        state.initDone = true;
+        
+        // Process existing images
+        var images = document.querySelectorAll('img');
+        for (var i = 0; i < images.length; i++) {
+            var img = images[i];
+            applyLazyAttributes(img);
+            optimizeImage(img);
+        }
+        
+        // Start mutation observer
+        if (document.body) {
+            mutationObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        } else {
+            // Wait for body
+            var bodyCheck = setInterval(function() {
+                if (document.body) {
+                    clearInterval(bodyCheck);
+                    mutationObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                    
+                    // Re-process any images that might have been missed
+                    var missedImages = document.querySelectorAll('img:not([data-optimized])');
+                    for (var i = 0; i < missedImages.length; i++) {
+                        optimizeImage(missedImages[i]);
+                    }
+                }
+            }, 50);
+        }
+        
+        // Performance report (moved to load event to ensure all images are processed)
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                console.log('=== WESERV OPTIMIZER REPORT ===');
+                console.log('Total images:', state.stats.total);
+                console.log('Optimized:', state.stats.optimized);
+                console.log('Failed:', state.stats.failed);
+                console.log('Format breakdown:', state.stats.byFormat);
+                console.log('Quality breakdown:', state.stats.byQuality);
+                
+                if (state.stats.failed > 0) {
+                    console.warn('Optimization failures:', state.stats.failed);
+                }
+                
+                // Count final lazy/async attributes
+                var finalImages = document.querySelectorAll('img');
+                var lazyCount = 0;
+                var asyncCount = 0;
+                for (var i = 0; i < finalImages.length; i++) {
+                    if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                    if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
+                }
+                console.log('Lazy loading:', lazyCount + '/' + finalImages.length);
+                console.log('Async decoding:', asyncCount + '/' + finalImages.length);
+                console.log('=== REPORT COMPLETE ===');
+            }, 1000);
+        });
+    }
+    
+    // Start immediately
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        setTimeout(initialize, 0);
+        init();
     }
 })();
