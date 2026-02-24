@@ -243,7 +243,7 @@
                 
                 // Handle nested images
                 if (node.querySelectorAll) {
-                    // First, apply lazy attributes to all images
+                    // First, apply lazy attributes to all media
                     var allMedia = node.querySelectorAll('img, iframe');
                     for (var j = 0; j < allMedia.length; j++) {
                         applyLazyAttributes(allMedia[j]);
@@ -411,10 +411,6 @@
         });
     }
     
-    // Start immediately
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
+    // ===== START IMMEDIATELY =====
+    init();
 })();
