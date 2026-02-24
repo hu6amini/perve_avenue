@@ -9,8 +9,7 @@
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
-       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2) format("woff2"),
-       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194774/forum/fonts/Font%20Awesome%206/fa-regular-400_b4lkfb.woff) format("woff");
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2) format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -26,8 +25,7 @@
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
-       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2) format("woff2"),
-       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_qsb9fj.woff) format("woff");
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2) format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -43,8 +41,7 @@
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
-       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2) format("woff2"),
-       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270629/forum/fonts/Font%20Awesome%206/fa-solid-900_lxocva.woff) format("woff");
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2) format("woff2");
   font-weight: 900;
   font-style: normal;
   font-display: swap;
