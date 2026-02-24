@@ -5,8 +5,19 @@
     var LAZY = "lazy";
     var ASYNC = "async";
     var CDN_BASE = 'https://images.weserv.nl/';
-    var DEFAULT_QUALITY = '100';
     var CACHE_DURATION = '1y';
+    
+    // Quality settings by format (optimized for quality vs size)
+    var QUALITY_SETTINGS = {
+        'jpg': '90',      // High quality JPEG
+        'jpeg': '90',     
+        'webp': '90',     // WebP handles quality differently
+        'avif': '85',     // AVIF is more efficient
+        'png': '100',     // PNG needs max for lossless
+        'gif': '100'      // GIF should be lossless
+    };
+    
+    var DEFAULT_QUALITY = '90'; // Slightly reduced from 100 for better balance
     
     var SKIP_PATTERNS = [
         '.svg', '.webp', '.avif',
@@ -18,7 +29,8 @@
         'forum-likes-avatar',
         'avatar-size-',
         'images.weserv.nl',
-        'wsrv.nl'
+        'wsrv.nl',
+        'data:image/svg'  // Skip inline SVGs
     ];
     
     for (var sp = 0; sp < SKIP_PATTERNS.length; sp++) {
@@ -179,7 +191,7 @@
         }
     }
     
-    // ===== PART 3: Format Conversion =====
+    // ===== PART 3: Format Conversion with Quality Optimization =====
     
     function shouldSkipImage(url, element) {
         if (!url) return true;
@@ -224,6 +236,69 @@
         }
     }
     
+    function getOptimalFormatForImage(src, isGif) {
+        if (isGif) {
+            return {
+                format: 'webp',
+                isAnimated: true
+            };
+        }
+        
+        // Check if browser supports AVIF (better quality than WebP)
+        var supportsAvif = supportsAVIF();
+        
+        return {
+            format: supportsAvif ? 'avif' : 'webp',
+            isAnimated: false
+        };
+    }
+    
+    function buildWeservParams(format, isGif, originalSrc, quality) {
+        var params = [];
+        
+        // Cache control
+        params.push('maxage=' + CACHE_DURATION);
+        
+        // Quality setting - use format-specific quality
+        params.push('q=' + quality);
+        
+        // Format-specific optimizations
+        switch(format) {
+            case 'png':
+                // PNG: Enable adaptive filtering for better compression without quality loss
+                params.push('af'); // Adaptive filter
+                params.push('l=9'); // Maximum compression level
+                break;
+                
+            case 'webp':
+            case 'avif':
+                // WebP/AVIF: Lossless compression when appropriate
+                params.push('lossless=true');
+                break;
+                
+            case 'jpg':
+            case 'jpeg':
+                // JPEG: Progressive for better perceived quality
+                params.push('il'); // Interlace/progressive
+                break;
+        }
+        
+        // Handle animated GIFs specially
+        if (isGif) {
+            params.push('n=-1'); // Render all frames
+            params.push('lossless=true'); // Keep lossless
+            // Don't add interlace for animated
+        } else {
+            // Add interlace for non-animated images (better progressive loading)
+            // But skip for PNG as it increases file size
+            if (format !== 'png') {
+                params.push('il');
+            }
+        }
+        
+        return params;
+    }
+    
     function convertToOptimalFormat(img) {
         var originalSrc = img.src;
         
@@ -256,26 +331,22 @@
                     lowerSrc.indexOf('.gif#') !== -1 || 
                     lowerSrc.lastIndexOf('.gif') === lowerSrc.length - 4);
         
-        var format;
-        var params = [];
+        // Get original format for quality detection
+        var originalFormat = 'unknown';
+        if (lowerSrc.indexOf('.jpg') !== -1 || lowerSrc.indexOf('.jpeg') !== -1) originalFormat = 'jpg';
+        else if (lowerSrc.indexOf('.png') !== -1) originalFormat = 'png';
+        else if (lowerSrc.indexOf('.gif') !== -1) originalFormat = 'gif';
+        else if (lowerSrc.indexOf('.webp') !== -1) originalFormat = 'webp';
         
-        params.push('maxage=' + CACHE_DURATION);
-        params.push('q=' + DEFAULT_QUALITY);
-        params.push('lossless=true');
+        // Determine optimal format
+        var formatInfo = getOptimalFormatForImage(originalSrc, isGif);
+        var format = formatInfo.format;
         
-        if (isGif) {
-            format = 'webp';
-            params.push('n=-1');
-            params.push('il');
-        } else {
-            format = supportsAVIF() ? 'avif' : 'webp';
-            
-            if (format === 'jpg' || format === 'jpeg') {
-                params.push('il');
-            } else if (format === 'png') {
-                params.push('il');
-            }
-        }
+        // Get quality setting for this format
+        var quality = QUALITY_SETTINGS[format] || DEFAULT_QUALITY;
+        
+        // Build weserv parameters
+        var params = buildWeservParams(format, isGif, originalSrc, quality);
         
         var encodedUrl = encodeURIComponent(originalSrc);
         var optimizedSrc = CDN_BASE + '?url=' + encodedUrl + '&output=' + format;
@@ -284,7 +355,12 @@
             optimizedSrc += '&' + params.join('&');
         }
         
+        // Store conversion info for debugging
+        img.setAttribute('data-conversion', originalFormat + '→' + format);
+        img.setAttribute('data-quality', quality);
+        
         img.onerror = function() {
+            console.warn('Weserv optimization failed for:', originalSrc);
             this.src = this.getAttribute('data-original-src');
             this.setAttribute('data-optimized', 'failed');
         };
@@ -356,7 +432,7 @@
     // ===== PART 5: Performance Reporting =====
     
     function generateReport() {
-        console.log('=== MEDIA OPTIMIZER REPORT (LOSSLESS QUALITY) ===');
+        console.log('=== MEDIA OPTIMIZER REPORT (QUALITY OPTIMIZED) ===');
         
         var testImg = document.createElement('img');
         console.log('createElement: loading=' + testImg.getAttribute('loading') + ', decoding=' + testImg.getAttribute('decoding'));
@@ -371,6 +447,7 @@
         var asyncCount = 0;
         var webpCount = 0;
         var avifCount = 0;
+        var pngOptimized = 0;
         var gifCount = 0;
         var gifToWebpCount = 0;
         var svgCount = 0;
@@ -379,7 +456,9 @@
         var optimizedCount = 0;
         var failedCount = 0;
         var losslessCount = 0;
+        var progressiveCount = 0;
         var otherCount = 0;
+        var qualityTotals = {};
         
         for (var i = 0; i < images.length; i++) {
             var img = images[i];
@@ -391,11 +470,23 @@
             var classes = img.className.toLowerCase();
             var isForumAvatar = false;
             var optimized = img.getAttribute('data-optimized');
+            var conversion = img.getAttribute('data-conversion');
+            var quality = img.getAttribute('data-quality');
+            
+            if (quality) {
+                qualityTotals[quality] = (qualityTotals[quality] || 0) + 1;
+            }
             
             if (optimized === 'true') {
                 optimizedCount++;
                 if (src.indexOf('lossless=true') !== -1) {
                     losslessCount++;
+                }
+                if (src.indexOf('&il') !== -1 || src.indexOf('?il') !== -1) {
+                    progressiveCount++;
+                }
+                if (src.indexOf('&af') !== -1) {
+                    pngOptimized++;
                 }
             }
             if (optimized === 'failed') failedCount++;
@@ -427,12 +518,17 @@
         }
         
         console.log('Images: ' + lazyCount + '/' + images.length + ' lazy, ' + asyncCount + '/' + images.length + ' async');
-        console.log('Optimization: ' + optimizedCount + ' optimized (lossless: ' + losslessCount + '), ' + failedCount + ' failed');
+        console.log('Optimization: ' + optimizedCount + ' optimized, ' + failedCount + ' failed');
+        console.log('Quality features:');
+        console.log('  - Lossless: ' + losslessCount);
+        console.log('  - Progressive: ' + progressiveCount);
+        console.log('  - PNG adaptive: ' + pngOptimized);
+        console.log('Quality distribution:', qualityTotals);
         console.log('Format breakdown:');
-        console.log('  - WebP (lossless): ' + webpCount);
-        console.log('  - AVIF (lossless): ' + avifCount);
+        console.log('  - WebP: ' + webpCount);
+        console.log('  - AVIF: ' + avifCount);
         console.log('  - GIF (original): ' + gifCount);
-        console.log('  - GIF → WebP (animated, lossless): ' + gifToWebpCount);
+        console.log('  - GIF → WebP: ' + gifToWebpCount);
         console.log('  - SVG: ' + svgCount);
         console.log('  - DiceBear avatars: ' + dicebearCount);
         console.log('  - Forum avatars: ' + forumAvatarCount);
