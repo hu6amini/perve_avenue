@@ -33,6 +33,7 @@
             total: 0,
             optimized: 0,
             failed: 0,
+            skipped: 0,
             byFormat: {},
             byQuality: {}
         },
@@ -87,6 +88,23 @@
         return 'unknown';
     }
     
+    // ===== LAZY LOADING & DECODING - NOW APPLIED TO ALL IMAGES =====
+    function applyLazyAttributes(el) {
+        if (!isMediaElement(el)) return el;
+        
+        // Always apply loading="lazy" if not set
+        if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
+            el.setAttribute('loading', CONFIG.lazy);
+        }
+        
+        // Always apply decoding="async" if not set (only for images)
+        if (el.tagName === 'IMG' && (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '')) {
+            el.setAttribute('decoding', CONFIG.async);
+        }
+        
+        return el;
+    }
+    
     // ===== WESERV OPTIMIZATION =====
     function buildWeservUrl(img) {
         var originalSrc = img.src;
@@ -110,7 +128,7 @@
             'q=' + quality
         ];
         
-        // Format-specific optimizations (using ALL available weserv features)
+        // Format-specific optimizations
         switch (outputFormat) {
             case 'png':
                 params.push('af');      // Adaptive filter for PNG
@@ -138,7 +156,7 @@
             params.push('l=9');
         }
         
-        // Always add filename if possible (better CDN caching)
+        // Add filename if possible
         var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
         if (filename && /^[a-zA-Z0-9.]+$/.test(filename)) {
             params.push('filename=' + filename);
@@ -160,10 +178,18 @@
     }
     
     function optimizeImage(img) {
-        // Skip if already processed or should be skipped
+        // ALWAYS apply lazy attributes first (even if skipped)
+        applyLazyAttributes(img);
+        
+        // Skip if already processed
         if (state.processed.has(img)) return;
-        if (shouldSkip(img.src, img)) {
+        
+        // Check if image should be skipped
+        var skip = shouldSkip(img.src, img);
+        if (skip) {
             state.processed.add(img);
+            state.stats.skipped++;
+            img.setAttribute('data-optimized', 'skipped');
             return;
         }
         
@@ -197,22 +223,7 @@
         img.setAttribute('data-quality', optimization.quality);
     }
     
-    // ===== LAZY LOADING & DECODING =====
-    function applyLazyAttributes(el) {
-        if (!isMediaElement(el)) return el;
-        
-        if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
-            el.setAttribute('loading', CONFIG.lazy);
-        }
-        
-        if (el.tagName === 'IMG' && (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '')) {
-            el.setAttribute('decoding', CONFIG.async);
-        }
-        
-        return el;
-    }
-    
-    // ===== MUTATION OBSERVER (removed IntersectionObserver) =====
+    // ===== MUTATION OBSERVER =====
     var mutationObserver = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
             if (mutation.type !== 'childList') return;
@@ -222,19 +233,26 @@
                 var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
-                // Apply lazy attributes
-                applyLazyAttributes(node);
-                
-                // Handle images
-                if (node.tagName === 'IMG') {
-                    optimizeImage(node);
+                // Handle the node itself if it's media
+                if (node.tagName === 'IMG' || node.tagName === 'IFRAME') {
+                    applyLazyAttributes(node);
+                    if (node.tagName === 'IMG') {
+                        optimizeImage(node);
+                    }
                 }
                 
                 // Handle nested images
                 if (node.querySelectorAll) {
+                    // First, apply lazy attributes to all images
+                    var allMedia = node.querySelectorAll('img, iframe');
+                    for (var j = 0; j < allMedia.length; j++) {
+                        applyLazyAttributes(allMedia[j]);
+                    }
+                    
+                    // Then optimize images
                     var images = node.querySelectorAll('img');
-                    for (var j = 0; j < images.length; j++) {
-                        optimizeImage(images[j]);
+                    for (var k = 0; k < images.length; k++) {
+                        optimizeImage(images[k]);
                     }
                 }
             }
@@ -245,6 +263,8 @@
     var OriginalImage = window.Image;
     window.Image = function(width, height) {
         var img = new OriginalImage(width, height);
+        
+        // Apply lazy attributes immediately
         img.setAttribute('loading', CONFIG.lazy);
         img.setAttribute('decoding', CONFIG.async);
         
@@ -309,12 +329,22 @@
         if (state.initDone) return;
         state.initDone = true;
         
-        // Process existing images
-        var images = document.querySelectorAll('img');
-        for (var i = 0; i < images.length; i++) {
-            var img = images[i];
+        // Process ALL existing images (including those that will be skipped)
+        var allImages = document.querySelectorAll('img');
+        for (var i = 0; i < allImages.length; i++) {
+            var img = allImages[i];
+            
+            // ALWAYS apply lazy attributes first
             applyLazyAttributes(img);
+            
+            // Then attempt optimization (will skip if needed)
             optimizeImage(img);
+        }
+        
+        // Also ensure iframes get lazy loading
+        var allIframes = document.querySelectorAll('iframe');
+        for (var j = 0; j < allIframes.length; j++) {
+            applyLazyAttributes(allIframes[j]);
         }
         
         // Start mutation observer
@@ -342,30 +372,40 @@
             }, 50);
         }
         
-        // Performance report (moved to load event to ensure all images are processed)
+        // Performance report
         window.addEventListener('load', function() {
             setTimeout(function() {
-                console.log('=== WESERV OPTIMIZER REPORT ===');
-                console.log('Total images:', state.stats.total);
-                console.log('Optimized:', state.stats.optimized);
-                console.log('Failed:', state.stats.failed);
-                console.log('Format breakdown:', state.stats.byFormat);
-                console.log('Quality breakdown:', state.stats.byQuality);
-                
-                if (state.stats.failed > 0) {
-                    console.warn('Optimization failures:', state.stats.failed);
-                }
-                
-                // Count final lazy/async attributes
                 var finalImages = document.querySelectorAll('img');
+                var finalIframes = document.querySelectorAll('iframe');
                 var lazyCount = 0;
                 var asyncCount = 0;
+                
+                // Count all images (including skipped ones)
                 for (var i = 0; i < finalImages.length; i++) {
                     if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
                     if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
                 }
-                console.log('Lazy loading:', lazyCount + '/' + finalImages.length);
+                
+                // Count iframes
+                for (var j = 0; j < finalIframes.length; j++) {
+                    if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                }
+                
+                var totalMedia = finalImages.length + finalIframes.length;
+                
+                console.log('=== WESERV OPTIMIZER REPORT ===');
+                console.log('Total images:', state.stats.total);
+                console.log('Optimized:', state.stats.optimized);
+                console.log('Skipped:', state.stats.skipped);
+                console.log('Failed:', state.stats.failed);
+                console.log('Format breakdown:', state.stats.byFormat);
+                console.log('Quality breakdown:', state.stats.byQuality);
+                console.log('Lazy loading:', lazyCount + '/' + totalMedia);
                 console.log('Async decoding:', asyncCount + '/' + finalImages.length);
+                
+                if (state.stats.failed > 0) {
+                    console.warn('Optimization failures:', state.stats.failed);
+                }
                 console.log('=== REPORT COMPLETE ===');
             }, 1000);
         });
