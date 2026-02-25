@@ -16,6 +16,10 @@
             gif: '100',     // GIF should be lossless
             unknown: '90'
         },
+        video: {
+            preload: 'none',           // Default: don't preload videos
+            autoplayPreload: 'metadata' // For autoplay videos
+        },
         skipPatterns: [
             '.svg', '.webp', '.avif', '.ico',
             'output=webp', 'output=avif',
@@ -37,12 +41,18 @@
             byFormat: {},
             byQuality: {}
         },
+        videos: {
+            total: 0,
+            preloadNone: 0,
+            autoplayVideos: 0,
+            withPoster: 0
+        },
         initDone: false
     };
     
     // ===== UTILITY FUNCTIONS =====
     function isMediaElement(el) {
-        return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME');
+        return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
     function shouldSkip(url, el) {
@@ -88,7 +98,53 @@
         return 'unknown';
     }
     
-    // ===== LAZY LOADING & DECODING - UPDATED TO HANDLE HIDDEN IFRAMES =====
+    // ===== VIDEO HANDLING =====
+    function setupVideoLazyLoading(video) {
+        if (state.processed.has(video)) return;
+        state.processed.add(video);
+        state.videos.total++;
+        
+        // Check if video has autoplay
+        var hasAutoplay = video.hasAttribute('autoplay');
+        if (hasAutoplay) {
+            state.videos.autoplayVideos++;
+        }
+        
+        // Set preload attribute based on autoplay status
+        if (!video.hasAttribute('preload') || video.getAttribute('preload') === '') {
+            var preloadValue = hasAutoplay ? CONFIG.video.autoplayPreload : CONFIG.video.preload;
+            video.setAttribute('preload', preloadValue);
+            
+            if (!hasAutoplay && preloadValue === 'none') {
+                state.videos.preloadNone++;
+            }
+        } else {
+            // Count existing preload="none" videos
+            if (video.getAttribute('preload') === 'none') {
+                state.videos.preloadNone++;
+            }
+        }
+        
+        // Check for poster
+        if (video.poster) {
+            state.videos.withPoster++;
+        } else {
+            console.warn('Video without poster:', video);
+        }
+        
+        // Store original sources if needed for future lazy loading
+        var sources = video.querySelectorAll('source[src]');
+        for (var i = 0; i < sources.length; i++) {
+            var source = sources[i];
+            if (!source.hasAttribute('data-original-src') && source.src) {
+                source.setAttribute('data-original-src', source.src);
+            }
+        }
+        
+        video.setAttribute('data-video-processed', 'true');
+    }
+    
+    // ===== LAZY LOADING & DECODING - UPDATED TO HANDLE HIDDEN IFRAMES AND VIDEOS =====
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
         
@@ -116,6 +172,11 @@
             if (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '') {
                 el.setAttribute('decoding', CONFIG.async);
             }
+        }
+        
+        // Handle VIDEOS
+        if (el.tagName === 'VIDEO') {
+            setupVideoLazyLoading(el);
         }
         
         return el;
@@ -253,7 +314,7 @@
                 if (node.nodeType !== 1) continue;
                 
                 // Handle the node itself if it's media
-                if (node.tagName === 'IMG' || node.tagName === 'IFRAME') {
+                if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
                     if (node.tagName === 'IMG') {
                         optimizeImage(node);
@@ -263,7 +324,7 @@
                 // Handle nested media
                 if (node.querySelectorAll) {
                     // First, apply lazy attributes to all media
-                    var allMedia = node.querySelectorAll('img, iframe');
+                    var allMedia = node.querySelectorAll('img, iframe, video');
                     for (var j = 0; j < allMedia.length; j++) {
                         applyLazyAttributes(allMedia[j]);
                     }
@@ -366,6 +427,12 @@
             applyLazyAttributes(allIframes[j]);
         }
         
+        // Process ALL videos
+        var allVideos = document.querySelectorAll('video');
+        for (var k = 0; k < allVideos.length; k++) {
+            applyLazyAttributes(allVideos[k]);
+        }
+        
         // Start mutation observer
         if (document.body) {
             mutationObserver.observe(document.body, {
@@ -393,6 +460,12 @@
                     for (var j = 0; j < missedIframes.length; j++) {
                         applyLazyAttributes(missedIframes[j]);
                     }
+                    
+                    // Re-process any videos that might have been missed
+                    var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
+                    for (var k = 0; k < missedVideos.length; k++) {
+                        applyLazyAttributes(missedVideos[k]);
+                    }
                 }
             }, 50);
         }
@@ -402,6 +475,7 @@
             setTimeout(function() {
                 var finalImages = document.querySelectorAll('img');
                 var finalIframes = document.querySelectorAll('iframe');
+                var finalVideos = document.querySelectorAll('video');
                 var lazyCount = 0;
                 var asyncCount = 0;
                 var placeholderCount = 0;
@@ -418,7 +492,14 @@
                     if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
                 }
                 
-                var totalMedia = finalImages.length + finalIframes.length;
+                // Count videos
+                for (var k = 0; k < finalVideos.length; k++) {
+                    // Videos don't have loading attribute, count them separately
+                    var preload = finalVideos[k].getAttribute('preload');
+                    if (preload === 'none') lazyCount++; // Count as "lazy loaded"
+                }
+                
+                var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
                 
                 console.log('=== WESERV OPTIMIZER REPORT ===');
                 console.log('Total images:', state.stats.total);
@@ -427,9 +508,15 @@
                 console.log('Failed:', state.stats.failed);
                 console.log('Format breakdown:', state.stats.byFormat);
                 console.log('Quality breakdown:', state.stats.byQuality);
-                console.log('Lazy loading:', lazyCount + '/' + totalMedia);
+                console.log('Lazy loading (all media):', lazyCount + '/' + totalMedia);
                 console.log('Async decoding:', asyncCount + '/' + finalImages.length);
                 console.log('Placeholder iframes:', placeholderCount);
+                console.log('\n=== VIDEO STATS ===');
+                console.log('Total videos:', state.videos.total);
+                console.log('Videos with preload="none":', state.videos.preloadNone);
+                console.log('Autoplay videos:', state.videos.autoplayVideos);
+                console.log('Videos with poster:', state.videos.withPoster);
+                console.log('Videos missing poster:', state.videos.total - state.videos.withPoster);
                 
                 if (state.stats.failed > 0) {
                     console.warn('Optimization failures:', state.stats.failed);
