@@ -88,18 +88,34 @@
         return 'unknown';
     }
     
-    // ===== LAZY LOADING & DECODING - NOW APPLIED TO ALL IMAGES =====
+    // ===== LAZY LOADING & DECODING - UPDATED TO HANDLE HIDDEN IFRAMES =====
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
         
-        // Always apply loading="lazy" if not set
-        if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
-            el.setAttribute('loading', CONFIG.lazy);
+        // Handle IFRAMES - including hidden/placeholder ones
+        if (el.tagName === 'IFRAME') {
+            // Always set loading="lazy" for iframes, even if no src
+            if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
+                el.setAttribute('loading', CONFIG.lazy);
+            }
+            
+            // Mark placeholder iframes (no src or empty src)
+            if (!el.src || el.src === '' || el.src === window.location.href) {
+                el.setAttribute('data-placeholder', 'true');
+            }
         }
         
-        // Always apply decoding="async" if not set (only for images)
-        if (el.tagName === 'IMG' && (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '')) {
-            el.setAttribute('decoding', CONFIG.async);
+        // Handle IMAGES
+        if (el.tagName === 'IMG') {
+            // Always apply loading="lazy" if not set
+            if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
+                el.setAttribute('loading', CONFIG.lazy);
+            }
+            
+            // Always apply decoding="async" if not set
+            if (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '') {
+                el.setAttribute('decoding', CONFIG.async);
+            }
         }
         
         return el;
@@ -178,6 +194,9 @@
     }
     
     function optimizeImage(img) {
+        // Skip if no src or data URI
+        if (!img.src || img.src.indexOf('data:') === 0) return;
+        
         // ALWAYS apply lazy attributes first (even if skipped)
         applyLazyAttributes(img);
         
@@ -241,7 +260,7 @@
                     }
                 }
                 
-                // Handle nested images
+                // Handle nested media
                 if (node.querySelectorAll) {
                     // First, apply lazy attributes to all media
                     var allMedia = node.querySelectorAll('img, iframe');
@@ -341,7 +360,7 @@
             optimizeImage(img);
         }
         
-        // Also ensure iframes get lazy loading
+        // Process ALL iframes (including hidden/placeholder ones)
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
             applyLazyAttributes(allIframes[j]);
@@ -368,6 +387,12 @@
                     for (var i = 0; i < missedImages.length; i++) {
                         optimizeImage(missedImages[i]);
                     }
+                    
+                    // Re-process any iframes that might have been missed
+                    var missedIframes = document.querySelectorAll('iframe:not([loading])');
+                    for (var j = 0; j < missedIframes.length; j++) {
+                        applyLazyAttributes(missedIframes[j]);
+                    }
                 }
             }, 50);
         }
@@ -379,6 +404,7 @@
                 var finalIframes = document.querySelectorAll('iframe');
                 var lazyCount = 0;
                 var asyncCount = 0;
+                var placeholderCount = 0;
                 
                 // Count all images (including skipped ones)
                 for (var i = 0; i < finalImages.length; i++) {
@@ -386,9 +412,10 @@
                     if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
                 }
                 
-                // Count iframes
+                // Count iframes and placeholders
                 for (var j = 0; j < finalIframes.length; j++) {
                     if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                    if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
                 }
                 
                 var totalMedia = finalImages.length + finalIframes.length;
@@ -402,10 +429,20 @@
                 console.log('Quality breakdown:', state.stats.byQuality);
                 console.log('Lazy loading:', lazyCount + '/' + totalMedia);
                 console.log('Async decoding:', asyncCount + '/' + finalImages.length);
+                console.log('Placeholder iframes:', placeholderCount);
                 
                 if (state.stats.failed > 0) {
                     console.warn('Optimization failures:', state.stats.failed);
                 }
+                
+                // Verify all iframes have lazy loading
+                var iframesWithoutLazy = document.querySelectorAll('iframe:not([loading="lazy"])');
+                if (iframesWithoutLazy.length > 0) {
+                    console.warn('Iframes still without lazy loading:', iframesWithoutLazy.length);
+                } else {
+                    console.log('✅ All iframes have lazy loading!');
+                }
+                
                 console.log('=== REPORT COMPLETE ===');
             }, 1000);
         });
