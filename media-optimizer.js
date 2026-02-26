@@ -538,14 +538,3 @@
     // ===== START IMMEDIATELY =====
     init();
 })();
-
-
-// =======scheduler.yield() (Break Up Long Tasks) ===============
-
-async function processThreadList() {
-  for (const post of threadPosts) {
-    updateUI(post);
-    // Yield to browser after every 5 posts
-    if (i % 5 === 0) await scheduler.yield();
-  }
-}
