@@ -10459,48 +10459,49 @@ class PostModernizer {
         });
     }
 
-    #transformCodeBlock(container) {
-        const codeTop = container.querySelector('.code_top');
-        const codeContent = container.querySelector('.code');
+#transformCodeBlock(container) {
+    const codeTop = container.querySelector('.code_top');
+    const codeContent = container.querySelector('.code');
 
-        if (!codeTop || !codeContent) return;
+    if (!codeTop || !codeContent) return;
 
-        const codeText = codeTop.textContent.trim();
-        const codeType = codeText.toUpperCase();
-        const isLongContent = this.#isLongContent(codeContent);
+    const codeText = codeTop.textContent.trim();
+    const codeType = codeText.toUpperCase();
+    const isLongContent = this.#isLongContent(codeContent);
 
-        const modernCode = document.createElement('div');
-        modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
+    const modernCode = document.createElement('div');
+    modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
 
-        let html = '<div class="code-header">' +
-            '<div class="code-icon">' +
-            '<i class="fa-regular fa-code" aria-hidden="true"></i>' +
-            '</div>' +
-            '<div class="code-info">' +
-            '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
-            '</div>' +
-            '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
-            '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +
-            '</button>' +
-            '</div>';
+    // FIX: Properly create icons with actual <i> elements
+    let html = '<div class="code-header">' +
+        '<div class="code-icon">' +
+        '<i class="fa-regular fa-code" aria-hidden="true"></i>' + // Added icon
+        '</div>' +
+        '<div class="code-info">' +
+        '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
+        '</div>' +
+        '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
+        '<i class="fa-regular fa-copy" aria-hidden="true"></i>' + // Added icon
+        '</button>' +
+        '</div>';
 
-        html += '<div class="code-content' +
-            (isLongContent ? ' collapsible-content' : '') + '">' +
-            '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
-            '</div>';
+    html += '<div class="code-content' +
+        (isLongContent ? ' collapsible-content' : '') + '">' +
+        '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
+        '</div>';
 
-        if (isLongContent) {
-            html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
-                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
-                'Show more code' +
-                '</button>';
-        }
-
-        modernCode.innerHTML = html;
-        container.replaceWith(modernCode);
-
-        this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
+    if (isLongContent) {
+        html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
+            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + // Added icon
+            'Show more code' +
+            '</button>';
     }
+
+    modernCode.innerHTML = html;
+    container.replaceWith(modernCode);
+
+    this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
+}
 
     #addCodeEventListeners(codeElement, codeText, isLongContent = false) {
         const codeHeader = codeElement.querySelector('.code-header');
