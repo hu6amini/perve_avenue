@@ -1,56 +1,85 @@
-// ===== DEFER HOST SCRIPTS =====
+// ===== DEFER HOST SCRIPTS v2 - MORE AGGRESSIVE =====
 // Place this script FIRST in the <head>, before any other scripts
 (function() {
     'use strict';
     
     // Configuration
     var DEFER_CONFIG = {
-        // Scripts to defer (by URL pattern)
         patterns: [
+            // jQuery and modal
+            'jq.js',
+            'jqt.js', 
+            'modal.js',
+            'jquery.modal',
+            
+            // Handlebars
             'hb.js',
             'handlebars',
-            'jq.js',
-            'jqt.js',
-            'modal.js',
+            
+            // Cloudflare/Turnstile
             'turnstile',
-            'api.js?render', // For recaptcha
+            'challenges.cloudflare.com',
+            
+            // Google services
+            'api.js?render',
+            'recaptcha',
+            'cse.google.com',
+            'google.com/cse',
+            
+            // Social widgets
+            'platform.twitter.com',
+            'platform.instagram.com',
+            
+            // Ads
             'adsbygoogle.js',
-            'script-loader'
+            'sportslocalmedia.com',
+            'akcelo',
+            
+            // Forum host specific
+            'script-loader',
+            'forumfree.net/libs',
+            'forumfree.net/internals',
+            'popper.js',
+            'tippy.js',
+            'scrollbar',
+            'timeago',
+            
+            // Your own scripts that should load later
+            'instant.page',
+            'lite-vimeo',
+            'lite-youtube'
         ],
         
-        // Delay before loading deferred scripts (ms)
-        delay: 3000,
+        // Delay before loading (ms)
+        delay: 4000,
         
-        // Enable debug logging
         debug: true
     };
     
-    // Store original DOM methods
-    var originalAppendChild = Element.prototype.appendChild;
-    var originalInsertBefore = Element.prototype.insertBefore;
+    // Store original methods
+    var originalCreateElement = document.createElement;
+    var originalAppendChild = Node.prototype.appendChild;
+    var originalInsertBefore = Node.prototype.insertBefore;
     var originalSetAttribute = Element.prototype.setAttribute;
+    var originalWrite = document.write;
     
     // Queue for deferred scripts
     var deferredScripts = [];
     
-    // Logging
     function log() {
         if (DEFER_CONFIG.debug) {
             var args = Array.prototype.slice.call(arguments);
-            args.unshift('🔧 [DeferScript]');
+            args.unshift('🔧 [DeferScript v2]');
             console.log.apply(console, args);
         }
     }
     
-    // Check if script should be deferred
-    function shouldDefer(script) {
-        if (!script.src) return false;
-        
-        var url = script.src.toLowerCase();
+    function shouldDefer(src) {
+        if (!src) return false;
+        var url = src.toLowerCase();
         var patterns = DEFER_CONFIG.patterns;
-        var i;
         
-        for (i = 0; i < patterns.length; i++) {
+        for (var i = 0; i < patterns.length; i++) {
             if (url.indexOf(patterns[i].toLowerCase()) !== -1) {
                 return true;
             }
@@ -58,106 +87,99 @@
         return false;
     }
     
-    // Load all deferred scripts after page load
-    function loadDeferredScripts() {
-        if (deferredScripts.length === 0) return;
+    // Override document.createElement
+    document.createElement = function(tagName, options) {
+        var element = originalCreateElement.call(document, tagName, options);
         
-        log('Loading ' + deferredScripts.length + ' deferred scripts...');
-        
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                var i, src, script;
-                
-                for (i = 0; i < deferredScripts.length; i++) {
-                    src = deferredScripts[i];
-                    script = document.createElement('script');
-                    script.src = src;
-                    script.async = true;
-                    script.defer = true;
-                    script.setAttribute('data-deferred', 'true');
-                    document.body.appendChild(script);
-                    
-                    var filename = src.split('/').pop();
-                    log('Loaded deferred:', filename);
-                }
-            }, DEFER_CONFIG.delay);
-        });
-    }
+        if (tagName.toLowerCase() === 'script') {
+            // Store the original src setter for this element
+            var descriptor = Object.getOwnPropertyDescriptor(element, 'src');
+            if (descriptor && descriptor.set) {
+                Object.defineProperty(element, 'src', {
+                    set: function(value) {
+                        if (shouldDefer(value)) {
+                            log('🛑 Blocked src set:', value.split('/').pop());
+                            deferredScripts.push(value);
+                            return;
+                        }
+                        descriptor.set.call(this, value);
+                    },
+                    get: descriptor.get,
+                    configurable: true
+                });
+            }
+        }
+        return element;
+    };
     
     // Override appendChild
-    Element.prototype.appendChild = function(newNode) {
-        // Check if this is a script being added to head
-        if (this === document.head && 
-            newNode.tagName === 'SCRIPT' && 
-            shouldDefer(newNode)) {
-            
+    Node.prototype.appendChild = function(newNode) {
+        if (newNode && newNode.tagName === 'SCRIPT' && newNode.src && shouldDefer(newNode.src)) {
             var src = newNode.src;
             var filename = src.split('/').pop();
-            log('🛑 Deferring script:', filename);
-            
-            // Queue it instead of appending
+            log('🛑 Blocked appendChild:', filename);
             deferredScripts.push(src);
-            
-            // Return something that won't break the caller
             return newNode;
         }
-        
-        // Normal behavior for everything else
         return originalAppendChild.call(this, newNode);
     };
     
-    // Override insertBefore similarly
-    Element.prototype.insertBefore = function(newNode, referenceNode) {
-        if (this === document.head && 
-            newNode.tagName === 'SCRIPT' && 
-            shouldDefer(newNode)) {
-            
+    // Override insertBefore
+    Node.prototype.insertBefore = function(newNode, referenceNode) {
+        if (newNode && newNode.tagName === 'SCRIPT' && newNode.src && shouldDefer(newNode.src)) {
             var src = newNode.src;
             var filename = src.split('/').pop();
-            log('🛑 Deferring script (insertBefore):', filename);
-            
+            log('🛑 Blocked insertBefore:', filename);
             deferredScripts.push(src);
             return newNode;
         }
-        
         return originalInsertBefore.call(this, newNode, referenceNode);
     };
     
-    // Override setAttribute to catch dynamically added scripts
+    // Override setAttribute
     Element.prototype.setAttribute = function(name, value) {
-        // If this is a script element and they're setting src
-        if (this.tagName === 'SCRIPT' && name === 'src' && this.parentNode === document.head) {
-            if (shouldDefer(this)) {
-                var filename = value.split('/').pop();
-                log('🛑 Deferring script (setAttribute):', filename);
-                deferredScripts.push(value);
-                return; // Don't actually set the src
-            }
+        if (this.tagName === 'SCRIPT' && name === 'src' && shouldDefer(value)) {
+            var filename = value.split('/').pop();
+            log('🛑 Blocked setAttribute:', filename);
+            deferredScripts.push(value);
+            return;
         }
-        
         return originalSetAttribute.call(this, name, value);
     };
     
-    // Process existing scripts immediately
-    function processExistingScripts() {
-        var scripts = document.querySelectorAll('script[src]');
-        var i, script, src, filename;
-        
-        for (i = 0; i < scripts.length; i++) {
-            script = scripts[i];
-            
-            if (script.parentNode === document.head && shouldDefer(script)) {
-                src = script.src;
-                filename = src.split('/').pop();
-                script.remove(); // Remove from DOM
-                deferredScripts.push(src);
-                log('🛑 Removed existing script:', filename);
+    // Override document.write
+    document.write = function(str) {
+        if (typeof str === 'string' && str.indexOf('<script') !== -1) {
+            var srcMatch = str.match(/src=["']([^"']+)["']/);
+            if (srcMatch && shouldDefer(srcMatch[1])) {
+                log('🛑 Blocked document.write script:', srcMatch[1].split('/').pop());
+                deferredScripts.push(srcMatch[1]);
+                return;
             }
         }
-    }
+        return originalWrite.call(document, str);
+    };
     
-    // Initialize
-    processExistingScripts();
-    loadDeferredScripts();
-    log('Defer script initialized with patterns:', DEFER_CONFIG.patterns.join(', '));
+    // Load deferred scripts after page load
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            log('Loading ' + deferredScripts.length + ' deferred scripts...');
+            var loaded = {};
+            
+            deferredScripts.forEach(function(src) {
+                if (loaded[src]) return;
+                loaded[src] = true;
+                
+                var script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.defer = true;
+                script.setAttribute('data-deferred', 'true');
+                document.body.appendChild(script);
+                log('Loaded deferred:', src.split('/').pop());
+            });
+        }, DEFER_CONFIG.delay);
+    });
+    
+    log('Defer script v2 initialized with patterns:', DEFER_CONFIG.patterns.join(', '));
 })();
