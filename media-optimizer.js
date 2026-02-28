@@ -18,7 +18,11 @@
         },
         video: {
             preload: 'none',           // Default: don't preload videos
-            autoplayPreload: 'metadata' // For autoplay videos
+            autoplayPreload: 'metadata', // For autoplay videos
+            posterService: 'https://images.weserv.nl/',
+            tenor: {
+                enabled: true
+            }
         },
         skipPatterns: [
             '.svg', '.webp', '.avif', '.ico',
@@ -99,6 +103,66 @@
     }
     
     // ===== VIDEO HANDLING =====
+    function generateVideoPoster(video) {
+        var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
+        if (!videoSrc) return;
+        
+        // Handle Tenor videos
+        if (videoSrc.indexOf('tenor.com') !== -1) {
+            // Try to get GIF version
+            var gifPoster = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
+            
+            // Preload the GIF to check if it works
+            var img = new Image();
+            img.onload = function() {
+                video.setAttribute('poster', gifPoster);
+                state.videos.withPoster++;
+            };
+            img.onerror = function() {
+                // If GIF fails, try alternative pattern
+                var altPoster = tryAlternativeTenorUrl(videoSrc);
+                if (altPoster) {
+                    video.setAttribute('poster', altPoster);
+                    state.videos.withPoster++;
+                } else {
+                    // Fallback to SVG placeholder
+                    createSvgPoster(video);
+                }
+            };
+            img.src = gifPoster;
+        } else {
+            // For non-Tenor videos, create SVG placeholder
+            createSvgPoster(video);
+        }
+    }
+    
+    function tryAlternativeTenorUrl(videoSrc) {
+        // Extract Tenor ID and name
+        var matches = videoSrc.match(/tenor\.com\/([^\/]+)\/([^\/\.]+)/);
+        if (matches) {
+            var id = matches[1]; // lJbMnadkHwEAAAPs
+            var name = matches[2]; // smile-evil
+            
+            // Try different Tenor URL patterns
+            return 'https://media.tenor.com/' + id + '/public/thumb.jpg';
+        }
+        return null;
+    }
+    
+    function createSvgPoster(video) {
+        var width = video.getAttribute('width') || 640;
+        var height = video.getAttribute('height') || 360;
+        
+        // Create SVG placeholder
+        var svg = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg">' +
+                  '<rect width="100%" height="100%" fill="#2a2a2a"/>' +
+                  '<text x="50%" y="50%" font-family="Arial" font-size="16" fill="#ffffff" text-anchor="middle" dy=".3em">🎬 Video</text>' +
+                  '</svg>';
+        
+        var poster = 'data:image/svg+xml,' + encodeURIComponent(svg);
+        video.setAttribute('poster', poster);
+    }
+    
     function setupVideoLazyLoading(video) {
         if (state.processed.has(video)) return;
         state.processed.add(video);
@@ -125,11 +189,14 @@
             }
         }
         
-        // Check for poster
+        // Generate poster if missing
+        if (!video.poster) {
+            generateVideoPoster(video);
+        }
+        
+        // Count videos with poster (after potential generation)
         if (video.poster) {
             state.videos.withPoster++;
-        } else {
-            console.warn('Video without poster:', video);
         }
         
         // Store original sources if needed for future lazy loading
@@ -144,18 +211,16 @@
         video.setAttribute('data-video-processed', 'true');
     }
     
-    // ===== LAZY LOADING & DECODING - UPDATED TO HANDLE HIDDEN IFRAMES AND VIDEOS =====
+    // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
         
-        // Handle IFRAMES - including hidden/placeholder ones
+        // Handle IFRAMES
         if (el.tagName === 'IFRAME') {
-            // Always set loading="lazy" for iframes, even if no src
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
                 el.setAttribute('loading', CONFIG.lazy);
             }
             
-            // Mark placeholder iframes (no src or empty src)
             if (!el.src || el.src === '' || el.src === window.location.href) {
                 el.setAttribute('data-placeholder', 'true');
             }
@@ -163,12 +228,10 @@
         
         // Handle IMAGES
         if (el.tagName === 'IMG') {
-            // Always apply loading="lazy" if not set
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
                 el.setAttribute('loading', CONFIG.lazy);
             }
             
-            // Always apply decoding="async" if not set
             if (!el.hasAttribute('decoding') || el.getAttribute('decoding') === '') {
                 el.setAttribute('decoding', CONFIG.async);
             }
@@ -191,7 +254,7 @@
         // Determine output format
         var outputFormat;
         if (isGif) {
-            outputFormat = 'webp'; // Convert GIF to WebP for animation support
+            outputFormat = 'webp';
         } else {
             outputFormat = supportsFormat('avif') ? 'avif' : 'webp';
         }
@@ -208,27 +271,26 @@
         // Format-specific optimizations
         switch (outputFormat) {
             case 'png':
-                params.push('af');      // Adaptive filter for PNG
-                params.push('l=9');     // Max compression
+                params.push('af');
+                params.push('l=9');
                 params.push('lossless=true');
                 break;
             case 'webp':
             case 'avif':
                 params.push('lossless=true');
-                params.push('il');       // Progressive/Interlace
+                params.push('il');
                 break;
             case 'jpeg':
             case 'jpg':
-                params.push('il');       // Progressive JPEG
+                params.push('il');
                 break;
         }
         
         // Special handling for animated GIFs
         if (isGif) {
-            params.push('n=-1');         // All frames
-            params.push('lossless=true'); // Keep quality
+            params.push('n=-1');
+            params.push('lossless=true');
         } else if (originalFormat === 'png') {
-            // PNG specific
             params.push('af');
             params.push('l=9');
         }
@@ -255,16 +317,12 @@
     }
     
     function optimizeImage(img) {
-        // Skip if no src or data URI
         if (!img.src || img.src.indexOf('data:') === 0) return;
         
-        // ALWAYS apply lazy attributes first (even if skipped)
         applyLazyAttributes(img);
         
-        // Skip if already processed
         if (state.processed.has(img)) return;
         
-        // Check if image should be skipped
         var skip = shouldSkip(img.src, img);
         if (skip) {
             state.processed.add(img);
@@ -273,28 +331,23 @@
             return;
         }
         
-        // Mark as processed
         state.processed.add(img);
         state.stats.total++;
         
-        // Store original
         var originalSrc = img.src;
         img.setAttribute('data-original', originalSrc);
         
-        // Build optimized URL
         var optimization = buildWeservUrl(img);
         
-        // Update stats
         state.stats.optimized++;
         state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
         state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
         
-        // Set optimized source with error fallback
         img.onerror = function() {
             state.stats.failed++;
             img.setAttribute('data-optimized', 'failed');
-            img.src = originalSrc; // Revert to original on error
-            img.onerror = null; // Prevent infinite loop
+            img.src = originalSrc;
+            img.onerror = null;
         };
         
         img.src = optimization.url;
@@ -313,7 +366,6 @@
                 var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
-                // Handle the node itself if it's media
                 if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
                     if (node.tagName === 'IMG') {
@@ -321,15 +373,12 @@
                     }
                 }
                 
-                // Handle nested media
                 if (node.querySelectorAll) {
-                    // First, apply lazy attributes to all media
                     var allMedia = node.querySelectorAll('img, iframe, video');
                     for (var j = 0; j < allMedia.length; j++) {
                         applyLazyAttributes(allMedia[j]);
                     }
                     
-                    // Then optimize images
                     var images = node.querySelectorAll('img');
                     for (var k = 0; k < images.length; k++) {
                         optimizeImage(images[k]);
@@ -339,22 +388,20 @@
         });
     });
     
-    // ===== PROXY PATTERNS FOR DYNAMIC IMAGES =====
+    // ===== PROXY PATTERNS =====
     var OriginalImage = window.Image;
     window.Image = function(width, height) {
         var img = new OriginalImage(width, height);
         
-        // Apply lazy attributes immediately
         img.setAttribute('loading', CONFIG.lazy);
         img.setAttribute('decoding', CONFIG.async);
         
-        // Store original src setter
         var originalSrcDesc = Object.getOwnPropertyDescriptor(img, 'src');
         if (originalSrcDesc && originalSrcDesc.set) {
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    if (value && !value.startsWith('data:')) {
+                    if (value && value.indexOf('data:') !== 0) {
                         optimizeImage(this);
                     }
                 },
@@ -367,13 +414,12 @@
     };
     window.Image.prototype = OriginalImage.prototype;
     
-    // Override src setter for all images
     var srcDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     if (srcDescriptor && srcDescriptor.set) {
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                if (value && !value.startsWith('data:') && this.isConnected) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected) {
                     optimizeImage(this);
                 }
             },
@@ -382,17 +428,15 @@
         });
     }
     
-    // Override setAttribute for dynamic src changes
     var originalSetAttribute = Element.prototype.setAttribute;
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        if (name === 'src' && this.tagName === 'IMG' && value && !value.startsWith('data:')) {
+        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
             optimizeImage(this);
         }
     };
     
-    // Override createElement
     var originalCreateElement = document.createElement;
     document.createElement = function(tagName, options) {
         var element = originalCreateElement.call(this, tagName, options);
@@ -409,38 +453,29 @@
         if (state.initDone) return;
         state.initDone = true;
         
-        // Process ALL existing images (including those that will be skipped)
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
-            
-            // ALWAYS apply lazy attributes first
             applyLazyAttributes(img);
-            
-            // Then attempt optimization (will skip if needed)
             optimizeImage(img);
         }
         
-        // Process ALL iframes (including hidden/placeholder ones)
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
             applyLazyAttributes(allIframes[j]);
         }
         
-        // Process ALL videos
         var allVideos = document.querySelectorAll('video');
         for (var k = 0; k < allVideos.length; k++) {
             applyLazyAttributes(allVideos[k]);
         }
         
-        // Start mutation observer
         if (document.body) {
             mutationObserver.observe(document.body, {
                 childList: true,
                 subtree: true
             });
         } else {
-            // Wait for body
             var bodyCheck = setInterval(function() {
                 if (document.body) {
                     clearInterval(bodyCheck);
@@ -449,19 +484,16 @@
                         subtree: true
                     });
                     
-                    // Re-process any images that might have been missed
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var i = 0; i < missedImages.length; i++) {
                         optimizeImage(missedImages[i]);
                     }
                     
-                    // Re-process any iframes that might have been missed
                     var missedIframes = document.querySelectorAll('iframe:not([loading])');
                     for (var j = 0; j < missedIframes.length; j++) {
                         applyLazyAttributes(missedIframes[j]);
                     }
                     
-                    // Re-process any videos that might have been missed
                     var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
                     for (var k = 0; k < missedVideos.length; k++) {
                         applyLazyAttributes(missedVideos[k]);
@@ -470,7 +502,6 @@
             }, 50);
         }
         
-        // Performance report
         window.addEventListener('load', function() {
             setTimeout(function() {
                 var finalImages = document.querySelectorAll('img');
@@ -480,23 +511,19 @@
                 var asyncCount = 0;
                 var placeholderCount = 0;
                 
-                // Count all images (including skipped ones)
                 for (var i = 0; i < finalImages.length; i++) {
                     if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
                     if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
                 }
                 
-                // Count iframes and placeholders
                 for (var j = 0; j < finalIframes.length; j++) {
                     if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
                     if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
                 }
                 
-                // Count videos
                 for (var k = 0; k < finalVideos.length; k++) {
-                    // Videos don't have loading attribute, count them separately
                     var preload = finalVideos[k].getAttribute('preload');
-                    if (preload === 'none') lazyCount++; // Count as "lazy loaded"
+                    if (preload === 'none') lazyCount++;
                 }
                 
                 var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
@@ -522,7 +549,6 @@
                     console.warn('Optimization failures:', state.stats.failed);
                 }
                 
-                // Verify all iframes have lazy loading
                 var iframesWithoutLazy = document.querySelectorAll('iframe:not([loading="lazy"])');
                 if (iframesWithoutLazy.length > 0) {
                     console.warn('Iframes still without lazy loading:', iframesWithoutLazy.length);
@@ -535,6 +561,5 @@
         });
     }
     
-    // ===== START IMMEDIATELY =====
     init();
 })();
