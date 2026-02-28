@@ -5528,6 +5528,7 @@ class PostModernizer {
             // Process media in content
             this.#preserveMediaDimensions(fragment);
             
+            // FIX: Transform special elements FIRST before text processing
             // Transform any quotes, spoilers, code blocks, attachments, embedded links
             this.#modernizeQuotesInContent(fragment);
             this.#modernizeSpoilersInContent(fragment);
@@ -5535,7 +5536,10 @@ class PostModernizer {
             this.#modernizeAttachmentsInContent(fragment);
             this.#modernizeEmbeddedLinksInContent(fragment);
             
-            // Process text nodes and line breaks
+            // FIX: Add protection for transformed elements to prevent post-text wrapping
+            this.#protectTransformedElements(fragment);
+            
+            // FIX: Process text nodes and line breaks LAST, but skip protected elements
             this.#processTextAndLineBreaks(fragment);
             
             contentWrapper.appendChild(fragment);
@@ -5559,6 +5563,34 @@ class PostModernizer {
     } catch (error) {
         console.error('Error transforming summary post preview:', error);
     }
+}
+
+// FIX: Add new method to protect transformed elements from post-text wrapping
+#protectTransformedElements(container) {
+    // Mark transformed elements to be skipped by text processing
+    const protectedSelectors = [
+        '.modern-quote',
+        '.modern-spoiler', 
+        '.modern-code',
+        '.modern-attachment',
+        '.modern-embedded-link',
+        '.code-header',
+        '.spoiler-header',
+        '.quote-header',
+        '.code-copy-btn',
+        '.code-expand-btn',
+        '.spoiler-expand-btn',
+        '.quote-expand-btn'
+    ];
+    
+    container.querySelectorAll(protectedSelectors.join(', ')).forEach(el => {
+        el.setAttribute('data-protected', 'true');
+        
+        // Also protect all children
+        el.querySelectorAll('*').forEach(child => {
+            child.setAttribute('data-protected', 'true');
+        });
+    });
 }
     
 #modernizeQuotesInContent(element) {
