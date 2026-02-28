@@ -1,8 +1,9 @@
-// Add this to your defer-host-scripts.js (or early in dynamic_loader.js)
+// Add this to your dynamic_loader.js after the existing code
 (function() {
     'use strict';
     
-    const TARGET_PATTERNS = {
+    // Resources we want to make non-blocking
+    const TARGET_RESOURCES = {
         scripts: [
             'jquery.modal/modal.js',
             'jquery.scrollbar/jquery.scrollbar.js',
@@ -20,64 +21,80 @@
     };
     
     function isTargetScript(src) {
-        return TARGET_PATTERNS.scripts.some(pattern => src.includes(pattern));
+        return TARGET_RESOURCES.scripts.some(pattern => src.includes(pattern));
     }
     
     function isTargetStylesheet(href) {
-        return TARGET_PATTERNS.stylesheets.some(pattern => href.includes(pattern));
+        return TARGET_RESOURCES.stylesheets.some(pattern => href.includes(pattern));
     }
     
-    // Store the original appendChild
-    const originalAppendChild = Node.prototype.appendChild;
-    
-    // Override it
-    Node.prototype.appendChild = function(newNode) {
-        // Handle scripts
-        if (newNode && newNode.tagName === 'SCRIPT' && newNode.src && isTargetScript(newNode.src)) {
-            console.log('🎯 Intercepted script:', newNode.src.split('/').pop());
+    // Create observer
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                // Handle script tags
+                if (node.tagName === 'SCRIPT' && node.src && isTargetScript(node.src)) {
+                    console.log('🎯 Found target script:', node.src.split('/').pop());
+                    
+                    // Create a new async/defer script
+                    const newScript = document.createElement('script');
+                    newScript.src = node.src;
+                    newScript.async = true;
+                    newScript.defer = true;
+                    newScript.setAttribute('data-original', 'true');
+                    
+                    // Replace the original
+                    node.parentNode.replaceChild(newScript, node);
+                }
+                
+                // Handle link tags (CSS)
+                if (node.tagName === 'LINK' && node.rel === 'stylesheet' && 
+                    node.href && isTargetStylesheet(node.href)) {
+                    console.log('🎯 Found target stylesheet:', node.href.split('/').pop());
+                    
+                    // Method 1: Set media="print" then onload set to "all"
+                    node.media = 'print';
+                    node.onload = () => { node.media = 'all'; };
+                    
+                    // Alternative Method 2: If you want to be more aggressive, use preload approach
+                    // But this is cleaner for existing nodes
+                }
+            });
             
-            // Create a new async/defer version
-            const newScript = document.createElement('script');
-            newScript.src = newNode.src;
-            newScript.async = true;
-            newScript.defer = true;
-            
-            // Return the new script instead
-            return originalAppendChild.call(this, newScript);
-        }
-        
-        // Handle stylesheets
-        if (newNode && newNode.tagName === 'LINK' && newNode.rel === 'stylesheet' && 
-            newNode.href && isTargetStylesheet(newNode.href)) {
-            console.log('🎯 Intercepted stylesheet:', newNode.href.split('/').pop());
-            
-            // Make it non-blocking
-            newNode.media = 'print';
-            newNode.onload = () => { newNode.media = 'all'; };
-        }
-        
-        return originalAppendChild.call(this, newNode);
-    };
+            // Also check for script tags that might have been added via innerHTML
+            if (mutation.target.nodeType === 1) {
+                const scripts = mutation.target.querySelectorAll('script[src]');
+                scripts.forEach((script) => {
+                    if (!script.hasAttribute('data-processed') && isTargetScript(script.src)) {
+                        script.setAttribute('data-processed', 'true');
+                        const newScript = document.createElement('script');
+                        newScript.src = script.src;
+                        newScript.async = true;
+                        newScript.defer = true;
+                        newScript.setAttribute('data-processed', 'true');
+                        script.parentNode.replaceChild(newScript, script);
+                    }
+                });
+                
+                const styles = mutation.target.querySelectorAll('link[rel="stylesheet"]');
+                styles.forEach((style) => {
+                    if (!style.hasAttribute('data-processed') && isTargetStylesheet(style.href)) {
+                        style.setAttribute('data-processed', 'true');
+                        style.media = 'print';
+                        style.onload = () => { style.media = 'all'; };
+                    }
+                });
+            }
+        });
+    });
     
-    // Also override insertBefore for completeness
-    const originalInsertBefore = Node.prototype.insertBefore;
-    Node.prototype.insertBefore = function(newNode, referenceNode) {
-        if (newNode && newNode.tagName === 'SCRIPT' && newNode.src && isTargetScript(newNode.src)) {
-            const newScript = document.createElement('script');
-            newScript.src = newNode.src;
-            newScript.async = true;
-            newScript.defer = true;
-            return originalInsertBefore.call(this, newScript, referenceNode);
-        }
-        
-        if (newNode && newNode.tagName === 'LINK' && newNode.rel === 'stylesheet' && 
-            newNode.href && isTargetStylesheet(newNode.href)) {
-            newNode.media = 'print';
-            newNode.onload = () => { newNode.media = 'all'; };
-        }
-        
-        return originalInsertBefore.call(this, newNode, referenceNode);
-    };
+    // Start observing
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: false,
+        characterData: false
+    });
     
-    console.log('🛡️ Script/Style interceptor active');
+    console.log('🔍 Resource observer started - watching for forum scripts and styles');
 })();
