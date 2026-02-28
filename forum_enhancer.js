@@ -5528,7 +5528,6 @@ class PostModernizer {
             // Process media in content
             this.#preserveMediaDimensions(fragment);
             
-            // FIX: Transform special elements FIRST before text processing
             // Transform any quotes, spoilers, code blocks, attachments, embedded links
             this.#modernizeQuotesInContent(fragment);
             this.#modernizeSpoilersInContent(fragment);
@@ -5536,10 +5535,7 @@ class PostModernizer {
             this.#modernizeAttachmentsInContent(fragment);
             this.#modernizeEmbeddedLinksInContent(fragment);
             
-            // FIX: Add protection for transformed elements to prevent post-text wrapping
-            this.#protectTransformedElements(fragment);
-            
-            // FIX: Process text nodes and line breaks LAST, but skip protected elements
+            // Process text nodes and line breaks
             this.#processTextAndLineBreaks(fragment);
             
             contentWrapper.appendChild(fragment);
@@ -5563,34 +5559,6 @@ class PostModernizer {
     } catch (error) {
         console.error('Error transforming summary post preview:', error);
     }
-}
-
-// FIX: Add new method to protect transformed elements from post-text wrapping
-#protectTransformedElements(container) {
-    // Mark transformed elements to be skipped by text processing
-    const protectedSelectors = [
-        '.modern-quote',
-        '.modern-spoiler', 
-        '.modern-code',
-        '.modern-attachment',
-        '.modern-embedded-link',
-        '.code-header',
-        '.spoiler-header',
-        '.quote-header',
-        '.code-copy-btn',
-        '.code-expand-btn',
-        '.spoiler-expand-btn',
-        '.quote-expand-btn'
-    ];
-    
-    container.querySelectorAll(protectedSelectors.join(', ')).forEach(el => {
-        el.setAttribute('data-protected', 'true');
-        
-        // Also protect all children
-        el.querySelectorAll('*').forEach(child => {
-            child.setAttribute('data-protected', 'true');
-        });
-    });
 }
     
 #modernizeQuotesInContent(element) {
@@ -8763,96 +8731,79 @@ class PostModernizer {
         });
     }
 
-#processTextAndLineBreaks(element) {
-    if (this.#isInEditor(element)) return;
-    
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
-        acceptNode: function(node) {
-            // Skip if node or its parent is protected
-            if (node.parentElement && node.parentElement.getAttribute('data-protected') === 'true') {
-                return NodeFilter.FILTER_REJECT;
-            }
-            if (node.parentElement && node.parentElement.closest('[data-protected="true"]')) {
-                return NodeFilter.FILTER_REJECT;
-            }
-            return NodeFilter.FILTER_ACCEPT;
-        }
-    }, false);
-    
-    const textNodes = [];
-    let node;
-
-    while ((node = walker.nextNode())) {
-        if (node.textContent.trim() !== '') {
-            textNodes.push(node);
-        }
-    }
-
-    textNodes.forEach(textNode => {
-        if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
-            const span = document.createElement('span');
-            span.className = 'post-text';
-            span.textContent = textNode.textContent;
-            textNode.parentNode.replaceChild(span, textNode);
-        }
-    });
-
-    // Process br elements but skip protected ones
-    element.querySelectorAll('br').forEach(br => {
-        if (br.closest('[data-protected="true"]')) {
-            return;
-        }
+    #processTextAndLineBreaks(element) {
+        if (this.#isInEditor(element)) return;
         
-        const prevSibling = br.previousElementSibling;
-        const nextSibling = br.nextElementSibling;
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+        let node;
 
-        if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
-            return;
+        while ((node = walker.nextNode())) {
+            if (node.textContent.trim() !== '') {
+                textNodes.push(node);
+            }
         }
 
-        if (prevSibling && nextSibling) {
-            const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
-            const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+        textNodes.forEach(textNode => {
+            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
+                const span = document.createElement('span');
+                span.className = 'post-text';
+                span.textContent = textNode.textContent;
+                textNode.parentNode.replaceChild(span, textNode);
+            }
+        });
 
-            if (prevIsPostText && nextIsPostText) {
-                prevSibling.classList.add('paragraph-end');
-                br.remove();
-            } else {
-                const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-                const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+        element.querySelectorAll('br').forEach(br => {
+            const prevSibling = br.previousElementSibling;
+            const nextSibling = br.nextElementSibling;
 
-                if (prevIsModern && nextIsModern) {
+            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
+                return;
+            }
+
+            if (prevSibling && nextSibling) {
+                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
+                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+
+                if (prevIsPostText && nextIsPostText) {
+                    prevSibling.classList.add('paragraph-end');
                     br.remove();
                 } else {
-                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+
+                    if (prevIsModern && nextIsModern) {
+                        br.remove();
+                    } else {
+                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                    }
                 }
+            } else {
+                br.remove();
             }
-        } else {
-            br.remove();
-        }
-    });
+        });
 
-    const postTextElements = element.querySelectorAll('.post-text:not([data-protected="true"])');
-    for (let i = 0; i < postTextElements.length - 1; i++) {
-        const current = postTextElements[i];
-        const next = postTextElements[i + 1];
+        const postTextElements = element.querySelectorAll('.post-text');
+        for (let i = 0; i < postTextElements.length - 1; i++) {
+            const current = postTextElements[i];
+            const next = postTextElements[i + 1];
 
-        let nodeBetween = current.nextSibling;
-        let onlyWhitespace = true;
+            let nodeBetween = current.nextSibling;
+            let onlyWhitespace = true;
 
-        while (nodeBetween && nodeBetween !== next) {
-            if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                onlyWhitespace = false;
-                break;
+            while (nodeBetween && nodeBetween !== next) {
+                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                    onlyWhitespace = false;
+                    break;
+                }
+                nodeBetween = nodeBetween.nextSibling;
             }
-            nodeBetween = nodeBetween.nextSibling;
-        }
 
-        if (onlyWhitespace) {
-            current.classList.add('paragraph-end');
+            if (onlyWhitespace) {
+                current.classList.add('paragraph-end');
+            }
         }
     }
-}
 
     #processSignature(element) {
         if (this.#isInEditor(element)) return;
@@ -10508,49 +10459,48 @@ class PostModernizer {
         });
     }
 
-#transformCodeBlock(container) {
-    const codeTop = container.querySelector('.code_top');
-    const codeContent = container.querySelector('.code');
+    #transformCodeBlock(container) {
+        const codeTop = container.querySelector('.code_top');
+        const codeContent = container.querySelector('.code');
 
-    if (!codeTop || !codeContent) return;
+        if (!codeTop || !codeContent) return;
 
-    const codeText = codeTop.textContent.trim();
-    const codeType = codeText.toUpperCase();
-    const isLongContent = this.#isLongContent(codeContent);
+        const codeText = codeTop.textContent.trim();
+        const codeType = codeText.toUpperCase();
+        const isLongContent = this.#isLongContent(codeContent);
 
-    const modernCode = document.createElement('div');
-    modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
+        const modernCode = document.createElement('div');
+        modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
 
-    // CRITICAL FIX: Add actual <i> elements with proper classes
-    let html = '<div class="code-header">' +
-        '<div class="code-icon">' +
-        '<i class="fa-regular fa-code" aria-hidden="true"></i>' + // This was missing
-        '</div>' +
-        '<div class="code-info">' +
-        '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
-        '</div>' +
-        '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
-        '<i class="fa-regular fa-copy" aria-hidden="true"></i>' + // This was missing
-        '</button>' +
-        '</div>';
+        let html = '<div class="code-header">' +
+            '<div class="code-icon">' +
+            '<i class="fa-regular fa-code" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="code-info">' +
+            '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
+            '</div>' +
+            '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
+            '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
 
-    html += '<div class="code-content' +
-        (isLongContent ? ' collapsible-content' : '') + '">' +
-        '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
-        '</div>';
+        html += '<div class="code-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
+            '</div>';
 
-    if (isLongContent) {
-        html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
-            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + // This was missing
-            'Show more code' +
-            '</button>';
+        if (isLongContent) {
+            html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more code' +
+                '</button>';
+        }
+
+        modernCode.innerHTML = html;
+        container.replaceWith(modernCode);
+
+        this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
     }
-
-    modernCode.innerHTML = html;
-    container.replaceWith(modernCode);
-
-    this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
-}
 
     #addCodeEventListeners(codeElement, codeText, isLongContent = false) {
         const codeHeader = codeElement.querySelector('.code-header');
