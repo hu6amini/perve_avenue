@@ -8891,47 +8891,47 @@ class PostModernizer {
         }, 10);
     }
 
-#transformSpoiler(container) {
-    const spoilerTop = container.querySelector('.code_top');
-    const spoilerContent = container.querySelector('.code[align="left"]');
+    #transformSpoiler(container) {
+        const spoilerTop = container.querySelector('.code_top');
+        const spoilerContent = container.querySelector('.code[align="left"]');
 
-    if (!spoilerTop || !spoilerContent) return;
+        if (!spoilerTop || !spoilerContent) return;
 
-    const isLongContent = this.#isLongContent(spoilerContent);
+        const isLongContent = this.#isLongContent(spoilerContent);
 
-    const modernSpoiler = document.createElement('div');
-    modernSpoiler.className = 'modern-spoiler';
+        const modernSpoiler = document.createElement('div');
+        modernSpoiler.className = 'modern-spoiler';
 
-    let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
-        '<div class="spoiler-icon">' +
-        '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +  // FIX: Added icon
-        '</div>' +
-        '<div class="spoiler-info">' +
-        '<span class="spoiler-title">SPOILER</span>' +
-        '</div>' +
-        '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
-        '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +  // FIX: Added icon
-        '</button>' +
-        '</div>';
+        let html = '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
+            '<div class="spoiler-icon">' +
+            '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="spoiler-info">' +
+            '<span class="spoiler-title">SPOILER</span>' +
+            '</div>' +
+            '<button class="spoiler-toggle" type="button" aria-label="Toggle spoiler">' +
+            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
 
-    html += '<div class="spoiler-content' +
-        (isLongContent ? ' collapsible-content' : '') + '">' +
-        this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
-        '</div>';
+        html += '<div class="spoiler-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            this.#preserveMediaDimensionsInHTML(spoilerContent.innerHTML) +
+            '</div>';
 
-    if (isLongContent) {
-        html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
-            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +  // FIX: Added icon
-            'Show more' +
-            '</button>';
+        if (isLongContent) {
+            html += '<button class="spoiler-expand-btn" type="button" aria-label="Show full spoiler content">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more' +
+                '</button>';
+        }
+
+        modernSpoiler.innerHTML = html;
+        container.replaceWith(modernSpoiler);
+
+        this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
     }
 
-    modernSpoiler.innerHTML = html;
-    container.replaceWith(modernSpoiler);
-
-    this.#addSpoilerEventListeners(modernSpoiler, isLongContent);
-}
-  
     #addSpoilerEventListeners(spoilerElement, isLongContent = false) {
         const spoilerHeader = spoilerElement.querySelector('.spoiler-header');
         const spoilerToggle = spoilerElement.querySelector('.spoiler-toggle');
@@ -10459,49 +10459,49 @@ class PostModernizer {
         });
     }
 
-#transformCodeBlock(container) {
-    const codeTop = container.querySelector('.code_top');
-    const codeContent = container.querySelector('.code');
+    #transformCodeBlock(container) {
+        const codeTop = container.querySelector('.code_top');
+        const codeContent = container.querySelector('.code');
 
-    if (!codeTop || !codeContent) return;
+        if (!codeTop || !codeContent) return;
 
-    const codeText = codeTop.textContent.trim();
-    const codeType = codeText.toUpperCase();
-    const isLongContent = this.#isLongContent(codeContent);
+        const codeText = codeTop.textContent.trim();
+        const codeType = codeText.toUpperCase();
+        const isLongContent = this.#isLongContent(codeContent);
 
-    const modernCode = document.createElement('div');
-    modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
+        const modernCode = document.createElement('div');
+        modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
 
-    let html = '<div class="code-header">' +
-        '<div class="code-icon">' +
-        '<i class="fa-regular fa-code" aria-hidden="true"></i>' +  // FIX: Added icon
-        '</div>' +
-        '<div class="code-info">' +
-        '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
-        '</div>' +
-        '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
-        '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +  // FIX: Added icon
-        '</button>' +
-        '</div>';
+        let html = '<div class="code-header">' +
+            '<div class="code-icon">' +
+            '<i class="fa-regular fa-code" aria-hidden="true"></i>' +
+            '</div>' +
+            '<div class="code-info">' +
+            '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
+            '</div>' +
+            '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
+            '<i class="fa-regular fa-copy" aria-hidden="true"></i>' +
+            '</button>' +
+            '</div>';
 
-    html += '<div class="code-content' +
-        (isLongContent ? ' collapsible-content' : '') + '">' +
-        '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
-        '</div>';
+        html += '<div class="code-content' +
+            (isLongContent ? ' collapsible-content' : '') + '">' +
+            '<pre><code>' + this.#escapeHtml(codeContent.textContent) + '</code></pre>' +
+            '</div>';
 
-    if (isLongContent) {
-        html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
-            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +  // FIX: Added icon
-            'Show more code' +
-            '</button>';
+        if (isLongContent) {
+            html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
+                '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' +
+                'Show more code' +
+                '</button>';
+        }
+
+        modernCode.innerHTML = html;
+        container.replaceWith(modernCode);
+
+        this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
     }
 
-    modernCode.innerHTML = html;
-    container.replaceWith(modernCode);
-
-    this.#addCodeEventListeners(modernCode, codeContent.textContent, isLongContent);
-}
-  
     #addCodeEventListeners(codeElement, codeText, isLongContent = false) {
         const codeHeader = codeElement.querySelector('.code-header');
         const copyBtn = codeElement.querySelector('.code-copy-btn');
