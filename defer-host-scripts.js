@@ -7,13 +7,15 @@
     var DEFER_CONFIG = {
         // Scripts to defer (by URL pattern)
         patterns: [
-            'modal.js',
-            'jq.js', 
-            'jqt.js',
             'hb.js',
             'handlebars',
+            'jq.js',
+            'jqt.js',
+            'modal.js',
+            'turnstile',
+            'api.js?render', // For recaptcha
             'adsbygoogle.js',
-            'script-loader' // Defer the main host loader too
+            'script-loader'
         ],
         
         // Delay before loading deferred scripts (ms)
@@ -157,5 +159,5 @@
     // Initialize
     processExistingScripts();
     loadDeferredScripts();
-    log('Defer script initialized');
+    log('Defer script initialized with patterns:', DEFER_CONFIG.patterns.join(', '));
 })();
