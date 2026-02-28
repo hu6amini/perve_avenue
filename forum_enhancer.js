@@ -5323,7 +5323,8 @@ class PostModernizer {
     // Only run on send page
     if (document.body.id !== 'send') return;
     
-    const summaryPosts = document.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
+    // Target all summary list items with classes starting with "box_"
+    const summaryPosts = document.querySelectorAll('.summary ol.list li[class*="box_"]:not(.post-preview-modernized)');
     
     summaryPosts.forEach((post, index) => {
         if (post.closest('.summary') && !post.classList.contains('post-preview-modernized')) {
@@ -5581,7 +5582,7 @@ class PostModernizer {
         this.#summaryObserverId = globalThis.forumObserver.register({
             id: 'summary-post-preview-modernizer',
             callback: (node) => this.#handleNewSummaryPosts(node),
-            selector: '.summary ol.list li',
+            selector: '.summary ol.list li[class*="box_"]', // Updated to target box_* classes
             priority: 'normal',
             pageTypes: ['send'] // Only on send page
         });
@@ -5590,13 +5591,13 @@ class PostModernizer {
         setInterval(() => this.#transformSummaryPostPreviews(), 2000);
     }
 }
-
+  
 #handleNewSummaryPosts(node) {
     if (document.body.id !== 'send') return;
     
     const processPost = (post, idx) => {
         // Calculate global index
-        const allPosts = document.querySelectorAll('.summary ol.list li');
+        const allPosts = document.querySelectorAll('.summary ol.list li[class*="box_"]');
         const globalIndex = Array.from(allPosts).indexOf(post);
         
         // Check if post still exists before waiting for avatars
@@ -5617,10 +5618,10 @@ class PostModernizer {
         });
     };
     
-    if (node.matches && node.matches('.summary ol.list li')) {
+    if (node.matches && node.matches('.summary ol.list li[class*="box_"]')) {
         processPost(node, 0);
     } else if (node.querySelectorAll) {
-        const posts = node.querySelectorAll('.summary ol.list li:not(.post-preview-modernized)');
+        const posts = node.querySelectorAll('.summary ol.list li[class*="box_"]:not(.post-preview-modernized)');
         posts.forEach((post, idx) => {
             processPost(post, idx);
         });
