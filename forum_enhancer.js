@@ -8763,79 +8763,96 @@ class PostModernizer {
         });
     }
 
-    #processTextAndLineBreaks(element) {
-        if (this.#isInEditor(element)) return;
-        
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-        const textNodes = [];
-        let node;
-
-        while ((node = walker.nextNode())) {
-            if (node.textContent.trim() !== '') {
-                textNodes.push(node);
+#processTextAndLineBreaks(element) {
+    if (this.#isInEditor(element)) return;
+    
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+        acceptNode: function(node) {
+            // Skip if node or its parent is protected
+            if (node.parentElement && node.parentElement.getAttribute('data-protected') === 'true') {
+                return NodeFilter.FILTER_REJECT;
             }
+            if (node.parentElement && node.parentElement.closest('[data-protected="true"]')) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
         }
+    }, false);
+    
+    const textNodes = [];
+    let node;
 
-        textNodes.forEach(textNode => {
-            if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
-                const span = document.createElement('span');
-                span.className = 'post-text';
-                span.textContent = textNode.textContent;
-                textNode.parentNode.replaceChild(span, textNode);
-            }
-        });
-
-        element.querySelectorAll('br').forEach(br => {
-            const prevSibling = br.previousElementSibling;
-            const nextSibling = br.nextElementSibling;
-
-            if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
-                return;
-            }
-
-            if (prevSibling && nextSibling) {
-                const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
-                const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
-
-                if (prevIsPostText && nextIsPostText) {
-                    prevSibling.classList.add('paragraph-end');
-                    br.remove();
-                } else {
-                    const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-                    const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
-
-                    if (prevIsModern && nextIsModern) {
-                        br.remove();
-                    } else {
-                        br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
-                    }
-                }
-            } else {
-                br.remove();
-            }
-        });
-
-        const postTextElements = element.querySelectorAll('.post-text');
-        for (let i = 0; i < postTextElements.length - 1; i++) {
-            const current = postTextElements[i];
-            const next = postTextElements[i + 1];
-
-            let nodeBetween = current.nextSibling;
-            let onlyWhitespace = true;
-
-            while (nodeBetween && nodeBetween !== next) {
-                if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
-                    onlyWhitespace = false;
-                    break;
-                }
-                nodeBetween = nodeBetween.nextSibling;
-            }
-
-            if (onlyWhitespace) {
-                current.classList.add('paragraph-end');
-            }
+    while ((node = walker.nextNode())) {
+        if (node.textContent.trim() !== '') {
+            textNodes.push(node);
         }
     }
+
+    textNodes.forEach(textNode => {
+        if (textNode.parentNode && (!textNode.parentNode.classList || !textNode.parentNode.classList.contains('post-text'))) {
+            const span = document.createElement('span');
+            span.className = 'post-text';
+            span.textContent = textNode.textContent;
+            textNode.parentNode.replaceChild(span, textNode);
+        }
+    });
+
+    // Process br elements but skip protected ones
+    element.querySelectorAll('br').forEach(br => {
+        if (br.closest('[data-protected="true"]')) {
+            return;
+        }
+        
+        const prevSibling = br.previousElementSibling;
+        const nextSibling = br.nextElementSibling;
+
+        if (br.closest('.modern-spoiler, .modern-code, .modern-quote, .code-header, .spoiler-header, .quote-header, .modern-attachment, .attachment-header, .modern-embedded-link')) {
+            return;
+        }
+
+        if (prevSibling && nextSibling) {
+            const prevIsPostText = prevSibling.classList && prevSibling.classList.contains('post-text');
+            const nextIsPostText = nextSibling.classList && nextSibling.classList.contains('post-text');
+
+            if (prevIsPostText && nextIsPostText) {
+                prevSibling.classList.add('paragraph-end');
+                br.remove();
+            } else {
+                const prevIsModern = prevSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+                const nextIsModern = nextSibling.closest('.modern-spoiler, .modern-code, .modern-quote, .modern-attachment, .modern-embedded-link');
+
+                if (prevIsModern && nextIsModern) {
+                    br.remove();
+                } else {
+                    br.style.cssText = 'margin:0;padding:0;display:block;content:\'\';height:0.75em;margin-bottom:0.25em';
+                }
+            }
+        } else {
+            br.remove();
+        }
+    });
+
+    const postTextElements = element.querySelectorAll('.post-text:not([data-protected="true"])');
+    for (let i = 0; i < postTextElements.length - 1; i++) {
+        const current = postTextElements[i];
+        const next = postTextElements[i + 1];
+
+        let nodeBetween = current.nextSibling;
+        let onlyWhitespace = true;
+
+        while (nodeBetween && nodeBetween !== next) {
+            if (nodeBetween.nodeType === Node.TEXT_NODE && nodeBetween.textContent.trim() !== '') {
+                onlyWhitespace = false;
+                break;
+            }
+            nodeBetween = nodeBetween.nextSibling;
+        }
+
+        if (onlyWhitespace) {
+            current.classList.add('paragraph-end');
+        }
+    }
+}
 
     #processSignature(element) {
         if (this.#isInEditor(element)) return;
