@@ -120,40 +120,66 @@
         return null;
     }
     
-    function generateVideoPoster(video) {
-        var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
-        if (!videoSrc) return;
+ function generateVideoPoster(video) {
+    var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
+    if (!videoSrc) return;
+    
+    if (videoSrc.indexOf('tenor.com') !== -1) {
+        var gifPoster = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
         
-        if (videoSrc.indexOf('tenor.com') !== -1) {
-            var gifPoster = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
-            
-            var img = new Image();
-            img.onload = function() {
-                video.setAttribute('poster', gifPoster);
-                video.setAttribute('data-poster-type', 'tenor-gif');
-                video.setAttribute('data-poster-loaded', 'true');
-                state.videos.withPoster++;
-            };
-            img.onerror = function() {
-                var altPoster = tryAlternativeTenorUrl(videoSrc);
-                if (altPoster) {
+        // Use weserv.nl as a CORS proxy (already in your CONFIG)
+        var proxyUrl = CONFIG.cdn + '?url=' + encodeURIComponent(gifPoster) + '&output=jpeg';
+        
+        var img = new Image();
+        img.crossOrigin = 'anonymous'; // Try with CORS attribute
+        
+        img.onload = function() {
+            // Success - set the original GIF as poster (not the proxy)
+            video.setAttribute('poster', gifPoster);
+            video.setAttribute('data-poster-type', 'tenor-gif');
+            video.setAttribute('data-poster-loaded', 'true');
+            state.videos.withPoster++;
+            console.log('✅ Poster added for Tenor video');
+        };
+        
+        img.onerror = function() {
+            // If proxy fails, try alternative Tenor URL
+            var matches = videoSrc.match(/tenor\.com\/([^\/]+)\/([^\/\.]+)/);
+            if (matches) {
+                var id = matches[1];
+                var altPoster = 'https://media.tenor.com/' + id + '/public/thumb.jpg';
+                
+                // Try alternative with proxy
+                var altImg = new Image();
+                altImg.crossOrigin = 'anonymous';
+                altImg.onload = function() {
                     video.setAttribute('poster', altPoster);
                     video.setAttribute('data-poster-type', 'tenor-thumb');
                     video.setAttribute('data-poster-loaded', 'true');
                     state.videos.withPoster++;
-                } else {
+                };
+                altImg.onerror = function() {
+                    // Ultimate fallback - SVG
                     createSvgPoster(video);
                     video.setAttribute('data-poster-loaded', 'true');
                     state.videos.withPoster++;
-                }
-            };
-            img.src = gifPoster;
-        } else {
-            createSvgPoster(video);
-            video.setAttribute('data-poster-loaded', 'true');
-            state.videos.withPoster++;
-        }
+                };
+                altImg.src = CONFIG.cdn + '?url=' + encodeURIComponent(altPoster) + '&output=jpeg';
+            } else {
+                createSvgPoster(video);
+                video.setAttribute('data-poster-loaded', 'true');
+                state.videos.withPoster++;
+            }
+        };
+        
+        // Load through proxy to bypass CORS
+        img.src = proxyUrl;
+    } else {
+        createSvgPoster(video);
+        video.setAttribute('data-poster-loaded', 'true');
+        state.videos.withPoster++;
     }
+}
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
