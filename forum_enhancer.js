@@ -10521,16 +10521,16 @@ class PostModernizer {
     const modernCode = document.createElement('div');
     modernCode.className = 'modern-code' + (isLongContent ? ' long-code' : '');
 
-    // FIX: Properly create icons with actual <i> elements
+    // CRITICAL FIX: Add actual <i> elements with proper classes
     let html = '<div class="code-header">' +
         '<div class="code-icon">' +
-        '<i class="fa-regular fa-code" aria-hidden="true"></i>' + // Added icon
+        '<i class="fa-regular fa-code" aria-hidden="true"></i>' + // This was missing
         '</div>' +
         '<div class="code-info">' +
         '<span class="code-title">' + this.#escapeHtml(codeType) + '</span>' +
         '</div>' +
         '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0">' +
-        '<i class="fa-regular fa-copy" aria-hidden="true"></i>' + // Added icon
+        '<i class="fa-regular fa-copy" aria-hidden="true"></i>' + // This was missing
         '</button>' +
         '</div>';
 
@@ -10541,7 +10541,7 @@ class PostModernizer {
 
     if (isLongContent) {
         html += '<button class="code-expand-btn" type="button" aria-label="Show full code" tabindex="0">' +
-            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + // Added icon
+            '<i class="fa-regular fa-chevron-down" aria-hidden="true"></i>' + // This was missing
             'Show more code' +
             '</button>';
     }
