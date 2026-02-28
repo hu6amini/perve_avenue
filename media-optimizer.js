@@ -8,21 +8,17 @@
         async: 'async',
         cache: '1y',
         quality: {
-            jpg: '90',      // High quality JPEG
+            jpg: '90',
             jpeg: '90',     
-            webp: '90',     // WebP handles quality differently
-            avif: '85',     // AVIF is more efficient
-            png: '100',     // PNG needs max for lossless
-            gif: '100',     // GIF should be lossless
+            webp: '90',
+            avif: '85',
+            png: '100',
+            gif: '100',
             unknown: '90'
         },
         video: {
-            preload: 'none',           // Default: don't preload videos
-            autoplayPreload: 'metadata', // For autoplay videos
-            posterService: 'https://images.weserv.nl/',
-            tenor: {
-                enabled: true
-            }
+            preload: 'none',
+            autoplayPreload: 'metadata'
         },
         skipPatterns: [
             '.svg', '.webp', '.avif', '.ico',
@@ -64,12 +60,10 @@
         
         var lower = url.toLowerCase();
         
-        // Check patterns
         for (var i = 0; i < CONFIG.skipPatterns.length; i++) {
             if (lower.indexOf(CONFIG.skipPatterns[i]) !== -1) return true;
         }
         
-        // Check element attributes/classes
         if (el) {
             var classes = el.className.toLowerCase();
             if (classes.indexOf('forum-') !== -1) return true;
@@ -102,58 +96,11 @@
         return 'unknown';
     }
     
-    // ===== VIDEO HANDLING =====
-    function generateVideoPoster(video) {
-        var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
-        if (!videoSrc) return;
-        
-        // Handle Tenor videos
-        if (videoSrc.indexOf('tenor.com') !== -1) {
-            // Try to get GIF version
-            var gifPoster = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
-            
-            // Preload the GIF to check if it works
-            var img = new Image();
-            img.onload = function() {
-                video.setAttribute('poster', gifPoster);
-                state.videos.withPoster++;
-            };
-            img.onerror = function() {
-                // If GIF fails, try alternative pattern
-                var altPoster = tryAlternativeTenorUrl(videoSrc);
-                if (altPoster) {
-                    video.setAttribute('poster', altPoster);
-                    state.videos.withPoster++;
-                } else {
-                    // Fallback to SVG placeholder
-                    createSvgPoster(video);
-                }
-            };
-            img.src = gifPoster;
-        } else {
-            // For non-Tenor videos, create SVG placeholder
-            createSvgPoster(video);
-        }
-    }
-    
-    function tryAlternativeTenorUrl(videoSrc) {
-        // Extract Tenor ID and name
-        var matches = videoSrc.match(/tenor\.com\/([^\/]+)\/([^\/\.]+)/);
-        if (matches) {
-            var id = matches[1]; // lJbMnadkHwEAAAPs
-            var name = matches[2]; // smile-evil
-            
-            // Try different Tenor URL patterns
-            return 'https://media.tenor.com/' + id + '/public/thumb.jpg';
-        }
-        return null;
-    }
-    
+    // ===== VIDEO POSTER GENERATION =====
     function createSvgPoster(video) {
         var width = video.getAttribute('width') || 640;
         var height = video.getAttribute('height') || 360;
         
-        // Create SVG placeholder
         var svg = '<svg width="' + width + '" height="' + height + '" xmlns="http://www.w3.org/2000/svg">' +
                   '<rect width="100%" height="100%" fill="#2a2a2a"/>' +
                   '<text x="50%" y="50%" font-family="Arial" font-size="16" fill="#ffffff" text-anchor="middle" dy=".3em">🎬 Video</text>' +
@@ -161,20 +108,64 @@
         
         var poster = 'data:image/svg+xml,' + encodeURIComponent(svg);
         video.setAttribute('poster', poster);
+        video.setAttribute('data-poster-type', 'svg');
     }
     
+    function tryAlternativeTenorUrl(videoSrc) {
+        var matches = videoSrc.match(/tenor\.com\/([^\/]+)\/([^\/\.]+)/);
+        if (matches) {
+            var id = matches[1];
+            return 'https://media.tenor.com/' + id + '/public/thumb.jpg';
+        }
+        return null;
+    }
+    
+    function generateVideoPoster(video) {
+        var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
+        if (!videoSrc) return;
+        
+        if (videoSrc.indexOf('tenor.com') !== -1) {
+            var gifPoster = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
+            
+            var img = new Image();
+            img.onload = function() {
+                video.setAttribute('poster', gifPoster);
+                video.setAttribute('data-poster-type', 'tenor-gif');
+                video.setAttribute('data-poster-loaded', 'true');
+                state.videos.withPoster++;
+            };
+            img.onerror = function() {
+                var altPoster = tryAlternativeTenorUrl(videoSrc);
+                if (altPoster) {
+                    video.setAttribute('poster', altPoster);
+                    video.setAttribute('data-poster-type', 'tenor-thumb');
+                    video.setAttribute('data-poster-loaded', 'true');
+                    state.videos.withPoster++;
+                } else {
+                    createSvgPoster(video);
+                    video.setAttribute('data-poster-loaded', 'true');
+                    state.videos.withPoster++;
+                }
+            };
+            img.src = gifPoster;
+        } else {
+            createSvgPoster(video);
+            video.setAttribute('data-poster-loaded', 'true');
+            state.videos.withPoster++;
+        }
+    }
+    
+    // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
         
-        // Check if video has autoplay
         var hasAutoplay = video.hasAttribute('autoplay');
         if (hasAutoplay) {
             state.videos.autoplayVideos++;
         }
         
-        // Set preload attribute based on autoplay status
         if (!video.hasAttribute('preload') || video.getAttribute('preload') === '') {
             var preloadValue = hasAutoplay ? CONFIG.video.autoplayPreload : CONFIG.video.preload;
             video.setAttribute('preload', preloadValue);
@@ -183,23 +174,17 @@
                 state.videos.preloadNone++;
             }
         } else {
-            // Count existing preload="none" videos
             if (video.getAttribute('preload') === 'none') {
                 state.videos.preloadNone++;
             }
         }
         
-        // Generate poster if missing
         if (!video.poster) {
             generateVideoPoster(video);
-        }
-        
-        // Count videos with poster (after potential generation)
-        if (video.poster) {
+        } else {
             state.videos.withPoster++;
         }
         
-        // Store original sources if needed for future lazy loading
         var sources = video.querySelectorAll('source[src]');
         for (var i = 0; i < sources.length; i++) {
             var source = sources[i];
@@ -215,7 +200,6 @@
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
         
-        // Handle IFRAMES
         if (el.tagName === 'IFRAME') {
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
                 el.setAttribute('loading', CONFIG.lazy);
@@ -226,7 +210,6 @@
             }
         }
         
-        // Handle IMAGES
         if (el.tagName === 'IMG') {
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
                 el.setAttribute('loading', CONFIG.lazy);
@@ -237,7 +220,6 @@
             }
         }
         
-        // Handle VIDEOS
         if (el.tagName === 'VIDEO') {
             setupVideoLazyLoading(el);
         }
@@ -251,7 +233,6 @@
         var originalFormat = detectFormat(originalSrc);
         var isGif = originalFormat === 'gif';
         
-        // Determine output format
         var outputFormat;
         if (isGif) {
             outputFormat = 'webp';
@@ -259,16 +240,13 @@
             outputFormat = supportsFormat('avif') ? 'avif' : 'webp';
         }
         
-        // Get quality setting
         var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
         
-        // Build parameters
         var params = [
             'maxage=' + CONFIG.cache,
             'q=' + quality
         ];
         
-        // Format-specific optimizations
         switch (outputFormat) {
             case 'png':
                 params.push('af');
@@ -286,7 +264,6 @@
                 break;
         }
         
-        // Special handling for animated GIFs
         if (isGif) {
             params.push('n=-1');
             params.push('lossless=true');
@@ -295,7 +272,6 @@
             params.push('l=9');
         }
         
-        // Add filename if possible
         var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
         if (filename && /^[a-zA-Z0-9.]+$/.test(filename)) {
             params.push('filename=' + filename);
@@ -502,11 +478,18 @@
             }, 50);
         }
         
+        // ===== PERFORMANCE REPORT =====
         window.addEventListener('load', function() {
             setTimeout(function() {
+                // Update video poster count from actual DOM
+                var finalVideos = document.querySelectorAll('video');
+                var videosWithPoster = 0;
+                for (var v = 0; v < finalVideos.length; v++) {
+                    if (finalVideos[v].poster) videosWithPoster++;
+                }
+                
                 var finalImages = document.querySelectorAll('img');
                 var finalIframes = document.querySelectorAll('iframe');
-                var finalVideos = document.querySelectorAll('video');
                 var lazyCount = 0;
                 var asyncCount = 0;
                 var placeholderCount = 0;
@@ -539,11 +522,11 @@
                 console.log('Async decoding:', asyncCount + '/' + finalImages.length);
                 console.log('Placeholder iframes:', placeholderCount);
                 console.log('\n=== VIDEO STATS ===');
-                console.log('Total videos:', state.videos.total);
+                console.log('Total videos:', finalVideos.length);
                 console.log('Videos with preload="none":', state.videos.preloadNone);
                 console.log('Autoplay videos:', state.videos.autoplayVideos);
-                console.log('Videos with poster:', state.videos.withPoster);
-                console.log('Videos missing poster:', state.videos.total - state.videos.withPoster);
+                console.log('Videos with poster:', videosWithPoster);
+                console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
                 
                 if (state.stats.failed > 0) {
                     console.warn('Optimization failures:', state.stats.failed);
@@ -557,7 +540,7 @@
                 }
                 
                 console.log('=== REPORT COMPLETE ===');
-            }, 1000);
+            }, 3000);
         });
     }
     
