@@ -204,30 +204,39 @@ document.head.appendChild(instantPagePreload);
         processedElements.add(script);
         script.setAttribute('data-deferred', 'true');
         
-        // Clone the script with defer attribute
-        const newScript = document.createElement('script');
+        // CRITICAL FIX: Instead of replacing the script (which creates empty tags),
+        // we modify the existing script's loading behavior
         
-        // Copy all attributes except src/async/defer
-        Array.from(script.attributes).forEach(attr => {
-            if (attr.name !== 'src' && attr.name !== 'async' && attr.name !== 'defer') {
-                newScript.setAttribute(attr.name, attr.value);
+        // Store the original src
+        const originalSrc = script.src;
+        
+        // Remove the src attribute temporarily to prevent loading
+        script.removeAttribute('src');
+        
+        // Set defer attribute
+        script.defer = true;
+        
+        // Use requestIdleCallback or setTimeout to restore src after other critical resources load
+        const loadDeferred = () => {
+            if (document.readyState === 'loading') {
+                // If document is still loading, wait for DOMContentLoaded
+                document.addEventListener('DOMContentLoaded', () => {
+                    script.src = originalSrc;
+                }, { once: true });
+            } else {
+                // Document already loaded, restore src
+                script.src = originalSrc;
             }
-        });
+        };
         
-        // Set defer and copy src
-        newScript.defer = true;
-        newScript.src = script.src;
-        
-        // Copy any inline content if present
-        if (script.innerHTML) {
-            newScript.innerHTML = script.innerHTML;
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(loadDeferred, { timeout: 2000 });
+        } else {
+            setTimeout(loadDeferred, 100);
         }
         
-        // Replace original script
-        script.parentNode.replaceChild(newScript, script);
-        
         if (window.DEFER_DEBUG) {
-            console.log('✅ Deferred script:', script.src.split('/').pop());
+            console.log('✅ Deferred script:', originalSrc.split('/').pop());
         }
     };
 
@@ -342,8 +351,29 @@ document.head.appendChild(instantPagePreload);
         return element;
     };
 
+    // Cleanup function to remove any empty script tags that might have been created
+    // This runs after a short delay to catch any stragglers
+    const cleanupEmptyScripts = () => {
+        document.querySelectorAll('script:not([src]):not([type="application/ld+json"]):not([type="application/json"])').forEach(script => {
+            // Check if it's truly empty (no src, no inner content)
+            if (!script.src && !script.innerHTML.trim()) {
+                script.remove();
+                if (window.DEFER_DEBUG) {
+                    console.log('🧹 Removed empty script tag');
+                }
+            }
+        });
+    };
+
+    // Run cleanup after everything settles
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(cleanupEmptyScripts, { timeout: 3000 });
+    } else {
+        setTimeout(cleanupEmptyScripts, 2000);
+    }
+
     // Optional: Enable debug mode to see what's being deferred
     // window.DEFER_DEBUG = true;
 
-    console.log('🚀 Resource deferrer initialized - will catch host-injected scripts');
+    console.log('🚀 Resource deferrer initialized - will catch host-injected scripts without creating empty tags');
 })();
