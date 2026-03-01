@@ -163,9 +163,8 @@ document.head.appendChild(instantPagePreload);
     
     // Configuration for what to defer
     const DEFER_CONFIG = {
-        // Scripts to defer (add patterns that match host-injected scripts)
         scriptPatterns: [
-            /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
+            /forum(?:free|community)\.(?:net|it)/,
             /akcelo/,
             /google-analytics/,
             /ads\./,
@@ -173,7 +172,6 @@ document.head.appendChild(instantPagePreload);
             /amazon-adsystem/,
             /criteo/
         ],
-        // Stylesheets to make non-render-blocking
         stylePatterns: [
             /forumfree\.net\/.*\.css$/,
             /akcelo/,
@@ -184,108 +182,133 @@ document.head.appendChild(instantPagePreload);
     // Store processed elements
     const processed = new WeakSet();
     
-    // Process a single script - ONLY if it matches patterns
     const processScript = (script) => {
-        // Skip if already processed or no src
         if (!script.src || processed.has(script) || script.hasAttribute('data-deferred')) return;
         
-        // Check if it matches our patterns
-        const matches = DEFER_CONFIG.scriptPatterns.some(pattern => pattern.test(script.src));
-        if (!matches) return;
-        
-        // Mark as processed
-        processed.add(script);
-        script.setAttribute('data-deferred', 'true');
-        
-        // Simply add defer attribute - that's it!
-        script.defer = true;
-        
-        console.log('Deferred:', script.src);
+        const src = script.src;
+        const patterns = DEFER_CONFIG.scriptPatterns;
+        for (let i = 0; i < patterns.length; i++) {
+            if (patterns[i].test(src)) {
+                processed.add(script);
+                script.setAttribute('data-deferred', 'true');
+                script.defer = true;
+                console.log('Deferred:', src);
+                return;
+            }
+        }
     };
 
-    // Process a single stylesheet
     const processStylesheet = (link) => {
         if (!link.href || processed.has(link) || link.hasAttribute('data-deferred')) return;
         
-        const matches = DEFER_CONFIG.stylePatterns.some(pattern => pattern.test(link.href));
-        if (!matches) return;
-        
-        processed.add(link);
-        link.setAttribute('data-deferred', 'true');
-        
-        // Make it non-blocking
-        link.media = 'print';
-        link.onload = () => link.media = 'all';
-        link.onerror = () => link.media = 'all';
+        const href = link.href;
+        const patterns = DEFER_CONFIG.stylePatterns;
+        for (let i = 0; i < patterns.length; i++) {
+            if (patterns[i].test(href)) {
+                processed.add(link);
+                link.setAttribute('data-deferred', 'true');
+                link.media = 'print';
+                link.onload = () => link.media = 'all';
+                link.onerror = () => link.media = 'all';
+                return;
+            }
+        }
     };
 
-    // OPTIMIZED: Target specific containers where deferred resources are likely to appear
-    const targetNodes = [
-        document.head,
-        document.body,
-        ...document.querySelectorAll('head, body, div, section, main, article')
-    ].filter(Boolean); // Remove any null/undefined
-    
-    // Watch for new elements in specific containers
-    const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            // Only process if this mutation added nodes
-            if (mutation.addedNodes.length === 0) continue;
+    // Recursive function to scan for scripts/css with depth limit
+    const scanForResources = (root, depth = 0, maxDepth = 3) => {
+        if (!root || depth > maxDepth) return;
+        
+        // Check direct children first
+        const children = root.children;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            const tag = child.tagName;
             
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) { // Element
-                    // Direct matches
-                    if (node.tagName === 'SCRIPT' && node.src) {
-                        processScript(node);
-                    } else if (node.tagName === 'LINK' && node.rel === 'stylesheet') {
-                        processStylesheet(node);
-                    }
-                    
-                    // Check children for scripts/css (limit depth for performance)
-                    if (node.children && node.children.length > 0) {
-                        // Use getElementsByTagName which is faster than querySelectorAll
-                        const scripts = node.getElementsByTagName('SCRIPT');
-                        for (let i = 0; i < scripts.length; i++) {
-                            if (scripts[i].src) processScript(scripts[i]);
-                        }
-                        
-                        const links = node.getElementsByTagName('LINK');
-                        for (let i = 0; i < links.length; i++) {
-                            if (links[i].rel === 'stylesheet') processStylesheet(links[i]);
-                        }
-                    }
+            if (tag === 'SCRIPT' && child.src) {
+                processScript(child);
+            } else if (tag === 'LINK' && child.rel === 'stylesheet') {
+                processStylesheet(child);
+            } else {
+                // Only go deeper if we haven't hit max depth
+                scanForResources(child, depth + 1, maxDepth);
+            }
+        }
+    };
+
+    // Identify likely containers
+    const getTargetNodes = () => {
+        const nodes = [document.head, document.body];
+        
+        const selectors = [
+            '.ads', '.advertisement', '.ad-container',
+            '.scripts', '.js-container', '.external-scripts',
+            '.footer', '.widget', '.widget-area',
+            '#ad-container', '#ads', '#ad-wrapper',
+            '.sidebar', '.aside', '.widgets',
+            '.third-party', '.embeds', '.integrations'
+        ];
+        
+        const containers = document.querySelectorAll(selectors.join(','));
+        for (let i = 0; i < containers.length; i++) {
+            nodes.push(containers[i]);
+        }
+        
+        // Deduplicate
+        const unique = new Set();
+        for (let i = 0; i < nodes.length; i++) {
+            if (nodes[i]) unique.add(nodes[i]);
+        }
+        
+        return Array.from(unique);
+    };
+
+    const targetNodes = getTargetNodes();
+
+    // Optimized watcher with limited depth scanning
+    const scriptWatcher = new MutationObserver((mutations) => {
+        for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
+            
+            if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
+            
+            const addedNodes = mutation.addedNodes;
+            for (let j = 0; j < addedNodes.length; j++) {
+                const node = addedNodes[j];
+                
+                if (node.nodeType !== 1) continue;
+                
+                const tag = node.tagName;
+                
+                // Direct script/link tags
+                if (tag === 'SCRIPT' && node.src) {
+                    processScript(node);
+                } else if (tag === 'LINK' && node.rel === 'stylesheet') {
+                    processStylesheet(node);
+                } else {
+                    // Scan children but limit depth to 3 levels
+                    scanForResources(node, 0, 3);
                 }
             }
         }
     });
 
-    // Start observing with optimized configuration
-    const observerConfig = {
+    const watchConfig = {
         childList: true,
-        subtree: false, // Changed to false - we'll observe multiple targets instead
+        subtree: false,  // Still false - we handle depth manually with limits
         attributes: false,
         characterData: false
     };
 
-    // Observe each target node separately (more efficient than deep subtree)
-    targetNodes.forEach(node => {
+    for (let i = 0; i < targetNodes.length; i++) {
         try {
-            observer.observe(node, observerConfig);
-        } catch (e) {
-            // Ignore errors for nodes that can't be observed
-        }
-    });
-
-    // Process existing elements (optimized with getElementsByTagName)
-    const existingScripts = document.getElementsByTagName('SCRIPT');
-    for (let i = 0; i < existingScripts.length; i++) {
-        if (existingScripts[i].src) processScript(existingScripts[i]);
+            scriptWatcher.observe(targetNodes[i], watchConfig);
+        } catch (e) {}
     }
+
+    // Initial scan - deeper to catch everything
+    console.log('🔍 Scanning for existing resources...');
+    scanForResources(document.documentElement, 0, 10);  // Deep scan for initial load
     
-    const existingLinks = document.getElementsByTagName('LINK');
-    for (let i = 0; i < existingLinks.length; i++) {
-        if (existingLinks[i].rel === 'stylesheet') processStylesheet(existingLinks[i]);
-    }
-
-    console.log('🚀 Optimized deferrer active');
+    console.log('🚀 Optimized scriptWatcher active on', targetNodes.length, 'containers');
 })();
