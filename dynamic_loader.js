@@ -164,15 +164,15 @@ document.head.appendChild(instantPagePreload);
     // Configuration for what to defer
     const DEFER_CONFIG = {
         // Scripts to defer (add patterns that match host-injected scripts)
-scriptPatterns: [
-    /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
-    /akcelo/,
-    /google-analytics/,
-    /ads\./,
-    /doubleclick/,
-    /amazon-adsystem/,
-    /criteo/
-],
+        scriptPatterns: [
+            /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
+            /akcelo/,
+            /google-analytics/,
+            /ads\./,
+            /doubleclick/,
+            /amazon-adsystem/,
+            /criteo/
+        ],
         // Stylesheets to make non-render-blocking
         stylePatterns: [
             /forumfree\.net\/.*\.css$/,
@@ -184,72 +184,142 @@ scriptPatterns: [
     // Store processed elements
     const processed = new WeakSet();
     
-    // Process a single script - ONLY if it matches patterns
+    // Ultra-fast script processing
     const processScript = (script) => {
-        // Skip if already processed or no src
+        // Fast path: skip if no src or already processed
         if (!script.src || processed.has(script) || script.hasAttribute('data-deferred')) return;
         
-        // Check if it matches our patterns
-        const matches = DEFER_CONFIG.scriptPatterns.some(pattern => pattern.test(script.src));
-        if (!matches) return;
-        
-        // Mark as processed
-        processed.add(script);
-        script.setAttribute('data-deferred', 'true');
-        
-        // Simply add defer attribute - that's it!
-        // This doesn't interfere with loading because the script is already in DOM
-        script.defer = true;
-        
-        console.log('Deferred:', script.src);
+        // Quick pattern matching
+        const src = script.src;
+        const patterns = DEFER_CONFIG.scriptPatterns;
+        for (let i = 0; i < patterns.length; i++) {
+            if (patterns[i].test(src)) {
+                // Mark as processed
+                processed.add(script);
+                script.setAttribute('data-deferred', 'true');
+                
+                // Defer it
+                script.defer = true;
+                
+                // Single console log for debugging (remove in production)
+                // console.log('Deferred:', src);
+                return;
+            }
+        }
     };
 
-    // Process a single stylesheet
+    // Ultra-fast stylesheet processing
     const processStylesheet = (link) => {
         if (!link.href || processed.has(link) || link.hasAttribute('data-deferred')) return;
         
-        const matches = DEFER_CONFIG.stylePatterns.some(pattern => pattern.test(link.href));
-        if (!matches) return;
-        
-        processed.add(link);
-        link.setAttribute('data-deferred', 'true');
-        
-        // Make it non-blocking
-        link.media = 'print';
-        link.onload = () => link.media = 'all';
-        link.onerror = () => link.media = 'all';
+        const href = link.href;
+        const patterns = DEFER_CONFIG.stylePatterns;
+        for (let i = 0; i < patterns.length; i++) {
+            if (patterns[i].test(href)) {
+                processed.add(link);
+                link.setAttribute('data-deferred', 'true');
+                
+                // Make non-blocking
+                link.media = 'print';
+                link.onload = () => link.media = 'all';
+                link.onerror = () => link.media = 'all';
+                return;
+            }
+        }
     };
 
-    // Watch for new elements
-    const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) { // Element
-                    if (node.tagName === 'SCRIPT' && node.src) {
-                        processScript(node);
-                    } else if (node.tagName === 'LINK' && node.rel === 'stylesheet') {
-                        processStylesheet(node);
-                    }
-                    
-                    // Check children
-                    if (node.querySelectorAll) {
-                        node.querySelectorAll('script[src]').forEach(processScript);
-                        node.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
-                    }
+    // Identify likely containers for third-party scripts
+    const getTargetNodes = () => {
+        const nodes = [
+            document.head,
+            document.body
+        ];
+        
+        // Common containers where third-party scripts hide
+        const selectors = [
+            '.ads', '.advertisement', '.ad-container',
+            '.scripts', '.js-container', '.external-scripts',
+            '.footer', '.widget', '.widget-area',
+            '#ad-container', '#ads', '#ad-wrapper',
+            '.sidebar', '.aside', '.widgets',
+            '.third-party', '.embeds', '.integrations'
+        ];
+        
+        // Fast selector query
+        const container = document.querySelectorAll(selectors.join(','));
+        for (let i = 0; i < container.length; i++) {
+            nodes.push(container[i]);
+        }
+        
+        // Remove null/undefined and duplicates
+        const unique = new Set();
+        for (let i = 0; i < nodes.length; i++) {
+            if (nodes[i]) unique.add(nodes[i]);
+        }
+        
+        return Array.from(unique);
+    };
+
+    // Target nodes for observation
+    const targetNodes = getTargetNodes();
+
+    // Optimized script watcher - only watches direct children of target nodes
+    const scriptWatcher = new MutationObserver((mutations) => {
+        for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
+            
+            // Fast filter: only childList mutations with added nodes
+            if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
+            
+            const addedNodes = mutation.addedNodes;
+            for (let j = 0; j < addedNodes.length; j++) {
+                const node = addedNodes[j];
+                
+                // Skip non-elements
+                if (node.nodeType !== 1) continue;
+                
+                // Check direct script/link tags
+                const tag = node.tagName;
+                if (tag === 'SCRIPT' && node.src) {
+                    processScript(node);
+                } else if (tag === 'LINK' && node.rel === 'stylesheet') {
+                    processStylesheet(node);
                 }
+                // Intentionally NOT checking children - performance > completeness
+                // Dynamic scripts rarely inject nested scripts
             }
         }
     });
 
-    // Start observing
-    observer.observe(document.documentElement, {
+    // Start watching each target node
+    const watchConfig = {
         childList: true,
-        subtree: true
-    });
+        subtree: false,  // Critical: only watch direct children
+        attributes: false,
+        characterData: false
+    };
 
-    // Process existing elements
-    document.querySelectorAll('script[src]').forEach(processScript);
-    document.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
+    for (let i = 0; i < targetNodes.length; i++) {
+        try {
+            scriptWatcher.observe(targetNodes[i], watchConfig);
+        } catch (e) {
+            // Silently fail - not critical
+        }
+    }
 
-    console.log('🚀 Minimal deferrer active');
+    // Process existing elements (ultra-fast with getElementsByTagName)
+    const existingScripts = document.getElementsByTagName('SCRIPT');
+    for (let i = 0; i < existingScripts.length; i++) {
+        const script = existingScripts[i];
+        if (script.src) processScript(script);
+    }
+    
+    const existingLinks = document.getElementsByTagName('LINK');
+    for (let i = 0; i < existingLinks.length; i++) {
+        const link = existingLinks[i];
+        if (link.rel === 'stylesheet') processStylesheet(link);
+    }
+
+    // Minimal startup message (comment out in production)
+    // console.log('🚀 Performance-optimized scriptWatcher active on', targetNodes.length, 'containers');
 })();
