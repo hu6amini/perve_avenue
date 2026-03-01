@@ -164,15 +164,15 @@ document.head.appendChild(instantPagePreload);
     // Configuration for what to defer
     const DEFER_CONFIG = {
         // Scripts to defer (add patterns that match host-injected scripts)
-scriptPatterns: [
-    /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
-    /akcelo/,
-    /google-analytics/,
-    /ads\./,
-    /doubleclick/,
-    /amazon-adsystem/,
-    /criteo/
-],
+        scriptPatterns: [
+            /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
+            /akcelo/,
+            /google-analytics/,
+            /ads\./,
+            /doubleclick/,
+            /amazon-adsystem/,
+            /criteo/
+        ],
         // Stylesheets to make non-render-blocking
         stylePatterns: [
             /forumfree\.net\/.*\.css$/,
@@ -198,7 +198,6 @@ scriptPatterns: [
         script.setAttribute('data-deferred', 'true');
         
         // Simply add defer attribute - that's it!
-        // This doesn't interfere with loading because the script is already in DOM
         script.defer = true;
         
         console.log('Deferred:', script.src);
@@ -220,8 +219,8 @@ scriptPatterns: [
         link.onerror = () => link.media = 'all';
     };
 
-    // Watch for new elements
-    const observer = new MutationObserver((mutations) => {
+    // Watch for new elements - renamed from 'observer' to 'scriptWatcher'
+    const scriptWatcher = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node.nodeType === 1) { // Element
@@ -241,8 +240,8 @@ scriptPatterns: [
         }
     });
 
-    // Start observing
-    observer.observe(document.documentElement, {
+    // Start observing - using the renamed variable
+    scriptWatcher.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
