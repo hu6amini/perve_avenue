@@ -164,15 +164,15 @@ document.head.appendChild(instantPagePreload);
     // Configuration for what to defer
     const DEFER_CONFIG = {
         // Scripts to defer (add patterns that match host-injected scripts)
-        scriptPatterns: [
-            /forumfree\.net\/.*\.js$/,
-            /akcelo/,
-            /google-analytics/,
-            /ads\./,
-            /doubleclick/,
-            /amazon-adsystem/,
-            /criteo/
-        ],
+scriptPatterns: [
+    /forum(?:free|community)\.(?:net|it)\/.*\.js(?:[?#]|$)/,  // Matches both .net and .it domains with .js files
+    /akcelo/,
+    /google-analytics/,
+    /ads\./,
+    /doubleclick/,
+    /amazon-adsystem/,
+    /criteo/
+],
         // Stylesheets to make non-render-blocking
         stylePatterns: [
             /forumfree\.net\/.*\.css$/,
