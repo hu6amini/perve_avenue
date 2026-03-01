@@ -165,7 +165,7 @@ document.head.appendChild(instantPagePreload);
     const DEFER_CONFIG = {
         // Scripts to defer (add patterns that match host-injected scripts)
 scriptPatterns: [
-    /forum(?:free|community)\.(?:net|it)\/.*\.js(?:[?#]|$)/,  // Matches both .net and .it domains with .js files
+    /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
     /akcelo/,
     /google-analytics/,
     /ads\./,
