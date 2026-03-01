@@ -163,8 +163,9 @@ document.head.appendChild(instantPagePreload);
     
     // Configuration for what to defer
     const DEFER_CONFIG = {
+        // Scripts to defer (add patterns that match host-injected scripts)
         scriptPatterns: [
-            /forum(?:free|community)\.(?:net|it)/,
+            /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
             /akcelo/,
             /google-analytics/,
             /ads\./,
@@ -172,6 +173,7 @@ document.head.appendChild(instantPagePreload);
             /amazon-adsystem/,
             /criteo/
         ],
+        // Stylesheets to make non-render-blocking
         stylePatterns: [
             /forumfree\.net\/.*\.css$/,
             /akcelo/,
@@ -182,6 +184,7 @@ document.head.appendChild(instantPagePreload);
     // Store processed elements
     const processed = new WeakSet();
     
+    // Fast script processing
     const processScript = (script) => {
         if (!script.src || processed.has(script) || script.hasAttribute('data-deferred')) return;
         
@@ -192,12 +195,13 @@ document.head.appendChild(instantPagePreload);
                 processed.add(script);
                 script.setAttribute('data-deferred', 'true');
                 script.defer = true;
-                console.log('Deferred:', src);
+                // console.log('Deferred:', src);
                 return;
             }
         }
     };
 
+    // Fast stylesheet processing
     const processStylesheet = (link) => {
         if (!link.href || processed.has(link) || link.hasAttribute('data-deferred')) return;
         
@@ -215,30 +219,35 @@ document.head.appendChild(instantPagePreload);
         }
     };
 
-    // Recursive function to scan for scripts/css with depth limit
-    const scanForResources = (root, depth = 0, maxDepth = 3) => {
-        if (!root || depth > maxDepth) return;
+    // RECURSIVE SCAN function to catch deeply nested scripts
+    const scanForScripts = (root) => {
+        // Check the root itself
+        if (root.tagName === 'SCRIPT' && root.src) {
+            processScript(root);
+        } else if (root.tagName === 'LINK' && root.rel === 'stylesheet') {
+            processStylesheet(root);
+        }
         
-        // Check direct children first
-        const children = root.children;
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            const tag = child.tagName;
+        // Check all children (fast with getElementsByTagName)
+        if (root.querySelectorAll) {
+            const scripts = root.getElementsByTagName('SCRIPT');
+            for (let i = 0; i < scripts.length; i++) {
+                if (scripts[i].src) processScript(scripts[i]);
+            }
             
-            if (tag === 'SCRIPT' && child.src) {
-                processScript(child);
-            } else if (tag === 'LINK' && child.rel === 'stylesheet') {
-                processStylesheet(child);
-            } else {
-                // Only go deeper if we haven't hit max depth
-                scanForResources(child, depth + 1, maxDepth);
+            const links = root.getElementsByTagName('LINK');
+            for (let i = 0; i < links.length; i++) {
+                if (links[i].rel === 'stylesheet') processStylesheet(links[i]);
             }
         }
     };
 
-    // Identify likely containers
+    // Identify containers for third-party scripts
     const getTargetNodes = () => {
-        const nodes = [document.head, document.body];
+        const nodes = [
+            document.head,
+            document.body
+        ];
         
         const selectors = [
             '.ads', '.advertisement', '.ad-container',
@@ -246,15 +255,15 @@ document.head.appendChild(instantPagePreload);
             '.footer', '.widget', '.widget-area',
             '#ad-container', '#ads', '#ad-wrapper',
             '.sidebar', '.aside', '.widgets',
-            '.third-party', '.embeds', '.integrations'
+            '.third-party', '.embeds', '.integrations',
+            '.Fixed', '.modern-menu-wrap', '.menuwrap', '.container', '.topic'
         ];
         
-        const containers = document.querySelectorAll(selectors.join(','));
-        for (let i = 0; i < containers.length; i++) {
-            nodes.push(containers[i]);
+        const container = document.querySelectorAll(selectors.join(','));
+        for (let i = 0; i < container.length; i++) {
+            nodes.push(container[i]);
         }
         
-        // Deduplicate
         const unique = new Set();
         for (let i = 0; i < nodes.length; i++) {
             if (nodes[i]) unique.add(nodes[i]);
@@ -263,13 +272,15 @@ document.head.appendChild(instantPagePreload);
         return Array.from(unique);
     };
 
+    // Target nodes for observation
     const targetNodes = getTargetNodes();
 
-    // Optimized watcher with limited depth scanning
+    // RECURSIVE WATCHER - catches deeply nested additions
     const scriptWatcher = new MutationObserver((mutations) => {
         for (let i = 0; i < mutations.length; i++) {
             const mutation = mutations[i];
             
+            // Fast filter
             if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
             
             const addedNodes = mutation.addedNodes;
@@ -278,24 +289,16 @@ document.head.appendChild(instantPagePreload);
                 
                 if (node.nodeType !== 1) continue;
                 
-                const tag = node.tagName;
-                
-                // Direct script/link tags
-                if (tag === 'SCRIPT' && node.src) {
-                    processScript(node);
-                } else if (tag === 'LINK' && node.rel === 'stylesheet') {
-                    processStylesheet(node);
-                } else {
-                    // Scan children but limit depth to 3 levels
-                    scanForResources(node, 0, 3);
-                }
+                // SCAN THE ENTIRE SUBTREE of added node
+                scanForScripts(node);
             }
         }
     });
 
+    // Start watching with subtree: true to catch nested additions
     const watchConfig = {
         childList: true,
-        subtree: false,  // Still false - we handle depth manually with limits
+        subtree: true,  // Back to true to catch nested scripts
         attributes: false,
         characterData: false
     };
@@ -303,12 +306,13 @@ document.head.appendChild(instantPagePreload);
     for (let i = 0; i < targetNodes.length; i++) {
         try {
             scriptWatcher.observe(targetNodes[i], watchConfig);
-        } catch (e) {}
+        } catch (e) {
+            // Silently fail
+        }
     }
 
-    // Initial scan - deeper to catch everything
-    console.log('🔍 Scanning for existing resources...');
-    scanForResources(document.documentElement, 0, 10);  // Deep scan for initial load
-    
-    console.log('🚀 Optimized scriptWatcher active on', targetNodes.length, 'containers');
+    // INITIAL SCAN - Catch ALL existing scripts everywhere
+    scanForScripts(document.documentElement);
+
+    // console.log('🚀 Script watcher active on', targetNodes.length, 'containers');
 })();
