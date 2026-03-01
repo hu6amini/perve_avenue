@@ -151,3 +151,199 @@ document.head.appendChild(instantPagePreload);
         e();
     }
 })();
+
+
+// ============================================================================
+// HOST SCRIPT DEFERRER - Added to catch and defer host-injected scripts
+// This MUST remain at the very end of this file to ensure it runs after all
+// other code and is ready to catch any scripts injected by the host service
+// ============================================================================
+(() => {
+    "use strict";
+    
+    // Configuration for what to defer
+    const DEFER_CONFIG = {
+        // Scripts to defer (add patterns that match host-injected scripts)
+        scriptPatterns: [
+            /forumfree\.net\/.*\.js$/,
+            /akcelo/,
+            /google-analytics/,
+            /ads\./,
+            /doubleclick/,
+            /amazon-adsystem/,
+            /criteo/
+        ],
+        // Stylesheets to make non-render-blocking
+        stylePatterns: [
+            /forumfree\.net\/.*\.css$/,
+            /akcelo/,
+            /tippy/
+        ]
+    };
+
+    // Store processed elements to avoid duplicate processing
+    const processedElements = new WeakSet();
+    
+    // Function to defer a script
+    const deferScript = (script) => {
+        if (processedElements.has(script) || script.hasAttribute('data-deferred')) return;
+        
+        // Don't defer critical scripts
+        if (script.src.includes('jq.js') || 
+            script.src.includes('jquery') ||
+            script.src.includes('jqt.js')) return;
+        
+        // Check if this script matches our patterns
+        const shouldDefer = DEFER_CONFIG.scriptPatterns.some(pattern => 
+            pattern.test(script.src)
+        );
+        
+        if (!shouldDefer) return;
+        
+        // Mark as processed
+        processedElements.add(script);
+        script.setAttribute('data-deferred', 'true');
+        
+        // Clone the script with defer attribute
+        const newScript = document.createElement('script');
+        
+        // Copy all attributes except src/async/defer
+        Array.from(script.attributes).forEach(attr => {
+            if (attr.name !== 'src' && attr.name !== 'async' && attr.name !== 'defer') {
+                newScript.setAttribute(attr.name, attr.value);
+            }
+        });
+        
+        // Set defer and copy src
+        newScript.defer = true;
+        newScript.src = script.src;
+        
+        // Copy any inline content if present
+        if (script.innerHTML) {
+            newScript.innerHTML = script.innerHTML;
+        }
+        
+        // Replace original script
+        script.parentNode.replaceChild(newScript, script);
+        
+        if (window.DEFER_DEBUG) {
+            console.log('✅ Deferred script:', script.src.split('/').pop());
+        }
+    };
+
+    // Function to make stylesheet non-render-blocking
+    const deferStylesheet = (link) => {
+        if (processedElements.has(link) || link.hasAttribute('data-deferred')) return;
+        
+        const shouldDefer = DEFER_CONFIG.stylePatterns.some(pattern => 
+            pattern.test(link.href)
+        );
+        
+        if (!shouldDefer) return;
+        
+        processedElements.add(link);
+        link.setAttribute('data-deferred', 'true');
+        
+        // Convert to non-blocking stylesheet
+        link.media = 'print';
+        link.onload = () => {
+            link.media = 'all';
+        };
+        link.onerror = () => {
+            link.media = 'all'; // Fallback if load fails
+        };
+        
+        if (window.DEFER_DEBUG) {
+            console.log('✅ Deferred stylesheet:', link.href.split('/').pop());
+        }
+    };
+
+    // Function to process new elements
+    const processNode = (node) => {
+        if (node.nodeType === 1) { // Element node
+            if (node.tagName === 'SCRIPT' && node.src) {
+                deferScript(node);
+            } else if (node.tagName === 'LINK' && 
+                       node.rel === 'stylesheet' && 
+                       node.href) {
+                deferStylesheet(node);
+            }
+            
+            // Process children for elements added with nested content
+            if (node.querySelectorAll) {
+                node.querySelectorAll('script[src]').forEach(deferScript);
+                node.querySelectorAll('link[rel="stylesheet"]').forEach(deferStylesheet);
+            }
+        }
+    };
+
+    // Create MutationObserver with unique variable name
+    const resourceObserver = new MutationObserver((mutations) => {
+        // Process all mutations immediately
+        for (const mutation of mutations) {
+            // Process added nodes
+            for (const node of mutation.addedNodes) {
+                processNode(node);
+            }
+        }
+    });
+
+    // Start observing with childList only (faster)
+    resourceObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+        // Removed attributes - not needed for catching new scripts
+    });
+
+    // Process any existing elements that might have been added before observer started
+    // Use requestIdleCallback for this if available, otherwise fallback to setTimeout
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+            document.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
+            document.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
+        }, { timeout: 1000 });
+    } else {
+        setTimeout(() => {
+            document.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
+            document.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
+        }, 0);
+    }
+
+    // Extra safety: microtask to catch any that might have been missed
+    // This runs before the browser paints
+    queueMicrotask(() => {
+        document.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
+        document.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
+    });
+
+    // Also catch any dynamically created scripts via older methods
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+        const element = originalCreateElement.call(document, tagName);
+        
+        if (tagName.toLowerCase() === 'script') {
+            // Proxy the src property setter
+            let srcValue = '';
+            Object.defineProperty(element, 'src', {
+                get: function() { return srcValue; },
+                set: function(value) {
+                    srcValue = value;
+                    // Queue a microtask to defer after all attributes are set
+                    queueMicrotask(() => {
+                        if (this.parentNode && this.src && !this.hasAttribute('data-deferred')) {
+                            deferScript(this);
+                        }
+                    });
+                },
+                configurable: true
+            });
+        }
+        
+        return element;
+    };
+
+    // Optional: Enable debug mode to see what's being deferred
+    // window.DEFER_DEBUG = true;
+
+    console.log('🚀 Resource deferrer initialized - will catch host-injected scripts');
+})();
