@@ -181,173 +181,75 @@ document.head.appendChild(instantPagePreload);
         ]
     };
 
-    // Store processed elements to avoid duplicate processing
-    const processedElements = new WeakSet();
+    // Store processed elements
+    const processed = new WeakSet();
     
-    // Function to defer a script - NEW APPROACH: use async=false instead of removing src
-    const deferScript = (script) => {
-        if (processedElements.has(script) || script.hasAttribute('data-deferred')) return;
+    // Process a single script - ONLY if it matches patterns
+    const processScript = (script) => {
+        // Skip if already processed or no src
+        if (!script.src || processed.has(script) || script.hasAttribute('data-deferred')) return;
         
-        // Don't defer critical scripts
-        if (script.src.includes('jq.js') || 
-            script.src.includes('jquery') ||
-            script.src.includes('jqt.js')) return;
-        
-        // Check if this script matches our patterns
-        const shouldDefer = DEFER_CONFIG.scriptPatterns.some(pattern => 
-            pattern.test(script.src)
-        );
-        
-        if (!shouldDefer) return;
+        // Check if it matches our patterns
+        const matches = DEFER_CONFIG.scriptPatterns.some(pattern => pattern.test(script.src));
+        if (!matches) return;
         
         // Mark as processed
-        processedElements.add(script);
+        processed.add(script);
         script.setAttribute('data-deferred', 'true');
         
-        // FIX: Use async=false to make it load without blocking, but preserve src
-        // This tells the browser to load asynchronously but execute in order
-        script.async = false;
+        // Simply add defer attribute - that's it!
+        // This doesn't interfere with loading because the script is already in DOM
         script.defer = true;
         
-        // No src removal - this keeps the dynamic loader happy
-        
-        if (window.DEFER_DEBUG) {
-            console.log('✅ Deferred script:', script.src.split('/').pop());
-        }
+        console.log('Deferred:', script.src);
     };
 
-    // Function to make stylesheet non-render-blocking
-    const deferStylesheet = (link) => {
-        if (processedElements.has(link) || link.hasAttribute('data-deferred')) return;
+    // Process a single stylesheet
+    const processStylesheet = (link) => {
+        if (!link.href || processed.has(link) || link.hasAttribute('data-deferred')) return;
         
-        const shouldDefer = DEFER_CONFIG.stylePatterns.some(pattern => 
-            pattern.test(link.href)
-        );
+        const matches = DEFER_CONFIG.stylePatterns.some(pattern => pattern.test(link.href));
+        if (!matches) return;
         
-        if (!shouldDefer) return;
-        
-        processedElements.add(link);
+        processed.add(link);
         link.setAttribute('data-deferred', 'true');
         
-        // Convert to non-blocking stylesheet
+        // Make it non-blocking
         link.media = 'print';
-        link.onload = () => {
-            link.media = 'all';
-        };
-        link.onerror = () => {
-            link.media = 'all'; // Fallback if load fails
-        };
-        
-        if (window.DEFER_DEBUG) {
-            console.log('✅ Deferred stylesheet:', link.href.split('/').pop());
-        }
+        link.onload = () => link.media = 'all';
+        link.onerror = () => link.media = 'all';
     };
 
-    // Function to process new elements
-    const processNode = (node) => {
-        if (node.nodeType === 1) { // Element node
-            if (node.tagName === 'SCRIPT' && node.src && !node.hasAttribute('data-deferred')) {
-                deferScript(node);
-            } else if (node.tagName === 'LINK' && 
-                       node.rel === 'stylesheet' && 
-                       node.href &&
-                       !node.hasAttribute('data-deferred')) {
-                deferStylesheet(node);
-            }
-            
-            // Process children for elements added with nested content
-            if (node.querySelectorAll) {
-                node.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
-                node.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
-            }
-        }
-    };
-
-    // Create MutationObserver with unique variable name
-    const resourceObserver = new MutationObserver((mutations) => {
-        // Process all mutations immediately
+    // Watch for new elements
+    const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-            // Process added nodes
             for (const node of mutation.addedNodes) {
-                processNode(node);
+                if (node.nodeType === 1) { // Element
+                    if (node.tagName === 'SCRIPT' && node.src) {
+                        processScript(node);
+                    } else if (node.tagName === 'LINK' && node.rel === 'stylesheet') {
+                        processStylesheet(node);
+                    }
+                    
+                    // Check children
+                    if (node.querySelectorAll) {
+                        node.querySelectorAll('script[src]').forEach(processScript);
+                        node.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
+                    }
+                }
             }
         }
     });
 
-    // Start observing with childList only (faster)
-    resourceObserver.observe(document.documentElement, {
+    // Start observing
+    observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // Process any existing elements that might have been added before observer started
-    // Use requestIdleCallback for this if available, otherwise fallback to setTimeout
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-            document.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
-            document.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
-        }, { timeout: 1000 });
-    } else {
-        setTimeout(() => {
-            document.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
-            document.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
-        }, 0);
-    }
+    // Process existing elements
+    document.querySelectorAll('script[src]').forEach(processScript);
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
 
-    // Extra safety: microtask to catch any that might have been missed
-    // This runs before the browser paints
-    queueMicrotask(() => {
-        document.querySelectorAll('script[src]:not([data-deferred])').forEach(deferScript);
-        document.querySelectorAll('link[rel="stylesheet"]:not([data-deferred])').forEach(deferStylesheet);
-    });
-
-    // SIMPLIFIED createElement proxy - just marks scripts for processing
-    const originalCreateElement = document.createElement;
-    document.createElement = function(tagName) {
-        const element = originalCreateElement.call(document, tagName);
-        
-        if (tagName.toLowerCase() === 'script') {
-            // Store the original src setter but don't interfere with loading
-            let srcValue = '';
-            Object.defineProperty(element, 'src', {
-                get: function() { return srcValue; },
-                set: function(value) {
-                    srcValue = value;
-                    // Don't process immediately - let the observer handle it
-                    // This prevents conflicts with dynamic loader
-                },
-                configurable: true
-            });
-        }
-        
-        return element;
-    };
-
-    // CLEANUP: Only remove truly empty scripts (not ones with src)
-    const cleanupEmptyScripts = () => {
-        document.querySelectorAll('script:not([src]):not([type="application/ld+json"]):not([type="application/json"])').forEach(script => {
-            // Check if it's truly empty (no src, no inner content)
-            if (!script.src && !script.innerHTML.trim()) {
-                // Check if it was created by our old logic (has data-deferred but no src)
-                if (script.hasAttribute('data-deferred')) {
-                    script.remove();
-                    if (window.DEFER_DEBUG) {
-                        console.log('🧹 Removed empty deferred script tag');
-                    }
-                }
-            }
-        });
-    };
-
-    // Run cleanup after everything settles (only if needed)
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(cleanupEmptyScripts, { timeout: 3000 });
-    } else {
-        setTimeout(cleanupEmptyScripts, 2000);
-    }
-
-    // Optional: Enable debug mode to see what's being deferred
-    // window.DEFER_DEBUG = true;
-
-    console.log('🚀 Resource deferrer initialized - compatible with dynamic loader');
+    console.log('🚀 Minimal deferrer active');
 })();
