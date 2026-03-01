@@ -163,164 +163,93 @@ document.head.appendChild(instantPagePreload);
     
     // Configuration for what to defer
     const DEFER_CONFIG = {
-        // Scripts to defer - MORE AGGRESSIVE PATTERNS
+        // Scripts to defer (add patterns that match host-injected scripts)
         scriptPatterns: [
-            // Catch ANY script from forum domains, regardless of port/path/extension
-            /forum(?:free|community)\.(?:net|it)(?::\d+)?\/.*(?:js|script|loader)/i,
-            /forum(?:free|community)\.(?:net|it)/i,  // Catch ALL scripts from these domains
-            
-            // Your existing patterns
-            /akcelo/i,
-            /google-analytics/i,
-            /ads\./i,
-            /doubleclick/i,
-            /amazon-adsystem/i,
-            /criteo/i
+            /forumfree\.net\/.*\.js$/,
+            /forumcommunity\.net\/.*\.js$/,
+            /akcelo/,
+            /google-analytics/,
+            /ads\./,
+            /doubleclick/,
+            /amazon-adsystem/,
+            /criteo/
         ],
         // Stylesheets to make non-render-blocking
         stylePatterns: [
-            /forum(?:free|community)\.(?:net|it)\/.*\.css/i,
-            /akcelo/i,
-            /tippy/i
+            /forumfree\.net\/.*\.css$/,
+            /akcelo/,
+            /tippy/
         ]
     };
 
     // Store processed elements
     const processed = new WeakSet();
     
-    // Fast script processing
+    // Process a single script - ONLY if it matches patterns
     const processScript = (script) => {
+        // Skip if already processed or no src
         if (!script.src || processed.has(script) || script.hasAttribute('data-deferred')) return;
         
-        const src = script.src;
-        const patterns = DEFER_CONFIG.scriptPatterns;
-        for (let i = 0; i < patterns.length; i++) {
-            if (patterns[i].test(src)) {
-                processed.add(script);
-                script.setAttribute('data-deferred', 'true');
-                script.defer = true;
-                console.log('✅ Deferred:', src);  // Keep this for debugging
-                return;
-            }
-        }
+        // Check if it matches our patterns
+        const matches = DEFER_CONFIG.scriptPatterns.some(pattern => pattern.test(script.src));
+        if (!matches) return;
+        
+        // Mark as processed
+        processed.add(script);
+        script.setAttribute('data-deferred', 'true');
+        
+        // Simply add defer attribute - that's it!
+        script.defer = true;
+        
+        console.log('Deferred:', script.src);
     };
 
-    // Fast stylesheet processing
+    // Process a single stylesheet
     const processStylesheet = (link) => {
         if (!link.href || processed.has(link) || link.hasAttribute('data-deferred')) return;
         
-        const href = link.href;
-        const patterns = DEFER_CONFIG.stylePatterns;
-        for (let i = 0; i < patterns.length; i++) {
-            if (patterns[i].test(href)) {
-                processed.add(link);
-                link.setAttribute('data-deferred', 'true');
-                link.media = 'print';
-                link.onload = () => link.media = 'all';
-                link.onerror = () => link.media = 'all';
-                console.log('📄 Non-blocking CSS:', href);  // Keep this for debugging
-                return;
-            }
-        }
+        const matches = DEFER_CONFIG.stylePatterns.some(pattern => pattern.test(link.href));
+        if (!matches) return;
+        
+        processed.add(link);
+        link.setAttribute('data-deferred', 'true');
+        
+        // Make it non-blocking
+        link.media = 'print';
+        link.onload = () => link.media = 'all';
+        link.onerror = () => link.media = 'all';
     };
 
-    // RECURSIVE SCAN function to catch deeply nested scripts
-    const scanForScripts = (root) => {
-        // Check the root itself
-        if (root.tagName === 'SCRIPT' && root.src) {
-            processScript(root);
-        } else if (root.tagName === 'LINK' && root.rel === 'stylesheet') {
-            processStylesheet(root);
-        }
-        
-        // Check all children (fast with getElementsByTagName)
-        if (root.querySelectorAll) {
-            const scripts = root.getElementsByTagName('SCRIPT');
-            for (let i = 0; i < scripts.length; i++) {
-                if (scripts[i].src) processScript(scripts[i]);
-            }
-            
-            const links = root.getElementsByTagName('LINK');
-            for (let i = 0; i < links.length; i++) {
-                if (links[i].rel === 'stylesheet') processStylesheet(links[i]);
-            }
-        }
-    };
-
-    // Identify containers for third-party scripts
-    const getTargetNodes = () => {
-        const nodes = [
-            document.head,
-            document.body
-        ];
-        
-        const selectors = [
-            '.ads', '.advertisement', '.ad-container',
-            '.scripts', '.js-container', '.external-scripts',
-            '.footer', '.widget', '.widget-area',
-            '#ad-container', '#ads', '#ad-wrapper',
-            '.sidebar', '.aside', '.widgets',
-            '.third-party', '.embeds', '.integrations',
-            '.Fixed', '.modern-menu-wrap', '.menuwrap', '.container', '.topic',
-            '.footer', '.footer_links',  // Added your footer classes
-            '#ffAdStart', '.FFA-box', '.FFA-element'  // Added ad container
-        ];
-        
-        const container = document.querySelectorAll(selectors.join(','));
-        for (let i = 0; i < container.length; i++) {
-            nodes.push(container[i]);
-        }
-        
-        const unique = new Set();
-        for (let i = 0; i < nodes.length; i++) {
-            if (nodes[i]) unique.add(nodes[i]);
-        }
-        
-        return Array.from(unique);
-    };
-
-    // Target nodes for observation
-    const targetNodes = getTargetNodes();
-
-    // RECURSIVE WATCHER - catches deeply nested additions
+    // Watch for new elements - using the original working observer
     const scriptWatcher = new MutationObserver((mutations) => {
-        for (let i = 0; i < mutations.length; i++) {
-            const mutation = mutations[i];
-            
-            // Fast filter
-            if (mutation.type !== 'childList' || !mutation.addedNodes.length) continue;
-            
-            const addedNodes = mutation.addedNodes;
-            for (let j = 0; j < addedNodes.length; j++) {
-                const node = addedNodes[j];
-                
-                if (node.nodeType !== 1) continue;
-                
-                // SCAN THE ENTIRE SUBTREE of added node
-                scanForScripts(node);
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType === 1) { // Element
+                    if (node.tagName === 'SCRIPT' && node.src) {
+                        processScript(node);
+                    } else if (node.tagName === 'LINK' && node.rel === 'stylesheet') {
+                        processStylesheet(node);
+                    }
+                    
+                    // Check children
+                    if (node.querySelectorAll) {
+                        node.querySelectorAll('script[src]').forEach(processScript);
+                        node.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
+                    }
+                }
             }
         }
     });
 
-    // Start watching with subtree: true to catch nested additions
-    const watchConfig = {
+    // Start observing the entire document (original working method)
+    scriptWatcher.observe(document.documentElement, {
         childList: true,
-        subtree: true,
-        attributes: false,
-        characterData: false
-    };
+        subtree: true
+    });
 
-    for (let i = 0; i < targetNodes.length; i++) {
-        try {
-            scriptWatcher.observe(targetNodes[i], watchConfig);
-        } catch (e) {
-            // Silently fail
-        }
-    }
+    // Process existing elements
+    document.querySelectorAll('script[src]').forEach(processScript);
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
 
-    // INITIAL SCAN - Catch ALL existing scripts everywhere
-    console.log('🔍 Scanning for scripts to defer...');
-    scanForScripts(document.documentElement);
-
-    console.log('🚀 Script watcher active on', targetNodes.length, 'containers');
+    console.log('🚀 Minimal deferrer active');
 })();
