@@ -163,21 +163,25 @@ document.head.appendChild(instantPagePreload);
     
     // Configuration for what to defer
     const DEFER_CONFIG = {
-        // Scripts to defer (add patterns that match host-injected scripts)
+        // Scripts to defer - MORE AGGRESSIVE PATTERNS
         scriptPatterns: [
-            /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
-            /akcelo/,
-            /google-analytics/,
-            /ads\./,
-            /doubleclick/,
-            /amazon-adsystem/,
-            /criteo/
+            // Catch ANY script from forum domains, regardless of port/path/extension
+            /forum(?:free|community)\.(?:net|it)(?::\d+)?\/.*(?:js|script|loader)/i,
+            /forum(?:free|community)\.(?:net|it)/i,  // Catch ALL scripts from these domains
+            
+            // Your existing patterns
+            /akcelo/i,
+            /google-analytics/i,
+            /ads\./i,
+            /doubleclick/i,
+            /amazon-adsystem/i,
+            /criteo/i
         ],
         // Stylesheets to make non-render-blocking
         stylePatterns: [
-            /forumfree\.net\/.*\.css$/,
-            /akcelo/,
-            /tippy/
+            /forum(?:free|community)\.(?:net|it)\/.*\.css/i,
+            /akcelo/i,
+            /tippy/i
         ]
     };
 
@@ -195,7 +199,7 @@ document.head.appendChild(instantPagePreload);
                 processed.add(script);
                 script.setAttribute('data-deferred', 'true');
                 script.defer = true;
-                // console.log('Deferred:', src);
+                console.log('✅ Deferred:', src);  // Keep this for debugging
                 return;
             }
         }
@@ -214,6 +218,7 @@ document.head.appendChild(instantPagePreload);
                 link.media = 'print';
                 link.onload = () => link.media = 'all';
                 link.onerror = () => link.media = 'all';
+                console.log('📄 Non-blocking CSS:', href);  // Keep this for debugging
                 return;
             }
         }
@@ -256,7 +261,9 @@ document.head.appendChild(instantPagePreload);
             '#ad-container', '#ads', '#ad-wrapper',
             '.sidebar', '.aside', '.widgets',
             '.third-party', '.embeds', '.integrations',
-            '.Fixed', '.modern-menu-wrap', '.menuwrap', '.container', '.topic'
+            '.Fixed', '.modern-menu-wrap', '.menuwrap', '.container', '.topic',
+            '.footer', '.footer_links',  // Added your footer classes
+            '#ffAdStart', '.FFA-box', '.FFA-element'  // Added ad container
         ];
         
         const container = document.querySelectorAll(selectors.join(','));
@@ -298,7 +305,7 @@ document.head.appendChild(instantPagePreload);
     // Start watching with subtree: true to catch nested additions
     const watchConfig = {
         childList: true,
-        subtree: true,  // Back to true to catch nested scripts
+        subtree: true,
         attributes: false,
         characterData: false
     };
@@ -312,7 +319,8 @@ document.head.appendChild(instantPagePreload);
     }
 
     // INITIAL SCAN - Catch ALL existing scripts everywhere
+    console.log('🔍 Scanning for scripts to defer...');
     scanForScripts(document.documentElement);
 
-    // console.log('🚀 Script watcher active on', targetNodes.length, 'containers');
+    console.log('🚀 Script watcher active on', targetNodes.length, 'containers');
 })();
