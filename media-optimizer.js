@@ -50,7 +50,7 @@
         initDone: false
     };
     
-    // ===== CACHED CAPABILITY CHECKS (PERFORMANCE) =====
+    // ===== CACHED CAPABILITY CHECKS =====
     var capabilities = (function() {
         return {
             webp: supportsFormat('webp'),
@@ -115,7 +115,7 @@
         return 'unknown';
     }
     
-    // ===== VIDEO POSTER GENERATION WITH INTERSECTION OBSERVER =====
+    // ===== VIDEO POSTER GENERATION =====
     function createSvgPoster(video) {
         var width = video.getAttribute('width') || 640;
         var height = video.getAttribute('height') || 360;
@@ -140,14 +140,30 @@
     }
     
     function generateVideoPoster(video) {
-        var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
-        if (!videoSrc) return;
+        // Don't generate if already has poster or already attempted
+        if (video.poster || video.hasAttribute('data-poster-attempted')) {
+            if (video.poster) {
+                state.videos.withPoster++;
+            }
+            return;
+        }
+        
+        video.setAttribute('data-poster-attempted', 'true');
+        
+        var videoSrc = video.currentSrc || video.src || 
+                      (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
+        
+        if (!videoSrc) {
+            createSvgPoster(video);
+            state.videos.withPoster++;
+            return;
+        }
         
         var lowerSrc = videoSrc.toLowerCase();
         var posterUrl = null;
         var posterType = 'unknown';
         
-        // Platform-specific poster generation (same as before)
+        // Platform-specific poster generation
         if (lowerSrc.indexOf('tenor.com') !== -1) {
             posterUrl = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
             posterType = 'tenor-gif';
@@ -217,7 +233,7 @@
                     state.videos.withPoster++;
                 };
                 img.src = posterUrl;
-                return;
+                return; // Exit early - poster will be set async
             }
         }
         else if (lowerSrc.indexOf('vimeo.com') !== -1) {
@@ -270,37 +286,35 @@
         }
         
         if (posterUrl) {
+            // For non-YouTube videos, set poster directly
             video.setAttribute('poster', posterUrl);
             video.setAttribute('data-poster-type', posterType);
             video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
         } else {
             createSvgPoster(video);
-            video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
         }
     }
     
-    // ===== VIDEO HANDLING WITH INTERSECTION OBSERVER =====
+    // ===== VIDEO HANDLING =====
     var videoObserver = new IntersectionObserver(function(entries) {
         entries.forEach(function(entry) {
             if (entry.isIntersecting) {
                 var video = entry.target;
-                if (!video.poster && !video.hasAttribute('data-poster-attempted')) {
-                    video.setAttribute('data-poster-attempted', 'true');
-                    generateVideoPoster(video);
-                }
+                generateVideoPoster(video);
                 videoObserver.unobserve(video);
             }
         });
-    }, { rootMargin: '500px' }); // Load posters 500px before videos enter viewport
+    }, { rootMargin: '500px' });
     
     function setupVideoLazyLoading(video) {
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
         
-        var hasAutoplay = video.hasAttribute('autoplay');
+        // Fix: Check autoplay correctly
+        var hasAutoplay = video.hasAttribute('autoplay') || video.autoplay === true;
         if (hasAutoplay) {
             state.videos.autoplayVideos++;
         }
@@ -318,19 +332,20 @@
             }
         }
         
-        // Only observe for poster generation if no poster exists
-        if (!video.poster) {
-            videoObserver.observe(video);
-        } else {
-            state.videos.withPoster++;
-        }
-        
+        // Store original sources
         var sources = video.querySelectorAll('source[src]');
         for (var i = 0; i < sources.length; i++) {
             var source = sources[i];
             if (!source.hasAttribute('data-original-src') && source.src) {
                 source.setAttribute('data-original-src', source.src);
             }
+        }
+        
+        // Only observe for poster if no poster exists
+        if (!video.poster && !video.hasAttribute('poster')) {
+            videoObserver.observe(video);
+        } else if (video.poster) {
+            state.videos.withPoster++;
         }
         
         video.setAttribute('data-video-processed', 'true');
@@ -373,7 +388,6 @@
         var originalFormat = detectFormat(originalSrc);
         var isGif = originalFormat === 'gif';
         
-        // Use cached capability checks
         var outputFormat;
         if (isGif) {
             outputFormat = 'webp';
@@ -522,12 +536,10 @@
     }
     
     var mutationObserver = new MutationObserver(function(mutations) {
-        // Add mutations to pending queue
         for (var i = 0; i < mutations.length; i++) {
             pendingMutations.push(mutations[i]);
         }
         
-        // Debounce processing
         clearTimeout(observerTimeout);
         observerTimeout = setTimeout(processPendingMutations, 100);
     });
@@ -592,7 +604,7 @@
         return element;
     };
     
-    // ===== CLEANUP ON PAGE UNLOAD =====
+    // ===== CLEANUP =====
     window.addEventListener('beforeunload', function() {
         mutationObserver.disconnect();
         videoObserver.disconnect();
@@ -637,7 +649,6 @@
                         subtree: true
                     });
                     
-                    // Catch any missed elements
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var i = 0; i < missedImages.length; i++) {
                         optimizeImage(missedImages[i]);
@@ -659,10 +670,17 @@
         // ===== PERFORMANCE REPORT =====
         window.addEventListener('load', function() {
             setTimeout(function() {
+                // Recalculate video stats to ensure accuracy
                 var finalVideos = document.querySelectorAll('video');
                 var videosWithPoster = 0;
+                var autoplayCount = 0;
+                var preloadNoneCount = 0;
+                
                 for (var v = 0; v < finalVideos.length; v++) {
-                    if (finalVideos[v].poster) videosWithPoster++;
+                    var video = finalVideos[v];
+                    if (video.poster) videosWithPoster++;
+                    if (video.hasAttribute('autoplay') || video.autoplay === true) autoplayCount++;
+                    if (video.getAttribute('preload') === 'none') preloadNoneCount++;
                 }
                 
                 var finalImages = document.querySelectorAll('img');
@@ -682,14 +700,13 @@
                 }
                 
                 for (var k = 0; k < finalVideos.length; k++) {
-                    var preload = finalVideos[k].getAttribute('preload');
-                    if (preload === 'none') lazyCount++;
+                    if (finalVideos[k].getAttribute('preload') === 'none') lazyCount++;
                 }
                 
                 var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
                 
                 console.log('=== WESERV OPTIMIZER REPORT ===');
-                console.log('Total images:', state.stats.total);
+                console.log('Total images:', finalImages.length);
                 console.log('Optimized:', state.stats.optimized);
                 console.log('Skipped:', state.stats.skipped);
                 console.log('Failed:', state.stats.failed);
@@ -700,8 +717,8 @@
                 console.log('Placeholder iframes:', placeholderCount);
                 console.log('\n=== VIDEO STATS ===');
                 console.log('Total videos:', finalVideos.length);
-                console.log('Videos with preload="none":', state.videos.preloadNone);
-                console.log('Autoplay videos:', state.videos.autoplayVideos);
+                console.log('Videos with preload="none":', preloadNoneCount);
+                console.log('Autoplay videos:', autoplayCount);
                 console.log('Videos with poster:', videosWithPoster);
                 console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
                 
