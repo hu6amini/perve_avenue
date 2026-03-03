@@ -500,7 +500,7 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  margin-top: 10px}
 
 #markdiv span {font-size: 14px;
- font-weight: 300}
+ font-weight: 300;}
 
 #markdiv mark {cursor: pointer;
  background: #E8EAF6;
@@ -508,6 +508,10 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  border-radius: 2px;
  color: #3F51B5;
  font-weight: 500}
+
+mark span {white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;}
 
 .edit {display: inline-flex;
  align-items: center;
