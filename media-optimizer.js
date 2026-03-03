@@ -50,15 +50,6 @@
         initDone: false
     };
     
-    // ===== CACHED CAPABILITY CHECKS =====
-    var capabilities = (function() {
-        return {
-            webp: supportsFormat('webp'),
-            avif: supportsFormat('avif'),
-            cspWorks: checkCSP()
-        };
-    })();
-    
     // ===== UTILITY FUNCTIONS =====
     function isMediaElement(el) {
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
@@ -89,16 +80,6 @@
             canvas.width = 1;
             canvas.height = 1;
             return canvas.toDataURL('image/' + format).indexOf('image/' + format) !== -1;
-        } catch (e) {
-            return false;
-        }
-    }
-    
-    function checkCSP() {
-        try {
-            var test = new Image();
-            test.src = CONFIG.cdn + '?url=' + encodeURIComponent('data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
-            return true;
         } catch (e) {
             return false;
         }
@@ -139,182 +120,196 @@
         return null;
     }
     
-    function generateVideoPoster(video) {
-        // Don't generate if already has poster or already attempted
-        if (video.poster || video.hasAttribute('data-poster-attempted')) {
-            if (video.poster) {
-                state.videos.withPoster++;
-            }
-            return;
-        }
-        
-        video.setAttribute('data-poster-attempted', 'true');
-        
-        var videoSrc = video.currentSrc || video.src || 
-                      (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
-        
-        if (!videoSrc) {
-            createSvgPoster(video);
-            state.videos.withPoster++;
-            return;
-        }
-        
-        var lowerSrc = videoSrc.toLowerCase();
-        var posterUrl = null;
-        var posterType = 'unknown';
-        
-        // Platform-specific poster generation
-        if (lowerSrc.indexOf('tenor.com') !== -1) {
-            posterUrl = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
-            posterType = 'tenor-gif';
-        }
-        else if (lowerSrc.indexOf('giphy.com') !== -1 || lowerSrc.indexOf('media.giphy.com') !== -1) {
-            var giphyMatches = videoSrc.match(/\/media\/([^\/]+)\//);
-            if (giphyMatches) {
-                var giphyId = giphyMatches[1];
-                posterUrl = 'https://media.giphy.com/media/' + giphyId + '/giphy.gif';
-                posterType = 'giphy-gif';
-            } else {
-                posterUrl = videoSrc.replace('.mp4', '.gif');
-                posterType = 'giphy-gif';
-            }
-        }
-        else if (lowerSrc.indexOf('imgur.com') !== -1) {
-            var imgurMatches = videoSrc.match(/imgur\.com\/([^\/\.]+)/);
-            if (imgurMatches) {
-                var imgurId = imgurMatches[1];
-                posterUrl = 'https://i.imgur.com/' + imgurId + '.gif';
-                posterType = 'imgur-gif';
-            }
-        }
-        else if (lowerSrc.indexOf('reddit.com') !== -1 || lowerSrc.indexOf('redd.it') !== -1) {
-            if (lowerSrc.indexOf('v.redd.it') !== -1) {
-                var redditId = videoSrc.split('/').pop().split('?')[0];
-                posterUrl = 'https://external-preview.redd.it/' + redditId + '?auto=webp&s=thumbnail';
-                posterType = 'reddit-preview';
-            }
-        }
-        else if (lowerSrc.indexOf('twitter.com') !== -1 || lowerSrc.indexOf('x.com') !== -1) {
-            var twitterMatches = videoSrc.match(/\/tweet_video\/([^\/\.]+)/);
-            if (twitterMatches) {
-                var tweetId = twitterMatches[1];
-                posterUrl = 'https://video.twimg.com/tweet_video_thumb/' + tweetId + '.jpg';
-                posterType = 'twitter-thumb';
-            }
-        }
-        else if (lowerSrc.indexOf('tiktok.com') !== -1) {
-            var tiktokMatches = videoSrc.match(/\/video\/(\d+)/);
-            if (tiktokMatches) {
-                var tiktokId = tiktokMatches[1];
-                posterUrl = 'https://www.tiktok.com/api/img/?itemId=' + tiktokId;
-                posterType = 'tiktok-thumb';
-            }
-        }
-        else if (lowerSrc.indexOf('youtube.com') !== -1 || lowerSrc.indexOf('youtu.be') !== -1) {
-            var youtubeId = null;
-            var youtubeMatches = videoSrc.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
-            if (youtubeMatches) {
-                youtubeId = youtubeMatches[1];
-                posterUrl = 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg';
-                posterType = 'youtube-thumb';
-                
-                var img = new Image();
-                img.onload = function() {
-                    video.setAttribute('poster', posterUrl);
-                    video.setAttribute('data-poster-type', posterType);
-                    video.setAttribute('data-poster-loaded', 'true');
-                    state.videos.withPoster++;
-                };
-                img.onerror = function() {
-                    var fallbackUrl = 'https://img.youtube.com/vi/' + youtubeId + '/hqdefault.jpg';
-                    video.setAttribute('poster', fallbackUrl);
-                    video.setAttribute('data-poster-type', 'youtube-thumb-fallback');
-                    video.setAttribute('data-poster-loaded', 'true');
-                    state.videos.withPoster++;
-                };
-                img.src = posterUrl;
-                return; // Exit early - poster will be set async
-            }
-        }
-        else if (lowerSrc.indexOf('vimeo.com') !== -1) {
-            var vimeoMatches = videoSrc.match(/vimeo\.com\/(\d+)/);
-            if (vimeoMatches) {
-                var vimeoId = vimeoMatches[1];
-                posterUrl = 'https://i.vimeocdn.com/video/' + vimeoId + '_640.jpg';
-                posterType = 'vimeo-thumb';
-            }
-        }
-        else if (lowerSrc.indexOf('imgplay.io') !== -1 || lowerSrc.indexOf('imgplay') !== -1) {
-            posterUrl = videoSrc.replace('.mp4', '.jpg').replace('.webm', '.jpg');
-            posterType = 'imgplay-thumb';
-        }
-        else if (lowerSrc.indexOf('clipchamp.com') !== -1) {
-            posterUrl = videoSrc.replace('/video/', '/thumbnail/') + '.jpg';
-            posterType = 'clipchamp-thumb';
-        }
-        else if (lowerSrc.indexOf('facebook.com') !== -1 || lowerSrc.indexOf('fbcdn.net') !== -1) {
-            var fbMatches = videoSrc.match(/\/v\/(\d+)/);
-            if (fbMatches) {
-                var fbId = fbMatches[1];
-                posterUrl = 'https://graph.facebook.com/' + fbId + '/picture';
-                posterType = 'facebook-thumb';
-            }
-        }
-        else if (lowerSrc.indexOf('instagram.com') !== -1 || lowerSrc.indexOf('cdninstagram.com') !== -1) {
-            var instaMatches = videoSrc.match(/\/p\/([^\/]+)/);
-            if (instaMatches) {
-                var instaId = instaMatches[1];
-                posterUrl = 'https://www.instagram.com/p/' + instaId + '/media/?size=t';
-                posterType = 'instagram-thumb';
-            }
-        }
-        else if (lowerSrc.indexOf('dailymotion.com') !== -1) {
-            var dmMatches = videoSrc.match(/\/video\/([^_]+)/);
-            if (dmMatches) {
-                var dmId = dmMatches[1];
-                posterUrl = 'https://www.dailymotion.com/thumbnail/video/' + dmId;
-                posterType = 'dailymotion-thumb';
-            }
-        }
-        else if (lowerSrc.indexOf('twitch.tv') !== -1 || lowerSrc.indexOf('clips.twitch.tv') !== -1) {
-            var twitchMatches = videoSrc.match(/\/clip\/([^\/]+)/i);
-            if (twitchMatches) {
-                var clipId = twitchMatches[1];
-                posterUrl = 'https://clips-media-assets.twitch.tv/' + clipId + '-preview.jpg';
-                posterType = 'twitch-thumb';
-            }
-        }
-        
-        if (posterUrl) {
-            // For non-YouTube videos, set poster directly
-            video.setAttribute('poster', posterUrl);
-            video.setAttribute('data-poster-type', posterType);
-            video.setAttribute('data-poster-loaded', 'true');
-            state.videos.withPoster++;
+function generateVideoPoster(video) {
+    var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
+    if (!videoSrc) return;
+    
+    var lowerSrc = videoSrc.toLowerCase();
+    var posterUrl = null;
+    var posterType = 'unknown';
+    
+    // ===== TENOR =====
+    if (lowerSrc.indexOf('tenor.com') !== -1) {
+        posterUrl = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
+        posterType = 'tenor-gif';
+    }
+    
+    // ===== GIFHY =====
+    else if (lowerSrc.indexOf('giphy.com') !== -1 || lowerSrc.indexOf('media.giphy.com') !== -1) {
+        // Giphy format: https://media.giphy.com/media/ID/giphy.gif or .mp4
+        var giphyMatches = videoSrc.match(/\/media\/([^\/]+)\//);
+        if (giphyMatches) {
+            var giphyId = giphyMatches[1];
+            posterUrl = 'https://media.giphy.com/media/' + giphyId + '/giphy.gif';
+            posterType = 'giphy-gif';
         } else {
-            createSvgPoster(video);
-            state.videos.withPoster++;
+            // Direct MP4 to GIF conversion
+            posterUrl = videoSrc.replace('.mp4', '.gif');
+            posterType = 'giphy-gif';
         }
     }
     
-    // ===== VIDEO HANDLING =====
-    var videoObserver = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-            if (entry.isIntersecting) {
-                var video = entry.target;
-                generateVideoPoster(video);
-                videoObserver.unobserve(video);
-            }
-        });
-    }, { rootMargin: '500px' });
+    // ===== IMGUR =====
+    else if (lowerSrc.indexOf('imgur.com') !== -1) {
+        // Imgur format: https://i.imgur.com/12345.mp4
+        var imgurMatches = videoSrc.match(/imgur\.com\/([^\/\.]+)/);
+        if (imgurMatches) {
+            var imgurId = imgurMatches[1];
+            posterUrl = 'https://i.imgur.com/' + imgurId + '.gif';
+            posterType = 'imgur-gif';
+        }
+    }
     
+    // ===== REDDIT =====
+    else if (lowerSrc.indexOf('reddit.com') !== -1 || lowerSrc.indexOf('redd.it') !== -1) {
+        // Reddit often uses v.redd.it or external links
+        if (lowerSrc.indexOf('v.redd.it') !== -1) {
+            // Try to get thumbnail from Reddit's preview system
+            var redditId = videoSrc.split('/').pop().split('?')[0];
+            posterUrl = 'https://external-preview.redd.it/' + redditId + '?auto=webp&s=thumbnail';
+            posterType = 'reddit-preview';
+        }
+    }
+    
+    // ===== TWITTER/X =====
+    else if (lowerSrc.indexOf('twitter.com') !== -1 || lowerSrc.indexOf('x.com') !== -1) {
+        // Twitter video thumbnails follow pattern
+        var twitterMatches = videoSrc.match(/\/tweet_video\/([^\/\.]+)/);
+        if (twitterMatches) {
+            var tweetId = twitterMatches[1];
+            posterUrl = 'https://video.twimg.com/tweet_video_thumb/' + tweetId + '.jpg';
+            posterType = 'twitter-thumb';
+        }
+    }
+    
+    // ===== TIKTOK =====
+    else if (lowerSrc.indexOf('tiktok.com') !== -1) {
+        // TikTok thumbnails
+        var tiktokMatches = videoSrc.match(/\/video\/(\d+)/);
+        if (tiktokMatches) {
+            var tiktokId = tiktokMatches[1];
+            posterUrl = 'https://www.tiktok.com/api/img/?itemId=' + tiktokId;
+            posterType = 'tiktok-thumb';
+        }
+    }
+    
+    // ===== YOUTUBE =====
+    else if (lowerSrc.indexOf('youtube.com') !== -1 || lowerSrc.indexOf('youtu.be') !== -1) {
+        // Extract YouTube video ID
+        var youtubeId = null;
+        var youtubeMatches = videoSrc.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+        if (youtubeMatches) {
+            youtubeId = youtubeMatches[1];
+            // Try maxresdefault first, fallback to hqdefault
+            posterUrl = 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg';
+            posterType = 'youtube-thumb';
+            
+            // Test if maxresdefault exists, fallback to hqdefault
+            var img = new Image();
+            img.onload = function() {
+                video.setAttribute('poster', posterUrl);
+                video.setAttribute('data-poster-type', posterType);
+                video.setAttribute('data-poster-loaded', 'true');
+                state.videos.withPoster++;
+            };
+            img.onerror = function() {
+                var fallbackUrl = 'https://img.youtube.com/vi/' + youtubeId + '/hqdefault.jpg';
+                video.setAttribute('poster', fallbackUrl);
+                video.setAttribute('data-poster-type', 'youtube-thumb-fallback');
+                video.setAttribute('data-poster-loaded', 'true');
+                state.videos.withPoster++;
+            };
+            img.src = posterUrl;
+            return; // Exit early since we're handling async
+        }
+    }
+    
+    // ===== VIMEO =====
+    else if (lowerSrc.indexOf('vimeo.com') !== -1) {
+        var vimeoMatches = videoSrc.match(/vimeo\.com\/(\d+)/);
+        if (vimeoMatches) {
+            var vimeoId = vimeoMatches[1];
+            posterUrl = 'https://i.vimeocdn.com/video/' + vimeoId + '_640.jpg';
+            posterType = 'vimeo-thumb';
+        }
+    }
+    
+    // ===== IMGPLAY ===== (common for forums)
+    else if (lowerSrc.indexOf('imgplay.io') !== -1 || lowerSrc.indexOf('imgplay') !== -1) {
+        posterUrl = videoSrc.replace('.mp4', '.jpg').replace('.webm', '.jpg');
+        posterType = 'imgplay-thumb';
+    }
+    
+    // ===== CLIPCHAMP =====
+    else if (lowerSrc.indexOf('clipchamp.com') !== -1) {
+        posterUrl = videoSrc.replace('/video/', '/thumbnail/') + '.jpg';
+        posterType = 'clipchamp-thumb';
+    }
+    
+    // ===== FACEBOOK =====
+    else if (lowerSrc.indexOf('facebook.com') !== -1 || lowerSrc.indexOf('fbcdn.net') !== -1) {
+        // Facebook uses complex CDN, try to get thumbnail from video ID
+        var fbMatches = videoSrc.match(/\/v\/(\d+)/);
+        if (fbMatches) {
+            var fbId = fbMatches[1];
+            posterUrl = 'https://graph.facebook.com/' + fbId + '/picture';
+            posterType = 'facebook-thumb';
+        }
+    }
+    
+    // ===== INSTAGRAM =====
+    else if (lowerSrc.indexOf('instagram.com') !== -1 || lowerSrc.indexOf('cdninstagram.com') !== -1) {
+        var instaMatches = videoSrc.match(/\/p\/([^\/]+)/);
+        if (instaMatches) {
+            var instaId = instaMatches[1];
+            posterUrl = 'https://www.instagram.com/p/' + instaId + '/media/?size=t';
+            posterType = 'instagram-thumb';
+        }
+    }
+    
+    // ===== DAILYMOTION =====
+    else if (lowerSrc.indexOf('dailymotion.com') !== -1) {
+        var dmMatches = videoSrc.match(/\/video\/([^_]+)/);
+        if (dmMatches) {
+            var dmId = dmMatches[1];
+            posterUrl = 'https://www.dailymotion.com/thumbnail/video/' + dmId;
+            posterType = 'dailymotion-thumb';
+        }
+    }
+    
+    // ===== TWITCH =====
+    else if (lowerSrc.indexOf('twitch.tv') !== -1 || lowerSrc.indexOf('clips.twitch.tv') !== -1) {
+        var twitchMatches = videoSrc.match(/\/clip\/([^\/]+)/i);
+        if (twitchMatches) {
+            var clipId = twitchMatches[1];
+            posterUrl = 'https://clips-media-assets.twitch.tv/' + clipId + '-preview.jpg';
+            posterType = 'twitch-thumb';
+        }
+    }
+    
+    // If we found a poster URL, set it directly
+    if (posterUrl) {
+        video.setAttribute('poster', posterUrl);
+        video.setAttribute('data-poster-type', posterType);
+        video.setAttribute('data-poster-loaded', 'true');
+        state.videos.withPoster++;
+        console.log('✅ Poster set for ' + posterType + ': ' + posterUrl.substring(0, 60) + '...');
+    } else {
+        // Fallback to SVG for unknown sites
+        createSvgPoster(video);
+        video.setAttribute('data-poster-loaded', 'true');
+        state.videos.withPoster++;
+        console.log('ℹ️ SVG fallback for:', videoSrc.substring(0, 60) + '...');
+    }
+}
+    
+    // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
         
-        // Fix: Check autoplay correctly
-        var hasAutoplay = video.hasAttribute('autoplay') || video.autoplay === true;
+        var hasAutoplay = video.hasAttribute('autoplay');
         if (hasAutoplay) {
             state.videos.autoplayVideos++;
         }
@@ -332,20 +327,18 @@
             }
         }
         
-        // Store original sources
+        if (!video.poster) {
+            generateVideoPoster(video);
+        } else {
+            state.videos.withPoster++;
+        }
+        
         var sources = video.querySelectorAll('source[src]');
         for (var i = 0; i < sources.length; i++) {
             var source = sources[i];
             if (!source.hasAttribute('data-original-src') && source.src) {
                 source.setAttribute('data-original-src', source.src);
             }
-        }
-        
-        // Only observe for poster if no poster exists
-        if (!video.poster && !video.hasAttribute('poster')) {
-            videoObserver.observe(video);
-        } else if (video.poster) {
-            state.videos.withPoster++;
         }
         
         video.setAttribute('data-video-processed', 'true');
@@ -392,7 +385,7 @@
         if (isGif) {
             outputFormat = 'webp';
         } else {
-            outputFormat = capabilities.avif ? 'avif' : 'webp';
+            outputFormat = supportsFormat('avif') ? 'avif' : 'webp';
         }
         
         var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
@@ -454,13 +447,6 @@
         
         if (state.processed.has(img)) return;
         
-        // Skip if CSP might block weserv
-        if (!capabilities.cspWorks) {
-            state.processed.add(img);
-            img.setAttribute('data-optimized', 'csp-blocked');
-            return;
-        }
-        
         var skip = shouldSkip(img.src, img);
         if (skip) {
             state.processed.add(img);
@@ -494,19 +480,10 @@
         img.setAttribute('data-quality', optimization.quality);
     }
     
-    // ===== DEBOUNCED MUTATION OBSERVER =====
-    var observerTimeout;
-    var pendingMutations = [];
-    
-    function processPendingMutations() {
-        if (pendingMutations.length === 0) return;
-        
-        var mutations = pendingMutations;
-        pendingMutations = [];
-        
-        for (var m = 0; m < mutations.length; m++) {
-            var mutation = mutations[m];
-            if (mutation.type !== 'childList') continue;
+    // ===== MUTATION OBSERVER =====
+    var mutationObserver = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type !== 'childList') return;
             
             var nodes = mutation.addedNodes;
             for (var i = 0; i < nodes.length; i++) {
@@ -532,16 +509,7 @@
                     }
                 }
             }
-        }
-    }
-    
-    var mutationObserver = new MutationObserver(function(mutations) {
-        for (var i = 0; i < mutations.length; i++) {
-            pendingMutations.push(mutations[i]);
-        }
-        
-        clearTimeout(observerTimeout);
-        observerTimeout = setTimeout(processPendingMutations, 100);
+        });
     });
     
     // ===== PROXY PATTERNS =====
@@ -604,19 +572,11 @@
         return element;
     };
     
-    // ===== CLEANUP =====
-    window.addEventListener('beforeunload', function() {
-        mutationObserver.disconnect();
-        videoObserver.disconnect();
-        clearTimeout(observerTimeout);
-    });
-    
     // ===== INITIALIZATION =====
     function init() {
         if (state.initDone) return;
         state.initDone = true;
         
-        // Process existing elements
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
@@ -634,7 +594,6 @@
             applyLazyAttributes(allVideos[k]);
         }
         
-        // Start observing
         if (document.body) {
             mutationObserver.observe(document.body, {
                 childList: true,
@@ -670,17 +629,11 @@
         // ===== PERFORMANCE REPORT =====
         window.addEventListener('load', function() {
             setTimeout(function() {
-                // Recalculate video stats to ensure accuracy
+                // Update video poster count from actual DOM
                 var finalVideos = document.querySelectorAll('video');
                 var videosWithPoster = 0;
-                var autoplayCount = 0;
-                var preloadNoneCount = 0;
-                
                 for (var v = 0; v < finalVideos.length; v++) {
-                    var video = finalVideos[v];
-                    if (video.poster) videosWithPoster++;
-                    if (video.hasAttribute('autoplay') || video.autoplay === true) autoplayCount++;
-                    if (video.getAttribute('preload') === 'none') preloadNoneCount++;
+                    if (finalVideos[v].poster) videosWithPoster++;
                 }
                 
                 var finalImages = document.querySelectorAll('img');
@@ -700,13 +653,14 @@
                 }
                 
                 for (var k = 0; k < finalVideos.length; k++) {
-                    if (finalVideos[k].getAttribute('preload') === 'none') lazyCount++;
+                    var preload = finalVideos[k].getAttribute('preload');
+                    if (preload === 'none') lazyCount++;
                 }
                 
                 var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
                 
                 console.log('=== WESERV OPTIMIZER REPORT ===');
-                console.log('Total images:', finalImages.length);
+                console.log('Total images:', state.stats.total);
                 console.log('Optimized:', state.stats.optimized);
                 console.log('Skipped:', state.stats.skipped);
                 console.log('Failed:', state.stats.failed);
@@ -717,13 +671,20 @@
                 console.log('Placeholder iframes:', placeholderCount);
                 console.log('\n=== VIDEO STATS ===');
                 console.log('Total videos:', finalVideos.length);
-                console.log('Videos with preload="none":', preloadNoneCount);
-                console.log('Autoplay videos:', autoplayCount);
+                console.log('Videos with preload="none":', state.videos.preloadNone);
+                console.log('Autoplay videos:', state.videos.autoplayVideos);
                 console.log('Videos with poster:', videosWithPoster);
                 console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
                 
                 if (state.stats.failed > 0) {
                     console.warn('Optimization failures:', state.stats.failed);
+                }
+                
+                var iframesWithoutLazy = document.querySelectorAll('iframe:not([loading="lazy"])');
+                if (iframesWithoutLazy.length > 0) {
+                    console.warn('Iframes still without lazy loading:', iframesWithoutLazy.length);
+                } else {
+                    console.log('✅ All iframes have lazy loading!');
                 }
                 
                 console.log('=== REPORT COMPLETE ===');
