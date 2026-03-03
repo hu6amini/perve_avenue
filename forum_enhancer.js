@@ -5556,9 +5556,67 @@ class PostModernizer {
             console.log('Parent node no longer available for summary post replacement');
         }
         
+        // **FIX: After replacement, scan the new post for any unmodernized elements**
+        setTimeout(() => {
+            this.#ensureAllElementsModernized(modernPost);
+        }, 10);
+        
     } catch (error) {
         console.error('Error transforming summary post preview:', error);
     }
+}
+
+// **NEW METHOD: Ensure all elements are properly modernized with icons**
+#ensureAllElementsModernized(postElement) {
+    if (!postElement) return;
+    
+    // Check for code blocks without icons
+    postElement.querySelectorAll('.modern-code .code-icon:empty').forEach(emptyIcon => {
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-code';
+        icon.setAttribute('aria-hidden', 'true');
+        emptyIcon.appendChild(icon);
+    });
+    
+    // Check for spoilers without icons
+    postElement.querySelectorAll('.modern-spoiler .spoiler-icon:empty').forEach(emptyIcon => {
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-eye-slash';
+        icon.setAttribute('aria-hidden', 'true');
+        emptyIcon.appendChild(icon);
+    });
+    
+    // Check for copy buttons without icons
+    postElement.querySelectorAll('.code-copy-btn:empty, .code-copy-btn:not(:has(i))').forEach(emptyBtn => {
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-copy';
+        icon.setAttribute('aria-hidden', 'true');
+        emptyBtn.appendChild(icon);
+    });
+    
+    // Check for spoiler toggle buttons without icons
+    postElement.querySelectorAll('.spoiler-toggle:empty, .spoiler-toggle:not(:has(i))').forEach(emptyBtn => {
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-chevron-down';
+        icon.setAttribute('aria-hidden', 'true');
+        emptyBtn.appendChild(icon);
+    });
+    
+    // Check for quote links without icons
+    postElement.querySelectorAll('.quote-link:empty, .quote-link:not(:has(i))').forEach(emptyLink => {
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-chevron-up';
+        icon.setAttribute('aria-hidden', 'true');
+        emptyLink.appendChild(icon);
+    });
+    
+    // Check for quote expand buttons without icons
+    postElement.querySelectorAll('.quote-expand-btn:empty, .quote-expand-btn:not(:has(i))').forEach(emptyBtn => {
+        const icon = document.createElement('i');
+        icon.className = 'fa-regular fa-chevron-down';
+        icon.setAttribute('aria-hidden', 'true');
+        emptyBtn.appendChild(icon);
+    });
 }
     
 #modernizeQuotesInContent(element) {
