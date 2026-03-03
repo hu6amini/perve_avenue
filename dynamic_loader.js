@@ -159,27 +159,20 @@ document.head.appendChild(instantPagePreload);
 // other code and is ready to catch any scripts injected by the host service
 // ============================================================================
 // ULTRA-EARLY RESOURCE OPTIMIZER - Place in <head> as first script
+// ULTRA-EARLY RESOURCE OPTIMIZER - Place in <head> as first script
 (function() {
     'use strict';
     
-    // Run immediately - before any resources load
     const config = {
         criticalScripts: [
             'jquery', 'modernizr', 'bootstrap', 'fontawesome',
             'react', 'vue', 'angular', 'ember',
             'gtm', 'analytics', 'facebook', 'twitter',
-            // Add your site-specific critical scripts
             'forum', 'core' 
         ],
         criticalCss: ['critical', 'inline', 'base', 'reset', 'normalize', 'main']
     };
     
-    // Cache document methods for performance
-    const doc = document;
-    const head = doc.head;
-    const body = doc.body; // May be null at this point
-    
-    // Helper to get resource name safely
     const getResourceName = (el) => {
         try {
             return el.src?.split('/').pop() || 
@@ -190,189 +183,157 @@ document.head.appendChild(instantPagePreload);
         }
     };
     
-    // Check if script is critical (should load normally)
     const isCriticalScript = (src) => {
         if (!src) return false;
         src = src.toLowerCase();
         return config.criticalScripts.some(pattern => src.includes(pattern));
     };
     
-    // Check if CSS is critical
     const isCriticalCSS = (href) => {
         if (!href) return false;
         href = href.toLowerCase();
         return config.criticalCss.some(pattern => href.includes(pattern));
     };
     
-    // Process all existing script tags BEFORE they load
-    const processExistingScripts = () => {
-        const scripts = doc.getElementsByTagName('script');
+    // Process a single script element
+    const optimizeScript = (script) => {
+        // Skip inline scripts and already optimized ones
+        if (!script.src || script.defer || script.async) return;
         
-        // Use standard for loop for maximum performance
+        if (!isCriticalScript(script.src)) {
+            script.defer = true;
+            console.debug(`[Optimizer] Deferred: ${getResourceName(script)}`);
+        } else {
+            console.debug(`[Optimizer] Critical (kept): ${getResourceName(script)}`);
+        }
+    };
+    
+    // Process a single link/CSS element
+    const optimizeCSS = (link) => {
+        if (link.rel !== 'stylesheet') return;
+        
+        if (!isCriticalCSS(link.href)) {
+            const originalMedia = link.media || 'all';
+            link.media = 'print';
+            link.onload = function() {
+                this.media = originalMedia;
+            };
+            console.debug(`[Optimizer] Async CSS: ${getResourceName(link)}`);
+        } else {
+            console.debug(`[Optimizer] Critical CSS: ${getResourceName(link)}`);
+        }
+    };
+    
+    // PHASE 1: Immediately process ALL existing scripts/CSS
+    const processExisting = () => {
+        console.debug('[Optimizer] Phase 1: Processing existing resources');
+        
+        const scripts = document.getElementsByTagName('script');
         for (let i = 0; i < scripts.length; i++) {
-            const script = scripts[i];
-            
-            // Skip inline scripts and already optimized ones
-            if (!script.src || script.defer || script.async) continue;
-            
-            const src = script.src;
-            
-            // Add appropriate attributes based on critical status
-            if (!isCriticalScript(src)) {
-                // Non-critical script - defer it
-                script.defer = true;
-                console.debug(`[Optimizer] Deferred: ${getResourceName(script)}`);
-            } else {
-                // Critical script - ensure it loads normally
-                console.debug(`[Optimizer] Critical (kept): ${getResourceName(script)}`);
-            }
+            optimizeScript(scripts[i]);
         }
-    };
-    
-    // Process CSS before they load
-    const processExistingCSS = () => {
-        const links = doc.getElementsByTagName('link');
         
+        const links = document.getElementsByTagName('link');
         for (let i = 0; i < links.length; i++) {
-            const link = links[i];
-            
-            // Skip non-stylesheet links
-            if (link.rel !== 'stylesheet') continue;
-            
-            const href = link.href;
-            
-            // Async load non-critical CSS
-            if (!isCriticalCSS(href)) {
-                // Store original media
-                const originalMedia = link.media || 'all';
-                
-                // Set to print to prevent blocking
-                link.media = 'print';
-                
-                // Switch back after load
-                link.onload = function() {
-                    this.media = originalMedia;
-                };
-                
-                console.debug(`[Optimizer] Async CSS: ${getResourceName(link)}`);
-            } else {
-                console.debug(`[Optimizer] Critical CSS: ${getResourceName(link)}`);
-            }
+            optimizeCSS(links[i]);
         }
     };
     
-    // Override DOM manipulation methods to catch dynamically added scripts
-    const overrideElementInsertion = () => {
-        // Save original methods
-        const originalAppendChild = Element.prototype.appendChild;
-        const originalInsertBefore = Element.prototype.insertBefore;
-        const originalReplaceChild = Element.prototype.replaceChild;
-        const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    // PHASE 2: Watch for ANY dynamically added resources
+    const watchForChanges = () => {
+        console.debug('[Optimizer] Phase 2: Starting mutation observer');
         
-        // Override appendChild
-        Element.prototype.appendChild = function(newChild) {
-            if (newChild?.nodeName === 'SCRIPT' && newChild.src) {
-                const script = newChild;
-                if (!script.defer && !script.async && !isCriticalScript(script.src)) {
-                    script.defer = true;
-                    console.debug(`[Optimizer] Deferred (dynamic): ${getResourceName(script)}`);
-                }
-            } else if (newChild?.nodeName === 'LINK' && newChild.rel === 'stylesheet') {
-                const link = newChild;
-                if (!isCriticalCSS(link.href)) {
-                    const originalMedia = link.media || 'all';
-                    link.media = 'print';
-                    link.onload = function() {
-                        this.media = originalMedia;
-                    };
-                    console.debug(`[Optimizer] Async CSS (dynamic): ${getResourceName(link)}`);
-                }
-            }
+        const domChangeWatcher = new MutationObserver((mutations) => {
+            let optimized = false;
             
-            return originalAppendChild.call(this, newChild);
-        };
-        
-        // Override insertBefore similarly
-        Element.prototype.insertBefore = function(newChild, refChild) {
-            if (newChild?.nodeName === 'SCRIPT' && newChild.src) {
-                const script = newChild;
-                if (!script.defer && !script.async && !isCriticalScript(script.src)) {
-                    script.defer = true;
-                }
-            } else if (newChild?.nodeName === 'LINK' && newChild.rel === 'stylesheet') {
-                const link = newChild;
-                if (!isCriticalCSS(link.href)) {
-                    const originalMedia = link.media || 'all';
-                    link.media = 'print';
-                    link.onload = function() {
-                        this.media = originalMedia;
-                    };
-                }
-            }
-            
-            return originalInsertBefore.call(this, newChild, refChild);
-        };
-        
-        // Override innerHTML setter
-        if (originalInnerHTML?.set) {
-            Object.defineProperty(Element.prototype, 'innerHTML', {
-                set: function(value) {
-                    // Call original setter first
-                    originalInnerHTML.set.call(this, value);
-                    
-                    // Then process any scripts that were added
-                    if (this.nodeName === 'HEAD' || this.nodeName === 'BODY' || this === head || this === body) {
-                        const scripts = this.getElementsByTagName('script');
-                        for (let i = 0; i < scripts.length; i++) {
-                            const script = scripts[i];
-                            if (script.src && !script.defer && !script.async && !isCriticalScript(script.src)) {
-                                script.defer = true;
-                            }
-                        }
-                        
-                        const links = this.getElementsByTagName('link');
-                        for (let i = 0; i < links.length; i++) {
-                            const link = links[i];
-                            if (link.rel === 'stylesheet' && !isCriticalCSS(link.href)) {
-                                const originalMedia = link.media || 'all';
-                                link.media = 'print';
-                                link.onload = function() {
-                                    this.media = originalMedia;
-                                };
-                            }
-                        }
+            mutations.forEach(mutation => {
+                // Check added nodes
+                mutation.addedNodes.forEach(node => {
+                    // Direct script/link tags
+                    if (node.nodeName === 'SCRIPT') {
+                        optimizeScript(node);
+                        optimized = true;
+                    } else if (node.nodeName === 'LINK') {
+                        optimizeCSS(node);
+                        optimized = true;
                     }
+                    
+                    // Check for nested scripts/links
+                    if (node.querySelectorAll) {
+                        node.querySelectorAll('script').forEach(optimizeScript);
+                        node.querySelectorAll('link[rel="stylesheet"]').forEach(optimizeCSS);
+                    }
+                });
+                
+                // Check for changes to existing nodes (like innerHTML updates)
+                if (mutation.type === 'childList' && mutation.target.querySelectorAll) {
+                    mutation.target.querySelectorAll('script').forEach(optimizeScript);
+                    mutation.target.querySelectorAll('link[rel="stylesheet"]').forEach(optimizeCSS);
                 }
             });
-        }
+            
+            if (optimized) {
+                console.debug('[Optimizer] Optimized dynamically added resources');
+            }
+        });
+        
+        // Start watching the document
+        domChangeWatcher.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: false,
+            characterData: false
+        });
+        
+        return domChangeWatcher;
     };
     
-    // Block parsing until we've processed everything
-    const blockAndOptimize = () => {
-        // First, process existing scripts/CSS
-        processExistingScripts();
-        processExistingCSS();
-        
-        // Then override DOM methods for future additions
-        overrideElementInsertion();
-        
-        // Remove the blocking mechanism (if we added any)
-        console.debug('[Optimizer] Initial optimization complete');
-    };
-    
-    // Run immediately - this will block parsing temporarily
-    blockAndOptimize();
-    
-    // Optional: Monitor performance after page load (non-blocking)
-    if (window.performance?.getEntriesByType) {
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
-                const resources = performance.getEntriesByType('resource');
-                const slowResources = resources.filter(r => r.duration > 200);
-                if (slowResources.length) {
-                    console.debug(`[Optimizer] Found ${slowResources.length} slow resources`);
+    // PHASE 3: Also watch for DOMContentLoaded to catch any late additions
+    const watchForLateAdditions = () => {
+        document.addEventListener('DOMContentLoaded', () => {
+            console.debug('[Optimizer] Phase 3: DOMContentLoaded check');
+            
+            // Double-check all scripts again
+            document.querySelectorAll('script:not([defer]):not([async])').forEach(script => {
+                if (script.src && !isCriticalScript(script.src)) {
+                    script.defer = true;
+                    console.debug(`[Optimizer] Late deferred: ${getResourceName(script)}`);
                 }
             });
-        }
+            
+            // Double-check all CSS
+            document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+                if (!isCriticalCSS(link.href) && link.media !== 'print') {
+                    const originalMedia = link.media || 'all';
+                    link.media = 'print';
+                    link.onload = function() {
+                        this.media = originalMedia;
+                    };
+                    console.debug(`[Optimizer] Late async CSS: ${getResourceName(link)}`);
+                }
+            });
+        });
+    };
+    
+    // Force this script to run before anything else
+    if (document.currentScript) {
+        document.currentScript.setAttribute('async', 'false');
+        document.currentScript.setAttribute('defer', 'false');
+    }
+    
+    // Run Phase 1 immediately (synchronously)
+    processExisting();
+    
+    // Start Phase 2 (asynchronous observer)
+    const domChangeWatcher = watchForChanges();
+    
+    // Setup Phase 3
+    watchForLateAdditions();
+    
+    console.debug('[Optimizer] Initialized and ready');
+    
+    // Optional: Expose watcher for debugging
+    if (window.__DEV__) {
+        window.__resourceWatcher = domChangeWatcher;
     }
 })();
