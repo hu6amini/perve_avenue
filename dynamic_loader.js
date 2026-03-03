@@ -160,15 +160,18 @@ document.head.appendChild(instantPagePreload);
 // ============================================================================
 // ULTRA-EARLY RESOURCE OPTIMIZER - Place in <head> as first script
 // ULTRA-EARLY RESOURCE OPTIMIZER - Place in <head> as first script
+// ULTRA-EARLY RESOURCE OPTIMIZER - Place in <head> as first script
 (function() {
     'use strict';
+    
+    console.debug('[Optimizer] Initializing...');
     
     const config = {
         criticalScripts: [
             'jquery', 'modernizr', 'bootstrap', 'fontawesome',
             'react', 'vue', 'angular', 'ember',
             'gtm', 'analytics', 'facebook', 'twitter',
-            'forum', 'core' 
+            'forum', 'core', 'jquery'  // Added jquery explicitly
         ],
         criticalCss: ['critical', 'inline', 'base', 'reset', 'normalize', 'main']
     };
@@ -195,22 +198,26 @@ document.head.appendChild(instantPagePreload);
         return config.criticalCss.some(pattern => href.includes(pattern));
     };
     
-    // Process a single script element
+    // Force defer on a script element
     const optimizeScript = (script) => {
-        // Skip inline scripts and already optimized ones
-        if (!script.src || script.defer || script.async) return;
+        // Skip if already processed or inline
+        if (!script.src || script.hasAttribute('data-optimized')) return;
+        
+        // Skip if already has defer/async
+        if (script.defer || script.async) return;
         
         if (!isCriticalScript(script.src)) {
             script.defer = true;
+            script.setAttribute('data-optimized', 'true');
             console.debug(`[Optimizer] Deferred: ${getResourceName(script)}`);
         } else {
+            script.setAttribute('data-optimized', 'true');
             console.debug(`[Optimizer] Critical (kept): ${getResourceName(script)}`);
         }
     };
     
-    // Process a single link/CSS element
     const optimizeCSS = (link) => {
-        if (link.rel !== 'stylesheet') return;
+        if (link.rel !== 'stylesheet' || link.hasAttribute('data-optimized')) return;
         
         if (!isCriticalCSS(link.href)) {
             const originalMedia = link.media || 'all';
@@ -218,122 +225,190 @@ document.head.appendChild(instantPagePreload);
             link.onload = function() {
                 this.media = originalMedia;
             };
+            link.setAttribute('data-optimized', 'true');
             console.debug(`[Optimizer] Async CSS: ${getResourceName(link)}`);
         } else {
+            link.setAttribute('data-optimized', 'true');
             console.debug(`[Optimizer] Critical CSS: ${getResourceName(link)}`);
         }
     };
     
-    // PHASE 1: Immediately process ALL existing scripts/CSS
-    const processExisting = () => {
-        console.debug('[Optimizer] Phase 1: Processing existing resources');
+    // PHASE 1: Scan existing DOM
+    const scanExisting = () => {
+        console.debug('[Optimizer] Phase 1: Scanning existing resources');
         
-        const scripts = document.getElementsByTagName('script');
-        for (let i = 0; i < scripts.length; i++) {
-            optimizeScript(scripts[i]);
-        }
-        
-        const links = document.getElementsByTagName('link');
-        for (let i = 0; i < links.length; i++) {
-            optimizeCSS(links[i]);
-        }
+        // Get all scripts and links currently in the document
+        document.querySelectorAll('script[src]').forEach(optimizeScript);
+        document.querySelectorAll('link[rel="stylesheet"]').forEach(optimizeCSS);
     };
     
-    // PHASE 2: Watch for ANY dynamically added resources
-    const watchForChanges = () => {
-        console.debug('[Optimizer] Phase 2: Starting mutation observer');
+    // PHASE 2: Watch for DOM changes
+    const watchDOM = () => {
+        console.debug('[Optimizer] Phase 2: Starting DOM watcher');
         
-        const domChangeWatcher = new MutationObserver((mutations) => {
-            let optimized = false;
+        const domWatcher = new MutationObserver((mutations) => {
+            let hasChanges = false;
             
             mutations.forEach(mutation => {
                 // Check added nodes
                 mutation.addedNodes.forEach(node => {
                     // Direct script/link tags
-                    if (node.nodeName === 'SCRIPT') {
+                    if (node.nodeName === 'SCRIPT' && node.src) {
                         optimizeScript(node);
-                        optimized = true;
-                    } else if (node.nodeName === 'LINK') {
+                        hasChanges = true;
+                    } else if (node.nodeName === 'LINK' && node.rel === 'stylesheet') {
                         optimizeCSS(node);
-                        optimized = true;
+                        hasChanges = true;
                     }
                     
-                    // Check for nested scripts/links
-                    if (node.querySelectorAll) {
-                        node.querySelectorAll('script').forEach(optimizeScript);
-                        node.querySelectorAll('link[rel="stylesheet"]').forEach(optimizeCSS);
+                    // Check for scripts/links added via innerHTML or other methods
+                    if (node.nodeType === 1) { // Element node
+                        const scripts = node.querySelectorAll('script[src]');
+                        const links = node.querySelectorAll('link[rel="stylesheet"]');
+                        
+                        scripts.forEach(optimizeScript);
+                        links.forEach(optimizeCSS);
+                        
+                        if (scripts.length || links.length) hasChanges = true;
                     }
                 });
                 
-                // Check for changes to existing nodes (like innerHTML updates)
-                if (mutation.type === 'childList' && mutation.target.querySelectorAll) {
-                    mutation.target.querySelectorAll('script').forEach(optimizeScript);
-                    mutation.target.querySelectorAll('link[rel="stylesheet"]').forEach(optimizeCSS);
+                // Also check for attribute changes (sometimes scripts get added via src attribute change)
+                if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
+                    if (mutation.target.nodeName === 'SCRIPT') {
+                        optimizeScript(mutation.target);
+                        hasChanges = true;
+                    }
                 }
             });
             
-            if (optimized) {
-                console.debug('[Optimizer] Optimized dynamically added resources');
+            if (hasChanges) {
+                console.debug('[Optimizer] Processed newly added resources');
             }
         });
         
-        // Start watching the document
-        domChangeWatcher.observe(document.documentElement, {
+        // Watch the entire document for changes
+        domWatcher.observe(document.documentElement, {
             childList: true,
             subtree: true,
-            attributes: false,
-            characterData: false
+            attributes: true,
+            attributeFilter: ['src', 'href', 'rel']
         });
         
-        return domChangeWatcher;
+        return domWatcher;
     };
     
-    // PHASE 3: Also watch for DOMContentLoaded to catch any late additions
-    const watchForLateAdditions = () => {
+    // PHASE 3: Override script creation methods
+    const overrideScriptCreation = () => {
+        // Save original createElement
+        const originalCreateElement = document.createElement;
+        
+        // Override createElement for script tags
+        document.createElement = function(tagName, options) {
+            const element = originalCreateElement.call(this, tagName, options);
+            
+            if (tagName.toLowerCase() === 'script') {
+                // Intercept script creation
+                const originalSetAttribute = element.setAttribute;
+                element.setAttribute = function(name, value) {
+                    originalSetAttribute.call(this, name, value);
+                    
+                    if (name === 'src' && this.src && !this.hasAttribute('data-optimized')) {
+                        // Small delay to let the script be added to DOM
+                        setTimeout(() => optimizeScript(this), 0);
+                    }
+                };
+                
+                // Also watch property changes
+                let srcValue = '';
+                Object.defineProperty(element, 'src', {
+                    get: function() { return srcValue; },
+                    set: function(value) {
+                        srcValue = value;
+                        if (value && !this.hasAttribute('data-optimized')) {
+                            setTimeout(() => optimizeScript(this), 0);
+                        }
+                    },
+                    configurable: true
+                });
+            }
+            
+            return element;
+        };
+    };
+    
+    // PHASE 4: Periodic rescan (catch anything missed)
+    const startPeriodicRescan = () => {
+        console.debug('[Optimizer] Phase 4: Starting periodic rescan');
+        
+        // Rescan every 500ms for the first 3 seconds
+        let scans = 0;
+        const interval = setInterval(() => {
+            scans++;
+            
+            const unoptimizedScripts = document.querySelectorAll('script[src]:not([data-optimized])');
+            const unoptimizedCSS = document.querySelectorAll('link[rel="stylesheet"]:not([data-optimized])');
+            
+            unoptimizedScripts.forEach(optimizeScript);
+            unoptimizedCSS.forEach(optimizeCSS);
+            
+            if (unoptimizedScripts.length || unoptimizedCSS.length) {
+                console.debug(`[Optimizer] Periodic scan #${scans}: Found ${unoptimizedScripts.length} scripts, ${unoptimizedCSS.length} CSS`);
+            }
+            
+            // Stop after 3 seconds or when no unoptimized resources left
+            if (scans > 6 || (document.querySelectorAll('script[src]:not([data-optimized])').length === 0 && 
+                document.querySelectorAll('link[rel="stylesheet"]:not([data-optimized])').length === 0)) {
+                clearInterval(interval);
+                console.debug('[Optimizer] Periodic scans complete');
+            }
+        }, 500);
+    };
+    
+    // PHASE 5: Handle DOMContentLoaded and load events
+    const watchEvents = () => {
         document.addEventListener('DOMContentLoaded', () => {
-            console.debug('[Optimizer] Phase 3: DOMContentLoaded check');
+            console.debug('[Optimizer] DOMContentLoaded - final check');
             
-            // Double-check all scripts again
-            document.querySelectorAll('script:not([defer]):not([async])').forEach(script => {
-                if (script.src && !isCriticalScript(script.src)) {
-                    script.defer = true;
-                    console.debug(`[Optimizer] Late deferred: ${getResourceName(script)}`);
-                }
-            });
+            // Final scan
+            document.querySelectorAll('script[src]:not([data-optimized])').forEach(optimizeScript);
+            document.querySelectorAll('link[rel="stylesheet"]:not([data-optimized])').forEach(optimizeCSS);
+        });
+        
+        window.addEventListener('load', () => {
+            console.debug('[Optimizer] Window load - final check');
             
-            // Double-check all CSS
-            document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
-                if (!isCriticalCSS(link.href) && link.media !== 'print') {
-                    const originalMedia = link.media || 'all';
-                    link.media = 'print';
-                    link.onload = function() {
-                        this.media = originalMedia;
-                    };
-                    console.debug(`[Optimizer] Late async CSS: ${getResourceName(link)}`);
-                }
-            });
+            // One last scan
+            document.querySelectorAll('script[src]:not([data-optimized])').forEach(optimizeScript);
+            document.querySelectorAll('link[rel="stylesheet"]:not([data-optimized])').forEach(optimizeCSS);
+            
+            // Report final stats
+            const totalDeferred = document.querySelectorAll('script[defer][data-optimized]').length;
+            const totalAsyncCSS = document.querySelectorAll('link[rel="stylesheet"][media="print"][data-optimized]').length;
+            console.debug(`[Optimizer] Complete: ${totalDeferred} scripts deferred, ${totalAsyncCSS} CSS async loaded`);
         });
     };
     
-    // Force this script to run before anything else
-    if (document.currentScript) {
-        document.currentScript.setAttribute('async', 'false');
-        document.currentScript.setAttribute('defer', 'false');
-    }
+    // Initialize all phases
+    const init = () => {
+        // Phase 1: Immediate scan
+        scanExisting();
+        
+        // Phase 2: DOM watcher
+        watchDOM();
+        
+        // Phase 3: Override script creation
+        overrideScriptCreation();
+        
+        // Phase 4: Periodic rescan
+        startPeriodicRescan();
+        
+        // Phase 5: Event listeners
+        watchEvents();
+        
+        console.debug('[Optimizer] All systems active');
+    };
     
-    // Run Phase 1 immediately (synchronously)
-    processExisting();
-    
-    // Start Phase 2 (asynchronous observer)
-    const domChangeWatcher = watchForChanges();
-    
-    // Setup Phase 3
-    watchForLateAdditions();
-    
-    console.debug('[Optimizer] Initialized and ready');
-    
-    // Optional: Expose watcher for debugging
-    if (window.__DEV__) {
-        window.__resourceWatcher = domChangeWatcher;
-    }
+    // Start immediately
+    init();
 })();
