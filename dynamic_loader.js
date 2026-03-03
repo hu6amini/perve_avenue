@@ -158,100 +158,221 @@ document.head.appendChild(instantPagePreload);
 // This MUST remain at the very end of this file to ensure it runs after all
 // other code and is ready to catch any scripts injected by the host service
 // ============================================================================
-(() => {
-    "use strict";
+// ULTRA-EARLY RESOURCE OPTIMIZER - Place in <head> as first script
+(function() {
+    'use strict';
     
-    // Configuration for what to defer
-    const DEFER_CONFIG = {
-        // Scripts to defer (add patterns that match host-injected scripts)
-        scriptPatterns: [
-            /forum(?:free|community)\.(?:net|it)/,  // Any script from these domains
-            /akcelo/,
-            /google-analytics/,
-            /ads\./,
-            /doubleclick/,
-            /amazon-adsystem/,
-            /criteo/
+    // Run immediately - before any resources load
+    const config = {
+        criticalScripts: [
+            'jquery', 'modernizr', 'bootstrap', 'fontawesome',
+            'react', 'vue', 'angular', 'ember',
+            'gtm', 'analytics', 'facebook', 'twitter',
+            // Add your site-specific critical scripts
+            'forum', 'core' 
         ],
-        // Stylesheets to make non-render-blocking
-        stylePatterns: [
-            /forum(?:free|community)\.(?:net|it)\/.*\.css/,  // Match ANY css from forum domains
-            /cdn\.forumfree\.net\/.*\.css/,                  // Specifically match cdn subdomain
-            /akcelo/,
-            /tippy/
-        ]
+        criticalCss: ['critical', 'inline', 'base', 'reset', 'normalize', 'main']
     };
-
-    // Store processed elements
-    const processed = new WeakSet();
     
-    // Process a single script - ONLY if it matches patterns
-    const processScript = (script) => {
-        // Skip if already processed or no src
-        if (!script.src || processed.has(script) || script.hasAttribute('data-deferred')) return;
-        
-        // Check if it matches our patterns
-        const matches = DEFER_CONFIG.scriptPatterns.some(pattern => pattern.test(script.src));
-        if (!matches) return;
-        
-        // Mark as processed
-        processed.add(script);
-        script.setAttribute('data-deferred', 'true');
-        
-        // Simply add defer attribute - that's it!
-        script.defer = true;
-        
-        console.log('Deferred:', script.src);
+    // Cache document methods for performance
+    const doc = document;
+    const head = doc.head;
+    const body = doc.body; // May be null at this point
+    
+    // Helper to get resource name safely
+    const getResourceName = (el) => {
+        try {
+            return el.src?.split('/').pop() || 
+                   el.href?.split('/').pop() || 
+                   'unknown';
+        } catch {
+            return 'unknown';
+        }
     };
-
-    // Process a single stylesheet
-    const processStylesheet = (link) => {
-        if (!link.href || processed.has(link) || link.hasAttribute('data-deferred')) return;
-        
-        const matches = DEFER_CONFIG.stylePatterns.some(pattern => pattern.test(link.href));
-        if (!matches) return;
-        
-        processed.add(link);
-        link.setAttribute('data-deferred', 'true');
-        
-        // Make it non-blocking
-        link.media = 'print';
-        link.onload = () => link.media = 'all';
-        link.onerror = () => link.media = 'all';
-        
-        console.log('📄 Non-blocking CSS:', link.href);
+    
+    // Check if script is critical (should load normally)
+    const isCriticalScript = (src) => {
+        if (!src) return false;
+        src = src.toLowerCase();
+        return config.criticalScripts.some(pattern => src.includes(pattern));
     };
-
-    // Watch for new elements
-    const scriptWatcher = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1) { // Element
-                    if (node.tagName === 'SCRIPT' && node.src) {
-                        processScript(node);
-                    } else if (node.tagName === 'LINK' && node.rel === 'stylesheet') {
-                        processStylesheet(node);
-                    }
-                    
-                    // Check children
-                    if (node.querySelectorAll) {
-                        node.querySelectorAll('script[src]').forEach(processScript);
-                        node.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
-                    }
-                }
+    
+    // Check if CSS is critical
+    const isCriticalCSS = (href) => {
+        if (!href) return false;
+        href = href.toLowerCase();
+        return config.criticalCss.some(pattern => href.includes(pattern));
+    };
+    
+    // Process all existing script tags BEFORE they load
+    const processExistingScripts = () => {
+        const scripts = doc.getElementsByTagName('script');
+        
+        // Use standard for loop for maximum performance
+        for (let i = 0; i < scripts.length; i++) {
+            const script = scripts[i];
+            
+            // Skip inline scripts and already optimized ones
+            if (!script.src || script.defer || script.async) continue;
+            
+            const src = script.src;
+            
+            // Add appropriate attributes based on critical status
+            if (!isCriticalScript(src)) {
+                // Non-critical script - defer it
+                script.defer = true;
+                console.debug(`[Optimizer] Deferred: ${getResourceName(script)}`);
+            } else {
+                // Critical script - ensure it loads normally
+                console.debug(`[Optimizer] Critical (kept): ${getResourceName(script)}`);
             }
         }
-    });
-
-    // Start observing
-    scriptWatcher.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-    });
-
-    // Process existing elements
-    document.querySelectorAll('script[src]').forEach(processScript);
-    document.querySelectorAll('link[rel="stylesheet"]').forEach(processStylesheet);
-
-    console.log('🚀 Minimal deferrer active');
+    };
+    
+    // Process CSS before they load
+    const processExistingCSS = () => {
+        const links = doc.getElementsByTagName('link');
+        
+        for (let i = 0; i < links.length; i++) {
+            const link = links[i];
+            
+            // Skip non-stylesheet links
+            if (link.rel !== 'stylesheet') continue;
+            
+            const href = link.href;
+            
+            // Async load non-critical CSS
+            if (!isCriticalCSS(href)) {
+                // Store original media
+                const originalMedia = link.media || 'all';
+                
+                // Set to print to prevent blocking
+                link.media = 'print';
+                
+                // Switch back after load
+                link.onload = function() {
+                    this.media = originalMedia;
+                };
+                
+                console.debug(`[Optimizer] Async CSS: ${getResourceName(link)}`);
+            } else {
+                console.debug(`[Optimizer] Critical CSS: ${getResourceName(link)}`);
+            }
+        }
+    };
+    
+    // Override DOM manipulation methods to catch dynamically added scripts
+    const overrideElementInsertion = () => {
+        // Save original methods
+        const originalAppendChild = Element.prototype.appendChild;
+        const originalInsertBefore = Element.prototype.insertBefore;
+        const originalReplaceChild = Element.prototype.replaceChild;
+        const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        
+        // Override appendChild
+        Element.prototype.appendChild = function(newChild) {
+            if (newChild?.nodeName === 'SCRIPT' && newChild.src) {
+                const script = newChild;
+                if (!script.defer && !script.async && !isCriticalScript(script.src)) {
+                    script.defer = true;
+                    console.debug(`[Optimizer] Deferred (dynamic): ${getResourceName(script)}`);
+                }
+            } else if (newChild?.nodeName === 'LINK' && newChild.rel === 'stylesheet') {
+                const link = newChild;
+                if (!isCriticalCSS(link.href)) {
+                    const originalMedia = link.media || 'all';
+                    link.media = 'print';
+                    link.onload = function() {
+                        this.media = originalMedia;
+                    };
+                    console.debug(`[Optimizer] Async CSS (dynamic): ${getResourceName(link)}`);
+                }
+            }
+            
+            return originalAppendChild.call(this, newChild);
+        };
+        
+        // Override insertBefore similarly
+        Element.prototype.insertBefore = function(newChild, refChild) {
+            if (newChild?.nodeName === 'SCRIPT' && newChild.src) {
+                const script = newChild;
+                if (!script.defer && !script.async && !isCriticalScript(script.src)) {
+                    script.defer = true;
+                }
+            } else if (newChild?.nodeName === 'LINK' && newChild.rel === 'stylesheet') {
+                const link = newChild;
+                if (!isCriticalCSS(link.href)) {
+                    const originalMedia = link.media || 'all';
+                    link.media = 'print';
+                    link.onload = function() {
+                        this.media = originalMedia;
+                    };
+                }
+            }
+            
+            return originalInsertBefore.call(this, newChild, refChild);
+        };
+        
+        // Override innerHTML setter
+        if (originalInnerHTML?.set) {
+            Object.defineProperty(Element.prototype, 'innerHTML', {
+                set: function(value) {
+                    // Call original setter first
+                    originalInnerHTML.set.call(this, value);
+                    
+                    // Then process any scripts that were added
+                    if (this.nodeName === 'HEAD' || this.nodeName === 'BODY' || this === head || this === body) {
+                        const scripts = this.getElementsByTagName('script');
+                        for (let i = 0; i < scripts.length; i++) {
+                            const script = scripts[i];
+                            if (script.src && !script.defer && !script.async && !isCriticalScript(script.src)) {
+                                script.defer = true;
+                            }
+                        }
+                        
+                        const links = this.getElementsByTagName('link');
+                        for (let i = 0; i < links.length; i++) {
+                            const link = links[i];
+                            if (link.rel === 'stylesheet' && !isCriticalCSS(link.href)) {
+                                const originalMedia = link.media || 'all';
+                                link.media = 'print';
+                                link.onload = function() {
+                                    this.media = originalMedia;
+                                };
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    };
+    
+    // Block parsing until we've processed everything
+    const blockAndOptimize = () => {
+        // First, process existing scripts/CSS
+        processExistingScripts();
+        processExistingCSS();
+        
+        // Then override DOM methods for future additions
+        overrideElementInsertion();
+        
+        // Remove the blocking mechanism (if we added any)
+        console.debug('[Optimizer] Initial optimization complete');
+    };
+    
+    // Run immediately - this will block parsing temporarily
+    blockAndOptimize();
+    
+    // Optional: Monitor performance after page load (non-blocking)
+    if (window.performance?.getEntriesByType) {
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => {
+                const resources = performance.getEntriesByType('resource');
+                const slowResources = resources.filter(r => r.duration > 200);
+                if (slowResources.length) {
+                    console.debug(`[Optimizer] Found ${slowResources.length} slow resources`);
+                }
+            });
+        }
+    }
 })();
