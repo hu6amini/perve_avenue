@@ -1951,7 +1951,8 @@ if (!globalThis.mediaDimensionExtractor) {
 
 // Enhanced replacement function
 function replaceVideoIframes() {
-    var iframes = document.querySelectorAll('.post .color iframe, #loading .color iframe');
+    // Updated selector to include .summary li[class^="box_"] iframe
+    var iframes = document.querySelectorAll('.post .color iframe, #loading .color iframe, .summary li[class^="box_"] iframe');
     console.log('Found ' + iframes.length + ' iframes to process');
 
     for (var i = 0; i < iframes.length; i++) {
@@ -2068,21 +2069,28 @@ function registerWithObserver() {
                 // Quick check if this could contain iframes
                 var isRelevant = false;
                 
-                // Direct iframe match
-                if (node.matches && node.matches('.post .color iframe, #loading .color iframe')) {
+                // Direct iframe match - Updated with new selector
+                if (node.matches && node.matches('.post .color iframe, #loading .color iframe, .summary li[class^="box_"] iframe')) {
                     isRelevant = true;
                 }
-                // Container that could have iframes
-                else if (node.matches && (node.matches('.post .color') || node.matches('#loading .color'))) {
+                // Container that could have iframes - Updated with new selector
+                else if (node.matches && (
+                    node.matches('.post .color') || 
+                    node.matches('#loading .color') || 
+                    node.matches('.summary li[class^="box_"]')
+                )) {
                     isRelevant = true;
                 }
                 // New iframe added to body (forumObserver passes the added node)
                 else if (node.matches && node.matches('iframe')) {
-                    // Check if this iframe is in our target areas
+                    // Check if this iframe is in our target areas - Updated with new selector
                     var parent = node.parentElement;
                     while (parent) {
-                        if (parent.matches && 
-                            (parent.matches('.post .color') || parent.matches('#loading .color'))) {
+                        if (parent.matches && (
+                            parent.matches('.post .color') || 
+                            parent.matches('#loading .color') || 
+                            parent.matches('.summary li[class^="box_"]')
+                        )) {
                             isRelevant = true;
                             break;
                         }
@@ -2092,16 +2100,16 @@ function registerWithObserver() {
                 
                 if (!isRelevant) return;
                 
-                // Process specific iframes
+                // Process specific iframes - Updated with new selector
                 var iframes = [];
                 
                 // If node is an iframe
                 if (node.matches && node.matches('iframe')) {
                     iframes.push(node);
                 }
-                // If node is a container, get its iframes
+                // If node is a container, get its iframes - Updated with new selector
                 else if (node.querySelectorAll) {
-                    var found = node.querySelectorAll('.post .color iframe, #loading .color iframe');
+                    var found = node.querySelectorAll('.post .color iframe, #loading .color iframe, .summary li[class^="box_"] iframe');
                     for (var i = 0; i < found.length; i++) {
                         iframes.push(found[i]);
                     }
@@ -2143,12 +2151,12 @@ function registerWithObserver() {
                     }
                 }
             },
-            // Watch for iframes and their containers
-            selector: 'iframe, .post .color, #loading .color, .color',
+            // Watch for iframes and their containers - Updated with new selector
+            selector: 'iframe, .post .color, #loading .color, .summary li[class^="box_"], .color',
             priority: 'high'
         });
         
-        console.log('📝 Registered video iframe replacement with ForumCoreObserver');
+        console.log('📝 Registered video iframe replacement with ForumCoreObserver (including .summary li[class^="box_"] iframes)');
         
         // Also add a periodic check for missed iframes (just in case)
         setupPeriodicCheck();
@@ -2197,7 +2205,6 @@ window.videoIframeUtils = {
     replace: replaceVideoIframes,
     init: initVideoIframeReplacement
 };
-
 
 //Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
