@@ -832,7 +832,7 @@ if (!globalThis.mediaDimensionExtractor) {
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
-        isInitialized: false,
+        isInitialized: false,        // <-- ADDED: Track initialization status
         cacheVersion: '2.2', // Updated version
         
         // Performance tracking
@@ -2013,6 +2013,15 @@ if (!globalThis.mediaDimensionExtractor) {
             processExistingElements();
             
             state.isInitialized = true;
+            
+            // ===== ADDED: Dispatch ready event for Post Modernizer =====
+            window.dispatchEvent(new CustomEvent('forum-avatars-ready', {
+                detail: { 
+                    timestamp: Date.now(),
+                    processed: state.processedPosts.size
+                }
+            }));
+            console.log('📢 Dispatched forum-avatars-ready event');
         });
     }
 
@@ -2022,6 +2031,9 @@ if (!globalThis.mediaDimensionExtractor) {
 
     window.ForumAvatars = {
         init: initAvatarSystem,
+        
+        // ===== ADDED: Property to check initialization status =====
+        isInitialized: false, // Will be updated when initialized
         
         refresh: function() {
             // Remove all avatars
@@ -2051,6 +2063,7 @@ if (!globalThis.mediaDimensionExtractor) {
             state.processingQueue = [];
             state.isProcessing = false;
             state.isInitialized = false;
+            window.ForumAvatars.isInitialized = false;
             
             // Clear localStorage
             var clearedKeys = [];
@@ -2207,6 +2220,13 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
     };
+
+    // Initialize the isInitialized property
+    Object.defineProperty(window.ForumAvatars, 'isInitialized', {
+        get: function() { return state.isInitialized; },
+        set: function(value) { state.isInitialized = value; },
+        configurable: true
+    });
 
     // ==============================
     // AUTO-INITIALIZE
