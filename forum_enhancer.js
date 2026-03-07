@@ -6146,20 +6146,25 @@ class PostModernizer {
     });
 }
 
-#setupSummaryPostObserver() {
-    if (globalThis.forumObserver) {
-        this.#summaryObserverId = globalThis.forumObserver.register({
-            id: 'summary-post-preview-modernizer',
-            callback: (node) => this.#handleNewSummaryPosts(node),
-            selector: '.summary ol.list li[class*="box_"]', // Updated to target box_* classes
-            priority: 'normal',
-            pageTypes: ['send'] // Only on send page
-        });
-    } else {
-        // Fallback polling
-        setInterval(() => this.#transformSummaryPostPreviews(), 2000);
+    #setupSummaryPostObserver() {
+        if (globalThis.forumObserver) {
+            this.#summaryObserverId = globalThis.forumObserver.register({
+                id: 'summary-post-preview-modernizer',
+                callback: (node) => {
+                    if (this.#waitingForScripts) {
+                        this.#pendingElements.push(node);
+                    } else {
+                        this.#handleNewSummaryPosts(node);
+                    }
+                },
+                selector: '.summary ol.list li[class*="box_"]',
+                priority: 'normal',
+                pageTypes: ['send']
+            });
+        } else {
+            setInterval(() => this.#transformSummaryPostPreviews(), 2000);
+        }
     }
-}
   
     #handleNewSummaryPosts(node) {
         if (document.body.id !== 'send') return;
@@ -11299,6 +11304,20 @@ class PostModernizer {
         }
     }
 
+      // Add a public method to check if Post Modernizer is ready
+    isReady() {
+        return !this.#waitingForScripts;
+    }
+
+    // Add a public method to get script readiness status
+    getScriptsReadyStatus() {
+        return {
+            ...this.#scriptsReady,
+            waitingForScripts: this.#waitingForScripts,
+            pendingElements: this.#pendingElements.length
+        };
+    }
+
     destroy() {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
         this.#debouncedObserverId, this.#cleanupObserverId,
@@ -11311,6 +11330,16 @@ class PostModernizer {
         if (this.#retryTimeoutId) {
             clearTimeout(this.#retryTimeoutId);
             this.#retryTimeoutId = null;
+        }
+
+        if (this.#coordinationCheckInterval) {
+            clearInterval(this.#coordinationCheckInterval);
+            this.#coordinationCheckInterval = null;
+        }
+
+        if (this.#coordinationTimeout) {
+            clearTimeout(this.#coordinationTimeout);
+            this.#coordinationTimeout = null;
         }
 
         this.#timeUpdateIntervals.forEach(interval => {
