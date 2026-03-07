@@ -8009,7 +8009,13 @@ class PostModernizer {
         
         this.#cleanupObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-cleanup',
-            callback: (node) => this.#handleCleanupTasks(node),
+            callback: (node) => {
+                if (this.#waitingForScripts) {
+                    this.#pendingElements.push(node);
+                } else {
+                    this.#handleCleanupTasks(node);
+                }
+            },
             selector: '.bullet_delete, .mini_buttons.points.Sub',
             priority: 'critical',
             pageTypes: pageTypes
@@ -8017,20 +8023,32 @@ class PostModernizer {
 
         this.#debouncedObserverId = globalThis.forumObserver.registerDebounced({
             id: 'post-modernizer-transform',
-            callback: (node) => this.#handlePostTransformation(node),
+            callback: (node) => {
+                if (this.#waitingForScripts) {
+                    this.#pendingElements.push(node);
+                } else {
+                    this.#handlePostTransformation(node);
+                }
+            },
             selector: '.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)',
             delay: 100,
             priority: 'normal',
             pageTypes: pageTypes
         });
     }
-
+  
     #setupSearchPostObserver() {
         const pageTypes = ['search'];
         
         this.#searchPostObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-search-posts',
-            callback: (node) => this.#handleSearchPostTransformation(node),
+            callback: (node) => {
+                if (this.#waitingForScripts) {
+                    this.#pendingElements.push(node);
+                } else {
+                    this.#handleSearchPostTransformation(node);
+                }
+            },
             selector: 'body#search .post, body#search li.post',
             priority: 'high',
             pageTypes: pageTypes
@@ -8042,7 +8060,13 @@ class PostModernizer {
         
         this.#activeStateObserverId = globalThis.forumObserver.register({
             id: 'post-modernizer-active-states',
-            callback: (node) => this.#handleActiveStateMutations(node),
+            callback: (node) => {
+                if (this.#waitingForScripts) {
+                    this.#pendingElements.push(node);
+                } else {
+                    this.#handleActiveStateMutations(node);
+                }
+            },
             selector: '.st-emoji-container, .mini_buttons.points.Sub .points',
             priority: 'normal',
             pageTypes: pageTypes
