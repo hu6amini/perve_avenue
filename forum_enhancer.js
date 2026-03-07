@@ -733,7 +733,7 @@ if (!globalThis.mediaDimensionExtractor) {
 
 
 // ==============================
-// Complete Working Avatar System - INCLUDING LIKES/DISLIKES - OPTIMIZED VERSION
+// Complete Working Avatar System - COORDINATED WITH MEDIA SCRIPTS
 // ==============================
 
 (function() {
@@ -812,6 +812,12 @@ if (!globalThis.mediaDimensionExtractor) {
                 '.summary'              // Then summary
             ],
             maxConcurrentRequests: 3     // Maximum concurrent API requests
+        },
+        
+        // Script coordination settings
+        coordination: {
+            maxWaitTime: 5000, // 5 seconds max wait
+            checkInterval: 100  // Check every 100ms
         }
     };
 
@@ -834,8 +840,87 @@ if (!globalThis.mediaDimensionExtractor) {
         isProcessing: false,
         activeRequests: 0,
         processedIds: new Set(), // Track processed user IDs to avoid duplicates
-        pendingBatches: []
+        pendingBatches: [],
+        
+        // Script readiness tracking
+        scriptsReady: {
+            weserv: false,
+            dimensionExtractor: false
+        },
+        waitingForScripts: true,
+        pendingElements: [] // Elements waiting for scripts to be ready
     };
+
+    // ==============================
+    // SCRIPT COORDINATION
+    // ==============================
+
+    function checkScriptsReady() {
+        // Check if Weserv has processed images
+        var weservProcessed = document.querySelector('img[data-optimized="true"]') !== null;
+        
+        // Check if dimension extractor exists
+        var extractorExists = !!window.mediaDimensionExtractor;
+        
+        state.scriptsReady.weserv = state.scriptsReady.weserv || weservProcessed;
+        state.scriptsReady.dimensionExtractor = state.scriptsReady.dimensionExtractor || extractorExists;
+        
+        return state.scriptsReady.weserv && state.scriptsReady.dimensionExtractor;
+    }
+
+    function waitForScripts(callback) {
+        if (checkScriptsReady()) {
+            console.log('✅ Avatar system: Media scripts ready, proceeding');
+            state.waitingForScripts = false;
+            callback();
+            return;
+        }
+
+        console.log('⏳ Avatar system waiting for media scripts...');
+
+        // Listen for events
+        var onWeservReady = function() {
+            state.scriptsReady.weserv = true;
+            if (checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        };
+
+        var onExtractorReady = function() {
+            state.scriptsReady.dimensionExtractor = true;
+            if (checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        };
+
+        var cleanup = function() {
+            window.removeEventListener('weserv-ready', onWeservReady);
+            window.removeEventListener('dimension-extractor-ready', onExtractorReady);
+            if (waitInterval) clearInterval(waitInterval);
+            if (timeout) clearTimeout(timeout);
+        };
+
+        // Listen for events
+        window.addEventListener('weserv-ready', onWeservReady, { passive: true });
+        window.addEventListener('dimension-extractor-ready', onExtractorReady, { passive: true });
+
+        // Fallback polling
+        var waitInterval = setInterval(function() {
+            if (checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        }, AVATAR_CONFIG.coordination.checkInterval);
+
+        // Timeout fallback
+        var timeout = setTimeout(function() {
+            console.warn('⚠️ Avatar system timeout waiting for scripts, proceeding anyway');
+            cleanup();
+            callback();
+        }, AVATAR_CONFIG.coordination.maxWaitTime);
+    }
 
     // ==============================
     // CORE FUNCTIONS
@@ -1372,6 +1457,200 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     // ==============================
+    // ENHANCED AVATAR CREATION
+    // ==============================
+
+    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser, isLikesList) {
+        var img = new Image();
+        
+        if (isLikesList) {
+            img.className = 'forum-likes-avatar avatar-size-' + size;
+        } else {
+            img.className = 'forum-user-avatar avatar-size-' + size;
+        }
+        
+        if (isDeletedUser) {
+            img.className += ' deleted-user-avatar';
+        }
+        
+        img.alt = username ? 'Avatar for ' + username : '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        
+        // Set dimensions
+        img.width = size;
+        img.height = size;
+        
+        // Let dimension extractor handle the final dimensions
+        img.dataset.needsDimensions = 'true';
+        
+        img.style.cssText = 
+            'width:' + size + 'px;' +
+            'height:' + size + 'px;' +
+            'border-radius:50%;' +
+            'object-fit:cover;' +
+            'vertical-align:middle;' +
+            'border:2px solid #fff;' +
+            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
+            'background-color:#f0f0f0;' +
+            'display:inline-block;';
+        
+        if (isLikesList) {
+            img.style.cssText += 
+                'margin-right:8px;' +
+                'margin-left:4px;' +
+                'border:1px solid #ddd;' +
+                'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
+        }
+        
+        // Set src after all attributes
+        img.src = avatarUrl;
+        
+        if (username) {
+            img.dataset.username = username;
+        }
+        
+        // Error handling
+        img.addEventListener('error', function onError() {
+            if (!avatarUrl.includes('dicebear.com')) {
+                markAvatarAsBroken(avatarUrl);
+            }
+            
+            if (userId) {
+                var cacheKey = userId + '_' + size;
+                delete state.userCache[cacheKey];
+                localStorage.removeItem(getCacheKey(userId, size));
+                
+                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+                this.src = fallbackUrl;
+            } else if (username) {
+                var cacheKey = 'deleted_' + username + '_' + size;
+                delete state.userCache[cacheKey];
+                localStorage.removeItem(getDeletedUserCacheKey(username, size));
+                
+                var fallbackUrl = generateLetterAvatar(null, username || '', size);
+                this.src = fallbackUrl;
+            }
+            this.removeEventListener('error', onError);
+        }, { once: true });
+        
+        return img;
+    }
+
+    // ==============================
+    // AVATAR INSERTION FUNCTIONS
+    // ==============================
+
+    function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
+        var nickname = postElement.querySelector('.nick a, .nick');
+        if (!nickname) return;
+        
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            return;
+        }
+        
+        var container = document.createElement('div');
+        container.className = 'forum-avatar-container';
+        container.style.cssText = 
+            'display:inline-block;' +
+            'vertical-align:middle;' +
+            'position:relative;' +
+            'margin-right:8px;';
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
+        container.appendChild(avatarImg);
+        nickname.parentNode.insertBefore(container, nickname);
+        
+        // Let dimension extractor process this image
+        if (window.mediaDimensionExtractor) {
+            // Small delay to ensure image is in DOM
+            setTimeout(function() {
+                window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
+            }, 10);
+        }
+    }
+
+    function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
+        var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
+        if (!parentLink) return;
+        
+        if (parentLink.querySelector('img.forum-user-avatar')) {
+            return;
+        }
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
+        
+        var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
+        if (defaultAvatarDiv) {
+            defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
+        } else {
+            parentLink.appendChild(avatarImg);
+        }
+        
+        parentLink.classList.add('avatar-replaced');
+        
+        // Let dimension extractor process this image
+        if (window.mediaDimensionExtractor) {
+            setTimeout(function() {
+                window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
+            }, 10);
+        }
+    }
+
+    function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
+        var nickname = postElement.querySelector('.nick');
+        if (!nickname) return;
+        
+        if (nickname.previousElementSibling && 
+            nickname.previousElementSibling.classList && 
+            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
+            return;
+        }
+        
+        var container = document.createElement('div');
+        container.className = 'forum-avatar-container deleted-user-container';
+        container.style.cssText = 
+            'display:inline-block;' +
+            'vertical-align:middle;' +
+            'position:relative;' +
+            'margin-right:8px;';
+        
+        var avatarImg = createAvatarElement(avatarUrl, null, size, username, true, false);
+        container.appendChild(avatarImg);
+        nickname.parentNode.insertBefore(container, nickname);
+        
+        // Let dimension extractor process this image
+        if (window.mediaDimensionExtractor) {
+            setTimeout(function() {
+                window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
+            }, 10);
+        }
+    }
+
+    function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
+        var span = linkElement.closest('span');
+        if (!span) return;
+        
+        if (span.querySelector('img.forum-likes-avatar')) {
+            return;
+        }
+        
+        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
+        
+        span.insertBefore(avatarImg, linkElement);
+        span.classList.add('has-forum-avatar');
+        
+        // Let dimension extractor process this image
+        if (window.mediaDimensionExtractor) {
+            setTimeout(function() {
+                window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
+            }, 10);
+        }
+    }
+
+    // ==============================
     // ELEMENT PROCESSING
     // ==============================
 
@@ -1523,18 +1802,26 @@ if (!globalThis.mediaDimensionExtractor) {
     function queueElementForProcessing(processingInfo) {
         if (!processingInfo) return;
         
+        // If still waiting for scripts, queue the element
+        if (state.waitingForScripts) {
+            state.pendingElements.push(processingInfo);
+            return;
+        }
+        
+        processElementNow(processingInfo);
+    }
+
+    function processElementNow(processingInfo) {
         var element = processingInfo.element;
         var userId = processingInfo.userId;
         var config = processingInfo.config;
         
-        // Extract username now for immediate use if needed
         var username = extractUsernameFromElement(element, config.type, userId);
         
         // Check cache first for immediate insertion
         if (userId && config.type !== 'deleted_user') {
             var cached = getAvatarFromCache(userId, config.size, config.type === 'likes_list');
             if (cached) {
-                // Insert immediately from cache
                 insertAvatarForProcessedItem({
                     element: element,
                     config: config,
@@ -1571,164 +1858,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }, 10);
         }
     }
-
-    // ==============================
-    // AVATAR CREATION & INSERTION
-    // ==============================
-
-    function createAvatarElement(avatarUrl, userId, size, username, isDeletedUser, isLikesList) {
-        var img = new Image();
-        
-        if (isLikesList) {
-            img.className = 'forum-likes-avatar avatar-size-' + size;
-        } else {
-            img.className = 'forum-user-avatar avatar-size-' + size;
-        }
-        
-        if (isDeletedUser) {
-            img.className += ' deleted-user-avatar';
-        }
-        
-        img.alt = username ? 'Avatar for ' + username : '';
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        
-        img.width = size;
-        img.height = size;
-        
-        img.style.cssText = 
-            'width:' + size + 'px;' +
-            'height:' + size + 'px;' +
-            'border-radius:50%;' +
-            'object-fit:cover;' +
-            'vertical-align:middle;' +
-            'border:2px solid #fff;' +
-            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
-            'background-color:#f0f0f0;' +
-            'display:inline-block;';
-        
-        if (isLikesList) {
-            img.style.cssText += 
-                'margin-right:8px;' +
-                'margin-left:4px;' +
-                'border:1px solid #ddd;' +
-                'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
-        }
-        
-        img.src = avatarUrl;
-        
-        if (username) {
-            img.dataset.username = username;
-        }
-        
-        img.addEventListener('error', function onError() {
-            if (!avatarUrl.includes('dicebear.com')) {
-                markAvatarAsBroken(avatarUrl);
-            }
-            
-            if (userId) {
-                var cacheKey = userId + '_' + size;
-                delete state.userCache[cacheKey];
-                localStorage.removeItem(getCacheKey(userId, size));
-                
-                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
-                this.src = fallbackUrl;
-            } else if (username) {
-                var cacheKey = 'deleted_' + username + '_' + size;
-                delete state.userCache[cacheKey];
-                localStorage.removeItem(getDeletedUserCacheKey(username, size));
-                
-                var fallbackUrl = generateLetterAvatar(null, username || '', size);
-                this.src = fallbackUrl;
-            }
-            this.removeEventListener('error', onError);
-        }, { once: true });
-        
-        return img;
-    }
-
-    function insertPostAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick a, .nick');
-        if (!nickname) return;
-        
-        if (nickname.previousElementSibling && 
-            nickname.previousElementSibling.classList && 
-            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
-            return;
-        }
-        
-        var container = document.createElement('div');
-        container.className = 'forum-avatar-container';
-        container.style.cssText = 
-            'display:inline-block;' +
-            'vertical-align:middle;' +
-            'position:relative;' +
-            'margin-right:8px;';
-        
-        container.appendChild(createAvatarElement(avatarUrl, userId, size, username, false, false));
-        nickname.parentNode.insertBefore(container, nickname);
-    }
-
-    function insertDefaultAvatar(defaultAvatarElement, userId, size, avatarUrl, username) {
-        var parentLink = defaultAvatarElement.closest('a.avatar[href*="MID="]');
-        if (!parentLink) return;
-        
-        if (parentLink.querySelector('img.forum-user-avatar')) {
-            return;
-        }
-        
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, false);
-        
-        var defaultAvatarDiv = parentLink.querySelector('.default-avatar');
-        if (defaultAvatarDiv) {
-            defaultAvatarDiv.parentNode.replaceChild(avatarImg, defaultAvatarDiv);
-        } else {
-            parentLink.appendChild(avatarImg);
-        }
-        
-        parentLink.classList.add('avatar-replaced');
-    }
-
-    function insertDeletedUserAvatar(postElement, userId, size, avatarUrl, username) {
-        var nickname = postElement.querySelector('.nick');
-        if (!nickname) return;
-        
-        if (nickname.previousElementSibling && 
-            nickname.previousElementSibling.classList && 
-            nickname.previousElementSibling.classList.contains('forum-avatar-container')) {
-            return;
-        }
-        
-        var container = document.createElement('div');
-        container.className = 'forum-avatar-container deleted-user-container';
-        container.style.cssText = 
-            'display:inline-block;' +
-            'vertical-align:middle;' +
-            'position:relative;' +
-            'margin-right:8px;';
-        
-        container.appendChild(createAvatarElement(avatarUrl, null, size, username, true, false));
-        nickname.parentNode.insertBefore(container, nickname);
-    }
-
-    function insertLikesListAvatar(linkElement, userId, size, avatarUrl, username) {
-        var span = linkElement.closest('span');
-        if (!span) return;
-        
-        if (span.querySelector('img.forum-likes-avatar')) {
-            return;
-        }
-        
-        var avatarImg = createAvatarElement(avatarUrl, userId, size, username, false, true);
-        
-        span.insertBefore(avatarImg, linkElement);
-        
-        span.classList.add('has-forum-avatar');
-    }
-
-    // ==============================
-    // PAGE PROCESSING
-    // ==============================
 
     function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -1771,6 +1900,37 @@ if (!globalThis.mediaDimensionExtractor) {
     }
 
     function processExistingElements() {
+        // If waiting for scripts, store elements for later
+        if (state.waitingForScripts) {
+            var allElements = [];
+            
+            // Popups
+            var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
+            for (var k = 0; k < likesLinks.length; k++) {
+                var likesInfo = shouldProcessElement(likesLinks[k]);
+                if (likesInfo) allElements.push(likesInfo);
+            }
+            
+            // Posts
+            var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
+            for (var i = 0; i < posts.length; i++) {
+                var postInfo = shouldProcessElement(posts[i]);
+                if (postInfo) allElements.push(postInfo);
+            }
+            
+            // Default avatars
+            var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
+            for (var j = 0; j < defaultAvatars.length; j++) {
+                var avatarInfo = shouldProcessElement(defaultAvatars[j]);
+                if (avatarInfo) allElements.push(avatarInfo);
+            }
+            
+            state.pendingElements = allElements;
+            console.log(`📦 Avatar system queued ${allElements.length} elements for after scripts ready`);
+            return;
+        }
+        
+        // Normal processing when scripts are ready
         // Process popups first (highest priority)
         var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         for (var k = 0; k < likesLinks.length; k++) {
@@ -1808,7 +1968,17 @@ if (!globalThis.mediaDimensionExtractor) {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
                 selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="]',
-                callback: handleNewElement,
+                callback: function(node) {
+                    // If scripts aren't ready, queue the element
+                    if (state.waitingForScripts) {
+                        var info = shouldProcessElement(node);
+                        if (info) {
+                            state.pendingElements.push(info);
+                        }
+                    } else {
+                        handleNewElement(node);
+                    }
+                },
                 priority: 'high'
             });
         }
@@ -1826,11 +1996,24 @@ if (!globalThis.mediaDimensionExtractor) {
         
         setupObserver();
         
-        // Process existing elements immediately
-        setTimeout(function() {
+        // Wait for media scripts before processing
+        waitForScripts(function() {
+            console.log('🚀 Avatar system starting with media scripts ready');
+            
+            // Process any elements that were queued while waiting
+            if (state.pendingElements.length > 0) {
+                console.log(`📦 Processing ${state.pendingElements.length} queued elements`);
+                state.pendingElements.forEach(function(info) {
+                    processElementNow(info);
+                });
+                state.pendingElements = [];
+            }
+            
+            // Process existing elements
             processExistingElements();
+            
             state.isInitialized = true;
-        }, 50); // Reduced delay for faster startup
+        });
     }
 
     // ==============================
@@ -1977,7 +2160,10 @@ if (!globalThis.mediaDimensionExtractor) {
                 queueSize: state.processingQueue.length,
                 isProcessing: state.isProcessing,
                 isInitialized: state.isInitialized,
-                cacheVersion: state.cacheVersion
+                cacheVersion: state.cacheVersion,
+                scriptsReady: state.scriptsReady,
+                waitingForScripts: state.waitingForScripts,
+                pendingElements: state.pendingElements.length
             };
         },
         
@@ -2007,6 +2193,18 @@ if (!globalThis.mediaDimensionExtractor) {
                 
                 var username = extractUsernameFromElement(link, 'likes_list', userId);
             }
+        },
+        
+        // NEW: Check if scripts are ready
+        areMediaScriptsReady: function() {
+            return checkScriptsReady();
+        },
+        
+        // NEW: Force reprocess with dimension extractor
+        reprocessWithDimensionExtractor: function(element) {
+            if (window.mediaDimensionExtractor && element) {
+                window.mediaDimensionExtractor.forceReprocessElement(element);
+            }
         }
     };
 
@@ -2015,7 +2213,7 @@ if (!globalThis.mediaDimensionExtractor) {
     // ==============================
 
     // Initialize immediately since script is loaded with defer
-    setTimeout(initAvatarSystem, 50);
+    setTimeout(initAvatarSystem, 10);
 
 })();
     
