@@ -10985,7 +10985,13 @@ class PostModernizer {
         if (globalThis.forumObserver) {
             this.#quoteLinkObserverId = globalThis.forumObserver.register({
                 id: 'quote-link-enhancer',
-                callback: (node) => this.#handleNewQuoteLinks(node),
+                callback: (node) => {
+                    if (this.#waitingForScripts) {
+                        this.#pendingElements.push(node);
+                    } else {
+                        this.#handleNewQuoteLinks(node);
+                    }
+                },
                 selector: '.quote-link, .quote_top a[href*="#entry"]',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
