@@ -11255,7 +11255,13 @@ class PostModernizer {
         if (globalThis.forumObserver) {
             this.#codeBlockObserverId = globalThis.forumObserver.register({
                 id: 'code-block-modernizer',
-                callback: (node) => this.#handleNewCodeBlocks(node),
+                callback: (node) => {
+                    if (this.#waitingForScripts) {
+                        this.#pendingElements.push(node);
+                    } else {
+                        this.#handleNewCodeBlocks(node);
+                    }
+                },
                 selector: 'div[align="center"]:has(.code_top)',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
@@ -11264,7 +11270,7 @@ class PostModernizer {
             setInterval(() => this.#processExistingCodeBlocks(), 2000);
         }
     }
-
+  
     #handleNewCodeBlocks(node) {
         if (node.matches('div[align="center"]:has(.code_top)')) {
             this.#transformCodeBlock(node);
