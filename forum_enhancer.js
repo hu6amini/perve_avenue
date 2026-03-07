@@ -7980,7 +7980,13 @@ class PostModernizer {
         if (globalThis.forumObserver) {
             this.#attachmentObserverId = globalThis.forumObserver.register({
                 id: 'attachment-modernizer',
-                callback: (node) => this.#handleNewAttachments(node),
+                callback: (node) => {
+                    if (this.#waitingForScripts) {
+                        this.#pendingElements.push(node);
+                    } else {
+                        this.#handleNewAttachments(node);
+                    }
+                },
                 selector: '.fancytop + div[align="center"], .fancytop + .fancyborder',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
