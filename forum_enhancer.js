@@ -5709,7 +5709,13 @@ class PostModernizer {
         if (globalThis.forumObserver) {
             this.#embeddedLinkObserverId = globalThis.forumObserver.register({
                 id: 'embedded-link-modernizer',
-                callback: (node) => this.#handleNewEmbeddedLinks(node),
+                callback: (node) => {
+                    if (this.#waitingForScripts) {
+                        this.#pendingElements.push(node);
+                    } else {
+                        this.#handleNewEmbeddedLinks(node);
+                    }
+                },
                 selector: '.ffb_embedlink',
                 priority: 'normal',
                 pageTypes: ['topic', 'blog', 'send', 'search']
