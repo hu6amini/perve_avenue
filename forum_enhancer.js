@@ -5136,10 +5136,215 @@ class PostModernizer {
     #detectedSeparator = null;
     #detectedTimeFormat = null;
 
+    // ===== SCRIPT COORDINATION =====
+    #scriptsReady = {
+        weserv: false,
+        dimensionExtractor: false,
+        avatar: false
+    };
+    #waitingForScripts = true;
+    #pendingElements = [];
+    #coordinationCheckInterval = null;
+    #coordinationTimeout = null;
+    
+    static #COORDINATION_CONFIG = {
+        maxWaitTime: 10000, // 10 seconds max wait
+        checkInterval: 100,  // Check every 100ms
+        requiredScripts: ['weserv', 'dimensionExtractor', 'avatar']
+    };
+
     constructor() {
         this.#initWithRetry();
     }
 
+      // ===== SCRIPT COORDINATION METHODS =====
+
+    #checkScriptsReady() {
+        // Check Weserv
+        if (!this.#scriptsReady.weserv) {
+            const weservProcessed = document.querySelector('img[data-optimized="true"]') !== null;
+            const weservEventReceived = window.__weservReady === true;
+            this.#scriptsReady.weserv = weservProcessed || weservEventReceived;
+        }
+
+        // Check Dimension Extractor
+        if (!this.#scriptsReady.dimensionExtractor) {
+            this.#scriptsReady.dimensionExtractor = !!window.mediaDimensionExtractor;
+        }
+
+        // Check Avatar system
+        if (!this.#scriptsReady.avatar) {
+            this.#scriptsReady.avatar = !!(window.ForumAvatars && window.ForumAvatars.areMediaScriptsReady);
+        }
+
+        // All scripts ready?
+        const allReady = PostModernizer.#COORDINATION_CONFIG.requiredScripts.every(
+            script => this.#scriptsReady[script]
+        );
+
+        if (allReady) {
+            console.log('✅ Post Modernizer: All media scripts ready');
+            this.#waitingForScripts = false;
+            
+            // Clean up coordination timers
+            if (this.#coordinationCheckInterval) {
+                clearInterval(this.#coordinationCheckInterval);
+                this.#coordinationCheckInterval = null;
+            }
+            if (this.#coordinationTimeout) {
+                clearTimeout(this.#coordinationTimeout);
+                this.#coordinationTimeout = null;
+            }
+        }
+
+        return allReady;
+    }
+
+    #waitForScripts(callback) {
+        // Quick check if already ready
+        if (this.#checkScriptsReady()) {
+            console.log('✅ Post Modernizer: Scripts already ready, proceeding');
+            callback();
+            return;
+        }
+
+        console.log('⏳ Post Modernizer waiting for media scripts...');
+
+        // Set up event listeners
+        const onWeservReady = () => {
+            this.#scriptsReady.weserv = true;
+            window.__weservReady = true;
+            if (this.#checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        };
+
+        const onExtractorReady = () => {
+            this.#scriptsReady.dimensionExtractor = true;
+            if (this.#checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        };
+
+        const onAvatarReady = () => {
+            this.#scriptsReady.avatar = true;
+            if (this.#checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        };
+
+        const cleanup = () => {
+            window.removeEventListener('weserv-ready', onWeservReady);
+            window.removeEventListener('dimension-extractor-ready', onExtractorReady);
+            window.removeEventListener('forum-avatars-ready', onAvatarReady);
+            
+            if (this.#coordinationCheckInterval) {
+                clearInterval(this.#coordinationCheckInterval);
+                this.#coordinationCheckInterval = null;
+            }
+            if (this.#coordinationTimeout) {
+                clearTimeout(this.#coordinationTimeout);
+                this.#coordinationTimeout = null;
+            }
+        };
+
+        // Listen for events
+        window.addEventListener('weserv-ready', onWeservReady, { passive: true });
+        window.addEventListener('dimension-extractor-ready', onExtractorReady, { passive: true });
+        window.addEventListener('forum-avatars-ready', onAvatarReady, { passive: true });
+
+        // Also check via polling (in case events are missed)
+        this.#coordinationCheckInterval = setInterval(() => {
+            if (this.#checkScriptsReady()) {
+                cleanup();
+                callback();
+            }
+        }, PostModernizer.#COORDINATION_CONFIG.checkInterval);
+
+        // Timeout fallback
+        this.#coordinationTimeout = setTimeout(() => {
+            console.warn('⚠️ Post Modernizer timeout waiting for scripts, proceeding anyway');
+            
+            // Mark any missing scripts as ready to proceed
+            PostModernizer.#COORDINATION_CONFIG.requiredScripts.forEach(script => {
+                if (!this.#scriptsReady[script]) {
+                    this.#scriptsReady[script] = true;
+                    console.warn(`⚠️ Forcing ${script} as ready due to timeout`);
+                }
+            });
+            
+            cleanup();
+            callback();
+        }, PostModernizer.#COORDINATION_CONFIG.maxWaitTime);
+    }
+
+    #processPendingElements() {
+        if (this.#pendingElements.length === 0) return;
+
+        console.log(`📦 Post Modernizer processing ${this.#pendingElements.length} pending elements`);
+        
+        const elements = [...this.#pendingElements];
+        this.#pendingElements = [];
+
+        // Process in batches to avoid blocking
+        const batchSize = 10;
+        for (let i = 0; i < elements.length; i += batchSize) {
+            const batch = elements.slice(i, i + batchSize);
+            setTimeout(() => {
+                batch.forEach(element => {
+                    if (element && element.isConnected) {
+                        this.#processElementNow(element);
+                    }
+                });
+            }, i * 10); // Stagger batches
+        }
+    }
+
+    #processElementNow(node) {
+        if (!node || !node.isConnected) return;
+
+        const bodyId = document.body.id;
+        
+        if (bodyId === 'search') {
+            if (node.matches?.('.post, li.post') || node.querySelector?.('.post, li.post')) {
+                this.#transformSearchPostElements();
+            }
+        } else {
+            if (node.matches?.('.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)') ||
+                node.querySelector?.('.post, .st-emoji, .title2.bottom, div[align="center"]:has(.quote_top), div.spoiler[align="center"], div[align="center"]:has(.code_top)')) {
+                this.#transformPostElements();
+            }
+        }
+
+        // Check for specific elements to modernize
+        if (node.matches?.('.fancytop + div[align="center"], .fancytop + .fancyborder')) {
+            this.#transformAttachment(node);
+        }
+
+        if (node.matches?.('.ffb_embedlink')) {
+            this.#handleNewEmbeddedLinks(node);
+        }
+
+        if (node.matches?.('.quote-link, .quote_top a[href*="#entry"]')) {
+            this.#enhanceSingleQuoteLink(node);
+        }
+
+        if (node.matches?.('div[align="center"]:has(.code_top)')) {
+            this.#transformCodeBlock(node);
+        }
+
+        if (node.matches?.('form#pollform .poll')) {
+            this.#transformPoll(node);
+        }
+
+        if (document.body.id === 'send' && node.matches?.('.summary ol.list li[class*="box_"]')) {
+            this.#handleNewSummaryPosts(node);
+        }
+    }
+  
     #initWithRetry() {
         if (this.#retryTimeoutId) {
             clearTimeout(this.#retryTimeoutId);
@@ -5162,12 +5367,19 @@ class PostModernizer {
         }
 
         this.#retryCount = 0;
-        this.#init();
+        
+        // Wait for scripts before initializing
+        this.#waitForScripts(() => {
+            this.#init();
+        });
     }
 
     #init() {
         try {
             const bodyId = document.body.id;
+            
+            // Process any elements that were queued while waiting
+            this.#processPendingElements();
             
             if (bodyId === 'search') {
                 this.#transformSearchPostElements();
@@ -5194,6 +5406,12 @@ class PostModernizer {
             }, 500);
 
             console.log('✅ Post Modernizer with all optimizations initialized');
+            
+            // Dispatch ready event
+            window.dispatchEvent(new CustomEvent('post-modernizer-ready', {
+                detail: { timestamp: Date.now() }
+            }));
+            
         } catch (error) {
             console.error('Post Modernizer initialization failed:', error);
 
