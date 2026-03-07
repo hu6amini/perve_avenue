@@ -8,8 +8,11 @@ async function processThreadList() {
   }
 }
 
-// Ultra-Optimized Media Dimension Extractor for deferred loading
-// DOM is guaranteed to be ready when this executes (defer attribute)
+// ============================================
+// MEDIA DIMENSION EXTRACTOR - Must run first
+// Waits for Weserv optimizer to complete
+// ============================================
+
 'use strict';
 
 class MediaDimensionExtractor {
@@ -23,6 +26,9 @@ class MediaDimensionExtractor {
     #cacheMisses = 0;
     #smallContextElements = null;
     #MAX_CACHE_SIZE = 500;
+    #pendingImages = new Set();  // Track images waiting for Weserv
+    #weservReady = false;        // Flag for Weserv completion
+    #initStarted = false;        // Prevent double initialization
 
     // Static configurations for better performance
     static #IFRAME_SIZES = new Map([
@@ -42,7 +48,7 @@ class MediaDimensionExtractor {
 
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
-    // UPDATED CONSTANTS TO MATCH NEW CSS HEADING SIZES:
+    // Emoji sizes based on CSS
     static #EMOJI_SIZE_NORMAL = 20;      // Body text: 16px × 1.25 = 20px
     static #EMOJI_SIZE_SMALL = 18;       // Signatures/quotes: 14px × 1.25 ≈ 18px
     static #EMOJI_SIZE_H1 = 35;          // h1: 32px × 1.1 = 35px
@@ -56,15 +62,79 @@ class MediaDimensionExtractor {
 
     constructor() {
         this.#imageLoadHandler = this.#handleImageLoad.bind(this);
-        // Cache context elements immediately
         this.#cacheContextElements();
-        this.#init();
+        
+        // Wait for Weserv before initializing
+        this.#waitForWeserv();
+    }
+
+    #waitForWeserv() {
+        // Prevent double initialization
+        if (this.#initStarted) return;
+        this.#initStarted = true;
+
+        // Check if Weserv already ran
+        const processedImages = document.querySelectorAll('img[data-optimized="true"]');
+        
+        if (processedImages.length > 0) {
+            console.log('✅ Weserv already processed ' + processedImages.length + ' images');
+            this.#weservReady = true;
+            this.#init();
+            return;
+        }
+
+        console.log('⏳ Dimension extractor waiting for Weserv optimizer...');
+
+        // Listen for Weserv ready event
+        window.addEventListener('weserv-ready', (e) => {
+            console.log('📢 Received weserv-ready event in dimension extractor', e.detail || '');
+            this.#weservReady = true;
+            this.#init();
+        }, { once: true, passive: true });
+
+        // Fallback: Poll for completion (max 3 seconds)
+        let attempts = 0;
+        const checkInterval = setInterval(() => {
+            attempts++;
+            const hasWeservImages = document.querySelectorAll('img[data-optimized="true"]').length > 0;
+            
+            if (hasWeservImages || attempts > 60) { // 60 * 50ms = 3 seconds
+                clearInterval(checkInterval);
+                
+                if (!this.#weservReady) {
+                    console.warn(hasWeservImages ? 
+                        '⚠️ Weserv ready but event missed - proceeding' : 
+                        '⚠️ Weserv timeout - proceeding anyway');
+                    
+                    this.#weservReady = true;
+                    this.#init();
+                }
+            }
+        }, 50);
     }
 
     #init() {
-        // Immediate initialization - DOM is ready (defer)
+        // Dispatch ready event
+        queueMicrotask(() => {
+            window.dispatchEvent(new CustomEvent('dimension-extractor-ready', {
+                detail: { timestamp: Date.now() }
+            }));
+            console.log('📐 Dimension extractor ready');
+        });
+
         this.#setupObserver();
         this.#cacheContextElements();
+        
+        // Process any pending images
+        if (this.#pendingImages.size > 0) {
+            console.log(`🔄 Processing ${this.#pendingImages.size} pending images`);
+            this.#pendingImages.forEach(img => {
+                if (img.isConnected) {
+                    this.#processImage(img);
+                }
+            });
+            this.#pendingImages.clear();
+        }
     }
 
     #cacheContextElements() {
@@ -282,6 +352,12 @@ class MediaDimensionExtractor {
             
             // Cache correct dimensions
             this.#cacheDimension(img.src, size, size);
+            return;
+        }
+
+        // NEW: If Weserv isn't ready yet, queue the image
+        if (!this.#weservReady && !img.hasAttribute('data-optimized')) {
+            this.#pendingImages.add(img);
             return;
         }
 
@@ -503,9 +579,8 @@ class MediaDimensionExtractor {
             if (widthNum > 0 && heightNum > 0) {
                 const parent = iframe.parentNode;
                 
-                // FIX: Check if parent exists and if iframe is still in the DOM
+                // Check if parent exists and if iframe is still in the DOM
                 if (parent && document.contains(iframe) && !parent.classList.contains('iframe-wrapper')) {
-                    // Check if wrapper already exists or if parent is being manipulated
                     try {
                         // Use documentFragment for batch DOM operations
                         const fragment = document.createDocumentFragment();
@@ -568,7 +643,8 @@ class MediaDimensionExtractor {
         }
     }
 
-    // Public API methods
+    // ===== PUBLIC API METHODS =====
+    
     extractDimensionsForElement(element) {
         if (!element) return;
 
@@ -596,6 +672,28 @@ class MediaDimensionExtractor {
         this.#processSingleMedia(element);
     }
 
+    // NEW: Refresh method for when Weserv becomes ready
+    refresh() {
+        console.log('🔄 Refreshing dimension extractor');
+        
+        // Clear processed flag for images without dimensions
+        const images = document.querySelectorAll('img:not([width])');
+        images.forEach(img => {
+            this.#processedMedia.delete(img);
+            this.#processImage(img);
+        });
+        
+        // Reprocess pending images
+        if (this.#pendingImages.size > 0) {
+            this.#pendingImages.forEach(img => {
+                if (img.isConnected) {
+                    this.#processImage(img);
+                }
+            });
+            this.#pendingImages.clear();
+        }
+    }
+
     clearCache() {
         this.#dimensionCache.clear();
         this.#lruMap.clear();
@@ -612,7 +710,9 @@ class MediaDimensionExtractor {
             cacheMisses: this.#cacheMisses,
             cacheHitRate: hitRate + '%',
             cacheSize: this.#dimensionCache.size,
-            processedMedia: this.#processedMedia.size
+            processedMedia: this.#processedMedia.size,
+            pendingImages: this.#pendingImages.size,
+            weservReady: this.#weservReady
         };
     }
 
@@ -621,37 +721,13 @@ class MediaDimensionExtractor {
     }
 }
 
-// ============================================
-// INITIALIZATION - Optimized for defer loading
-// ============================================
-
-// Deferred scripts execute after DOM is ready, no need for DOMContentLoaded
+// Initialize dimension extractor immediately
 if (!globalThis.mediaDimensionExtractor) {
     try {
         globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
+        console.log('📏 MediaDimensionExtractor initialized (top of forum_enhancer.js)');
     } catch (error) {
-        // Single retry after short delay using requestIdleCallback
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
-                if (!globalThis.mediaDimensionExtractor) {
-                    try {
-                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                    } catch (retryError) {
-                        // Silent fail
-                    }
-                }
-            }, { timeout: 50 });
-        } else {
-            setTimeout(() => {
-                if (!globalThis.mediaDimensionExtractor) {
-                    try {
-                        globalThis.mediaDimensionExtractor = new MediaDimensionExtractor();
-                    } catch (retryError) {
-                        // Silent fail
-                    }
-                }
-            }, 50);
-        }
+        console.error('Failed to initialize MediaDimensionExtractor:', error);
     }
 }
 
