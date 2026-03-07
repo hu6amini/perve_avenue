@@ -5719,65 +5719,71 @@ class PostModernizer {
         }
     }
 
-#handleNewEmbeddedLinks(node) {
-    if (this.#isInEditor(node)) return;
-    
-    const safeTransform = (link) => {
-        if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
+    #handleNewEmbeddedLinks(node) {
+        if (this.#isInEditor(node)) return;
         
-        // Check if we should wait for images
-        const images = link.querySelectorAll('img');
-        
-        if (images.length === 0) {
-            // No images to wait for, transform immediately
-            this.#transformEmbeddedLink(link);
+        // If still waiting for scripts, queue the node
+        if (this.#waitingForScripts) {
+            this.#pendingElements.push(node);
             return;
         }
         
-        // Check if images are ready (either processed by media script or loaded)
-        const areImagesReady = Array.from(images).every(img => {
-            return img.hasAttribute('data-optimized') || 
-                   img.src.includes('images.weserv.nl') ||
-                   img.complete;
-        });
-        
-        if (areImagesReady) {
-            this.#transformEmbeddedLink(link);
-        } else {
-            // Images not ready, wait for them
-            console.log('⏳ Waiting for images to be processed in embedded link');
+        const safeTransform = (link) => {
+            if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
             
-            let attempts = 0;
-            const maxAttempts = 15; // 1.5 seconds total
+            // Check if we should wait for images
+            const images = link.querySelectorAll('img');
             
-            const waitForImages = setInterval(() => {
-                attempts++;
+            if (images.length === 0) {
+                // No images to wait for, transform immediately
+                this.#transformEmbeddedLink(link);
+                return;
+            }
+            
+            // Check if images are ready (either processed by media script or loaded)
+            const areImagesReady = Array.from(images).every(img => {
+                return img.hasAttribute('data-optimized') || 
+                       img.src.includes('images.weserv.nl') ||
+                       img.complete;
+            });
+            
+            if (areImagesReady) {
+                this.#transformEmbeddedLink(link);
+            } else {
+                // Images not ready, wait for them
+                console.log('⏳ Waiting for images to be processed in embedded link');
                 
-                const currentImages = link.querySelectorAll('img');
-                const nowReady = Array.from(currentImages).every(img => {
-                    return img.hasAttribute('data-optimized') || 
-                           img.src.includes('images.weserv.nl') ||
-                           img.complete;
-                });
+                let attempts = 0;
+                const maxAttempts = 15; // 1.5 seconds total
                 
-                if (nowReady || attempts >= maxAttempts) {
-                    clearInterval(waitForImages);
-                    if (!link.classList.contains('embedded-link-modernized')) {
-                        console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
-                        this.#transformEmbeddedLink(link);
+                const waitForImages = setInterval(() => {
+                    attempts++;
+                    
+                    const currentImages = link.querySelectorAll('img');
+                    const nowReady = Array.from(currentImages).every(img => {
+                        return img.hasAttribute('data-optimized') || 
+                               img.src.includes('images.weserv.nl') ||
+                               img.complete;
+                    });
+                    
+                    if (nowReady || attempts >= maxAttempts) {
+                        clearInterval(waitForImages);
+                        if (!link.classList.contains('embedded-link-modernized')) {
+                            console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
+                            this.#transformEmbeddedLink(link);
+                        }
                     }
-                }
-            }, 100);
+                }, 100);
+            }
+        };
+        
+        // Process the node
+        if (node.matches && node.matches('.ffb_embedlink')) {
+            safeTransform(node);
+        } else if (node.querySelectorAll) {
+            node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
         }
-    };
-    
-    // Process the node
-    if (node.matches && node.matches('.ffb_embedlink')) {
-        safeTransform(node);
-    } else if (node.querySelectorAll) {
-        node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
     }
-}
 
 // ==============================
 // SUMMARY POST PREVIEW TRANSFORMATION (for body#send)
