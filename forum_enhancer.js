@@ -5177,6 +5177,105 @@ class PostModernizer {
         this.#initWithRetry();
     }
 
+  #skeletonUI = {
+    enabled: true,
+    container: null,
+    originalContent: null
+};
+
+#showSkeletonUI() {
+    // Find the main posts container
+    const container = document.querySelector('.big_list, .summary ol.list');
+    if (!container || container.hasAttribute('data-skeleton-applied')) return;
+    
+    this.#skeletonUI.container = container;
+    this.#skeletonUI.originalContent = container.innerHTML;
+    
+    // Store original dimensions to prevent layout shift
+    const containerRect = container.getBoundingClientRect();
+    container.style.minHeight = containerRect.height + 'px';
+    container.style.position = 'relative';
+    
+    // Count how many posts to skeleton
+    const postCount = container.children.length;
+    
+    // Generate skeleton HTML
+    let skeletonHTML = '';
+    for (let i = 0; i < postCount; i++) {
+        skeletonHTML += this.#generateSkeletonPost(i);
+    }
+    
+    // Apply skeleton
+    container.innerHTML = skeletonHTML;
+    container.setAttribute('data-skeleton-applied', 'true');
+    
+    console.log(`🦴 Skeleton UI shown for ${postCount} posts`);
+}
+
+#generateSkeletonPost(index) {
+    // Create a skeleton that matches your modern post structure
+    return `
+        <div class="skeleton-post" style="margin-bottom: 20px; background: var(--bg-primary); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);">
+            <div class="skeleton-header" style="padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 12px;">
+                <div class="skeleton-avatar" style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite;"></div>
+                <div class="skeleton-info" style="flex: 1;">
+                    <div class="skeleton-line" style="height: 16px; width: 30%; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px; margin-bottom: 8px;"></div>
+                    <div class="skeleton-line" style="height: 14px; width: 20%; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px;"></div>
+                </div>
+            </div>
+            <div class="skeleton-content" style="padding: 16px;">
+                <div class="skeleton-line" style="height: 16px; width: 100%; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px; margin-bottom: 12px;"></div>
+                <div class="skeleton-line" style="height: 16px; width: 90%; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px; margin-bottom: 12px;"></div>
+                <div class="skeleton-line" style="height: 16px; width: 80%; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px;"></div>
+            </div>
+            <div class="skeleton-footer" style="padding: 12px 16px; border-top: 1px solid var(--border-color); display: flex; gap: 16px;">
+                <div class="skeleton-button" style="width: 60px; height: 32px; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px;"></div>
+                <div class="skeleton-button" style="width: 60px; height: 32px; background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 4px;"></div>
+            </div>
+        </div>
+    `;
+}
+
+#hideSkeletonAndReveal() {
+    const container = this.#skeletonUI.container;
+    if (!container || !container.hasAttribute('data-skeleton-applied')) {
+        // If no skeleton was shown, just transform directly
+        this.#transformPostElements();
+        return;
+    }
+    
+    console.log('✨ Hiding skeleton and revealing modern posts');
+    
+    // Fade out skeleton
+    container.style.opacity = '0';
+    container.style.transition = 'opacity 0.2s ease';
+    
+    // Restore original content and transform
+    setTimeout(() => {
+        // Restore original HTML
+        container.innerHTML = this.#skeletonUI.originalContent;
+        
+        // Now transform the real content
+        this.#transformPostElements();
+        
+        // Fade in the transformed content
+        container.style.opacity = '1';
+        
+        // Clean up skeleton attributes
+        container.removeAttribute('data-skeleton-applied');
+        container.style.minHeight = '';
+        
+        console.log('✅ Modern posts revealed');
+        
+        // Process any pending elements that might have been queued
+        if (this.#pendingElements.length > 0) {
+            console.log(`📦 Processing ${this.#pendingElements.length} queued elements after reveal`);
+            this.#processPendingElements();
+        }
+        
+    }, 200); // Match the CSS transition duration
+}
+
       // ===== SCRIPT COORDINATION METHODS =====
 
     #checkScriptsReady() {
@@ -5220,86 +5319,106 @@ class PostModernizer {
         return allReady;
     }
 
-    #waitForScripts(callback) {
-        // Quick check if already ready
-        if (this.#checkScriptsReady()) {
-            console.log('✅ Post Modernizer: Scripts already ready, proceeding');
-            callback();
-            return;
-        }
-
-        console.log('⏳ Post Modernizer waiting for media scripts...');
-
-        // Set up event listeners
-        const onWeservReady = () => {
-            this.#scriptsReady.weserv = true;
-            window.__weservReady = true;
-            if (this.#checkScriptsReady()) {
-                cleanup();
-                callback();
-            }
-        };
-
-        const onExtractorReady = () => {
-            this.#scriptsReady.dimensionExtractor = true;
-            if (this.#checkScriptsReady()) {
-                cleanup();
-                callback();
-            }
-        };
-
-        const onAvatarReady = () => {
-            this.#scriptsReady.avatar = true;
-            if (this.#checkScriptsReady()) {
-                cleanup();
-                callback();
-            }
-        };
-
-        const cleanup = () => {
-            window.removeEventListener('weserv-ready', onWeservReady);
-            window.removeEventListener('dimension-extractor-ready', onExtractorReady);
-            window.removeEventListener('forum-avatars-ready', onAvatarReady);
-            
-            if (this.#coordinationCheckInterval) {
-                clearInterval(this.#coordinationCheckInterval);
-                this.#coordinationCheckInterval = null;
-            }
-            if (this.#coordinationTimeout) {
-                clearTimeout(this.#coordinationTimeout);
-                this.#coordinationTimeout = null;
-            }
-        };
-
-        // Listen for events
-        window.addEventListener('weserv-ready', onWeservReady, { passive: true });
-        window.addEventListener('dimension-extractor-ready', onExtractorReady, { passive: true });
-        window.addEventListener('forum-avatars-ready', onAvatarReady, { passive: true });
-
-        // Also check via polling (in case events are missed)
-        this.#coordinationCheckInterval = setInterval(() => {
-            if (this.#checkScriptsReady()) {
-                cleanup();
-                callback();
-            }
-        }, PostModernizer.#COORDINATION_CONFIG.checkInterval);
-
-        // Timeout fallback
-        this.#coordinationTimeout = setTimeout(() => {
-            console.warn('⚠️ Post Modernizer timeout waiting for scripts, proceeding anyway');
-            
-            // Mark any missing scripts as ready to proceed
-            PostModernizer.#COORDINATION_CONFIG.requiredScripts.forEach(script => {
-                if (!this.#scriptsReady[script]) {
-                    this.#scriptsReady[script] = true;
-                    console.warn(`⚠️ Forcing ${script} as ready due to timeout`);
-                }
-            });
-            
-            cleanup();
-            callback();
-        }, PostModernizer.#COORDINATION_CONFIG.maxWaitTime);
+#waitForScripts(callback) {
+    // Quick check if already ready
+    if (this.#checkScriptsReady()) {
+        console.log('✅ Post Modernizer: Scripts already ready, proceeding');
+        callback();
+        return;
     }
+
+    console.log('⏳ Post Modernizer waiting for media scripts... (skeleton visible)');
+
+    // Set up event listeners
+    const onWeservReady = () => {
+        this.#scriptsReady.weserv = true;
+        window.__weservReady = true;
+        console.log('📢 Received weserv-ready event');
+        if (this.#checkScriptsReady()) {
+            console.log('✅ All scripts ready via weserv event');
+            cleanup();
+            this.#hideSkeletonAndReveal();
+            callback();
+        }
+    };
+
+    const onExtractorReady = () => {
+        this.#scriptsReady.dimensionExtractor = true;
+        console.log('📢 Received dimension-extractor-ready event');
+        if (this.#checkScriptsReady()) {
+            console.log('✅ All scripts ready via dimension extractor event');
+            cleanup();
+            this.#hideSkeletonAndReveal();
+            callback();
+        }
+    };
+
+    const onAvatarReady = () => {
+        this.#scriptsReady.avatar = true;
+        window.__forumAvatarsReady = true;
+        console.log('📢 Received forum-avatars-ready event');
+        if (this.#checkScriptsReady()) {
+            console.log('✅ All scripts ready via avatar event');
+            cleanup();
+            this.#hideSkeletonAndReveal();
+            callback();
+        }
+    };
+
+    const cleanup = () => {
+        // Remove event listeners
+        window.removeEventListener('weserv-ready', onWeservReady);
+        window.removeEventListener('dimension-extractor-ready', onExtractorReady);
+        window.removeEventListener('forum-avatars-ready', onAvatarReady);
+        
+        // Clear intervals and timeouts
+        if (this.#coordinationCheckInterval) {
+            clearInterval(this.#coordinationCheckInterval);
+            this.#coordinationCheckInterval = null;
+        }
+        if (this.#coordinationTimeout) {
+            clearTimeout(this.#coordinationTimeout);
+            this.#coordinationTimeout = null;
+        }
+        
+        console.log('🧹 Cleaned up script coordination listeners');
+    };
+
+    // Listen for events
+    window.addEventListener('weserv-ready', onWeservReady, { passive: true });
+    window.addEventListener('dimension-extractor-ready', onExtractorReady, { passive: true });
+    window.addEventListener('forum-avatars-ready', onAvatarReady, { passive: true });
+
+    // Also check via polling (in case events are missed)
+    this.#coordinationCheckInterval = setInterval(() => {
+        if (this.#checkScriptsReady()) {
+            console.log('✅ All scripts ready via polling check');
+            cleanup();
+            this.#hideSkeletonAndReveal();
+            callback();
+        }
+    }, PostModernizer.#COORDINATION_CONFIG.checkInterval);
+
+    // Timeout fallback
+    this.#coordinationTimeout = setTimeout(() => {
+        console.warn('⚠️ Post Modernizer timeout waiting for scripts, revealing skeleton anyway');
+        
+        // Mark any missing scripts as ready to proceed
+        PostModernizer.#COORDINATION_CONFIG.requiredScripts.forEach(script => {
+            if (!this.#scriptsReady[script]) {
+                this.#scriptsReady[script] = true;
+                console.warn(`⚠️ Forcing ${script} as ready due to timeout`);
+            }
+        });
+        
+        cleanup();
+        
+        // Hide skeleton and reveal whatever we have
+        this.#hideSkeletonAndReveal();
+        
+        callback();
+    }, PostModernizer.#COORDINATION_CONFIG.maxWaitTime);
+}
 
     #processPendingElements() {
         if (this.#pendingElements.length === 0) return;
@@ -5394,58 +5513,58 @@ class PostModernizer {
         });
     }
 
-    #init() {
-        try {
-            const bodyId = document.body.id;
-            
-            // Process any elements that were queued while waiting
-            this.#processPendingElements();
-            
-            if (bodyId === 'search') {
-                this.#transformSearchPostElements();
-                this.#setupSearchPostObserver();
-            } else {
-                this.#transformPostElements();
-                this.#setupObserverCallbacks();
-                this.#setupActiveStateObserver();
-            }
-            
-            this.#enhanceReputationSystem();
-            this.#setupEnhancedAnchorNavigation();
-            this.#enhanceQuoteLinks();
-            this.#modernizeCodeBlocks();
-            this.#modernizeAttachments();
-            this.#modernizeEmbeddedLinks();
-            this.#modernizePolls();
-            this.#transformSummaryPostPreviews();
-            this.#setupSummaryPostObserver();
+#init() {
+    try {
+        const bodyId = document.body.id;
+        
+        // ===== PHASE 1: Show skeleton UI immediately =====
+        if (this.#skeletonUI.enabled) {
+            this.#showSkeletonUI();
+        }
+        
+        // Process any elements that were queued while waiting
+        this.#processPendingElements();
+        
+        if (bodyId === 'search') {
+            this.#transformSearchPostElements();
+            this.#setupSearchPostObserver();
+        } else {
+            // Don't transform yet - we're in skeleton mode
+            // this.#transformPostElements(); ← MOVED to after scripts ready
+            this.#setupObserverCallbacks();
+            this.#setupActiveStateObserver();
+        }
+        
+        this.#enhanceReputationSystem();
+        this.#setupEnhancedAnchorNavigation();
+        this.#enhanceQuoteLinks();
+        this.#modernizeCodeBlocks();
+        this.#modernizeAttachments();
+        this.#modernizeEmbeddedLinks();
+        this.#modernizePolls();
+        this.#transformSummaryPostPreviews();
+        this.#setupSummaryPostObserver();
 
-            // Clean up any double-wrapped media from previous runs
-            setTimeout(() => {
-                this.#cleanupAllDoubleWrappedMedia();
-            }, 500);
+        // Clean up any double-wrapped media from previous runs
+        setTimeout(() => {
+            this.#cleanupAllDoubleWrappedMedia();
+        }, 500);
 
-            console.log('✅ Post Modernizer with all optimizations initialized');
-            
-            // Dispatch ready event
-            window.dispatchEvent(new CustomEvent('post-modernizer-ready', {
-                detail: { timestamp: Date.now() }
-            }));
-            
-        } catch (error) {
-            console.error('Post Modernizer initialization failed:', error);
-
-            if (this.#retryCount < this.#maxRetries) {
-                this.#retryCount++;
-                const delay = 100 * Math.pow(2, this.#retryCount - 1);
-                console.log('Initialization failed, retrying in ' + delay + 'ms...');
-
-                setTimeout(() => {
-                    this.#initWithRetry();
-                }, delay);
-            }
+        console.log('✅ Post Modernizer initialized (skeleton mode active)');
+        
+        // Dispatch ready event
+        window.dispatchEvent(new CustomEvent('post-modernizer-ready', {
+            detail: { timestamp: Date.now(), skeletonActive: true }
+        }));
+        
+    } catch (error) {
+        console.error('Post Modernizer initialization failed:', error);
+        // If error, show original content
+        if (this.#skeletonUI.container) {
+            this.#skeletonUI.container.innerHTML = this.#skeletonUI.originalContent;
         }
     }
+}
 
     #cleanupAllDoubleWrappedMedia() {
         document.querySelectorAll('.standard-media-wrapper').forEach(standardWrapper => {
