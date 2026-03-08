@@ -2,18 +2,32 @@
 
 class ForumCoreObserver {
     #observer = null;
-    #shadowObserver = null;
-    #resizeObserver = null;
+    #iframeObservers = new WeakMap();
+    #shadowObservers = new WeakMap();
     #intersectionObserver = null;
+    #resizeObserver = null;
+    #animationObserver = null;
     #mutationQueue = [];
+    #priorityQueue = {
+        high: [],
+        medium: [],
+        low: []
+    };
     #isProcessing = false;
     #initialScanComplete = false;
     #debounceTimeouts = new Map();
-    #processedNodes = new WeakSet();
-    #observedShadows = new WeakSet();
-    #observedIframes = new WeakSet();
+    #processedNodes = typeof WeakSet !== 'undefined' ? new WeakSet() : {
+        has: () => false,
+        add: () => {},
+        delete: () => {}
+    };
+    #nodeTimestamps = new Map();
     #cleanupIntervalId = null;
-    #fontCheckTimer = null;
+    #lastStyleMutation = 0;
+    #debug = false;
+    #errorCount = 0;
+    #maxErrors = 10;
+    #resetTimeout = null;
     
     #callbacks = new Map();
     #debouncedCallbacks = new Map();
@@ -22,9 +36,7 @@ class ForumCoreObserver {
     // Script readiness tracking
     #scriptsReady = {
         weserv: false,
-        dimensionExtractor: false,
-        avatar: false,
-        postModernizer: false
+        dimensionExtractor: false
     };
     
     static #CONFIG = {
@@ -33,7 +45,7 @@ class ForumCoreObserver {
             subtree: true,
             characterData: true,
             attributes: true,
-            attributeFilter: ['class', 'id', 'style', 'data-*', 'width', 'height', 'src']
+            attributeFilter: ['class', 'id', 'style', 'data-*', 'src', 'href']
         },
         performance: {
             maxProcessingTime: 16,
@@ -41,18 +53,19 @@ class ForumCoreObserver {
             debounceThreshold: 100,
             idleCallbackTimeout: 2000,
             searchPageBatchSize: 10,
-            resizeObserverThrottle: 100
+            styleMutationThrottle: 16, // 60fps
+            maxContinuousProcessing: 100 // ms before yielding
         },
         memory: {
             maxProcessedNodes: 10000,
             cleanupInterval: 30000,
-            nodeTTL: 300000
+            nodeTTL: 300000,
+            maxCallbackRetries: 3
         },
-        selectors: {
-            mediaElements: 'img, iframe, video, lite-youtube, lite-vimeo, .media-wrapper, .iframe-wrapper',
-            textElements: '.post-content, .post-text, .message, .content',
-            lazyElements: '.lazy, [loading="lazy"], [data-src]',
-            shadowContainers: '*'
+        priorities: {
+            childList: 1,      // High
+            attributes: 2,      // Medium
+            characterData: 3    // Low
         }
     };
     
@@ -61,517 +74,315 @@ class ForumCoreObserver {
         processedMutations: 0,
         averageProcessingTime: 0,
         lastMutationTime: 0,
-        shadowRootsFound: 0,
-        iframesObserved: 0,
-        resizeEvents: 0
+        errors: 0,
+        lastError: null,
+        totalNodesProcessed: 0,
+        queueHighWatermark: 0
     };
     
-    constructor() {
+    constructor(debug = false) {
+        this.#debug = debug;
         this.#init();
         this.#setupThemeListener();
         this.#setupScriptCoordination();
-        this.#setupEnhancedObservers();
-        this.#interceptStyleChanges();
-        this.#monitorFontLoading();
-        this.#observeShadowDOM();
-        this.#observeIframes();
-        this.#monitorDynamicScripts();
-        this.#setupMediaQueryListeners();
-        this.#monitorPerformance();
+        this.#setupIframeObservation();
+        this.#setupIntersectionObserver();
+        this.#setupResizeObserver();
+        this.#setupAnimationObserver();
+        this.#setupErrorHandling();
+        this.#setupPerformanceMonitoring();
+    }
+    
+    #log(...args) {
+        if (this.#debug) {
+            console.log('[ForumObserver]', ...args);
+        }
+    }
+    
+    #error(...args) {
+        console.error('[ForumObserver]', ...args);
+        this.#mutationMetrics.errors++;
+        this.#mutationMetrics.lastError = args.join(' ');
     }
     
     #init() {
-        this.#observer = new MutationObserver(this.#handleMutations.bind(this));
-        this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
-        
-        // Also observe the document itself for completeness
-        if (document.documentElement !== document) {
-            this.#observer.observe(document, ForumCoreObserver.#CONFIG.observer);
-        }
-        
-        this.#scanExistingContent();
-        this.#setupCleanup();
-        
-        document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { 
-            passive: true, 
-            capture: true 
-        });
-        
-        // Catch DOMContentLoaded for late additions
-        document.addEventListener('DOMContentLoaded', () => {
-            queueMicrotask(() => this.#scanExistingContent());
-        });
-        
-        // Catch load events for iframes and images
-        window.addEventListener('load', () => {
-            queueMicrotask(() => this.#processLoadedResources());
-        }, { passive: true });
-        
-        console.log('🔍 Enhanced ForumCoreObserver initialized (GLOBAL - bulletproof mode)');
-    }
-    
-    #setupEnhancedObservers() {
-        // ResizeObserver for element size changes
-        this.#resizeObserver = new ResizeObserver((entries) => {
-            this.#mutationMetrics.resizeEvents += entries.length;
-            
-            // Throttle resize processing
-            if (this.#resizeTimeout) clearTimeout(this.#resizeTimeout);
-            
-            this.#resizeTimeout = setTimeout(() => {
-                entries.forEach(entry => {
-                    const element = entry.target;
-                    
-                    // Only reprocess if dimensions actually changed meaningfully
-                    const width = Math.round(entry.contentRect.width);
-                    const height = Math.round(entry.contentRect.height);
-                    
-                    if (width > 0 && height > 0) {
-                        const oldWidth = element._lastProcessedWidth;
-                        const oldHeight = element._lastProcessedHeight;
-                        
-                        // Skip if dimensions haven't changed much (avoid loops)
-                        if (oldWidth && oldHeight && 
-                            Math.abs(width - oldWidth) < 5 && 
-                            Math.abs(height - oldHeight) < 5) {
-                            return;
-                        }
-                        
-                        element._lastProcessedWidth = width;
-                        element._lastProcessedHeight = height;
-                        
-                        // Check if element contains media that might need reprocessing
-                        if (element.matches(ForumCoreObserver.#CONFIG.selectors.mediaElements) ||
-                            element.querySelector(ForumCoreObserver.#CONFIG.selectors.mediaElements)) {
-                            queueMicrotask(() => this.#processNode(element));
-                        }
-                    }
-                });
-            }, ForumCoreObserver.#CONFIG.performance.resizeObserverThrottle);
-        });
-        
-        // IntersectionObserver for lazy-loaded content
-        this.#intersectionObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const element = entry.target;
-                    
-                    // Remove from observer once visible
-                    this.#intersectionObserver.unobserve(element);
-                    
-                    // Process if not already processed
-                    if (!this.#processedNodes.has(element)) {
-                        queueMicrotask(() => this.#processNode(element));
-                    }
-                    
-                    // Also process any media inside
-                    if (element.querySelector) {
-                        const mediaElements = element.querySelectorAll(
-                            ForumCoreObserver.#CONFIG.selectors.mediaElements
-                        );
-                        mediaElements.forEach(media => {
-                            if (!this.#processedNodes.has(media)) {
-                                queueMicrotask(() => this.#processNode(media));
-                            }
-                        });
-                    }
-                }
-            });
-        }, { 
-            rootMargin: '100px', // Start loading 100px before visibility
-            threshold: 0.01 
-        });
-    }
-    
-    #observeShadowDOM() {
-        const observeShadowRoot = (host, shadowRoot) => {
-            if (this.#observedShadows.has(shadowRoot)) return;
-            
-            this.#observedShadows.add(shadowRoot);
-            this.#mutationMetrics.shadowRootsFound++;
-            
-            const shadowObserver = new MutationObserver((mutations) => {
-                // Reuse main mutation handler
-                this.#handleMutations(mutations.map(m => ({
-                    ...m,
-                    target: m.target,
-                    type: m.type,
-                    addedNodes: m.addedNodes,
-                    removedNodes: m.removedNodes,
-                    attributeName: m.attributeName,
-                    oldValue: m.oldValue
-                })));
-            });
-            
-            shadowObserver.observe(shadowRoot, ForumCoreObserver.#CONFIG.observer);
-            
-            // Process existing shadow DOM content
-            queueMicrotask(() => {
-                this.#processNode(shadowRoot);
-                shadowRoot.querySelectorAll('*').forEach(el => {
-                    this.#processNode(el);
-                });
-            });
-            
-            // Recursively observe nested shadow roots
-            shadowRoot.querySelectorAll('*').forEach(el => {
-                if (el.shadowRoot) {
-                    observeShadowRoot(el, el.shadowRoot);
-                }
-            });
-        };
-        
-        // Initial shadow DOM scan
-        const scanForShadowRoots = (root) => {
-            root.querySelectorAll('*').forEach(el => {
-                if (el.shadowRoot) {
-                    observeShadowRoot(el, el.shadowRoot);
-                }
-            });
-        };
-        
-        scanForShadowRoots(document);
-        
-        // Observer for new shadow hosts
-        const shadowHostObserver = new MutationObserver((mutations) => {
-            mutations.forEach(m => {
-                m.addedNodes.forEach(node => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        if (node.shadowRoot) {
-                            observeShadowRoot(node, node.shadowRoot);
-                        }
-                        scanForShadowRoots(node);
-                    }
-                });
-            });
-        });
-        
-        shadowHostObserver.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-        });
-    }
-    
-    #observeIframes() {
-        const observeIframe = (iframe) => {
-            if (this.#observedIframes.has(iframe)) return;
-            
-            try {
-                // Check if same-origin
-                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-                
-                if (iframeDoc && iframeDoc !== document) {
-                    this.#observedIframes.add(iframe);
-                    this.#mutationMetrics.iframesObserved++;
-                    
-                    const iframeObserver = new MutationObserver((mutations) => {
-                        // Transform mutations to include iframe reference
-                        const enhancedMutations = mutations.map(m => ({
-                            ...m,
-                            target: m.target,
-                            iframeSource: iframe
-                        }));
-                        this.#handleMutations(enhancedMutations);
-                    });
-                    
-                    iframeObserver.observe(iframeDoc.documentElement, ForumCoreObserver.#CONFIG.observer);
-                    
-                    // Process existing iframe content
-                    queueMicrotask(() => {
-                        this.#processNode(iframeDoc.documentElement);
-                    });
-                    
-                    // Observe iframe size changes
-                    if (this.#resizeObserver) {
-                        this.#resizeObserver.observe(iframe);
-                    }
-                }
-            } catch (e) {
-                // Cross-origin iframe - can't observe directly
-                // But we can observe the iframe element itself
-                if (this.#resizeObserver) {
-                    this.#resizeObserver.observe(iframe);
-                }
-                
-                // Watch for load events which might indicate content changes
-                iframe.addEventListener('load', () => {
-                    try {
-                        // Try again after load (might become same-origin)
-                        if (iframe.contentDocument) {
-                            observeIframe(iframe);
-                        }
-                    } catch (e) {
-                        // Still cross-origin, ignore
-                    }
-                    
-                    // Even if cross-origin, we can observe the iframe element
-                    queueMicrotask(() => this.#processNode(iframe));
-                }, { once: true, passive: true });
-            }
-        };
-        
-        // Initial iframe scan
-        document.querySelectorAll('iframe').forEach(observeIframe);
-        
-        // Observer for new iframes
-        const iframeObserver = new MutationObserver((mutations) => {
-            mutations.forEach(m => {
-                m.addedNodes.forEach(node => {
-                    if (node.tagName === 'IFRAME') {
-                        observeIframe(node);
-                    } else if (node.querySelectorAll) {
-                        node.querySelectorAll('iframe').forEach(observeIframe);
-                    }
-                });
-            });
-        });
-        
-        iframeObserver.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-        });
-    }
-    
-    #interceptStyleChanges() {
-        // Guard against multiple intercepts
-        if (window.__styleIntercepted) return;
-        window.__styleIntercepted = true;
-        
         try {
-            // Intercept CSSStyleDeclaration methods
-            const styleProto = CSSStyleDeclaration.prototype;
+            this.#observer = new MutationObserver(this.#handleMutationsWithRetry.bind(this));
+            this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
+            this.#scanExistingContent();
+            this.#setupCleanup();
             
-            if (!styleProto.__isIntercepted) {
-                const originalSetProperty = styleProto.setProperty;
-                const originalRemoveProperty = styleProto.removeProperty;
-                
-                styleProto.setProperty = function(property, value, priority) {
-                    const element = this._element;
-                    const oldValue = this[property];
-                    const result = originalSetProperty.call(this, property, value, priority);
-                    
-                    if (element && oldValue !== value && element.isConnected) {
-                        // Throttle style change processing
-                        if (!element._styleTimeout) {
-                            element._styleTimeout = setTimeout(() => {
-                                element._styleTimeout = null;
-                                
-                                // Only process if style change affects layout
-                                const layoutProps = ['width', 'height', 'display', 'position', 'top', 'left'];
-                                if (layoutProps.includes(property)) {
-                                    queueMicrotask(() => this.#processNode(element));
-                                }
-                            }, 50);
-                        }
-                    }
-                    
-                    return result;
-                };
-                
-                styleProto.removeProperty = function(property) {
-                    const element = this._element;
-                    const oldValue = this[property];
-                    const result = originalRemoveProperty.call(this, property);
-                    
-                    if (element && oldValue !== undefined && element.isConnected) {
-                        const layoutProps = ['width', 'height', 'display', 'position', 'top', 'left'];
-                        if (layoutProps.includes(property)) {
-                            queueMicrotask(() => this.#processNode(element));
-                        }
-                    }
-                    
-                    return result;
-                };
-                
-                styleProto.__isIntercepted = true;
-            }
+            document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { 
+                passive: true, 
+                capture: true 
+            });
             
-            // Track element references in CSSStyleDeclaration
-            const originalGetComputedStyle = window.getComputedStyle;
+            document.addEventListener('load', this.#handleLoadEvents.bind(this), true);
             
-            if (!window.__getComputedStyleIntercepted) {
-                window.getComputedStyle = function(element, pseudoElt) {
-                    const style = originalGetComputedStyle.call(this, element, pseudoElt);
-                    if (element && element.nodeType === Node.ELEMENT_NODE) {
-                        style._element = element;
-                    }
-                    return style;
-                };
-                window.__getComputedStyleIntercepted = true;
-            }
+            // Observe dynamically added styles
+            this.#observeStyleChanges();
             
-        } catch (e) {
-            console.warn('Style interception failed (non-critical):', e);
+            this.#log('ForumCoreObserver initialized (GLOBAL - enhanced mode)');
+        } catch (error) {
+            this.#error('Failed to initialize:', error);
+            this.#scheduleReset();
         }
     }
     
-    #monitorFontLoading() {
-        if (!document.fonts) return;
-        
-        const processFontDependentElements = () => {
-            queueMicrotask(() => {
-                // Text-heavy elements that might shift after font load
-                document.querySelectorAll(
-                    ForumCoreObserver.#CONFIG.selectors.textElements
-                ).forEach(el => {
-                    if (el.isConnected && !this.#processedNodes.has(el)) {
-                        this.#processNode(el);
-                    }
-                });
-            });
-        };
-        
-        // Fonts already loaded?
-        if (document.fonts.status === 'loaded') {
-            processFontDependentElements();
-        }
-        
-        // Listen for font loading
-        document.fonts.ready.then(processFontDependentElements);
-        
-        document.fonts.addEventListener('loadingdone', processFontDependentElements);
-        
-        // Periodic check for custom fonts
-        this.#fontCheckTimer = setInterval(() => {
-            if (document.fonts.status === 'loaded') {
-                processFontDependentElements();
+    #setupErrorHandling() {
+        window.addEventListener('error', (event) => {
+            if (event.error && event.error.message.includes('ForumObserver')) {
+                this.#errorCount++;
+                if (this.#errorCount > this.#maxErrors) {
+                    this.#scheduleReset();
+                }
             }
+        });
+    }
+    
+    #scheduleReset() {
+        if (this.#resetTimeout) clearTimeout(this.#resetTimeout);
+        this.#resetTimeout = setTimeout(() => {
+            this.#log('Attempting to reset observer...');
+            this.destroy();
+            this.#init();
         }, 5000);
     }
     
-    #monitorDynamicScripts() {
-        // Intercept script creation to catch dynamically added scripts
-        const originalCreateElement = document.createElement;
-        
-        document.createElement = function(tagName, options) {
-            const element = originalCreateElement.call(this, tagName, options);
-            
-            if (tagName.toLowerCase() === 'script') {
-                // Wrap script execution to catch after load
-                const originalSetAttribute = element.setAttribute;
-                
-                element.setAttribute = function(name, value) {
-                    if (name === 'src') {
-                        // Script with src - observe after load
-                        const loadHandler = () => {
-                            queueMicrotask(() => {
-                                // Script loaded - may have modified DOM
-                                this.#scanExistingContent();
-                            });
-                            element.removeEventListener('load', loadHandler);
-                        };
-                        element.addEventListener('load', loadHandler, { once: true, passive: true });
-                    }
-                    return originalSetAttribute.call(this, name, value);
-                };
-            }
-            
-            return element;
-        }.bind(this);
-    }
-    
-    #setupMediaQueryListeners() {
-        // Watch for responsive design changes
-        const breakpoints = [
-            '(max-width: 480px)',
-            '(max-width: 768px)',
-            '(max-width: 1024px)',
-            '(orientation: portrait)',
-            '(orientation: landscape)'
-        ];
-        
-        breakpoints.forEach(query => {
-            const mql = window.matchMedia(query);
-            
-            const handler = (e) => {
-                // Media query changed - reprocess responsive elements
-                queueMicrotask(() => {
-                    document.querySelectorAll(
-                        '.responsive, [class*="col-"], .row, .container, img, iframe, video'
-                    ).forEach(el => {
-                        if (el.isConnected) {
-                            this.#processNode(el);
-                        }
-                    });
-                });
-            };
-            
-            mql.addEventListener('change', handler, { passive: true });
-            
-            // Initial check
-            if (mql.matches) {
-                handler(mql);
-            }
-        });
-    }
-    
-    #monitorPerformance() {
-        // Use PerformanceObserver to detect layout shifts
-        if (typeof PerformanceObserver !== 'undefined') {
-            try {
-                const layoutShiftObserver = new PerformanceObserver((list) => {
-                    const entries = list.getEntries();
-                    let hadSignificantShift = false;
-                    
-                    entries.forEach(entry => {
-                        // Check if layout shift was significant (>0.1)
-                        if (entry.value > 0.1) {
-                            hadSignificantShift = true;
-                        }
-                    });
-                    
-                    if (hadSignificantShift) {
-                        // Layout shifted - reprocess visible elements
-                        queueMicrotask(() => {
-                            document.querySelectorAll(
-                                ForumCoreObserver.#CONFIG.selectors.mediaElements
-                            ).forEach(el => {
-                                if (el.isConnected && this.#isElementInViewport(el)) {
-                                    this.#processNode(el);
-                                }
-                            });
-                        });
-                    }
-                });
-                
-                layoutShiftObserver.observe({ type: 'layout-shift', buffered: true });
-            } catch (e) {
-                // LayoutShift not supported
-            }
+    #setupPerformanceMonitoring() {
+        if ('performance' in window && 'mark' in performance) {
+            setInterval(() => {
+                const memory = performance.memory;
+                if (memory && memory.usedJSHeapSize > memory.jsHeapSizeLimit * 0.8) {
+                    this.#log('High memory usage detected, triggering cleanup');
+                    this.#cleanupProcessedNodes(true);
+                }
+            }, 10000);
         }
     }
     
-    #isElementInViewport(el) {
-        const rect = el.getBoundingClientRect();
-        return (
-            rect.top >= 0 &&
-            rect.left >= 0 &&
-            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-        );
-    }
-    
-    #processLoadedResources() {
-        // Process images that loaded after page load
-        document.querySelectorAll('img:not([data-processed])').forEach(img => {
-            if (img.complete && img.naturalWidth) {
-                this.#processNode(img);
-                img.setAttribute('data-processed', 'true');
-            }
+    #observeStyleChanges() {
+        const styleObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.tagName === 'STYLE' || node.tagName === 'LINK') {
+                            this.#handleNewStyles(node);
+                        }
+                    });
+                }
+            });
         });
         
-        // Process iframes that loaded
-        document.querySelectorAll('iframe:not([data-processed])').forEach(iframe => {
-            this.#processNode(iframe);
-            iframe.setAttribute('data-processed', 'true');
+        styleObserver.observe(document.head, {
+            childList: true,
+            subtree: true
         });
+    }
+    
+    #handleNewStyles(styleNode) {
+        // Process any elements that might be affected by new styles
+        setTimeout(() => {
+            const affectedSelectors = this.#extractSelectorsFromStyles(styleNode);
+            affectedSelectors.forEach(selector => {
+                try {
+                    document.querySelectorAll(selector).forEach(el => {
+                        if (!this.#processedNodes.has(el)) {
+                            this.#processNode(el);
+                        }
+                    });
+                } catch (e) {}
+            });
+        }, 100);
+    }
+    
+    #extractSelectorsFromStyles(styleNode) {
+        // Simplified selector extraction
+        const selectors = [];
+        try {
+            const sheet = styleNode.sheet || 
+                (styleNode.tagName === 'LINK' ? styleNode.styleSheet : null);
+            if (sheet && sheet.cssRules) {
+                for (let rule of sheet.cssRules) {
+                    if (rule.selectorText) {
+                        selectors.push(rule.selectorText);
+                    }
+                }
+            }
+        } catch (e) {
+            // CORS or other issues
+        }
+        return selectors;
+    }
+    
+    #setupIframeObservation() {
+        document.addEventListener('load', (e) => {
+            if (e.target.tagName === 'IFRAME') {
+                this.#observeIframe(e.target);
+            }
+        }, true);
+        
+        // Observe existing iframes
+        document.querySelectorAll('iframe').forEach(iframe => this.#observeIframe(iframe));
+    }
+    
+    #observeIframe(iframe) {
+        try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iframeDoc) {
+                const iframeObserver = new MutationObserver((mutations) => {
+                    this.#handleIframeMutations(mutations, iframe);
+                });
+                iframeObserver.observe(iframeDoc.documentElement, 
+                    ForumCoreObserver.#CONFIG.observer);
+                this.#iframeObservers.set(iframe, iframeObserver);
+                
+                // Process existing content in iframe
+                this.#scanIframeContent(iframeDoc);
+            }
+        } catch (e) {
+            // Cross-origin iframe - can't observe
+            this.#log('Cannot observe cross-origin iframe');
+        }
+    }
+    
+    #scanIframeContent(doc) {
+        const elements = doc.querySelectorAll('*');
+        elements.forEach(el => {
+            if (!this.#processedNodes.has(el)) {
+                this.#processNode(el);
+            }
+        });
+    }
+    
+    #handleIframeMutations(mutations, iframe) {
+        mutations.forEach(mutation => {
+            if (mutation.type === 'childList') {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        const affectedNodes = new Set();
+                        this.#collectAllElements(node, affectedNodes);
+                        affectedNodes.forEach(el => {
+                            if (!this.#processedNodes.has(el)) {
+                                this.#processNode(el);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+    
+    #setupIntersectionObserver() {
+        this.#intersectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    if (!this.#processedNodes.has(entry.target)) {
+                        this.#processNode(entry.target);
+                    }
+                    this.#intersectionObserver.unobserve(entry.target);
+                }
+            });
+        }, { 
+            rootMargin: '200px', // Load slightly before visible
+            threshold: 0.01 
+        });
+        
+        // Observe lazy-load candidates
+        this.#observeLazyElements();
+    }
+    
+    #observeLazyElements() {
+        const lazySelectors = [
+            '.lazy', '.lazy-load', '[data-src]', '[loading="lazy"]',
+            '.post', '.content', '.article', '.preview'
+        ];
+        
+        lazySelectors.forEach(selector => {
+            try {
+                document.querySelectorAll(selector).forEach(el => {
+                    if (!this.#processedNodes.has(el)) {
+                        this.#intersectionObserver.observe(el);
+                    }
+                });
+            } catch (e) {}
+        });
+    }
+    
+    #setupResizeObserver() {
+        if (typeof ResizeObserver !== 'undefined') {
+            this.#resizeObserver = new ResizeObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                        // Element became visible through resize
+                        if (!this.#processedNodes.has(entry.target)) {
+                            this.#processNode(entry.target);
+                        }
+                    }
+                });
+            });
+            
+            // Observe containers that might expand
+            const containerSelectors = [
+                '.post-content', '.expandable', '.collapsible',
+                '.dropdown-content', '.modal-content'
+            ];
+            
+            containerSelectors.forEach(selector => {
+                try {
+                    document.querySelectorAll(selector).forEach(el => {
+                        this.#resizeObserver.observe(el);
+                    });
+                } catch (e) {}
+            });
+        }
+    }
+    
+    #setupAnimationObserver() {
+        if (typeof AnimationObserver !== 'undefined') {
+            // Use AnimationObserver if available
+            this.#animationObserver = new AnimationObserver((animations) => {
+                animations.forEach(animation => {
+                    const target = animation.effect.target;
+                    if (target && !this.#processedNodes.has(target)) {
+                        this.#processNode(target);
+                    }
+                });
+            });
+        } else {
+            // Fallback: listen for animation events
+            document.addEventListener('animationstart', (e) => {
+                if (!this.#processedNodes.has(e.target)) {
+                    this.#processNode(e.target);
+                }
+            }, true);
+            
+            document.addEventListener('transitionstart', (e) => {
+                if (!this.#processedNodes.has(e.target)) {
+                    this.#processNode(e.target);
+                }
+            }, true);
+        }
+    }
+    
+    #handleLoadEvents(e) {
+        const target = e.target;
+        if (target.nodeType === Node.ELEMENT_NODE) {
+            // Handle image loads, font loads, etc.
+            if (target.tagName === 'IMG' || target.tagName === 'VIDEO' || 
+                target.tagName === 'IFRAME' || target.tagName === 'SCRIPT') {
+                if (!this.#processedNodes.has(target)) {
+                    this.#processNode(target);
+                }
+            }
+        }
     }
     
     #setupScriptCoordination() {
         // Listen for Weserv ready event
         window.addEventListener('weserv-ready', (e) => {
             this.#scriptsReady.weserv = true;
-            console.log('🎯 Weserv ready event received', e.detail || '');
+            this.#log('Weserv ready event received', e.detail || '');
             
             // Trigger dimension extractor if it exists
             if (globalThis.mediaDimensionExtractor) {
@@ -580,34 +391,16 @@ class ForumCoreObserver {
                 });
             }
             
-            // Check if all are ready
+            // Check if both are ready
             this.#checkAllScriptsReady();
         }, { once: true, passive: true });
         
         // Listen for Dimension Extractor ready
         window.addEventListener('dimension-extractor-ready', (e) => {
             this.#scriptsReady.dimensionExtractor = true;
-            console.log('📐 Dimension extractor ready', e.detail || '');
+            this.#log('Dimension extractor ready', e.detail || '');
             
-            // Check if all are ready
-            this.#checkAllScriptsReady();
-        }, { once: true, passive: true });
-        
-        // Listen for Avatar system ready
-        window.addEventListener('forum-avatars-ready', (e) => {
-            this.#scriptsReady.avatar = true;
-            console.log('👤 Avatar system ready', e.detail || '');
-            
-            // Check if all are ready
-            this.#checkAllScriptsReady();
-        }, { once: true, passive: true });
-        
-        // Listen for Post Modernizer ready
-        window.addEventListener('post-modernizer-ready', (e) => {
-            this.#scriptsReady.postModernizer = true;
-            console.log('📝 Post Modernizer ready', e.detail || '');
-            
-            // Check if all are ready
+            // Check if both are ready
             this.#checkAllScriptsReady();
         }, { once: true, passive: true });
         
@@ -620,48 +413,20 @@ class ForumCoreObserver {
                         detail: { source: 'fallback' } 
                     }));
                 }
-                
-                if (!this.#scriptsReady.dimensionExtractor && window.mediaDimensionExtractor) {
-                    this.#scriptsReady.dimensionExtractor = true;
-                    window.dispatchEvent(new CustomEvent('dimension-extractor-ready', {
-                        detail: { source: 'fallback' }
-                    }));
-                }
-                
-                if (!this.#scriptsReady.avatar && window.ForumAvatars) {
-                    this.#scriptsReady.avatar = true;
-                    window.dispatchEvent(new CustomEvent('forum-avatars-ready', {
-                        detail: { source: 'fallback' }
-                    }));
-                }
-                
-                if (!this.#scriptsReady.postModernizer && window.postModernizer) {
-                    this.#scriptsReady.postModernizer = true;
-                    window.dispatchEvent(new CustomEvent('post-modernizer-ready', {
-                        detail: { source: 'fallback' }
-                    }));
-                }
-            }, 1000);
+            }, 500);
         }, { once: true, passive: true });
     }
     
     #checkAllScriptsReady() {
-        const allReady = Object.values(this.#scriptsReady).every(v => v === true);
-        
-        if (allReady) {
-            console.log('✅ All forum scripts ready and coordinated');
-            
-            // Dispatch global ready event
-            window.dispatchEvent(new CustomEvent('all-forum-scripts-ready', {
-                detail: { timestamp: Date.now() }
-            }));
+        if (this.#scriptsReady.weserv && this.#scriptsReady.dimensionExtractor) {
+            this.#log('All media scripts ready and coordinated');
             
             // Process any images that might have been missed
             if (globalThis.mediaDimensionExtractor) {
                 requestIdleCallback(() => {
                     const unprocessed = document.querySelectorAll('img:not([width])');
                     if (unprocessed.length) {
-                        console.log(`🔄 Processing ${unprocessed.length} missed images`);
+                        this.#log(`Processing ${unprocessed.length} missed images`);
                         unprocessed.forEach(img => {
                             globalThis.mediaDimensionExtractor.forceReprocessElement(img);
                         });
@@ -717,7 +482,7 @@ class ForumCoreObserver {
     #setupThemeListener() {
         window.addEventListener('themechange', (e) => {
             const { theme } = e.detail;
-            console.log(`🎨 Theme change detected: ${theme}`);
+            this.#log(`Theme change detected: ${theme}`);
             this.#pageState = this.#detectPageState();
             this.#notifyThemeDependentCallbacks(theme);
             this.#rescanThemeSensitiveElements(theme);
@@ -749,7 +514,7 @@ class ForumCoreObserver {
                 try {
                     callback.fn(document.documentElement, newTheme);
                 } catch (error) {
-                    console.error(`Theme callback ${callback.id} failed:`, error);
+                    this.#error(`Theme callback ${callback.id} failed:`, error);
                 }
             });
         }
@@ -761,7 +526,8 @@ class ForumCoreObserver {
             '.post-modernized', '.st-emoji-container', '.points_up, .points_down',
             '.btn', '.menu-dropdown', '.cs-fui.st-emoji-pop', '.modern-menu-wrap',
             '.search-post', '.post-header', '.post-content', '.post-footer',
-            '.modern-topic-title', '.modern-nav', '.modern-breadcrumb'
+            '.modern-topic-title', '.modern-nav', '.modern-breadcrumb',
+            '[data-theme-sensitive="true"]'
         ];
         
         if ('requestIdleCallback' in window) {
@@ -804,73 +570,120 @@ class ForumCoreObserver {
         });
     }
     
+    #handleMutationsWithRetry(mutations) {
+        try {
+            this.#handleMutations(mutations);
+        } catch (error) {
+            this.#error('Mutation handling failed:', error);
+            this.#errorCount++;
+            
+            if (this.#errorCount > this.#maxErrors) {
+                this.#log('Too many errors, resetting observer...');
+                this.#observer.disconnect();
+                this.#observer = new MutationObserver(this.#handleMutationsWithRetry.bind(this));
+                this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
+                this.#errorCount = 0;
+            }
+        }
+    }
+    
     #handleMutations(mutations) {
         this.#mutationMetrics.totalMutations += mutations.length;
         this.#mutationMetrics.lastMutationTime = Date.now();
         
+        const startTime = performance.now();
+        
         for (var i = 0; i < mutations.length; i++) {
             var mutation = mutations[i];
+            
+            // Prevent infinite loops
+            if (mutation.target.dataset && mutation.target.dataset.observerOrigin === 'forum-script') {
+                continue;
+            }
+            
+            // Check if we should process this mutation
             if (this.#shouldProcessMutation(mutation)) {
-                this.#mutationQueue.push(mutation);
+                const priority = this.#getMutationPriority(mutation);
+                this.#priorityQueue[priority].push(mutation);
+            }
+            
+            // Yield if we're taking too long
+            if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxContinuousProcessing) {
+                setTimeout(() => this.#processMutationQueue(), 0);
+                return;
             }
         }
         
-        if (this.#mutationQueue.length && !this.#isProcessing) {
+        if (!this.#isProcessing) {
             this.#processMutationQueue();
         }
+    }
+    
+    #getMutationPriority(mutation) {
+        const basePriority = ForumCoreObserver.#CONFIG.priorities[mutation.type] || 2;
+        
+        // Adjust priority based on context
+        if (mutation.type === 'attributes') {
+            if (mutation.attributeName === 'src' || mutation.attributeName === 'href') {
+                return 'high'; // Resource changes are high priority
+            }
+            if (mutation.attributeName === 'class' && 
+                mutation.target.classList.contains('lazy')) {
+                return 'high'; // Lazy loading classes are high priority
+            }
+        }
+        
+        if (mutation.type === 'childList' && 
+            mutation.addedNodes.length > 10) {
+            return 'medium'; // Large batches can be medium priority
+        }
+        
+        return basePriority === 1 ? 'high' : basePriority === 2 ? 'medium' : 'low';
     }
     
     #shouldProcessMutation(mutation) {
         var target = mutation.target;
         
-        // Skip if marked as our own mutation
+        // Skip mutations from our own scripts
         if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
             return false;
         }
         
         // Skip hidden elements
         if (target.nodeType === Node.ELEMENT_NODE) {
-            try {
-                var style = window.getComputedStyle(target);
-                if (style.display === 'none' || style.visibility === 'hidden') {
-                    return false;
+            var style = window.getComputedStyle(target);
+            if (style.display === 'none' || style.visibility === 'hidden') {
+                // But track if they might become visible
+                if (mutation.type === 'attributes' && 
+                    (mutation.attributeName === 'class' || mutation.attributeName === 'style')) {
+                    return true; // Might become visible
                 }
-            } catch (e) {
-                // Ignore - element might be detached
+                return false;
             }
         }
         
-        // Always process theme changes
+        // Theme changes are always important
         if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
             return true;
         }
         
-        // Process character data in important elements
-        if (mutation.type === 'characterData') {
-            var parent = target.parentElement;
-            return parent ? this.#shouldObserveTextChanges(parent) : false;
-        }
-        
-        // Process style changes that might affect layout
+        // Throttle style mutations
         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            const now = Date.now();
+            if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
+                return false;
+            }
+            this.#lastStyleMutation = now;
+            
             var oldValue = mutation.oldValue || '';
             var newValue = target.getAttribute('style') || '';
             return this.#styleChangeAffectsDOM(oldValue, newValue);
         }
         
-        // Process src changes for media
-        if (mutation.type === 'attributes' && 
-            (mutation.attributeName === 'src' || mutation.attributeName === 'data-src')) {
-            const tagName = target.tagName;
-            if (tagName === 'IMG' || tagName === 'IFRAME' || tagName === 'VIDEO' || tagName === 'SOURCE') {
-                return true;
-            }
-        }
-        
-        // Process dimension changes
-        if (mutation.type === 'attributes' && 
-            (mutation.attributeName === 'width' || mutation.attributeName === 'height')) {
-            return true;
+        // Text changes in important elements
+        if (mutation.type === 'characterData') {
+            var parent = target.parentElement;
+            return parent ? this.#shouldObserveTextChanges(parent) : false;
         }
         
         return true;
@@ -933,28 +746,46 @@ class ForumCoreObserver {
     }
     
     async #processMutationQueue() {
+        if (this.#isProcessing) return;
+        
         this.#isProcessing = true;
         var startTime = performance.now();
         
         try {
-            while (this.#mutationQueue.length) {
-                var batchSize = Math.min(
-                    ForumCoreObserver.#CONFIG.performance.mutationBatchSize,
-                    this.#mutationQueue.length
-                );
+            // Process by priority
+            const priorities = ['high', 'medium', 'low'];
+            
+            for (const priority of priorities) {
+                const queue = this.#priorityQueue[priority];
                 
-                var batch = this.#mutationQueue.splice(0, batchSize);
-                await this.#processMutationBatch(batch);
-                
-                if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxProcessingTime) {
-                    await new Promise(function(resolve) {
-                        queueMicrotask(resolve);
-                    });
-                    startTime = performance.now();
+                while (queue.length) {
+                    var batchSize = Math.min(
+                        priority === 'high' ? 25 : 
+                        priority === 'medium' ? 50 : 100,
+                        queue.length
+                    );
+                    
+                    var batch = queue.splice(0, batchSize);
+                    await this.#processMutationBatch(batch, priority);
+                    
+                    // Update watermark
+                    const totalQueue = this.#priorityQueue.high.length + 
+                                      this.#priorityQueue.medium.length + 
+                                      this.#priorityQueue.low.length;
+                    this.#mutationMetrics.queueHighWatermark = Math.max(
+                        this.#mutationMetrics.queueHighWatermark, 
+                        totalQueue
+                    );
+                    
+                    // Check time limit
+                    if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxProcessingTime) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                        startTime = performance.now();
+                    }
                 }
             }
         } catch (error) {
-            console.error('Mutation processing error:', error);
+            this.#error('Mutation processing error:', error);
         } finally {
             this.#isProcessing = false;
             this.#mutationMetrics.processedMutations++;
@@ -965,7 +796,7 @@ class ForumCoreObserver {
         }
     }
     
-    async #processMutationBatch(mutations) {
+    async #processMutationBatch(mutations, priority) {
         var affectedNodes = new Set();
         
         for (var i = 0; i < mutations.length; i++) {
@@ -979,36 +810,19 @@ class ForumCoreObserver {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             this.#collectAllElements(node, affectedNodes);
                             
-                            // Set up observers for new elements
-                            if (node.tagName === 'IFRAME') {
-                                this.#observeIframes(node);
-                            }
+                            // Check for shadow DOM
                             if (node.shadowRoot) {
-                                this.#observeShadowDOM(node);
-                            }
-                            
-                            // Observe media elements for resize
-                            if (node.matches(ForumCoreObserver.#CONFIG.selectors.mediaElements)) {
-                                this.#resizeObserver?.observe(node);
-                            }
-                            
-                            // Observe lazy elements for intersection
-                            if (node.matches(ForumCoreObserver.#CONFIG.selectors.lazyElements)) {
-                                this.#intersectionObserver?.observe(node);
+                                this.#collectAllElements(node.shadowRoot, affectedNodes);
+                                this.#observeShadowRoot(node.shadowRoot, node);
                             }
                         }
                     }
                     
-                    // Process removed nodes (cleanup)
+                    // Process removed nodes (clean up)
                     for (var j = 0; j < mutation.removedNodes.length; j++) {
                         var node = mutation.removedNodes[j];
                         if (node.nodeType === Node.ELEMENT_NODE) {
-                            // Clean up observers
-                            this.#resizeObserver?.unobserve(node);
-                            this.#intersectionObserver?.unobserve(node);
-                            
-                            // Remove from processed set to allow reprocessing if re-added
-                            this.#processedNodes.delete(node);
+                            this.#cleanupRemovedNode(node);
                         }
                     }
                     break;
@@ -1022,15 +836,11 @@ class ForumCoreObserver {
                         this.#notifyThemeDependentCallbacks(theme);
                     }
                     
-                    // Handle src changes for media
-                    if (mutation.attributeName === 'src' || mutation.attributeName === 'data-src') {
-                        const target = mutation.target;
-                        if (target.tagName === 'IMG' || target.tagName === 'IFRAME') {
-                            // Re-observe iframe after src change
-                            if (target.tagName === 'IFRAME') {
-                                this.#observedIframes.delete(target);
-                                this.#observeIframes(target);
-                            }
+                    // Check if element became visible
+                    if (mutation.attributeName === 'class' || mutation.attributeName === 'style') {
+                        const style = window.getComputedStyle(mutation.target);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                            affectedNodes.add(mutation.target);
                         }
                     }
                     break;
@@ -1049,14 +859,18 @@ class ForumCoreObserver {
         
         for (var k = 0; k < nodeArray.length; k++) {
             var node = nodeArray[k];
-            if (node && !this.#processedNodes.has(node) && node.isConnected) {
+            if (node && !this.#processedNodes.has(node)) {
                 nodesToProcess.push(node);
+                this.#nodeTimestamps.set(node, Date.now());
             }
         }
         
         if (!nodesToProcess.length) return;
         
-        var CONCURRENCY_LIMIT = 4;
+        this.#mutationMetrics.totalNodesProcessed += nodesToProcess.length;
+        
+        // Process with concurrency based on priority
+        var CONCURRENCY_LIMIT = priority === 'high' ? 8 : priority === 'medium' ? 4 : 2;
         var chunks = [];
         
         for (var l = 0; l < nodesToProcess.length; l += CONCURRENCY_LIMIT) {
@@ -1075,12 +889,65 @@ class ForumCoreObserver {
         }
     }
     
+    #observeShadowRoot(shadowRoot, host) {
+        if (this.#shadowObservers.has(host)) return;
+        
+        const shadowObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const affectedNodes = new Set();
+                            this.#collectAllElements(node, affectedNodes);
+                            affectedNodes.forEach(el => {
+                                if (!this.#processedNodes.has(el)) {
+                                    this.#processNode(el);
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        });
+        
+        shadowObserver.observe(shadowRoot, ForumCoreObserver.#CONFIG.observer);
+        this.#shadowObservers.set(host, shadowObserver);
+    }
+    
+    #cleanupRemovedNode(node) {
+        // Clean up any references to removed node
+        this.#processedNodes.delete(node);
+        this.#nodeTimestamps.delete(node);
+        
+        // Clean up shadow DOM observer
+        if (this.#shadowObservers.has(node)) {
+            this.#shadowObservers.get(node).disconnect();
+            this.#shadowObservers.delete(node);
+        }
+        
+        // Clean up iframe observer
+        if (this.#iframeObservers.has(node)) {
+            this.#iframeObservers.get(node).disconnect();
+            this.#iframeObservers.delete(node);
+        }
+        
+        // Unobserve from intersection observer
+        if (this.#intersectionObserver) {
+            this.#intersectionObserver.unobserve(node);
+        }
+        
+        // Unobserve from resize observer
+        if (this.#resizeObserver) {
+            this.#resizeObserver.unobserve(node);
+        }
+    }
+    
     #collectAllElements(root, collection) {
         if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
         
         collection.add(root);
         
-        // Also collect from shadow DOM if present
+        // Check for shadow DOM
         if (root.shadowRoot) {
             this.#collectAllElements(root.shadowRoot, collection);
         }
@@ -1092,26 +959,7 @@ class ForumCoreObserver {
     }
     
     async #processNode(node) {
-        if (!node || !node.isConnected || this.#processedNodes.has(node)) return;
-        
-        // Check if node or its ancestors are hidden
-        try {
-            let hidden = false;
-            let element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-            
-            while (element) {
-                const style = window.getComputedStyle(element);
-                if (style.display === 'none' || style.visibility === 'hidden') {
-                    hidden = true;
-                    break;
-                }
-                element = element.parentElement;
-            }
-            
-            if (hidden) return;
-        } catch (e) {
-            // Ignore - element might be detached
-        }
+        if (!node || this.#processedNodes.has(node)) return;
         
         var matchingCallbacks = this.#getMatchingCallbacks(node);
         if (!matchingCallbacks.length) return;
@@ -1126,6 +974,12 @@ class ForumCoreObserver {
         for (var i = 0; i < matchingCallbacks.length; i++) {
             var callback = matchingCallbacks[i];
             var priority = callback.priority || 'normal';
+            
+            // Check retry count
+            if (callback.retryCount > (callback.maxRetries || ForumCoreObserver.#CONFIG.memory.maxCallbackRetries)) {
+                continue; // Skip if too many retries
+            }
+            
             priorityGroups[priority].push(callback);
         }
         
@@ -1144,6 +998,7 @@ class ForumCoreObserver {
         }
         
         this.#processedNodes.add(node);
+        this.#nodeTimestamps.set(node, Date.now());
     }
     
     #getMatchingCallbacks(node) {
@@ -1153,47 +1008,39 @@ class ForumCoreObserver {
         for (var i = 0; i < callbackValues.length; i++) {
             var callback = callbackValues[i];
             
-            // Check page types if specified
-            if (callback.pageTypes && callback.pageTypes.length > 0) {
-                const bodyId = document.body.id;
-                const pageType = bodyId === 'search' ? 'search' :
-                                bodyId === 'send' ? 'send' :
-                                bodyId === 'blog' ? 'blog' :
-                                bodyId === 'topic' ? 'topic' : 'other';
-                
-                if (!callback.pageTypes.includes(pageType)) {
-                    continue;
-                }
+            // Check if callback should run on this page type
+            if (callback.pageTypes && !this.#matchesPageType(callback.pageTypes)) {
+                continue;
             }
             
             if (callback.selector) {
                 try {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        if (node.matches(callback.selector)) {
-                            matching.push(callback);
-                        } else {
-                            // Check if node contains matching elements
-                            const matches = node.querySelectorAll(callback.selector);
-                            if (matches.length > 0) {
-                                matching.push(callback);
-                            }
-                        }
-                    } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-                        const matches = node.querySelectorAll(callback.selector);
-                        if (matches.length > 0) {
-                            matching.push(callback);
-                        }
+                    if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
+                        continue;
                     }
                 } catch (e) {
                     // Invalid selector, skip
+                    continue;
                 }
-            } else {
-                // No selector means always match
-                matching.push(callback);
             }
+            
+            matching.push(callback);
         }
         
         return matching;
+    }
+    
+    #matchesPageType(pageTypes) {
+        if (!pageTypes) return true;
+        
+        for (var i = 0; i < pageTypes.length; i++) {
+            var type = pageTypes[i];
+            if (this.#pageState['is' + type.charAt(0).toUpperCase() + type.slice(1)]) {
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     async #executeCallbacks(callbacks, node) {
@@ -1203,7 +1050,7 @@ class ForumCoreObserver {
             var callback = callbacks[i];
             promises.push((async function() {
                 try {
-                    // Mark as our own mutation to avoid loops
+                    // Set origin to prevent infinite loops
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         node.dataset.observerOrigin = 'forum-script';
                     }
@@ -1214,19 +1061,23 @@ class ForumCoreObserver {
                         await callback.fn(node);
                     }
                     
-                    // Clean up marker
+                    // Reset retry count on success
+                    callback.retryCount = 0;
+                    
+                } catch (error) {
+                    callback.retryCount = (callback.retryCount || 0) + 1;
+                    this.#error('Callback ' + callback.id + ' failed (attempt ' + callback.retryCount + '):', error);
+                    
+                    // Schedule retry if under limit
+                    if (callback.retryCount <= (callback.maxRetries || ForumCoreObserver.#CONFIG.memory.maxCallbackRetries)) {
+                        setTimeout(() => {
+                            this.#processNode(node);
+                        }, 1000 * callback.retryCount); // Exponential backoff
+                    }
+                } finally {
+                    // Clean up origin marker
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         delete node.dataset.observerOrigin;
-                    }
-                } catch (error) {
-                    console.error('Callback ' + callback.id + ' failed:', error);
-                    
-                    // Retry logic for failed callbacks
-                    if (callback.retryCount < (callback.maxRetries || 3)) {
-                        callback.retryCount++;
-                        setTimeout(() => {
-                            this.#executeCallbacks([callback], node);
-                        }, 100 * Math.pow(2, callback.retryCount));
                     }
                 }
             }).call(this));
@@ -1275,7 +1126,7 @@ class ForumCoreObserver {
             '.anchor-container', '.modern-bottom-actions', '.multiquote-control',
             '.moderator-controls', '.ip-address-control', '.search-post',
             '.post-actions', '.user-info', '.post-content', '.post-footer',
-            'img', 'iframe', 'video', 'lite-youtube', 'lite-vimeo'
+            '[data-forum-element="true"]'
         ];
         
         var previewSelectors = [
@@ -1285,96 +1136,89 @@ class ForumCoreObserver {
         
         var allSelectors = forumSelectors.concat(previewSelectors);
         
-        // Process in batches to avoid blocking
-        const processBatch = (startIndex) => {
-            const batchSize = 50;
-            const endIndex = Math.min(startIndex + batchSize, allSelectors.length);
-            
-            for (var i = startIndex; i < endIndex; i++) {
-                var selector = allSelectors[i];
-                try {
-                    var nodes = document.querySelectorAll(selector);
-                    for (var j = 0; j < nodes.length; j++) {
-                        var node = nodes[j];
-                        if (!this.#processedNodes.has(node) && node.isConnected) {
-                            // Queue for processing, don't await
-                            this.#processNode(node);
-                            
-                            // Set up observers
-                            if (node.tagName === 'IFRAME') {
-                                this.#observeIframes(node);
-                            }
-                            if (node.shadowRoot) {
-                                this.#observeShadowDOM(node);
-                            }
-                            if (node.matches(ForumCoreObserver.#CONFIG.selectors.mediaElements)) {
-                                this.#resizeObserver?.observe(node);
-                            }
-                            if (node.matches(ForumCoreObserver.#CONFIG.selectors.lazyElements)) {
-                                this.#intersectionObserver?.observe(node);
-                            }
+        for (var i = 0; i < allSelectors.length; i++) {
+            var selector = allSelectors[i];
+            try {
+                var nodes = document.querySelectorAll(selector);
+                for (var j = 0; j < nodes.length; j++) {
+                    var node = nodes[j];
+                    if (!this.#processedNodes.has(node)) {
+                        this.#processNode(node);
+                        
+                        // Check for shadow DOM
+                        if (node.shadowRoot) {
+                            this.#collectAllElements(node.shadowRoot, new Set());
                         }
                     }
-                } catch (e) {
-                    // Ignore selector errors
                 }
-            }
-            
-            if (endIndex < allSelectors.length) {
-                setTimeout(() => processBatch(endIndex), 10);
-            } else {
-                this.#initialScanComplete = true;
-                console.log('✅ Initial content scan complete (GLOBAL mode)');
-                
-                // Scan shadow DOM after initial scan
-                this.#scanShadowDOM();
-                
-                // Scan iframes after initial scan
-                this.#scanIframes();
-            }
-        };
+            } catch (e) {}
+        }
         
-        processBatch(0);
-    }
-    
-    #scanShadowDOM() {
-        document.querySelectorAll('*').forEach(el => {
-            if (el.shadowRoot) {
-                this.#observeShadowDOM(el);
-            }
-        });
-    }
-    
-    #scanIframes() {
+        // Scan for shadow DOM hosts
+        this.#scanForShadowDOM();
+        
+        // Scan for iframes
         document.querySelectorAll('iframe').forEach(iframe => {
-            this.#observeIframes(iframe);
+            this.#observeIframe(iframe);
+        });
+        
+        this.#initialScanComplete = true;
+        this.#log('Initial content scan complete (GLOBAL mode)');
+    }
+    
+    #scanForShadowDOM() {
+        const shadowHosts = document.querySelectorAll('*');
+        shadowHosts.forEach(host => {
+            if (host.shadowRoot && !this.#shadowObservers.has(host)) {
+                this.#observeShadowRoot(host.shadowRoot, host);
+            }
         });
     }
     
     #setupCleanup() {
-        this.#cleanupIntervalId = setInterval(function() {
-            // Clean up old processed nodes (WeakSet will handle itself, but we can trigger GC)
-            if (typeof globalThis.gc === 'function') {
+        this.#cleanupIntervalId = setInterval(() => {
+            this.#cleanupProcessedNodes();
+            
+            if (typeof globalThis.gc === 'function' && 
+                this.#mutationMetrics.totalNodesProcessed > 10000) {
                 globalThis.gc();
             }
-            
-            // Clean up mutation metrics
-            const now = Date.now();
-            if (now - this.#mutationMetrics.lastMutationTime > 60000) {
-                // No mutations for a minute, reset metrics
-                this.#mutationMetrics.averageProcessingTime = 0;
-            }
-            
-            // Check memory usage
-            if (this.#processedNodes.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes) {
-                console.warn('Processed nodes approaching limit: ' + this.#processedNodes.size);
-                
-                // Force garbage collection if possible
-                if (typeof globalThis.gc === 'function') {
-                    globalThis.gc();
+        }, ForumCoreObserver.#CONFIG.memory.cleanupInterval);
+    }
+    
+    #cleanupProcessedNodes(force = false) {
+        const now = Date.now();
+        let cleanupCount = 0;
+        
+        // Clean up old nodes from timestamp map
+        for (const [node, timestamp] of this.#nodeTimestamps) {
+            if (force || now - timestamp > ForumCoreObserver.#CONFIG.memory.nodeTTL) {
+                // Check if node still exists in DOM
+                if (!document.body.contains(node)) {
+                    this.#processedNodes.delete(node);
+                    this.#nodeTimestamps.delete(node);
+                    cleanupCount++;
                 }
             }
-        }.bind(this), ForumCoreObserver.#CONFIG.memory.cleanupInterval);
+        }
+        
+        if (cleanupCount > 0) {
+            this.#log(`Cleaned up ${cleanupCount} old nodes`);
+        }
+        
+        // Check if we need to clear the entire WeakSet
+        if (this.#nodeTimestamps.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes) {
+            this.#log('Processed nodes approaching limit, clearing cache');
+            this.#processedNodes = new WeakSet();
+            // Keep timestamps for nodes that still exist
+            const newTimestamps = new Map();
+            for (const [node, timestamp] of this.#nodeTimestamps) {
+                if (document.body.contains(node)) {
+                    newTimestamps.set(node, timestamp);
+                }
+            }
+            this.#nodeTimestamps = newTimestamps;
+        }
     }
     
     #handleVisibilityChange() {
@@ -1382,9 +1226,10 @@ class ForumCoreObserver {
             this.#pause();
         } else {
             this.#resume();
-            queueMicrotask(function() {
+            queueMicrotask(() => {
                 this.#scanExistingContent();
-            }.bind(this));
+                this.#observeLazyElements();
+            });
         }
     }
     
@@ -1393,12 +1238,14 @@ class ForumCoreObserver {
             this.#observer.disconnect();
         }
         
-        if (this.#resizeObserver) {
-            this.#resizeObserver.disconnect();
+        // Pause iframe observers
+        for (const [iframe, observer] of this.#iframeObservers) {
+            observer.disconnect();
         }
         
-        if (this.#intersectionObserver) {
-            this.#intersectionObserver.disconnect();
+        // Pause shadow DOM observers
+        for (const [host, observer] of this.#shadowObservers) {
+            observer.disconnect();
         }
         
         var timeoutIds = Array.from(this.#debounceTimeouts.values());
@@ -1410,28 +1257,20 @@ class ForumCoreObserver {
     
     #resume() {
         if (!this.#observer) {
-            this.#observer = new MutationObserver(this.#handleMutations.bind(this));
+            this.#observer = new MutationObserver(this.#handleMutationsWithRetry.bind(this));
         }
         
         this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
         
-        if (document.documentElement !== document) {
-            this.#observer.observe(document, ForumCoreObserver.#CONFIG.observer);
-        }
+        // Resume iframe observers
+        document.querySelectorAll('iframe').forEach(iframe => {
+            if (!this.#iframeObservers.has(iframe)) {
+                this.#observeIframe(iframe);
+            }
+        });
         
-        // Reconnect resize observer
-        if (this.#resizeObserver) {
-            document.querySelectorAll(ForumCoreObserver.#CONFIG.selectors.mediaElements).forEach(el => {
-                this.#resizeObserver.observe(el);
-            });
-        }
-        
-        // Reconnect intersection observer
-        if (this.#intersectionObserver) {
-            document.querySelectorAll(ForumCoreObserver.#CONFIG.selectors.lazyElements).forEach(el => {
-                this.#intersectionObserver.observe(el);
-            });
-        }
+        // Resume shadow DOM observers
+        this.#scanForShadowDOM();
     }
     
     // ===== PUBLIC API =====
@@ -1448,34 +1287,26 @@ class ForumCoreObserver {
             pageTypes: settings.pageTypes,
             dependencies: settings.dependencies,
             retryCount: 0,
-            maxRetries: settings.maxRetries || 3,
-            createdAt: performance.now()
+            maxRetries: settings.maxRetries || ForumCoreObserver.#CONFIG.memory.maxCallbackRetries,
+            createdAt: performance.now(),
+            metadata: settings.metadata || {}
         };
         
         this.#callbacks.set(id, callback);
-        console.log('📝 Registered GLOBAL callback: ' + id + ' (priority: ' + callback.priority + ')');
+        this.#log('Registered GLOBAL callback: ' + id + ' (priority: ' + callback.priority + ')');
         
-        // Process existing nodes if initial scan is complete
         if (this.#initialScanComplete && callback.selector) {
-            var nodes = document.querySelectorAll(callback.selector);
-            for (var i = 0; i < nodes.length; i++) {
-                var node = nodes[i];
-                if (!this.#processedNodes.has(node) && node.isConnected) {
-                    this.#processNode(node);
+            try {
+                var nodes = document.querySelectorAll(callback.selector);
+                for (var i = 0; i < nodes.length; i++) {
+                    var node = nodes[i];
+                    if (!this.#processedNodes.has(node)) {
+                        this.#processNode(node);
+                    }
                 }
+            } catch (e) {
+                this.#error('Error during initial callback scan:', e);
             }
-            
-            // Also check shadow DOM
-            document.querySelectorAll('*').forEach(el => {
-                if (el.shadowRoot) {
-                    var shadowNodes = el.shadowRoot.querySelectorAll(callback.selector);
-                    shadowNodes.forEach(node => {
-                        if (!this.#processedNodes.has(node) && node.isConnected) {
-                            this.#processNode(node);
-                        }
-                    });
-                }
-            });
         }
         
         return id;
@@ -1487,7 +1318,8 @@ class ForumCoreObserver {
         this.#debouncedCallbacks.set(id, {
             callback: settings.callback,
             delay: settings.delay || ForumCoreObserver.#CONFIG.performance.debounceThreshold,
-            lastRun: 0
+            lastRun: 0,
+            timeout: null
         });
         
         return id;
@@ -1504,7 +1336,7 @@ class ForumCoreObserver {
             try {
                 settings.callback(document.documentElement, currentTheme);
             } catch (error) {
-                console.error(`Theme-aware callback ${callbackId} failed on init:`, error);
+                this.#error(`Theme-aware callback ${callbackId} failed on init:`, error);
             }
         });
         
@@ -1520,6 +1352,10 @@ class ForumCoreObserver {
         }
         
         if (this.#debouncedCallbacks.has(callbackId)) {
+            const debounced = this.#debouncedCallbacks.get(callbackId);
+            if (debounced.timeout) {
+                clearTimeout(debounced.timeout);
+            }
             this.#debouncedCallbacks.delete(callbackId);
             removed = true;
         }
@@ -1530,7 +1366,7 @@ class ForumCoreObserver {
         }
         
         if (removed) {
-            console.log('🗑️ Unregistered callback: ' + callbackId);
+            this.#log('Unregistered callback: ' + callbackId);
         }
         
         return removed;
@@ -1539,47 +1375,32 @@ class ForumCoreObserver {
     forceScan(selector) {
         if (!selector) {
             this.#scanExistingContent();
-            this.#scanShadowDOM();
-            this.#scanIframes();
             return;
         }
         
-        var nodes = document.querySelectorAll(selector);
-        for (var i = 0; i < nodes.length; i++) {
-            var node = nodes[i];
-            if (!this.#processedNodes.has(node) && node.isConnected) {
-                this.#processNode(node);
+        try {
+            var nodes = document.querySelectorAll(selector);
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+                if (!this.#processedNodes.has(node)) {
+                    this.#processNode(node);
+                }
             }
+        } catch (e) {
+            this.#error('Error during force scan:', e);
         }
-        
-        // Also scan shadow DOM
-        document.querySelectorAll('*').forEach(el => {
-            if (el.shadowRoot) {
-                var shadowNodes = el.shadowRoot.querySelectorAll(selector);
-                shadowNodes.forEach(node => {
-                    if (!this.#processedNodes.has(node) && node.isConnected) {
-                        this.#processNode(node);
-                    }
-                });
-            }
-        });
     }
     
-    forceReprocessElement(element) {
-        if (!element) return;
-        
-        // Remove from processed set
-        this.#processedNodes.delete(element);
-        
-        // Reprocess
-        this.#processNode(element);
-        
-        // Reprocess children
-        if (element.querySelectorAll) {
-            element.querySelectorAll('*').forEach(child => {
-                this.#processedNodes.delete(child);
-                this.#processNode(child);
-            });
+    forceReprocess(selector) {
+        try {
+            var nodes = document.querySelectorAll(selector);
+            for (var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+                this.#processedNodes.delete(node);
+                this.#processNode(node);
+            }
+        } catch (e) {
+            this.#error('Error during force reprocess:', e);
         }
     }
     
@@ -1588,50 +1409,67 @@ class ForumCoreObserver {
     }
     
     getStats() {
+        const now = Date.now();
+        const activeNodes = Array.from(this.#nodeTimestamps.entries())
+            .filter(([node]) => document.body.contains(node)).length;
+        
         return {
-            totalMutations: this.#mutationMetrics.totalMutations,
-            processedMutations: this.#mutationMetrics.processedMutations,
-            averageProcessingTime: this.#mutationMetrics.averageProcessingTime.toFixed(2) + 'ms',
-            lastMutationTime: new Date(this.#mutationMetrics.lastMutationTime).toISOString(),
-            registeredCallbacks: this.#callbacks.size,
-            debouncedCallbacks: this.#debouncedCallbacks.size,
-            pendingTimeouts: this.#debounceTimeouts.size,
-            processedNodes: this.#processedNodes.size,
-            pageState: this.#pageState,
-            isProcessing: this.#isProcessing,
-            queueLength: this.#mutationQueue.length,
-            scriptsReady: this.#scriptsReady,
-            shadowRootsFound: this.#mutationMetrics.shadowRootsFound,
-            iframesObserved: this.#mutationMetrics.iframesObserved,
-            resizeEvents: this.#mutationMetrics.resizeEvents,
-            currentTheme: this.#pageState.currentTheme,
-            themeMode: this.#pageState.themeMode,
-            themeDependentCallbacks: Array.from(this.#callbacks.values()).filter(c => 
-                c.dependencies && c.dependencies.includes('theme')
-            ).length
+            mutations: {
+                total: this.#mutationMetrics.totalMutations,
+                processed: this.#mutationMetrics.processedMutations,
+                avgTime: this.#mutationMetrics.averageProcessingTime,
+                lastTime: this.#mutationMetrics.lastMutationTime,
+                errors: this.#mutationMetrics.errors,
+                lastError: this.#mutationMetrics.lastError,
+                totalNodesProcessed: this.#mutationMetrics.totalNodesProcessed,
+                queueHighWatermark: this.#mutationMetrics.queueHighWatermark
+            },
+            callbacks: {
+                registered: this.#callbacks.size,
+                debounced: this.#debouncedCallbacks.size,
+                pendingTimeouts: this.#debounceTimeouts.size,
+                themeDependent: Array.from(this.#callbacks.values()).filter(c => 
+                    c.dependencies && c.dependencies.includes('theme')
+                ).length
+            },
+            nodes: {
+                processed: this.#processedNodes.size,
+                active: activeNodes,
+                tracked: this.#nodeTimestamps.size
+            },
+            state: {
+                ...this.#pageState,
+                isProcessing: this.#isProcessing,
+                queueLength: this.#priorityQueue.high.length + 
+                             this.#priorityQueue.medium.length + 
+                             this.#priorityQueue.low.length,
+                queueBreakdown: {
+                    high: this.#priorityQueue.high.length,
+                    medium: this.#priorityQueue.medium.length,
+                    low: this.#priorityQueue.low.length
+                },
+                scriptsReady: this.#scriptsReady,
+                errorCount: this.#errorCount,
+                hasResetScheduled: !!this.#resetTimeout
+            },
+            memory: {
+                iframeObservers: this.#iframeObservers.size,
+                shadowObservers: this.#shadowObservers.size
+            }
         };
     }
     
-    getScriptsStatus() {
-        return { ...this.#scriptsReady };
-    }
-    
-    waitForScripts(scriptNames, timeout = 10000) {
-        return new Promise((resolve, reject) => {
-            const checkInterval = setInterval(() => {
-                const allReady = scriptNames.every(name => this.#scriptsReady[name]);
-                if (allReady) {
-                    clearInterval(checkInterval);
-                    clearTimeout(timeoutId);
-                    resolve();
-                }
-            }, 100);
+    async waitForScripts(scripts = ['weserv', 'dimensionExtractor'], timeout = 5000) {
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < timeout) {
+            const allReady = scripts.every(script => this.#scriptsReady[script]);
+            if (allReady) return true;
             
-            const timeoutId = setTimeout(() => {
-                clearInterval(checkInterval);
-                reject(new Error('Timeout waiting for scripts: ' + scriptNames.join(', ')));
-            }, timeout);
-        });
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        return false;
     }
     
     destroy() {
@@ -1641,34 +1479,53 @@ class ForumCoreObserver {
             clearInterval(this.#cleanupIntervalId);
         }
         
-        if (this.#fontCheckTimer) {
-            clearInterval(this.#fontCheckTimer);
+        if (this.#resetTimeout) {
+            clearTimeout(this.#resetTimeout);
         }
         
+        // Disconnect all observers
+        if (this.#intersectionObserver) {
+            this.#intersectionObserver.disconnect();
+        }
+        
+        if (this.#resizeObserver) {
+            this.#resizeObserver.disconnect();
+        }
+        
+        // Clear all maps and sets
         this.#callbacks.clear();
         this.#debouncedCallbacks.clear();
         this.#processedNodes = new WeakSet();
-        this.#observedShadows = new WeakSet();
-        this.#observedIframes = new WeakSet();
+        this.#nodeTimestamps.clear();
+        this.#iframeObservers.clear();
+        this.#shadowObservers.clear();
+        this.#priorityQueue.high = [];
+        this.#priorityQueue.medium = [];
+        this.#priorityQueue.low = [];
         this.#mutationQueue.length = 0;
         this.#debounceTimeouts.clear();
         
         document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
+        document.removeEventListener('load', this.#handleLoadEvents, true);
         
-        console.log('🔄 Enhanced ForumCoreObserver destroyed');
+        this.#log('ForumCoreObserver destroyed');
     }
     
-    static create() {
-        return new ForumCoreObserver();
+    static create(debug = false) {
+        return new ForumCoreObserver(debug);
     }
 }
 
-// Initialize globally
+// Initialize globally with enhanced features
 if (!globalThis.forumObserver) {
     try {
-        globalThis.forumObserver = ForumCoreObserver.create();
+        // Check if we should enable debug mode
+        const debug = localStorage.getItem('forum-observer-debug') === 'true' || 
+                     window.location.hash === '#observer-debug';
         
-        // Helper functions for easy script registration
+        globalThis.forumObserver = ForumCoreObserver.create(debug);
+        
+        // Convenience global functions
         globalThis.registerForumScript = function(settings) {
             return globalThis.forumObserver ? globalThis.forumObserver.register(settings) : null;
         };
@@ -1681,36 +1538,59 @@ if (!globalThis.forumObserver) {
             return globalThis.forumObserver ? globalThis.forumObserver.registerThemeAware(settings) : null;
         };
         
-        // Cleanup on page hide
+        globalThis.waitForForumScripts = function(scripts, timeout) {
+            return globalThis.forumObserver ? globalThis.forumObserver.waitForScripts(scripts, timeout) : Promise.reject('Observer not initialized');
+        };
+        
+        globalThis.getForumObserverStats = function() {
+            return globalThis.forumObserver ? globalThis.forumObserver.getStats() : null;
+        };
+        
+        // Debug helper
+        if (debug) {
+            globalThis.forumObserverDebug = {
+                enable: () => {
+                    localStorage.setItem('forum-observer-debug', 'true');
+                    window.location.reload();
+                },
+                disable: () => {
+                    localStorage.removeItem('forum-observer-debug');
+                    window.location.reload();
+                },
+                stats: () => globalThis.forumObserver?.getStats(),
+                reprocess: (selector) => globalThis.forumObserver?.forceReprocess(selector)
+            };
+            console.log('🔧 ForumObserver debug mode enabled. Use forumObserverDebug object.');
+        }
+        
+        // Clean up on page unload
         globalThis.addEventListener('pagehide', function() {
             if (globalThis.forumObserver) {
                 globalThis.forumObserver.destroy();
+                globalThis.forumObserver = null;
             }
         }, { once: true });
         
-        console.log('🚀 Enhanced ForumCoreObserver ready (BULLETPROOF MODE)');
+        console.log('🚀 ForumCoreObserver ready (ENHANCED GLOBAL MODE) with full DOM coverage');
         
     } catch (error) {
-        console.error('Failed to initialize Enhanced ForumCoreObserver:', error);
+        console.error('Failed to initialize ForumCoreObserver:', error);
         
-        // Fallback proxy
+        // Provide fallback that logs warnings
         globalThis.forumObserver = new Proxy({}, {
             get: function(target, prop) {
-                var methods = ['register', 'registerDebounced', 'registerThemeAware', 'unregister', 
-                              'forceScan', 'forceReprocessElement', 'updateThemeOnElements', 
-                              'getStats', 'getScriptsStatus', 'waitForScripts', 'destroy'];
-                if (methods.indexOf(prop) > -1) {
+                const methods = ['register', 'registerDebounced', 'registerThemeAware', 'unregister', 
+                               'forceScan', 'forceReprocess', 'updateThemeOnElements', 'getStats', 
+                               'destroy', 'waitForScripts'];
+                if (methods.includes(prop)) {
                     return function() {
                         console.warn('ForumCoreObserver not initialized - ' + prop + ' called');
+                        return prop === 'getStats' ? { error: 'Not initialized' } : 
+                               prop === 'waitForScripts' ? Promise.reject('Not initialized') : null;
                     };
                 }
                 return undefined;
             }
         });
     }
-}
-
-// Export for module systems if needed
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ForumCoreObserver };
 }
