@@ -761,7 +761,8 @@ if (!globalThis.mediaDimensionExtractor) {
             'post': 60,
             'profile_card': 80,
             'deleted_user': 60,
-            'likes_list': 30
+            'likes_list': 30,
+            'fast_reply': 40  // Added fast reply size
         },
         
         selectors: {
@@ -805,20 +806,35 @@ if (!globalThis.mediaDimensionExtractor) {
         
         // Performance settings
         performance: {
-            batchSize: 5,              // Process 5 users at a time
-            batchDelay: 50,             // 50ms between batches
-            prioritySelectors: [        // Elements to prioritize
-                '.popup.pop_points',    // Popups first (they're visible)
-                '.summary'              // Then summary
+            batchSize: 5,
+            batchDelay: 50,
+            prioritySelectors: [
+                '.popup.pop_points',
+                '.summary'
             ],
-            maxConcurrentRequests: 3     // Maximum concurrent API requests
+            maxConcurrentRequests: 3
         },
         
         // Script coordination settings
         coordination: {
-            maxWaitTime: 5000, // 5 seconds max wait
-            checkInterval: 100  // Check every 100ms
+            maxWaitTime: 5000,
+            checkInterval: 100
         }
+    };
+
+    // ==============================
+    // FAST REPLY USER INFO CONFIG
+    // ==============================
+    var FAST_REPLY_CONFIG = {
+        selectors: {
+            fastReply: '.fast.send .skin_tbl',
+            menuWrap: '.menuwrap',
+            nick: '.nick',
+            avatar: '.avatar',
+            userLink: 'a[href*="MID="]'
+        },
+        size: 40,
+        debug: false
     };
 
     // ==============================
@@ -832,14 +848,15 @@ if (!globalThis.mediaDimensionExtractor) {
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
-        isInitialized: false,        // <-- ADDED: Track initialization status
-        cacheVersion: '2.2', // Updated version
+        processedFastReply: new WeakSet(), // Added for fast reply
+        isInitialized: false,
+        cacheVersion: '2.2',
         
         // Performance tracking
         processingQueue: [],
         isProcessing: false,
         activeRequests: 0,
-        processedIds: new Set(), // Track processed user IDs to avoid duplicates
+        processedIds: new Set(),
         pendingBatches: [],
         
         // Script readiness tracking
@@ -848,7 +865,13 @@ if (!globalThis.mediaDimensionExtractor) {
             dimensionExtractor: false
         },
         waitingForScripts: true,
-        pendingElements: [] // Elements waiting for scripts to be ready
+        pendingElements: [],
+        
+        // Fast reply state
+        fastReply: {
+            currentUser: null,
+            initialized: false
+        }
     };
 
     // ==============================
@@ -856,10 +879,7 @@ if (!globalThis.mediaDimensionExtractor) {
     // ==============================
 
     function checkScriptsReady() {
-        // Check if Weserv has processed images
         var weservProcessed = document.querySelector('img[data-optimized="true"]') !== null;
-        
-        // Check if dimension extractor exists
         var extractorExists = !!window.mediaDimensionExtractor;
         
         state.scriptsReady.weserv = state.scriptsReady.weserv || weservProcessed;
@@ -878,7 +898,6 @@ if (!globalThis.mediaDimensionExtractor) {
 
         console.log('⏳ Avatar system waiting for media scripts...');
 
-        // Listen for events
         var onWeservReady = function() {
             state.scriptsReady.weserv = true;
             if (checkScriptsReady()) {
@@ -902,11 +921,9 @@ if (!globalThis.mediaDimensionExtractor) {
             if (timeout) clearTimeout(timeout);
         };
 
-        // Listen for events
         window.addEventListener('weserv-ready', onWeservReady, { passive: true });
         window.addEventListener('dimension-extractor-ready', onExtractorReady, { passive: true });
 
-        // Fallback polling
         var waitInterval = setInterval(function() {
             if (checkScriptsReady()) {
                 cleanup();
@@ -914,7 +931,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }, AVATAR_CONFIG.coordination.checkInterval);
 
-        // Timeout fallback
         var timeout = setTimeout(function() {
             console.warn('⚠️ Avatar system timeout waiting for scripts, proceeding anyway');
             cleanup();
@@ -983,7 +999,7 @@ if (!globalThis.mediaDimensionExtractor) {
         if (brokenCache) {
             try {
                 var data = JSON.parse(brokenCache);
-                if (Date.now() - data.timestamp < 3600000) { // 1 hour
+                if (Date.now() - data.timestamp < 3600000) {
                     state.brokenAvatars.add(avatarUrl);
                     return true;
                 } else {
@@ -1020,8 +1036,8 @@ if (!globalThis.mediaDimensionExtractor) {
         var img = new Image();
         var timeoutId = setTimeout(function() {
             img.onload = img.onerror = null;
-            callback(true); // Assume it might work
-        }, 3000); // Reduced to 3 seconds for better performance
+            callback(true);
+        }, 3000);
         
         img.onload = function() {
             clearTimeout(timeoutId);
@@ -1047,11 +1063,8 @@ if (!globalThis.mediaDimensionExtractor) {
             return;
         }
         
-        // Remove duplicates
         var uniqueIds = [...new Set(userIds)];
         
-        // Create a single request with multiple IDs (if API supports it)
-        // If not, we'll fall back to individual requests with limits
         var url = '/api.php?mid=' + uniqueIds.join(',');
         
         fetch(url)
@@ -1065,7 +1078,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 callback(data);
             })
             .catch(function(error) {
-                // Fall back to individual requests with concurrency limit
                 fetchMultipleUsersIndividual(uniqueIds, callback);
             });
     }
@@ -1244,13 +1256,11 @@ if (!globalThis.mediaDimensionExtractor) {
     function getAvatarFromCache(userId, size, isLikesList) {
         var cacheKey = userId + '_' + size;
         
-        // Check memory cache
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
             var isGenerated = cached.url && cached.url.includes('dicebear.com');
             var isBroken = isBrokenAvatarUrl(cached.url);
             
-            // For likes list, prefer real avatars
             if (isLikesList && isGenerated) {
                 return null;
             }
@@ -1259,13 +1269,11 @@ if (!globalThis.mediaDimensionExtractor) {
                 return cached;
             }
             
-            // If it's a real avatar marked broken, return null to retry
             if (!isGenerated && isBroken) {
                 return null;
             }
         }
         
-        // Check localStorage
         var stored = localStorage.getItem(getCacheKey(userId, size));
         if (stored) {
             try {
@@ -1277,7 +1285,7 @@ if (!globalThis.mediaDimensionExtractor) {
                 
                 if (!isExpired && !isOldVersion) {
                     if (!isGenerated && isBroken) {
-                        return null; // Retry broken real avatars
+                        return null;
                     }
                     if (!isBroken) {
                         state.userCache[cacheKey] = data;
@@ -1295,7 +1303,6 @@ if (!globalThis.mediaDimensionExtractor) {
         
         state.isProcessing = true;
         
-        // Group by type to prioritize popups
         var popupItems = [];
         var summaryItems = [];
         var otherItems = [];
@@ -1311,11 +1318,9 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         });
         
-        // Combine with priority order
         var prioritizedQueue = [...popupItems, ...summaryItems, ...otherItems];
         state.processingQueue = [];
         
-        // Process in batches
         function processBatch(startIndex) {
             var batch = prioritizedQueue.slice(startIndex, startIndex + AVATAR_CONFIG.performance.batchSize);
             
@@ -1324,7 +1329,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 return;
             }
             
-            // Group by user ID for batch API requests
             var userMap = new Map();
             batch.forEach(function(item) {
                 if (item.userId && !item.isDeletedUser) {
@@ -1343,13 +1347,11 @@ if (!globalThis.mediaDimensionExtractor) {
                         config: item.config
                     });
                 } else {
-                    // Handle deleted users immediately (no API call needed)
                     var avatarUrl = generateLetterAvatar(null, item.username, item.config.size);
                     insertAvatarForProcessedItem(item, avatarUrl, item.username);
                 }
             });
             
-            // Fetch real users in batch
             var realUsers = Array.from(userMap.values());
             if (realUsers.length > 0) {
                 var userIds = realUsers.map(u => u.userId);
@@ -1371,7 +1373,6 @@ if (!globalThis.mediaDimensionExtractor) {
                             
                             avatarUrl = userApiData.avatar;
                             
-                            // Test image asynchronously
                             testImageUrl(avatarUrl, function(success) {
                                 if (success) {
                                     finishUserAvatars(userData, avatarUrl, finalUsername);
@@ -1387,7 +1388,6 @@ if (!globalThis.mediaDimensionExtractor) {
                         }
                         
                         function finishUserAvatars(userData, url, name) {
-                            // Cache the avatar
                             var cacheKey = userData.userId + '_' + userData.size;
                             var cacheData = {
                                 url: url,
@@ -1407,7 +1407,6 @@ if (!globalThis.mediaDimensionExtractor) {
                             
                             state.userCache[cacheKey] = cacheData;
                             
-                            // Insert avatars for all elements of this user
                             userData.elements.forEach(function(elementInfo) {
                                 insertAvatarForProcessedItem({
                                     element: elementInfo.element,
@@ -1419,20 +1418,17 @@ if (!globalThis.mediaDimensionExtractor) {
                         }
                     });
                     
-                    // Process next batch after delay
                     setTimeout(function() {
                         processBatch(startIndex + AVATAR_CONFIG.performance.batchSize);
                     }, AVATAR_CONFIG.performance.batchDelay);
                 });
             } else {
-                // No real users, process next batch
                 setTimeout(function() {
                     processBatch(startIndex + AVATAR_CONFIG.performance.batchSize);
                 }, AVATAR_CONFIG.performance.batchDelay);
             }
         }
         
-        // Start processing first batch
         processBatch(0);
     }
 
@@ -1477,11 +1473,9 @@ if (!globalThis.mediaDimensionExtractor) {
         img.loading = 'lazy';
         img.decoding = 'async';
         
-        // Set dimensions
         img.width = size;
         img.height = size;
         
-        // Let dimension extractor handle the final dimensions
         img.dataset.needsDimensions = 'true';
         
         img.style.cssText = 
@@ -1503,14 +1497,12 @@ if (!globalThis.mediaDimensionExtractor) {
                 'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
         }
         
-        // Set src after all attributes
         img.src = avatarUrl;
         
         if (username) {
             img.dataset.username = username;
         }
         
-        // Error handling
         img.addEventListener('error', function onError() {
             if (!avatarUrl.includes('dicebear.com')) {
                 markAvatarAsBroken(avatarUrl);
@@ -1563,9 +1555,7 @@ if (!globalThis.mediaDimensionExtractor) {
         container.appendChild(avatarImg);
         nickname.parentNode.insertBefore(container, nickname);
         
-        // Let dimension extractor process this image
         if (window.mediaDimensionExtractor) {
-            // Small delay to ensure image is in DOM
             setTimeout(function() {
                 window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
             }, 10);
@@ -1591,7 +1581,6 @@ if (!globalThis.mediaDimensionExtractor) {
         
         parentLink.classList.add('avatar-replaced');
         
-        // Let dimension extractor process this image
         if (window.mediaDimensionExtractor) {
             setTimeout(function() {
                 window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
@@ -1621,7 +1610,6 @@ if (!globalThis.mediaDimensionExtractor) {
         container.appendChild(avatarImg);
         nickname.parentNode.insertBefore(container, nickname);
         
-        // Let dimension extractor process this image
         if (window.mediaDimensionExtractor) {
             setTimeout(function() {
                 window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
@@ -1642,11 +1630,198 @@ if (!globalThis.mediaDimensionExtractor) {
         span.insertBefore(avatarImg, linkElement);
         span.classList.add('has-forum-avatar');
         
-        // Let dimension extractor process this image
         if (window.mediaDimensionExtractor) {
             setTimeout(function() {
                 window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
             }, 10);
+        }
+    }
+
+    // ==============================
+    // FAST REPLY USER INFO FUNCTIONS
+    // ==============================
+
+    function extractCurrentUser() {
+        if (state.fastReply.currentUser) return state.fastReply.currentUser;
+        
+        var menuwrap = document.querySelector(FAST_REPLY_CONFIG.selectors.menuWrap);
+        if (!menuwrap) return null;
+        
+        var nickElement = menuwrap.querySelector(FAST_REPLY_CONFIG.selectors.nick);
+        if (!nickElement) return null;
+        
+        var username = nickElement.textContent.trim();
+        
+        var userId = null;
+        var userLink = menuwrap.querySelector(FAST_REPLY_CONFIG.selectors.userLink);
+        if (userLink) {
+            var match = userLink.href.match(/MID=(\d+)/);
+            if (match) userId = match[1];
+        }
+        
+        var avatarUrl = null;
+        var avatarElement = menuwrap.querySelector(FAST_REPLY_CONFIG.selectors.avatar);
+        if (avatarElement) {
+            var img = avatarElement.querySelector('img');
+            if (img && img.src) {
+                avatarUrl = img.src;
+            } else {
+                var bgImage = window.getComputedStyle(avatarElement).backgroundImage;
+                if (bgImage && bgImage !== 'none') {
+                    avatarUrl = bgImage.slice(5, -2).replace(/["']/g, '');
+                }
+            }
+        }
+        
+        state.fastReply.currentUser = {
+            username: username,
+            userId: userId,
+            avatarUrl: avatarUrl
+        };
+        
+        if (FAST_REPLY_CONFIG.debug) {
+            console.log('[FastReply] Extracted user:', state.fastReply.currentUser);
+        }
+        
+        return state.fastReply.currentUser;
+    }
+
+    function createFastReplyAvatarImg(avatarUrl, username, userId) {
+        var img = new Image();
+        img.src = avatarUrl || generateLetterAvatar(userId, username, FAST_REPLY_CONFIG.size);
+        img.alt = 'Avatar for ' + username;
+        img.width = FAST_REPLY_CONFIG.size;
+        img.height = FAST_REPLY_CONFIG.size;
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        
+        img.className = 'fast-reply-avatar';
+        img.dataset.userId = userId || '';
+        img.dataset.username = username;
+        img.dataset.needsDimensions = 'true';
+        
+        img.style.cssText = 
+            'width: ' + FAST_REPLY_CONFIG.size + 'px;' +
+            'height: ' + FAST_REPLY_CONFIG.size + 'px;' +
+            'border-radius: 50%;' +
+            'object-fit: cover;' +
+            'border: 2px solid #fff;' +
+            'box-shadow: 0 2px 4px rgba(0,0,0,0.1);' +
+            'vertical-align: middle;' +
+            'display: inline-block;';
+        
+        img.addEventListener('error', function onError() {
+            if (!this.src.includes('dicebear.com')) {
+                this.src = generateLetterAvatar(userId, username, FAST_REPLY_CONFIG.size);
+            }
+            this.removeEventListener('error', onError);
+        }, { once: true });
+        
+        return img;
+    }
+
+    function createFastReplyUserInfo(user) {
+        if (!user) return null;
+        
+        var container = document.createElement('div');
+        container.className = 'fast-reply-user-info';
+        container.style.cssText = 
+            'margin-bottom: 12px;' +
+            'padding: 10px 15px;' +
+            'background: linear-gradient(to right, #f8f9fa, #e9ecef);' +
+            'border-radius: 8px;' +
+            'display: flex;' +
+            'align-items: center;' +
+            'gap: 12px;' +
+            'border: 1px solid #dee2e6;';
+        
+        var label = document.createElement('span');
+        label.style.cssText = 
+            'color: #6c757d;' +
+            'font-size: 13px;' +
+            'margin-right: 5px;';
+        label.textContent = 'Replying as:';
+        
+        var avatarLink = document.createElement('a');
+        avatarLink.href = user.userId ? 'act=Profile&MID=' + user.userId : '#';
+        avatarLink.className = 'avatar';
+        avatarLink.rel = 'nofollow';
+        avatarLink.style.display = 'flex';
+        
+        var avatarImg = createFastReplyAvatarImg(user.avatarUrl, user.username, user.userId);
+        avatarLink.appendChild(avatarImg);
+        
+        var usernameLink = document.createElement('a');
+        usernameLink.href = avatarLink.href;
+        usernameLink.className = 'fast-reply-username';
+        usernameLink.style.cssText = 
+            'font-weight: 600;' +
+            'color: #007bff;' +
+            'text-decoration: none;' +
+            'font-size: 15px;' +
+            'margin-left: 5px;';
+        usernameLink.textContent = user.username;
+        
+        usernameLink.addEventListener('mouseenter', function() {
+            this.style.textDecoration = 'underline';
+        });
+        usernameLink.addEventListener('mouseleave', function() {
+            this.style.textDecoration = 'none';
+        });
+        
+        container.appendChild(label);
+        container.appendChild(avatarLink);
+        container.appendChild(usernameLink);
+        
+        return container;
+    }
+
+    function addFastReplyUserInfo(node) {
+        if (state.processedFastReply.has(node)) return;
+        
+        var fastReply = node && node.matches && node.matches(FAST_REPLY_CONFIG.selectors.fastReply) 
+            ? node 
+            : node && node.querySelector && node.querySelector(FAST_REPLY_CONFIG.selectors.fastReply) 
+            || document.querySelector(FAST_REPLY_CONFIG.selectors.fastReply);
+        
+        if (!fastReply) return;
+        
+        if (fastReply.querySelector('.fast-reply-user-info')) return;
+        
+        var user = extractCurrentUser();
+        if (!user) {
+            if (FAST_REPLY_CONFIG.debug) console.warn('[FastReply] Could not extract current user');
+            return;
+        }
+        
+        var userInfo = createFastReplyUserInfo(user);
+        if (!userInfo) return;
+        
+        var skinTbl = fastReply.closest('.skin_tbl') || fastReply;
+        skinTbl.insertBefore(userInfo, skinTbl.firstChild);
+        
+        state.processedFastReply.add(fastReply);
+        
+        if (FAST_REPLY_CONFIG.debug) console.log('[FastReply] Added user info for:', user.username);
+        
+        if (window.mediaDimensionExtractor) {
+            var avatarImg = userInfo.querySelector('img');
+            if (avatarImg) {
+                setTimeout(function() {
+                    window.mediaDimensionExtractor.forceReprocessElement(avatarImg);
+                }, 100);
+            }
+        }
+    }
+
+    function refreshFastReplyUser() {
+        state.fastReply.currentUser = null;
+        var fastReply = document.querySelector(FAST_REPLY_CONFIG.selectors.fastReply);
+        if (fastReply) {
+            var existing = fastReply.querySelector('.fast-reply-user-info');
+            if (existing) existing.remove();
+            state.processedFastReply.delete(fastReply);
+            addFastReplyUserInfo(fastReply);
         }
     }
 
@@ -1759,7 +1934,6 @@ if (!globalThis.mediaDimensionExtractor) {
         
         var userId = extractUserIdFromElement(element, config.extractor);
         
-        // Check if already has avatar
         if (config.type === 'post' || config.type === 'deleted_user') {
             var nickname = element.querySelector('.nick');
             if (!nickname) {
@@ -1802,7 +1976,6 @@ if (!globalThis.mediaDimensionExtractor) {
     function queueElementForProcessing(processingInfo) {
         if (!processingInfo) return;
         
-        // If still waiting for scripts, queue the element
         if (state.waitingForScripts) {
             state.pendingElements.push(processingInfo);
             return;
@@ -1818,7 +1991,6 @@ if (!globalThis.mediaDimensionExtractor) {
         
         var username = extractUsernameFromElement(element, config.type, userId);
         
-        // Check cache first for immediate insertion
         if (userId && config.type !== 'deleted_user') {
             var cached = getAvatarFromCache(userId, config.size, config.type === 'likes_list');
             if (cached) {
@@ -1831,7 +2003,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 return;
             }
         } else if (config.type === 'deleted_user') {
-            // Deleted users can be generated immediately
             var avatarUrl = generateLetterAvatar(null, username, config.size);
             insertAvatarForProcessedItem({
                 element: element,
@@ -1842,7 +2013,6 @@ if (!globalThis.mediaDimensionExtractor) {
             return;
         }
         
-        // Add to queue for batch processing
         state.processingQueue.push({
             element: element,
             userId: userId,
@@ -1851,7 +2021,6 @@ if (!globalThis.mediaDimensionExtractor) {
             isDeletedUser: config.type === 'deleted_user'
         });
         
-        // Start processing queue if not already running
         if (!state.isProcessing) {
             setTimeout(function() {
                 processAvatarQueue();
@@ -1862,15 +2031,12 @@ if (!globalThis.mediaDimensionExtractor) {
     function handleNewElement(node) {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
         
-        // Check the node itself
         var nodeInfo = shouldProcessElement(node);
         if (nodeInfo) {
             queueElementForProcessing(nodeInfo);
         }
         
-        // Check for child elements based on priority
         setTimeout(function() {
-            // Check popups first (highest priority)
             var popups = node.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
             for (var k = 0; k < popups.length; k++) {
                 var likesInfo = shouldProcessElement(popups[k]);
@@ -1879,7 +2045,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }
             
-            // Then check posts
             var posts = node.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
             for (var i = 0; i < posts.length; i++) {
                 var postInfo = shouldProcessElement(posts[i]);
@@ -1888,7 +2053,6 @@ if (!globalThis.mediaDimensionExtractor) {
                 }
             }
             
-            // Finally check default avatars
             var defaultAvatars = node.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
             for (var j = 0; j < defaultAvatars.length; j++) {
                 var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -1896,29 +2060,35 @@ if (!globalThis.mediaDimensionExtractor) {
                     queueElementForProcessing(avatarInfo);
                 }
             }
+            
+            // Also check for fast reply
+            if (node.matches && node.matches(FAST_REPLY_CONFIG.selectors.fastReply)) {
+                addFastReplyUserInfo(node);
+            } else if (node.querySelector) {
+                var fastReply = node.querySelector(FAST_REPLY_CONFIG.selectors.fastReply);
+                if (fastReply) {
+                    addFastReplyUserInfo(fastReply);
+                }
+            }
         }, 0);
     }
 
     function processExistingElements() {
-        // If waiting for scripts, store elements for later
         if (state.waitingForScripts) {
             var allElements = [];
             
-            // Popups
             var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
             for (var k = 0; k < likesLinks.length; k++) {
                 var likesInfo = shouldProcessElement(likesLinks[k]);
                 if (likesInfo) allElements.push(likesInfo);
             }
             
-            // Posts
             var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
             for (var i = 0; i < posts.length; i++) {
                 var postInfo = shouldProcessElement(posts[i]);
                 if (postInfo) allElements.push(postInfo);
             }
             
-            // Default avatars
             var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
             for (var j = 0; j < defaultAvatars.length; j++) {
                 var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -1926,12 +2096,10 @@ if (!globalThis.mediaDimensionExtractor) {
             }
             
             state.pendingElements = allElements;
-            console.log(`📦 Avatar system queued ${allElements.length} elements for after scripts ready`);
+            console.log('📦 Avatar system queued ' + allElements.length + ' elements for after scripts ready');
             return;
         }
         
-        // Normal processing when scripts are ready
-        // Process popups first (highest priority)
         var likesLinks = document.querySelectorAll('.popup.pop_points .users li a[href*="MID="]');
         for (var k = 0; k < likesLinks.length; k++) {
             var likesInfo = shouldProcessElement(likesLinks[k]);
@@ -1940,7 +2108,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        // Then process posts
         var posts = document.querySelectorAll('.summary li[class^="box_"], .post.box_visitatore');
         for (var i = 0; i < posts.length; i++) {
             var postInfo = shouldProcessElement(posts[i]);
@@ -1949,7 +2116,6 @@ if (!globalThis.mediaDimensionExtractor) {
             }
         }
         
-        // Finally process default avatars
         var defaultAvatars = document.querySelectorAll('a.avatar[href*="MID="] .default-avatar');
         for (var j = 0; j < defaultAvatars.length; j++) {
             var avatarInfo = shouldProcessElement(defaultAvatars[j]);
@@ -1957,6 +2123,9 @@ if (!globalThis.mediaDimensionExtractor) {
                 queueElementForProcessing(avatarInfo);
             }
         }
+        
+        // Process fast reply
+        addFastReplyUserInfo(document);
     }
 
     // ==============================
@@ -1967,19 +2136,30 @@ if (!globalThis.mediaDimensionExtractor) {
         if (window.forumObserver && typeof window.forumObserver.register === 'function') {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
-                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="]',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="], .fast.send .skin_tbl',
                 callback: function(node) {
-                    // If scripts aren't ready, queue the element
                     if (state.waitingForScripts) {
                         var info = shouldProcessElement(node);
                         if (info) {
                             state.pendingElements.push(info);
+                        } else if (node.matches && node.matches(FAST_REPLY_CONFIG.selectors.fastReply)) {
+                            addFastReplyUserInfo(node);
                         }
                     } else {
                         handleNewElement(node);
                     }
                 },
                 priority: 'high'
+            });
+            
+            // Also register for menuWrap changes to update fast reply
+            window.forumObserver.register({
+                id: 'fast_reply_user_update',
+                selector: FAST_REPLY_CONFIG.selectors.menuWrap,
+                priority: 'medium',
+                callback: function() {
+                    refreshFastReplyUser();
+                }
             });
         }
     }
@@ -1991,30 +2171,25 @@ if (!globalThis.mediaDimensionExtractor) {
     function initAvatarSystem() {
         if (state.isInitialized) return;
         
-        // Clear old cache entries
         clearOldCacheEntries();
         
         setupObserver();
         
-        // Wait for media scripts before processing
         waitForScripts(function() {
             console.log('🚀 Avatar system starting with media scripts ready');
             
-            // Process any elements that were queued while waiting
             if (state.pendingElements.length > 0) {
-                console.log(`📦 Processing ${state.pendingElements.length} queued elements`);
+                console.log('📦 Processing ' + state.pendingElements.length + ' queued elements');
                 state.pendingElements.forEach(function(info) {
                     processElementNow(info);
                 });
                 state.pendingElements = [];
             }
             
-            // Process existing elements
             processExistingElements();
             
             state.isInitialized = true;
             
-            // ===== ADDED: Dispatch ready event for Post Modernizer =====
             window.dispatchEvent(new CustomEvent('forum-avatars-ready', {
                 detail: { 
                     timestamp: Date.now(),
@@ -2032,11 +2207,9 @@ if (!globalThis.mediaDimensionExtractor) {
     window.ForumAvatars = {
         init: initAvatarSystem,
         
-        // ===== ADDED: Property to check initialization status =====
-        isInitialized: false, // Will be updated when initialized
+        isInitialized: false,
         
         refresh: function() {
-            // Remove all avatars
             var containers = document.querySelectorAll('.forum-avatar-container, .has-forum-avatar img.forum-likes-avatar');
             for (var i = 0; i < containers.length; i++) {
                 containers[i].remove();
@@ -2053,30 +2226,38 @@ if (!globalThis.mediaDimensionExtractor) {
                 replacedLinks[k].classList.remove('has-forum-avatar');
             }
             
-            // Reset state
             state.userCache = {};
             state.brokenAvatars.clear();
             state.processedPosts = new WeakSet();
             state.processedAvatars = new WeakSet();
             state.processedDeletedUsers = new WeakSet();
             state.processedLikesList = new WeakSet();
+            state.processedFastReply = new WeakSet();
             state.processingQueue = [];
             state.isProcessing = false;
             state.isInitialized = false;
             window.ForumAvatars.isInitialized = false;
             
-            // Clear localStorage
-            var clearedKeys = [];
             for (var l = 0; l < localStorage.length; l++) {
                 var key = localStorage.key(l);
                 if (key && (key.startsWith(AVATAR_CONFIG.cache.prefix) || 
                             key.startsWith(AVATAR_CONFIG.cache.deletedPrefix))) {
                     localStorage.removeItem(key);
-                    clearedKeys.push(key);
                 }
             }
             
             initAvatarSystem();
+        },
+        
+        // Fast reply specific methods
+        refreshFastReply: refreshFastReplyUser,
+        
+        getCurrentUser: function() {
+            return extractCurrentUser();
+        },
+        
+        setFastReplyDebug: function(enabled) {
+            FAST_REPLY_CONFIG.debug = enabled;
         },
         
         clearCache: function() {
@@ -2158,11 +2339,13 @@ if (!globalThis.mediaDimensionExtractor) {
             }
             
             var likesAvatars = document.querySelectorAll('.forum-likes-avatar').length;
+            var fastReplyExists = !!document.querySelector('.fast-reply-user-info');
             
             return {
                 postsTotal: posts.length,
                 postsWithAvatars: withAvatars,
                 likesAvatars: likesAvatars,
+                fastReplyPresent: fastReplyExists,
                 memoryCache: Object.keys(state.userCache).length,
                 localStorageCache: cacheCount,
                 realAvatars: realCount,
@@ -2185,14 +2368,12 @@ if (!globalThis.mediaDimensionExtractor) {
             
             for (var i = 0; i < posts.length; i++) {
                 var nickname = posts[i].querySelector('.nick a, .nick');
-                
                 var extracted = extractUsernameFromElement(posts[i], 'post', userId);
             }
             
             fetch('/api.php?mid=' + userId)
                 .then(r => r.json())
-                .then(data => {
-                })
+                .then(data => {})
                 .catch(err => {});
         },
         
@@ -2201,19 +2382,15 @@ if (!globalThis.mediaDimensionExtractor) {
             
             for (var i = 0; i < likesLinks.length; i++) {
                 var link = likesLinks[i];
-                
                 var userId = extractUserIdFromElement(link, 'likes_href');
-                
                 var username = extractUsernameFromElement(link, 'likes_list', userId);
             }
         },
         
-        // NEW: Check if scripts are ready
         areMediaScriptsReady: function() {
             return checkScriptsReady();
         },
         
-        // NEW: Force reprocess with dimension extractor
         reprocessWithDimensionExtractor: function(element) {
             if (window.mediaDimensionExtractor && element) {
                 window.mediaDimensionExtractor.forceReprocessElement(element);
@@ -2221,7 +2398,6 @@ if (!globalThis.mediaDimensionExtractor) {
         }
     };
 
-    // Initialize the isInitialized property
     Object.defineProperty(window.ForumAvatars, 'isInitialized', {
         get: function() { return state.isInitialized; },
         set: function(value) { state.isInitialized = value; },
@@ -2232,7 +2408,6 @@ if (!globalThis.mediaDimensionExtractor) {
     // AUTO-INITIALIZE
     // ==============================
 
-    // Initialize immediately since script is loaded with defer
     setTimeout(initAvatarSystem, 10);
 
 })();
