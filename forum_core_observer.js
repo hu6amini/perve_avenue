@@ -8,6 +8,8 @@ class ForumCoreObserver {
     #debounceTimeouts = new Map();
     #processedNodes = new WeakSet();
     #cleanupIntervalId = null;
+    #periodicRescanId = null;
+    #elementMetadata = new WeakMap(); // Store metadata about processed elements
     
     #callbacks = new Map();
     #debouncedCallbacks = new Map();
@@ -25,19 +27,26 @@ class ForumCoreObserver {
             subtree: true,
             characterData: true,
             attributes: true,
-            attributeFilter: ['class', 'id', 'style', 'data-*']
+            attributeFilter: ['class', 'id', 'style', 'data-*', 'src', 'href']
         },
         performance: {
             maxProcessingTime: 16,
             mutationBatchSize: 50,
+            largeBatchThreshold: 100,
             debounceThreshold: 100,
             idleCallbackTimeout: 2000,
-            searchPageBatchSize: 10
+            searchPageBatchSize: 10,
+            periodicRescanInterval: 3000, // 3 seconds
+            maxConcurrentProcessing: 4
         },
         memory: {
             maxProcessedNodes: 10000,
             cleanupInterval: 30000,
             nodeTTL: 300000
+        },
+        attributes: {
+            important: ['class', 'data-content', 'data-optimized', 'src', 'style'],
+            tracking: ['data-processed', 'data-last-attrs']
         }
     };
     
@@ -45,18 +54,35 @@ class ForumCoreObserver {
         totalMutations: 0,
         processedMutations: 0,
         averageProcessingTime: 0,
-        lastMutationTime: 0
+        lastMutationTime: 0,
+        shadowDomDetected: 0,
+        cssomChanges: 0
     };
     
     constructor() {
         this.#init();
         this.#setupThemeListener();
         this.#setupScriptCoordination();
+        this.#patchDOMMethods();
+        this.#setupPeriodicRescan();
+        this.#observeShadowDOM();
+        this.#monitorCSSOM();
     }
     
     #init() {
         this.#observer = new MutationObserver(this.#handleMutations.bind(this));
-        this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
+        this.#observer.observe(document.documentElement, {
+            ...ForumCoreObserver.#CONFIG.observer,
+            subtree: true,
+            childList: true
+        });
+        
+        // Also observe the document itself
+        this.#observer.observe(document, {
+            childList: true,
+            subtree: true
+        });
+        
         this.#scanExistingContent();
         this.#setupCleanup();
         
@@ -65,206 +91,372 @@ class ForumCoreObserver {
             capture: true 
         });
         
-        console.log('🔍 ForumCoreObserver initialized (GLOBAL - with script coordination)');
+        // Capture any synchronous scripts that might have run
+        this.#captureInitialDOM();
+        
+        console.log('🔍 ForumCoreObserver initialized (BULLETPROOF MODE)');
     }
     
-    #setupScriptCoordination() {
-        // Listen for Weserv ready event
-        window.addEventListener('weserv-ready', (e) => {
-            this.#scriptsReady.weserv = true;
-            console.log('🎯 Weserv ready event received', e.detail || '');
-            
-            // Trigger dimension extractor if it exists
-            if (globalThis.mediaDimensionExtractor) {
-                queueMicrotask(() => {
-                    globalThis.mediaDimensionExtractor.refresh();
+    // ===== SHADOW DOM DETECTION =====
+    
+    #observeShadowDOM() {
+        // Watch for shadow DOM creation
+        const observeShadow = (element) => {
+            if (element.shadowRoot && !element._shadowObserved) {
+                element._shadowObserved = true;
+                this.#mutationMetrics.shadowDomDetected++;
+                
+                // Observe the shadow root
+                this.#observer.observe(element.shadowRoot, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    characterData: true
                 });
+                
+                // Recursively process shadow DOM content
+                this.#collectAllElements(element.shadowRoot, new Set());
+            }
+        };
+        
+        // Patch attachShadow to detect new shadow roots
+        const originalAttachShadow = Element.prototype.attachShadow;
+        Element.prototype.attachShadow = function(init) {
+            const shadowRoot = originalAttachShadow.call(this, init);
+            setTimeout(() => observeShadow(this), 0);
+            return shadowRoot;
+        };
+        
+        // Check existing elements for shadow roots
+        document.querySelectorAll('*').forEach(observeShadow);
+    }
+    
+    // ===== CSSOM MONITORING =====
+    
+    #monitorCSSOM() {
+        // Monitor style sheet changes
+        const originalInsertRule = CSSStyleSheet.prototype.insertRule;
+        CSSStyleSheet.prototype.insertRule = function(rule, index) {
+            const result = originalInsertRule.call(this, rule, index);
+            this.#mutationMetrics.cssomChanges++;
+            
+            // Trigger a rescan of elements that might be affected
+            requestIdleCallback(() => {
+                this.#rescanAffectedElements(rule);
+            }, { timeout: 1000 });
+            
+            return result;
+        };
+        
+        const originalDeleteRule = CSSStyleSheet.prototype.deleteRule;
+        CSSStyleSheet.prototype.deleteRule = function(index) {
+            const result = originalDeleteRule.call(this, index);
+            this.#mutationMetrics.cssomChanges++;
+            return result;
+        };
+        
+        // Monitor adoptedStyleSheets
+        const originalAdoptedStyleSheets = Object.getOwnPropertyDescriptor(Document.prototype, 'adoptedStyleSheets');
+        if (originalAdoptedStyleSheets) {
+            Object.defineProperty(document, 'adoptedStyleSheets', {
+                set: function(sheets) {
+                    originalAdoptedStyleSheets.set.call(this, sheets);
+                    this.#mutationMetrics.cssomChanges++;
+                    this.#rescanAllElements();
+                }.bind(this),
+                get: originalAdoptedStyleSheets.get
+            });
+        }
+    }
+    
+    #rescanAffectedElements(rule) {
+        // Parse rule to find affected selectors (simplified)
+        const selectorMatch = rule.match(/^([^{]+)\{/);
+        if (selectorMatch) {
+            const selector = selectorMatch[1].trim();
+            try {
+                document.querySelectorAll(selector).forEach(el => {
+                    this.#processedNodes.delete(el);
+                    this.#processNode(el);
+                });
+            } catch (e) {
+                // Invalid selector, ignore
+            }
+        }
+    }
+    
+    #rescanAllElements() {
+        requestIdleCallback(() => {
+            document.querySelectorAll('*').forEach(el => {
+                if (!this.#processedNodes.has(el)) {
+                    this.#processNode(el);
+                }
+            });
+        }, { timeout: 2000 });
+    }
+    
+    // ===== DOM METHOD PATCHING =====
+    
+    #patchDOMMethods() {
+        // Patch insertAdjacentHTML
+        const originalInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
+        Element.prototype.insertAdjacentHTML = function(position, text) {
+            const result = originalInsertAdjacentHTML.call(this, position, text);
+            
+            // Determine which nodes were added
+            let addedNodes = [];
+            switch(position) {
+                case 'beforebegin':
+                    if (this.previousSibling) addedNodes = [this.previousSibling];
+                    break;
+                case 'afterbegin':
+                    if (this.firstChild) addedNodes = [this.firstChild];
+                    break;
+                case 'beforeend':
+                    if (this.lastChild) addedNodes = [this.lastChild];
+                    break;
+                case 'afterend':
+                    if (this.nextSibling) addedNodes = [this.nextSibling];
+                    break;
             }
             
-            // Check if both are ready
-            this.#checkAllScriptsReady();
-        }, { once: true, passive: true });
-        
-        // Listen for Dimension Extractor ready
-        window.addEventListener('dimension-extractor-ready', (e) => {
-            this.#scriptsReady.dimensionExtractor = true;
-            console.log('📐 Dimension extractor ready', e.detail || '');
-            
-            // Check if both are ready
-            this.#checkAllScriptsReady();
-        }, { once: true, passive: true });
-        
-        // Fallback: Check after load
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                if (!this.#scriptsReady.weserv && document.querySelector('img[data-optimized="true"]')) {
-                    this.#scriptsReady.weserv = true;
-                    window.dispatchEvent(new CustomEvent('weserv-ready', { 
-                        detail: { source: 'fallback' } 
-                    }));
+            // Process added nodes
+            addedNodes.forEach(node => {
+                if (node && node.nodeType === Node.ELEMENT_NODE) {
+                    this.#collectAllElements(node, new Set()).forEach(el => {
+                        if (!this.#processedNodes.has(el)) {
+                            this.#mutationQueue.push({
+                                type: 'childList',
+                                addedNodes: [el],
+                                target: this
+                            });
+                        }
+                    });
                 }
-            }, 500);
-        }, { once: true, passive: true });
+            });
+            
+            // Trigger queue processing
+            if (!this.#isProcessing) {
+                this.#processMutationQueue();
+            }
+            
+            return result;
+        }.bind(this);
+        
+        // Patch innerHTML to detect replacements
+        const originalInnerHTMLDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        if (originalInnerHTMLDescriptor && originalInnerHTMLDescriptor.set) {
+            Object.defineProperty(Element.prototype, 'innerHTML', {
+                set: function(value) {
+                    const oldChildren = Array.from(this.children);
+                    originalInnerHTMLDescriptor.set.call(this, value);
+                    
+                    // Check what changed
+                    const newChildren = Array.from(this.children);
+                    
+                    // Removed elements
+                    oldChildren.forEach(child => {
+                        if (!newChildren.includes(child)) {
+                            this.#processedNodes.delete(child);
+                        }
+                    });
+                    
+                    // Added elements
+                    newChildren.forEach(child => {
+                        if (!oldChildren.includes(child)) {
+                            this.#collectAllElements(child, new Set()).forEach(el => {
+                                this.#processedNodes.delete(el);
+                            });
+                        }
+                    });
+                    
+                    // Trigger reprocessing
+                    setTimeout(() => {
+                        newChildren.forEach(child => {
+                            this.#processNode(child);
+                        });
+                    }, 0);
+                }.bind(this),
+                get: originalInnerHTMLDescriptor.get
+            });
+        }
+        
+        // Patch document.write
+        const originalWrite = document.write;
+        document.write = function() {
+            const result = originalWrite.apply(this, arguments);
+            setTimeout(() => this.#scanExistingContent(), 0);
+            return result;
+        }.bind(this);
+        
+        // Patch createElement to track dynamically created elements
+        const originalCreateElement = document.createElement;
+        document.createElement = function(tagName, options) {
+            const element = originalCreateElement.call(this, tagName, options);
+            
+            // Tag for tracking
+            element._dynamicallyCreated = true;
+            
+            return element;
+        };
     }
     
-    #checkAllScriptsReady() {
-        if (this.#scriptsReady.weserv && this.#scriptsReady.dimensionExtractor) {
-            console.log('✅ All media scripts ready and coordinated');
+    // ===== INITIAL DOM CAPTURE =====
+    
+    #captureInitialDOM() {
+        // Capture any elements that might have been added before observer started
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(el => {
+            this.#elementMetadata.set(el, {
+                firstSeen: performance.now(),
+                attributes: this.#captureAttributes(el)
+            });
+        });
+    }
+    
+    #captureAttributes(element) {
+        const attrs = {};
+        ForumCoreObserver.#CONFIG.attributes.important.forEach(attr => {
+            if (element.hasAttribute(attr)) {
+                attrs[attr] = element.getAttribute(attr);
+            }
+        });
+        return attrs;
+    }
+    
+    // ===== PERIODIC RESCAN =====
+    
+    #setupPeriodicRescan() {
+        this.#periodicRescanId = setInterval(() => {
+            if (document.hidden) return; // Skip if tab is hidden
             
-            // Process any images that might have been missed
-            if (globalThis.mediaDimensionExtractor) {
-                requestIdleCallback(() => {
-                    const unprocessed = document.querySelectorAll('img:not([width])');
-                    if (unprocessed.length) {
-                        console.log(`🔄 Processing ${unprocessed.length} missed images`);
-                        unprocessed.forEach(img => {
-                            globalThis.mediaDimensionExtractor.forceReprocessElement(img);
+            requestIdleCallback(() => {
+                const allElements = document.querySelectorAll('*');
+                let rescanned = 0;
+                
+                for (let el of allElements) {
+                    if (!this.#processedNodes.has(el)) {
+                        this.#processNode(el);
+                        rescanned++;
+                    } else {
+                        // Check for important attribute changes
+                        const metadata = this.#elementMetadata.get(el);
+                        if (metadata) {
+                            const currentAttrs = this.#captureAttributes(el);
+                            let changed = false;
+                            
+                            for (let attr in currentAttrs) {
+                                if (metadata.attributes[attr] !== currentAttrs[attr]) {
+                                    changed = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (changed) {
+                                this.#processedNodes.delete(el);
+                                this.#processNode(el);
+                                rescanned++;
+                                
+                                // Update metadata
+                                metadata.attributes = currentAttrs;
+                                metadata.lastChange = performance.now();
+                            }
+                        }
+                    }
+                    
+                    // Check for shadow DOM
+                    if (el.shadowRoot && !el._shadowProcessed) {
+                        el._shadowProcessed = true;
+                        this.#collectAllElements(el.shadowRoot, new Set()).forEach(shadowEl => {
+                            this.#processNode(shadowEl);
                         });
                     }
-                }, { timeout: 1000 });
-            }
-        }
-    }
-    
-    #detectPageState() {
-        var pathname = window.location.pathname;
-        var className = document.body.className;
-        var theme = document.documentElement.dataset?.theme;
-        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        
-        var selectors = {
-            forum: '.board, .big_list',
-            topic: '.modern-topic-title, .post',
-            blog: '#blog, .article',
-            profile: '.modern-profile, .profile',
-            search: '#search.posts, body#search',
-            modernized: '.post-modernized'
-        };
-        
-        var pageChecks = {};
-        for (var key in selectors) {
-            if (selectors.hasOwnProperty(key)) {
-                pageChecks[key] = document.querySelector(selectors[key]) || null;
-            }
-        }
-        
-        return {
-            isForum: pathname.includes('/f/') || pageChecks.forum,
-            isTopic: pathname.includes('/t/') || pageChecks.topic,
-            isBlog: pathname.includes('/b/') || pageChecks.blog,
-            isProfile: pathname.includes('/user/') || pageChecks.profile,
-            isSearch: pathname.includes('/search/') || pageChecks.search,
-            hasModernizedPosts: !!pageChecks.modernized,
-            hasModernizedQuotes: !!document.querySelector('.modern-quote'),
-            hasModernizedProfile: !!document.querySelector('.modern-profile'),
-            hasModernizedNavigation: !!document.querySelector('.modern-nav'),
-            currentTheme: theme || (prefersDark ? 'dark' : 'light'),
-            themeMode: theme ? 'manual' : 'auto',
-            isDarkMode: theme === 'dark' || (!theme && prefersDark),
-            isLightMode: theme === 'light' || (!theme && !prefersDark),
-            isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
-            isMobile: window.matchMedia('(max-width: 768px)').matches,
-            isSendPage: document.body.id === 'send' || className.includes('send'),
-            hasPreview: !!document.querySelector('#preview, #ajaxObject, .preview, .Item.preview')
-        };
-    }
-    
-    #setupThemeListener() {
-        window.addEventListener('themechange', (e) => {
-            const { theme } = e.detail;
-            console.log(`🎨 Theme change detected: ${theme}`);
-            this.#pageState = this.#detectPageState();
-            this.#notifyThemeDependentCallbacks(theme);
-            this.#rescanThemeSensitiveElements(theme);
-            this.#updateThemeAttributes(theme);
-        }, { passive: true });
-        
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-            if (!localStorage.getItem('forum-theme')) {
-                const newTheme = e.matches ? 'dark' : 'light';
-                queueMicrotask(() => {
-                    this.#pageState = this.#detectPageState();
-                    this.#rescanThemeSensitiveElements('auto');
-                });
-            }
-        });
-    }
-    
-    #notifyThemeDependentCallbacks(newTheme) {
-        const themeDependentCallbacks = Array.from(this.#callbacks.values()).filter(callback => {
-            return callback.dependencies && (
-                callback.dependencies.includes('theme') ||
-                callback.dependencies.includes('theme-change') ||
-                callback.dependencies.includes('data-theme')
-            );
-        });
-        
-        if (themeDependentCallbacks.length) {
-            themeDependentCallbacks.forEach(callback => {
-                try {
-                    callback.fn(document.documentElement, newTheme);
-                } catch (error) {
-                    console.error(`Theme callback ${callback.id} failed:`, error);
                 }
-            });
-        }
+                
+                if (rescanned > 0) {
+                    console.log(`🔄 Periodic rescan found ${rescanned} new/changed elements`);
+                }
+            }, { timeout: 1000 });
+        }, ForumCoreObserver.#CONFIG.performance.periodicRescanInterval);
     }
     
-    #rescanThemeSensitiveElements(theme) {
-        const themeSensitiveSelectors = [
-            '.modern-quote', '.modern-spoiler', '.modern-code', '.post',
-            '.post-modernized', '.st-emoji-container', '.points_up, .points_down',
-            '.btn', '.menu-dropdown', '.cs-fui.st-emoji-pop', '.modern-menu-wrap',
-            '.search-post', '.post-header', '.post-content', '.post-footer',
-            '.modern-topic-title', '.modern-nav', '.modern-breadcrumb'
-        ];
-        
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => {
-                themeSensitiveSelectors.forEach(selector => {
-                    try {
-                        const elements = document.querySelectorAll(selector);
-                        elements.forEach(element => {
-                            this.#processedNodes.delete(element);
-                            this.#processNode(element);
-                        });
-                    } catch (e) {}
-                });
-            }, { timeout: 500 });
-        } else {
-            setTimeout(() => {
-                themeSensitiveSelectors.forEach(selector => {
-                    try {
-                        const elements = document.querySelectorAll(selector);
-                        elements.forEach(element => {
-                            this.#processedNodes.delete(element);
-                            this.#processNode(element);
-                        });
-                    } catch (e) {}
-                });
-            }, 100);
-        }
-    }
+    // ===== ENHANCED MUTATION HANDLING =====
     
-    #updateThemeAttributes(theme) {
-        const elementsToUpdate = [
-            '.cs-fui.st-emoji-pop', '.st-emoji-container', 
-            '.post-modernized', '.post.preview'
-        ];
+    #collectAllElements(root, collection, includeShadow = true) {
+        if (!root || root.nodeType !== Node.ELEMENT_NODE) return collection;
         
-        elementsToUpdate.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => {
-                el.setAttribute('data-theme', theme);
-            });
-        });
+        collection.add(root);
+        
+        // Check for shadow DOM
+        if (includeShadow && root.shadowRoot) {
+            this.#collectAllElements(root.shadowRoot, collection, includeShadow);
+        }
+        
+        // Handle document fragments
+        if (root.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+            const children = root.childNodes;
+            for (let i = 0; i < children.length; i++) {
+                if (children[i].nodeType === Node.ELEMENT_NODE) {
+                    this.#collectAllElements(children[i], collection, includeShadow);
+                }
+            }
+            return collection;
+        }
+        
+        // Regular children
+        const children = root.children;
+        for (let i = 0; i < children.length; i++) {
+            this.#collectAllElements(children[i], collection, includeShadow);
+        }
+        
+        return collection;
     }
     
     #handleMutations(mutations) {
         this.#mutationMetrics.totalMutations += mutations.length;
         this.#mutationMetrics.lastMutationTime = Date.now();
         
+        // Check for large batches
+        if (mutations.length > ForumCoreObserver.#CONFIG.performance.largeBatchThreshold) {
+            this.#handleLargeMutationBatch(mutations);
+            return;
+        }
+        
         for (var i = 0; i < mutations.length; i++) {
             var mutation = mutations[i];
+            
+            // Handle document fragments specially
+            if (mutation.type === 'childList') {
+                for (var j = 0; j < mutation.addedNodes.length; j++) {
+                    var node = mutation.addedNodes[j];
+                    
+                    if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                        // Flatten fragment and process all children
+                        const elements = this.#collectAllElements(node, new Set());
+                        elements.forEach(el => {
+                            this.#mutationQueue.push({
+                                type: 'childList',
+                                addedNodes: [el],
+                                target: mutation.target
+                            });
+                        });
+                        continue;
+                    }
+                    
+                    if (node.nodeType === Node.ELEMENT_NODE && node.shadowRoot) {
+                        // Process shadow DOM content
+                        const shadowElements = this.#collectAllElements(node.shadowRoot, new Set());
+                        shadowElements.forEach(el => {
+                            this.#mutationQueue.push({
+                                type: 'childList',
+                                addedNodes: [el],
+                                target: mutation.target
+                            });
+                        });
+                    }
+                }
+            }
+            
             if (this.#shouldProcessMutation(mutation)) {
                 this.#mutationQueue.push(mutation);
             }
@@ -275,8 +467,51 @@ class ForumCoreObserver {
         }
     }
     
+    #handleLargeMutationBatch(mutations) {
+        console.log(`📦 Large mutation batch detected (${mutations.length} mutations), processing with idle callback`);
+        
+        requestIdleCallback(() => {
+            // Combine all added nodes
+            const allNodes = new Set();
+            
+            mutations.forEach(mutation => {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            allNodes.add(node);
+                        } else if (node.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+                            this.#collectAllElements(node, allNodes);
+                        }
+                    });
+                } else if (mutation.type === 'attributes') {
+                    allNodes.add(mutation.target);
+                }
+            });
+            
+            // Process in chunks
+            const nodes = Array.from(allNodes);
+            const chunkSize = 50;
+            
+            for (let i = 0; i < nodes.length; i += chunkSize) {
+                setTimeout(() => {
+                    const chunk = nodes.slice(i, i + chunkSize);
+                    chunk.forEach(node => {
+                        if (!this.#processedNodes.has(node)) {
+                            this.#processNode(node);
+                        }
+                    });
+                }, i * 2); // Stagger chunks
+            }
+        }, { timeout: 3000 });
+    }
+    
     #shouldProcessMutation(mutation) {
         var target = mutation.target;
+        
+        // Always process shadow DOM mutations
+        if (target.getRootNode() !== document) {
+            return true;
+        }
         
         if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
             return false;
@@ -284,24 +519,28 @@ class ForumCoreObserver {
         
         if (target.nodeType === Node.ELEMENT_NODE) {
             var style = window.getComputedStyle(target);
-            if (style.display === 'none' || style.visibility === 'hidden') {
+            if (style.display === 'none' && style.visibility === 'hidden') {
+                // Still process if it has important attributes
+                if (target.hasAttribute('data-optimized') || 
+                    target.hasAttribute('data-processed')) {
+                    return true;
+                }
                 return false;
             }
         }
         
-        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-            return true;
+        // Always process attribute changes for important attributes
+        if (mutation.type === 'attributes') {
+            const importantAttrs = ForumCoreObserver.#CONFIG.attributes.important;
+            if (importantAttrs.includes(mutation.attributeName)) {
+                return true;
+            }
         }
         
+        // Process character data in important contexts
         if (mutation.type === 'characterData') {
             var parent = target.parentElement;
             return parent ? this.#shouldObserveTextChanges(parent) : false;
-        }
-        
-        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-            var oldValue = mutation.oldValue || '';
-            var newValue = target.getAttribute('style') || '';
-            return this.#styleChangeAffectsDOM(oldValue, newValue);
         }
         
         return true;
@@ -462,19 +701,18 @@ class ForumCoreObserver {
         }
     }
     
-    #collectAllElements(root, collection) {
-        if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
-        
-        collection.add(root);
-        
-        var children = root.children;
-        for (var i = 0; i < children.length; i++) {
-            this.#collectAllElements(children[i], collection);
-        }
-    }
+    // ===== ENHANCED NODE PROCESSING =====
     
     async #processNode(node) {
         if (!node || this.#processedNodes.has(node)) return;
+        
+        // Store metadata
+        if (!this.#elementMetadata.has(node)) {
+            this.#elementMetadata.set(node, {
+                firstSeen: performance.now(),
+                attributes: this.#captureAttributes(node)
+            });
+        }
         
         var matchingCallbacks = this.#getMatchingCallbacks(node);
         if (!matchingCallbacks.length) return;
@@ -507,6 +745,7 @@ class ForumCoreObserver {
         }
         
         this.#processedNodes.add(node);
+        node.setAttribute('data-processed', 'true');
     }
     
     #getMatchingCallbacks(node) {
@@ -517,12 +756,19 @@ class ForumCoreObserver {
             var callback = callbackValues[i];
             
             if (callback.selector) {
-                if (!node.matches(callback.selector) && !node.querySelector(callback.selector)) {
-                    continue;
+                try {
+                    // Check if node matches selector or contains matching elements
+                    if (node.matches && node.matches(callback.selector)) {
+                        matching.push(callback);
+                    } else if (node.querySelector && node.querySelector(callback.selector)) {
+                        matching.push(callback);
+                    }
+                } catch (e) {
+                    // Invalid selector, skip
                 }
+            } else {
+                matching.push(callback);
             }
-            
-            matching.push(callback);
         }
         
         return matching;
@@ -612,7 +858,7 @@ class ForumCoreObserver {
         }
         
         this.#initialScanComplete = true;
-        console.log('✅ Initial content scan complete (GLOBAL mode)');
+        console.log('✅ Initial content scan complete (BULLETPROOF MODE)');
     }
     
     #setupCleanup() {
@@ -661,6 +907,201 @@ class ForumCoreObserver {
         }
         
         this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
+    }
+    
+    // ===== SCRIPT COORDINATION METHODS =====
+    
+    #setupScriptCoordination() {
+        // Listen for Weserv ready event
+        window.addEventListener('weserv-ready', (e) => {
+            this.#scriptsReady.weserv = true;
+            console.log('🎯 Weserv ready event received', e.detail || '');
+            
+            // Trigger dimension extractor if it exists
+            if (globalThis.mediaDimensionExtractor) {
+                queueMicrotask(() => {
+                    globalThis.mediaDimensionExtractor.refresh();
+                });
+            }
+            
+            // Check if both are ready
+            this.#checkAllScriptsReady();
+        }, { once: true, passive: true });
+        
+        // Listen for Dimension Extractor ready
+        window.addEventListener('dimension-extractor-ready', (e) => {
+            this.#scriptsReady.dimensionExtractor = true;
+            console.log('📐 Dimension extractor ready', e.detail || '');
+            
+            // Check if both are ready
+            this.#checkAllScriptsReady();
+        }, { once: true, passive: true });
+        
+        // Fallback: Check after load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (!this.#scriptsReady.weserv && document.querySelector('img[data-optimized="true"]')) {
+                    this.#scriptsReady.weserv = true;
+                    window.dispatchEvent(new CustomEvent('weserv-ready', { 
+                        detail: { source: 'fallback' } 
+                    }));
+                }
+            }, 500);
+        }, { once: true, passive: true });
+    }
+    
+    #checkAllScriptsReady() {
+        if (this.#scriptsReady.weserv && this.#scriptsReady.dimensionExtractor) {
+            console.log('✅ All media scripts ready and coordinated');
+            
+            // Process any images that might have been missed
+            if (globalThis.mediaDimensionExtractor) {
+                requestIdleCallback(() => {
+                    const unprocessed = document.querySelectorAll('img:not([width])');
+                    if (unprocessed.length) {
+                        console.log(`🔄 Processing ${unprocessed.length} missed images`);
+                        unprocessed.forEach(img => {
+                            globalThis.mediaDimensionExtractor.forceReprocessElement(img);
+                        });
+                    }
+                }, { timeout: 1000 });
+            }
+        }
+    }
+    
+    // ===== THEME METHODS =====
+    
+    #detectPageState() {
+        var pathname = window.location.pathname;
+        var className = document.body.className;
+        var theme = document.documentElement.dataset?.theme;
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        var selectors = {
+            forum: '.board, .big_list',
+            topic: '.modern-topic-title, .post',
+            blog: '#blog, .article',
+            profile: '.modern-profile, .profile',
+            search: '#search.posts, body#search',
+            modernized: '.post-modernized'
+        };
+        
+        var pageChecks = {};
+        for (var key in selectors) {
+            if (selectors.hasOwnProperty(key)) {
+                pageChecks[key] = document.querySelector(selectors[key]) || null;
+            }
+        }
+        
+        return {
+            isForum: pathname.includes('/f/') || pageChecks.forum,
+            isTopic: pathname.includes('/t/') || pageChecks.topic,
+            isBlog: pathname.includes('/b/') || pageChecks.blog,
+            isProfile: pathname.includes('/user/') || pageChecks.profile,
+            isSearch: pathname.includes('/search/') || pageChecks.search,
+            hasModernizedPosts: !!pageChecks.modernized,
+            hasModernizedQuotes: !!document.querySelector('.modern-quote'),
+            hasModernizedProfile: !!document.querySelector('.modern-profile'),
+            hasModernizedNavigation: !!document.querySelector('.modern-nav'),
+            currentTheme: theme || (prefersDark ? 'dark' : 'light'),
+            themeMode: theme ? 'manual' : 'auto',
+            isDarkMode: theme === 'dark' || (!theme && prefersDark),
+            isLightMode: theme === 'light' || (!theme && !prefersDark),
+            isLoggedIn: !!document.querySelector('.menuwrap .avatar'),
+            isMobile: window.matchMedia('(max-width: 768px)').matches,
+            isSendPage: document.body.id === 'send' || className.includes('send'),
+            hasPreview: !!document.querySelector('#preview, #ajaxObject, .preview, .Item.preview')
+        };
+    }
+    
+    #setupThemeListener() {
+        window.addEventListener('themechange', (e) => {
+            const { theme } = e.detail;
+            console.log(`🎨 Theme change detected: ${theme}`);
+            this.#pageState = this.#detectPageState();
+            this.#notifyThemeDependentCallbacks(theme);
+            this.#rescanThemeSensitiveElements(theme);
+            this.#updateThemeAttributes(theme);
+        }, { passive: true });
+        
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (!localStorage.getItem('forum-theme')) {
+                const newTheme = e.matches ? 'dark' : 'light';
+                queueMicrotask(() => {
+                    this.#pageState = this.#detectPageState();
+                    this.#rescanThemeSensitiveElements('auto');
+                });
+            }
+        });
+    }
+    
+    #notifyThemeDependentCallbacks(newTheme) {
+        const themeDependentCallbacks = Array.from(this.#callbacks.values()).filter(callback => {
+            return callback.dependencies && (
+                callback.dependencies.includes('theme') ||
+                callback.dependencies.includes('theme-change') ||
+                callback.dependencies.includes('data-theme')
+            );
+        });
+        
+        if (themeDependentCallbacks.length) {
+            themeDependentCallbacks.forEach(callback => {
+                try {
+                    callback.fn(document.documentElement, newTheme);
+                } catch (error) {
+                    console.error(`Theme callback ${callback.id} failed:`, error);
+                }
+            });
+        }
+    }
+    
+    #rescanThemeSensitiveElements(theme) {
+        const themeSensitiveSelectors = [
+            '.modern-quote', '.modern-spoiler', '.modern-code', '.post',
+            '.post-modernized', '.st-emoji-container', '.points_up, .points_down',
+            '.btn', '.menu-dropdown', '.cs-fui.st-emoji-pop', '.modern-menu-wrap',
+            '.search-post', '.post-header', '.post-content', '.post-footer',
+            '.modern-topic-title', '.modern-nav', '.modern-breadcrumb'
+        ];
+        
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => {
+                themeSensitiveSelectors.forEach(selector => {
+                    try {
+                        const elements = document.querySelectorAll(selector);
+                        elements.forEach(element => {
+                            this.#processedNodes.delete(element);
+                            this.#processNode(element);
+                        });
+                    } catch (e) {}
+                });
+            }, { timeout: 500 });
+        } else {
+            setTimeout(() => {
+                themeSensitiveSelectors.forEach(selector => {
+                    try {
+                        const elements = document.querySelectorAll(selector);
+                        elements.forEach(element => {
+                            this.#processedNodes.delete(element);
+                            this.#processNode(element);
+                        });
+                    } catch (e) {}
+                });
+            }, 100);
+        }
+    }
+    
+    #updateThemeAttributes(theme) {
+        const elementsToUpdate = [
+            '.cs-fui.st-emoji-pop', '.st-emoji-container', 
+            '.post-modernized', '.post.preview'
+        ];
+        
+        elementsToUpdate.forEach(selector => {
+            document.querySelectorAll(selector).forEach(el => {
+                el.setAttribute('data-theme', theme);
+            });
+        });
     }
     
     // ===== PUBLIC API =====
@@ -772,7 +1213,7 @@ class ForumCoreObserver {
     }
     
     getStats() {
-        return {
+        const baseStats = {
             totalMutations: this.#mutationMetrics.totalMutations,
             processedMutations: this.#mutationMetrics.processedMutations,
             averageProcessingTime: this.#mutationMetrics.averageProcessingTime,
@@ -791,7 +1232,53 @@ class ForumCoreObserver {
                 c.dependencies && c.dependencies.includes('theme')
             ).length
         };
+        
+        // Add enhanced metrics
+        return {
+            ...baseStats,
+            shadowDomDetected: this.#mutationMetrics.shadowDomDetected,
+            cssomChanges: this.#mutationMetrics.cssomChanges,
+            metadataTracked: this.#elementMetadata.size,
+            coverage: this.#calculateCoverage()
+        };
     }
+    
+    #calculateCoverage() {
+        const totalElements = document.querySelectorAll('*').length;
+        const processedElements = this.#processedNodes.size;
+        
+        return {
+            total: totalElements,
+            processed: processedElements,
+            percentage: totalElements ? ((processedElements / totalElements) * 100).toFixed(2) + '%' : '0%'
+        };
+    }
+    
+    // ===== NEW PUBLIC METHODS =====
+    
+    forceReprocessElement(element) {
+        if (!element) return;
+        
+        this.#processedNodes.delete(element);
+        this.#elementMetadata.delete(element);
+        this.#processNode(element);
+    }
+    
+    forceReprocessSelector(selector) {
+        document.querySelectorAll(selector).forEach(el => {
+            this.forceReprocessElement(el);
+        });
+    }
+    
+    getElementMetadata(element) {
+        return this.#elementMetadata.get(element);
+    }
+    
+    isElementProcessed(element) {
+        return this.#processedNodes.has(element);
+    }
+    
+    // ===== DESTROY METHOD (enhanced) =====
     
     destroy() {
         this.#pause();
@@ -800,9 +1287,14 @@ class ForumCoreObserver {
             clearInterval(this.#cleanupIntervalId);
         }
         
+        if (this.#periodicRescanId) {
+            clearInterval(this.#periodicRescanId);
+        }
+        
         this.#callbacks.clear();
         this.#debouncedCallbacks.clear();
         this.#processedNodes = new WeakSet();
+        this.#elementMetadata = new WeakMap();
         this.#mutationQueue.length = 0;
         this.#debounceTimeouts.clear();
         
@@ -839,14 +1331,14 @@ if (!globalThis.forumObserver) {
             }
         }, { once: true });
         
-        console.log('🚀 ForumCoreObserver ready (GLOBAL MODE) with script coordination');
+        console.log('🚀 ForumCoreObserver ready (BULLETPROOF MODE)');
         
     } catch (error) {
         console.error('Failed to initialize ForumCoreObserver:', error);
         
         globalThis.forumObserver = new Proxy({}, {
             get: function(target, prop) {
-                var methods = ['register', 'registerDebounced', 'registerThemeAware', 'unregister', 'forceScan', 'updateThemeOnElements', 'getStats', 'destroy'];
+                var methods = ['register', 'registerDebounced', 'registerThemeAware', 'unregister', 'forceScan', 'updateThemeOnElements', 'getStats', 'destroy', 'forceReprocessElement', 'forceReprocessSelector', 'getElementMetadata', 'isElementProcessed'];
                 if (methods.indexOf(prop) > -1) {
                     return function() {
                         console.warn('ForumCoreObserver not initialized - ' + prop + ' called');
