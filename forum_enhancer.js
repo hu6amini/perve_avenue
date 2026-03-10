@@ -11619,29 +11619,25 @@ class PostModernizer {
         }
     }
   
-    #handleNewCodeBlocks(node) {
-        if (node.matches('div[align="center"]:has(.code_top)')) {
-            this.#transformCodeBlock(node);
-        } else {
-            node.querySelectorAll('div[align="center"]:has(.code_top)').forEach(block => {
-                this.#transformCodeBlock(block);
-            });
-        }
+#handleNewCodeBlocks(node) {
+    if (node.matches('div[align="center"]:has(.code_top)')) {
+        this.#transformCodeBlock(node);
+        
+        // Clean up BR issues after transformation
+        setTimeout(() => {
+            this.#cleanupAllBrIssues();
+        }, 100);
+    } else {
+        node.querySelectorAll('div[align="center"]:has(.code_top)').forEach(block => {
+            this.#transformCodeBlock(block);
+            
+            // Clean up BR issues after transformation
+            setTimeout(() => {
+                this.#cleanupAllBrIssues();
+            }, 100);
+        });
     }
-
-      // Add a public method to check if Post Modernizer is ready
-    isReady() {
-        return !this.#waitingForScripts;
-    }
-
-    // Add a public method to get script readiness status
-    getScriptsReadyStatus() {
-        return {
-            ...this.#scriptsReady,
-            waitingForScripts: this.#waitingForScripts,
-            pendingElements: this.#pendingElements.length
-        };
-    }
+}
 
     destroy() {
         const ids = [this.#postModernizerId, this.#activeStateObserverId,
