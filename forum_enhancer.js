@@ -5920,71 +5920,87 @@ class PostModernizer {
         }
     }
 
-    #handleNewEmbeddedLinks(node) {
-        if (this.#isInEditor(node)) return;
+#handleNewEmbeddedLinks(node) {
+    if (this.#isInEditor(node)) return;
+    
+    // If still waiting for scripts, queue the node
+    if (this.#waitingForScripts) {
+        this.#pendingElements.push(node);
+        return;
+    }
+    
+    const safeTransform = (link) => {
+        if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
         
-        // If still waiting for scripts, queue the node
-        if (this.#waitingForScripts) {
-            this.#pendingElements.push(node);
+        // Check if we should wait for images
+        const images = link.querySelectorAll('img');
+        
+        if (images.length === 0) {
+            // No images to wait for, transform immediately
+            this.#transformEmbeddedLink(link);
+            
+            // Clean up BR issues after transformation
+            setTimeout(() => {
+                this.#cleanupAllBrIssues();
+            }, 100);
+            
             return;
         }
         
-        const safeTransform = (link) => {
-            if (this.#isInEditor(link) || link.classList.contains('embedded-link-modernized')) return;
-            
-            // Check if we should wait for images
-            const images = link.querySelectorAll('img');
-            
-            if (images.length === 0) {
-                // No images to wait for, transform immediately
-                this.#transformEmbeddedLink(link);
-                return;
-            }
-            
-            // Check if images are ready (either processed by media script or loaded)
-            const areImagesReady = Array.from(images).every(img => {
-                return img.hasAttribute('data-optimized') || 
-                       img.src.includes('images.weserv.nl') ||
-                       img.complete;
-            });
-            
-            if (areImagesReady) {
-                this.#transformEmbeddedLink(link);
-            } else {
-                // Images not ready, wait for them
-                console.log('⏳ Waiting for images to be processed in embedded link');
-                
-                let attempts = 0;
-                const maxAttempts = 15; // 1.5 seconds total
-                
-                const waitForImages = setInterval(() => {
-                    attempts++;
-                    
-                    const currentImages = link.querySelectorAll('img');
-                    const nowReady = Array.from(currentImages).every(img => {
-                        return img.hasAttribute('data-optimized') || 
-                               img.src.includes('images.weserv.nl') ||
-                               img.complete;
-                    });
-                    
-                    if (nowReady || attempts >= maxAttempts) {
-                        clearInterval(waitForImages);
-                        if (!link.classList.contains('embedded-link-modernized')) {
-                            console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
-                            this.#transformEmbeddedLink(link);
-                        }
-                    }
-                }, 100);
-            }
-        };
+        // Check if images are ready (either processed by media script or loaded)
+        const areImagesReady = Array.from(images).every(img => {
+            return img.hasAttribute('data-optimized') || 
+                   img.src.includes('images.weserv.nl') ||
+                   img.complete;
+        });
         
-        // Process the node
-        if (node.matches && node.matches('.ffb_embedlink')) {
-            safeTransform(node);
-        } else if (node.querySelectorAll) {
-            node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
+        if (areImagesReady) {
+            this.#transformEmbeddedLink(link);
+            
+            // Clean up BR issues after transformation
+            setTimeout(() => {
+                this.#cleanupAllBrIssues();
+            }, 100);
+        } else {
+            // Images not ready, wait for them
+            console.log('⏳ Waiting for images to be processed in embedded link');
+            
+            let attempts = 0;
+            const maxAttempts = 15; // 1.5 seconds total
+            
+            const waitForImages = setInterval(() => {
+                attempts++;
+                
+                const currentImages = link.querySelectorAll('img');
+                const nowReady = Array.from(currentImages).every(img => {
+                    return img.hasAttribute('data-optimized') || 
+                           img.src.includes('images.weserv.nl') ||
+                           img.complete;
+                });
+                
+                if (nowReady || attempts >= maxAttempts) {
+                    clearInterval(waitForImages);
+                    if (!link.classList.contains('embedded-link-modernized')) {
+                        console.log(nowReady ? '✅ Images ready, transforming' : '⚠️ Timeout, transforming anyway');
+                        this.#transformEmbeddedLink(link);
+                        
+                        // Clean up BR issues after transformation
+                        setTimeout(() => {
+                            this.#cleanupAllBrIssues();
+                        }, 100);
+                    }
+                }
+            }, 100);
         }
+    };
+    
+    // Process the node
+    if (node.matches && node.matches('.ffb_embedlink')) {
+        safeTransform(node);
+    } else if (node.querySelectorAll) {
+        node.querySelectorAll('.ffb_embedlink:not(.embedded-link-modernized)').forEach(safeTransform);
     }
+}
 
 // ==============================
 // SUMMARY POST PREVIEW TRANSFORMATION (for body#send)
