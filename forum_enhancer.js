@@ -8229,15 +8229,25 @@ class PostModernizer {
         }
     }
 
-    #handleNewAttachments(node) {
-        if (node.matches('.fancytop + div[align="center"]') || node.matches('.fancytop + .fancyborder')) {
-            this.#transformAttachment(node);
-        } else {
-            node.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(attachment => {
-                this.#transformAttachment(attachment);
-            });
-        }
+#handleNewAttachments(node) {
+    if (node.matches('.fancytop + div[align="center"]') || node.matches('.fancytop + .fancyborder')) {
+        this.#transformAttachment(node);
+        
+        // Clean up BR issues after transformation
+        setTimeout(() => {
+            this.#cleanupAllBrIssues();
+        }, 100);
+    } else {
+        node.querySelectorAll('.fancytop + div[align="center"], .fancytop + .fancyborder').forEach(attachment => {
+            this.#transformAttachment(attachment);
+            
+            // Clean up BR issues after transformation
+            setTimeout(() => {
+                this.#cleanupAllBrIssues();
+            }, 100);
+        });
     }
+}
 
     // ==============================
     // OBSERVER SETUP
