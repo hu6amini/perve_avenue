@@ -6886,15 +6886,25 @@ class PostModernizer {
         }
     }
   
-    #handleNewPolls(node) {
-        if (node.matches('form#pollform .poll:not(.poll-modernized)')) {
-            this.#transformPoll(node);
-        } else {
-            node.querySelectorAll('form#pollform .poll:not(.poll-modernized)').forEach(poll => {
-                this.#transformPoll(poll);
-            });
-        }
+#handleNewPolls(node) {
+    if (node.matches('form#pollform .poll:not(.poll-modernized)')) {
+        this.#transformPoll(node);
+        
+        // Clean up BR issues after transformation
+        setTimeout(() => {
+            this.#cleanupAllBrIssues();
+        }, 100);
+    } else {
+        node.querySelectorAll('form#pollform .poll:not(.poll-modernized)').forEach(poll => {
+            this.#transformPoll(poll);
+            
+            // Clean up BR issues after transformation
+            setTimeout(() => {
+                this.#cleanupAllBrIssues();
+            }, 100);
+        });
     }
+}
     
     // ==============================
     // ADAPTIVE DATE PARSING SYSTEM
