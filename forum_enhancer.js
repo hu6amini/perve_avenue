@@ -9616,6 +9616,95 @@ class PostModernizer {
         }
     }
 
+  // ==============================
+// BR CLEANUP METHODS
+// ==============================
+
+#cleanupBrAroundMedia() {
+    // Target iframes and video wrapper divs
+    const mediaSelectors = [
+        'iframe',
+        'div[style*="position:relative"][style*="padding-bottom"]',
+        '.standard-media-wrapper',
+        '.media-wrapper',
+        '.iframe-wrapper',
+        'lite-youtube',
+        'lite-vimeo',
+        'video'
+    ];
+    
+    document.querySelectorAll(mediaSelectors.join(', ')).forEach(mediaElement => {
+        // Skip if element is no longer in DOM
+        if (!mediaElement || !mediaElement.isConnected) return;
+        
+        // Remove <br> right before media
+        let prevSibling = mediaElement.previousSibling;
+        while (prevSibling) {
+            if (prevSibling.nodeType === Node.ELEMENT_NODE && 
+                prevSibling.tagName === 'BR') {
+                const brToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                brToRemove.remove();
+            } else if (prevSibling.nodeType === Node.TEXT_NODE && 
+                       /^\s*$/.test(prevSibling.textContent)) {
+                const textToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                textToRemove.remove();
+            } else {
+                break;
+            }
+        }
+        
+        // Remove <br> right after media
+        let nextSibling = mediaElement.nextSibling;
+        while (nextSibling) {
+            if (nextSibling.nodeType === Node.ELEMENT_NODE && 
+                nextSibling.tagName === 'BR') {
+                const brToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                brToRemove.remove();
+            } else if (nextSibling.nodeType === Node.TEXT_NODE && 
+                       /^\s*$/.test(nextSibling.textContent)) {
+                const textToRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                textToRemove.remove();
+            } else {
+                break;
+            }
+        }
+    });
+}
+
+#cleanupBrBeforeEditElements() {
+    document.querySelectorAll('span.edit, .post-edit, .edit').forEach(editElement => {
+        // Skip if element is no longer in DOM or if it's in an editor
+        if (!editElement || !editElement.isConnected || this.#isInEditor(editElement)) return;
+        
+        // Remove <br> immediately before edit element
+        let prevSibling = editElement.previousSibling;
+        while (prevSibling) {
+            if (prevSibling.nodeType === Node.ELEMENT_NODE && 
+                prevSibling.tagName === 'BR') {
+                const brToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                brToRemove.remove();
+            } else if (prevSibling.nodeType === Node.TEXT_NODE && 
+                       /^\s*$/.test(prevSibling.textContent)) {
+                const textToRemove = prevSibling;
+                prevSibling = prevSibling.previousSibling;
+                textToRemove.remove();
+            } else {
+                break;
+            }
+        }
+    });
+}
+
+#cleanupAllBrIssues() {
+    this.#cleanupBrAroundMedia();
+    this.#cleanupBrBeforeEditElements();
+}
+
     #processSignature(element) {
         if (this.#isInEditor(element)) return;
         
