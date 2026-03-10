@@ -6382,47 +6382,52 @@ class PostModernizer {
         }
     }
   
-    #handleNewSummaryPosts(node) {
-        if (document.body.id !== 'send') return;
-        
-        // If still waiting for scripts, queue the node
-        if (this.#waitingForScripts) {
-            this.#pendingElements.push(node);
-            return;
-        }
-        
-        const processPost = (post, idx) => {
-            // Calculate global index
-            const allPosts = document.querySelectorAll('.summary ol.list li[class*="box_"]');
-            const globalIndex = Array.from(allPosts).indexOf(post);
-            
-            // Check if post still exists before waiting for avatars
-            if (!post || !post.parentNode) return;
-            
-            // Wait for avatars
-            this.#waitForSummaryAvatars(post, (avatarFound) => {
-                // Double-check the post still exists after the delay
-                if (!post || !post.parentNode) {
-                    console.log('Summary post disappeared during avatar waiting, skipping');
-                    return;
-                }
-                
-                if (avatarFound) {
-                    console.log('✅ Avatar found for new summary post, transforming');
-                }
-                this.#transformSingleSummaryPost(post, globalIndex);
-            });
-        };
-        
-        if (node.matches && node.matches('.summary ol.list li[class*="box_"]')) {
-            processPost(node, 0);
-        } else if (node.querySelectorAll) {
-            const posts = node.querySelectorAll('.summary ol.list li[class*="box_"]:not(.post-preview-modernized)');
-            posts.forEach((post, idx) => {
-                processPost(post, idx);
-            });
-        }
+#handleNewSummaryPosts(node) {
+    if (document.body.id !== 'send') return;
+    
+    // If still waiting for scripts, queue the node
+    if (this.#waitingForScripts) {
+        this.#pendingElements.push(node);
+        return;
     }
+    
+    const processPost = (post, idx) => {
+        // Calculate global index
+        const allPosts = document.querySelectorAll('.summary ol.list li[class*="box_"]');
+        const globalIndex = Array.from(allPosts).indexOf(post);
+        
+        // Check if post still exists before waiting for avatars
+        if (!post || !post.parentNode) return;
+        
+        // Wait for avatars
+        this.#waitForSummaryAvatars(post, (avatarFound) => {
+            // Double-check the post still exists after the delay
+            if (!post || !post.parentNode) {
+                console.log('Summary post disappeared during avatar waiting, skipping');
+                return;
+            }
+            
+            if (avatarFound) {
+                console.log('✅ Avatar found for new summary post, transforming');
+            }
+            this.#transformSingleSummaryPost(post, globalIndex);
+            
+            // Clean up BR issues after transformation
+            setTimeout(() => {
+                this.#cleanupAllBrIssues();
+            }, 200);
+        });
+    };
+    
+    if (node.matches && node.matches('.summary ol.list li[class*="box_"]')) {
+        processPost(node, 0);
+    } else if (node.querySelectorAll) {
+        const posts = node.querySelectorAll('.summary ol.list li[class*="box_"]:not(.post-preview-modernized)');
+        posts.forEach((post, idx) => {
+            processPost(post, idx);
+        });
+    }
+}
     
     // ==============================
     // MODERN POLL SYSTEM
