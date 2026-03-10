@@ -390,7 +390,6 @@
                 break;
             case 'webp':
             case 'avif':
-                params.push('lossless=true');
                 params.push('il');
                 break;
             case 'jpeg':
