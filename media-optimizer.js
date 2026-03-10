@@ -11,7 +11,7 @@
             jpg: '90',
             jpeg: '90',     
             webp: '90',
-            avif: '85',
+            avif: '85',      // Kept for reference but no longer used
             png: '100',
             gif: '100',
             unknown: '90'
@@ -368,12 +368,8 @@
         var originalFormat = detectFormat(originalSrc);
         var isGif = originalFormat === 'gif';
         
-        var outputFormat;
-        if (isGif) {
-            outputFormat = 'webp';
-        } else {
-            outputFormat = supportsFormat('avif') ? 'avif' : 'webp';
-        }
+        // AVIF REMOVED - Always use WebP for non-GIF images
+        var outputFormat = isGif ? 'webp' : 'webp';
         
         var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
         
@@ -389,7 +385,6 @@
                 params.push('lossless=true');
                 break;
             case 'webp':
-            case 'avif':
                 params.push('il');
                 break;
             case 'jpeg':
