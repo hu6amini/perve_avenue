@@ -6267,6 +6267,11 @@ class PostModernizer {
             this.#ensureAllElementsModernized(modernPost);
         }, 10);
         
+        // === NEW: Clean up BR issues after transformation ===
+        setTimeout(() => {
+            this.#cleanupAllBrIssues();
+        }, 200);
+        
     } catch (error) {
         console.error('Error transforming summary post preview:', error);
     }
