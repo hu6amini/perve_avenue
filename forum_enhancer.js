@@ -12711,81 +12711,73 @@ class BBCodeEditor {
     /**
      * Converts BBCode back to forum HTML for submission
      */
-    #bbcodeToForum(bbcode) {
-        if (!bbcode) return '';
-        
-        try {
-            let forumHtml = bbcode;
+#bbcodeToForum(bbcode) {
+    if (!bbcode) return '';
+    
+    try {
+        let forumHtml = bbcode;
 
-            // Basic formatting
-            forumHtml = forumHtml.replace(/\[b\](.*?)\[\/b\]/gis, '<b>$1</b>');
-            forumHtml = forumHtml.replace(/\[i\](.*?)\[\/i\]/gis, '<i>$1</i>');
-            forumHtml = forumHtml.replace(/\[u\](.*?)\[\/u\]/gis, '<u>$1</u>');
-            forumHtml = forumHtml.replace(/\[del\](.*?)\[\/del\]/gis, '<del>$1</del>');
-            forumHtml = forumHtml.replace(/\[sup\](.*?)\[\/sup\]/gis, '<sup>$1</sup>');
-            forumHtml = forumHtml.replace(/\[sub\](.*?)\[\/sub\]/gis, '<sub>$1</sub>');
+        // Basic formatting - convert these to HTML
+        forumHtml = forumHtml.replace(/\[b\](.*?)\[\/b\]/gis, '<b>$1</b>');
+        forumHtml = forumHtml.replace(/\[i\](.*?)\[\/i\]/gis, '<i>$1</i>');
+        forumHtml = forumHtml.replace(/\[u\](.*?)\[\/u\]/gis, '<u>$1</u>');
+        forumHtml = forumHtml.replace(/\[del\](.*?)\[\/del\]/gis, '<del>$1</del>');
+        forumHtml = forumHtml.replace(/\[sup\](.*?)\[\/sup\]/gis, '<sup>$1</sup>');
+        forumHtml = forumHtml.replace(/\[sub\](.*?)\[\/sub\]/gis, '<sub>$1</sub>');
 
-            // Lists with nested content
-            forumHtml = forumHtml.replace(/\[list=1\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
-                items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
-                    content = this.#bbcodeToForum(content);
-                    return '<li>' + content + '</li>';
-                });
-                return '<ol>' + items + '</ol>';
+        // Lists with nested content - convert to HTML
+        forumHtml = forumHtml.replace(/\[list=1\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
+            items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
+                // Recursively convert nested content
+                content = this.#bbcodeToForum(content);
+                return '<li>' + content + '</li>';
             });
+            return '<ol>' + items + '</ol>';
+        });
 
-            forumHtml = forumHtml.replace(/\[list\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
-                items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
-                    content = this.#bbcodeToForum(content);
-                    return '<li>' + content + '</li>';
-                });
-                return '<ul>' + items + '</ul>';
+        forumHtml = forumHtml.replace(/\[list\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
+            items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
+                content = this.#bbcodeToForum(content);
+                return '<li>' + content + '</li>';
             });
+            return '<ul>' + items + '</ul>';
+        });
 
-            // Center
-            forumHtml = forumHtml.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<p align="center">$1</p>');
+        // URLs - convert to HTML
+        forumHtml = forumHtml.replace(/\[URL=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+        forumHtml = forumHtml.replace(/\[URL\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
-            // URLs - handle both with and without text
-            forumHtml = forumHtml.replace(/\[URL=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
-            forumHtml = forumHtml.replace(/\[URL\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        // Images with weserv proxy - convert to HTML
+        forumHtml = forumHtml.replace(/\[IMG\](.*?)\[\/IMG\]/gis, (_, src) => {
+            try {
+                const encodedSrc = encodeURIComponent(src);
+                return `<img src="https://images.weserv.nl/?url=${encodedSrc}&output=webp&maxage=1y&q=90&il&af&l=9" alt="image" loading="lazy" decoding="async" data-original="${src}" data-optimized="true" data-format="webp" data-quality="90">`;
+            } catch (e) {
+                return `<img src="${src}" alt="image">`;
+            }
+        });
 
-            // Images with weserv proxy
-            forumHtml = forumHtml.replace(/\[IMG\](.*?)\[\/IMG\]/gis, (_, src) => {
-                try {
-                    const encodedSrc = encodeURIComponent(src);
-                    return `<img src="https://images.weserv.nl/?url=${encodedSrc}&output=webp&maxage=1y&q=90&il&af&l=9" alt="image" loading="lazy" decoding="async" data-original="${src}" data-optimized="true" data-format="webp" data-quality="90">`;
-                } catch (e) {
-                    return `<img src="${src}" alt="image">`;
-                }
-            });
+        // Font styles - convert to HTML
+        forumHtml = forumHtml.replace(/\[font=(.*?)\](.*?)\[\/font\]/gis, '<span style="font-family:$1">$2</span>');
+        forumHtml = forumHtml.replace(/\[size=(.*?)\](.*?)\[\/size\]/gis, (_, size, content) => {
+            const ptSize = Math.round(parseInt(size) * 0.75) + 'pt';
+            return '<span style="font-size:' + ptSize + ';line-height:100%">' + content + '</span>';
+        });
+        forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
 
-            // Font
-            forumHtml = forumHtml.replace(/\[font=(.*?)\](.*?)\[\/font\]/gis, '<span style="font-family:$1">$2</span>');
+        // Code/HTML blocks - convert to HTML (these are forum-specific)
+        forumHtml = forumHtml.replace(/\[CODE\](.*?)\[\/CODE\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
+        forumHtml = forumHtml.replace(/\[HTML\](.*?)\[\/HTML\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
 
-            // Size (px to pt)
-            forumHtml = forumHtml.replace(/\[size=(.*?)\](.*?)\[\/size\]/gis, (_, size, content) => {
-                const ptSize = Math.round(parseInt(size) * 0.75) + 'pt';
-                return '<span style="font-size:' + ptSize + ';line-height:100%">' + content + '</span>';
-            });
+// Convert newlines to <br> tags
+        forumHtml = forumHtml.replace(/\n/g, '<br>');
 
-            // Color
-            forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
-
-            // Quote/Code blocks
-            forumHtml = forumHtml.replace(/\[QUOTE\](.*?)\[\/QUOTE\]/gis, '<div align="center"><div class="quote_top" align="left"><b>QUOTE</b></div><div class="quote" align="left">$1</div></div>');
-            forumHtml = forumHtml.replace(/\[CODE\](.*?)\[\/CODE\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
-            forumHtml = forumHtml.replace(/\[HTML\](.*?)\[\/HTML\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
-            forumHtml = forumHtml.replace(/\[SPOILER\](.*?)\[\/SPOILER\]/gis, '<div class="spoiler" align="center"><div class="code_top" align="left"><b>SPOILER</b> (<a href="javascript:;" onclick="spoiler(this)">click to view</a>)</div><div class="code" align="left">$1</div>');
-
-            // Convert newlines to <br> tags, but preserve existing <br> tags
-            forumHtml = forumHtml.replace(/\n/g, '<br>');
-
-            return forumHtml;
-        } catch (error) {
-            console.error('Error in bbcodeToForum:', error);
-            return bbcode; // Return original on error
-        }
+        return forumHtml;
+    } catch (error) {
+        console.error('Error in bbcodeToForum:', error);
+        return bbcode; // Return original on error
     }
+}
 
     #syncToOriginal() {
         try {
