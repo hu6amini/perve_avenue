@@ -12752,15 +12752,9 @@ class BBCodeEditor {
         forumHtml = forumHtml.replace(/\[URL=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
         forumHtml = forumHtml.replace(/\[URL\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
-        // Images with weserv proxy - convert to HTML
-        forumHtml = forumHtml.replace(/\[IMG\](.*?)\[\/IMG\]/gis, (_, src) => {
-            try {
-                const encodedSrc = encodeURIComponent(src);
-                return `<img src="https://images.weserv.nl/?url=${encodedSrc}&output=webp&maxage=1y&q=90&il&af&l=9" alt="image" loading="lazy" decoding="async" data-original="${src}" data-optimized="true" data-format="webp" data-quality="90">`;
-            } catch (e) {
-                return `<img src="${src}" alt="image">`;
-            }
-        });
+        // IMPORTANT: Skip image conversion entirely - leave [IMG] tags as BBCode
+        // The forum's media dimension extractor and weserv optimizer will handle them
+        // forumHtml = forumHtml.replace(/\[IMG\](.*?)\[\/IMG\]/gis, ...REMOVED...
 
         // Font styles - convert to HTML
         forumHtml = forumHtml.replace(/\[font=(.*?)\](.*?)\[\/font\]/gis, '<span style="font-family:$1">$2</span>');
@@ -12774,7 +12768,12 @@ class BBCodeEditor {
         forumHtml = forumHtml.replace(/\[CODE\](.*?)\[\/CODE\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
         forumHtml = forumHtml.replace(/\[HTML\](.*?)\[\/HTML\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
 
-// Convert newlines to <br> tags
+        // IMPORTANT: Leave these as BBCode for the forum to handle natively
+        // Center - LET FORUM HANDLE
+        // Quote - LET FORUM HANDLE  
+        // Spoiler - LET FORUM HANDLE
+
+        // Convert newlines to <br> tags
         forumHtml = forumHtml.replace(/\n/g, '<br>');
 
         return forumHtml;
