@@ -11732,7 +11732,7 @@ globalThis.addEventListener('pagehide', function() {
 
 
 // ============================================
-// BBCODE EDITOR - Professional Edition (Error-Resilient)
+// BBCODE EDITOR - Professional Edition
 // ============================================
 
 'use strict';
@@ -11741,7 +11741,6 @@ class BBCodeEditor {
     #originalTextarea = null;
     #editorWrapper = null;
     #bbcodeEditor = null;
-    #previewPanel = null;
     #statusElements = {};
     #undoStack = [];
     #redoStack = [];
@@ -11758,7 +11757,6 @@ class BBCodeEditor {
     static #CONFIG = {
         MAX_UNDO_STEPS: 100,
         STATUS_DEBOUNCE_DELAY: 100,
-        PREVIEW_SANITIZE: true,
         ALLOWED_HTML_TAGS: ['b', 'i', 'u', 'del', 'sup', 'sub', 'ol', 'ul', 'li', 'p', 'a', 'img', 'span', 'div', 'blockquote', 'pre', 'strong', 'em'],
         ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target']
     };
@@ -11959,36 +11957,6 @@ class BBCodeEditor {
             outline-offset: -2px;
         }
         
-        .bbcode-preview { 
-            padding: 12px; 
-            min-height: 200px; 
-            background: #fff; 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            font-size: 14px; 
-            line-height: 1.6; 
-            overflow-y: auto; 
-        } 
-        
-        .bbcode-preview blockquote { 
-            background: #f9f9f9; 
-            border-left: 3px solid #ccc; 
-            padding: 10px; 
-            margin: 10px 0; 
-        } 
-        
-        .bbcode-preview pre { 
-            background: #f4f4f4; 
-            padding: 10px; 
-            border: 1px solid #ddd; 
-            overflow-x: auto; 
-            font-family: monospace; 
-        } 
-        
-        .bbcode-preview img { 
-            max-width: 100%; 
-            height: auto; 
-        } 
-        
         .bbcode-statusbar { 
             display: flex; 
             gap: 20px; 
@@ -12036,7 +12004,6 @@ class BBCodeEditor {
     `;
 
     constructor() {
-        // Wrap initialization in try-catch to prevent breaking other scripts
         try {
             this.#injectStyles();
             this.#waitForObserver();
@@ -12064,7 +12031,6 @@ class BBCodeEditor {
         this.#initStarted = true;
 
         try {
-            // Set a timeout to prevent infinite waiting
             const observerTimeout = setTimeout(() => {
                 console.warn('BBCode Editor: ForumObserver timeout, proceeding without it');
                 this.#init();
@@ -12072,11 +12038,10 @@ class BBCodeEditor {
 
             if (!globalThis.forumObserver) {
                 console.log('⏳ BBCode Editor waiting for ForumCoreObserver...');
-                // Check a few times then proceed anyway
                 let attempts = 0;
                 const checkInterval = setInterval(() => {
                     attempts++;
-                    if (globalThis.forumObserver || attempts > 30) { // 3 seconds max
+                    if (globalThis.forumObserver || attempts > 30) {
                         clearInterval(checkInterval);
                         clearTimeout(observerTimeout);
                         if (globalThis.forumObserver) {
@@ -12094,7 +12059,7 @@ class BBCodeEditor {
             this.#findTextarea();
         } catch (error) {
             console.error('Error in waitForObserver:', error);
-            this.#init(); // Try to init anyway
+            this.#init();
         }
     }
 
@@ -12103,7 +12068,6 @@ class BBCodeEditor {
             this.#originalTextarea = document.getElementById('Post');
             if (!this.#originalTextarea) {
                 console.log('⏳ Textarea #Post not found, will retry on DOM changes...');
-                // Observe DOM for textarea
                 const observer = new MutationObserver(() => {
                     this.#originalTextarea = document.getElementById('Post');
                     if (this.#originalTextarea && !this.#originalTextarea.hasAttribute('data-editor-initialized')) {
@@ -12113,7 +12077,6 @@ class BBCodeEditor {
                 });
                 observer.observe(document.body, { childList: true, subtree: true });
                 
-                // Timeout after 5 seconds
                 setTimeout(() => observer.disconnect(), 5000);
                 return;
             }
@@ -12131,7 +12094,6 @@ class BBCodeEditor {
     }
 
     #showFallbackEditor() {
-        // If all else fails, show a simple message but don't break
         const textarea = document.getElementById('Post');
         if (textarea && textarea.parentNode) {
             const fallback = document.createElement('div');
@@ -12145,7 +12107,6 @@ class BBCodeEditor {
         console.log('📝 Initializing BBCode Editor...');
 
         try {
-            // Double-check textarea exists
             if (!this.#originalTextarea) {
                 this.#originalTextarea = document.getElementById('Post');
                 if (!this.#originalTextarea) {
@@ -12153,7 +12114,6 @@ class BBCodeEditor {
                 }
             }
 
-            // Mark as initialized
             this.#originalTextarea.setAttribute('data-editor-initialized', 'true');
 
             const textareaContainer = this.#originalTextarea.parentNode;
@@ -12161,35 +12121,28 @@ class BBCodeEditor {
                 throw new Error('Textarea container not found');
             }
 
-            // Store original value
             const originalValue = this.#originalTextarea.value || '';
 
-            // Hide original but keep it functional
             this.#originalTextarea.style.display = 'none';
             this.#originalTextarea.setAttribute('data-bbcode-editor', 'true');
             this.#originalTextarea.setAttribute('aria-hidden', 'true');
 
-            // Create editor wrapper
             this.#editorWrapper = document.createElement('div');
             this.#editorWrapper.className = 'bbcode-editor-wrapper';
             this.#editorWrapper.setAttribute('role', 'application');
             this.#editorWrapper.setAttribute('aria-label', 'BBCode editor');
             this.#editorWrapper.setAttribute('data-forum-element', 'true');
 
-            // Convert forum HTML to BBCode for the editor
             const editorInitialValue = this.#safeForumToBBCode(originalValue);
 
-            // Build and insert editor
             this.#editorWrapper.innerHTML = this.#buildEditorHTML(editorInitialValue);
             textareaContainer.insertBefore(this.#editorWrapper, this.#originalTextarea.nextSibling);
 
-            // Get elements with error checking
             this.#bbcodeEditor = document.getElementById('bbcode-editor');
             if (!this.#bbcodeEditor) {
                 throw new Error('BBCode editor textarea not found');
             }
 
-            this.#previewPanel = this.#editorWrapper.querySelector('.bbcode-preview');
             this.#statusElements = {
                 chars: this.#editorWrapper.querySelector('.bbcode-char-count'),
                 words: this.#editorWrapper.querySelector('.bbcode-word-count'),
@@ -12197,13 +12150,11 @@ class BBCodeEditor {
                 cursor: this.#editorWrapper.querySelector('.bbcode-cursor-pos')
             };
 
-            // Verify status elements
             if (!this.#statusElements.chars || !this.#statusElements.words || 
                 !this.#statusElements.lines || !this.#statusElements.cursor) {
                 console.warn('Some status elements not found');
             }
 
-            // Initialize undo stack with size limit
             this.#undoStack = [editorInitialValue];
             this.#undoPosition = 0;
 
@@ -12211,7 +12162,6 @@ class BBCodeEditor {
             this.#registerWithObserver();
             this.#updateStatus();
 
-            // Announce for screen readers
             this.#announce('BBCode editor initialized');
 
             console.log('✅ BBCode Editor initialized successfully');
@@ -12219,13 +12169,11 @@ class BBCodeEditor {
             console.error('BBCode Editor initialization failed:', error);
             this.#initializationError = error;
             
-            // Restore original textarea if editor failed
             if (this.#originalTextarea) {
                 this.#originalTextarea.style.display = '';
                 this.#originalTextarea.removeAttribute('data-editor-initialized');
             }
             
-            // Remove editor wrapper if it was created
             if (this.#editorWrapper && this.#editorWrapper.parentNode) {
                 this.#editorWrapper.remove();
             }
@@ -12236,7 +12184,6 @@ class BBCodeEditor {
 
     #attachEventListeners() {
         try {
-            // Store bound handlers for proper cleanup
             this.#clickHandler = (e) => {
                 try {
                     const btn = e.target.closest('.bbcode-btn');
@@ -12264,7 +12211,6 @@ class BBCodeEditor {
             this.#editorWrapper.addEventListener('change', this.#changeHandler);
 
             if (this.#bbcodeEditor) {
-                // Use debounced status update for performance
                 const debouncedUpdate = this.#debounce(() => this.#updateStatus(), BBCodeEditor.#CONFIG.STATUS_DEBOUNCE_DELAY);
                 
                 this.#bbcodeEditor.addEventListener('input', () => {
@@ -12293,7 +12239,6 @@ class BBCodeEditor {
                 this.#bbcodeEditor.addEventListener('keydown', (e) => {
                     try {
                         this.#handleKeydown(e);
-                        // Store cursor position before change
                         queueMicrotask(() => {
                             this.#lastCursorPosition = {
                                 start: this.#bbcodeEditor.selectionStart,
@@ -12305,7 +12250,6 @@ class BBCodeEditor {
                     }
                 });
 
-                // Handle paste to clean up any unwanted formatting
                 this.#bbcodeEditor.addEventListener('paste', (e) => {
                     try {
                         e.preventDefault();
@@ -12354,7 +12298,6 @@ class BBCodeEditor {
 
     #announce(message) {
         try {
-            // Create or update ARIA live region for screen readers
             let announcer = document.getElementById('bbcode-announcer');
             if (!announcer) {
                 announcer = document.createElement('div');
@@ -12375,86 +12318,6 @@ class BBCodeEditor {
             announcer.textContent = message;
         } catch (error) {
             // Fail silently for announcements
-        }
-    }
-
-    #sanitizeHtml(html) {
-        if (!BBCodeEditor.#CONFIG.PREVIEW_SANITIZE) return html;
-
-        try {
-            const temp = document.createElement('div');
-            temp.innerHTML = html;
-
-            // Remove all script tags and event handlers
-            const scripts = temp.querySelectorAll('script, iframe, object, embed, *[onclick], *[onload], *[onerror]');
-            scripts.forEach(el => el.remove());
-
-            // Filter attributes on remaining elements
-            const allElements = temp.querySelectorAll('*');
-            allElements.forEach(el => {
-                const tagName = el.tagName.toLowerCase();
-                
-                // Remove disallowed tags
-                if (!BBCodeEditor.#CONFIG.ALLOWED_HTML_TAGS.includes(tagName)) {
-                    const parent = el.parentNode;
-                    while (el.firstChild) {
-                        parent.insertBefore(el.firstChild, el);
-                    }
-                    el.remove();
-                    return;
-                }
-
-                // Filter attributes
-                Array.from(el.attributes).forEach(attr => {
-                    if (!BBCodeEditor.#CONFIG.ALLOWED_ATTRIBUTES.includes(attr.name) && 
-                        !attr.name.startsWith('data-')) {
-                        el.removeAttribute(attr.name);
-                    }
-                    
-                    // Remove javascript: links
-                    if (attr.name === 'href' && attr.value.toLowerCase().startsWith('javascript:')) {
-                        el.removeAttribute('href');
-                    }
-                });
-            });
-
-            return temp.innerHTML;
-        } catch (error) {
-            console.error('Error sanitizing HTML:', error);
-            return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-        }
-    }
-
-    #validateBBCode(bbcode) {
-        const stack = [];
-        const tagRegex = /\[(\/)?(\w+)[^\]]*\]/g;
-        let match;
-        
-        try {
-            while ((match = tagRegex.exec(bbcode)) !== null) {
-                const isClosing = !!match[1];
-                const tag = match[2].toLowerCase();
-                
-                // Ignore self-closing tags and special tags
-                if (tag === 'img' || tag === 'br' || tag === 'hr') continue;
-                
-                if (!isClosing) {
-                    stack.push(tag);
-                } else {
-                    const lastTag = stack.pop();
-                    if (lastTag !== tag) {
-                        return { valid: false, error: `Mismatched tags: expected [/${lastTag}] but found [/${tag}]` };
-                    }
-                }
-            }
-            
-            if (stack.length > 0) {
-                return { valid: false, error: `Unclosed tags: ${stack.map(t => '[' + t + ']').join(', ')}` };
-            }
-            
-            return { valid: true };
-        } catch (e) {
-            return { valid: false, error: 'Invalid BBCode structure' };
         }
     }
 
@@ -12482,12 +12345,6 @@ class BBCodeEditor {
                         <button type="button" class="bbcode-btn redo-btn" title="Redo (Ctrl+Y)" aria-label="Redo">
                             <i class="fa-regular fa-rotate-right" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="bbcode-btn preview-btn" title="Preview (Ctrl+Shift+P)" aria-label="Toggle preview">
-                            <i class="fa-regular fa-eye" aria-hidden="true"></i>
-                        </button>
-                        <button type="button" class="bbcode-btn source-btn" title="Toggle Source" aria-label="Toggle source view">
-                            <i class="fa-regular fa-code" aria-hidden="true"></i>
-                        </button>
                     </div>
                 </div>
                 <div class="bbcode-editor-area">
@@ -12495,7 +12352,6 @@ class BBCodeEditor {
                         placeholder="Write your message here..." 
                         aria-label="BBCode editor content" 
                         data-forum-element="true">${escapedValue}</textarea>
-                    <div class="bbcode-preview" style="display: none;" data-forum-element="true" aria-live="polite"></div>
                 </div>
                 <div class="bbcode-statusbar" data-forum-element="true">
                     <span class="bbcode-char-count">0 characters</span>
@@ -12574,7 +12430,6 @@ class BBCodeEditor {
             errorDiv.setAttribute('role', 'alert');
             this.#editorWrapper?.appendChild(errorDiv);
             
-            // Auto-remove after 5 seconds
             setTimeout(() => errorDiv.remove(), 5000);
         } catch (error) {
             console.error('Error showing error message:', error);
@@ -12583,207 +12438,192 @@ class BBCodeEditor {
 
     /**
      * Converts forum HTML to BBCode for the editor
-     * Now handles nested tags better
      */
-#forumToBBCode(forumHtml) {
-    if (!forumHtml) return '';
-    
-    try {
-        let bbcode = forumHtml;
+    #forumToBBCode(forumHtml) {
+        if (!forumHtml) return '';
+        
+        try {
+            let bbcode = forumHtml;
 
-        // Handle nested tags by processing from inside out
-        const processNested = (text, patterns) => {
-            let result = text;
-            let changed;
-            do {
-                changed = false;
-                for (const [pattern, replacement] of patterns) {
-                    try {
-                        const newResult = this.#safeRegexReplace(result, pattern, replacement);
-                        if (newResult !== result) {
-                            result = newResult;
-                            changed = true;
+            const processNested = (text, patterns) => {
+                let result = text;
+                let changed;
+                do {
+                    changed = false;
+                    for (const [pattern, replacement] of patterns) {
+                        try {
+                            const newResult = this.#safeRegexReplace(result, pattern, replacement);
+                            if (newResult !== result) {
+                                result = newResult;
+                                changed = true;
+                            }
+                        } catch (e) {
+                            console.warn('Pattern failed:', pattern, e);
                         }
-                    } catch (e) {
-                        console.warn('Pattern failed:', pattern, e);
                     }
-                }
-            } while (changed);
-            return result;
-        };
+                } while (changed);
+                return result;
+            };
 
-        // Define conversion patterns
-        const patterns = [
-            // Basic formatting
-            [/<b>(.*?)<\/b>/gis, '[b]$1[/b]'],
-            [/<strong>(.*?)<\/strong>/gis, '[b]$1[/b]'],
-            [/<i>(.*?)<\/i>/gis, '[i]$1[/i]'],
-            [/<em>(.*?)<\/em>/gis, '[i]$1[/i]'],
-            [/<u>(.*?)<\/u>/gis, '[u]$1[/u]'],
-            [/<del>(.*?)<\/del>/gis, '[del]$1[/del]'],
-            [/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]'],
-            [/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]'],
+            const patterns = [
+                // Basic formatting
+                [/<b>(.*?)<\/b>/gis, '[b]$1[/b]'],
+                [/<strong>(.*?)<\/strong>/gis, '[b]$1[/b]'],
+                [/<i>(.*?)<\/i>/gis, '[i]$1[/i]'],
+                [/<em>(.*?)<\/em>/gis, '[i]$1[/i]'],
+                [/<u>(.*?)<\/u>/gis, '[u]$1[/u]'],
+                [/<del>(.*?)<\/del>/gis, '[del]$1[/del]'],
+                [/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]'],
+                [/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]'],
 
-            // Lists with nested content
-            [/<ol[^>]*>([\s\S]*?)<\/ol>/gis, (_, items) => {
-                items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
-                    liContent = processNested(liContent, patterns);
-                    return '[*]' + liContent + '\n';
-                });
-                items = items.replace(/<br\s*\/?>/gi, '');
-                return '[list=1]\n' + items.trim() + '\n[/list]';
-            }],
+                // Lists with nested content
+                [/<ol[^>]*>([\s\S]*?)<\/ol>/gis, (_, items) => {
+                    items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
+                        liContent = processNested(liContent, patterns);
+                        return '[*]' + liContent + '\n';
+                    });
+                    items = items.replace(/<br\s*\/?>/gi, '');
+                    return '[list=1]\n' + items.trim() + '\n[/list]';
+                }],
 
-            [/<ul[^>]*>([\s\S]*?)<\/ul>/gis, (_, items) => {
-                items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
-                    liContent = processNested(liContent, patterns);
-                    return '[*]' + liContent + '\n';
-                });
-                items = items.replace(/<br\s*\/?>/gi, '');
-                return '[list]\n' + items.trim() + '\n[/list]';
-            }],
+                [/<ul[^>]*>([\s\S]*?)<\/ul>/gis, (_, items) => {
+                    items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
+                        liContent = processNested(liContent, patterns);
+                        return '[*]' + liContent + '\n';
+                    });
+                    items = items.replace(/<br\s*\/?>/gi, '');
+                    return '[list]\n' + items.trim() + '\n[/list]';
+                }],
 
-            // Links - handle special chars in URLs
-            [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
-                url = url.replace(/&amp;/g, '&');
-                text = text.replace(/<[^>]+>/g, '');
-                if (url === text || text === '') {
-                    return '[URL]' + url + '[/URL]';
-                }
-                return '[URL=' + url + ']' + text + '[/URL]';
-            }],
+                // Links
+                [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
+                    url = url.replace(/&amp;/g, '&');
+                    text = text.replace(/<[^>]+>/g, '');
+                    if (url === text || text === '') {
+                        return '[URL]' + url + '[/URL]';
+                    }
+                    return '[URL=' + url + ']' + text + '[/URL]';
+                }],
 
-            // IMPORTANT: Handle images - extract original URL from weserv if present
-            [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
-                try {
-                    // First decode the URL parameter
-                    const url = decodeURIComponent(encodedUrl);
-                    return '[IMG]' + url + '[/IMG]';
-                } catch (e) {
-                    return '[IMG]' + encodedUrl + '[/IMG]';
-                }
-            }],
-            // Handle regular img tags without weserv
-            [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]'],
+                // Images - extract original URL from weserv if present
+                [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
+                    try {
+                        const url = decodeURIComponent(encodedUrl);
+                        return '[IMG]' + url + '[/IMG]';
+                    } catch (e) {
+                        return '[IMG]' + encodedUrl + '[/IMG]';
+                    }
+                }],
+                [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]'],
 
-            // Font styles
-            [/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]'],
-            [/<span[^>]*font-size:(\d+)pt[^>]*>(.*?)<\/span>/gis, (_, ptSize, content) => {
-                const size = Math.round(parseInt(ptSize) / 0.75);
-                return '[size=' + size + ']' + content + '[/size]';
-            }],
-            [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
+                // Font styles
+                [/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]'],
+                [/<span[^>]*font-size:(\d+)pt[^>]*>(.*?)<\/span>/gis, (_, ptSize, content) => {
+                    const size = Math.round(parseInt(ptSize) / 0.75);
+                    return '[size=' + size + ']' + content + '[/size]';
+                }],
+                [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
 
-            // Code/HTML blocks - convert to BBCode
-            [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[CODE]$1[/CODE]'],
-            [/<pre[^>]*>(.*?)<\/pre>/gis, '[CODE]$1[/CODE]'],
-            [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[HTML]$1[/HTML]'],
+                // Code/HTML blocks
+                [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[CODE]$1[/CODE]'],
+                [/<pre[^>]*>(.*?)<\/pre>/gis, '[CODE]$1[/CODE]'],
+                [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[HTML]$1[/HTML]'],
 
-            // IMPORTANT: Handle center tags that might have been converted by the forum
-            // But we want to keep them as BBCode, so we convert them back
-            [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
-            [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
+                // Center tags - keep as BBCode for forum to handle
+                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
+                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
 
-            // IMPORTANT: Preserve existing BBCode tags for center, quote, and spoiler
-            // These patterns ensure we don't lose them if they're already in the HTML
-            [/\[CENTER\](.*?)\[\/CENTER\]/gis, '[CENTER]$1[/CENTER]'],
-            [/\[QUOTE\](.*?)\[\/QUOTE\]/gis, '[QUOTE]$1[/QUOTE]'],
-            [/\[SPOILER\](.*?)\[\/SPOILER\]/gis, '[SPOILER]$1[/SPOILER]']
-        ];
+                // Preserve existing BBCode tags
+                [/\[CENTER\](.*?)\[\/CENTER\]/gis, '[CENTER]$1[/CENTER]'],
+                [/\[QUOTE\](.*?)\[\/QUOTE\]/gis, '[QUOTE]$1[/QUOTE]'],
+                [/\[SPOILER\](.*?)\[\/SPOILER\]/gis, '[SPOILER]$1[/SPOILER]']
+            ];
 
-        // Process all conversions with nesting support
-        bbcode = processNested(bbcode, patterns);
+            bbcode = processNested(bbcode, patterns);
 
-        // Clean up
-        bbcode = bbcode.replace(/<br\s*\/?>/gi, '\n');
-        bbcode = bbcode.replace(/&nbsp;/g, ' ');
-        bbcode = bbcode.replace(/&amp;/g, '&');
-        bbcode = bbcode.replace(/&lt;/g, '<');
-        bbcode = bbcode.replace(/&gt;/g, '>');
-        bbcode = bbcode.replace(/&quot;/g, '"');
-        
-        // Remove any remaining HTML tags
-        bbcode = bbcode.replace(/<[^>]+>/g, '');
-        
-        // Clean up whitespace
-        bbcode = bbcode.replace(/\n\s*\n/g, '\n\n');
+            bbcode = bbcode.replace(/<br\s*\/?>/gi, '\n');
+            bbcode = bbcode.replace(/&nbsp;/g, ' ');
+            bbcode = bbcode.replace(/&amp;/g, '&');
+            bbcode = bbcode.replace(/&lt;/g, '<');
+            bbcode = bbcode.replace(/&gt;/g, '>');
+            bbcode = bbcode.replace(/&quot;/g, '"');
+            
+            bbcode = bbcode.replace(/<[^>]+>/g, '');
+            
+            bbcode = bbcode.replace(/\n\s*\n/g, '\n\n');
 
-        return bbcode.trim();
-    } catch (error) {
-        console.error('Error in forumToBBCode:', error);
-        return forumHtml; // Return original on error
+            return bbcode.trim();
+        } catch (error) {
+            console.error('Error in forumToBBCode:', error);
+            return forumHtml;
+        }
     }
-}
-  
+
     /**
      * Converts BBCode back to forum HTML for submission
      */
-#bbcodeToForum(bbcode) {
-    if (!bbcode) return '';
-    
-    try {
-        let forumHtml = bbcode;
+    #bbcodeToForum(bbcode) {
+        if (!bbcode) return '';
+        
+        try {
+            let forumHtml = bbcode;
 
-        // Basic formatting - convert these to HTML
-        forumHtml = forumHtml.replace(/\[b\](.*?)\[\/b\]/gis, '<b>$1</b>');
-        forumHtml = forumHtml.replace(/\[i\](.*?)\[\/i\]/gis, '<i>$1</i>');
-        forumHtml = forumHtml.replace(/\[u\](.*?)\[\/u\]/gis, '<u>$1</u>');
-        forumHtml = forumHtml.replace(/\[del\](.*?)\[\/del\]/gis, '<del>$1</del>');
-        forumHtml = forumHtml.replace(/\[sup\](.*?)\[\/sup\]/gis, '<sup>$1</sup>');
-        forumHtml = forumHtml.replace(/\[sub\](.*?)\[\/sub\]/gis, '<sub>$1</sub>');
+            // Basic formatting - convert to HTML
+            forumHtml = forumHtml.replace(/\[b\](.*?)\[\/b\]/gis, '<b>$1</b>');
+            forumHtml = forumHtml.replace(/\[i\](.*?)\[\/i\]/gis, '<i>$1</i>');
+            forumHtml = forumHtml.replace(/\[u\](.*?)\[\/u\]/gis, '<u>$1</u>');
+            forumHtml = forumHtml.replace(/\[del\](.*?)\[\/del\]/gis, '<del>$1</del>');
+            forumHtml = forumHtml.replace(/\[sup\](.*?)\[\/sup\]/gis, '<sup>$1</sup>');
+            forumHtml = forumHtml.replace(/\[sub\](.*?)\[\/sub\]/gis, '<sub>$1</sub>');
 
-        // Lists with nested content - convert to HTML
-        forumHtml = forumHtml.replace(/\[list=1\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
-            items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
-                // Recursively convert nested content
-                content = this.#bbcodeToForum(content);
-                return '<li>' + content + '</li>';
+            // Lists with nested content
+            forumHtml = forumHtml.replace(/\[list=1\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
+                items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
+                    content = this.#bbcodeToForum(content);
+                    return '<li>' + content + '</li>';
+                });
+                return '<ol>' + items + '</ol>';
             });
-            return '<ol>' + items + '</ol>';
-        });
 
-        forumHtml = forumHtml.replace(/\[list\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
-            items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
-                content = this.#bbcodeToForum(content);
-                return '<li>' + content + '</li>';
+            forumHtml = forumHtml.replace(/\[list\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
+                items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
+                    content = this.#bbcodeToForum(content);
+                    return '<li>' + content + '</li>';
+                });
+                return '<ul>' + items + '</ul>';
             });
-            return '<ul>' + items + '</ul>';
-        });
 
-        // URLs - convert to HTML
-        forumHtml = forumHtml.replace(/\[URL=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
-        forumHtml = forumHtml.replace(/\[URL\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+            // URLs - convert to HTML
+            forumHtml = forumHtml.replace(/\[URL=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+            forumHtml = forumHtml.replace(/\[URL\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
-        // IMPORTANT: Skip image conversion entirely - leave [IMG] tags as BBCode
-        // The forum's media dimension extractor and weserv optimizer will handle them
-        // forumHtml = forumHtml.replace(/\[IMG\](.*?)\[\/IMG\]/gis, ...REMOVED...
+            // IMPORTANT: Skip image conversion - leave [IMG] tags as BBCode
+            // The forum's media dimension extractor and weserv optimizer will handle them
 
-        // Font styles - convert to HTML
-        forumHtml = forumHtml.replace(/\[font=(.*?)\](.*?)\[\/font\]/gis, '<span style="font-family:$1">$2</span>');
-        forumHtml = forumHtml.replace(/\[size=(.*?)\](.*?)\[\/size\]/gis, (_, size, content) => {
-            const ptSize = Math.round(parseInt(size) * 0.75) + 'pt';
-            return '<span style="font-size:' + ptSize + ';line-height:100%">' + content + '</span>';
-        });
-        forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
+            // Font styles - convert to HTML
+            forumHtml = forumHtml.replace(/\[font=(.*?)\](.*?)\[\/font\]/gis, '<span style="font-family:$1">$2</span>');
+            forumHtml = forumHtml.replace(/\[size=(.*?)\](.*?)\[\/size\]/gis, (_, size, content) => {
+                const ptSize = Math.round(parseInt(size) * 0.75) + 'pt';
+                return '<span style="font-size:' + ptSize + ';line-height:100%">' + content + '</span>';
+            });
+            forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
 
-        // Code/HTML blocks - convert to HTML (these are forum-specific)
-        forumHtml = forumHtml.replace(/\[CODE\](.*?)\[\/CODE\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
-        forumHtml = forumHtml.replace(/\[HTML\](.*?)\[\/HTML\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
+            // Code/HTML blocks - convert to HTML
+            forumHtml = forumHtml.replace(/\[CODE\](.*?)\[\/CODE\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
+            forumHtml = forumHtml.replace(/\[HTML\](.*?)\[\/HTML\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
 
-        // IMPORTANT: Leave these as BBCode for the forum to handle natively
-        // Center - LET FORUM HANDLE
-        // Quote - LET FORUM HANDLE  
-        // Spoiler - LET FORUM HANDLE
+            // IMPORTANT: Leave these as BBCode for the forum to handle natively
+            // [CENTER], [QUOTE], [SPOILER] are left untouched
 
-        // Convert newlines to <br> tags
-        forumHtml = forumHtml.replace(/\n/g, '<br>');
+            // Convert newlines to <br> tags
+            forumHtml = forumHtml.replace(/\n/g, '<br>');
 
-        return forumHtml;
-    } catch (error) {
-        console.error('Error in bbcodeToForum:', error);
-        return bbcode; // Return original on error
+            return forumHtml;
+        } catch (error) {
+            console.error('Error in bbcodeToForum:', error);
+            return bbcode;
+        }
     }
-}
 
     #syncToOriginal() {
         try {
@@ -12816,7 +12656,6 @@ class BBCodeEditor {
 
     #saveState(value) {
         try {
-            // Limit undo stack size
             if (this.#undoStack.length > BBCodeEditor.#CONFIG.MAX_UNDO_STEPS) {
                 this.#undoStack.shift();
                 this.#undoPosition--;
@@ -12897,7 +12736,6 @@ class BBCodeEditor {
             let newText, newCursorStart, newCursorEnd;
 
             if (start === end) {
-                // No selection
                 if (tag === 'ul' || tag === 'ol') {
                     newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
                     newCursorStart = start + openTag.length + '[*]'.length;
@@ -12908,7 +12746,6 @@ class BBCodeEditor {
                     newCursorEnd = newCursorStart;
                 }
             } else {
-                // Has selection
                 if (tag === 'ul' || tag === 'ol') {
                     const items = selectedText.split('\n')
                         .filter(item => item.trim())
@@ -12941,7 +12778,6 @@ class BBCodeEditor {
         try {
             const tag = btn.getAttribute('data-tag');
 
-            // Undo
             if (btn.classList.contains('undo-btn')) {
                 if (this.#undoPosition > 0) {
                     this.#undoPosition--;
@@ -12953,7 +12789,6 @@ class BBCodeEditor {
                 return;
             }
 
-            // Redo
             if (btn.classList.contains('redo-btn')) {
                 if (this.#redoStack.length > 0) {
                     const redoValue = this.#redoStack.pop();
@@ -12967,53 +12802,9 @@ class BBCodeEditor {
                 return;
             }
 
-            // Preview
-            if (btn.classList.contains('preview-btn')) {
-                if (this.#previewPanel.style.display === 'none') {
-                    const editorValue = this.#bbcodeEditor.value;
-                    const forumFormat = this.#bbcodeToForum(editorValue);
-                    const sanitizedHtml = this.#sanitizeHtml(forumFormat);
-                    const html = sanitizedHtml
-                        .replace(/<b>(.*?)<\/b>/gis, '<strong>$1</strong>')
-                        .replace(/<i>(.*?)<\/i>/gis, '<em>$1</em>');
-                    this.#previewPanel.innerHTML = html;
-                    this.#previewPanel.style.display = 'block';
-                    this.#bbcodeEditor.style.display = 'none';
-                    this.#announce('Preview mode enabled');
-                } else {
-                    this.#previewPanel.style.display = 'none';
-                    this.#bbcodeEditor.style.display = '';
-                    this.#bbcodeEditor.focus();
-                    this.#announce('Edit mode enabled');
-                }
-                return;
-            }
-
-            // Source toggle
-            if (btn.classList.contains('source-btn')) {
-                if (this.#originalTextarea.style.display === 'none') {
-                    this.#originalTextarea.style.display = '';
-                    this.#originalTextarea.style.width = '100%';
-                    this.#originalTextarea.style.minHeight = '200px';
-                    this.#bbcodeEditor.style.display = 'none';
-                    this.#previewPanel.style.display = 'none';
-                    this.#originalTextarea.focus();
-                    this.#announce('Source view enabled');
-                } else {
-                    this.#originalTextarea.style.display = 'none';
-                    this.#bbcodeEditor.style.display = '';
-                    this.#syncFromOriginal();
-                    this.#bbcodeEditor.focus();
-                    this.#announce('Editor view enabled');
-                }
-                return;
-            }
-
-            // URL button
             if (tag === 'url') {
                 const url = prompt('Enter URL:', 'https://');
                 if (url) {
-                    // Basic URL validation
                     try {
                         new URL(url);
                         const start = this.#bbcodeEditor.selectionStart;
@@ -13043,7 +12834,6 @@ class BBCodeEditor {
                 return;
             }
 
-            // Image button
             if (tag === 'img') {
                 const imgUrl = prompt('Enter image URL:', 'https://');
                 if (imgUrl) {
@@ -13057,7 +12847,6 @@ class BBCodeEditor {
                 return;
             }
 
-            // Regular tag insertion
             if (tag) {
                 this.#insertTag(tag);
             }
@@ -13197,7 +12986,7 @@ class BBCodeEditor {
                     priority: 'high',
                     selector: '.bbcode-editor-wrapper',
                     pageTypes: ['SendPage'],
-                    callback: () => {} // No-op since we already attached listeners
+                    callback: () => {}
                 });
             }
         } catch (error) {
@@ -13227,20 +13016,8 @@ class BBCodeEditor {
         }
     }
 
-    validate() {
-        try {
-            const value = this.#bbcodeEditor?.value;
-            if (!value) return { valid: true };
-            return this.#validateBBCode(value);
-        } catch (error) {
-            console.error('Error validating:', error);
-            return { valid: false, error: 'Validation error' };
-        }
-    }
-
     destroy() {
         try {
-            // Clean up event listeners
             if (this.#editorWrapper) {
                 if (this.#clickHandler) {
                     this.#editorWrapper.removeEventListener('click', this.#clickHandler);
@@ -13250,24 +13027,20 @@ class BBCodeEditor {
                 }
             }
 
-            // Clear timeouts
             if (this.#saveTimeout) {
                 clearTimeout(this.#saveTimeout);
             }
 
-            // Unregister from observer
             if (globalThis.forumObserver && this.#observerId) {
                 globalThis.forumObserver.unregister(this.#observerId);
             }
             
-            // Remove DOM elements
             this.#editorWrapper?.remove();
             if (this.#originalTextarea) {
                 this.#originalTextarea.style.removeProperty('display');
                 this.#originalTextarea.removeAttribute('data-editor-initialized');
             }
 
-            // Remove announcer
             document.getElementById('bbcode-announcer')?.remove();
 
             console.log('📝 BBCode Editor destroyed');
@@ -13277,17 +13050,14 @@ class BBCodeEditor {
     }
 }
 
-// Safe initialization that won't break other scripts
+// Safe initialization
 (function() {
-    // Don't initialize if already exists
     if (globalThis.bbcodeEditor) {
         console.log('📝 BBCodeEditor already exists');
         return;
     }
 
-    // Use try-catch at the top level
     try {
-        // Defer initialization to not block page load
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
                 try {
@@ -13297,14 +13067,12 @@ class BBCodeEditor {
                 }
             });
         } else {
-            // Use setTimeout to defer and catch any errors
             setTimeout(() => {
                 try {
                     globalThis.bbcodeEditor = new BBCodeEditor();
                     console.log('📝 BBCodeEditor initialized (Professional Edition)');
                 } catch (error) {
                     console.error('Failed to initialize BBCodeEditor:', error);
-                    // Show fallback message
                     const textarea = document.getElementById('Post');
                     if (textarea && textarea.parentNode) {
                         const fallback = document.createElement('div');
@@ -13316,7 +13084,6 @@ class BBCodeEditor {
             }, 100);
         }
     } catch (error) {
-        // Ultimate fallback - never break other scripts
         console.error('Critical BBCodeEditor error:', error);
     }
 })();
