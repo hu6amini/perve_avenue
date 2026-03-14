@@ -12585,130 +12585,129 @@ class BBCodeEditor {
      * Converts forum HTML to BBCode for the editor
      * Now handles nested tags better
      */
-    #forumToBBCode(forumHtml) {
-        if (!forumHtml) return '';
-        
-        try {
-            let bbcode = forumHtml;
+#forumToBBCode(forumHtml) {
+    if (!forumHtml) return '';
+    
+    try {
+        let bbcode = forumHtml;
 
-            // Handle nested tags by processing from inside out
-            const processNested = (text, patterns) => {
-                let result = text;
-                let changed;
-                do {
-                    changed = false;
-                    for (const [pattern, replacement] of patterns) {
-                        try {
-                            const newResult = this.#safeRegexReplace(result, pattern, replacement);
-                            if (newResult !== result) {
-                                result = newResult;
-                                changed = true;
-                            }
-                        } catch (e) {
-                            console.warn('Pattern failed:', pattern, e);
-                        }
-                    }
-                } while (changed);
-                return result;
-            };
-
-            // Define conversion patterns
-            const patterns = [
-                // Basic formatting
-                [/<b>(.*?)<\/b>/gis, '[b]$1[/b]'],
-                [/<strong>(.*?)<\/strong>/gis, '[b]$1[/b]'],
-                [/<i>(.*?)<\/i>/gis, '[i]$1[/i]'],
-                [/<em>(.*?)<\/em>/gis, '[i]$1[/i]'],
-                [/<u>(.*?)<\/u>/gis, '[u]$1[/u]'],
-                [/<del>(.*?)<\/del>/gis, '[del]$1[/del]'],
-                [/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]'],
-                [/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]'],
-
-                // Lists with nested content
-                [/<ol[^>]*>([\s\S]*?)<\/ol>/gis, (_, items) => {
-                    items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
-                        liContent = processNested(liContent, patterns);
-                        return '[*]' + liContent + '\n';
-                    });
-                    items = items.replace(/<br\s*\/?>/gi, '');
-                    return '[list=1]\n' + items.trim() + '\n[/list]';
-                }],
-
-                [/<ul[^>]*>([\s\S]*?)<\/ul>/gis, (_, items) => {
-                    items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
-                        liContent = processNested(liContent, patterns);
-                        return '[*]' + liContent + '\n';
-                    });
-                    items = items.replace(/<br\s*\/?>/gi, '');
-                    return '[list]\n' + items.trim() + '\n[/list]';
-                }],
-
-                // Center
-                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
-                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
-
-                // Links - handle special chars in URLs
-                [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
-                    url = url.replace(/&amp;/g, '&');
-                    text = text.replace(/<[^>]+>/g, '');
-                    if (url === text || text === '') {
-                        return '[URL]' + url + '[/URL]';
-                    }
-                    return '[URL=' + url + ']' + text + '[/URL]';
-                }],
-
-                // Images
-                [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
+        // Handle nested tags by processing from inside out
+        const processNested = (text, patterns) => {
+            let result = text;
+            let changed;
+            do {
+                changed = false;
+                for (const [pattern, replacement] of patterns) {
                     try {
-                        const url = decodeURIComponent(encodedUrl);
-                        return '[IMG]' + url + '[/IMG]';
+                        const newResult = this.#safeRegexReplace(result, pattern, replacement);
+                        if (newResult !== result) {
+                            result = newResult;
+                            changed = true;
+                        }
                     } catch (e) {
-                        return '[IMG]' + encodedUrl + '[/IMG]';
+                        console.warn('Pattern failed:', pattern, e);
                     }
-                }],
-                [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]'],
+                }
+            } while (changed);
+            return result;
+        };
 
-                // Font styles
-                [/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]'],
-                [/<span[^>]*font-size:(\d+)pt[^>]*>(.*?)<\/span>/gis, (_, ptSize, content) => {
-                    const size = Math.round(parseInt(ptSize) / 0.75);
-                    return '[size=' + size + ']' + content + '[/size]';
-                }],
-                [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
+        // Define conversion patterns
+        const patterns = [
+            // Basic formatting
+            [/<b>(.*?)<\/b>/gis, '[b]$1[/b]'],
+            [/<strong>(.*?)<\/strong>/gis, '[b]$1[/b]'],
+            [/<i>(.*?)<\/i>/gis, '[i]$1[/i]'],
+            [/<em>(.*?)<\/em>/gis, '[i]$1[/i]'],
+            [/<u>(.*?)<\/u>/gis, '[u]$1[/u]'],
+            [/<del>(.*?)<\/del>/gis, '[del]$1[/del]'],
+            [/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]'],
+            [/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]'],
 
-                // Quote/Code blocks
-                [/<div[^>]*class="quote"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[QUOTE]$1[/QUOTE]'],
-                [/<blockquote[^>]*>(.*?)<\/blockquote>/gis, '[QUOTE]$1[/QUOTE]'],
-                [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[CODE]$1[/CODE]'],
-                [/<pre[^>]*>(.*?)<\/pre>/gis, '[CODE]$1[/CODE]'],
-                [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[HTML]$1[/HTML]'],
-                [/<div[^>]*class="spoiler"[^>]*>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>/gis, '[SPOILER]$1[/SPOILER]']
-            ];
+            // Lists with nested content
+            [/<ol[^>]*>([\s\S]*?)<\/ol>/gis, (_, items) => {
+                items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
+                    liContent = processNested(liContent, patterns);
+                    return '[*]' + liContent + '\n';
+                });
+                items = items.replace(/<br\s*\/?>/gi, '');
+                return '[list=1]\n' + items.trim() + '\n[/list]';
+            }],
 
-            // Process all conversions with nesting support
-            bbcode = processNested(bbcode, patterns);
+            [/<ul[^>]*>([\s\S]*?)<\/ul>/gis, (_, items) => {
+                items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
+                    liContent = processNested(liContent, patterns);
+                    return '[*]' + liContent + '\n';
+                });
+                items = items.replace(/<br\s*\/?>/gi, '');
+                return '[list]\n' + items.trim() + '\n[/list]';
+            }],
 
-            // Clean up
-            bbcode = bbcode.replace(/<br\s*\/?>/gi, '\n');
-            bbcode = bbcode.replace(/&nbsp;/g, ' ');
-            bbcode = bbcode.replace(/&amp;/g, '&');
-            bbcode = bbcode.replace(/&lt;/g, '<');
-            bbcode = bbcode.replace(/&gt;/g, '>');
-            bbcode = bbcode.replace(/&quot;/g, '"');
-            
-            // Remove any remaining HTML tags
-            bbcode = bbcode.replace(/<[^>]+>/g, '');
-            
-            // Clean up whitespace
-            bbcode = bbcode.replace(/\n\s*\n/g, '\n\n');
+            // Center
+            [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
+            [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
 
-            return bbcode.trim();
-        } catch (error) {
-            console.error('Error in forumToBBCode:', error);
-            return forumHtml; // Return original on error
-        }
+            // Links - handle special chars in URLs
+            [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
+                url = url.replace(/&amp;/g, '&');
+                text = text.replace(/<[^>]+>/g, '');
+                if (url === text || text === '') {
+                    return '[URL]' + url + '[/URL]';
+                }
+                return '[URL=' + url + ']' + text + '[/URL]';
+            }],
+
+            // Images
+            [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
+                try {
+                    const url = decodeURIComponent(encodedUrl);
+                    return '[IMG]' + url + '[/IMG]';
+                } catch (e) {
+                    return '[IMG]' + encodedUrl + '[/IMG]';
+                }
+            }],
+            [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]'],
+
+            // Font styles
+            [/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]'],
+            [/<span[^>]*font-size:(\d+)pt[^>]*>(.*?)<\/span>/gis, (_, ptSize, content) => {
+                const size = Math.round(parseInt(ptSize) / 0.75);
+                return '[size=' + size + ']' + content + '[/size]';
+            }],
+            [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
+
+            // IMPORTANT: Handle any existing BBCode tags that might be in the HTML
+            // This ensures we don't double-convert
+            [/\[QUOTE\](.*?)\[\/QUOTE\]/gis, '[QUOTE]$1[/QUOTE]'],
+            [/\[CODE\](.*?)\[\/CODE\]/gis, '[CODE]$1[/CODE]'],
+            [/\[HTML\](.*?)\[\/HTML\]/gis, '[HTML]$1[/HTML]'],
+            [/\[SPOILER\](.*?)\[\/SPOILER\]/gis, '[SPOILER]$1[/SPOILER]']
+        ];
+
+        // Process all conversions with nesting support
+        bbcode = processNested(bbcode, patterns);
+
+        // Clean up
+        bbcode = bbcode.replace(/<br\s*\/?>/gi, '\n');
+        bbcode = bbcode.replace(/&nbsp;/g, ' ');
+        bbcode = bbcode.replace(/&amp;/g, '&');
+        bbcode = bbcode.replace(/&lt;/g, '<');
+        bbcode = bbcode.replace(/&gt;/g, '>');
+        bbcode = bbcode.replace(/&quot;/g, '"');
+        
+        // Remove any remaining HTML tags
+        bbcode = bbcode.replace(/<[^>]+>/g, '');
+        
+        // Clean up whitespace
+        bbcode = bbcode.replace(/\n\s*\n/g, '\n\n');
+
+        return bbcode.trim();
+    } catch (error) {
+        console.error('Error in forumToBBCode:', error);
+        return forumHtml; // Return original on error
     }
-
+}
+  
     /**
      * Converts BBCode back to forum HTML for submission
      */
