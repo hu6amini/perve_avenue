@@ -11964,24 +11964,27 @@ function initEditorWithObserver() {
         forumHtml = forumHtml.replace(/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]');
         
         // Convert any HTML lists back to BBCode lists first
-        forumHtml = forumHtml.replace(/<ol>(.*?)<\/ol>/gis, function(match, items) {
-            items = items.replace(/<li>(.*?)<\/li>/gis, '[*]$1\n');
+        forumHtml = forumHtml.replace(/<ol[^>]*>(.*?)<\/ol>/gis, function(match, items) {
+            items = items.replace(/<li[^>]*>(.*?)<\/li>/gis, '[*]$1\n');
             return '[list=1]\n' + items + '[/list]';
         });
         
-        forumHtml = forumHtml.replace(/<ul>(.*?)<\/ul>/gis, function(match, items) {
-            items = items.replace(/<li>(.*?)<\/li>/gis, '[*]$1\n');
+        forumHtml = forumHtml.replace(/<ul[^>]*>(.*?)<\/ul>/gis, function(match, items) {
+            items = items.replace(/<li[^>]*>(.*?)<\/li>/gis, '[*]$1\n');
             return '[list]\n' + items + '[/list]';
         });
         
+        // Handle standalone list items
+        forumHtml = forumHtml.replace(/<li[^>]*>(.*?)<\/li>/gis, '[*]$1\n');
+        
         // Now convert BBCode lists to forum HTML
         forumHtml = forumHtml.replace(/\[list=1\](.*?)\[\/list\]/gis, function(match, items) {
-            items = items.replace(/\[\*](.*?)(?=\n|\[\*|$)/gis, '<li>$1</li><br>');
+            items = items.replace(/\[\*](.*?)(?=\n|\[\*]|\[\/list]|$)/gis, '<li>$1</li><br>');
             return '<ol><br>' + items + '</ol>';
         });
         
         forumHtml = forumHtml.replace(/\[list\](.*?)\[\/list\]/gis, function(match, items) {
-            items = items.replace(/\[\*](.*?)(?=\n|\[\*|$)/gis, '<li>$1</li><br>');
+            items = items.replace(/\[\*](.*?)(?=\n|\[\*]|\[\/list]|$)/gis, '<li>$1</li><br>');
             return '<ul><br>' + items + '</ul>';
         });
         
@@ -12038,59 +12041,101 @@ function initEditorWithObserver() {
         if (!forumHtml) return '';
         var bbcode = forumHtml;
         
-        // Convert forum HTML to BBCode
-        bbcode = bbcode.replace(/<p align="center">(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]\n');
+        // First, aggressively convert all HTML lists to BBCode format
+        // Handle ordered lists with possible attributes
+        bbcode = bbcode.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, function(match, items) {
+            items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1\n');
+            items = items.replace(/<br\s*\/?>/gi, '');
+            items = items.replace(/&nbsp;/g, ' ');
+            return '[list=1]\n' + items.trim() + '\n[/list]';
+        });
         
-        bbcode = bbcode.replace(/<a href="(.*?)" target="_blank">(.*?)<\/a>/gis, function(match, url, text) {
-            if (url === text) {
+        // Handle unordered lists with possible attributes
+        bbcode = bbcode.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, function(match, items) {
+            items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1\n');
+            items = items.replace(/<br\s*\/?>/gi, '');
+            items = items.replace(/&nbsp;/g, ' ');
+            return '[list]\n' + items.trim() + '\n[/list]';
+        });
+        
+        // Handle any remaining list items
+        bbcode = bbcode.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1\n');
+        
+        // Convert center paragraphs
+        bbcode = bbcode.replace(/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]\n');
+        bbcode = bbcode.replace(/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]\n');
+        
+        // Convert links
+        bbcode = bbcode.replace(/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, function(match, url, text) {
+            url = url.replace(/&amp;/g, '&');
+            text = text.replace(/<[^>]+>/g, '');
+            if (url === text || text === '') {
                 return '[URL]' + url + '[/URL]';
             } else {
                 return '[URL=' + url + ']' + text + '[/URL]';
             }
         });
         
-        bbcode = bbcode.replace(/<img src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&.*?" alt="image".*?>/gis, function(match, encodedUrl) {
-            var url = decodeURIComponent(encodedUrl);
-            return '[IMG]' + url + '[/IMG]\n';
+        // Convert images
+        bbcode = bbcode.replace(/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, function(match, encodedUrl) {
+            try {
+                var url = decodeURIComponent(encodedUrl);
+                return '[IMG]' + url + '[/IMG]\n';
+            } catch (e) {
+                return match;
+            }
         });
         
-        bbcode = bbcode.replace(/<span style="font-family:(.*?)">(.*?)<\/span>/gis, '[font=$1]$2[/font]');
+        bbcode = bbcode.replace(/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]\n');
         
-        bbcode = bbcode.replace(/<span style="font-size:(.*?)pt;line-height:100%">(.*?)<\/span>/gis, function(match, ptSize, content) {
+        // Convert font spans
+        bbcode = bbcode.replace(/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]');
+        
+        // Convert size (pt to px)
+        bbcode = bbcode.replace(/<span[^>]*font-size:(\d+)pt[^>]*>(.*?)<\/span>/gis, function(match, ptSize, content) {
             var size = Math.round(parseInt(ptSize) / 0.75);
             return '[size=' + size + ']' + content + '[/size]';
         });
         
-        bbcode = bbcode.replace(/<span style="color:(.*?)">(.*?)<\/span>/gis, '[color=$1]$2[/color]');
+        // Convert color spans
+        bbcode = bbcode.replace(/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]');
         
-        bbcode = bbcode.replace(/<div align="center"><div class="quote_top" align="left"><b>QUOTE<\/b><\/div><div class="quote" align="left">(.*?)<\/div><\/div>/gis, '[QUOTE]$1[/QUOTE]\n');
-        bbcode = bbcode.replace(/<div align="center"><div class="code_top" align="left"><b>CODE<\/b><\/div><div class="code" align="left">(.*?)<\/div><\/div>/gis, '[CODE]$1[/CODE]\n');
-        bbcode = bbcode.replace(/<div align="center"><div class="code_top" align="left"><b>HTML<\/b><\/div><div class="code" align="left">(.*?)<\/div><\/div>/gis, '[HTML]$1[/HTML]\n');
-        bbcode = bbcode.replace(/<div class="spoiler" align="center"><div class="code_top" align="left"><b>SPOILER<\/b> \(<a href="javascript:;" onclick="spoiler\(this\)">click to view<\/a>\)<\/div><div class="code" align="left">(.*?)<\/div>/gis, '[SPOILER]$1[/SPOILER]');
+        // Convert quote blocks
+        bbcode = bbcode.replace(/<div[^>]*class="quote"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[QUOTE]$1[/QUOTE]\n');
+        bbcode = bbcode.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, '[QUOTE]$1[/QUOTE]\n');
         
-        // Convert forum HTML lists to BBCode lists
-        bbcode = bbcode.replace(/<ol><br>(.*?)<\/ol>/gis, function(match, items) {
-            items = items.replace(/<li>(.*?)<\/li><br>/gis, '[*]$1\n');
-            return '[list=1]\n' + items + '[/list]\n';
-        });
+        // Convert code blocks
+        bbcode = bbcode.replace(/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[CODE]$1[/CODE]\n');
+        bbcode = bbcode.replace(/<pre[^>]*>(.*?)<\/pre>/gis, '[CODE]$1[/CODE]\n');
         
-        bbcode = bbcode.replace(/<ul><br>(.*?)<\/ul>/gis, function(match, items) {
-            items = items.replace(/<li>(.*?)<\/li><br>/gis, '[*]$1\n');
-            return '[list]\n' + items + '[/list]\n';
-        });
+        // Convert HTML blocks
+        bbcode = bbcode.replace(/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[HTML]$1[/HTML]\n');
         
-        // Basic HTML to BBCode
+        // Convert spoilers
+        bbcode = bbcode.replace(/<div[^>]*class="spoiler"[^>]*>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>/gis, '[SPOILER]$1[/SPOILER]');
+        
+        // Convert basic HTML tags
         bbcode = bbcode.replace(/<b>(.*?)<\/b>/gis, '[b]$1[/b]');
+        bbcode = bbcode.replace(/<strong>(.*?)<\/strong>/gis, '[b]$1[/b]');
         bbcode = bbcode.replace(/<i>(.*?)<\/i>/gis, '[i]$1[/i]');
+        bbcode = bbcode.replace(/<em>(.*?)<\/em>/gis, '[i]$1[/i]');
         bbcode = bbcode.replace(/<u>(.*?)<\/u>/gis, '[u]$1[/u]');
         bbcode = bbcode.replace(/<del>(.*?)<\/del>/gis, '[del]$1[/del]');
         bbcode = bbcode.replace(/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]');
         bbcode = bbcode.replace(/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]');
         
-        // Remove leftover <br> tags
-        bbcode = bbcode.replace(/<br>/g, '\n');
+        // Remove all remaining HTML tags
+        bbcode = bbcode.replace(/<[^>]+>/g, '');
         
-        return bbcode;
+        // Clean up whitespace
+        bbcode = bbcode.replace(/\n\s*\n/g, '\n');
+        bbcode = bbcode.replace(/&nbsp;/g, ' ');
+        bbcode = bbcode.replace(/&amp;/g, '&');
+        bbcode = bbcode.replace(/&lt;/g, '<');
+        bbcode = bbcode.replace(/&gt;/g, '>');
+        bbcode = bbcode.replace(/&quot;/g, '"');
+        
+        return bbcode.trim();
     }
     
     // Sync functions
@@ -12156,12 +12201,10 @@ function initEditorWithObserver() {
             case 'sup': openTag = '[sup]'; closeTag = '[/sup]'; break;
             case 'sub': openTag = '[sub]'; closeTag = '[/sub]'; break;
             case 'ul': 
-                // Unordered list - proper BBCode format
                 openTag = '[list]\n';
                 closeTag = '\n[/list]';
                 break;
             case 'ol': 
-                // Ordered list - proper BBCode format with numbering
                 openTag = '[list=1]\n';
                 closeTag = '\n[/list]';
                 break;
@@ -12183,9 +12226,7 @@ function initEditorWithObserver() {
         if (start === end) {
             // No selection
             if (tag === 'ul' || tag === 'ol') {
-                // Insert list with placeholder items
                 newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
-                // Position cursor at first list item
                 newCursorStart = start + openTag.length + '[*]'.length;
                 newCursorEnd = newCursorStart + 'List item 1'.length;
             } else {
@@ -12194,7 +12235,7 @@ function initEditorWithObserver() {
                 newCursorEnd = newCursorStart;
             }
         } else {
-            // Has selection - convert selected lines to list items
+            // Has selection
             if (tag === 'ul' || tag === 'ol') {
                 var items = selectedText.split('\n');
                 var listItems = '';
@@ -12230,8 +12271,6 @@ function initEditorWithObserver() {
         selector: '.bbcode-editor-wrapper, #bbcode-editor, .bbcode-btn, .bbcode-select',
         pageTypes: ['SendPage'],
         callback: function(node) {
-            console.log('Observer processing editor node:', node);
-            
             // Handle toolbar buttons
             if (node.classList && node.classList.contains('bbcode-btn')) {
                 node.addEventListener('click', function(e) {
@@ -12551,3 +12590,4 @@ if (document.readyState === 'loading') {
 
 // Fallback
 setTimeout(initEditorWithObserver, 500);
+
