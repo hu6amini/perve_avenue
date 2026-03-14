@@ -12073,6 +12073,9 @@ class BBCodeEditor {
         this.#undoStack = [editorInitialValue];
         this.#undoPosition = 0;
 
+        // Attach event listeners directly
+        this.#attachEventListeners();
+
         // Register with observer
         this.#registerWithObserver();
 
@@ -12080,6 +12083,38 @@ class BBCodeEditor {
         this.#updateStatus();
 
         console.log('✅ BBCode Editor initialized');
+    }
+
+    #attachEventListeners() {
+        // Use event delegation on the editor wrapper
+        this.#editorWrapper.addEventListener('click', (e) => {
+            const btn = e.target.closest('.bbcode-btn');
+            if (btn) {
+                e.preventDefault();
+                this.#handleButtonClick(btn);
+            }
+        });
+
+        // Handle select changes
+        this.#editorWrapper.addEventListener('change', (e) => {
+            const select = e.target.closest('.bbcode-select');
+            if (select) {
+                this.#handleSelectChange(select);
+            }
+        });
+
+        // Handle textarea events directly
+        if (this.#bbcodeEditor) {
+            this.#bbcodeEditor.addEventListener('input', () => {
+                this.#syncToOriginal();
+                this.#saveState(this.#bbcodeEditor.value);
+                this.#updateStatus();
+            });
+            
+            this.#bbcodeEditor.addEventListener('keyup', () => this.#updateStatus());
+            this.#bbcodeEditor.addEventListener('click', () => this.#updateStatus());
+            this.#bbcodeEditor.addEventListener('keydown', (e) => this.#handleKeydown(e));
+        }
     }
 
     #buildEditorHTML(initialValue) {
@@ -12448,55 +12483,7 @@ class BBCodeEditor {
         this.#bbcodeEditor.focus();
     }
 
-    #registerWithObserver() {
-        // Register main editor components
-        this.#observerId = globalThis.forumObserver.register({
-            id: 'bbcode-editor-init',
-            priority: 'high',
-            selector: '.bbcode-editor-wrapper, #bbcode-editor, .bbcode-btn, .bbcode-select',
-            pageTypes: ['SendPage'],
-            callback: (node) => this.#handleNodeCallback(node)
-        });
-
-        // Register debounced status updates
-        globalThis.forumObserver.registerDebounced({
-            id: 'bbcode-editor-status',
-            priority: 'low',
-            selector: '#bbcode-editor',
-            pageTypes: ['SendPage'],
-            delay: 100,
-            callback: () => this.#updateStatus()
-        });
-    }
-
-    #handleNodeCallback(node) {
-        // Handle toolbar buttons
-        if (node.classList?.contains('bbcode-btn')) {
-            node.addEventListener('click', (e) => this.#handleButtonClick(e));
-        }
-
-        // Handle select changes
-        if (node.classList?.contains('bbcode-select')) {
-            node.addEventListener('change', (e) => this.#handleSelectChange(e));
-        }
-
-        // Handle textarea
-        if (node.id === 'bbcode-editor') {
-            node.addEventListener('input', () => {
-                this.#syncToOriginal();
-                this.#saveState(node.value);
-                this.#updateStatus();
-            });
-            
-            node.addEventListener('keyup', () => this.#updateStatus());
-            node.addEventListener('click', () => this.#updateStatus());
-            node.addEventListener('keydown', (e) => this.#handleKeydown(e));
-        }
-    }
-
-    #handleButtonClick(e) {
-        e.preventDefault();
-        const btn = e.currentTarget;
+    #handleButtonClick(btn) {
         const tag = btn.getAttribute('data-tag');
 
         // Undo
@@ -12595,11 +12582,12 @@ class BBCodeEditor {
         }
 
         // Regular tag insertion
-        this.#insertTag(tag);
+        if (tag) {
+            this.#insertTag(tag);
+        }
     }
 
-    #handleSelectChange(e) {
-        const select = e.currentTarget;
+    #handleSelectChange(select) {
         const value = select.value;
         const group = select.getAttribute('data-group');
 
@@ -12670,6 +12658,18 @@ class BBCodeEditor {
                 shortcuts[key]();
             }
         }
+    }
+
+    #registerWithObserver() {
+        // We don't need to register individual elements anymore since we use event delegation
+        // But we keep this for compatibility with the observer system
+        this.#observerId = globalThis.forumObserver.register({
+            id: 'bbcode-editor-init',
+            priority: 'high',
+            selector: '.bbcode-editor-wrapper',
+            pageTypes: ['SendPage'],
+            callback: () => {} // No-op since we already attached listeners
+        });
     }
 
     // Public API
