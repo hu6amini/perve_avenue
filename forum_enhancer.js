@@ -11732,7 +11732,7 @@ globalThis.addEventListener('pagehide', function() {
 
 
 // ============================================
-// BBCODE EDITOR - Modern ES6+ Implementation
+// BBCODE EDITOR - Modern ES6+ Implementation with Font Awesome
 // ============================================
 
 'use strict';
@@ -11749,42 +11749,43 @@ class BBCodeEditor {
     #observerId = null;
     #initStarted = false;
 
-    // Static toolbar configuration
+    // Static toolbar configuration with Font Awesome icons
     static #TOOLBAR_GROUPS = [
         {
             name: 'basic',
             buttons: [
-                { tag: 'b', title: 'Bold (Ctrl+B)', icon: '<b>B</b>' },
-                { tag: 'i', title: 'Italic (Ctrl+I)', icon: '<i>I</i>' },
-                { tag: 'u', title: 'Underline (Ctrl+U)', icon: '<u>U</u>' },
-                { tag: 'del', title: 'Strikethrough', icon: '<del>S</del>' },
-                { tag: 'sup', title: 'Superscript', icon: 'x²' },
-                { tag: 'sub', title: 'Subscript', icon: 'x₂' }
+                { tag: 'b', title: 'Bold (Ctrl+B)', icon: '<i class="fa-regular fa-bold" aria-hidden="true"></i>' },
+                { tag: 'i', title: 'Italic (Ctrl+I)', icon: '<i class="fa-regular fa-italic" aria-hidden="true"></i>' },
+                { tag: 'u', title: 'Underline (Ctrl+U)', icon: '<i class="fa-regular fa-underline" aria-hidden="true"></i>' },
+                { tag: 'del', title: 'Strikethrough', icon: '<i class="fa-regular fa-strikethrough" aria-hidden="true"></i>' },
+                { tag: 'sup', title: 'Superscript', icon: '<i class="fa-regular fa-superscript" aria-hidden="true"></i>' },
+                { tag: 'sub', title: 'Subscript', icon: '<i class="fa-regular fa-subscript" aria-hidden="true"></i>' }
             ]
         },
         {
             name: 'lists',
             buttons: [
-                { tag: 'ul', title: 'Bullet List', icon: '• List' },
-                { tag: 'ol', title: 'Numbered List', icon: '1. List' }
+                { tag: 'ul', title: 'Bullet List', icon: '<i class="fa-regular fa-list-ul" aria-hidden="true"></i>' },
+                { tag: 'ol', title: 'Numbered List', icon: '<i class="fa-regular fa-list-ol" aria-hidden="true"></i>' }
             ]
         },
         {
             name: 'align',
             buttons: [
-                { tag: 'center', title: 'Center', icon: 'CENTER' }
+                { tag: 'center', title: 'Center', icon: '<i class="fa-regular fa-align-center" aria-hidden="true"></i>' }
             ]
         },
         {
             name: 'links',
             buttons: [
-                { tag: 'url', title: 'Insert Link (Ctrl+L)', icon: 'URL' },
-                { tag: 'img', title: 'Insert Image (Ctrl+P)', icon: 'IMG' }
+                { tag: 'url', title: 'Insert Link (Ctrl+L)', icon: '<i class="fa-regular fa-link" aria-hidden="true"></i>' },
+                { tag: 'img', title: 'Insert Image (Ctrl+P)', icon: '<i class="fa-regular fa-image" aria-hidden="true"></i>' }
             ]
         },
         {
             name: 'font',
             type: 'select',
+            icon: '<i class="fa-regular fa-font" aria-hidden="true"></i>',
             options: [
                 { value: '', text: 'Font' },
                 { value: 'Arial', text: 'Arial' },
@@ -11797,6 +11798,7 @@ class BBCodeEditor {
         {
             name: 'size',
             type: 'select',
+            icon: '<i class="fa-regular fa-text-height" aria-hidden="true"></i>',
             options: [
                 { value: '', text: 'Size' },
                 { value: '8', text: '8' },
@@ -11811,6 +11813,7 @@ class BBCodeEditor {
         {
             name: 'color',
             type: 'select',
+            icon: '<i class="fa-regular fa-palette" aria-hidden="true"></i>',
             options: [
                 { value: '', text: 'COLOR' },
                 { value: 'blue', text: 'Blue', style: 'color:blue' },
@@ -11825,10 +11828,10 @@ class BBCodeEditor {
         {
             name: 'blocks',
             buttons: [
-                { tag: 'quote', title: 'Quote (Ctrl+Q)', icon: 'QUOTE' },
-                { tag: 'code', title: 'Code (Ctrl+K)', icon: 'CODE' },
-                { tag: 'html', title: 'HTML', icon: 'HTML' },
-                { tag: 'spoiler', title: 'Spoiler', icon: 'SPOILER' }
+                { tag: 'quote', title: 'Quote (Ctrl+Q)', icon: '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' },
+                { tag: 'code', title: 'Code (Ctrl+K)', icon: '<i class="fa-sharp fa-regular fa-code" aria-hidden="true"></i>' },
+                { tag: 'html', title: 'HTML', icon: '<i class="fa-regular fa-file-html" aria-hidden="true"></i>' },
+                { tag: 'spoiler', title: 'Spoiler', icon: '<i class="fa-regular fa-flag" aria-hidden="true"></i>' }
             ]
         }
     ];
@@ -11849,6 +11852,7 @@ class BBCodeEditor {
             background: #f8f9fa; 
             border-bottom: 1px solid #ddd; 
             gap: 8px; 
+            align-items: center;
         } 
         
         .bbcode-toolbar-group { 
@@ -11856,6 +11860,7 @@ class BBCodeEditor {
             gap: 4px; 
             padding-right: 8px; 
             border-right: 1px solid #ccc; 
+            align-items: center;
         } 
         
         .bbcode-toolbar-group:last-child { 
@@ -11868,9 +11873,12 @@ class BBCodeEditor {
             border: 1px solid #ccc; 
             border-radius: 3px; 
             cursor: pointer; 
-            font-size: 13px; 
+            font-size: 14px; 
             min-width: 32px; 
             transition: all 0.2s; 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         } 
         
         .bbcode-btn:hover { 
@@ -11883,13 +11891,30 @@ class BBCodeEditor {
             transform: translateY(1px); 
         } 
         
+        .bbcode-btn i {
+            font-size: 16px;
+            line-height: 1;
+        }
+        
         .bbcode-select { 
             padding: 5px; 
             border: 1px solid #ccc; 
             border-radius: 3px; 
             background: #fff; 
             font-size: 13px; 
+            min-width: 80px;
         } 
+        
+        .bbcode-select-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .bbcode-select-group i {
+            color: #666;
+            font-size: 16px;
+        }
         
         .bbcode-textarea { 
             width: 100%; 
@@ -11950,8 +11975,12 @@ class BBCodeEditor {
         
         .undo-btn, .redo-btn { 
             font-family: monospace; 
-            font-size: 16px; 
+            font-size: 18px; 
         } 
+
+        .undo-btn i, .redo-btn i {
+            font-size: 18px;
+        }
     `;
 
     constructor() {
@@ -12060,10 +12089,18 @@ class BBCodeEditor {
             <div class="bbcode-toolbar" role="toolbar" aria-label="Formatting tools">
                 ${this.#buildToolbarGroups()}
                 <div class="bbcode-toolbar-group bbcode-utils">
-                    <button type="button" class="bbcode-btn undo-btn" title="Undo (Ctrl+Z)">↩</button>
-                    <button type="button" class="bbcode-btn redo-btn" title="Redo (Ctrl+Y)">↪</button>
-                    <button type="button" class="bbcode-btn preview-btn" title="Preview (Ctrl+Shift+P)">👁️</button>
-                    <button type="button" class="bbcode-btn source-btn" title="Toggle Source">📝</button>
+                    <button type="button" class="bbcode-btn undo-btn" title="Undo (Ctrl+Z)">
+                        <i class="fa-regular fa-rotate-left" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="bbcode-btn redo-btn" title="Redo (Ctrl+Y)">
+                        <i class="fa-regular fa-rotate-right" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="bbcode-btn preview-btn" title="Preview (Ctrl+Shift+P)">
+                        <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="bbcode-btn source-btn" title="Toggle Source">
+                        <i class="fa-regular fa-code" aria-hidden="true"></i>
+                    </button>
                 </div>
             </div>
             <div class="bbcode-editor-area">
@@ -12087,12 +12124,17 @@ class BBCodeEditor {
             let groupHtml = '<div class="bbcode-toolbar-group" role="group">';
             
             if (group.type === 'select') {
+                groupHtml += '<div class="bbcode-select-group">';
+                if (group.icon) {
+                    groupHtml += group.icon;
+                }
                 groupHtml += `<select class="bbcode-select" data-group="${group.name}">`;
                 groupHtml += group.options.map(opt => {
                     const styleAttr = opt.style ? ` style="${opt.style}"` : '';
                     return `<option value="${opt.value}"${styleAttr}>${opt.text}</option>`;
                 }).join('');
                 groupHtml += '</select>';
+                groupHtml += '</div>';
             } else {
                 groupHtml += group.buttons.map(btn => 
                     `<button type="button" class="bbcode-btn" 
