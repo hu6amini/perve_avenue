@@ -12653,15 +12653,17 @@ class BBCodeEditor {
                 return '[URL=' + url + ']' + text + '[/URL]';
             }],
 
-            // Images
+            // IMPORTANT: Handle images - extract original URL from weserv if present
             [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
                 try {
+                    // First decode the URL parameter
                     const url = decodeURIComponent(encodedUrl);
                     return '[IMG]' + url + '[/IMG]';
                 } catch (e) {
                     return '[IMG]' + encodedUrl + '[/IMG]';
                 }
             }],
+            // Handle regular img tags without weserv
             [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]'],
 
             // Font styles
