@@ -12643,10 +12643,6 @@ class BBCodeEditor {
                 return '[list]\n' + items.trim() + '\n[/list]';
             }],
 
-            // Center
-            [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
-            [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
-
             // Links - handle special chars in URLs
             [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
                 url = url.replace(/&amp;/g, '&');
@@ -12676,11 +12672,20 @@ class BBCodeEditor {
             }],
             [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
 
-            // IMPORTANT: Handle any existing BBCode tags that might be in the HTML
-            // This ensures we don't double-convert
+            // Code/HTML blocks - convert to BBCode
+            [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[CODE]$1[/CODE]'],
+            [/<pre[^>]*>(.*?)<\/pre>/gis, '[CODE]$1[/CODE]'],
+            [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[HTML]$1[/HTML]'],
+
+            // IMPORTANT: Handle center tags that might have been converted by the forum
+            // But we want to keep them as BBCode, so we convert them back
+            [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
+            [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
+
+            // IMPORTANT: Preserve existing BBCode tags for center, quote, and spoiler
+            // These patterns ensure we don't lose them if they're already in the HTML
+            [/\[CENTER\](.*?)\[\/CENTER\]/gis, '[CENTER]$1[/CENTER]'],
             [/\[QUOTE\](.*?)\[\/QUOTE\]/gis, '[QUOTE]$1[/QUOTE]'],
-            [/\[CODE\](.*?)\[\/CODE\]/gis, '[CODE]$1[/CODE]'],
-            [/\[HTML\](.*?)\[\/HTML\]/gis, '[HTML]$1[/HTML]'],
             [/\[SPOILER\](.*?)\[\/SPOILER\]/gis, '[SPOILER]$1[/SPOILER]']
         ];
 
