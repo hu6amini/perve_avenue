@@ -13154,6 +13154,8 @@ class BBCodeEditor {
             const value = this.#bbcodeEditor.value;
             
             this.#bbcodeEditor.value = value.substring(0, start) + text + value.substring(end);
+            
+            // Place cursor AFTER the inserted text
             this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = start + text.length;
             
             this.#syncToOriginal();
@@ -13164,6 +13166,9 @@ class BBCodeEditor {
             if (!this.#isEditing) {
                 this.#autoSave();
             }
+            
+            // Ensure editor keeps focus
+            this.#bbcodeEditor.focus();
         } catch (error) {
             console.error('Error inserting text:', error);
         }
@@ -13632,6 +13637,29 @@ class BBCodeEditor {
     }
 
     /**
+     * Validates if a string looks like a URL
+     */
+    #isValidUrl(string) {
+        if (!string || typeof string !== 'string') return false;
+        
+        // Trim whitespace
+        string = string.trim();
+        
+        // Must have at least something that looks like a domain
+        if (string.length < 3) return false;
+        
+        // Check for common URL patterns
+        const urlPatterns = [
+            /^https?:\/\//i,                    // http:// or https://
+            /^www\.[a-z0-9-]+(\.[a-z0-9-]+)+/i, // www.example.com
+            /^[a-z0-9-]+(\.[a-z0-9-]+)+\.[a-z]{2,}/i, // example.com
+            /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/|$)/i // domain with TLD
+        ];
+        
+        return urlPatterns.some(pattern => pattern.test(string));
+    }
+
+    /**
      * Converts forum HTML to BBCode for the editor
      */
     #forumToBBCode(forumHtml) {
@@ -13933,12 +13961,12 @@ class BBCodeEditor {
             if (start === end) {
                 if (tag === 'ul' || tag === 'ol') {
                     newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
-                    newCursorStart = start + openTag.length + '[*]'.length;
-                    newCursorEnd = newCursorStart + 'List item 1'.length;
+                    newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
                 } else {
                     newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
-                    newCursorStart = start + openTag.length;
-                    newCursorEnd = newCursorStart;
+                    // Place cursor AFTER the closing tag
+                    newCursorStart = newCursorEnd = start + openTag.length + closeTag.length;
                 }
             } else {
                 if (tag === 'ul' || tag === 'ol') {
@@ -13947,12 +13975,12 @@ class BBCodeEditor {
                         .map(item => '[*]' + item)
                         .join('\n');
                     newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
-                    newCursorStart = start + openTag.length;
-                    newCursorEnd = newCursorStart + items.length;
+                    newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
                 } else {
                     newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
-                    newCursorStart = start + openTag.length;
-                    newCursorEnd = newCursorStart + selectedText.length;
+                    // Place cursor AFTER the closing tag
+                    newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
                 }
             }
 
@@ -14005,38 +14033,45 @@ class BBCodeEditor {
 
             if (tag === 'url') {
                 const url = prompt('Enter URL:', 'https://');
-                if (url) {
-                    try {
-                        new URL(url);
+                if (url && url.trim()) {
+                    // More lenient URL validation
+                    const trimmedUrl = url.trim();
+                    
+                    // Accept anything that looks like a URL
+                    if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                         const start = this.#bbcodeEditor.selectionStart;
                         const end = this.#bbcodeEditor.selectionEnd;
-                        const selectedText = this.#bbcodeEditor.value.substring(start, end);
+                        const text = this.#bbcodeEditor.value;
+                        const selectedText = text.substring(start, end);
+
+                        let newText;
+                        let newCursorPos;
 
                         if (selectedText) {
                             // If text is selected, create a link with that text
-                            const newText = text.substring(0, start) + 
-                                `[url=${url}]${selectedText}[/url]` + 
+                            newText = text.substring(0, start) + 
+                                `[url=${trimmedUrl}]${selectedText}[/url]` + 
                                 text.substring(end);
-                            this.#bbcodeEditor.value = newText;
-                            this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                start + (`[url=${url}]`).length + selectedText.length + '[/url]'.length;
+                            newCursorPos = start + (`[url=${trimmedUrl}]`).length + selectedText.length + '[/url]'.length;
                         } else {
                             // If no text is selected, insert [url]url[/url]
-                            const newText = text.substring(0, start) + 
-                                `[url]${url}[/url]` + 
+                            newText = text.substring(0, start) + 
+                                `[url]${trimmedUrl}[/url]` + 
                                 text.substring(end);
-                            this.#bbcodeEditor.value = newText;
-                            this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                start + (`[url]`).length + url.length + '[/url]'.length;
+                            newCursorPos = start + (`[url]`).length + trimmedUrl.length + '[/url]'.length;
                         }
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
                         
                         this.#syncToOriginal();
                         this.#saveState(newText);
                         this.#updateStatus();
+                        this.#bbcodeEditor.focus();
                         this.#showStatusMessage('Link inserted', 'success');
                         
-                    } catch (e) {
-                        alert('Please enter a valid URL');
+                    } else {
+                        alert('Please enter a valid URL (e.g., https://example.com or www.example.com)');
                     }
                 }
                 return;
@@ -14044,28 +14079,34 @@ class BBCodeEditor {
 
             if (tag === 'img') {
                 const imgUrl = prompt('Enter image URL:', 'https://');
-                if (imgUrl) {
-                    try {
-                        new URL(imgUrl);
+                if (imgUrl && imgUrl.trim()) {
+                    const trimmedUrl = imgUrl.trim();
+                    
+                    // Accept anything that looks like an image URL
+                    if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                         const start = this.#bbcodeEditor.selectionStart;
                         const end = this.#bbcodeEditor.selectionEnd;
                         const text = this.#bbcodeEditor.value;
                         
                         // Insert [img]url[/img]
                         const newText = text.substring(0, start) + 
-                            `[img]${imgUrl}[/img]` + 
+                            `[img]${trimmedUrl}[/img]` + 
                             text.substring(end);
+                        
+                        // Place cursor AFTER the closing tag
+                        const newCursorPos = start + (`[img]`).length + trimmedUrl.length + '[/img]'.length;
+                        
                         this.#bbcodeEditor.value = newText;
-                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                            start + (`[img]`).length + imgUrl.length + '[/img]'.length;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
                         
                         this.#syncToOriginal();
                         this.#saveState(newText);
                         this.#updateStatus();
+                        this.#bbcodeEditor.focus();
                         this.#showStatusMessage('Image inserted', 'success');
                         
-                    } catch (e) {
-                        alert('Please enter a valid image URL');
+                    } else {
+                        alert('Please enter a valid image URL (e.g., https://example.com/image.jpg)');
                     }
                 }
                 return;
@@ -14154,35 +14195,37 @@ class BBCodeEditor {
                     'l': () => {
                         e.preventDefault();
                         const url = prompt('Enter URL:');
-                        if (url) {
-                            try {
-                                new URL(url);
+                        if (url && url.trim()) {
+                            const trimmedUrl = url.trim();
+                            
+                            if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                                 const text = this.#bbcodeEditor.value;
                                 
+                                let newText;
+                                let newCursorPos;
+
                                 if (selectedText) {
-                                    // If text is selected, create a link with that text
-                                    const newText = text.substring(0, start) + 
-                                        `[url=${url}]${selectedText}[/url]` + 
+                                    newText = text.substring(0, start) + 
+                                        `[url=${trimmedUrl}]${selectedText}[/url]` + 
                                         text.substring(end);
-                                    this.#bbcodeEditor.value = newText;
-                                    this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                        start + (`[url=${url}]`).length + selectedText.length + '[/url]'.length;
+                                    newCursorPos = start + (`[url=${trimmedUrl}]`).length + selectedText.length + '[/url]'.length;
                                 } else {
-                                    // If no text is selected, insert [url]url[/url]
-                                    const newText = text.substring(0, start) + 
-                                        `[url]${url}[/url]` + 
+                                    newText = text.substring(0, start) + 
+                                        `[url]${trimmedUrl}[/url]` + 
                                         text.substring(end);
-                                    this.#bbcodeEditor.value = newText;
-                                    this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                        start + (`[url]`).length + url.length + '[/url]'.length;
+                                    newCursorPos = start + (`[url]`).length + trimmedUrl.length + '[/url]'.length;
                                 }
+                                
+                                this.#bbcodeEditor.value = newText;
+                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
                                 
                                 this.#syncToOriginal();
                                 this.#saveState(newText);
                                 this.#updateStatus();
+                                this.#bbcodeEditor.focus();
                                 this.#showStatusMessage('Link inserted', 'success');
                                 
-                            } catch (e) {
+                            } else {
                                 alert('Please enter a valid URL');
                             }
                         }
@@ -14190,27 +14233,28 @@ class BBCodeEditor {
                     'p': () => {
                         e.preventDefault();
                         const imgUrl = prompt('Enter image URL:');
-                        if (imgUrl) {
-                            try {
-                                new URL(imgUrl);
+                        if (imgUrl && imgUrl.trim()) {
+                            const trimmedUrl = imgUrl.trim();
+                            
+                            if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                                 const text = this.#bbcodeEditor.value;
-                                const start = this.#bbcodeEditor.selectionStart;
-                                const end = this.#bbcodeEditor.selectionEnd;
                                 
-                                // Insert [img]url[/img]
                                 const newText = text.substring(0, start) + 
-                                    `[img]${imgUrl}[/img]` + 
+                                    `[img]${trimmedUrl}[/img]` + 
                                     text.substring(end);
+                                
+                                const newCursorPos = start + (`[img]`).length + trimmedUrl.length + '[/img]'.length;
+                                
                                 this.#bbcodeEditor.value = newText;
-                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                    start + (`[img]`).length + imgUrl.length + '[/img]'.length;
+                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
                                 
                                 this.#syncToOriginal();
                                 this.#saveState(newText);
                                 this.#updateStatus();
+                                this.#bbcodeEditor.focus();
                                 this.#showStatusMessage('Image inserted', 'success');
                                 
-                            } catch (e) {
+                            } else {
                                 alert('Please enter a valid image URL');
                             }
                         }
