@@ -12500,21 +12500,21 @@ class BBCodeEditor {
                     url = url.replace(/&amp;/g, '&');
                     text = text.replace(/<[^>]+>/g, '');
                     if (url === text || text === '') {
-                        return '[URL]' + url + '[/URL]';
+                        return '[url]' + url + '[/url]';
                     }
-                    return '[URL=' + url + ']' + text + '[/URL]';
+                    return '[url=' + url + ']' + text + '[/url]';
                 }],
 
                 // Images - extract original URL from weserv if present
                 [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
                     try {
                         const url = decodeURIComponent(encodedUrl);
-                        return '[IMG]' + url + '[/IMG]';
+                        return '[img]' + url + '[/img]';
                     } catch (e) {
-                        return '[IMG]' + encodedUrl + '[/IMG]';
+                        return '[img]' + encodedUrl + '[/img]';
                     }
                 }],
-                [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[IMG]$1[/IMG]'],
+                [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[img]$1[/img]'],
 
                 // Font styles
                 [/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]'],
@@ -12525,18 +12525,18 @@ class BBCodeEditor {
                 [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
 
                 // Code/HTML blocks
-                [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[CODE]$1[/CODE]'],
-                [/<pre[^>]*>(.*?)<\/pre>/gis, '[CODE]$1[/CODE]'],
-                [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[HTML]$1[/HTML]'],
+                [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[code]$1[/code]'],
+                [/<pre[^>]*>(.*?)<\/pre>/gis, '[code]$1[/code]'],
+                [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[html]$1[/html]'],
 
                 // Center tags - keep as BBCode for forum to handle
-                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[CENTER]$1[/CENTER]'],
-                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]'],
+                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[center]$1[/center]'],
+                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[center]$1[/center]'],
 
                 // Preserve existing BBCode tags
-                [/\[CENTER\](.*?)\[\/CENTER\]/gis, '[CENTER]$1[/CENTER]'],
-                [/\[QUOTE\](.*?)\[\/QUOTE\]/gis, '[QUOTE]$1[/QUOTE]'],
-                [/\[SPOILER\](.*?)\[\/SPOILER\]/gis, '[SPOILER]$1[/SPOILER]']
+                [/\[center\](.*?)\[\/center\]/gis, '[center]$1[/center]'],
+                [/\[quote\](.*?)\[\/quote\]/gis, '[quote]$1[/quote]'],
+                [/\[spoiler\](.*?)\[\/spoiler\]/gis, '[spoiler]$1[/spoiler]']
             ];
 
             bbcode = processNested(bbcode, patterns);
@@ -12594,8 +12594,8 @@ class BBCodeEditor {
             });
 
             // URLs - convert to HTML
-            forumHtml = forumHtml.replace(/\[URL=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
-            forumHtml = forumHtml.replace(/\[URL\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+            forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+            forumHtml = forumHtml.replace(/\[url\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
             // IMPORTANT: Skip image conversion - leave [IMG] tags as BBCode
             // The forum's media dimension extractor and weserv optimizer will handle them
@@ -12609,8 +12609,8 @@ class BBCodeEditor {
             forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
 
             // Code/HTML blocks - convert to HTML
-            forumHtml = forumHtml.replace(/\[CODE\](.*?)\[\/CODE\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
-            forumHtml = forumHtml.replace(/\[HTML\](.*?)\[\/HTML\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
+            forumHtml = forumHtml.replace(/\[code\](.*?)\[\/code\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
+            forumHtml = forumHtml.replace(/\[html\](.*?)\[\/html\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
 
             // IMPORTANT: Leave these as BBCode for the forum to handle natively
             // [CENTER], [QUOTE], [SPOILER] are left untouched
@@ -12719,13 +12719,13 @@ class BBCodeEditor {
                 'sub': ['[sub]', '[/sub]'],
                 'ul': ['[list]\n', '\n[/list]'],
                 'ol': ['[list=1]\n', '\n[/list]'],
-                'center': ['[CENTER]', '[/CENTER]'],
-                'url': [value ? `[URL=${value}]` : '[URL]', '[/URL]'],
-                'img': ['[IMG]', '[/IMG]'],
-                'quote': ['[QUOTE]', '[/QUOTE]'],
-                'code': ['[CODE]', '[/CODE]'],
-                'html': ['[HTML]', '[/HTML]'],
-                'spoiler': ['[SPOILER]', '[/SPOILER]'],
+                'center': ['[center]', '[/center]'],
+                'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
+                'img': ['[img]', '[/img]'],
+                'quote': ['[quote]', '[/quote]'],
+                'code': ['[code]', '[/code]'],
+                'html': ['[html]', '[/html]'],
+                'spoiler': ['[spoiler]', '[/spoiler]'],
                 'font': [`[font=${value}]`, '[/font]'],
                 'size': [`[size=${value}]`, '[/size]'],
                 'color': [`[color=${value}]`, '[/color]']
