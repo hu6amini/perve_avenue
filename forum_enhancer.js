@@ -11731,7 +11731,7 @@ globalThis.addEventListener('pagehide', function() {
 
 
 // ============================================
-// BBCODE EDITOR - Enhanced Edition
+// BBCODE EDITOR - Enhanced Edition with Full Emoji Support
 // ============================================
 
 'use strict';
@@ -11757,7 +11757,8 @@ class BBCodeEditor {
     #emojiButton = null;
     #draftKey = null;
     #statusMessageTimeout = null;
-    #isEditing = false; // New flag to track if we're editing an existing post
+    #isEditing = false;
+    #currentEmojiCategory = 'smileys';
     
     // Configuration
     static #CONFIG = {
@@ -11770,29 +11771,518 @@ class BBCodeEditor {
         ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target']
     };
 
-    // Common forum emojis/smilies
-    static #EMOJIS = [
-        { code: ':)', emoji: '😊', name: 'smile' },
-        { code: ':(', emoji: '😞', name: 'sad' },
-        { code: ';)', emoji: '😉', name: 'wink' },
-        { code: ':D', emoji: '😃', name: 'grin' },
-        { code: ':P', emoji: '😛', name: 'tongue' },
-        { code: 'B)', emoji: '😎', name: 'cool' },
-        { code: ':o', emoji: '😮', name: 'surprised' },
-        { code: ':x', emoji: '😶', name: 'silent' },
-        { code: ':|', emoji: '😐', name: 'neutral' },
-        { code: ':*', emoji: '😘', name: 'kiss' },
-        { code: ':@', emoji: '😠', name: 'angry' },
-        { code: ':$', emoji: '😳', name: 'blush' },
-        { code: ':#', emoji: '🤐', name: 'zip' },
-        { code: ':~', emoji: '😫', name: 'tired' },
-        { code: '(y)', emoji: '👍', name: 'thumbs up' },
-        { code: '(n)', emoji: '👎', name: 'thumbs down' },
-        { code: '(h)', emoji: '👋', name: 'wave' },
-        { code: '(c)', emoji: '©️', name: 'copyright' },
-        { code: '(r)', emoji: '®️', name: 'registered' },
-        { code: '(tm)', emoji: '™️', name: 'trademark' }
-    ];
+    // Comprehensive emoji collection organized by category
+    static #EMOJI_CATEGORIES = {
+        smileys: {
+            name: 'Smileys & Emotion',
+            emojis: [
+                { code: ':)', emoji: '😃', name: 'Grinning Face' },
+                { code: ':D', emoji: '😄', name: 'Grinning Face with Smiling Eyes' },
+                { code: '=D', emoji: '😁', name: 'Beaming Face with Smiling Eyes' },
+                { code: 'XD', emoji: '😆', name: 'Grinning Squinting Face' },
+                { code: ':^)', emoji: '😅', name: 'Grinning Face with Sweat' },
+                { code: ':\')', emoji: '😂', name: 'Face with Tears of Joy' },
+                { code: ';)', emoji: '😉', name: 'Winking Face' },
+                { code: ':)', emoji: '😊', name: 'Smiling Face with Smiling Eyes' },
+                { code: 'O:)', emoji: '😇', name: 'Smiling Face with Halo' },
+                { code: ':3', emoji: '😍', name: 'Smiling Face with Heart-Eyes' },
+                { code: ':*', emoji: '😘', name: 'Face Blowing a Kiss' },
+                { code: ':x', emoji: '😚', name: 'Kissing Face with Closed Eyes' },
+                { code: ':P', emoji: '😋', name: 'Face Savoring Food' },
+                { code: ':p', emoji: '😜', name: 'Winking Face with Tongue' },
+                { code: ';p', emoji: '😝', name: 'Squinting Face with Tongue' },
+                { code: ':|', emoji: '😐', name: 'Neutral Face' },
+                { code: ':|', emoji: '😶', name: 'Face Without Mouth' },
+                { code: ':)', emoji: '😏', name: 'Smirking Face' },
+                { code: ':l', emoji: '😒', name: 'Unamused Face' },
+                { code: ':)', emoji: '😌', name: 'Relieved Face' },
+                { code: ':(', emoji: '😔', name: 'Pensive Face' },
+                { code: '|)', emoji: '😪', name: 'Sleepy Face' },
+                { code: ':(', emoji: '😷', name: 'Face with Medical Mask' },
+                { code: 'X(', emoji: '😵', name: 'Face with Crossed-Out Eyes' },
+                { code: '8)', emoji: '😎', name: 'Smiling Face with Sunglasses' },
+                { code: ':O', emoji: '😲', name: 'Astonished Face' },
+                { code: ':$', emoji: '😳', name: 'Flushed Face' },
+                { code: 'D:', emoji: '😨', name: 'Fearful Face' },
+                { code: ';(', emoji: '😰', name: 'Anxious Face with Sweat' },
+                { code: ':\'(', emoji: '😥', name: 'Sad but Relieved Face' },
+                { code: ';(', emoji: '😢', name: 'Crying Face' },
+                { code: ':,(', emoji: '😭', name: 'Loudly Crying Face' },
+                { code: 'D:', emoji: '😱', name: 'Face Screaming in Fear' },
+                { code: '>:(', emoji: '😖', name: 'Confounded Face' },
+                { code: ':(', emoji: '😣', name: 'Persevering Face' },
+                { code: ':(', emoji: '😞', name: 'Disappointed Face' },
+                { code: ';_;', emoji: '😓', name: 'Downcast Face with Sweat' },
+                { code: ':(', emoji: '😩', name: 'Weary Face' },
+                { code: '>:(', emoji: '😫', name: 'Tired Face' },
+                { code: '>:|', emoji: '😤', name: 'Face with Steam From Nose' },
+                { code: '>:(', emoji: '😡', name: 'Enraged Face' },
+                { code: ':@', emoji: '😠', name: 'Angry Face' },
+                { code: '}:)', emoji: '😈', name: 'Smiling Face with Horns' },
+                { code: '}:(', emoji: '👿', name: 'Angry Face with Horns' },
+                { code: 'X(', emoji: '💀', name: 'Skull' },
+                { code: ':P', emoji: '💩', name: 'Pile of Poo' },
+                { code: ':{', emoji: '👹', name: 'Ogre' },
+                { code: ':{', emoji: '👺', name: 'Goblin' },
+                { code: ':)', emoji: '👻', name: 'Ghost' },
+                { code: ':)', emoji: '👽', name: 'Alien' },
+                { code: ':)', emoji: '👾', name: 'Alien Monster' }
+            ]
+        },
+        cats: {
+            name: 'Cat Faces',
+            emojis: [
+                { code: ':3', emoji: '😺', name: 'Grinning Cat' },
+                { code: ':3', emoji: '😸', name: 'Grinning Cat with Smiling Eyes' },
+                { code: ':\')', emoji: '😹', name: 'Cat with Tears of Joy' },
+                { code: ':3', emoji: '😻', name: 'Smiling Cat with Heart-Eyes' },
+                { code: ':3', emoji: '😼', name: 'Cat with Wry Smile' },
+                { code: ':3', emoji: '😽', name: 'Kissing Cat' },
+                { code: ':(', emoji: '🙀', name: 'Weary Cat' },
+                { code: ';(', emoji: '😿', name: 'Crying Cat' },
+                { code: '>:(', emoji: '😾', name: 'Pouting Cat' },
+                { code: ':#', emoji: '🙈', name: 'See-No-Evil Monkey' },
+                { code: ':#', emoji: '🙉', name: 'Hear-No-Evil Monkey' },
+                { code: ':#', emoji: '🙊', name: 'Speak-No-Evil Monkey' }
+            ]
+        },
+        hearts: {
+            name: 'Hearts & Romance',
+            emojis: [
+                { code: '<3', emoji: '❤️', name: 'Heart' },
+                { code: '</3', emoji: '💔', name: 'Broken Heart' },
+                { code: '<3', emoji: '💌', name: 'Love Letter' },
+                { code: '<3', emoji: '💘', name: 'Heart with Arrow' },
+                { code: '<3', emoji: '💝', name: 'Heart with Ribbon' },
+                { code: '<3', emoji: '💖', name: 'Sparkling Heart' },
+                { code: '<3', emoji: '💗', name: 'Growing Heart' },
+                { code: '<3', emoji: '💓', name: 'Beating Heart' },
+                { code: '<3', emoji: '💞', name: 'Revolving Hearts' },
+                { code: '<3', emoji: '💕', name: 'Two Hearts' },
+                { code: '<3', emoji: '💟', name: 'Heart Decoration' },
+                { code: '<3', emoji: '💛', name: 'Yellow Heart' },
+                { code: '<3', emoji: '💚', name: 'Green Heart' },
+                { code: '<3', emoji: '💙', name: 'Blue Heart' },
+                { code: '<3', emoji: '💜', name: 'Purple Heart' },
+                { code: ':*', emoji: '💋', name: 'Kiss Mark' },
+                { code: '100', emoji: '💯', name: 'Hundred Points' },
+                { code: '!', emoji: '💢', name: 'Anger Symbol' },
+                { code: 'boom', emoji: '💥', name: 'Collision' },
+                { code: '*', emoji: '💫', name: 'Dizzy' },
+                { code: 'sweat', emoji: '💦', name: 'Sweat Droplets' },
+                { code: '->', emoji: '💨', name: 'Dashing Away' },
+                { code: '...', emoji: '💬', name: 'Speech Balloon' },
+                { code: '...', emoji: '💭', name: 'Thought Balloon' },
+                { code: 'zzz', emoji: '💤', name: 'Zzz' }
+            ]
+        },
+        gestures: {
+            name: 'Hand Gestures',
+            emojis: [
+                { code: '(wave)', emoji: '👋', name: 'Waving Hand' },
+                { code: '(hand)', emoji: '✋', name: 'Raised Hand' },
+                { code: '(ok)', emoji: '👌', name: 'OK Hand' },
+                { code: '(left)', emoji: '👈', name: 'Backhand Index Pointing Left' },
+                { code: '(right)', emoji: '👉', name: 'Backhand Index Pointing Right' },
+                { code: '(up)', emoji: '👆', name: 'Backhand Index Pointing Up' },
+                { code: '(down)', emoji: '👇', name: 'Backhand Index Pointing Down' },
+                { code: '(y)', emoji: '👍', name: 'Thumbs Up' },
+                { code: '(n)', emoji: '👎', name: 'Thumbs Down' },
+                { code: '(fist)', emoji: '✊', name: 'Raised Fist' },
+                { code: '(punch)', emoji: '👊', name: 'Oncoming Fist' },
+                { code: '(clap)', emoji: '👏', name: 'Clapping Hands' },
+                { code: '(raise)', emoji: '🙌', name: 'Raising Hands' },
+                { code: '(open)', emoji: '👐', name: 'Open Hands' },
+                { code: '(pray)', emoji: '🙏', name: 'Folded Hands' },
+                { code: '(nail)', emoji: '💅', name: 'Nail Polish' },
+                { code: '(flex)', emoji: '💪', name: 'Flexed Biceps' },
+                { code: '(ear)', emoji: '👂', name: 'Ear' },
+                { code: '(nose)', emoji: '👃', name: 'Nose' },
+                { code: '(eyes)', emoji: '👀', name: 'Eyes' },
+                { code: '(tongue)', emoji: '👅', name: 'Tongue' },
+                { code: '(mouth)', emoji: '👄', name: 'Mouth' }
+            ]
+        },
+        people: {
+            name: 'People',
+            emojis: [
+                { code: '(baby)', emoji: '👶', name: 'Baby' },
+                { code: '(boy)', emoji: '👦', name: 'Boy' },
+                { code: '(girl)', emoji: '👧', name: 'Girl' },
+                { code: '(blond)', emoji: '👱', name: 'Person: Blond Hair' },
+                { code: '(man)', emoji: '👨', name: 'Man' },
+                { code: '(woman)', emoji: '👩', name: 'Woman' },
+                { code: '(oldman)', emoji: '👴', name: 'Old Man' },
+                { code: '(oldwoman)', emoji: '👵', name: 'Old Woman' },
+                { code: '(frown)', emoji: '🙍', name: 'Person Frowning' },
+                { code: '(pout)', emoji: '🙎', name: 'Person Pouting' },
+                { code: '(no)', emoji: '🙅', name: 'Person Gesturing No' },
+                { code: '(ok)', emoji: '🙆', name: 'Person Gesturing OK' },
+                { code: '(tip)', emoji: '💁', name: 'Person Tipping Hand' },
+                { code: '(raise)', emoji: '🙋', name: 'Person Raising Hand' },
+                { code: '(bow)', emoji: '🙇', name: 'Person Bowing' },
+                { code: '(police)', emoji: '👮', name: 'Police Officer' },
+                { code: '(guard)', emoji: '💂', name: 'Guard' },
+                { code: '(construction)', emoji: '👷', name: 'Construction Worker' },
+                { code: '(princess)', emoji: '👸', name: 'Princess' },
+                { code: '(turban)', emoji: '👳', name: 'Person Wearing Turban' },
+                { code: '(skullcap)', emoji: '👲', name: 'Person with Skullcap' },
+                { code: '(veil)', emoji: '👰', name: 'Person with Veil' },
+                { code: '(angel)', emoji: '👼', name: 'Baby Angel' },
+                { code: '(santa)', emoji: '🎅', name: 'Santa Claus' },
+                { code: '(massage)', emoji: '💆', name: 'Person Getting Massage' },
+                { code: '(haircut)', emoji: '💇', name: 'Person Getting Haircut' },
+                { code: '(walk)', emoji: '🚶', name: 'Person Walking' },
+                { code: '(run)', emoji: '🏃', name: 'Person Running' },
+                { code: '(dance)', emoji: '💃', name: 'Woman Dancing' },
+                { code: '(bunny)', emoji: '👯', name: 'People with Bunny Ears' },
+                { code: '(horse)', emoji: '🏇', name: 'Horse Racing' },
+                { code: '(snowboard)', emoji: '🏂', name: 'Snowboarder' },
+                { code: '(surf)', emoji: '🏄', name: 'Person Surfing' },
+                { code: '(row)', emoji: '🚣', name: 'Person Rowing Boat' },
+                { code: '(swim)', emoji: '🏊', name: 'Person Swimming' },
+                { code: '(bike)', emoji: '🚴', name: 'Person Biking' },
+                { code: '(mountainbike)', emoji: '🚵', name: 'Person Mountain Biking' },
+                { code: '(bath)', emoji: '🛀', name: 'Person Taking Bath' },
+                { code: '(women)', emoji: '👭', name: 'Women Holding Hands' },
+                { code: '(couple)', emoji: '👫', name: 'Woman and Man Holding Hands' },
+                { code: '(men)', emoji: '👬', name: 'Men Holding Hands' },
+                { code: '(kiss)', emoji: '💏', name: 'Kiss' },
+                { code: '(coupleheart)', emoji: '💑', name: 'Couple with Heart' },
+                { code: '(bust)', emoji: '👤', name: 'Bust in Silhouette' },
+                { code: '(busts)', emoji: '👥', name: 'Busts in Silhouette' },
+                { code: '(family)', emoji: '👪', name: 'Family' },
+                { code: '(footprints)', emoji: '👣', name: 'Footprints' }
+            ]
+        },
+        animals: {
+            name: 'Animals & Nature',
+            emojis: [
+                { code: '(monkeyface)', emoji: '🐵', name: 'Monkey Face' },
+                { code: '(monkey)', emoji: '🐒', name: 'Monkey' },
+                { code: '(dogface)', emoji: '🐶', name: 'Dog Face' },
+                { code: '(dog)', emoji: '🐕', name: 'Dog' },
+                { code: '(poodle)', emoji: '🐩', name: 'Poodle' },
+                { code: '(wolf)', emoji: '🐺', name: 'Wolf' },
+                { code: '(catface)', emoji: '🐱', name: 'Cat Face' },
+                { code: '(cat)', emoji: '🐈', name: 'Cat' },
+                { code: '(tigerface)', emoji: '🐯', name: 'Tiger Face' },
+                { code: '(tiger)', emoji: '🐅', name: 'Tiger' },
+                { code: '(leopard)', emoji: '🐆', name: 'Leopard' },
+                { code: '(horseface)', emoji: '🐴', name: 'Horse Face' },
+                { code: '(horse)', emoji: '🐎', name: 'Horse' },
+                { code: '(cowface)', emoji: '🐮', name: 'Cow Face' },
+                { code: '(ox)', emoji: '🐂', name: 'Ox' },
+                { code: '(buffalo)', emoji: '🐃', name: 'Water Buffalo' },
+                { code: '(cow)', emoji: '🐄', name: 'Cow' },
+                { code: '(pigface)', emoji: '🐷', name: 'Pig Face' },
+                { code: '(pig)', emoji: '🐖', name: 'Pig' },
+                { code: '(boar)', emoji: '🐗', name: 'Boar' },
+                { code: '(pignose)', emoji: '🐽', name: 'Pig Nose' },
+                { code: '(ram)', emoji: '🐏', name: 'Ram' },
+                { code: '(ewe)', emoji: '🐑', name: 'Ewe' },
+                { code: '(goat)', emoji: '🐐', name: 'Goat' },
+                { code: '(camel)', emoji: '🐪', name: 'Camel' },
+                { code: '(camel2)', emoji: '🐫', name: 'Two-Hump Camel' },
+                { code: '(elephant)', emoji: '🐘', name: 'Elephant' },
+                { code: '(mouseface)', emoji: '🐭', name: 'Mouse Face' },
+                { code: '(mouse)', emoji: '🐁', name: 'Mouse' },
+                { code: '(rat)', emoji: '🐀', name: 'Rat' },
+                { code: '(hamster)', emoji: '🐹', name: 'Hamster' },
+                { code: '(rabbitface)', emoji: '🐰', name: 'Rabbit Face' },
+                { code: '(rabbit)', emoji: '🐇', name: 'Rabbit' },
+                { code: '(bear)', emoji: '🐻', name: 'Bear' },
+                { code: '(koala)', emoji: '🐨', name: 'Koala' },
+                { code: '(panda)', emoji: '🐼', name: 'Panda' },
+                { code: '(paw)', emoji: '🐾', name: 'Paw Prints' },
+                { code: '(chicken)', emoji: '🐔', name: 'Chicken' },
+                { code: '(rooster)', emoji: '🐓', name: 'Rooster' },
+                { code: '(hatching)', emoji: '🐣', name: 'Hatching Chick' },
+                { code: '(babychick)', emoji: '🐤', name: 'Baby Chick' },
+                { code: '(frontchick)', emoji: '🐥', name: 'Front-Facing Baby Chick' },
+                { code: '(bird)', emoji: '🐦', name: 'Bird' },
+                { code: '(penguin)', emoji: '🐧', name: 'Penguin' },
+                { code: '(frog)', emoji: '🐸', name: 'Frog' },
+                { code: '(crocodile)', emoji: '🐊', name: 'Crocodile' },
+                { code: '(turtle)', emoji: '🐢', name: 'Turtle' },
+                { code: '(snake)', emoji: '🐍', name: 'Snake' },
+                { code: '(dragonface)', emoji: '🐲', name: 'Dragon Face' },
+                { code: '(dragon)', emoji: '🐉', name: 'Dragon' },
+                { code: '(whale)', emoji: '🐳', name: 'Spouting Whale' },
+                { code: '(whale2)', emoji: '🐋', name: 'Whale' },
+                { code: '(dolphin)', emoji: '🐬', name: 'Dolphin' },
+                { code: '(fish)', emoji: '🐟', name: 'Fish' },
+                { code: '(tropicalfish)', emoji: '🐠', name: 'Tropical Fish' },
+                { code: '(blowfish)', emoji: '🐡', name: 'Blowfish' },
+                { code: '(octopus)', emoji: '🐙', name: 'Octopus' },
+                { code: '(shell)', emoji: '🐚', name: 'Spiral Shell' },
+                { code: '(snail)', emoji: '🐌', name: 'Snail' },
+                { code: '(bug)', emoji: '🐛', name: 'Bug' },
+                { code: '(ant)', emoji: '🐜', name: 'Ant' },
+                { code: '(bee)', emoji: '🐝', name: 'Honeybee' },
+                { code: '(beetle)', emoji: '🐞', name: 'Lady Beetle' }
+            ]
+        },
+        plants: {
+            name: 'Plants & Flowers',
+            emojis: [
+                { code: '(flower)', emoji: '💐', name: 'Bouquet' },
+                { code: '(cherry)', emoji: '🌸', name: 'Cherry Blossom' },
+                { code: '(whiteflower)', emoji: '💮', name: 'White Flower' },
+                { code: '(rose)', emoji: '🌹', name: 'Rose' },
+                { code: '(hibiscus)', emoji: '🌺', name: 'Hibiscus' },
+                { code: '(sunflower)', emoji: '🌻', name: 'Sunflower' },
+                { code: '(blossom)', emoji: '🌼', name: 'Blossom' },
+                { code: '(tulip)', emoji: '🌷', name: 'Tulip' },
+                { code: '(seedling)', emoji: '🌱', name: 'Seedling' },
+                { code: '(tree)', emoji: '🌲', name: 'Evergreen Tree' },
+                { code: '(tree2)', emoji: '🌳', name: 'Deciduous Tree' },
+                { code: '(palmtree)', emoji: '🌴', name: 'Palm Tree' },
+                { code: '(cactus)', emoji: '🌵', name: 'Cactus' },
+                { code: '(rice)', emoji: '🌾', name: 'Sheaf of Rice' },
+                { code: '(herb)', emoji: '🌿', name: 'Herb' },
+                { code: '(clover)', emoji: '🍀', name: 'Four Leaf Clover' },
+                { code: '(maple)', emoji: '🍁', name: 'Maple Leaf' },
+                { code: '(leaf)', emoji: '🍂', name: 'Fallen Leaf' },
+                { code: '(leaf2)', emoji: '🍃', name: 'Leaf Fluttering in Wind' },
+                { code: '(mushroom)', emoji: '🍄', name: 'Mushroom' }
+            ]
+        },
+        food: {
+            name: 'Food & Drink',
+            emojis: [
+                { code: '(grapes)', emoji: '🍇', name: 'Grapes' },
+                { code: '(melon)', emoji: '🍈', name: 'Melon' },
+                { code: '(watermelon)', emoji: '🍉', name: 'Watermelon' },
+                { code: '(orange)', emoji: '🍊', name: 'Tangerine' },
+                { code: '(lemon)', emoji: '🍋', name: 'Lemon' },
+                { code: '(banana)', emoji: '🍌', name: 'Banana' },
+                { code: '(pineapple)', emoji: '🍍', name: 'Pineapple' },
+                { code: '(apple)', emoji: '🍎', name: 'Red Apple' },
+                { code: '(apple2)', emoji: '🍏', name: 'Green Apple' },
+                { code: '(pear)', emoji: '🍐', name: 'Pear' },
+                { code: '(peach)', emoji: '🍑', name: 'Peach' },
+                { code: '(cherries)', emoji: '🍒', name: 'Cherries' },
+                { code: '(strawberry)', emoji: '🍓', name: 'Strawberry' },
+                { code: '(tomato)', emoji: '🍅', name: 'Tomato' },
+                { code: '(eggplant)', emoji: '🍆', name: 'Eggplant' },
+                { code: '(corn)', emoji: '🌽', name: 'Ear of Corn' },
+                { code: '(chestnut)', emoji: '🌰', name: 'Chestnut' },
+                { code: '(bread)', emoji: '🍞', name: 'Bread' },
+                { code: '(meat)', emoji: '🍖', name: 'Meat on Bone' },
+                { code: '(chickenleg)', emoji: '🍗', name: 'Poultry Leg' },
+                { code: '(hamburger)', emoji: '🍔', name: 'Hamburger' },
+                { code: '(fries)', emoji: '🍟', name: 'French Fries' },
+                { code: '(pizza)', emoji: '🍕', name: 'Pizza' },
+                { code: '(egg)', emoji: '🍳', name: 'Cooking' },
+                { code: '(pot)', emoji: '🍲', name: 'Pot of Food' },
+                { code: '(bento)', emoji: '🍱', name: 'Bento Box' },
+                { code: '(ricecracker)', emoji: '🍘', name: 'Rice Cracker' },
+                { code: '(riceball)', emoji: '🍙', name: 'Rice Ball' },
+                { code: '(rice)', emoji: '🍚', name: 'Cooked Rice' },
+                { code: '(curry)', emoji: '🍛', name: 'Curry Rice' },
+                { code: '(noodle)', emoji: '🍜', name: 'Steaming Bowl' },
+                { code: '(spaghetti)', emoji: '🍝', name: 'Spaghetti' },
+                { code: '(potato)', emoji: '🍠', name: 'Roasted Sweet Potato' },
+                { code: '(oden)', emoji: '🍢', name: 'Oden' },
+                { code: '(sushi)', emoji: '🍣', name: 'Sushi' },
+                { code: '(shrimp)', emoji: '🍤', name: 'Fried Shrimp' },
+                { code: '(fishcake)', emoji: '🍥', name: 'Fish Cake with Swirl' },
+                { code: '(dango)', emoji: '🍡', name: 'Dango' },
+                { code: '(icecream)', emoji: '🍦', name: 'Soft Ice Cream' },
+                { code: '(shavedice)', emoji: '🍧', name: 'Shaved Ice' },
+                { code: '(icecream2)', emoji: '🍨', name: 'Ice Cream' },
+                { code: '(doughnut)', emoji: '🍩', name: 'Doughnut' },
+                { code: '(cookie)', emoji: '🍪', name: 'Cookie' },
+                { code: '(cake)', emoji: '🎂', name: 'Birthday Cake' },
+                { code: '(shortcake)', emoji: '🍰', name: 'Shortcake' },
+                { code: '(chocolate)', emoji: '🍫', name: 'Chocolate Bar' },
+                { code: '(candy)', emoji: '🍬', name: 'Candy' },
+                { code: '(lollipop)', emoji: '🍭', name: 'Lollipop' },
+                { code: '(custard)', emoji: '🍮', name: 'Custard' },
+                { code: '(honey)', emoji: '🍯', name: 'Honey Pot' },
+                { code: '(babybottle)', emoji: '🍼', name: 'Baby Bottle' },
+                { code: '(tea)', emoji: '🍵', name: 'Teacup Without Handle' },
+                { code: '(sake)', emoji: '🍶', name: 'Sake' },
+                { code: '(wine)', emoji: '🍷', name: 'Wine Glass' },
+                { code: '(cocktail)', emoji: '🍸', name: 'Cocktail Glass' },
+                { code: '(drink)', emoji: '🍹', name: 'Tropical Drink' },
+                { code: '(beer)', emoji: '🍺', name: 'Beer Mug' },
+                { code: '(beers)', emoji: '🍻', name: 'Clinking Beer Mugs' },
+                { code: '(fork)', emoji: '🍴', name: 'Fork and Knife' },
+                { code: '(knife)', emoji: '🔪', name: 'Kitchen Knife' }
+            ]
+        },
+        travel: {
+            name: 'Travel & Places',
+            emojis: [
+                { code: '(earth)', emoji: '🌍', name: 'Globe Showing Europe-Africa' },
+                { code: '(earth2)', emoji: '🌎', name: 'Globe Showing Americas' },
+                { code: '(earth3)', emoji: '🌏', name: 'Globe Showing Asia-Australia' },
+                { code: '(globe)', emoji: '🌐', name: 'Globe with Meridians' },
+                { code: '(japan)', emoji: '🗾', name: 'Map of Japan' },
+                { code: '(volcano)', emoji: '🌋', name: 'Volcano' },
+                { code: '(mtfuji)', emoji: '🗻', name: 'Mount Fuji' },
+                { code: '(house)', emoji: '🏠', name: 'House' },
+                { code: '(house2)', emoji: '🏡', name: 'House with Garden' },
+                { code: '(office)', emoji: '🏢', name: 'Office Building' },
+                { code: '(jppost)', emoji: '🏣', name: 'Japanese Post Office' },
+                { code: '(post)', emoji: '🏤', name: 'Post Office' },
+                { code: '(hospital)', emoji: '🏥', name: 'Hospital' },
+                { code: '(bank)', emoji: '🏦', name: 'Bank' },
+                { code: '(hotel)', emoji: '🏨', name: 'Hotel' },
+                { code: '(lovehotel)', emoji: '🏩', name: 'Love Hotel' },
+                { code: '(convenience)', emoji: '🏪', name: 'Convenience Store' },
+                { code: '(school)', emoji: '🏫', name: 'School' },
+                { code: '(department)', emoji: '🏬', name: 'Department Store' },
+                { code: '(factory)', emoji: '🏭', name: 'Factory' },
+                { code: '(japcastle)', emoji: '🏯', name: 'Japanese Castle' },
+                { code: '(castle)', emoji: '🏰', name: 'Castle' },
+                { code: '(wedding)', emoji: '💒', name: 'Wedding' },
+                { code: '(tokyotower)', emoji: '🗼', name: 'Tokyo Tower' },
+                { code: '(statue)', emoji: '🗽', name: 'Statue of Liberty' },
+                { code: '(foggy)', emoji: '🌁', name: 'Foggy' },
+                { code: '(night)', emoji: '🌃', name: 'Night with Stars' },
+                { code: '(sunrise)', emoji: '🌄', name: 'Sunrise Over Mountains' },
+                { code: '(sunrise2)', emoji: '🌅', name: 'Sunrise' },
+                { code: '(dusk)', emoji: '🌆', name: 'Cityscape at Dusk' },
+                { code: '(sunset)', emoji: '🌇', name: 'Sunset' },
+                { code: '(bridge)', emoji: '🌉', name: 'Bridge at Night' }
+            ]
+        },
+        activities: {
+            name: 'Activities',
+            emojis: [
+                { code: '(carousel)', emoji: '🎠', name: 'Carousel Horse' },
+                { code: '(ferris)', emoji: '🎡', name: 'Ferris Wheel' },
+                { code: '(roller)', emoji: '🎢', name: 'Roller Coaster' },
+                { code: '(barber)', emoji: '💈', name: 'Barber Pole' },
+                { code: '(circus)', emoji: '🎪', name: 'Circus Tent' },
+                { code: '(jackolantern)', emoji: '🎃', name: 'Jack-O-Lantern' },
+                { code: '(tree)', emoji: '🎄', name: 'Christmas Tree' },
+                { code: '(fireworks)', emoji: '🎆', name: 'Fireworks' },
+                { code: '(sparkler)', emoji: '🎇', name: 'Sparkler' },
+                { code: '(sparkles)', emoji: '✨', name: 'Sparkles' },
+                { code: '(balloon)', emoji: '🎈', name: 'Balloon' },
+                { code: '(party)', emoji: '🎉', name: 'Party Popper' },
+                { code: '(confetti)', emoji: '🎊', name: 'Confetti Ball' },
+                { code: '(tanabata)', emoji: '🎋', name: 'Tanabata Tree' },
+                { code: '(pine)', emoji: '🎍', name: 'Pine Decoration' },
+                { code: '(dolls)', emoji: '🎎', name: 'Japanese Dolls' },
+                { code: '(carp)', emoji: '🎏', name: 'Carp Streamer' },
+                { code: '(wind)', emoji: '🎐', name: 'Wind Chime' },
+                { code: '(moonview)', emoji: '🎑', name: 'Moon Viewing Ceremony' },
+                { code: '(ribbon)', emoji: '🎀', name: 'Ribbon' },
+                { code: '(gift)', emoji: '🎁', name: 'Wrapped Gift' },
+                { code: '(ticket)', emoji: '🎫', name: 'Ticket' },
+                { code: '(trophy)', emoji: '🏆', name: 'Trophy' },
+                { code: '(basketball)', emoji: '🏀', name: 'Basketball' },
+                { code: '(football)', emoji: '🏈', name: 'American Football' },
+                { code: '(rugby)', emoji: '🏉', name: 'Rugby Football' },
+                { code: '(tennis)', emoji: '🎾', name: 'Tennis' },
+                { code: '(bowling)', emoji: '🎳', name: 'Bowling' },
+                { code: '(fishing)', emoji: '🎣', name: 'Fishing Pole' },
+                { code: '(running)', emoji: '🎽', name: 'Running Shirt' },
+                { code: '(ski)', emoji: '🎿', name: 'Skis' },
+                { code: '(dart)', emoji: '🎯', name: 'Bullseye' },
+                { code: '(gun)', emoji: '🔫', name: 'Water Pistol' },
+                { code: '(pool)', emoji: '🎱', name: 'Pool 8 Ball' },
+                { code: '(crystal)', emoji: '🔮', name: 'Crystal Ball' },
+                { code: '(game)', emoji: '🎮', name: 'Video Game' },
+                { code: '(slot)', emoji: '🎰', name: 'Slot Machine' },
+                { code: '(dice)', emoji: '🎲', name: 'Game Die' },
+                { code: '(joker)', emoji: '🃏', name: 'Joker' },
+                { code: '(cards)', emoji: '🎴', name: 'Flower Playing Cards' },
+                { code: '(theater)', emoji: '🎭', name: 'Performing Arts' },
+                { code: '(art)', emoji: '🎨', name: 'Artist Palette' }
+            ]
+        },
+        objects: {
+            name: 'Objects',
+            emojis: [
+                { code: '(glasses)', emoji: '👓', name: 'Glasses' },
+                { code: '(tie)', emoji: '👔', name: 'Necktie' },
+                { code: '(shirt)', emoji: '👕', name: 'T-Shirt' },
+                { code: '(jeans)', emoji: '👖', name: 'Jeans' },
+                { code: '(dress)', emoji: '👗', name: 'Dress' },
+                { code: '(kimono)', emoji: '👘', name: 'Kimono' },
+                { code: '(bikini)', emoji: '👙', name: 'Bikini' },
+                { code: '(wclothes)', emoji: '👚', name: 'Woman’s Clothes' },
+                { code: '(purse)', emoji: '👛', name: 'Purse' },
+                { code: '(handbag)', emoji: '👜', name: 'Handbag' },
+                { code: '(clutch)', emoji: '👝', name: 'Clutch Bag' },
+                { code: '(backpack)', emoji: '🎒', name: 'Backpack' },
+                { code: '(mshoe)', emoji: '👞', name: 'Man’s Shoe' },
+                { code: '(runningshoe)', emoji: '👟', name: 'Running Shoe' },
+                { code: '(heels)', emoji: '👠', name: 'High-Heeled Shoe' },
+                { code: '(sandal)', emoji: '👡', name: 'Woman’s Sandal' },
+                { code: '(boot)', emoji: '👢', name: 'Woman’s Boot' },
+                { code: '(crown)', emoji: '👑', name: 'Crown' },
+                { code: '(hat)', emoji: '👒', name: 'Woman’s Hat' },
+                { code: '(tophat)', emoji: '🎩', name: 'Top Hat' },
+                { code: '(cap)', emoji: '🎓', name: 'Graduation Cap' },
+                { code: '(lipstick)', emoji: '💄', name: 'Lipstick' },
+                { code: '(ring)', emoji: '💍', name: 'Ring' },
+                { code: '(gem)', emoji: '💎', name: 'Gem Stone' }
+            ]
+        },
+        symbols: {
+            name: 'Symbols',
+            emojis: [
+                { code: '(mute)', emoji: '🔇', name: 'Muted Speaker' },
+                { code: '(speaker)', emoji: '🔈', name: 'Speaker Low Volume' },
+                { code: '(speaker2)', emoji: '🔉', name: 'Speaker Medium Volume' },
+                { code: '(speaker3)', emoji: '🔊', name: 'Speaker High Volume' },
+                { code: '(loud)', emoji: '📢', name: 'Loudspeaker' },
+                { code: '(megaphone)', emoji: '📣', name: 'Megaphone' },
+                { code: '(horn)', emoji: '📯', name: 'Postal Horn' },
+                { code: '(bell)', emoji: '🔔', name: 'Bell' },
+                { code: '(nobell)', emoji: '🔕', name: 'Bell with Slash' },
+                { code: '(score)', emoji: '🎼', name: 'Musical Score' },
+                { code: '(note)', emoji: '🎵', name: 'Musical Note' },
+                { code: '(notes)', emoji: '🎶', name: 'Musical Notes' },
+                { code: '(mic)', emoji: '🎤', name: 'Microphone' },
+                { code: '(headphone)', emoji: '🎧', name: 'Headphone' },
+                { code: '(radio)', emoji: '📻', name: 'Radio' },
+                { code: '(sax)', emoji: '🎷', name: 'Saxophone' },
+                { code: '(trumpet)', emoji: '🎺', name: 'Trumpet' },
+                { code: '(guitar)', emoji: '🎸', name: 'Guitar' },
+                { code: '(keyboard)', emoji: '🎹', name: 'Musical Keyboard' },
+                { code: '(violin)', emoji: '🎻', name: 'Violin' },
+                { code: '(phone)', emoji: '📱', name: 'Mobile Phone' },
+                { code: '(phone2)', emoji: '📲', name: 'Mobile Phone with Arrow' },
+                { code: '(phone3)', emoji: '📞', name: 'Telephone Receiver' },
+                { code: '(pager)', emoji: '📟', name: 'Pager' },
+                { code: '(fax)', emoji: '📠', name: 'Fax Machine' },
+                { code: '(battery)', emoji: '🔋', name: 'Battery' },
+                { code: '(plug)', emoji: '🔌', name: 'Electric Plug' },
+                { code: '(laptop)', emoji: '💻', name: 'Laptop' },
+                { code: '(disk)', emoji: '💽', name: 'Computer Disk' },
+                { code: '(floppy)', emoji: '💾', name: 'Floppy Disk' },
+                { code: '(cd)', emoji: '💿', name: 'Optical Disk' },
+                { code: '(dvd)', emoji: '📀', name: 'DVD' },
+                { code: '(movie)', emoji: '🎥', name: 'Movie Camera' },
+                { code: '(clapper)', emoji: '🎬', name: 'Clapper Board' },
+                { code: '(tv)', emoji: '📺', name: 'Television' },
+                { code: '(camera)', emoji: '📷', name: 'Camera' },
+                { code: '(video)', emoji: '📹', name: 'Video Camera' },
+                { code: '(vhs)', emoji: '📼', name: 'Videocassette' },
+                { code: '(mag)', emoji: '🔍', name: 'Magnifying Glass Tilted Left' },
+                { code: '(mag2)', emoji: '🔎', name: 'Magnifying Glass Tilted Right' },
+                { code: '(bulb)', emoji: '💡', name: 'Light Bulb' },
+                { code: '(flashlight)', emoji: '🔦', name: 'Flashlight' },
+                { code: '(lantern)', emoji: '🏮', name: 'Red Paper Lantern' }
+            ]
+        },
+        flags: {
+            name: 'Flags',
+            emojis: [
+                { code: '(flag)', emoji: '🏁', name: 'Chequered Flag' },
+                { code: '(flag2)', emoji: '🚩', name: 'Triangular Flag' },
+                { code: '(crossflags)', emoji: '🎌', name: 'Crossed Flags' }
+            ]
+        }
+    };
 
     // Static toolbar configuration with Font Awesome icons
     static #TOOLBAR_GROUPS = [
@@ -12050,15 +12540,53 @@ class BBCodeEditor {
             border: 1px solid #ddd;
             border-radius: 4px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            padding: 12px;
+            padding: 0;
             z-index: 1000;
-            max-width: 320px;
-            max-height: 300px;
-            overflow-y: auto;
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
+            width: 400px;
+            max-height: 400px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
             margin-top: 4px;
+        }
+        
+        .bbcode-emoji-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .bbcode-emoji-category-btn {
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .bbcode-emoji-category-btn:hover {
+            background: #e9ecef;
+            border-color: #999;
+        }
+        
+        .bbcode-emoji-category-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+        
+        .bbcode-emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px;
+            padding: 12px;
+            overflow-y: auto;
+            max-height: 300px;
         }
         
         .bbcode-emoji-item {
@@ -12070,7 +12598,7 @@ class BBCodeEditor {
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s;
-            font-size: 12px;
+            font-size: 11px;
         }
         
         .bbcode-emoji-item:hover {
@@ -12081,12 +12609,14 @@ class BBCodeEditor {
         
         .bbcode-emoji-item span:first-child {
             font-size: 24px;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         
         .bbcode-emoji-item span:last-child {
             color: #666;
-            font-size: 10px;
+            font-size: 9px;
+            word-break: break-word;
+            text-align: center;
         }
         
         /* Draft indicator and restore button */
@@ -12958,7 +13488,7 @@ class BBCodeEditor {
     }
 
     /**
-     * Emoji Picker functionality
+     * Emoji Picker functionality with categories
      */
     #createEmojiPicker() {
         try {
@@ -12967,7 +13497,46 @@ class BBCodeEditor {
             this.#emojiPicker.setAttribute('role', 'dialog');
             this.#emojiPicker.setAttribute('aria-label', 'Emoji picker');
             
-            BBCodeEditor.#EMOJIS.forEach(emoji => {
+            // Create category tabs
+            const categoriesDiv = document.createElement('div');
+            categoriesDiv.className = 'bbcode-emoji-categories';
+            
+            for (const [key, category] of Object.entries(BBCodeEditor.#EMOJI_CATEGORIES)) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `bbcode-emoji-category-btn${key === this.#currentEmojiCategory ? ' active' : ''}`;
+                btn.textContent = category.name;
+                btn.setAttribute('data-category', key);
+                
+                btn.addEventListener('click', () => {
+                    this.#switchEmojiCategory(key);
+                });
+                
+                categoriesDiv.appendChild(btn);
+            }
+            
+            // Create emoji grid
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'bbcode-emoji-grid';
+            
+            this.#populateEmojiGrid(gridDiv, this.#currentEmojiCategory);
+            
+            this.#emojiPicker.appendChild(categoriesDiv);
+            this.#emojiPicker.appendChild(gridDiv);
+            this.#editorWrapper.appendChild(this.#emojiPicker);
+        } catch (error) {
+            console.error('Error creating emoji picker:', error);
+        }
+    }
+
+    #populateEmojiGrid(grid, categoryKey) {
+        try {
+            grid.innerHTML = '';
+            const category = BBCodeEditor.#EMOJI_CATEGORIES[categoryKey];
+            
+            if (!category) return;
+            
+            category.emojis.forEach(emoji => {
                 const item = document.createElement('div');
                 item.className = 'bbcode-emoji-item';
                 item.setAttribute('role', 'button');
@@ -12987,12 +13556,36 @@ class BBCodeEditor {
                     }
                 });
                 
-                this.#emojiPicker.appendChild(item);
+                grid.appendChild(item);
+            });
+        } catch (error) {
+            console.error('Error populating emoji grid:', error);
+        }
+    }
+
+    #switchEmojiCategory(categoryKey) {
+        try {
+            this.#currentEmojiCategory = categoryKey;
+            
+            if (!this.#emojiPicker) return;
+            
+            // Update active category button
+            const buttons = this.#emojiPicker.querySelectorAll('.bbcode-emoji-category-btn');
+            buttons.forEach(btn => {
+                if (btn.getAttribute('data-category') === categoryKey) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
             });
             
-            this.#editorWrapper.appendChild(this.#emojiPicker);
+            // Update grid
+            const grid = this.#emojiPicker.querySelector('.bbcode-emoji-grid');
+            if (grid) {
+                this.#populateEmojiGrid(grid, categoryKey);
+            }
         } catch (error) {
-            console.error('Error creating emoji picker:', error);
+            console.error('Error switching emoji category:', error);
         }
     }
 
@@ -13002,7 +13595,7 @@ class BBCodeEditor {
                 this.#createEmojiPicker();
             }
             
-            if (this.#emojiPicker.style.display === 'grid') {
+            if (this.#emojiPicker.style.display === 'flex') {
                 this.#closeEmojiPicker();
             } else {
                 // Position picker near the emoji button
@@ -13013,11 +13606,12 @@ class BBCodeEditor {
                     this.#emojiPicker.style.position = 'absolute';
                     this.#emojiPicker.style.top = (rect.bottom - wrapperRect.top) + 'px';
                     this.#emojiPicker.style.left = (rect.left - wrapperRect.left) + 'px';
-                    this.#emojiPicker.style.display = 'grid';
+                    this.#emojiPicker.style.display = 'flex';
                     
-                    // Focus first item for accessibility
+                    // Focus first category for accessibility
                     setTimeout(() => {
-                        this.#emojiPicker.querySelector('.bbcode-emoji-item')?.focus();
+                        const firstCategory = this.#emojiPicker.querySelector('.bbcode-emoji-category-btn');
+                        if (firstCategory) firstCategory.focus();
                     }, 100);
                 }
             }
@@ -13494,7 +14088,7 @@ class BBCodeEditor {
     #handleKeydown(e) {
         try {
             // Close emoji picker on Escape
-            if (e.key === 'Escape' && this.#emojiPicker?.style.display === 'grid') {
+            if (e.key === 'Escape' && this.#emojiPicker?.style.display === 'flex') {
                 this.#closeEmojiPicker();
                 e.preventDefault();
                 return;
@@ -13737,7 +14331,7 @@ class BBCodeEditor {
         const initEditor = () => {
             try {
                 globalThis.bbcodeEditor = new BBCodeEditor();
-                console.log('📝 BBCodeEditor initialized (Enhanced Edition)');
+                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Emoji Support)');
             } catch (error) {
                 console.error('Failed to initialize BBCodeEditor:', error);
                 const textarea = document.getElementById('Post');
