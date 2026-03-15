@@ -11755,7 +11755,6 @@ class BBCodeEditor {
     #observerReady = false;
     #emojiPicker = null;
     #emojiButton = null;
-    #spellCheckEnabled = true;
     #draftKey = null;
     #statusMessageTimeout = null;
     
@@ -11830,12 +11829,6 @@ class BBCodeEditor {
             name: 'emoji',
             buttons: [
                 { tag: 'emoji', title: 'Insert Emoji', icon: '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' }
-            ]
-        },
-        {
-            name: 'tools',
-            buttons: [
-                { tag: 'spellcheck', title: 'Toggle Spell Check', icon: '<i class="fa-regular fa-spell-check" aria-hidden="true"></i>' }
             ]
         },
         {
@@ -11948,12 +11941,6 @@ class BBCodeEditor {
             background: #dee2e6; 
             transform: translateY(1px); 
         } 
-        
-        .bbcode-btn.active {
-            background: #007bff;
-            color: white;
-            border-color: #0056b3;
-        }
         
         .bbcode-btn:focus-visible {
             outline: 2px solid #0066cc;
@@ -12300,10 +12287,6 @@ class BBCodeEditor {
                 throw new Error('BBCode editor textarea not found');
             }
 
-            // Set initial spell check
-            this.#spellCheckEnabled = true;
-            this.#bbcodeEditor.spellcheck = this.#spellCheckEnabled;
-
             // Get status elements
             this.#statusElements = {
                 chars: this.#editorWrapper.querySelector('.bbcode-char-count'),
@@ -12556,8 +12539,7 @@ class BBCodeEditor {
                     <textarea id="bbcode-editor" class="bbcode-textarea" 
                         placeholder="Write your message here..." 
                         aria-label="BBCode editor content" 
-                        data-forum-element="true"
-                        spellcheck="true">${escapedValue}</textarea>
+                        data-forum-element="true">${escapedValue}</textarea>
                 </div>
                 <div class="bbcode-statusbar" data-forum-element="true">
                     <span class="bbcode-char-count">0 characters</span>
@@ -12817,35 +12799,6 @@ class BBCodeEditor {
             this.#showStatusMessage(`Emoji ${code} inserted`, 'success');
         } catch (error) {
             console.error('Error inserting emoji:', error);
-        }
-    }
-
-    /**
-     * Spell check toggle
-     */
-    #toggleSpellCheck() {
-        try {
-            this.#spellCheckEnabled = !this.#spellCheckEnabled;
-            this.#bbcodeEditor.spellcheck = this.#spellCheckEnabled;
-            
-            // Update button appearance
-            const spellCheckBtn = this.#editorWrapper.querySelector('[data-tag="spellcheck"]');
-            if (spellCheckBtn) {
-                if (this.#spellCheckEnabled) {
-                    spellCheckBtn.classList.remove('active');
-                } else {
-                    spellCheckBtn.classList.add('active');
-                }
-            }
-            
-            this.#showStatusMessage(
-                `Spell check ${this.#spellCheckEnabled ? 'enabled' : 'disabled'}`,
-                'info'
-            );
-            
-            this.#announce(`Spell check ${this.#spellCheckEnabled ? 'enabled' : 'disabled'}`);
-        } catch (error) {
-            console.error('Error toggling spell check:', error);
         }
     }
 
@@ -13215,14 +13168,9 @@ class BBCodeEditor {
                 return;
             }
 
-            // Handle new features
+            // Handle emoji picker
             if (tag === 'emoji') {
                 this.#toggleEmojiPicker();
-                return;
-            }
-
-            if (tag === 'spellcheck') {
-                this.#toggleSpellCheck();
                 return;
             }
 
@@ -13397,12 +13345,6 @@ class BBCodeEditor {
                     'k': () => {
                         e.preventDefault();
                         this.#insertTag('code');
-                    },
-                    's': () => {
-                        // Don't prevent default for Ctrl+S - let browser handle save
-                        if (e.shiftKey) {
-                            // Ctrl+Shift+S could be used for something else
-                        }
                     }
                 };
 
@@ -13483,10 +13425,6 @@ class BBCodeEditor {
     clearDraft() {
         this.#clearDraft();
         this.#showStatusMessage('Draft cleared', 'info');
-    }
-
-    isSpellCheckEnabled() {
-        return this.#spellCheckEnabled;
     }
 
     destroy() {
