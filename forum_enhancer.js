@@ -11731,7 +11731,7 @@ globalThis.addEventListener('pagehide', function() {
 
 
 // ============================================
-// BBCODE EDITOR - Forum Observer Edition
+// BBCODE EDITOR - Enhanced Edition
 // ============================================
 
 'use strict';
@@ -11747,19 +11747,51 @@ class BBCodeEditor {
     #observerId = null;
     #initStarted = false;
     #saveTimeout = null;
+    #autoSaveTimeout = null;
     #clickHandler = null;
     #changeHandler = null;
     #lastCursorPosition = { start: 0, end: 0 };
     #initializationError = null;
     #observerReady = false;
+    #emojiPicker = null;
+    #emojiButton = null;
+    #spellCheckEnabled = true;
+    #draftKey = null;
+    #statusMessageTimeout = null;
     
     // Configuration
     static #CONFIG = {
         MAX_UNDO_STEPS: 100,
         STATUS_DEBOUNCE_DELAY: 100,
+        AUTO_SAVE_DELAY: 2000,
+        STATUS_MESSAGE_DURATION: 3000,
         ALLOWED_HTML_TAGS: ['b', 'i', 'u', 'del', 'sup', 'sub', 'ol', 'ul', 'li', 'p', 'a', 'img', 'span', 'div', 'blockquote', 'pre', 'strong', 'em'],
         ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target']
     };
+
+    // Common forum emojis/smilies
+    static #EMOJIS = [
+        { code: ':)', emoji: '😊', name: 'smile' },
+        { code: ':(', emoji: '😞', name: 'sad' },
+        { code: ';)', emoji: '😉', name: 'wink' },
+        { code: ':D', emoji: '😃', name: 'grin' },
+        { code: ':P', emoji: '😛', name: 'tongue' },
+        { code: 'B)', emoji: '😎', name: 'cool' },
+        { code: ':o', emoji: '😮', name: 'surprised' },
+        { code: ':x', emoji: '😶', name: 'silent' },
+        { code: ':|', emoji: '😐', name: 'neutral' },
+        { code: ':*', emoji: '😘', name: 'kiss' },
+        { code: ':@', emoji: '😠', name: 'angry' },
+        { code: ':$', emoji: '😳', name: 'blush' },
+        { code: ':#', emoji: '🤐', name: 'zip' },
+        { code: ':~', emoji: '😫', name: 'tired' },
+        { code: '(y)', emoji: '👍', name: 'thumbs up' },
+        { code: '(n)', emoji: '👎', name: 'thumbs down' },
+        { code: '(h)', emoji: '👋', name: 'wave' },
+        { code: '(c)', emoji: '©️', name: 'copyright' },
+        { code: '(r)', emoji: '®️', name: 'registered' },
+        { code: '(tm)', emoji: '™️', name: 'trademark' }
+    ];
 
     // Static toolbar configuration with Font Awesome icons
     static #TOOLBAR_GROUPS = [
@@ -11792,6 +11824,18 @@ class BBCodeEditor {
             buttons: [
                 { tag: 'url', title: 'Insert Link (Ctrl+L)', icon: '<i class="fa-regular fa-link" aria-hidden="true"></i>' },
                 { tag: 'img', title: 'Insert Image (Ctrl+P)', icon: '<i class="fa-regular fa-image" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'emoji',
+            buttons: [
+                { tag: 'emoji', title: 'Insert Emoji', icon: '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'tools',
+            buttons: [
+                { tag: 'spellcheck', title: 'Toggle Spell Check', icon: '<i class="fa-regular fa-spell-check" aria-hidden="true"></i>' }
             ]
         },
         {
@@ -11855,6 +11899,7 @@ class BBCodeEditor {
             background: #fff; 
             margin: 10px 0; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            position: relative;
         } 
         
         .bbcode-toolbar { 
@@ -11891,6 +11936,7 @@ class BBCodeEditor {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            position: relative;
         } 
         
         .bbcode-btn:hover { 
@@ -11902,6 +11948,12 @@ class BBCodeEditor {
             background: #dee2e6; 
             transform: translateY(1px); 
         } 
+        
+        .bbcode-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
         
         .bbcode-btn:focus-visible {
             outline: 2px solid #0066cc;
@@ -11965,14 +12017,30 @@ class BBCodeEditor {
             border-top: 1px solid #ddd; 
             font-size: 12px; 
             color: #666; 
+            position: relative;
         } 
         
         .bbcode-statusbar span {
             user-select: none;
         }
         
+        .bbcode-status-message {
+            margin-left: auto;
+            color: #28a745;
+            animation: fadeInOut 3s ease-in-out;
+        }
+        
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
         .bbcode-utils { 
             margin-left: auto; 
+            display: flex;
+            gap: 4px;
         } 
         
         .undo-btn, .redo-btn { 
@@ -11982,6 +12050,71 @@ class BBCodeEditor {
 
         .undo-btn i, .redo-btn i {
             font-size: 18px;
+        }
+        
+        /* Emoji Picker Styles */
+        .bbcode-emoji-picker {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 12px;
+            z-index: 1000;
+            max-width: 320px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-top: 4px;
+        }
+        
+        .bbcode-emoji-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 6px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 12px;
+        }
+        
+        .bbcode-emoji-item:hover {
+            background: #f0f0f0;
+            border-color: #999;
+            transform: scale(1.05);
+        }
+        
+        .bbcode-emoji-item span:first-child {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        
+        .bbcode-emoji-item span:last-child {
+            color: #666;
+            font-size: 10px;
+        }
+        
+        /* Draft indicator */
+        .bbcode-draft-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ffc107;
+            margin-left: 8px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
         }
         
         .bbcode-error {
@@ -12031,6 +12164,9 @@ class BBCodeEditor {
         this.#initStarted = true;
 
         console.log('📝 BBCode Editor waiting for ForumCoreObserver...');
+
+        // Generate draft key based on current page
+        this.#draftKey = `bbcode-draft-${window.location.pathname}`;
 
         // Check if observer is already available
         if (globalThis.forumObserver) {
@@ -12137,7 +12273,9 @@ class BBCodeEditor {
                 throw new Error('Textarea container not found');
             }
 
-            const originalValue = this.#originalTextarea.value || '';
+            // Load draft if available
+            const draft = this.#loadDraft();
+            const originalValue = draft || this.#originalTextarea.value || '';
 
             // Hide original textarea
             this.#originalTextarea.style.display = 'none';
@@ -12162,13 +12300,21 @@ class BBCodeEditor {
                 throw new Error('BBCode editor textarea not found');
             }
 
+            // Set initial spell check
+            this.#spellCheckEnabled = true;
+            this.#bbcodeEditor.spellcheck = this.#spellCheckEnabled;
+
             // Get status elements
             this.#statusElements = {
                 chars: this.#editorWrapper.querySelector('.bbcode-char-count'),
                 words: this.#editorWrapper.querySelector('.bbcode-word-count'),
                 lines: this.#editorWrapper.querySelector('.bbcode-lines'),
-                cursor: this.#editorWrapper.querySelector('.bbcode-cursor-pos')
+                cursor: this.#editorWrapper.querySelector('.bbcode-cursor-pos'),
+                message: this.#editorWrapper.querySelector('.bbcode-status-message')
             };
+
+            // Get emoji button
+            this.#emojiButton = this.#editorWrapper.querySelector('[data-tag="emoji"]');
 
             // Initialize undo stack
             this.#undoStack = [editorInitialValue];
@@ -12179,6 +12325,25 @@ class BBCodeEditor {
             
             // Update status
             this.#updateStatus();
+
+            // Show draft indicator if draft was loaded
+            if (draft) {
+                this.#showDraftIndicator();
+                this.#showStatusMessage('Draft loaded', 'info');
+            }
+
+            // Set up beforeunload handler to save draft
+            window.addEventListener('beforeunload', () => {
+                this.#autoSave();
+            });
+
+            // Set up form submit handler to clear draft
+            const form = this.#originalTextarea.form;
+            if (form) {
+                form.addEventListener('submit', () => {
+                    this.#clearDraft();
+                });
+            }
 
             // Announce success
             this.#announce('BBCode editor initialized');
@@ -12211,6 +12376,11 @@ class BBCodeEditor {
                     if (btn) {
                         e.preventDefault();
                         this.#handleButtonClick(btn);
+                    } else {
+                        // Close emoji picker if clicking outside
+                        if (this.#emojiPicker && !this.#emojiPicker.contains(e.target)) {
+                            this.#closeEmojiPicker();
+                        }
                     }
                 } catch (error) {
                     console.error('Error in click handler:', error);
@@ -12235,12 +12405,14 @@ class BBCodeEditor {
             // Editor textarea events
             if (this.#bbcodeEditor) {
                 const debouncedUpdate = this.#debounce(() => this.#updateStatus(), BBCodeEditor.#CONFIG.STATUS_DEBOUNCE_DELAY);
+                const debouncedAutoSave = this.#debounce(() => this.#autoSave(), BBCodeEditor.#CONFIG.AUTO_SAVE_DELAY);
                 
                 this.#bbcodeEditor.addEventListener('input', () => {
                     try {
                         this.#syncToOriginal();
                         this.#saveState(this.#bbcodeEditor.value);
                         debouncedUpdate();
+                        debouncedAutoSave(); // Auto-save on input
                         
                         // Notify observer of change
                         if (this.#observerReady && globalThis.forumObserver) {
@@ -12260,6 +12432,9 @@ class BBCodeEditor {
                             end: this.#bbcodeEditor.selectionEnd
                         };
                         this.#updateStatus();
+                        
+                        // Close emoji picker if open
+                        this.#closeEmojiPicker();
                     } catch (error) {
                         console.error('Error in click handler:', error);
                     }
@@ -12320,6 +12495,7 @@ class BBCodeEditor {
             this.#syncToOriginal();
             this.#saveState(this.#bbcodeEditor.value);
             this.#updateStatus();
+            this.#autoSave(); // Auto-save after insertion
         } catch (error) {
             console.error('Error inserting text:', error);
         }
@@ -12380,13 +12556,15 @@ class BBCodeEditor {
                     <textarea id="bbcode-editor" class="bbcode-textarea" 
                         placeholder="Write your message here..." 
                         aria-label="BBCode editor content" 
-                        data-forum-element="true">${escapedValue}</textarea>
+                        data-forum-element="true"
+                        spellcheck="true">${escapedValue}</textarea>
                 </div>
                 <div class="bbcode-statusbar" data-forum-element="true">
                     <span class="bbcode-char-count">0 characters</span>
                     <span class="bbcode-word-count">0 words</span>
                     <span class="bbcode-lines">0 lines</span>
                     <span class="bbcode-cursor-pos">Ln 1, Col 1</span>
+                    <span class="bbcode-status-message"></span>
                 </div>
             `;
         } catch (error) {
@@ -12451,6 +12629,56 @@ class BBCodeEditor {
         }
     }
 
+    #showStatusMessage(message, type = 'info') {
+        try {
+            if (!this.#statusElements.message) return;
+            
+            const colors = {
+                info: '#17a2b8',
+                success: '#28a745',
+                warning: '#ffc107',
+                error: '#dc3545'
+            };
+            
+            this.#statusElements.message.textContent = message;
+            this.#statusElements.message.style.color = colors[type] || colors.info;
+            this.#statusElements.message.style.display = 'inline';
+            
+            if (this.#statusMessageTimeout) {
+                clearTimeout(this.#statusMessageTimeout);
+            }
+            
+            this.#statusMessageTimeout = setTimeout(() => {
+                if (this.#statusElements.message) {
+                    this.#statusElements.message.textContent = '';
+                    this.#statusElements.message.style.display = 'none';
+                }
+            }, BBCodeEditor.#CONFIG.STATUS_MESSAGE_DURATION);
+        } catch (error) {
+            console.error('Error showing status message:', error);
+        }
+    }
+
+    #showDraftIndicator() {
+        try {
+            const indicator = document.createElement('span');
+            indicator.className = 'bbcode-draft-indicator';
+            indicator.title = 'Draft saved';
+            this.#statusElements.chars?.appendChild(indicator);
+        } catch (error) {
+            console.error('Error showing draft indicator:', error);
+        }
+    }
+
+    #removeDraftIndicator() {
+        try {
+            const indicator = this.#editorWrapper?.querySelector('.bbcode-draft-indicator');
+            indicator?.remove();
+        } catch (error) {
+            console.error('Error removing draft indicator:', error);
+        }
+    }
+
     #showError(message) {
         try {
             const errorDiv = document.createElement('div');
@@ -12462,6 +12690,162 @@ class BBCodeEditor {
             setTimeout(() => errorDiv.remove(), 5000);
         } catch (error) {
             console.error('Error showing error message:', error);
+        }
+    }
+
+    /**
+     * Auto-save functionality
+     */
+    #autoSave() {
+        try {
+            if (!this.#draftKey || !this.#bbcodeEditor) return;
+            
+            const value = this.#bbcodeEditor.value;
+            if (value.trim()) {
+                localStorage.setItem(this.#draftKey, value);
+                this.#showDraftIndicator();
+                this.#showStatusMessage('Draft saved', 'success');
+            } else {
+                // Clear draft if empty
+                this.#clearDraft();
+            }
+        } catch (error) {
+            console.error('Error auto-saving:', error);
+        }
+    }
+
+    #loadDraft() {
+        try {
+            if (!this.#draftKey) return null;
+            return localStorage.getItem(this.#draftKey);
+        } catch (error) {
+            console.error('Error loading draft:', error);
+            return null;
+        }
+    }
+
+    #clearDraft() {
+        try {
+            if (this.#draftKey) {
+                localStorage.removeItem(this.#draftKey);
+                this.#removeDraftIndicator();
+            }
+        } catch (error) {
+            console.error('Error clearing draft:', error);
+        }
+    }
+
+    /**
+     * Emoji Picker functionality
+     */
+    #createEmojiPicker() {
+        try {
+            this.#emojiPicker = document.createElement('div');
+            this.#emojiPicker.className = 'bbcode-emoji-picker';
+            this.#emojiPicker.setAttribute('role', 'dialog');
+            this.#emojiPicker.setAttribute('aria-label', 'Emoji picker');
+            
+            BBCodeEditor.#EMOJIS.forEach(emoji => {
+                const item = document.createElement('div');
+                item.className = 'bbcode-emoji-item';
+                item.setAttribute('role', 'button');
+                item.setAttribute('tabindex', '0');
+                item.setAttribute('aria-label', emoji.name);
+                item.innerHTML = `<span>${emoji.emoji}</span><span>${emoji.code}</span>`;
+                
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.#insertEmoji(emoji.code);
+                });
+                
+                item.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.#insertEmoji(emoji.code);
+                    }
+                });
+                
+                this.#emojiPicker.appendChild(item);
+            });
+            
+            this.#editorWrapper.appendChild(this.#emojiPicker);
+        } catch (error) {
+            console.error('Error creating emoji picker:', error);
+        }
+    }
+
+    #toggleEmojiPicker() {
+        try {
+            if (!this.#emojiPicker) {
+                this.#createEmojiPicker();
+            }
+            
+            if (this.#emojiPicker.style.display === 'grid') {
+                this.#closeEmojiPicker();
+            } else {
+                // Position picker near the emoji button
+                if (this.#emojiButton) {
+                    const rect = this.#emojiButton.getBoundingClientRect();
+                    const wrapperRect = this.#editorWrapper.getBoundingClientRect();
+                    
+                    this.#emojiPicker.style.position = 'absolute';
+                    this.#emojiPicker.style.top = (rect.bottom - wrapperRect.top) + 'px';
+                    this.#emojiPicker.style.left = (rect.left - wrapperRect.left) + 'px';
+                    this.#emojiPicker.style.display = 'grid';
+                    
+                    // Focus first item for accessibility
+                    setTimeout(() => {
+                        this.#emojiPicker.querySelector('.bbcode-emoji-item')?.focus();
+                    }, 100);
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling emoji picker:', error);
+        }
+    }
+
+    #closeEmojiPicker() {
+        if (this.#emojiPicker) {
+            this.#emojiPicker.style.display = 'none';
+        }
+    }
+
+    #insertEmoji(code) {
+        try {
+            this.#insertTextAtCursor(code);
+            this.#closeEmojiPicker();
+            this.#showStatusMessage(`Emoji ${code} inserted`, 'success');
+        } catch (error) {
+            console.error('Error inserting emoji:', error);
+        }
+    }
+
+    /**
+     * Spell check toggle
+     */
+    #toggleSpellCheck() {
+        try {
+            this.#spellCheckEnabled = !this.#spellCheckEnabled;
+            this.#bbcodeEditor.spellcheck = this.#spellCheckEnabled;
+            
+            // Update button appearance
+            const spellCheckBtn = this.#editorWrapper.querySelector('[data-tag="spellcheck"]');
+            if (spellCheckBtn) {
+                if (this.#spellCheckEnabled) {
+                    spellCheckBtn.classList.remove('active');
+                } else {
+                    spellCheckBtn.classList.add('active');
+                }
+            }
+            
+            this.#showStatusMessage(
+                `Spell check ${this.#spellCheckEnabled ? 'enabled' : 'disabled'}`,
+                'info'
+            );
+            
+            this.#announce(`Spell check ${this.#spellCheckEnabled ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+            console.error('Error toggling spell check:', error);
         }
     }
 
@@ -12831,6 +13215,17 @@ class BBCodeEditor {
                 return;
             }
 
+            // Handle new features
+            if (tag === 'emoji') {
+                this.#toggleEmojiPicker();
+                return;
+            }
+
+            if (tag === 'spellcheck') {
+                this.#toggleSpellCheck();
+                return;
+            }
+
             if (tag === 'url') {
                 const url = prompt('Enter URL:', 'https://');
                 if (url) {
@@ -12910,6 +13305,13 @@ class BBCodeEditor {
 
     #handleKeydown(e) {
         try {
+            // Close emoji picker on Escape
+            if (e.key === 'Escape' && this.#emojiPicker?.style.display === 'grid') {
+                this.#closeEmojiPicker();
+                e.preventDefault();
+                return;
+            }
+
             if (e.ctrlKey || e.metaKey) {
                 const key = e.key.toLowerCase();
                 const start = this.#bbcodeEditor.selectionStart;
@@ -12995,6 +13397,12 @@ class BBCodeEditor {
                     'k': () => {
                         e.preventDefault();
                         this.#insertTag('code');
+                    },
+                    's': () => {
+                        // Don't prevent default for Ctrl+S - let browser handle save
+                        if (e.shiftKey) {
+                            // Ctrl+Shift+S could be used for something else
+                        }
                     }
                 };
 
@@ -13065,14 +13473,27 @@ class BBCodeEditor {
                 this.#syncToOriginal();
                 this.#saveState(value);
                 this.#updateStatus();
+                this.#autoSave(); // Save to localStorage
             }
         } catch (error) {
             console.error('Error setting value:', error);
         }
     }
 
+    clearDraft() {
+        this.#clearDraft();
+        this.#showStatusMessage('Draft cleared', 'info');
+    }
+
+    isSpellCheckEnabled() {
+        return this.#spellCheckEnabled;
+    }
+
     destroy() {
         try {
+            // Save final draft before destroying
+            this.#autoSave();
+
             if (this.#editorWrapper) {
                 if (this.#clickHandler) {
                     this.#editorWrapper.removeEventListener('click', this.#clickHandler);
@@ -13086,9 +13507,20 @@ class BBCodeEditor {
                 clearTimeout(this.#saveTimeout);
             }
 
+            if (this.#autoSaveTimeout) {
+                clearTimeout(this.#autoSaveTimeout);
+            }
+
+            if (this.#statusMessageTimeout) {
+                clearTimeout(this.#statusMessageTimeout);
+            }
+
             if (globalThis.forumObserver && this.#observerId) {
                 globalThis.forumObserver.unregister(this.#observerId);
             }
+            
+            // Remove emoji picker if it exists
+            this.#emojiPicker?.remove();
             
             this.#editorWrapper?.remove();
             if (this.#originalTextarea) {
@@ -13117,7 +13549,7 @@ class BBCodeEditor {
         const initEditor = () => {
             try {
                 globalThis.bbcodeEditor = new BBCodeEditor();
-                console.log('📝 BBCodeEditor initialized (Forum Observer Edition)');
+                console.log('📝 BBCodeEditor initialized (Enhanced Edition)');
             } catch (error) {
                 console.error('Failed to initialize BBCodeEditor:', error);
                 const textarea = document.getElementById('Post');
