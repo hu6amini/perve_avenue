@@ -11757,6 +11757,7 @@ class BBCodeEditor {
     #emojiButton = null;
     #draftKey = null;
     #statusMessageTimeout = null;
+    #isEditing = false; // New flag to track if we're editing an existing post
     
     // Configuration
     static #CONFIG = {
@@ -11764,6 +11765,7 @@ class BBCodeEditor {
         STATUS_DEBOUNCE_DELAY: 100,
         AUTO_SAVE_DELAY: 2000,
         STATUS_MESSAGE_DURATION: 3000,
+        DRAFT_EXPIRY: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
         ALLOWED_HTML_TAGS: ['b', 'i', 'u', 'del', 'sup', 'sub', 'ol', 'ul', 'li', 'p', 'a', 'img', 'span', 'div', 'blockquote', 'pre', 'strong', 'em'],
         ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target']
     };
@@ -12087,15 +12089,41 @@ class BBCodeEditor {
             font-size: 10px;
         }
         
-        /* Draft indicator */
+        /* Draft indicator and restore button */
         .bbcode-draft-indicator {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 8px;
+        }
+        
+        .bbcode-draft-dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             background: #ffc107;
-            margin-left: 8px;
             animation: pulse 1.5s infinite;
+        }
+        
+        .bbcode-restore-draft {
+            background: none;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bbcode-restore-draft:hover {
+            background: #fff3cd;
+            border-color: #856404;
+        }
+        
+        .bbcode-restore-draft:focus-visible {
+            outline: 2px solid #856404;
+            outline-offset: 2px;
         }
         
         @keyframes pulse {
@@ -12120,6 +12148,70 @@ class BBCodeEditor {
             color: #856404;
             border-radius: 4px;
             margin: 10px 0;
+        }
+
+        .bbcode-draft-prompt {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 16px;
+            z-index: 10000;
+            max-width: 300px;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .bbcode-draft-prompt h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+        }
+        
+        .bbcode-draft-prompt p {
+            margin: 0 0 15px 0;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .bbcode-draft-prompt-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .bbcode-draft-prompt button {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .bbcode-draft-prompt .restore-btn {
+            background: #ffc107;
+            border-color: #856404;
+            color: #856404;
+        }
+        
+        .bbcode-draft-prompt .restore-btn:hover {
+            background: #ffcd39;
+        }
+        
+        .bbcode-draft-prompt .discard-btn {
+            background: #fff;
+            border-color: #ccc;
+        }
+        
+        .bbcode-draft-prompt .discard-btn:hover {
+            background: #f8f9fa;
         }
     `;
 
@@ -12152,8 +12244,11 @@ class BBCodeEditor {
 
         console.log('📝 BBCode Editor waiting for ForumCoreObserver...');
 
+        // Check if we're on body#send page (editing)
+        this.#checkIfEditing();
+
         // Generate draft key based on current page
-        this.#draftKey = `bbcode-draft-${window.location.pathname}`;
+        this.#generateDraftKey();
 
         // Check if observer is already available
         if (globalThis.forumObserver) {
@@ -12196,6 +12291,47 @@ class BBCodeEditor {
             clearInterval(checkInterval);
             window.removeEventListener('forum-observer-ready', observerReadyHandler);
         }, 5000);
+    }
+
+    #checkIfEditing() {
+        // Check if we're on body#send page (editing an existing post)
+        this.#isEditing = document.body && document.body.id === 'send';
+        
+        // Also check URL parameters for edit indicator
+        if (window.location.search.includes('edit=') || window.location.pathname.includes('/edit/')) {
+            this.#isEditing = true;
+        }
+        
+        console.log(`📝 ${this.#isEditing ? 'Editing existing post' : 'Creating new post'}`);
+    }
+
+    #generateDraftKey() {
+        // For new posts: use pathname
+        // For edits: include post ID in draft key to avoid conflicts
+        if (this.#isEditing) {
+            // Try to extract post ID from URL or form
+            const postId = this.#extractPostId();
+            this.#draftKey = postId ? 
+                `bbcode-draft-edit-${postId}` : 
+                `bbcode-draft-${window.location.pathname}-edit`;
+        } else {
+            this.#draftKey = `bbcode-draft-${window.location.pathname}`;
+        }
+    }
+
+    #extractPostId() {
+        // Try to get post ID from various sources
+        const textarea = document.getElementById('Post');
+        if (textarea && textarea.dataset.postId) {
+            return textarea.dataset.postId;
+        }
+        
+        // Try from URL
+        const match = window.location.pathname.match(/\/edit\/(\d+)/) || 
+                     window.location.search.match(/post_id=(\d+)/) ||
+                     window.location.search.match(/edit=(\d+)/);
+        
+        return match ? match[1] : null;
     }
 
     #checkForTextarea() {
@@ -12260,9 +12396,18 @@ class BBCodeEditor {
                 throw new Error('Textarea container not found');
             }
 
-            // Load draft if available
-            const draft = this.#loadDraft();
-            const originalValue = draft || this.#originalTextarea.value || '';
+            // Determine initial content
+            let initialValue = this.#originalTextarea.value || '';
+            let draftAvailable = false;
+            
+            // Only check for drafts if we're not editing an existing post
+            if (!this.#isEditing) {
+                const draft = this.#loadDraft();
+                if (draft) {
+                    draftAvailable = true;
+                    initialValue = draft;
+                }
+            }
 
             // Hide original textarea
             this.#originalTextarea.style.display = 'none';
@@ -12276,7 +12421,7 @@ class BBCodeEditor {
             this.#editorWrapper.setAttribute('aria-label', 'BBCode editor');
             this.#editorWrapper.setAttribute('data-forum-element', 'true');
 
-            const editorInitialValue = this.#safeForumToBBCode(originalValue);
+            const editorInitialValue = this.#safeForumToBBCode(initialValue);
 
             this.#editorWrapper.innerHTML = this.#buildEditorHTML(editorInitialValue);
             textareaContainer.insertBefore(this.#editorWrapper, this.#originalTextarea.nextSibling);
@@ -12309,16 +12454,18 @@ class BBCodeEditor {
             // Update status
             this.#updateStatus();
 
-            // Show draft indicator if draft was loaded
-            if (draft) {
+            // Show draft indicator if draft was loaded (only for new posts)
+            if (!this.#isEditing && draftAvailable) {
                 this.#showDraftIndicator();
                 this.#showStatusMessage('Draft loaded', 'info');
             }
 
-            // Set up beforeunload handler to save draft
-            window.addEventListener('beforeunload', () => {
-                this.#autoSave();
-            });
+            // Set up beforeunload handler to save draft (only for new posts)
+            if (!this.#isEditing) {
+                window.addEventListener('beforeunload', () => {
+                    this.#autoSave();
+                });
+            }
 
             // Set up form submit handler to clear draft
             const form = this.#originalTextarea.form;
@@ -12382,6 +12529,13 @@ class BBCodeEditor {
                 }
             };
 
+            // Handle restore draft button clicks
+            this.#editorWrapper.addEventListener('click', (e) => {
+                if (e.target.classList.contains('bbcode-restore-draft')) {
+                    this.#restoreDraft();
+                }
+            });
+
             this.#editorWrapper.addEventListener('click', this.#clickHandler);
             this.#editorWrapper.addEventListener('change', this.#changeHandler);
 
@@ -12395,7 +12549,11 @@ class BBCodeEditor {
                         this.#syncToOriginal();
                         this.#saveState(this.#bbcodeEditor.value);
                         debouncedUpdate();
-                        debouncedAutoSave(); // Auto-save on input
+                        
+                        // Only auto-save for new posts
+                        if (!this.#isEditing) {
+                            debouncedAutoSave();
+                        }
                         
                         // Notify observer of change
                         if (this.#observerReady && globalThis.forumObserver) {
@@ -12478,7 +12636,11 @@ class BBCodeEditor {
             this.#syncToOriginal();
             this.#saveState(this.#bbcodeEditor.value);
             this.#updateStatus();
-            this.#autoSave(); // Auto-save after insertion
+            
+            // Only auto-save for new posts
+            if (!this.#isEditing) {
+                this.#autoSave();
+            }
         } catch (error) {
             console.error('Error inserting text:', error);
         }
@@ -12643,10 +12805,13 @@ class BBCodeEditor {
 
     #showDraftIndicator() {
         try {
-            const indicator = document.createElement('span');
-            indicator.className = 'bbcode-draft-indicator';
-            indicator.title = 'Draft saved';
-            this.#statusElements.chars?.appendChild(indicator);
+            const container = document.createElement('span');
+            container.className = 'bbcode-draft-indicator';
+            container.innerHTML = `
+                <span class="bbcode-draft-dot" title="Draft saved"></span>
+                <button type="button" class="bbcode-restore-draft" title="Restore original content">Restore original</button>
+            `;
+            this.#statusElements.chars?.appendChild(container);
         } catch (error) {
             console.error('Error showing draft indicator:', error);
         }
@@ -12658,6 +12823,18 @@ class BBCodeEditor {
             indicator?.remove();
         } catch (error) {
             console.error('Error removing draft indicator:', error);
+        }
+    }
+
+    #restoreDraft() {
+        try {
+            const draft = this.#loadDraft();
+            if (draft) {
+                this.setValue(draft);
+                this.#showStatusMessage('Draft restored', 'success');
+            }
+        } catch (error) {
+            console.error('Error restoring draft:', error);
         }
     }
 
@@ -12675,16 +12852,64 @@ class BBCodeEditor {
         }
     }
 
+    #showDraftPrompt(draftContent, originalContent) {
+        try {
+            const prompt = document.createElement('div');
+            prompt.className = 'bbcode-draft-prompt';
+            prompt.setAttribute('role', 'dialog');
+            prompt.setAttribute('aria-label', 'Draft found');
+            
+            prompt.innerHTML = `
+                <h4>📝 Draft Found</h4>
+                <p>You have a saved draft from ${new Date().toLocaleDateString()}. Would you like to restore it?</p>
+                <div class="bbcode-draft-prompt-buttons">
+                    <button type="button" class="restore-btn">Restore Draft</button>
+                    <button type="button" class="discard-btn">Discard Draft</button>
+                </div>
+            `;
+            
+            document.body.appendChild(prompt);
+            
+            const restoreBtn = prompt.querySelector('.restore-btn');
+            const discardBtn = prompt.querySelector('.discard-btn');
+            
+            restoreBtn.addEventListener('click', () => {
+                this.setValue(draftContent);
+                this.#showDraftIndicator();
+                this.#showStatusMessage('Draft restored', 'success');
+                prompt.remove();
+            });
+            
+            discardBtn.addEventListener('click', () => {
+                this.#clearDraft();
+                this.setValue(originalContent);
+                this.#showStatusMessage('Draft discarded', 'info');
+                prompt.remove();
+            });
+            
+            // Auto-remove after 30 seconds
+            setTimeout(() => prompt.remove(), 30000);
+            
+        } catch (error) {
+            console.error('Error showing draft prompt:', error);
+        }
+    }
+
     /**
      * Auto-save functionality
      */
     #autoSave() {
         try {
-            if (!this.#draftKey || !this.#bbcodeEditor) return;
+            if (!this.#draftKey || !this.#bbcodeEditor || this.#isEditing) return;
             
             const value = this.#bbcodeEditor.value;
             if (value.trim()) {
-                localStorage.setItem(this.#draftKey, value);
+                const draftData = {
+                    content: value,
+                    timestamp: Date.now(),
+                    url: window.location.pathname
+                };
+                localStorage.setItem(this.#draftKey, JSON.stringify(draftData));
                 this.#showDraftIndicator();
                 this.#showStatusMessage('Draft saved', 'success');
             } else {
@@ -12699,7 +12924,22 @@ class BBCodeEditor {
     #loadDraft() {
         try {
             if (!this.#draftKey) return null;
-            return localStorage.getItem(this.#draftKey);
+            
+            const draftData = localStorage.getItem(this.#draftKey);
+            if (!draftData) return null;
+            
+            try {
+                const parsed = JSON.parse(draftData);
+                // Check if draft is expired
+                if (Date.now() - parsed.timestamp > BBCodeEditor.#CONFIG.DRAFT_EXPIRY) {
+                    localStorage.removeItem(this.#draftKey);
+                    return null;
+                }
+                return parsed.content;
+            } catch {
+                // Legacy format (just string)
+                return draftData;
+            }
         } catch (error) {
             console.error('Error loading draft:', error);
             return null;
@@ -13415,7 +13655,11 @@ class BBCodeEditor {
                 this.#syncToOriginal();
                 this.#saveState(value);
                 this.#updateStatus();
-                this.#autoSave(); // Save to localStorage
+                
+                // Only auto-save for new posts
+                if (!this.#isEditing) {
+                    this.#autoSave();
+                }
             }
         } catch (error) {
             console.error('Error setting value:', error);
@@ -13427,10 +13671,16 @@ class BBCodeEditor {
         this.#showStatusMessage('Draft cleared', 'info');
     }
 
+    isEditing() {
+        return this.#isEditing;
+    }
+
     destroy() {
         try {
-            // Save final draft before destroying
-            this.#autoSave();
+            // Save final draft before destroying (only for new posts)
+            if (!this.#isEditing) {
+                this.#autoSave();
+            }
 
             if (this.#editorWrapper) {
                 if (this.#clickHandler) {
