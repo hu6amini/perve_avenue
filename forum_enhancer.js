@@ -13789,7 +13789,7 @@ class BBCodeEditor {
             });
 
             // URLs - convert to HTML
-            forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+            forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
             forumHtml = forumHtml.replace(/\[url\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
             // IMPORTANT: Skip image conversion - leave [IMG] tags as BBCode
@@ -14018,11 +14018,11 @@ class BBCodeEditor {
                             const linkText = prompt('Enter link text:', 'Click here');
                             if (linkText) {
                                 const newText = this.#bbcodeEditor.value.substring(0, start) + 
-                                    `[URL=${url}]${linkText}[/URL]` + 
+                                    `[url=${url}]${linkText}[/url]` + 
                                     this.#bbcodeEditor.value.substring(end);
                                 this.#bbcodeEditor.value = newText;
                                 this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                    start + (`[URL=${url}]`).length + linkText.length + '[/URL]'.length;
+                                    start + (`[url=${url}]`).length + linkText.length + '[/url]'.length;
                                 this.#syncToOriginal();
                                 this.#saveState(newText);
                                 this.#updateStatus();
@@ -14140,11 +14140,11 @@ class BBCodeEditor {
                                     const linkText = prompt('Enter link text:', 'Click here');
                                     if (linkText) {
                                         const newText = this.#bbcodeEditor.value.substring(0, start) + 
-                                            `[URL=${url}]${linkText}[/URL]` + 
+                                            `[url=${url}]${linkText}[/url]` + 
                                             this.#bbcodeEditor.value.substring(end);
                                         this.#bbcodeEditor.value = newText;
                                         this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                            start + (`[URL=${url}]`).length + linkText.length + '[/URL]'.length;
+                                            start + (`[url=${url}]`).length + linkText.length + '[/url]'.length;
                                         this.#syncToOriginal();
                                         this.#saveState(newText);
                                         this.#updateStatus();
