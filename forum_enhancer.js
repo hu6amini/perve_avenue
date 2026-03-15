@@ -11841,8 +11841,8 @@ class BBCodeEditor {
             name: 'blocks',
             buttons: [
                 { tag: 'quote', title: 'Quote (Ctrl+Q)', icon: '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' },
-                { tag: 'code', title: 'Code (Ctrl+K)', icon: '<i class="fa-sharp fa-regular fa-code" aria-hidden="true"></i>' },
-                { tag: 'html', title: 'HTML', icon: '<i class="fa-regular fa-file-html" aria-hidden="true"></i>' },
+                { tag: 'code', title: 'Code (Ctrl+K)', icon: '<i class="fa-regular fa-code-simple" aria-hidden="true"></i>' },
+                { tag: 'html', title: 'HTML', icon: '<i class="fa-regular fa-code" aria-hidden="true"></i>' },
                 { tag: 'spoiler', title: 'Spoiler', icon: '<i class="fa-regular fa-flag" aria-hidden="true"></i>' }
             ]
         }
