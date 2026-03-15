@@ -14013,21 +14013,28 @@ class BBCodeEditor {
                         const selectedText = this.#bbcodeEditor.value.substring(start, end);
 
                         if (selectedText) {
-                            this.#insertTag('url', url);
+                            // If text is selected, create a link with that text
+                            const newText = text.substring(0, start) + 
+                                `[url=${url}]${selectedText}[/url]` + 
+                                text.substring(end);
+                            this.#bbcodeEditor.value = newText;
+                            this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
+                                start + (`[url=${url}]`).length + selectedText.length + '[/url]'.length;
                         } else {
-                            const linkText = prompt('Enter link text:', 'Click here');
-                            if (linkText) {
-                                const newText = this.#bbcodeEditor.value.substring(0, start) + 
-                                    `[url=${url}]${linkText}[/url]` + 
-                                    this.#bbcodeEditor.value.substring(end);
-                                this.#bbcodeEditor.value = newText;
-                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                    start + (`[url=${url}]`).length + linkText.length + '[/url]'.length;
-                                this.#syncToOriginal();
-                                this.#saveState(newText);
-                                this.#updateStatus();
-                            }
+                            // If no text is selected, insert [url]url[/url]
+                            const newText = text.substring(0, start) + 
+                                `[url]${url}[/url]` + 
+                                text.substring(end);
+                            this.#bbcodeEditor.value = newText;
+                            this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
+                                start + (`[url]`).length + url.length + '[/url]'.length;
                         }
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#showStatusMessage('Link inserted', 'success');
+                        
                     } catch (e) {
                         alert('Please enter a valid URL');
                     }
@@ -14040,7 +14047,23 @@ class BBCodeEditor {
                 if (imgUrl) {
                     try {
                         new URL(imgUrl);
-                        this.#insertTag('img', imgUrl);
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        
+                        // Insert [img]url[/img]
+                        const newText = text.substring(0, start) + 
+                            `[img]${imgUrl}[/img]` + 
+                            text.substring(end);
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
+                            start + (`[img]`).length + imgUrl.length + '[/img]'.length;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#showStatusMessage('Image inserted', 'success');
+                        
                     } catch (e) {
                         alert('Please enter a valid image URL');
                     }
@@ -14134,22 +14157,31 @@ class BBCodeEditor {
                         if (url) {
                             try {
                                 new URL(url);
+                                const text = this.#bbcodeEditor.value;
+                                
                                 if (selectedText) {
-                                    this.#insertTag('url', url);
+                                    // If text is selected, create a link with that text
+                                    const newText = text.substring(0, start) + 
+                                        `[url=${url}]${selectedText}[/url]` + 
+                                        text.substring(end);
+                                    this.#bbcodeEditor.value = newText;
+                                    this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
+                                        start + (`[url=${url}]`).length + selectedText.length + '[/url]'.length;
                                 } else {
-                                    const linkText = prompt('Enter link text:', 'Click here');
-                                    if (linkText) {
-                                        const newText = this.#bbcodeEditor.value.substring(0, start) + 
-                                            `[url=${url}]${linkText}[/url]` + 
-                                            this.#bbcodeEditor.value.substring(end);
-                                        this.#bbcodeEditor.value = newText;
-                                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
-                                            start + (`[url=${url}]`).length + linkText.length + '[/url]'.length;
-                                        this.#syncToOriginal();
-                                        this.#saveState(newText);
-                                        this.#updateStatus();
-                                    }
+                                    // If no text is selected, insert [url]url[/url]
+                                    const newText = text.substring(0, start) + 
+                                        `[url]${url}[/url]` + 
+                                        text.substring(end);
+                                    this.#bbcodeEditor.value = newText;
+                                    this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
+                                        start + (`[url]`).length + url.length + '[/url]'.length;
                                 }
+                                
+                                this.#syncToOriginal();
+                                this.#saveState(newText);
+                                this.#updateStatus();
+                                this.#showStatusMessage('Link inserted', 'success');
+                                
                             } catch (e) {
                                 alert('Please enter a valid URL');
                             }
@@ -14161,7 +14193,23 @@ class BBCodeEditor {
                         if (imgUrl) {
                             try {
                                 new URL(imgUrl);
-                                this.#insertTag('img', imgUrl);
+                                const text = this.#bbcodeEditor.value;
+                                const start = this.#bbcodeEditor.selectionStart;
+                                const end = this.#bbcodeEditor.selectionEnd;
+                                
+                                // Insert [img]url[/img]
+                                const newText = text.substring(0, start) + 
+                                    `[img]${imgUrl}[/img]` + 
+                                    text.substring(end);
+                                this.#bbcodeEditor.value = newText;
+                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = 
+                                    start + (`[img]`).length + imgUrl.length + '[/img]'.length;
+                                
+                                this.#syncToOriginal();
+                                this.#saveState(newText);
+                                this.#updateStatus();
+                                this.#showStatusMessage('Image inserted', 'success');
+                                
                             } catch (e) {
                                 alert('Please enter a valid image URL');
                             }
