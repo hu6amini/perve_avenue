@@ -12058,32 +12058,61 @@ class BBCodeEditor {
         if (this.#initStarted) return;
         this.#initStarted = true;
 
+        // First, try to find the textarea immediately
+        const textarea = document.getElementById('Post');
+        if (textarea && !textarea.hasAttribute('data-editor-initialized')) {
+            console.log('📝 Textarea found immediately, initializing...');
+            this.#originalTextarea = textarea;
+            this.#init();
+            return;
+        }
+
         // Check if forumObserver is available
         if (globalThis.forumObserver) {
             console.log('📝 BBCode Editor: ForumCoreObserver detected');
             this.#registerWithObserver();
-            this.#init();
+            
+            // Also do a direct check after a short delay
+            setTimeout(() => {
+                if (!this.#editorWrapper) {
+                    const textarea = document.getElementById('Post');
+                    if (textarea && !textarea.hasAttribute('data-editor-initialized')) {
+                        console.log('📝 Initializing via fallback timeout');
+                        this.#originalTextarea = textarea;
+                        this.#init();
+                    }
+                }
+            }, 500);
         } else {
             console.log('⏳ BBCode Editor waiting for ForumCoreObserver...');
             
-            // Listen for when scripts are ready via the observer's event system
+            // Listen for when scripts are ready
+            let attempts = 0;
             const checkInterval = setInterval(() => {
-                if (globalThis.forumObserver) {
+                attempts++;
+                const textarea = document.getElementById('Post');
+                
+                if (textarea && !textarea.hasAttribute('data-editor-initialized')) {
                     clearInterval(checkInterval);
-                    console.log('📝 BBCode Editor: ForumCoreObserver now available');
-                    this.#registerWithObserver();
+                    console.log('📝 Textarea found, initializing directly');
+                    this.#originalTextarea = textarea;
                     this.#init();
+                } else if (globalThis.forumObserver) {
+                    clearInterval(checkInterval);
+                    console.log('📝 ForumCoreObserver now available, registering...');
+                    this.#registerWithObserver();
+                } else if (attempts > 50) { // 5 seconds max
+                    clearInterval(checkInterval);
+                    console.warn('BBCode Editor: Timeout waiting for textarea');
+                    
+                    // Final check
+                    const finalTextarea = document.getElementById('Post');
+                    if (finalTextarea && !finalTextarea.hasAttribute('data-editor-initialized')) {
+                        this.#originalTextarea = finalTextarea;
+                        this.#init();
+                    }
                 }
             }, 100);
-            
-            // Fallback timeout
-            setTimeout(() => {
-                clearInterval(checkInterval);
-                if (!globalThis.forumObserver) {
-                    console.warn('BBCode Editor: ForumCoreObserver not available after timeout, initializing anyway');
-                    this.#init();
-                }
-            }, 3000);
         }
     }
 
@@ -12092,21 +12121,27 @@ class BBCodeEditor {
             if (globalThis.forumObserver) {
                 // Register with the core observer
                 this.#observerId = globalThis.forumObserver.register({
-                    id: 'bbcode-editor',
+                    id: 'bbcode-editor-' + Date.now(),
                     priority: 'high',
-                    selector: '#Post, .bbcode-editor-wrapper',
+                    selector: '#Post',
                     pageTypes: ['SendPage'],
                     callback: (node) => {
-                        if (node.id === 'Post' && !node.hasAttribute('data-editor-initialized')) {
+                        console.log('📝 Observer callback triggered for:', node);
+                        if (node && node.id === 'Post' && !node.hasAttribute('data-editor-initialized')) {
                             this.#originalTextarea = node;
-                            if (!this.#editorWrapper) {
-                                this.#init();
-                            }
+                            this.#init();
                         }
                     }
                 });
                 
                 console.log('📝 BBCode Editor registered with ForumCoreObserver, ID:', this.#observerId);
+                
+                // Force a scan for existing elements
+                setTimeout(() => {
+                    if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
+                        globalThis.forumObserver.forceScan('#Post');
+                    }
+                }, 200);
             }
         } catch (error) {
             console.error('Error registering with observer:', error);
@@ -12180,7 +12215,7 @@ class BBCodeEditor {
             this.#updateStatus();
 
             // Notify observer that editor is ready
-            if (globalThis.forumObserver) {
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
                 globalThis.forumObserver.forceScan('.bbcode-editor-wrapper');
             }
 
@@ -12651,7 +12686,7 @@ class BBCodeEditor {
             });
 
             // URLs - convert to HTML
-            forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/URL\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+            forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
             forumHtml = forumHtml.replace(/\[url\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
             // IMPORTANT: Skip image conversion - leave [IMG] tags as BBCode
@@ -13112,11 +13147,40 @@ class BBCodeEditor {
         return;
     }
 
-    // Helper to initialize when ready
+    // Helper to check if we're on a send page
+    const isSendPage = () => {
+        return document.body?.id === 'send' || 
+               document.body?.classList?.contains('send') ||
+               window.location.pathname.includes('/send') ||
+               window.location.pathname.includes('/new-topic') ||
+               window.location.pathname.includes('/post') ||
+               window.location.pathname.includes('/reply');
+    };
+
+    // Helper to initialize
     const initializeEditor = () => {
         try {
+            // Don't initialize if not on send page
+            if (!isSendPage()) {
+                console.log('📝 Not a send page, BBCodeEditor skipping');
+                return;
+            }
+
+            // Check if textarea exists
+            const textarea = document.getElementById('Post');
+            if (!textarea) {
+                console.log('⏳ BBCodeEditor waiting for #Post textarea');
+                return false;
+            }
+
+            // Check if already initialized
+            if (textarea.hasAttribute('data-editor-initialized')) {
+                console.log('✅ BBCodeEditor already initialized');
+                return true;
+            }
+
+            console.log('📝 Initializing BBCodeEditor...');
             globalThis.bbcodeEditor = new BBCodeEditor();
-            console.log('📝 BBCodeEditor initialized (Professional Edition)');
             
             // Expose public API
             globalThis.getBBCodeEditor = () => globalThis.bbcodeEditor;
@@ -13128,58 +13192,69 @@ class BBCodeEditor {
                     globalThis.bbcodeEditor = null;
                 }
             };
+            
+            console.log('✅ BBCodeEditor initialized successfully');
+            return true;
         } catch (error) {
             console.error('Failed to initialize BBCodeEditor:', error);
+            return false;
         }
     };
 
-    // Check if we're on a send page (where editor is needed)
-    const isSendPage = () => {
-        return document.body?.id === 'send' || 
-               document.body?.classList.contains('send') ||
-               window.location.pathname.includes('/send') ||
-               window.location.pathname.includes('/new-topic');
-    };
-
-    // Only initialize on send pages
-    if (!isSendPage()) {
-        console.log('📝 Not a send page, BBCodeEditor skipping');
+    // Try to initialize immediately
+    if (initializeEditor()) {
         return;
     }
 
-    // Use ForumCoreObserver if available
+    // If not initialized, set up observers
+    console.log('⏳ Setting up BBCodeEditor initialization watchers');
+
+    // Try with ForumCoreObserver first
     if (globalThis.forumObserver) {
-        console.log('📝 Using ForumCoreObserver for BBCodeEditor initialization');
+        console.log('📝 Using ForumCoreObserver for BBCodeEditor');
         
-        // Register for page type
         const observerId = globalThis.forumObserver.register({
             id: 'bbcode-editor-init',
             priority: 'high',
             selector: '#Post',
             pageTypes: ['SendPage'],
             callback: (node) => {
-                if (node.id === 'Post' && !node.hasAttribute('data-editor-initialized')) {
+                console.log('📝 Observer triggered for BBCodeEditor');
+                if (node && node.id === 'Post' && !node.hasAttribute('data-editor-initialized')) {
                     initializeEditor();
                 }
             }
         });
 
-        // Also check immediately
+        // Force scan immediately
         setTimeout(() => {
-            const textarea = document.getElementById('Post');
-            if (textarea && !textarea.hasAttribute('data-editor-initialized')) {
-                initializeEditor();
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.forceScan === 'function') {
+                globalThis.forumObserver.forceScan('#Post');
             }
         }, 100);
-        
-    } else {
-        // Fallback to direct initialization if observer not available
-        console.log('📝 ForumCoreObserver not available, direct initialization');
-        
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeEditor);
-        } else {
-            setTimeout(initializeEditor, 100);
-        }
     }
+
+    // Fallback: DOMContentLoaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(initializeEditor, 100);
+        });
+    }
+
+    // Fallback: direct check with interval
+    let attempts = 0;
+    const checkInterval = setInterval(() => {
+        attempts++;
+        if (initializeEditor() || attempts > 30) {
+            clearInterval(checkInterval);
+        }
+    }, 200);
+
+    // Final fallback: load event
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            initializeEditor();
+        }, 500);
+    });
 })();
