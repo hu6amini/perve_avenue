@@ -55,28 +55,7 @@
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
-    // NEW: Check if element is inside .ve-content.color
-    function isInVeContent(element) {
-        if (!element) return false;
-        
-        var current = element;
-        while (current) {
-            if (current.classList && 
-                current.classList.contains('ve-content') && 
-                current.classList.contains('color')) {
-                return true;
-            }
-            current = current.parentElement;
-        }
-        return false;
-    }
-    
     function shouldSkip(url, el) {
-        // Skip if inside .ve-content.color
-        if (el && isInVeContent(el)) {
-            return true;
-        }
-        
         if (!url || url.indexOf('data:') === 0) return true;
         
         var lower = url.toLowerCase();
@@ -142,11 +121,6 @@
     }
     
     function generateVideoPoster(video) {
-        // Skip if inside .ve-content.color
-        if (isInVeContent(video)) {
-            return;
-        }
-        
         var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
         if (!videoSrc) return;
         
@@ -318,11 +292,6 @@
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
-        // Skip if inside .ve-content.color
-        if (isInVeContent(video)) {
-            return;
-        }
-        
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
@@ -365,11 +334,6 @@
     // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
-        
-        // Skip if inside .ve-content.color
-        if (isInVeContent(el)) {
-            return el;
-        }
         
         if (el.tagName === 'IFRAME') {
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
@@ -462,11 +426,6 @@
         
         applyLazyAttributes(img);
         
-        // Skip if inside .ve-content.color
-        if (isInVeContent(img)) {
-            return;
-        }
-        
         if (state.processed.has(img)) return;
         
         var skip = shouldSkip(img.src, img);
@@ -512,11 +471,6 @@
                 var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
-                // Skip entire node if it's inside .ve-content.color
-                if (isInVeContent(node)) {
-                    continue;
-                }
-                
                 if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
                     if (node.tagName === 'IMG') {
@@ -527,17 +481,12 @@
                 if (node.querySelectorAll) {
                     var allMedia = node.querySelectorAll('img, iframe, video');
                     for (var j = 0; j < allMedia.length; j++) {
-                        // Check each media element individually
-                        if (!isInVeContent(allMedia[j])) {
-                            applyLazyAttributes(allMedia[j]);
-                        }
+                        applyLazyAttributes(allMedia[j]);
                     }
                     
                     var images = node.querySelectorAll('img');
                     for (var k = 0; k < images.length; k++) {
-                        if (!isInVeContent(images[k])) {
-                            optimizeImage(images[k]);
-                        }
+                        optimizeImage(images[k]);
                     }
                 }
             }
@@ -557,7 +506,7 @@
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    if (value && value.indexOf('data:') !== 0 && !isInVeContent(this)) {
+                    if (value && value.indexOf('data:') !== 0) {
                         optimizeImage(this);
                     }
                 },
@@ -575,7 +524,7 @@
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                if (value && value.indexOf('data:') !== 0 && this.isConnected && !isInVeContent(this)) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected) {
                     optimizeImage(this);
                 }
             },
@@ -588,7 +537,7 @@
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0 && !isInVeContent(this)) {
+        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
             optimizeImage(this);
         }
     };
@@ -598,7 +547,6 @@
         var element = originalCreateElement.call(this, tagName, options);
         
         if (tagName.toLowerCase() === 'img') {
-            // We don't check isInVeContent here because element isn't in DOM yet
             applyLazyAttributes(element);
         }
         
@@ -610,30 +558,21 @@
         if (state.initDone) return;
         state.initDone = true;
         
-        // Helper function to process element if not in .ve-content.color
-        function processIfNotInVeContent(el, processor) {
-            if (!isInVeContent(el)) {
-                processor(el);
-            }
-        }
-        
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
-            processIfNotInVeContent(img, function(img) {
-                applyLazyAttributes(img);
-                optimizeImage(img);
-            });
+            applyLazyAttributes(img);
+            optimizeImage(img);
         }
         
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
-            processIfNotInVeContent(allIframes[j], applyLazyAttributes);
+            applyLazyAttributes(allIframes[j]);
         }
         
         var allVideos = document.querySelectorAll('video');
         for (var k = 0; k < allVideos.length; k++) {
-            processIfNotInVeContent(allVideos[k], applyLazyAttributes);
+            applyLazyAttributes(allVideos[k]);
         }
         
         if (document.body) {
@@ -652,23 +591,17 @@
                     
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var i = 0; i < missedImages.length; i++) {
-                        if (!isInVeContent(missedImages[i])) {
-                            optimizeImage(missedImages[i]);
-                        }
+                        optimizeImage(missedImages[i]);
                     }
                     
                     var missedIframes = document.querySelectorAll('iframe:not([loading])');
                     for (var j = 0; j < missedIframes.length; j++) {
-                        if (!isInVeContent(missedIframes[j])) {
-                            applyLazyAttributes(missedIframes[j]);
-                        }
+                        applyLazyAttributes(missedIframes[j]);
                     }
                     
                     var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
                     for (var k = 0; k < missedVideos.length; k++) {
-                        if (!isInVeContent(missedVideos[k])) {
-                            applyLazyAttributes(missedVideos[k]);
-                        }
+                        applyLazyAttributes(missedVideos[k]);
                     }
                 }
             }, 50);
@@ -693,7 +626,7 @@
                 var finalVideos = document.querySelectorAll('video');
                 var videosWithPoster = 0;
                 for (var v = 0; v < finalVideos.length; v++) {
-                    if (!isInVeContent(finalVideos[v]) && finalVideos[v].poster) videosWithPoster++;
+                    if (finalVideos[v].poster) videosWithPoster++;
                 }
                 
                 var finalImages = document.querySelectorAll('img');
@@ -703,24 +636,18 @@
                 var placeholderCount = 0;
                 
                 for (var i = 0; i < finalImages.length; i++) {
-                    if (!isInVeContent(finalImages[i])) {
-                        if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                        if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
-                    }
+                    if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                    if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
                 }
                 
                 for (var j = 0; j < finalIframes.length; j++) {
-                    if (!isInVeContent(finalIframes[j])) {
-                        if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                        if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
-                    }
+                    if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                    if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
                 }
                 
                 for (var k = 0; k < finalVideos.length; k++) {
-                    if (!isInVeContent(finalVideos[k])) {
-                        var preload = finalVideos[k].getAttribute('preload');
-                        if (preload === 'none') lazyCount++;
-                    }
+                    var preload = finalVideos[k].getAttribute('preload');
+                    if (preload === 'none') lazyCount++;
                 }
                 
                 var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
