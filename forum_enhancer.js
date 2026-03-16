@@ -187,13 +187,10 @@ class MediaDimensionExtractor {
             
             while (elementIndex < batch.length && processedCount < BATCH_SIZE) {
                 const element = batch[elementIndex];
-                
-                // Skip if inside .ve-content.color
-                if (!this.#isInVeContent(element) && !this.#processedMedia.has(element)) {
+                if (!this.#processedMedia.has(element)) {
                     this.#processSingleMedia(element);
                     processedCount++;
                 }
-                
                 elementIndex++;
             }
             
@@ -210,28 +207,9 @@ class MediaDimensionExtractor {
         }
     }
 
-    #isInVeContent(element) {
-        // Check if element or any ancestor has class "ve-content" with class "color"
-        let current = element;
-        while (current) {
-            if (current.classList && 
-                current.classList.contains('ve-content') && 
-                current.classList.contains('color')) {
-                return true;
-            }
-            current = current.parentElement;
-        }
-        return false;
-    }
-
     #processMedia(node) {
         // Add this check at the beginning
         if (!node || !node.isConnected) {
-            return;
-        }
-        
-        // Skip if inside .ve-content.color
-        if (this.#isInVeContent(node)) {
             return;
         }
         
@@ -260,11 +238,6 @@ class MediaDimensionExtractor {
         // Skip if node is not in DOM
         if (!node || !node.isConnected) return;
         
-        // Skip if inside .ve-content.color
-        if (this.#isInVeContent(node)) {
-            return;
-        }
-        
         const images = node.getElementsByTagName('img');
         const iframes = node.getElementsByTagName('iframe');
         const videos = node.getElementsByTagName('video');
@@ -273,7 +246,7 @@ class MediaDimensionExtractor {
         for (let i = 0, len = images.length; i < len; i++) {
             const img = images[i];
             if (img.isConnected && !this.#processedMedia.has(img)) {
-                this.#processSingleMedia(img);
+                this.#processImage(img);
             }
         }
         
@@ -281,7 +254,7 @@ class MediaDimensionExtractor {
         for (let i = 0, len = iframes.length; i < len; i++) {
             const iframe = iframes[i];
             if (iframe.isConnected && !this.#processedMedia.has(iframe)) {
-                this.#processSingleMedia(iframe);
+                this.#processIframe(iframe);
             }
         }
         
@@ -289,21 +262,13 @@ class MediaDimensionExtractor {
         for (let i = 0, len = videos.length; i < len; i++) {
             const video = videos[i];
             if (video.isConnected && !this.#processedMedia.has(video)) {
-                this.#processSingleMedia(video);
+                this.#processVideo(video);
             }
         }
     }
 
     #processSingleMedia(media) {
         if (!media || !media.isConnected) return;
-        
-        // Skip if inside .ve-content.color
-        if (this.#isInVeContent(media)) {
-            // Mark as processed to avoid future attempts
-            this.#processedMedia.add(media);
-            return;
-        }
-        
         if (this.#processedMedia.has(media)) return;
 
         const tag = media.tagName;
@@ -714,10 +679,6 @@ class MediaDimensionExtractor {
         // Clear processed flag for images without dimensions
         const images = document.querySelectorAll('img:not([width])');
         images.forEach(img => {
-            // Skip if inside .ve-content.color
-            if (this.#isInVeContent(img)) {
-                return;
-            }
             this.#processedMedia.delete(img);
             this.#processImage(img);
         });
@@ -725,7 +686,7 @@ class MediaDimensionExtractor {
         // Reprocess pending images
         if (this.#pendingImages.size > 0) {
             this.#pendingImages.forEach(img => {
-                if (img.isConnected && !this.#isInVeContent(img)) {
+                if (img.isConnected) {
                     this.#processImage(img);
                 }
             });
@@ -769,7 +730,6 @@ if (!globalThis.mediaDimensionExtractor) {
         console.error('Failed to initialize MediaDimensionExtractor:', error);
     }
 }
-
 
 // ==============================
 // Complete Working Avatar System - COORDINATED WITH MEDIA SCRIPTS
