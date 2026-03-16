@@ -55,6 +55,20 @@
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
+    function isInVeContent(el) {
+        // Check if element or any ancestor has class "ve-content" with class "color"
+        var current = el;
+        while (current) {
+            if (current.classList && 
+                current.classList.contains('ve-content') && 
+                current.classList.contains('color')) {
+                return true;
+            }
+            current = current.parentElement;
+        }
+        return false;
+    }
+    
     function shouldSkip(url, el) {
         if (!url || url.indexOf('data:') === 0) return true;
         
@@ -292,6 +306,11 @@
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
+        // Skip if in ve-content.color
+        if (isInVeContent(video)) {
+            return;
+        }
+        
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
@@ -333,6 +352,11 @@
     
     // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
+        // Skip if in ve-content.color
+        if (isInVeContent(el)) {
+            return el;
+        }
+        
         if (!isMediaElement(el)) return el;
         
         if (el.tagName === 'IFRAME') {
@@ -422,6 +446,11 @@
     }
     
     function optimizeImage(img) {
+        // Skip if in ve-content.color
+        if (isInVeContent(img)) {
+            return;
+        }
+        
         if (!img.src || img.src.indexOf('data:') === 0) return;
         
         applyLazyAttributes(img);
@@ -471,6 +500,11 @@
                 var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
+                // Skip entire node if it's in ve-content.color
+                if (isInVeContent(node)) {
+                    continue;
+                }
+                
                 if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
                     if (node.tagName === 'IMG') {
@@ -481,12 +515,18 @@
                 if (node.querySelectorAll) {
                     var allMedia = node.querySelectorAll('img, iframe, video');
                     for (var j = 0; j < allMedia.length; j++) {
-                        applyLazyAttributes(allMedia[j]);
+                        // Skip individual media if in ve-content.color
+                        if (!isInVeContent(allMedia[j])) {
+                            applyLazyAttributes(allMedia[j]);
+                        }
                     }
                     
                     var images = node.querySelectorAll('img');
                     for (var k = 0; k < images.length; k++) {
-                        optimizeImage(images[k]);
+                        // Skip individual images if in ve-content.color
+                        if (!isInVeContent(images[k])) {
+                            optimizeImage(images[k]);
+                        }
                     }
                 }
             }
@@ -498,6 +538,7 @@
     window.Image = function(width, height) {
         var img = new OriginalImage(width, height);
         
+        // Skip if in ve-content.color (will be checked in optimizeImage)
         img.setAttribute('loading', CONFIG.lazy);
         img.setAttribute('decoding', CONFIG.async);
         
@@ -506,7 +547,7 @@
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    if (value && value.indexOf('data:') !== 0) {
+                    if (value && value.indexOf('data:') !== 0 && !isInVeContent(this)) {
                         optimizeImage(this);
                     }
                 },
@@ -524,7 +565,7 @@
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                if (value && value.indexOf('data:') !== 0 && this.isConnected) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected && !isInVeContent(this)) {
                     optimizeImage(this);
                 }
             },
@@ -537,7 +578,7 @@
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
+        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0 && !isInVeContent(this)) {
             optimizeImage(this);
         }
     };
@@ -547,7 +588,8 @@
         var element = originalCreateElement.call(this, tagName, options);
         
         if (tagName.toLowerCase() === 'img') {
-            applyLazyAttributes(element);
+            // Don't apply lazy attributes yet - will be checked when added to DOM
+            // We need to check context at time of addition
         }
         
         return element;
@@ -558,21 +600,32 @@
         if (state.initDone) return;
         state.initDone = true;
         
+        // Process initial images (skip those in ve-content.color)
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
-            applyLazyAttributes(img);
-            optimizeImage(img);
+            if (!isInVeContent(img)) {
+                applyLazyAttributes(img);
+                optimizeImage(img);
+            }
         }
         
+        // Process initial iframes (skip those in ve-content.color)
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
-            applyLazyAttributes(allIframes[j]);
+            var iframe = allIframes[j];
+            if (!isInVeContent(iframe)) {
+                applyLazyAttributes(iframe);
+            }
         }
         
+        // Process initial videos (skip those in ve-content.color)
         var allVideos = document.querySelectorAll('video');
         for (var k = 0; k < allVideos.length; k++) {
-            applyLazyAttributes(allVideos[k]);
+            var video = allVideos[k];
+            if (!isInVeContent(video)) {
+                applyLazyAttributes(video);
+            }
         }
         
         if (document.body) {
@@ -589,19 +642,28 @@
                         subtree: true
                     });
                     
+                    // Process any missed images (skip those in ve-content.color)
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var i = 0; i < missedImages.length; i++) {
-                        optimizeImage(missedImages[i]);
+                        if (!isInVeContent(missedImages[i])) {
+                            optimizeImage(missedImages[i]);
+                        }
                     }
                     
+                    // Process any missed iframes (skip those in ve-content.color)
                     var missedIframes = document.querySelectorAll('iframe:not([loading])');
                     for (var j = 0; j < missedIframes.length; j++) {
-                        applyLazyAttributes(missedIframes[j]);
+                        if (!isInVeContent(missedIframes[j])) {
+                            applyLazyAttributes(missedIframes[j]);
+                        }
                     }
                     
+                    // Process any missed videos (skip those in ve-content.color)
                     var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
                     for (var k = 0; k < missedVideos.length; k++) {
-                        applyLazyAttributes(missedVideos[k]);
+                        if (!isInVeContent(missedVideos[k])) {
+                            applyLazyAttributes(missedVideos[k]);
+                        }
                     }
                 }
             }, 50);
