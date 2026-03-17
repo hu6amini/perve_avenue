@@ -20,28 +20,27 @@
             preload: 'none',
             autoplayPreload: 'metadata'
         },
-        // Tiptap editor selectors to skip - expanded list
+        // Tiptap editor selectors to skip - based on your actual HTML
         editorSkipSelectors: [
             '#st-visual-editor',
             '.st-editor',
-            '.ve-root',
             '.ve-container',
+            '.ve-root',
+            '.ve-main',
             '.ve-content',
-            '.ve-content.color',  // Specific selector for your .ve-content .color div
-            '.color',             // Any element with color class inside editor
+            '.ve-content.color',
             '.tiptap',
             '.ProseMirror',
             '[contenteditable="true"]',
-            // Additional parent containers
             '.st-editor-attachments',
-            '.ve-toolbar',
-            '.ve-formats-list'
+            '.ve-toolbar'
         ],
-        // Editor parent IDs/classes to check
-        editorParentSelectors: [
-            '#st-visual-editor',
-            '.st-editor',
-            '.ve-root'
+        // Critical editor containers that should never be processed
+        criticalEditorContainers: [
+            '.tiptap',
+            '.ProseMirror',
+            '[contenteditable="true"]',
+            '.ve-content'
         ],
         skipPatterns: [
             '.svg', '.webp', '.avif', '.ico',
@@ -61,7 +60,7 @@
             optimized: 0,
             failed: 0,
             skipped: 0,
-            editorSkipped: 0,  // Track editor-skipped separately
+            editorSkipped: 0,
             byFormat: {},
             byQuality: {}
         },
@@ -71,9 +70,7 @@
             autoplayVideos: 0,
             withPoster: 0
         },
-        initDone: false,
-        // Cache editor elements for faster lookup
-        editorElements: null
+        initDone: false
     };
     
     // ===== UTILITY FUNCTIONS =====
@@ -81,85 +78,41 @@
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
-    // IMPROVED FUNCTION: Check if element is inside Tiptap editor with caching
+    // IMPROVED: Aggressive editor detection
     function isInTiptapEditor(el) {
         if (!el) return false;
         
-        // Quick check: if element has editor-skipped attribute, return true
+        // Quick check for editor-skipped attribute
         if (el.getAttribute && el.getAttribute('data-editor-skipped') === 'true') {
             return true;
         }
         
-        // Check if element itself has editor classes
-        if (el.classList) {
-            var classList = el.classList;
-            for (var c = 0; c < CONFIG.editorSkipSelectors.length; c++) {
-                var selector = CONFIG.editorSkipSelectors[c];
-                // Handle class selectors (starting with .)
-                if (selector.charAt(0) === '.') {
-                    var className = selector.substring(1);
-                    if (classList.contains(className)) {
-                        el.setAttribute('data-editor-skipped', 'true');
-                        return true;
-                    }
-                }
-                // Handle ID selectors (starting with #)
-                else if (selector.charAt(0) === '#') {
-                    var idName = selector.substring(1);
-                    if (el.id === idName) {
-                        el.setAttribute('data-editor-skipped', 'true');
-                        return true;
-                    }
-                }
-                // Handle attribute selectors
-                else if (selector.indexOf('[') === 0) {
-                    try {
-                        if (el.matches && el.matches(selector)) {
-                            el.setAttribute('data-editor-skipped', 'true');
-                            return true;
-                        }
-                    } catch (e) {}
-                }
-            }
-        }
-        
-        // Check for contenteditable
-        if (el.getAttribute && el.getAttribute('contenteditable') === 'true') {
-            el.setAttribute('data-editor-skipped', 'true');
-            return true;
-        }
-        
-        // Check for ProseMirror class (Tiptap specific)
-        if (el.classList && el.classList.contains('ProseMirror')) {
-            el.setAttribute('data-editor-skipped', 'true');
-            return true;
-        }
-        
-        // Check if element is inside any editor container
-        var checkElement = el.parentNode;
-        var maxDepth = 10; // Limit traversal depth for performance
+        // IMMEDIATE CHECK: If element is inside tiptap or ProseMirror, skip immediately
+        var checkElement = el;
         var depth = 0;
+        var maxDepth = 20; // Increased depth for safety
         
         while (checkElement && checkElement !== document.body && depth < maxDepth) {
-            // Check if this parent is an editor container
-            for (var i = 0; i < CONFIG.editorParentSelectors.length; i++) {
-                var parentSelector = CONFIG.editorParentSelectors[i];
-                try {
-                    if (checkElement.matches && checkElement.matches(parentSelector)) {
-                        el.setAttribute('data-editor-skipped', 'true');
-                        return true;
-                    }
-                } catch (e) {}
+            // Check for critical editor containers
+            if (checkElement.classList) {
+                // Direct class checks for speed
+                if (checkElement.classList.contains('tiptap') || 
+                    checkElement.classList.contains('ProseMirror') ||
+                    checkElement.classList.contains('ve-content') ||
+                    checkElement.classList.contains('color')) {
+                    el.setAttribute('data-editor-skipped', 'true');
+                    return true;
+                }
             }
             
-            // Also check for contenteditable on parent
+            // Check for contenteditable
             if (checkElement.getAttribute && checkElement.getAttribute('contenteditable') === 'true') {
                 el.setAttribute('data-editor-skipped', 'true');
                 return true;
             }
             
-            // Check for ProseMirror on parent
-            if (checkElement.classList && checkElement.classList.contains('ProseMirror')) {
+            // Check ID
+            if (checkElement.id === 'st-visual-editor') {
                 el.setAttribute('data-editor-skipped', 'true');
                 return true;
             }
@@ -171,24 +124,19 @@
         return false;
     }
     
-    // NEW FUNCTION: Quick check if we're in editor context using cached elements
-    function isInEditorContextFast(el) {
+    // FAST PATH: Check if element is inside any critical editor container
+    function isInCriticalEditor(el) {
         if (!el) return false;
         
-        // Refresh editor elements cache if needed
-        if (!state.editorElements || state.editorElements.length === 0) {
-            var selectors = CONFIG.editorParentSelectors.join(',');
-            state.editorElements = document.querySelectorAll(selectors);
-        }
-        
-        // Check if element or any parent is one of the cached editor elements
         var checkElement = el;
         var depth = 0;
         var maxDepth = 10;
         
-        while (checkElement && depth < maxDepth) {
-            for (var i = 0; i < state.editorElements.length; i++) {
-                if (checkElement === state.editorElements[i]) {
+        while (checkElement && checkElement !== document.body && depth < maxDepth) {
+            if (checkElement.classList) {
+                if (checkElement.classList.contains('tiptap') || 
+                    checkElement.classList.contains('ProseMirror') ||
+                    checkElement.classList.contains('ve-content')) {
                     return true;
                 }
             }
@@ -203,11 +151,13 @@
         // Skip data URLs
         if (!url || url.indexOf('data:') === 0) return true;
         
-        // IMPROVED: Skip if element is inside Tiptap editor - use both methods
+        // CRITICAL: First check if element is in editor - do this BEFORE anything else
         if (el) {
-            if (isInTiptapEditor(el) || isInEditorContextFast(el)) {
-                console.log('📝 Skipping media inside Tiptap editor:', url.substring(0, 60) + '...');
+            // Aggressive editor check
+            if (isInTiptapEditor(el)) {
+                console.log('📝 Skipping editor image:', url.substring(0, 60) + '...');
                 state.stats.editorSkipped++;
+                state.stats.skipped++;
                 if (el.tagName === 'IMG') {
                     el.setAttribute('data-optimized', 'skipped-editor');
                 }
@@ -256,7 +206,7 @@
     // ===== VIDEO POSTER GENERATION =====
     function createSvgPoster(video) {
         // Skip if video is in Tiptap editor
-        if (isInTiptapEditor(video) || isInEditorContextFast(video)) return;
+        if (isInTiptapEditor(video)) return;
         
         var width = video.getAttribute('width') || 640;
         var height = video.getAttribute('height') || 360;
@@ -282,7 +232,7 @@
     
     function generateVideoPoster(video) {
         // Skip if video is in Tiptap editor
-        if (isInTiptapEditor(video) || isInEditorContextFast(video)) return;
+        if (isInTiptapEditor(video)) return;
         
         var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
         if (!videoSrc) return;
@@ -456,7 +406,7 @@
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
         // Skip if video is in Tiptap editor
-        if (isInTiptapEditor(video) || isInEditorContextFast(video)) {
+        if (isInTiptapEditor(video)) {
             if (!state.processed.has(video)) {
                 state.processed.add(video);
                 video.setAttribute('data-video-processed', 'skipped-editor');
@@ -507,8 +457,8 @@
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
         
-        // Skip if element is in Tiptap editor
-        if (isInTiptapEditor(el) || isInEditorContextFast(el)) {
+        // Skip if element is in Tiptap editor - do this first
+        if (isInTiptapEditor(el)) {
             return el;
         }
         
@@ -599,17 +549,26 @@
     }
     
     function optimizeImage(img) {
+        // CRITICAL: First check if already processed
+        if (state.processed.has(img)) return;
+        
+        // CRITICAL: Check for editor BEFORE anything else
+        if (isInTiptapEditor(img)) {
+            state.processed.add(img);
+            state.stats.skipped++;
+            state.stats.editorSkipped++;
+            img.setAttribute('data-optimized', 'skipped-editor');
+            return;
+        }
+        
         if (!img.src || img.src.indexOf('data:') === 0) return;
         
         applyLazyAttributes(img);
-        
-        if (state.processed.has(img)) return;
         
         var skip = shouldSkip(img.src, img);
         if (skip) {
             state.processed.add(img);
             state.stats.skipped++;
-            // Don't set data-optimized for editor-skipped (already set in shouldSkip)
             if (img.getAttribute('data-optimized') !== 'skipped-editor') {
                 img.setAttribute('data-optimized', 'skipped');
             }
@@ -651,9 +610,6 @@
                 var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
-                // Reset editor elements cache when new nodes are added
-                state.editorElements = null;
-                
                 if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
                     if (node.tagName === 'IMG') {
@@ -682,7 +638,7 @@
         var img = new OriginalImage(width, height);
         
         // Don't set lazy attributes for images created in editor context
-        if (!isInTiptapEditor(img) && !isInEditorContextFast(img)) {
+        if (!isInTiptapEditor(img)) {
             img.setAttribute('loading', CONFIG.lazy);
             img.setAttribute('decoding', CONFIG.async);
         }
@@ -692,7 +648,7 @@
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    if (value && value.indexOf('data:') !== 0 && !isInTiptapEditor(this) && !isInEditorContextFast(this)) {
+                    if (value && value.indexOf('data:') !== 0 && !isInTiptapEditor(this)) {
                         optimizeImage(this);
                     }
                 },
@@ -710,7 +666,7 @@
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                if (value && value.indexOf('data:') !== 0 && this.isConnected && !isInTiptapEditor(this) && !isInEditorContextFast(this)) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected && !isInTiptapEditor(this)) {
                     optimizeImage(this);
                 }
             },
@@ -723,7 +679,7 @@
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0 && !isInTiptapEditor(this) && !isInEditorContextFast(this)) {
+        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0 && !isInTiptapEditor(this)) {
             optimizeImage(this);
         }
     };
@@ -732,7 +688,7 @@
     document.createElement = function(tagName, options) {
         var element = originalCreateElement.call(this, tagName, options);
         
-        if (tagName.toLowerCase() === 'img' && !isInTiptapEditor(element) && !isInEditorContextFast(element)) {
+        if (tagName.toLowerCase() === 'img' && !isInTiptapEditor(element)) {
             applyLazyAttributes(element);
         }
         
@@ -744,28 +700,31 @@
         if (state.initDone) return;
         state.initDone = true;
         
-        // Cache editor elements for fast lookup
-        var selectors = CONFIG.editorParentSelectors.join(',');
-        state.editorElements = document.querySelectorAll(selectors);
-        
+        // First pass: Mark all editor images as skipped
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
-            // Skip if in editor during initial scan
-            if (!isInTiptapEditor(img) && !isInEditorContextFast(img)) {
-                applyLazyAttributes(img);
-                optimizeImage(img);
-            } else {
+            if (isInTiptapEditor(img)) {
                 state.stats.skipped++;
                 state.stats.editorSkipped++;
                 img.setAttribute('data-optimized', 'skipped-editor');
+                state.processed.add(img);
+            }
+        }
+        
+        // Second pass: Process non-editor images
+        for (var i = 0; i < allImages.length; i++) {
+            var img = allImages[i];
+            if (!state.processed.has(img)) {
+                applyLazyAttributes(img);
+                optimizeImage(img);
             }
         }
         
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
             var iframe = allIframes[j];
-            if (!isInTiptapEditor(iframe) && !isInEditorContextFast(iframe)) {
+            if (!isInTiptapEditor(iframe)) {
                 applyLazyAttributes(iframe);
             }
         }
@@ -773,7 +732,7 @@
         var allVideos = document.querySelectorAll('video');
         for (var k = 0; k < allVideos.length; k++) {
             var video = allVideos[k];
-            if (!isInTiptapEditor(video) && !isInEditorContextFast(video)) {
+            if (!isInTiptapEditor(video)) {
                 applyLazyAttributes(video);
             }
         }
@@ -791,40 +750,11 @@
                         childList: true,
                         subtree: true
                     });
-                    
-                    // Refresh editor elements cache
-                    state.editorElements = document.querySelectorAll(selectors);
-                    
-                    var missedImages = document.querySelectorAll('img:not([data-optimized])');
-                    for (var i = 0; i < missedImages.length; i++) {
-                        if (!isInTiptapEditor(missedImages[i]) && !isInEditorContextFast(missedImages[i])) {
-                            optimizeImage(missedImages[i]);
-                        } else {
-                            missedImages[i].setAttribute('data-optimized', 'skipped-editor');
-                        }
-                    }
-                    
-                    var missedIframes = document.querySelectorAll('iframe:not([loading])');
-                    for (var j = 0; j < missedIframes.length; j++) {
-                        if (!isInTiptapEditor(missedIframes[j]) && !isInEditorContextFast(missedIframes[j])) {
-                            applyLazyAttributes(missedIframes[j]);
-                        }
-                    }
-                    
-                    var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
-                    for (var k = 0; k < missedVideos.length; k++) {
-                        if (!isInTiptapEditor(missedVideos[k]) && !isInEditorContextFast(missedVideos[k])) {
-                            applyLazyAttributes(missedVideos[k]);
-                        } else {
-                            missedVideos[k].setAttribute('data-video-processed', 'skipped-editor');
-                        }
-                    }
                 }
             }, 50);
         }
         
         // ===== DISPATCH READY EVENT =====
-        // Small delay to ensure all initial processing is done
         setTimeout(function() {
             window.dispatchEvent(new CustomEvent('weserv-ready', {
                 detail: { 
@@ -839,63 +769,12 @@
         // ===== PERFORMANCE REPORT =====
         window.addEventListener('load', function() {
             setTimeout(function() {
-                var finalVideos = document.querySelectorAll('video');
-                var videosWithPoster = 0;
-                for (var v = 0; v < finalVideos.length; v++) {
-                    if (!isInTiptapEditor(finalVideos[v]) && !isInEditorContextFast(finalVideos[v]) && finalVideos[v].poster) videosWithPoster++;
-                }
-                
-                var finalImages = document.querySelectorAll('img');
-                var finalIframes = document.querySelectorAll('iframe');
-                var lazyCount = 0;
-                var asyncCount = 0;
-                var placeholderCount = 0;
-                
-                for (var i = 0; i < finalImages.length; i++) {
-                    if (!isInTiptapEditor(finalImages[i]) && !isInEditorContextFast(finalImages[i])) {
-                        if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                        if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
-                    }
-                }
-                
-                for (var j = 0; j < finalIframes.length; j++) {
-                    if (!isInTiptapEditor(finalIframes[j]) && !isInEditorContextFast(finalIframes[j])) {
-                        if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                        if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
-                    }
-                }
-                
-                for (var k = 0; k < finalVideos.length; k++) {
-                    if (!isInTiptapEditor(finalVideos[k]) && !isInEditorContextFast(finalVideos[k])) {
-                        var preload = finalVideos[k].getAttribute('preload');
-                        if (preload === 'none') lazyCount++;
-                    }
-                }
-                
-                var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
-                
                 console.log('=== WESERV OPTIMIZER REPORT ===');
                 console.log('Total images:', state.stats.total);
                 console.log('Optimized:', state.stats.optimized);
                 console.log('Skipped (total):', state.stats.skipped);
                 console.log('  - Skipped (editor):', state.stats.editorSkipped);
                 console.log('Failed:', state.stats.failed);
-                console.log('Format breakdown:', state.stats.byFormat);
-                console.log('Quality breakdown:', state.stats.byQuality);
-                console.log('Lazy loading (all media):', lazyCount + '/' + totalMedia);
-                console.log('Async decoding:', asyncCount + '/' + finalImages.length);
-                console.log('Placeholder iframes:', placeholderCount);
-                console.log('\n=== VIDEO STATS ===');
-                console.log('Total videos:', finalVideos.length);
-                console.log('Videos with preload="none":', state.videos.preloadNone);
-                console.log('Autoplay videos:', state.videos.autoplayVideos);
-                console.log('Videos with poster:', videosWithPoster);
-                console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
-                
-                if (state.stats.failed > 0) {
-                    console.warn('Optimization failures:', state.stats.failed);
-                }
-                
                 console.log('=== REPORT COMPLETE ===');
             }, 3000);
         });
