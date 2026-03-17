@@ -11,7 +11,7 @@
             jpg: '90',
             jpeg: '90',     
             webp: '90',
-            avif: '85',
+            avif: '85',      // Kept for reference but no longer used
             png: '100',
             gif: '100',
             unknown: '90'
@@ -26,9 +26,7 @@
             'dicebear.com', 'api.dicebear.com',
             'forum-user-avatar', 'forum-likes-avatar',
             'avatar-size-', 'images.weserv.nl', 'wsrv.nl',
-            'data:image',
-            'tiptap', 'ProseMirror', 'contenteditable',
-            've-content', 'st-editor', 'st-visual-editor'
+            'data:image'
         ].map(function(p) { return p.toLowerCase(); })
     };
     
@@ -49,115 +47,31 @@
             autoplayVideos: 0,
             withPoster: 0
         },
-        initDone: false,
-        editorCache: new WeakMap(),
-        processingQueue: new Set(), // Track elements being processed
-        isEditorActive: false // Track if editor is currently active
+        initDone: false
     };
     
-    // ===== EDITOR DETECTION =====
-    function isInEditor(el) {
-        if (!el || typeof el.closest !== 'function') return false;
-        
-        // Check cache first
-        if (state.editorCache.has(el)) {
-            return state.editorCache.get(el);
-        }
-        
-        // CRITICAL: Check if element is inside ProseMirror editor or has ProseMirror classes
-        var inEditor = !!(
-            el.closest('.tiptap') || 
-            el.closest('.ProseMirror') || 
-            el.closest('[contenteditable="true"]') ||
-            el.closest('.ve-content') ||
-            el.closest('.st-editor') ||
-            el.closest('#st-visual-editor') ||
-            // Check for ProseMirror-specific attributes
-            el.hasAttribute('data-prosemirror') ||
-            el.classList.contains('ProseMirror-separator') ||
-            // Check if parent is ProseMirror widget
-            (el.parentElement && el.parentElement.classList.contains('ProseMirror-widget'))
-        );
-        
-        // Also check if this element was likely created by ProseMirror
-        if (!inEditor && el.tagName === 'IMG') {
-            // Images created by ProseMirror often have these attributes
-            inEditor = el.hasAttribute('contenteditable') && 
-                      el.getAttribute('contenteditable') === 'false' &&
-                      el.hasAttribute('draggable') &&
-                      el.closest('.ProseMirror');
-        }
-        
-        state.editorCache.set(el, inEditor);
-        return inEditor;
-    }
-    
-    // Check if we're currently in an editor operation
-    function isEditorOperation() {
-        // Check if active element is editor
-        var activeEl = document.activeElement;
-        if (activeEl && isInEditor(activeEl)) {
-            return true;
-        }
-        
-        // Check if any editor element has focus
-        var editor = document.querySelector('.tiptap, .ProseMirror, [contenteditable="true"]');
-        if (editor && editor.contains(document.activeElement)) {
-            return true;
-        }
-        
-        return false;
+    // ===== UTILITY FUNCTIONS =====
+    function isMediaElement(el) {
+        return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
     function shouldSkip(url, el) {
         if (!url || url.indexOf('data:') === 0) return true;
         
-        // ULTRA IMPORTANT: Skip if element is in editor OR if editor is currently active
-        if (el) {
-            if (isInEditor(el) || state.isEditorActive || isEditorOperation()) {
-                if (el.tagName === 'IMG') {
-                    // Mark as skipped but preserve original URL
-                    el.setAttribute('data-optimized', 'skipped-editor');
-                    // Ensure we don't modify the src
-                    if (el.hasAttribute('data-original')) {
-                        el.removeAttribute('data-original');
-                    }
-                }
-                state.stats.skipped++;
-                return true;
-            }
-        }
-        
         var lower = url.toLowerCase();
         
         for (var i = 0; i < CONFIG.skipPatterns.length; i++) {
-            if (lower.indexOf(CONFIG.skipPatterns[i]) !== -1) {
-                state.stats.skipped++;
-                return true;
-            }
+            if (lower.indexOf(CONFIG.skipPatterns[i]) !== -1) return true;
         }
         
         if (el) {
             var classes = el.className.toLowerCase();
-            if (classes.indexOf('forum-') !== -1 || 
-                classes.indexOf('prosemirror') !== -1 ||
-                classes.indexOf('tiptap') !== -1) {
-                state.stats.skipped++;
-                return true;
-            }
-            if (el.hasAttribute('data-forum-avatar') || 
-                el.hasAttribute('data-username')) {
-                state.stats.skipped++;
-                return true;
-            }
+            if (classes.indexOf('forum-') !== -1) return true;
+            if (el.hasAttribute('data-forum-avatar')) return true;
+            if (el.hasAttribute('data-username')) return true;
         }
         
         return false;
-    }
-    
-    // ===== UTILITY FUNCTIONS =====
-    function isMediaElement(el) {
-        return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
     function supportsFormat(format) {
@@ -175,7 +89,8 @@
         var lower = url.toLowerCase();
         if (lower.indexOf('.jpg') !== -1 || lower.indexOf('.jpeg') !== -1) return 'jpeg';
         if (lower.indexOf('.png') !== -1) return 'png';
-        if (lower.indexOf('.gif') !== -1) return 'gif';
+        if (lower.indexOf('.gif') !== -1 && 
+            (lower.indexOf('.gif?') !== -1 || lower.lastIndexOf('.gif') === lower.length - 4)) return 'gif';
         if (lower.indexOf('.webp') !== -1) return 'webp';
         if (lower.indexOf('.avif') !== -1) return 'avif';
         return 'unknown';
@@ -183,8 +98,6 @@
     
     // ===== VIDEO POSTER GENERATION =====
     function createSvgPoster(video) {
-        if (isInEditor(video)) return;
-        
         var width = video.getAttribute('width') || 640;
         var height = video.getAttribute('height') || 360;
         
@@ -198,9 +111,16 @@
         video.setAttribute('data-poster-type', 'svg');
     }
     
+    function tryAlternativeTenorUrl(videoSrc) {
+        var matches = videoSrc.match(/tenor\.com\/([^\/]+)\/([^\/\.]+)/);
+        if (matches) {
+            var id = matches[1];
+            return 'https://media.tenor.com/' + id + '/public/thumb.jpg';
+        }
+        return null;
+    }
+    
     function generateVideoPoster(video) {
-        if (isInEditor(video)) return;
-        
         var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
         if (!videoSrc) return;
         
@@ -208,11 +128,13 @@
         var posterUrl = null;
         var posterType = 'unknown';
         
-        // Platform-specific poster generation (same as before)
+        // ===== TENOR =====
         if (lowerSrc.indexOf('tenor.com') !== -1) {
             posterUrl = videoSrc.replace('.webm', '.gif').replace('.mp4', '.gif');
             posterType = 'tenor-gif';
         }
+        
+        // ===== GIFHY =====
         else if (lowerSrc.indexOf('giphy.com') !== -1 || lowerSrc.indexOf('media.giphy.com') !== -1) {
             var giphyMatches = videoSrc.match(/\/media\/([^\/]+)\//);
             if (giphyMatches) {
@@ -224,6 +146,8 @@
                 posterType = 'giphy-gif';
             }
         }
+        
+        // ===== IMGUR =====
         else if (lowerSrc.indexOf('imgur.com') !== -1) {
             var imgurMatches = videoSrc.match(/imgur\.com\/([^\/\.]+)/);
             if (imgurMatches) {
@@ -232,6 +156,8 @@
                 posterType = 'imgur-gif';
             }
         }
+        
+        // ===== REDDIT =====
         else if (lowerSrc.indexOf('reddit.com') !== -1 || lowerSrc.indexOf('redd.it') !== -1) {
             if (lowerSrc.indexOf('v.redd.it') !== -1) {
                 var redditId = videoSrc.split('/').pop().split('?')[0];
@@ -239,6 +165,28 @@
                 posterType = 'reddit-preview';
             }
         }
+        
+        // ===== TWITTER/X =====
+        else if (lowerSrc.indexOf('twitter.com') !== -1 || lowerSrc.indexOf('x.com') !== -1) {
+            var twitterMatches = videoSrc.match(/\/tweet_video\/([^\/\.]+)/);
+            if (twitterMatches) {
+                var tweetId = twitterMatches[1];
+                posterUrl = 'https://video.twimg.com/tweet_video_thumb/' + tweetId + '.jpg';
+                posterType = 'twitter-thumb';
+            }
+        }
+        
+        // ===== TIKTOK =====
+        else if (lowerSrc.indexOf('tiktok.com') !== -1) {
+            var tiktokMatches = videoSrc.match(/\/video\/(\d+)/);
+            if (tiktokMatches) {
+                var tiktokId = tiktokMatches[1];
+                posterUrl = 'https://www.tiktok.com/api/img/?itemId=' + tiktokId;
+                posterType = 'tiktok-thumb';
+            }
+        }
+        
+        // ===== YOUTUBE =====
         else if (lowerSrc.indexOf('youtube.com') !== -1 || lowerSrc.indexOf('youtu.be') !== -1) {
             var youtubeId = null;
             var youtubeMatches = videoSrc.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
@@ -246,26 +194,105 @@
                 youtubeId = youtubeMatches[1];
                 posterUrl = 'https://img.youtube.com/vi/' + youtubeId + '/maxresdefault.jpg';
                 posterType = 'youtube-thumb';
+                
+                var img = new Image();
+                img.onload = function() {
+                    video.setAttribute('poster', posterUrl);
+                    video.setAttribute('data-poster-type', posterType);
+                    video.setAttribute('data-poster-loaded', 'true');
+                    state.videos.withPoster++;
+                };
+                img.onerror = function() {
+                    var fallbackUrl = 'https://img.youtube.com/vi/' + youtubeId + '/hqdefault.jpg';
+                    video.setAttribute('poster', fallbackUrl);
+                    video.setAttribute('data-poster-type', 'youtube-thumb-fallback');
+                    video.setAttribute('data-poster-loaded', 'true');
+                    state.videos.withPoster++;
+                };
+                img.src = posterUrl;
+                return;
             }
         }
         
-        if (posterUrl && !isInEditor(video)) {
+        // ===== VIMEO =====
+        else if (lowerSrc.indexOf('vimeo.com') !== -1) {
+            var vimeoMatches = videoSrc.match(/vimeo\.com\/(\d+)/);
+            if (vimeoMatches) {
+                var vimeoId = vimeoMatches[1];
+                posterUrl = 'https://i.vimeocdn.com/video/' + vimeoId + '_640.jpg';
+                posterType = 'vimeo-thumb';
+            }
+        }
+        
+        // ===== IMGPLAY =====
+        else if (lowerSrc.indexOf('imgplay.io') !== -1 || lowerSrc.indexOf('imgplay') !== -1) {
+            posterUrl = videoSrc.replace('.mp4', '.jpg').replace('.webm', '.jpg');
+            posterType = 'imgplay-thumb';
+        }
+        
+        // ===== CLIPCHAMP =====
+        else if (lowerSrc.indexOf('clipchamp.com') !== -1) {
+            posterUrl = videoSrc.replace('/video/', '/thumbnail/') + '.jpg';
+            posterType = 'clipchamp-thumb';
+        }
+        
+        // ===== FACEBOOK =====
+        else if (lowerSrc.indexOf('facebook.com') !== -1 || lowerSrc.indexOf('fbcdn.net') !== -1) {
+            var fbMatches = videoSrc.match(/\/v\/(\d+)/);
+            if (fbMatches) {
+                var fbId = fbMatches[1];
+                posterUrl = 'https://graph.facebook.com/' + fbId + '/picture';
+                posterType = 'facebook-thumb';
+            }
+        }
+        
+        // ===== INSTAGRAM =====
+        else if (lowerSrc.indexOf('instagram.com') !== -1 || lowerSrc.indexOf('cdninstagram.com') !== -1) {
+            var instaMatches = videoSrc.match(/\/p\/([^\/]+)/);
+            if (instaMatches) {
+                var instaId = instaMatches[1];
+                posterUrl = 'https://www.instagram.com/p/' + instaId + '/media/?size=t';
+                posterType = 'instagram-thumb';
+            }
+        }
+        
+        // ===== DAILYMOTION =====
+        else if (lowerSrc.indexOf('dailymotion.com') !== -1) {
+            var dmMatches = videoSrc.match(/\/video\/([^_]+)/);
+            if (dmMatches) {
+                var dmId = dmMatches[1];
+                posterUrl = 'https://www.dailymotion.com/thumbnail/video/' + dmId;
+                posterType = 'dailymotion-thumb';
+            }
+        }
+        
+        // ===== TWITCH =====
+        else if (lowerSrc.indexOf('twitch.tv') !== -1 || lowerSrc.indexOf('clips.twitch.tv') !== -1) {
+            var twitchMatches = videoSrc.match(/\/clip\/([^\/]+)/i);
+            if (twitchMatches) {
+                var clipId = twitchMatches[1];
+                posterUrl = 'https://clips-media-assets.twitch.tv/' + clipId + '-preview.jpg';
+                posterType = 'twitch-thumb';
+            }
+        }
+        
+        if (posterUrl) {
             video.setAttribute('poster', posterUrl);
             video.setAttribute('data-poster-type', posterType);
             video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
-        } else if (!isInEditor(video)) {
+            console.log('✅ Poster set for ' + posterType + ': ' + posterUrl.substring(0, 60) + '...');
+        } else {
             createSvgPoster(video);
             video.setAttribute('data-poster-loaded', 'true');
             state.videos.withPoster++;
+            console.log('ℹ️ SVG fallback for:', videoSrc.substring(0, 60) + '...');
         }
     }
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
-        if (isInEditor(video)) return;
         if (state.processed.has(video)) return;
-        
         state.processed.add(video);
         state.videos.total++;
         
@@ -281,6 +308,10 @@
             if (!hasAutoplay && preloadValue === 'none') {
                 state.videos.preloadNone++;
             }
+        } else {
+            if (video.getAttribute('preload') === 'none') {
+                state.videos.preloadNone++;
+            }
         }
         
         if (!video.poster) {
@@ -289,12 +320,20 @@
             state.videos.withPoster++;
         }
         
+        var sources = video.querySelectorAll('source[src]');
+        for (var i = 0; i < sources.length; i++) {
+            var source = sources[i];
+            if (!source.hasAttribute('data-original-src') && source.src) {
+                source.setAttribute('data-original-src', source.src);
+            }
+        }
+        
         video.setAttribute('data-video-processed', 'true');
     }
     
     // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
-        if (!isMediaElement(el) || isInEditor(el)) return el;
+        if (!isMediaElement(el)) return el;
         
         if (el.tagName === 'IFRAME') {
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
@@ -329,7 +368,9 @@
         var originalFormat = detectFormat(originalSrc);
         var isGif = originalFormat === 'gif';
         
+        // AVIF REMOVED - Always use WebP for non-GIF images
         var outputFormat = isGif ? 'webp' : 'webp';
+        
         var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
         
         var params = [
@@ -337,8 +378,19 @@
             'q=' + quality
         ];
         
-        if (outputFormat === 'webp') {
-            params.push('il');
+        switch (outputFormat) {
+            case 'png':
+                params.push('af');
+                params.push('l=9');
+                params.push('lossless=true');
+                break;
+            case 'webp':
+                params.push('il');
+                break;
+            case 'jpeg':
+            case 'jpg':
+                params.push('il');
+                break;
         }
         
         if (isGif) {
@@ -370,35 +422,20 @@
     }
     
     function optimizeImage(img) {
-        // CRITICAL: Multiple checks to ensure we don't process editor images
-        if (!img || !img.src || img.src.indexOf('data:') === 0) return;
-        
-        // Check if editor is active OR image is in editor
-        if (state.isEditorActive || isEditorOperation() || isInEditor(img)) {
-            img.setAttribute('data-optimized', 'skipped-editor');
-            return;
-        }
-        
-        // Additional check for ProseMirror-specific images
-        if (img.classList.contains('ProseMirror-separator') ||
-            img.hasAttribute('data-prosemirror') ||
-            (img.closest('.ProseMirror') && img.getAttribute('contenteditable') === 'false')) {
-            img.setAttribute('data-optimized', 'skipped-editor');
-            return;
-        }
+        if (!img.src || img.src.indexOf('data:') === 0) return;
         
         applyLazyAttributes(img);
         
         if (state.processed.has(img)) return;
-        if (state.processingQueue.has(img)) return;
         
         var skip = shouldSkip(img.src, img);
         if (skip) {
             state.processed.add(img);
+            state.stats.skipped++;
+            img.setAttribute('data-optimized', 'skipped');
             return;
         }
         
-        state.processingQueue.add(img);
         state.processed.add(img);
         state.stats.total++;
         
@@ -416,11 +453,6 @@
             img.setAttribute('data-optimized', 'failed');
             img.src = originalSrc;
             img.onerror = null;
-            state.processingQueue.delete(img);
-        };
-        
-        img.onload = function() {
-            state.processingQueue.delete(img);
         };
         
         img.src = optimization.url;
@@ -431,124 +463,50 @@
     
     // ===== MUTATION OBSERVER =====
     var mutationObserver = new MutationObserver(function(mutations) {
-        // Check if editor is active before processing any mutations
-        if (state.isEditorActive || isEditorOperation()) {
-            return;
-        }
-        
-        var processedInThisBatch = new WeakSet();
-        
         mutations.forEach(function(mutation) {
             if (mutation.type !== 'childList') return;
-            
-            var target = mutation.target;
-            
-            // Skip if target is in editor
-            if (isInEditor(target)) {
-                return;
-            }
             
             var nodes = mutation.addedNodes;
             for (var i = 0; i < nodes.length; i++) {
                 var node = nodes[i];
-                if (node.nodeType !== 1 || processedInThisBatch.has(node)) continue;
+                if (node.nodeType !== 1) continue;
                 
-                // Skip if node is in editor
-                if (isInEditor(node)) {
-                    continue;
-                }
-                
-                processedInThisBatch.add(node);
-                
-                if (node.tagName === 'IMG') {
-                    if (!isInEditor(node)) {
-                        applyLazyAttributes(node);
+                if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
+                    applyLazyAttributes(node);
+                    if (node.tagName === 'IMG') {
                         optimizeImage(node);
                     }
-                } else if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
-                    if (!isInEditor(node)) {
-                        applyLazyAttributes(node);
-                    }
                 }
                 
-                if (node.children && node.children.length) {
-                    var images = node.getElementsByTagName('IMG');
-                    for (var j = 0; j < images.length; j++) {
-                        var img = images[j];
-                        if (!processedInThisBatch.has(img) && !isInEditor(img)) {
-                            processedInThisBatch.add(img);
-                            applyLazyAttributes(img);
-                            optimizeImage(img);
-                        }
+                if (node.querySelectorAll) {
+                    var allMedia = node.querySelectorAll('img, iframe, video');
+                    for (var j = 0; j < allMedia.length; j++) {
+                        applyLazyAttributes(allMedia[j]);
                     }
                     
-                    var iframes = node.getElementsByTagName('IFRAME');
-                    for (var k = 0; k < iframes.length; k++) {
-                        var iframe = iframes[k];
-                        if (!processedInThisBatch.has(iframe) && !isInEditor(iframe)) {
-                            processedInThisBatch.add(iframe);
-                            applyLazyAttributes(iframe);
-                        }
-                    }
-                    
-                    var videos = node.getElementsByTagName('VIDEO');
-                    for (var l = 0; l < videos.length; l++) {
-                        var video = videos[l];
-                        if (!processedInThisBatch.has(video) && !isInEditor(video)) {
-                            processedInThisBatch.add(video);
-                            applyLazyAttributes(video);
-                        }
+                    var images = node.querySelectorAll('img');
+                    for (var k = 0; k < images.length; k++) {
+                        optimizeImage(images[k]);
                     }
                 }
             }
         });
     });
     
-    // ===== EDITOR ACTIVITY MONITORING =====
-    function setupEditorMonitoring() {
-        var editor = document.querySelector('.tiptap, .ProseMirror, [contenteditable="true"]');
-        if (editor) {
-            editor.addEventListener('focus', function() {
-                state.isEditorActive = true;
-            });
-            
-            editor.addEventListener('blur', function() {
-                state.isEditorActive = false;
-            });
-            
-            editor.addEventListener('click', function() {
-                state.isEditorActive = true;
-            });
-            
-            // Monitor for image insertion in editor
-            editor.addEventListener('DOMNodeInserted', function(e) {
-                if (e.target.tagName === 'IMG') {
-                    // Mark any images inserted into editor as skipped
-                    e.target.setAttribute('data-optimized', 'skipped-editor');
-                }
-            }, false);
-        }
-    }
-    
     // ===== PROXY PATTERNS =====
     var OriginalImage = window.Image;
     window.Image = function(width, height) {
         var img = new OriginalImage(width, height);
         
-        // Don't apply lazy attributes if editor is active
-        if (!state.isEditorActive && !isEditorOperation()) {
-            img.setAttribute('loading', CONFIG.lazy);
-            img.setAttribute('decoding', CONFIG.async);
-        }
+        img.setAttribute('loading', CONFIG.lazy);
+        img.setAttribute('decoding', CONFIG.async);
         
         var originalSrcDesc = Object.getOwnPropertyDescriptor(img, 'src');
         if (originalSrcDesc && originalSrcDesc.set) {
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    // CRITICAL: Don't optimize if editor is active
-                    if (value && value.indexOf('data:') !== 0 && 
-                        !state.isEditorActive && !isEditorOperation() && !isInEditor(this)) {
+                    if (value && value.indexOf('data:') !== 0) {
                         optimizeImage(this);
                     }
                 },
@@ -566,9 +524,7 @@
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                // CRITICAL: Don't optimize if editor is active
-                if (value && value.indexOf('data:') !== 0 && this.isConnected && 
-                    !state.isEditorActive && !isEditorOperation() && !isInEditor(this)) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected) {
                     optimizeImage(this);
                 }
             },
@@ -581,13 +537,8 @@
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        // CRITICAL: Don't optimize if editor is active
         if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
-            if (!state.isEditorActive && !isEditorOperation() && !isInEditor(this)) {
-                optimizeImage(this);
-            } else if (isInEditor(this)) {
-                this.setAttribute('data-optimized', 'skipped-editor');
-            }
+            optimizeImage(this);
         }
     };
     
@@ -596,10 +547,7 @@
         var element = originalCreateElement.call(this, tagName, options);
         
         if (tagName.toLowerCase() === 'img') {
-            // Only apply lazy attributes if not in editor
-            if (!state.isEditorActive && !isEditorOperation()) {
-                applyLazyAttributes(element);
-            }
+            applyLazyAttributes(element);
         }
         
         return element;
@@ -610,64 +558,125 @@
         if (state.initDone) return;
         state.initDone = true;
         
-        // Set up editor monitoring
-        setupEditorMonitoring();
+        var allImages = document.querySelectorAll('img');
+        for (var i = 0; i < allImages.length; i++) {
+            var img = allImages[i];
+            applyLazyAttributes(img);
+            optimizeImage(img);
+        }
         
-        // Small delay to ensure editor is fully loaded
+        var allIframes = document.querySelectorAll('iframe');
+        for (var j = 0; j < allIframes.length; j++) {
+            applyLazyAttributes(allIframes[j]);
+        }
+        
+        var allVideos = document.querySelectorAll('video');
+        for (var k = 0; k < allVideos.length; k++) {
+            applyLazyAttributes(allVideos[k]);
+        }
+        
+        if (document.body) {
+            mutationObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        } else {
+            var bodyCheck = setInterval(function() {
+                if (document.body) {
+                    clearInterval(bodyCheck);
+                    mutationObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                    
+                    var missedImages = document.querySelectorAll('img:not([data-optimized])');
+                    for (var i = 0; i < missedImages.length; i++) {
+                        optimizeImage(missedImages[i]);
+                    }
+                    
+                    var missedIframes = document.querySelectorAll('iframe:not([loading])');
+                    for (var j = 0; j < missedIframes.length; j++) {
+                        applyLazyAttributes(missedIframes[j]);
+                    }
+                    
+                    var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
+                    for (var k = 0; k < missedVideos.length; k++) {
+                        applyLazyAttributes(missedVideos[k]);
+                    }
+                }
+            }, 50);
+        }
+        
+        // ===== DISPATCH READY EVENT =====
+        // Small delay to ensure all initial processing is done
         setTimeout(function() {
-            // Process only non-editor images
-            var allImages = document.querySelectorAll('img');
-            for (var i = 0; i < allImages.length; i++) {
-                var img = allImages[i];
-                if (!isInEditor(img)) {
-                    applyLazyAttributes(img);
-                    optimizeImage(img);
-                } else {
-                    img.setAttribute('data-optimized', 'skipped-editor');
-                }
-            }
-            
-            // Process iframes (skip editor)
-            var allIframes = document.querySelectorAll('iframe');
-            for (var j = 0; j < allIframes.length; j++) {
-                var iframe = allIframes[j];
-                if (!isInEditor(iframe)) {
-                    applyLazyAttributes(iframe);
-                }
-            }
-            
-            // Process videos (skip editor)
-            var allVideos = document.querySelectorAll('video');
-            for (var k = 0; k < allVideos.length; k++) {
-                var video = allVideos[k];
-                if (!isInEditor(video)) {
-                    applyLazyAttributes(video);
-                }
-            }
-            
-            // Start observing after initial processing
-            if (document.body) {
-                mutationObserver.observe(document.body, {
-                    childList: true,
-                    subtree: true
-                });
-            }
-            
-            // Dispatch ready event
             window.dispatchEvent(new CustomEvent('weserv-ready', {
                 detail: { 
                     stats: state.stats,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    imagesProcessed: state.stats.optimized
                 }
             }));
-        }, 500); // Increased delay to ensure editor is ready
+            console.log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
+        }, 100);
+        
+        // ===== PERFORMANCE REPORT =====
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                var finalVideos = document.querySelectorAll('video');
+                var videosWithPoster = 0;
+                for (var v = 0; v < finalVideos.length; v++) {
+                    if (finalVideos[v].poster) videosWithPoster++;
+                }
+                
+                var finalImages = document.querySelectorAll('img');
+                var finalIframes = document.querySelectorAll('iframe');
+                var lazyCount = 0;
+                var asyncCount = 0;
+                var placeholderCount = 0;
+                
+                for (var i = 0; i < finalImages.length; i++) {
+                    if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                    if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
+                }
+                
+                for (var j = 0; j < finalIframes.length; j++) {
+                    if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                    if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
+                }
+                
+                for (var k = 0; k < finalVideos.length; k++) {
+                    var preload = finalVideos[k].getAttribute('preload');
+                    if (preload === 'none') lazyCount++;
+                }
+                
+                var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
+                
+                console.log('=== WESERV OPTIMIZER REPORT ===');
+                console.log('Total images:', state.stats.total);
+                console.log('Optimized:', state.stats.optimized);
+                console.log('Skipped:', state.stats.skipped);
+                console.log('Failed:', state.stats.failed);
+                console.log('Format breakdown:', state.stats.byFormat);
+                console.log('Quality breakdown:', state.stats.byQuality);
+                console.log('Lazy loading (all media):', lazyCount + '/' + totalMedia);
+                console.log('Async decoding:', asyncCount + '/' + finalImages.length);
+                console.log('Placeholder iframes:', placeholderCount);
+                console.log('\n=== VIDEO STATS ===');
+                console.log('Total videos:', finalVideos.length);
+                console.log('Videos with preload="none":', state.videos.preloadNone);
+                console.log('Autoplay videos:', state.videos.autoplayVideos);
+                console.log('Videos with poster:', videosWithPoster);
+                console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
+                
+                if (state.stats.failed > 0) {
+                    console.warn('Optimization failures:', state.stats.failed);
+                }
+                
+                console.log('=== REPORT COMPLETE ===');
+            }, 3000);
+        });
     }
     
-    // Start when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-    
+    init();
 })();
