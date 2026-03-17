@@ -20,6 +20,14 @@
             preload: 'none',
             autoplayPreload: 'metadata'
         },
+        // Tiptap editor selectors
+        tiptapSelectors: [
+            '#st-visual-editor',
+            '.st-editor',
+            '.tiptap',
+            '.ProseMirror',
+            '[contenteditable="true"]'  // Any contenteditable element
+        ],
         skipPatterns: [
             '.svg', '.webp', '.avif', '.ico',
             'output=webp', 'output=avif',
@@ -55,6 +63,34 @@
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
+    // NEW: Check if element is inside Tiptap editor
+    function isInTiptapEditor(el) {
+        if (!el) return false;
+        
+        // Check if element itself matches or is inside any Tiptap selector
+        for (var i = 0; i < CONFIG.tiptapSelectors.length; i++) {
+            var selector = CONFIG.tiptapSelectors[i];
+            
+            // Check if element matches selector
+            if (el.matches && el.matches(selector)) return true;
+            
+            // Check if element is inside a matching element
+            if (el.closest && el.closest(selector)) return true;
+        }
+        
+        // Additional check: if element has contenteditable attribute
+        if (el.hasAttribute && el.hasAttribute('contenteditable')) return true;
+        
+        // Check if any parent has contenteditable
+        var parent = el.parentElement;
+        while (parent) {
+            if (parent.hasAttribute && parent.hasAttribute('contenteditable')) return true;
+            parent = parent.parentElement;
+        }
+        
+        return false;
+    }
+    
     function shouldSkip(url, el) {
         if (!url || url.indexOf('data:') === 0) return true;
         
@@ -69,6 +105,12 @@
             if (classes.indexOf('forum-') !== -1) return true;
             if (el.hasAttribute('data-forum-avatar')) return true;
             if (el.hasAttribute('data-username')) return true;
+            
+            // NEW: Skip optimization for images in Tiptap editor
+            if (isInTiptapEditor(el)) {
+                console.log('📝 Tiptap editor image detected - skipping optimization:', url.substring(0, 60) + '...');
+                return true;
+            }
         }
         
         return false;
@@ -433,6 +475,11 @@
             state.processed.add(img);
             state.stats.skipped++;
             img.setAttribute('data-optimized', 'skipped');
+            
+            // If in Tiptap editor, still mark as processed but keep original src
+            if (isInTiptapEditor(img)) {
+                img.setAttribute('data-tiptap-image', 'true');
+            }
             return;
         }
         
@@ -634,10 +681,12 @@
                 var lazyCount = 0;
                 var asyncCount = 0;
                 var placeholderCount = 0;
+                var tiptapImages = 0;
                 
                 for (var i = 0; i < finalImages.length; i++) {
                     if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
                     if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
+                    if (finalImages[i].getAttribute('data-tiptap-image') === 'true') tiptapImages++;
                 }
                 
                 for (var j = 0; j < finalIframes.length; j++) {
@@ -656,6 +705,7 @@
                 console.log('Total images:', state.stats.total);
                 console.log('Optimized:', state.stats.optimized);
                 console.log('Skipped:', state.stats.skipped);
+                console.log('  - Tiptap editor images:', tiptapImages);
                 console.log('Failed:', state.stats.failed);
                 console.log('Format breakdown:', state.stats.byFormat);
                 console.log('Quality breakdown:', state.stats.byQuality);
