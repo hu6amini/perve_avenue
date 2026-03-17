@@ -20,13 +20,14 @@
             preload: 'none',
             autoplayPreload: 'metadata'
         },
-        // Tiptap editor selectors
-        tiptapSelectors: [
+        // Tiptap editor selectors to skip
+        editorSkipSelectors: [
             '#st-visual-editor',
             '.st-editor',
+            '.ve-root',
+            '.ve-content',
             '.tiptap',
-            '.ProseMirror',
-            '[contenteditable="true"]'  // Any contenteditable element
+            '[contenteditable="true"]'  // Skip any contenteditable elements
         ],
         skipPatterns: [
             '.svg', '.webp', '.avif', '.ico',
@@ -63,36 +64,45 @@
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
     }
     
-    // NEW: Check if element is inside Tiptap editor
+    // NEW FUNCTION: Check if element is inside Tiptap editor
     function isInTiptapEditor(el) {
         if (!el) return false;
         
-        // Check if element itself matches or is inside any Tiptap selector
-        for (var i = 0; i < CONFIG.tiptapSelectors.length; i++) {
-            var selector = CONFIG.tiptapSelectors[i];
+        // Check if element itself or any parent matches editor selectors
+        var checkElement = el;
+        while (checkElement && checkElement !== document.body) {
+            // Check if element has contenteditable attribute
+            if (checkElement.getAttribute && checkElement.getAttribute('contenteditable') === 'true') {
+                return true;
+            }
             
-            // Check if element matches selector
-            if (el.matches && el.matches(selector)) return true;
+            // Check against editor selectors
+            for (var i = 0; i < CONFIG.editorSkipSelectors.length; i++) {
+                var selector = CONFIG.editorSkipSelectors[i];
+                try {
+                    if (checkElement.matches && checkElement.matches(selector)) {
+                        return true;
+                    }
+                } catch (e) {
+                    // Ignore invalid selectors
+                }
+            }
             
-            // Check if element is inside a matching element
-            if (el.closest && el.closest(selector)) return true;
-        }
-        
-        // Additional check: if element has contenteditable attribute
-        if (el.hasAttribute && el.hasAttribute('contenteditable')) return true;
-        
-        // Check if any parent has contenteditable
-        var parent = el.parentElement;
-        while (parent) {
-            if (parent.hasAttribute && parent.hasAttribute('contenteditable')) return true;
-            parent = parent.parentElement;
+            checkElement = checkElement.parentNode;
         }
         
         return false;
     }
     
     function shouldSkip(url, el) {
+        // Skip data URLs
         if (!url || url.indexOf('data:') === 0) return true;
+        
+        // NEW: Skip if element is inside Tiptap editor
+        if (el && isInTiptapEditor(el)) {
+            console.log('📝 Skipping media inside Tiptap editor:', url.substring(0, 60) + '...');
+            return true;
+        }
         
         var lower = url.toLowerCase();
         
@@ -105,12 +115,6 @@
             if (classes.indexOf('forum-') !== -1) return true;
             if (el.hasAttribute('data-forum-avatar')) return true;
             if (el.hasAttribute('data-username')) return true;
-            
-            // NEW: Skip optimization for images in Tiptap editor
-            if (isInTiptapEditor(el)) {
-                console.log('📝 Tiptap editor image detected - skipping optimization:', url.substring(0, 60) + '...');
-                return true;
-            }
         }
         
         return false;
@@ -140,6 +144,9 @@
     
     // ===== VIDEO POSTER GENERATION =====
     function createSvgPoster(video) {
+        // Skip if video is in Tiptap editor
+        if (isInTiptapEditor(video)) return;
+        
         var width = video.getAttribute('width') || 640;
         var height = video.getAttribute('height') || 360;
         
@@ -163,6 +170,9 @@
     }
     
     function generateVideoPoster(video) {
+        // Skip if video is in Tiptap editor
+        if (isInTiptapEditor(video)) return;
+        
         var videoSrc = video.src || (video.querySelector('source[src]') ? video.querySelector('source[src]').src : null);
         if (!videoSrc) return;
         
@@ -334,6 +344,15 @@
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
+        // Skip if video is in Tiptap editor
+        if (isInTiptapEditor(video)) {
+            if (!state.processed.has(video)) {
+                state.processed.add(video);
+                video.setAttribute('data-video-processed', 'skipped-editor');
+            }
+            return;
+        }
+        
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
@@ -376,6 +395,11 @@
     // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
         if (!isMediaElement(el)) return el;
+        
+        // Skip if element is in Tiptap editor
+        if (isInTiptapEditor(el)) {
+            return el;
+        }
         
         if (el.tagName === 'IFRAME') {
             if (!el.hasAttribute('loading') || el.getAttribute('loading') === '') {
@@ -475,11 +499,6 @@
             state.processed.add(img);
             state.stats.skipped++;
             img.setAttribute('data-optimized', 'skipped');
-            
-            // If in Tiptap editor, still mark as processed but keep original src
-            if (isInTiptapEditor(img)) {
-                img.setAttribute('data-tiptap-image', 'true');
-            }
             return;
         }
         
@@ -545,15 +564,18 @@
     window.Image = function(width, height) {
         var img = new OriginalImage(width, height);
         
-        img.setAttribute('loading', CONFIG.lazy);
-        img.setAttribute('decoding', CONFIG.async);
+        // Don't set lazy attributes for images created in editor context
+        if (!isInTiptapEditor(img)) {
+            img.setAttribute('loading', CONFIG.lazy);
+            img.setAttribute('decoding', CONFIG.async);
+        }
         
         var originalSrcDesc = Object.getOwnPropertyDescriptor(img, 'src');
         if (originalSrcDesc && originalSrcDesc.set) {
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    if (value && value.indexOf('data:') !== 0) {
+                    if (value && value.indexOf('data:') !== 0 && !isInTiptapEditor(this)) {
                         optimizeImage(this);
                     }
                 },
@@ -571,7 +593,7 @@
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                if (value && value.indexOf('data:') !== 0 && this.isConnected) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected && !isInTiptapEditor(this)) {
                     optimizeImage(this);
                 }
             },
@@ -584,7 +606,7 @@
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
+        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0 && !isInTiptapEditor(this)) {
             optimizeImage(this);
         }
     };
@@ -593,7 +615,7 @@
     document.createElement = function(tagName, options) {
         var element = originalCreateElement.call(this, tagName, options);
         
-        if (tagName.toLowerCase() === 'img') {
+        if (tagName.toLowerCase() === 'img' && !isInTiptapEditor(element)) {
             applyLazyAttributes(element);
         }
         
@@ -608,18 +630,30 @@
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
-            applyLazyAttributes(img);
-            optimizeImage(img);
+            // Skip if in editor during initial scan
+            if (!isInTiptapEditor(img)) {
+                applyLazyAttributes(img);
+                optimizeImage(img);
+            } else {
+                state.stats.skipped++;
+                img.setAttribute('data-optimized', 'skipped-editor');
+            }
         }
         
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
-            applyLazyAttributes(allIframes[j]);
+            var iframe = allIframes[j];
+            if (!isInTiptapEditor(iframe)) {
+                applyLazyAttributes(iframe);
+            }
         }
         
         var allVideos = document.querySelectorAll('video');
         for (var k = 0; k < allVideos.length; k++) {
-            applyLazyAttributes(allVideos[k]);
+            var video = allVideos[k];
+            if (!isInTiptapEditor(video)) {
+                applyLazyAttributes(video);
+            }
         }
         
         if (document.body) {
@@ -638,17 +672,23 @@
                     
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var i = 0; i < missedImages.length; i++) {
-                        optimizeImage(missedImages[i]);
+                        if (!isInTiptapEditor(missedImages[i])) {
+                            optimizeImage(missedImages[i]);
+                        }
                     }
                     
                     var missedIframes = document.querySelectorAll('iframe:not([loading])');
                     for (var j = 0; j < missedIframes.length; j++) {
-                        applyLazyAttributes(missedIframes[j]);
+                        if (!isInTiptapEditor(missedIframes[j])) {
+                            applyLazyAttributes(missedIframes[j]);
+                        }
                     }
                     
                     var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
                     for (var k = 0; k < missedVideos.length; k++) {
-                        applyLazyAttributes(missedVideos[k]);
+                        if (!isInTiptapEditor(missedVideos[k])) {
+                            applyLazyAttributes(missedVideos[k]);
+                        }
                     }
                 }
             }, 50);
@@ -673,7 +713,7 @@
                 var finalVideos = document.querySelectorAll('video');
                 var videosWithPoster = 0;
                 for (var v = 0; v < finalVideos.length; v++) {
-                    if (finalVideos[v].poster) videosWithPoster++;
+                    if (!isInTiptapEditor(finalVideos[v]) && finalVideos[v].poster) videosWithPoster++;
                 }
                 
                 var finalImages = document.querySelectorAll('img');
@@ -681,22 +721,26 @@
                 var lazyCount = 0;
                 var asyncCount = 0;
                 var placeholderCount = 0;
-                var tiptapImages = 0;
                 
                 for (var i = 0; i < finalImages.length; i++) {
-                    if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                    if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
-                    if (finalImages[i].getAttribute('data-tiptap-image') === 'true') tiptapImages++;
+                    if (!isInTiptapEditor(finalImages[i])) {
+                        if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                        if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
+                    }
                 }
                 
                 for (var j = 0; j < finalIframes.length; j++) {
-                    if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                    if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
+                    if (!isInTiptapEditor(finalIframes[j])) {
+                        if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+                        if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
+                    }
                 }
                 
                 for (var k = 0; k < finalVideos.length; k++) {
-                    var preload = finalVideos[k].getAttribute('preload');
-                    if (preload === 'none') lazyCount++;
+                    if (!isInTiptapEditor(finalVideos[k])) {
+                        var preload = finalVideos[k].getAttribute('preload');
+                        if (preload === 'none') lazyCount++;
+                    }
                 }
                 
                 var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
@@ -704,8 +748,8 @@
                 console.log('=== WESERV OPTIMIZER REPORT ===');
                 console.log('Total images:', state.stats.total);
                 console.log('Optimized:', state.stats.optimized);
-                console.log('Skipped:', state.stats.skipped);
-                console.log('  - Tiptap editor images:', tiptapImages);
+                console.log('Skipped (total):', state.stats.skipped);
+                console.log('  - Skipped (editor):', document.querySelectorAll('img[data-optimized="skipped-editor"]').length);
                 console.log('Failed:', state.stats.failed);
                 console.log('Format breakdown:', state.stats.byFormat);
                 console.log('Quality breakdown:', state.stats.byQuality);
