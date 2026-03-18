@@ -607,75 +607,102 @@
             }, 50);
         }
         
-        // ===== DISPATCH READY EVENT =====
-        // Small delay to ensure all initial processing is done
+        // ===== DISPATCH READY EVENT (Optimized with requestIdleCallback) =====
         setTimeout(function() {
+            // Critical: dispatch the event immediately with minimal data
             window.dispatchEvent(new CustomEvent('weserv-ready', {
                 detail: { 
-                    stats: state.stats,
+                    stats: {
+                        optimized: state.stats.optimized,
+                        total: state.stats.total,
+                        failed: state.stats.failed,
+                        skipped: state.stats.skipped
+                    },
                     timestamp: Date.now(),
                     imagesProcessed: state.stats.optimized
                 }
             }));
-            console.log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
+            
+            // Non-critical: logging can happen when browser is idle
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(function() {
+                    console.log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
+                }, { timeout: 2000 });
+            } else {
+                // Fallback for browsers without requestIdleCallback
+                setTimeout(function() {
+                    console.log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
+                }, 0);
+            }
         }, 100);
         
-        // ===== PERFORMANCE REPORT =====
+        // ===== PERFORMANCE REPORT (Optimized with requestIdleCallback) =====
         window.addEventListener('load', function() {
             setTimeout(function() {
-                var finalVideos = document.querySelectorAll('video');
-                var videosWithPoster = 0;
-                for (var v = 0; v < finalVideos.length; v++) {
-                    if (finalVideos[v].poster) videosWithPoster++;
+                if ('requestIdleCallback' in window) {
+                    requestIdleCallback(function() {
+                        generatePerformanceReport();
+                    }, { timeout: 3000 });
+                } else {
+                    generatePerformanceReport();
                 }
-                
-                var finalImages = document.querySelectorAll('img');
-                var finalIframes = document.querySelectorAll('iframe');
-                var lazyCount = 0;
-                var asyncCount = 0;
-                var placeholderCount = 0;
-                
-                for (var i = 0; i < finalImages.length; i++) {
-                    if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                    if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
-                }
-                
-                for (var j = 0; j < finalIframes.length; j++) {
-                    if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
-                    if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
-                }
-                
-                for (var k = 0; k < finalVideos.length; k++) {
-                    var preload = finalVideos[k].getAttribute('preload');
-                    if (preload === 'none') lazyCount++;
-                }
-                
-                var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
-                
-                console.log('=== WESERV OPTIMIZER REPORT ===');
-                console.log('Total images:', state.stats.total);
-                console.log('Optimized:', state.stats.optimized);
-                console.log('Skipped:', state.stats.skipped);
-                console.log('Failed:', state.stats.failed);
-                console.log('Format breakdown:', state.stats.byFormat);
-                console.log('Quality breakdown:', state.stats.byQuality);
-                console.log('Lazy loading (all media):', lazyCount + '/' + totalMedia);
-                console.log('Async decoding:', asyncCount + '/' + finalImages.length);
-                console.log('Placeholder iframes:', placeholderCount);
-                console.log('\n=== VIDEO STATS ===');
-                console.log('Total videos:', finalVideos.length);
-                console.log('Videos with preload="none":', state.videos.preloadNone);
-                console.log('Autoplay videos:', state.videos.autoplayVideos);
-                console.log('Videos with poster:', videosWithPoster);
-                console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
-                
-                if (state.stats.failed > 0) {
-                    console.warn('Optimization failures:', state.stats.failed);
-                }
-                
-                console.log('=== REPORT COMPLETE ===');
             }, 3000);
         });
+    }
+    
+    // ===== PERFORMANCE REPORT GENERATION =====
+    function generatePerformanceReport() {
+        var finalVideos = document.querySelectorAll('video');
+        var videosWithPoster = 0;
+        for (var v = 0; v < finalVideos.length; v++) {
+            if (finalVideos[v].poster) videosWithPoster++;
+        }
+        
+        var finalImages = document.querySelectorAll('img');
+        var finalIframes = document.querySelectorAll('iframe');
+        var lazyCount = 0;
+        var asyncCount = 0;
+        var placeholderCount = 0;
+        
+        for (var i = 0; i < finalImages.length; i++) {
+            if (finalImages[i].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+            if (finalImages[i].getAttribute('decoding') === CONFIG.async) asyncCount++;
+        }
+        
+        for (var j = 0; j < finalIframes.length; j++) {
+            if (finalIframes[j].getAttribute('loading') === CONFIG.lazy) lazyCount++;
+            if (finalIframes[j].getAttribute('data-placeholder') === 'true') placeholderCount++;
+        }
+        
+        for (var k = 0; k < finalVideos.length; k++) {
+            var preload = finalVideos[k].getAttribute('preload');
+            if (preload === 'none') lazyCount++;
+        }
+        
+        var totalMedia = finalImages.length + finalIframes.length + finalVideos.length;
+        
+        console.log('=== WESERV OPTIMIZER REPORT ===');
+        console.log('Total images:', state.stats.total);
+        console.log('Optimized:', state.stats.optimized);
+        console.log('Skipped:', state.stats.skipped);
+        console.log('Failed:', state.stats.failed);
+        console.log('Format breakdown:', state.stats.byFormat);
+        console.log('Quality breakdown:', state.stats.byQuality);
+        console.log('Lazy loading (all media):', lazyCount + '/' + totalMedia);
+        console.log('Async decoding:', asyncCount + '/' + finalImages.length);
+        console.log('Placeholder iframes:', placeholderCount);
+        console.log('\n=== VIDEO STATS ===');
+        console.log('Total videos:', finalVideos.length);
+        console.log('Videos with preload="none":', state.videos.preloadNone);
+        console.log('Autoplay videos:', state.videos.autoplayVideos);
+        console.log('Videos with poster:', videosWithPoster);
+        console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
+        
+        if (state.stats.failed > 0) {
+            console.warn('Optimization failures:', state.stats.failed);
+        }
+        
+        console.log('=== REPORT COMPLETE ===');
     }
     
     init();
