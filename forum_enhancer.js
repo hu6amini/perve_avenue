@@ -13954,34 +13954,39 @@ class BBCodeEditor {
         };
 
         const [openTag, closeTag] = tagMap[tag] || ['', ''];
+
         let newText, newCursorStart, newCursorEnd;
 
         if (start === end) {
-            // No text selected - place cursor between tags
+            // No text selected
             if (tag === 'ul' || tag === 'ol') {
-                // For lists, we still want the cursor at the end
+                // List handling with placeholder items
                 newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
+                // Place cursor AFTER the list items
                 newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
                 newCursorEnd = newCursorStart;
             } else {
-                // For inline tags, place cursor BETWEEN the opening and closing tags
+                // For regular tags, insert both tags and place cursor BETWEEN them
                 newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
-                // Position cursor right after the opening tag (between the tags)
+                // Place cursor BETWEEN the tags (e.g., [b]|[/b])
                 newCursorStart = newCursorEnd = start + openTag.length;
             }
         } else {
-            // Text selected - wrap it and place cursor after the closing tag
+            // Text is selected
             if (tag === 'ul' || tag === 'ol') {
+                // Convert selected lines to list items
                 const items = selectedText.split('\n')
                     .filter(item => item.trim())
                     .map(item => '[*]' + item)
                     .join('\n');
                 newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
+                // Place cursor AFTER the closing tag
                 newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
                 newCursorEnd = newCursorStart;
             } else {
+                // Wrap selected text with tags
                 newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
-                // Place cursor AFTER the closing tag (user can continue typing after the formatted text)
+                // Place cursor AFTER the closing tag
                 newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
             }
         }
