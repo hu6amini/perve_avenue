@@ -13925,77 +13925,80 @@ class BBCodeEditor {
         }
     }
 
-    #insertTag(tag, value = '') {
-        try {
-            const start = this.#bbcodeEditor.selectionStart;
-            const end = this.#bbcodeEditor.selectionEnd;
-            const text = this.#bbcodeEditor.value;
-            const selectedText = text.substring(start, end);
+#insertTag(tag, value = '') {
+    try {
+        const start = this.#bbcodeEditor.selectionStart;
+        const end = this.#bbcodeEditor.selectionEnd;
+        const text = this.#bbcodeEditor.value;
+        const selectedText = text.substring(start, end);
 
-            const tagMap = {
-                'b': ['[b]', '[/b]'],
-                'i': ['[i]', '[/i]'],
-                'u': ['[u]', '[/u]'],
-                'del': ['[del]', '[/del]'],
-                'sup': ['[sup]', '[/sup]'],
-                'sub': ['[sub]', '[/sub]'],
-                'ul': ['[list]\n', '\n[/list]'],
-                'ol': ['[list=1]\n', '\n[/list]'],
-                'center': ['[center]', '[/center]'],
-                'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
-                'img': ['[img]', '[/img]'],
-                'quote': ['[quote]', '[/quote]'],
-                'code': ['[code]', '[/code]'],
-                'html': ['[html]', '[/html]'],
-                'spoiler': ['[spoiler]', '[/spoiler]'],
-                'font': [`[font=${value}]`, '[/font]'],
-                'size': [`[size=${value}]`, '[/size]'],
-                'color': [`[color=${value}]`, '[/color]']
-            };
+        const tagMap = {
+            'b': ['[b]', '[/b]'],
+            'i': ['[i]', '[/i]'],
+            'u': ['[u]', '[/u]'],
+            'del': ['[del]', '[/del]'],
+            'sup': ['[sup]', '[/sup]'],
+            'sub': ['[sub]', '[/sub]'],
+            'ul': ['[list]\n', '\n[/list]'],
+            'ol': ['[list=1]\n', '\n[/list]'],
+            'center': ['[center]', '[/center]'],
+            'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
+            'img': ['[img]', '[/img]'],
+            'quote': ['[quote]', '[/quote]'],
+            'code': ['[code]', '[/code]'],
+            'html': ['[html]', '[/html]'],
+            'spoiler': ['[spoiler]', '[/spoiler]'],
+            'font': [`[font=${value}]`, '[/font]'],
+            'size': [`[size=${value}]`, '[/size]'],
+            'color': [`[color=${value}]`, '[/color]']
+        };
 
-            const [openTag, closeTag] = tagMap[tag] || ['', ''];
+        const [openTag, closeTag] = tagMap[tag] || ['', ''];
+        let newText, newCursorStart, newCursorEnd;
 
-            let newText, newCursorStart, newCursorEnd;
-
-            if (start === end) {
-                if (tag === 'ul' || tag === 'ol') {
-                    newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
-                    newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
-                    newCursorEnd = newCursorStart;
-                } else {
-                    newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
-                    // Place cursor AFTER the closing tag
-                    newCursorStart = newCursorEnd = start + openTag.length + closeTag.length;
-                }
+        if (start === end) {
+            // No text selected - place cursor between tags
+            if (tag === 'ul' || tag === 'ol') {
+                // For lists, we still want the cursor at the end
+                newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
+                newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
+                newCursorEnd = newCursorStart;
             } else {
-                if (tag === 'ul' || tag === 'ol') {
-                    const items = selectedText.split('\n')
-                        .filter(item => item.trim())
-                        .map(item => '[*]' + item)
-                        .join('\n');
-                    newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
-                    newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
-                    newCursorEnd = newCursorStart;
-                } else {
-                    newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
-                    // Place cursor AFTER the closing tag
-                    newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
-                }
+                // For inline tags, place cursor BETWEEN the opening and closing tags
+                newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
+                // Position cursor right after the opening tag (between the tags)
+                newCursorStart = newCursorEnd = start + openTag.length;
             }
-
-            this.#bbcodeEditor.value = newText;
-            this.#bbcodeEditor.selectionStart = newCursorStart;
-            this.#bbcodeEditor.selectionEnd = newCursorEnd;
-
-            this.#syncToOriginal();
-            this.#saveState(newText);
-            this.#updateStatus();
-            this.#bbcodeEditor.focus();
-        } catch (error) {
-            console.error('Error inserting tag:', error);
+        } else {
+            // Text selected - wrap it and place cursor after the closing tag
+            if (tag === 'ul' || tag === 'ol') {
+                const items = selectedText.split('\n')
+                    .filter(item => item.trim())
+                    .map(item => '[*]' + item)
+                    .join('\n');
+                newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
+                newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
+                newCursorEnd = newCursorStart;
+            } else {
+                newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
+                // Place cursor AFTER the closing tag (user can continue typing after the formatted text)
+                newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
+            }
         }
-    }
 
+        this.#bbcodeEditor.value = newText;
+        this.#bbcodeEditor.selectionStart = newCursorStart;
+        this.#bbcodeEditor.selectionEnd = newCursorEnd;
+
+        this.#syncToOriginal();
+        this.#saveState(newText);
+        this.#updateStatus();
+        this.#bbcodeEditor.focus();
+    } catch (error) {
+        console.error('Error inserting tag:', error);
+    }
+}
+  
     #handleButtonClick(btn) {
         try {
             const tag = btn.getAttribute('data-tag');
