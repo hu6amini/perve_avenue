@@ -14451,3 +14451,318 @@ class BBCodeEditor {
         console.error('Critical BBCodeEditor error:', error);
     }
 })();
+
+
+
+
+
+
+
+
+
+"use strict"; 
+ 
+const POST_TEXTAREA_ID = "Post"; 
+const IMG_SELECTOR = "img"; 
+const IFRAME_SELECTOR = "iframe"; 
+const VIDEO_SELECTOR = "video"; 
+const SEND_BUTTONS_SELECTOR = '.send input[type="submit"], .send button[type="submit"]'; 
+const WSERV_CDN = "https://images.weserv.nl/"; 
+ 
+const imageDataMap = new Map; 
+let textareaChangeInterval = null; 
+let currentTextareaValue = ""; 
+ 
+function decodeHtmlEntities(e) { 
+ const t = document.createElement("textarea"); 
+ t.innerHTML = e; 
+ return t.value; 
+} 
+ 
+// Convert image URLs to WebP using wsrv.nl 
+function convertToWebPUrl(imageUrl) { 
+ if (!imageUrl || imageUrl.indexOf('data:') === 0 || imageUrl.indexOf('images.weserv.nl') !== -1) { 
+ return imageUrl; 
+ } 
+ 
+ // Skip SVG files 
+ if (imageUrl.toLowerCase().indexOf('.svg') !== -1) { 
+ return imageUrl; 
+ } 
+ 
+ const encodedUrl =*encodeURIComponent(imageUrl); 
+ const optimizedUrl = WSERV_CDN + '?url=' + encodedUrl + '&output=webp&maxage=1y&q=90&il'; 
+ 
+ // Add lossless for PNG and GIF 
+ if (imageUrl.toLowerCase().indexOf('.png') !== -1) { 
+ return optimizedUrl + '&af&l=9'; 
+ } 
+ 
+ if (imageUrl.toLowerCase().indexOf('.gif') !== -1) { 
+ return optimizedUrl + '&n=-1&lossless=true'; 
+ } 
+ 
+ return optimizedUrl; 
+} 
+ 
+// Convert all image URLs in HTML content to WebP 
+function convertImagesToWebP(htmlContent) { 
+ const tempDiv = document.createElement("div"); 
+ tempDiv.innerHTML = htmlContent; 
+ 
+ const images = tempDiv.querySelectorAll(IMG_SELECTOR); 
+ let modified = false; 
+ 
+ for (const img of images) { 
+ const originalSrc = img.getAttribute("src"); 
+ if (originalSrc && originalSrc.indexOf('data:') !== 0 && originalSrc.indexOf('images.weserv.nl') === -1) { 
+ const webpUrl = convertToWebPUrl(originalSrc); 
+ if (webpUrl !== originalSrc) { 
+ img.setAttribute("src", webpUrl); 
+ modified = true; 
+ } 
+ } 
+ } 
+ 
+ // Also convert BBCode IMG tags 
+ let htmlString = tempDiv.innerHTML; 
+ const bbcodeImgRegex = /\[IMG(?:=[^\]]+)?\](.*?)\[\/IMG\]/gi; 
+ 
+ htmlString = htmlString.replace(bbcodeImgRegex, function(match, url) { 
+ if (url && url.indexOf('data:') !== 0 && url.indexOf('images.weserv.nl') === -1) { 
+ const webpUrl = convertToWebPUrl(url); 
+ if (webpUrl !== url) { 
+ return '[IMG]' + webpUrl + '[/IMG]'; 
+ } 
+ } 
+ return match; 
+ }); 
+ 
+ return modified || htmlString !== tempDiv.innerHTML ? htmlString : tempDiv.innerHTML; 
+} 
+ 
+async function calculateImageDimensions() { 
+ const e = document.getElementById(POST_TEXTAREA_ID); 
+ if (!e) return; 
+ 
+ // First convert BBCode IMG tags to HTML img tags for dimension calculation 
+ let processedValue = e.value; 
+ const bbcodeImgRegex = /\[IMG(?:=[^\]]+)?\](.*?)\[\/IMG\]/gi; 
+ processedValue = processedValue.replace(bbcodeImgRegex, '<img src="$1">'); 
+ 
+ const t = document.createElement("div"); 
+ t.innerHTML = processedValue; 
+ const a = t.querySelectorAll(IMG_SELECTOR); 
+ const n = []; 
+ 
+ for (const e of a) { 
+ const t = e.getAttribute("src"); 
+ if (t && !imageDataMap.has(t) && t.indexOf('data:') !== 0) { 
+ n.push(t); 
+ } 
+ } 
+ 
+ if (n.length > 0) { 
+ await Promise.allSettled(n.map((e => new Promise((t => { 
+ const a = new Image; 
+ a.onload = () => { 
+ imageDataMap.set(e, { width: a.naturalWidth, height: a.naturalHeight }); 
+ t(); 
+ }; 
+ a.onerror = () => { 
+ imageDataMap.set(e, { width: 0, height: 0 }); 
+ t(); 
+ }; 
+ a.src = e; 
+ }))))); 
+ } 
+} 
+ 
+function applyAttributes() { 
+ const e = document.getElementById(POST_TEXTAREA_ID); 
+ if (!e) return; 
+ 
+ // Get the raw value (might contain BBCode) 
+ let rawValue = e.value; 
+ 
+ // Convert BBCode IMG tags to HTML for processing 
+ const bbcodeImgRegex = /\[IMG(?:=[^\]]+)?\](.*?)\[\/IMG\]/gi; 
+ let htmlValue = rawValue.replace(bbcodeImgRegex, '<img src="$1">'); 
+ 
+ const t = document.createElement("div"); 
+ t.innerHTML = htmlValue; 
+ const a = t.querySelectorAll(IMG_SELECTOR); 
+ let modified = false; 
+ 
+ for (const img of a) { 
+ const src = img.getAttribute("src"); 
+ if (!src) continue; 
+ 
+ // Convert to WebP if needed 
+ let finalSrc = src; 
+ if (src.indexOf('data:') !== 0 && src.indexOf('images.weserv.nl') === -1) { 
+ finalSrc = convertToWebPUrl(src); 
+ if (finalSrc !== src) { 
+ img.setAttribute("src", finalSrc); 
+ modified = true; 
+ } 
+ } 
+ 
+ const alt = src.split("/").pop().split(".")[0].replace(/[_-]+/g, " "); 
+ const attributes = { 
+ loading: "lazy", 
+ decoding: "async", 
+ alt: alt 
+ }; 
+ 
+ if (imageDataMap.has(src)) { 
+ const { width, height } = imageDataMap.get(src); 
+ attributes.width = width; 
+ attributes.height = height; 
+ } 
+ 
+ for (const [attr, value] of Object.entries(attributes)) { 
+ img.setAttribute(attr, value); 
+ } 
+ } 
+ 
+ const i = t.querySelectorAll(IFRAME_SELECTOR); 
+ for (const iframe of i) { 
+ iframe.setAttribute("loading", "lazy"); 
+ modified = true; 
+ } 
+ 
+ const o = t.querySelectorAll(VIDEO_SELECTOR); 
+ for (const video of o) { 
+ video.setAttribute("preload", "metadata"); 
+ video.setAttribute("loading", "lazy"); 
+ if (!video.hasAttribute("width")) video.setAttribute("width", "auto"); 
+ if (!video.hasAttribute("height")) video.setAttribute("height", "auto"); 
+ video.setAttribute("disablepictureinpicture", ""); 
+ video.setAttribute("disableremoteplayback", ""); 
+ if (!video.hasAttribute("aria-label")) video.setAttribute("aria-label", "Video content"); 
+ modified = true; 
+ } 
+ 
+ if (modified) { 
+ // Convert back to BBCode format if needed 
+ let finalHtml = t.innerHTML; 
+ 
+ // Convert HTML img tags back to BBCode if the original had BBCode 
+ if (rawValue.match(bbcodeImgRegex)) { 
+ finalHtml = finalHtml.replace(/<img[^>]*src="([^"]+)"[^>]*>/gi, function(match, url) { 
+ // Preserve any other attributes if needed 
+ return '[IMG]' + url + '[/IMG]'; 
+ }); 
+ } 
+ 
+ e.value = finalHtml; 
+ } 
+} 
+ 
+function convertBbcodeToHtml(e) { 
+ return e.replace(/\[IMG(?:=[^\]]+)?\](.*?)\[\/IMG\]/gi, '<img src="$1">'); 
+} 
+ 
+function detectTextareaChanges() { 
+ const e = document.getElementById(POST_TEXTAREA_ID); 
+ if (!e) return; 
+ 
+ e.value = convertBbcodeToHtml(e.value); 
+ currentTextareaValue = e.value; 
+ 
+ textareaChangeInterval = setInterval((() => { 
+ if (e.value !== currentTextareaValue) { 
+ currentTextareaValue = e.value; 
+ calculateImageDimensions(); 
+ } 
+ }), 500); 
+ 
+ const t = new MutationObserver((e => { 
+ for (const t of e) { 
+ if (t.type === "attributes" || t.type === "childList") { 
+ calculateImageDimensions(); 
+ break; 
+ } 
+ } 
+ })); 
+ t.observe(e, { attributes: true, childList: true, subtree: true }); 
+ 
+ let a; 
+ const n = () => { 
+ clearTimeout(a); 
+ a = setTimeout((() => { 
+ e.value = convertBbcodeToHtml(e.value); 
+ e.value = decodeHtmlEntities(e.value); 
+ calculateImageDimensions(); 
+ }), 100); 
+ }; 
+ 
+ e.addEventListener("input", n); 
+ e.addEventListener("change", calculateImageDimensions); 
+} 
+ 
+// Process textarea content and convert images to WebP before submission 
+function processFormSubmission() { 
+ const textarea = document.getElementById(POST_TEXTAREA_ID); 
+ if (!textarea) return true; 
+ 
+ let content = textarea.value; 
+ let modified = false; 
+ 
+ // Convert BBCode IMG tags to WebP URLs 
+ const bbcodeImgRegex = /\[IMG(?:=[^\]]+)?\](.*?)\[\/IMG\]/gi; 
+ content = content.replace(bbcodeImgRegex, function(match, url) { 
+ if (url && url.indexOf('data:') !== 0 && url.indexOf('images.weserv.nl') === -1) { 
+ const webpUrl = convertToWebPUrl(url); 
+ if (webpUrl !== url) { 
+ modified = true; 
+ return '[IMG]' + webpUrl + '[/IMG]'; 
+ } 
+ } 
+ return match; 
+ }); 
+ 
+ // Also convert HTML img tags if they exist 
+ const htmlImgRegex = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi; 
+ content = content.replace(htmlImgRegex, function(match, url) { 
+ if (url && url.indexOf('data:') !== 0 && url.indexOf('images.weserv.nl') === -1) { 
+ const webpUrl = convertToWebPUrl(url); 
+ if (webpUrl !== url) { 
+ modified = true; 
+ return match.replace(url, webpUrl); 
+ } 
+ } 
+ return match; 
+ }); 
+ 
+ if (modified) { 
+ textarea.value = content; 
+ } 
+ 
+ // Apply all attributes and final optimizations 
+ applyAttributes(); 
+ 
+ return true; 
+} 
+ 
+function initializeImageOptimizer() { 
+ const e = document.querySelectorAll(SEND_BUTTONS_SELECTOR); 
+ e.forEach((button => { 
+ button.addEventListener("click", (function(event) { 
+ // Process images to WebP before submission 
+ const result = processFormSubmission(); 
+ 
+ // Call original ValidateForm if it exists 
+ if (typeof ValidateForm === "function") { 
+ return ValidateForm() && result; 
+ } 
+ return result; 
+ })); 
+ })); 
+ 
+ detectTextareaChanges(); 
+ calculateImageDimensions(); 
+} 
+ 
+initializeImageOptimizer();
