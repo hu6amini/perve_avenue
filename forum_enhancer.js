@@ -12329,10 +12329,12 @@ class BBCodeEditor {
             options: [
                 { value: '', text: 'Font' },
                 { value: 'Arial', text: 'Arial' },
-                { value: 'Verdana', text: 'Verdana' },
+                { value: 'Bree Serif', text: 'Bree Serif' },
+                { value: 'Courier New', text: 'Courier New' },
+                { value: 'Quicksand', text: 'Quicksand' },
                 { value: 'Tahoma', text: 'Tahoma' },
                 { value: 'Times New Roman', text: 'Times New Roman' },
-                { value: 'Courier New', text: 'Courier New' }
+                { value: 'Verdana', text: 'Verdana' }
             ]
         },
         {
