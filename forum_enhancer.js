@@ -12344,14 +12344,14 @@ class BBCodeEditor {
             options: [
                 { value: '', text: 'Font Family' },
                 { value: 'Arial', text: 'Arial' },
-                { value: 'Courier New', text: 'Courier New' },
                 { value: 'Bree Serif', text: 'Bree Serif' },
+                { value: 'Courier New', text: 'Courier New' },
+                { value: 'Georgia', text: 'Georgia' },
+                { value: 'Impact', text: 'Impact' },
                 { value: 'Quicksand', text: 'Quicksand' },
                 { value: 'Tahoma', text: 'Tahoma' },
                 { value: 'Times New Roman', text: 'Times New Roman' },
-                { value: 'Verdana', text: 'Verdana' },
-                { value: 'Georgia', text: 'Georgia' },
-                { value: 'Impact', text: 'Impact' }
+                { value: 'Verdana', text: 'Verdana' }
             ]
         },
         {
