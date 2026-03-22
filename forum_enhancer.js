@@ -12284,10 +12284,10 @@ class BBCodeEditor {
         }
     };
 
-    // Static toolbar configuration with Font Awesome icons
+    // Toolbar configuration matching Tiptap editor layout with all BBCode options
     static #TOOLBAR_GROUPS = [
         {
-            name: 'basic',
+            name: 'textFormat',
             buttons: [
                 { tag: 'b', title: 'Bold (Ctrl+B)', icon: '<i class="fa-regular fa-bold" aria-hidden="true"></i>' },
                 { tag: 'i', title: 'Italic (Ctrl+I)', icon: '<i class="fa-regular fa-italic" aria-hidden="true"></i>' },
@@ -12298,6 +12298,15 @@ class BBCodeEditor {
             ]
         },
         {
+            name: 'alignment',
+            buttons: [
+                { tag: 'left', title: 'Align Left', icon: '<i class="fa-regular fa-align-left" aria-hidden="true"></i>' },
+                { tag: 'center', title: 'Align Center', icon: '<i class="fa-regular fa-align-center" aria-hidden="true"></i>' },
+                { tag: 'right', title: 'Align Right', icon: '<i class="fa-regular fa-align-right" aria-hidden="true"></i>' },
+                { tag: 'justify', title: 'Justify', icon: '<i class="fa-regular fa-align-justify" aria-hidden="true"></i>' }
+            ]
+        },
+        {
             name: 'lists',
             buttons: [
                 { tag: 'ul', title: 'Bullet List', icon: '<i class="fa-regular fa-list-ul" aria-hidden="true"></i>' },
@@ -12305,16 +12314,91 @@ class BBCodeEditor {
             ]
         },
         {
-            name: 'align',
+            name: 'indent',
             buttons: [
-                { tag: 'center', title: 'Center', icon: '<i class="fa-regular fa-align-center" aria-hidden="true"></i>' }
+                { tag: 'indent', title: 'Increase Indent', icon: '<i class="fa-regular fa-indent" aria-hidden="true"></i>' },
+                { tag: 'outdent', title: 'Decrease Indent', icon: '<i class="fa-regular fa-outdent" aria-hidden="true"></i>' }
             ]
         },
         {
             name: 'links',
             buttons: [
                 { tag: 'url', title: 'Insert Link (Ctrl+L)', icon: '<i class="fa-regular fa-link" aria-hidden="true"></i>' },
-                { tag: 'img', title: 'Insert Image (Ctrl+P)', icon: '<i class="fa-regular fa-image" aria-hidden="true"></i>' }
+                { tag: 'img', title: 'Insert Image (Ctrl+P)', icon: '<i class="fa-regular fa-image" aria-hidden="true"></i>' },
+                { tag: 'email', title: 'Insert Email Link', icon: '<i class="fa-regular fa-envelope" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'blocks',
+            buttons: [
+                { tag: 'quote', title: 'Quote (Ctrl+Q)', icon: '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' },
+                { tag: 'code', title: 'Code (Ctrl+K)', icon: '<i class="fa-regular fa-code-simple" aria-hidden="true"></i>' },
+                { tag: 'html', title: 'HTML', icon: '<i class="fa-regular fa-code" aria-hidden="true"></i>' },
+                { tag: 'spoiler', title: 'Spoiler', icon: '<i class="fa-regular fa-flag" aria-hidden="true"></i>' },
+                { tag: 'pre', title: 'Preformatted Text', icon: '<i class="fa-regular fa-text-size" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'font',
+            type: 'select',
+            icon: '<i class="fa-regular fa-font" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Font Family' },
+                { value: 'Arial', text: 'Arial' },
+                { value: 'Courier New', text: 'Courier New' },
+                { value: 'Bree Serif', text: 'Bree Serif' },
+                { value: 'Quicksand', text: 'Quicksand' },
+                { value: 'Tahoma', text: 'Tahoma' },
+                { value: 'Times New Roman', text: 'Times New Roman' },
+                { value: 'Verdana', text: 'Verdana' },
+                { value: 'Georgia', text: 'Georgia' },
+                { value: 'Impact', text: 'Impact' }
+            ]
+        },
+        {
+            name: 'size',
+            type: 'select',
+            icon: '<i class="fa-regular fa-text-height" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Font Size' },
+                { value: '8', text: '8px' },
+                { value: '10', text: '10px' },
+                { value: '12', text: '12px' },
+                { value: '14', text: '14px' },
+                { value: '18', text: '18px' },
+                { value: '24', text: '24px' },
+                { value: '36', text: '36px' },
+                { value: '48', text: '48px' }
+            ]
+        },
+        {
+            name: 'color',
+            type: 'select',
+            icon: '<i class="fa-regular fa-palette" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Text Color' },
+                { value: 'black', text: 'Black', style: 'color:black' },
+                { value: 'blue', text: 'Blue', style: 'color:blue' },
+                { value: 'red', text: 'Red', style: 'color:red' },
+                { value: 'purple', text: 'Purple', style: 'color:purple' },
+                { value: 'orange', text: 'Orange', style: 'color:orange' },
+                { value: 'yellow', text: 'Yellow', style: 'color:yellow' },
+                { value: 'gray', text: 'Gray', style: 'color:gray' },
+                { value: 'green', text: 'Green', style: 'color:green' },
+                { value: 'white', text: 'White', style: 'color:white' }
+            ]
+        },
+        {
+            name: 'background',
+            type: 'select',
+            icon: '<i class="fa-regular fa-highlighter" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Background Color' },
+                { value: 'yellow', text: 'Yellow', style: 'background-color:yellow' },
+                { value: 'lightblue', text: 'Light Blue', style: 'background-color:lightblue' },
+                { value: 'lightgreen', text: 'Light Green', style: 'background-color:lightgreen' },
+                { value: 'pink', text: 'Pink', style: 'background-color:pink' },
+                { value: 'gray', text: 'Gray', style: 'background-color:gray' }
             ]
         },
         {
@@ -12324,57 +12408,11 @@ class BBCodeEditor {
             ]
         },
         {
-            name: 'font',
-            type: 'select',
-            icon: '<i class="fa-regular fa-font" aria-hidden="true"></i>',
-            options: [
-                { value: '', text: 'Font' },
-                { value: 'Arial', text: 'Arial' },
-                { value: 'Courier New', text: 'Courier New' },
-                { value: 'Bree Serif', text: 'Bree Serif' },
-                { value: 'Quicksand', text: 'Quicksand' },
-                { value: 'Tahoma', text: 'Tahoma' },
-                { value: 'Times New Roman', text: 'Times New Roman' },
-                { value: 'Verdana', text: 'Verdana' }
-            ]
-        },
-        {
-            name: 'size',
-            type: 'select',
-            icon: '<i class="fa-regular fa-text-height" aria-hidden="true"></i>',
-            options: [
-                { value: '', text: 'Size' },
-                { value: '8', text: '8' },
-                { value: '10', text: '10' },
-                { value: '12', text: '12' },
-                { value: '14', text: '14' },
-                { value: '18', text: '18' },
-                { value: '24', text: '24' },
-                { value: '36', text: '36' }
-            ]
-        },
-        {
-            name: 'color',
-            type: 'select',
-            icon: '<i class="fa-regular fa-palette" aria-hidden="true"></i>',
-            options: [
-                { value: '', text: 'COLOR' },
-                { value: 'blue', text: 'Blue', style: 'color:blue' },
-                { value: 'red', text: 'Red', style: 'color:red' },
-                { value: 'purple', text: 'Purple', style: 'color:purple' },
-                { value: 'orange', text: 'Orange', style: 'color:orange' },
-                { value: 'yellow', text: 'Yellow', style: 'color:yellow' },
-                { value: 'gray', text: 'Gray', style: 'color:gray' },
-                { value: 'green', text: 'Green', style: 'color:green' }
-            ]
-        },
-        {
-            name: 'blocks',
+            name: 'misc',
             buttons: [
-                { tag: 'quote', title: 'Quote (Ctrl+Q)', icon: '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' },
-                { tag: 'code', title: 'Code (Ctrl+K)', icon: '<i class="fa-regular fa-code-simple" aria-hidden="true"></i>' },
-                { tag: 'html', title: 'HTML', icon: '<i class="fa-regular fa-code" aria-hidden="true"></i>' },
-                { tag: 'spoiler', title: 'Spoiler', icon: '<i class="fa-regular fa-flag" aria-hidden="true"></i>' }
+                { tag: 'hr', title: 'Horizontal Rule', icon: '<i class="fa-regular fa-minus" aria-hidden="true"></i>' },
+                { tag: 'table', title: 'Insert Table', icon: '<i class="fa-regular fa-table" aria-hidden="true"></i>' },
+                { tag: 'video', title: 'Insert Video', icon: '<i class="fa-regular fa-video" aria-hidden="true"></i>' }
             ]
         }
     ];
@@ -12453,7 +12491,7 @@ class BBCodeEditor {
             border-radius: 3px; 
             background: #fff; 
             font-size: 13px; 
-            min-width: 80px;
+            min-width: 100px;
         } 
         
         .bbcode-select:focus-visible {
@@ -13731,6 +13769,16 @@ class BBCodeEditor {
                 [/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]'],
                 [/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]'],
 
+                // Alignment
+                [/<p[^>]*align="left"[^>]*>(.*?)<\/p>/gis, '[left]$1[/left]'],
+                [/<div[^>]*align="left"[^>]*>(.*?)<\/div>/gis, '[left]$1[/left]'],
+                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[center]$1[/center]'],
+                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[center]$1[/center]'],
+                [/<p[^>]*align="right"[^>]*>(.*?)<\/p>/gis, '[right]$1[/right]'],
+                [/<div[^>]*align="right"[^>]*>(.*?)<\/div>/gis, '[right]$1[/right]'],
+                [/<p[^>]*align="justify"[^>]*>(.*?)<\/p>/gis, '[justify]$1[/justify]'],
+                [/<div[^>]*align="justify"[^>]*>(.*?)<\/div>/gis, '[justify]$1[/justify]'],
+
                 // Lists with nested content
                 [/<ol[^>]*>([\s\S]*?)<\/ol>/gis, (_, items) => {
                     items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
@@ -13750,6 +13798,10 @@ class BBCodeEditor {
                     return '[list]\n' + items.trim() + '\n[/list]';
                 }],
 
+                // Indentation
+                [/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gis, '[indent]$1[/indent]'],
+                [/<div[^>]*style="margin-left:[^"]*">([\s\S]*?)<\/div>/gis, '[indent]$1[/indent]'],
+
                 // Links
                 [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
                     url = url.replace(/&amp;/g, '&');
@@ -13759,6 +13811,7 @@ class BBCodeEditor {
                     }
                     return '[url=' + url + ']' + text + '[/url]';
                 }],
+                [/<a[^>]*href="mailto:(.*?)"[^>]*>(.*?)<\/a>/gis, '[email=$1]$2[/email]'],
 
                 // Images - extract original URL from weserv if present
                 [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
@@ -13778,20 +13831,31 @@ class BBCodeEditor {
                     return '[size=' + size + ']' + content + '[/size]';
                 }],
                 [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
+                [/<span[^>]*background-color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[bgcolor=$1]$2[/bgcolor]'],
 
                 // Code/HTML blocks
                 [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[code]$1[/code]'],
                 [/<pre[^>]*>(.*?)<\/pre>/gis, '[code]$1[/code]'],
                 [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[html]$1[/html]'],
 
-                // Center tags - keep as BBCode for forum to handle
-                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[center]$1[/center]'],
-                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[center]$1[/center]'],
+                // Horizontal rule
+                [/<hr[^>]*>/gis, '[hr]'],
 
                 // Preserve existing BBCode tags
                 [/\[center\](.*?)\[\/center\]/gis, '[center]$1[/center]'],
+                [/\[left\](.*?)\[\/left\]/gis, '[left]$1[/left]'],
+                [/\[right\](.*?)\[\/right\]/gis, '[right]$1[/right]'],
+                [/\[justify\](.*?)\[\/justify\]/gis, '[justify]$1[/justify]'],
                 [/\[quote\](.*?)\[\/quote\]/gis, '[quote]$1[/quote]'],
-                [/\[spoiler\](.*?)\[\/spoiler\]/gis, '[spoiler]$1[/spoiler]']
+                [/\[spoiler\](.*?)\[\/spoiler\]/gis, '[spoiler]$1[/spoiler]'],
+                [/\[indent\](.*?)\[\/indent\]/gis, '[indent]$1[/indent]'],
+                [/\[bgcolor=(.*?)\](.*?)\[\/bgcolor\]/gis, '[bgcolor=$1]$2[/bgcolor]'],
+                [/\[email=(.*?)\](.*?)\[\/email\]/gis, '[email=$1]$2[/email]'],
+                [/\[hr\]/gis, '[hr]'],
+                [/\[table\](.*?)\[\/table\]/gis, '[table]$1[/table]'],
+                [/\[tr\](.*?)\[\/tr\]/gis, '[tr]$1[/tr]'],
+                [/\[td\](.*?)\[\/td\]/gis, '[td]$1[/td]'],
+                [/\[video\](.*?)\[\/video\]/gis, '[video]$1[/video]']
             ];
 
             bbcode = processNested(bbcode, patterns);
@@ -13831,6 +13895,12 @@ class BBCodeEditor {
             forumHtml = forumHtml.replace(/\[sup\](.*?)\[\/sup\]/gis, '<sup>$1</sup>');
             forumHtml = forumHtml.replace(/\[sub\](.*?)\[\/sub\]/gis, '<sub>$1</sub>');
 
+            // Alignment
+            forumHtml = forumHtml.replace(/\[left\](.*?)\[\/left\]/gis, '<div align="left">$1</div>');
+            forumHtml = forumHtml.replace(/\[center\](.*?)\[\/center\]/gis, '<div align="center">$1</div>');
+            forumHtml = forumHtml.replace(/\[right\](.*?)\[\/right\]/gis, '<div align="right">$1</div>');
+            forumHtml = forumHtml.replace(/\[justify\](.*?)\[\/justify\]/gis, '<div align="justify">$1</div>');
+
             // Lists with nested content
             forumHtml = forumHtml.replace(/\[list=1\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
                 items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
@@ -13848,9 +13918,15 @@ class BBCodeEditor {
                 return '<ul>' + items + '</ul>';
             });
 
+            // Indentation
+            forumHtml = forumHtml.replace(/\[indent\](.*?)\[\/indent\]/gis, '<blockquote>$1</blockquote>');
+
             // URLs - convert to HTML
             forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
             forumHtml = forumHtml.replace(/\[url\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+            // Email links
+            forumHtml = forumHtml.replace(/\[email=(.*?)\](.*?)\[\/email\]/gis, '<a href="mailto:$1">$2</a>');
 
             // IMPORTANT: Skip image conversion - leave [IMG] tags as BBCode
             // The forum's media dimension extractor and weserv optimizer will handle them
@@ -13862,13 +13938,23 @@ class BBCodeEditor {
                 return '<span style="font-size:' + ptSize + ';line-height:100%">' + content + '</span>';
             });
             forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
+            forumHtml = forumHtml.replace(/\[bgcolor=(.*?)\](.*?)\[\/bgcolor\]/gis, '<span style="background-color:$1">$2</span>');
 
             // Code/HTML blocks - convert to HTML
             forumHtml = forumHtml.replace(/\[code\](.*?)\[\/code\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
             forumHtml = forumHtml.replace(/\[html\](.*?)\[\/html\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
 
+            // Horizontal rule
+            forumHtml = forumHtml.replace(/\[hr\]/gis, '<hr>');
+
+            // Tables
+            forumHtml = forumHtml.replace(/\[table\](.*?)\[\/table\]/gis, '<table border="1" cellpadding="4" cellspacing="0">$1</table>');
+            forumHtml = forumHtml.replace(/\[tr\](.*?)\[\/tr\]/gis, '<tr>$1</tr>');
+            forumHtml = forumHtml.replace(/\[td\](.*?)\[\/td\]/gis, '<td>$1</td>');
+
+            // Video placeholder - keep as BBCode for forum to handle
             // IMPORTANT: Leave these as BBCode for the forum to handle natively
-            // [CENTER], [QUOTE], [SPOILER] are left untouched
+            // [VIDEO], [CENTER], [QUOTE], [SPOILER] are left untouched
 
             // Convert newlines to <br> tags
             forumHtml = forumHtml.replace(/\n/g, '<br>');
@@ -13972,21 +14058,79 @@ class BBCodeEditor {
                 'del': ['[del]', '[/del]'],
                 'sup': ['[sup]', '[/sup]'],
                 'sub': ['[sub]', '[/sub]'],
+                'left': ['[left]', '[/left]'],
+                'center': ['[center]', '[/center]'],
+                'right': ['[right]', '[/right]'],
+                'justify': ['[justify]', '[/justify]'],
                 'ul': ['[list]\n', '\n[/list]'],
                 'ol': ['[list=1]\n', '\n[/list]'],
-                'center': ['[center]', '[/center]'],
+                'indent': ['[indent]', '[/indent]'],
+                'outdent': ['', ''], // Outdent is more complex - we'll handle specially
                 'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
                 'img': ['[img]', '[/img]'],
+                'email': [value ? `[email=${value}]` : '[email]', '[/email]'],
                 'quote': ['[quote]', '[/quote]'],
                 'code': ['[code]', '[/code]'],
                 'html': ['[html]', '[/html]'],
                 'spoiler': ['[spoiler]', '[/spoiler]'],
+                'pre': ['[code]', '[/code]'],
                 'font': [`[font=${value}]`, '[/font]'],
                 'size': [`[size=${value}]`, '[/size]'],
-                'color': [`[color=${value}]`, '[/color]']
+                'color': [`[color=${value}]`, '[/color]'],
+                'background': [`[bgcolor=${value}]`, '[/bgcolor]'],
+                'hr': ['[hr]\n', ''],
+                'table': ['[table]\n[tr][td]', '[/td][/tr]\n[/table]'],
+                'video': ['[video]', '[/video]']
             };
 
             const [openTag, closeTag] = tagMap[tag] || ['', ''];
+
+            // Handle outdent specially - try to reduce indentation of selected lines
+            if (tag === 'outdent') {
+                let newText = text;
+                let lines = newText.split('\n');
+                let modifiedLines = [];
+                let startLine = 0;
+                let endLine = lines.length - 1;
+                
+                // Find which lines are selected
+                let currentPos = 0;
+                for (let i = 0; i < lines.length; i++) {
+                    const lineEnd = currentPos + lines[i].length + 1;
+                    if (start >= currentPos && start <= lineEnd) startLine = i;
+                    if (end >= currentPos && end <= lineEnd) endLine = i;
+                    currentPos = lineEnd;
+                }
+                
+                // Remove indentation from selected lines
+                for (let i = 0; i < lines.length; i++) {
+                    if (i >= startLine && i <= endLine) {
+                        // Check for existing [indent] tags
+                        let line = lines[i];
+                        if (line.startsWith('[indent]')) {
+                            line = line.substring(8);
+                            if (line.endsWith('[/indent]')) {
+                                line = line.substring(0, line.length - 9);
+                            }
+                        }
+                        // Also check for space indentation
+                        line = line.replace(/^( {4}|\t)/, '');
+                        modifiedLines.push(line);
+                    } else {
+                        modifiedLines.push(lines[i]);
+                    }
+                }
+                newText = modifiedLines.join('\n');
+                
+                this.#bbcodeEditor.value = newText;
+                this.#bbcodeEditor.selectionStart = start;
+                this.#bbcodeEditor.selectionEnd = end;
+                this.#syncToOriginal();
+                this.#saveState(newText);
+                this.#updateStatus();
+                this.#bbcodeEditor.focus();
+                return;
+            }
 
             let newText, newCursorStart, newCursorEnd;
 
@@ -13995,13 +14139,19 @@ class BBCodeEditor {
                 if (tag === 'ul' || tag === 'ol') {
                     // List handling with placeholder items
                     newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
-                    // Place cursor AFTER the list items
                     newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'table') {
+                    newText = text.substring(0, start) + openTag + 'Cell 1' + closeTag + text.substring(end);
+                    newCursorStart = start + openTag.length + 'Cell 1'.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'hr') {
+                    newText = text.substring(0, start) + openTag + text.substring(end);
+                    newCursorStart = start + openTag.length;
                     newCursorEnd = newCursorStart;
                 } else {
                     // For regular tags, insert both tags and place cursor BETWEEN them
                     newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
-                    // Place cursor BETWEEN the tags (e.g., [b]|[/b])
                     newCursorStart = newCursorEnd = start + openTag.length;
                 }
             } else {
@@ -14013,13 +14163,28 @@ class BBCodeEditor {
                         .map(item => '[*]' + item)
                         .join('\n');
                     newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
-                    // Place cursor AFTER the closing tag
                     newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'indent') {
+                    // Indent selected lines
+                    const lines = selectedText.split('\n');
+                    const indentedLines = lines.map(line => '[indent]' + line + '[/indent]');
+                    const indentedText = indentedLines.join('\n');
+                    newText = text.substring(0, start) + indentedText + text.substring(end);
+                    newCursorStart = start + indentedText.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'table') {
+                    // Wrap selected text in table cells
+                    const cells = selectedText.split('\n')
+                        .filter(cell => cell.trim())
+                        .map(cell => '[tr][td]' + cell + '[/td][/tr]')
+                        .join('\n');
+                    newText = text.substring(0, start) + '[table]\n' + cells + '\n[/table]' + text.substring(end);
+                    newCursorStart = start + ('[table]\n' + cells + '\n[/table]').length;
                     newCursorEnd = newCursorStart;
                 } else {
                     // Wrap selected text with tags
                     newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
-                    // Place cursor AFTER the closing tag
                     newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
                 }
             }
@@ -14074,10 +14239,7 @@ class BBCodeEditor {
             if (tag === 'url') {
                 const url = prompt('Enter URL:', 'https://');
                 if (url && url.trim()) {
-                    // More lenient URL validation
                     const trimmedUrl = url.trim();
-                    
-                    // Accept anything that looks like a URL
                     if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                         const start = this.#bbcodeEditor.selectionStart;
                         const end = this.#bbcodeEditor.selectionEnd;
@@ -14088,13 +14250,11 @@ class BBCodeEditor {
                         let newCursorPos;
 
                         if (selectedText) {
-                            // If text is selected, create a link with that text
                             newText = text.substring(0, start) + 
                                 `[url=${trimmedUrl}]${selectedText}[/url]` + 
                                 text.substring(end);
                             newCursorPos = start + (`[url=${trimmedUrl}]`).length + selectedText.length + '[/url]'.length;
                         } else {
-                            // If no text is selected, insert [url]url[/url]
                             newText = text.substring(0, start) + 
                                 `[url]${trimmedUrl}[/url]` + 
                                 text.substring(end);
@@ -14109,9 +14269,48 @@ class BBCodeEditor {
                         this.#updateStatus();
                         this.#bbcodeEditor.focus();
                         this.#showStatusMessage('Link inserted', 'success');
-                        
                     } else {
                         alert('Please enter a valid URL (e.g., https://example.com or www.example.com)');
+                    }
+                }
+                return;
+            }
+
+            if (tag === 'email') {
+                const email = prompt('Enter email address:', '');
+                if (email && email.trim()) {
+                    const trimmedEmail = email.trim();
+                    if (trimmedEmail.includes('@')) {
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        const selectedText = text.substring(start, end);
+
+                        let newText;
+                        let newCursorPos;
+
+                        if (selectedText) {
+                            newText = text.substring(0, start) + 
+                                `[email=${trimmedEmail}]${selectedText}[/email]` + 
+                                text.substring(end);
+                            newCursorPos = start + (`[email=${trimmedEmail}]`).length + selectedText.length + '[/email]'.length;
+                        } else {
+                            newText = text.substring(0, start) + 
+                                `[email]${trimmedEmail}[/email]` + 
+                                text.substring(end);
+                            newCursorPos = start + (`[email]`).length + trimmedEmail.length + '[/email]'.length;
+                        }
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#bbcodeEditor.focus();
+                        this.#showStatusMessage('Email link inserted', 'success');
+                    } else {
+                        alert('Please enter a valid email address');
                     }
                 }
                 return;
@@ -14121,19 +14320,15 @@ class BBCodeEditor {
                 const imgUrl = prompt('Enter image URL:', 'https://');
                 if (imgUrl && imgUrl.trim()) {
                     const trimmedUrl = imgUrl.trim();
-                    
-                    // Accept anything that looks like an image URL
                     if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                         const start = this.#bbcodeEditor.selectionStart;
                         const end = this.#bbcodeEditor.selectionEnd;
                         const text = this.#bbcodeEditor.value;
                         
-                        // Insert [img]url[/img]
                         const newText = text.substring(0, start) + 
                             `[img]${trimmedUrl}[/img]` + 
                             text.substring(end);
                         
-                        // Place cursor AFTER the closing tag
                         const newCursorPos = start + (`[img]`).length + trimmedUrl.length + '[/img]'.length;
                         
                         this.#bbcodeEditor.value = newText;
@@ -14144,10 +14339,74 @@ class BBCodeEditor {
                         this.#updateStatus();
                         this.#bbcodeEditor.focus();
                         this.#showStatusMessage('Image inserted', 'success');
-                        
                     } else {
                         alert('Please enter a valid image URL (e.g., https://example.com/image.jpg)');
                     }
+                }
+                return;
+            }
+
+            if (tag === 'video') {
+                const videoUrl = prompt('Enter video URL (YouTube, Vimeo, etc.):', 'https://');
+                if (videoUrl && videoUrl.trim()) {
+                    const trimmedUrl = videoUrl.trim();
+                    if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('youtube') || trimmedUrl.includes('vimeo')) {
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        
+                        const newText = text.substring(0, start) + 
+                            `[video]${trimmedUrl}[/video]` + 
+                            text.substring(end);
+                        
+                        const newCursorPos = start + (`[video]`).length + trimmedUrl.length + '[/video]'.length;
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#bbcodeEditor.focus();
+                        this.#showStatusMessage('Video inserted', 'success');
+                    } else {
+                        alert('Please enter a valid video URL');
+                    }
+                }
+                return;
+            }
+
+            if (tag === 'table') {
+                const rows = prompt('Enter number of rows:', '2');
+                const cols = prompt('Enter number of columns:', '2');
+                if (rows && cols) {
+                    const r = parseInt(rows) || 2;
+                    const c = parseInt(cols) || 2;
+                    let tableContent = '';
+                    for (let i = 0; i < r; i++) {
+                        tableContent += '[tr]\n';
+                        for (let j = 0; j < c; j++) {
+                            tableContent += `[td]Cell ${i+1},${j+1}[/td]\n`;
+                        }
+                        tableContent += '[/tr]\n';
+                    }
+                    const start = this.#bbcodeEditor.selectionStart;
+                    const end = this.#bbcodeEditor.selectionEnd;
+                    const text = this.#bbcodeEditor.value;
+                    
+                    const newText = text.substring(0, start) + 
+                        `[table]\n${tableContent}[/table]` + 
+                        text.substring(end);
+                    
+                    this.#bbcodeEditor.value = newText;
+                    this.#bbcodeEditor.selectionStart = start;
+                    this.#bbcodeEditor.selectionEnd = end;
+                    
+                    this.#syncToOriginal();
+                    this.#saveState(newText);
+                    this.#updateStatus();
+                    this.#bbcodeEditor.focus();
+                    this.#showStatusMessage('Table inserted', 'success');
                 }
                 return;
             }
@@ -14170,7 +14429,8 @@ class BBCodeEditor {
             const groupMap = {
                 'color': 'color',
                 'size': 'size',
-                'font': 'font'
+                'font': 'font',
+                'background': 'background'
             };
 
             if (groupMap[group]) {
@@ -14237,7 +14497,6 @@ class BBCodeEditor {
                         const url = prompt('Enter URL:');
                         if (url && url.trim()) {
                             const trimmedUrl = url.trim();
-                            
                             if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                                 const text = this.#bbcodeEditor.value;
                                 
@@ -14264,7 +14523,6 @@ class BBCodeEditor {
                                 this.#updateStatus();
                                 this.#bbcodeEditor.focus();
                                 this.#showStatusMessage('Link inserted', 'success');
-                                
                             } else {
                                 alert('Please enter a valid URL');
                             }
@@ -14275,7 +14533,6 @@ class BBCodeEditor {
                         const imgUrl = prompt('Enter image URL:');
                         if (imgUrl && imgUrl.trim()) {
                             const trimmedUrl = imgUrl.trim();
-                            
                             if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
                                 const text = this.#bbcodeEditor.value;
                                 
@@ -14293,7 +14550,6 @@ class BBCodeEditor {
                                 this.#updateStatus();
                                 this.#bbcodeEditor.focus();
                                 this.#showStatusMessage('Image inserted', 'success');
-                                
                             } else {
                                 alert('Please enter a valid image URL');
                             }
@@ -14473,7 +14729,7 @@ class BBCodeEditor {
         const initEditor = () => {
             try {
                 globalThis.bbcodeEditor = new BBCodeEditor();
-                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Emoji Support & Autoresize)');
+                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Toolbar & All BBCode Tags)');
             } catch (error) {
                 console.error('Failed to initialize BBCodeEditor:', error);
                 const textarea = document.getElementById('Post');
