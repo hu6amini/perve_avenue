@@ -13259,7 +13259,7 @@ class BBCodeEditor {
                 </div>
                 <div class="bbcode-editor-area">
                     <textarea id="bbcode-editor" class="bbcode-textarea" 
-                        placeholder="Write your message... BBCode & emoji supported" 
+                        placeholder="Write your message here..." 
                         aria-label="BBCode editor content" 
                         data-forum-element="true">${escapedValue}</textarea>
                 </div>
