@@ -11756,9 +11756,7 @@ class BBCodeEditor {
     #statusMessageTimeout = null;
     #isEditing = false;
     #currentEmojiCategory = 'smileys';
-    #syncHandler = null;
-    #textareaObserver = null;
-    #isInternalUpdate = false;
+    #resizeObserver = null;
     
     // Configuration
     static #CONFIG = {
@@ -12981,9 +12979,6 @@ class BBCodeEditor {
             // Setup autoresize
             this.#setupAutoresize();
             
-            // Setup textarea sync for Tiptap compatibility
-            this.#setupTextareaSync();
-            
             // Update status
             this.#updateStatus();
 
@@ -13055,104 +13050,6 @@ class BBCodeEditor {
         autoResize();
     }
 
-    #setupTextareaSync() {
-        if (!this.#originalTextarea) return;
-        
-        // Function to sync from original textarea to BBCode editor
-        const syncFromOriginal = () => {
-            // Skip if we're in the middle of an internal update
-            if (this.#isInternalUpdate) return;
-            
-            if (this.#bbcodeEditor && this.#originalTextarea) {
-                const forumFormat = this.#originalTextarea.value;
-                const editorFormat = this.#safeForumToBBCode(forumFormat);
-                
-                // Avoid unnecessary updates
-                if (this.#bbcodeEditor.value !== editorFormat) {
-                    const cursorPos = this.#bbcodeEditor.selectionStart;
-                    
-                    this.#bbcodeEditor.value = editorFormat;
-                    
-                    // Try to preserve cursor position if possible
-                    if (cursorPos <= this.#bbcodeEditor.value.length) {
-                        this.#bbcodeEditor.selectionStart = cursorPos;
-                        this.#bbcodeEditor.selectionEnd = cursorPos;
-                    }
-                    
-                    this.#updateStatus();
-                    this.#saveState(editorFormat);
-                    
-                    // Trigger autoresize
-                    if (this.#bbcodeEditor.style.height) {
-                        this.#bbcodeEditor.style.height = 'auto';
-                        const scrollHeight = this.#bbcodeEditor.scrollHeight;
-                        const maxHeight = BBCodeEditor.#CONFIG.EDITOR_MAX_HEIGHT;
-                        const newHeight = Math.min(scrollHeight, maxHeight);
-                        this.#bbcodeEditor.style.height = newHeight + 'px';
-                    }
-                }
-            }
-        };
-        
-        // Create debounced version for performance
-        const debouncedSync = this.#debounce(syncFromOriginal, 50);
-        
-        // Listen for input events on the original textarea
-        this.#originalTextarea.addEventListener('input', debouncedSync);
-        this.#originalTextarea.addEventListener('change', debouncedSync);
-        
-        // Use MutationObserver to detect attribute changes (like value)
-        this.#textareaObserver = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
-                    debouncedSync();
-                    break;
-                }
-            }
-        });
-        
-        // Observe the textarea for value attribute changes
-        this.#textareaObserver.observe(this.#originalTextarea, {
-            attributes: true,
-            attributeFilter: ['value']
-        });
-        
-        // Also observe the parent form in case the textarea gets replaced
-        const form = this.#originalTextarea.form;
-        if (form) {
-            const formObserver = new MutationObserver((mutations) => {
-                for (const mutation of mutations) {
-                    if (mutation.type === 'childList') {
-                        // Check if our textarea was replaced
-                        const newTextarea = document.getElementById('Post');
-                        if (newTextarea && newTextarea !== this.#originalTextarea) {
-                            // Disconnect old observer
-                            if (this.#textareaObserver) {
-                                this.#textareaObserver.disconnect();
-                            }
-                            
-                            this.#originalTextarea = newTextarea;
-                            this.#setupTextareaSync(); // Re-setup sync
-                            break;
-                        }
-                    }
-                }
-            });
-            
-            formObserver.observe(form, {
-                childList: true,
-                subtree: true
-            });
-            
-            this.#formObserver = formObserver;
-        }
-        
-        // Initial sync
-        syncFromOriginal();
-        
-        console.log('📝 Textarea sync enabled for Tiptap editor compatibility');
-    }
-
     #attachEventListeners() {
         try {
             // Click handler for toolbar buttons
@@ -13202,7 +13099,6 @@ class BBCodeEditor {
                 
                 this.#bbcodeEditor.addEventListener('input', () => {
                     try {
-                        this.#isInternalUpdate = true;
                         this.#syncToOriginal();
                         this.#saveState(this.#bbcodeEditor.value);
                         debouncedUpdate();
@@ -13216,13 +13112,8 @@ class BBCodeEditor {
                         if (this.#observerReady && globalThis.forumObserver) {
                             this.#originalTextarea.dispatchEvent(new Event('input', { bubbles: true }));
                         }
-                        
-                        setTimeout(() => {
-                            this.#isInternalUpdate = false;
-                        }, 10);
                     } catch (error) {
                         console.error('Error in input handler:', error);
-                        this.#isInternalUpdate = false;
                     }
                 });
                 
@@ -13288,7 +13179,6 @@ class BBCodeEditor {
 
     #insertTextAtCursor(text) {
         try {
-            this.#isInternalUpdate = true;
             const start = this.#bbcodeEditor.selectionStart;
             const end = this.#bbcodeEditor.selectionEnd;
             const value = this.#bbcodeEditor.value;
@@ -13309,13 +13199,8 @@ class BBCodeEditor {
             
             // Ensure editor keeps focus
             this.#bbcodeEditor.focus();
-            
-            setTimeout(() => {
-                this.#isInternalUpdate = false;
-            }, 10);
         } catch (error) {
             console.error('Error inserting text:', error);
-            this.#isInternalUpdate = false;
         }
     }
 
@@ -13995,7 +13880,6 @@ class BBCodeEditor {
 
     #syncToOriginal() {
         try {
-            this.#isInternalUpdate = true;
             const editorValue = this.#bbcodeEditor.value;
             const forumFormat = this.#bbcodeToForum(editorValue);
             
@@ -14004,12 +13888,8 @@ class BBCodeEditor {
                 const event = new Event('input', { bubbles: true });
                 this.#originalTextarea.dispatchEvent(event);
             }
-            setTimeout(() => {
-                this.#isInternalUpdate = false;
-            }, 10);
         } catch (error) {
             console.error('Error syncing to original:', error);
-            this.#isInternalUpdate = false;
         }
     }
 
@@ -14078,7 +13958,6 @@ class BBCodeEditor {
 
     #insertTag(tag, value = '') {
         try {
-            this.#isInternalUpdate = true;
             const start = this.#bbcodeEditor.selectionStart;
             const end = this.#bbcodeEditor.selectionEnd;
             const text = this.#bbcodeEditor.value;
@@ -14151,13 +14030,8 @@ class BBCodeEditor {
             this.#saveState(newText);
             this.#updateStatus();
             this.#bbcodeEditor.focus();
-            
-            setTimeout(() => {
-                this.#isInternalUpdate = false;
-            }, 10);
         } catch (error) {
             console.error('Error inserting tag:', error);
-            this.#isInternalUpdate = false;
         }
     }
 
@@ -14167,22 +14041,17 @@ class BBCodeEditor {
 
             if (btn.classList.contains('undo-btn')) {
                 if (this.#undoPosition > 0) {
-                    this.#isInternalUpdate = true;
                     this.#undoPosition--;
                     this.#bbcodeEditor.value = this.#undoStack[this.#undoPosition];
                     this.#syncToOriginal();
                     this.#updateStatus();
                     this.#announce('Undo');
-                    setTimeout(() => {
-                        this.#isInternalUpdate = false;
-                    }, 10);
                 }
                 return;
             }
 
             if (btn.classList.contains('redo-btn')) {
                 if (this.#redoStack.length > 0) {
-                    this.#isInternalUpdate = true;
                     const redoValue = this.#redoStack.pop();
                     this.#undoPosition++;
                     this.#undoStack[this.#undoPosition] = redoValue;
@@ -14190,9 +14059,6 @@ class BBCodeEditor {
                     this.#syncToOriginal();
                     this.#updateStatus();
                     this.#announce('Redo');
-                    setTimeout(() => {
-                        this.#isInternalUpdate = false;
-                    }, 10);
                 }
                 return;
             }
@@ -14347,29 +14213,21 @@ class BBCodeEditor {
                     'z': () => {
                         e.preventDefault();
                         if (this.#undoPosition > 0) {
-                            this.#isInternalUpdate = true;
                             this.#undoPosition--;
                             this.#bbcodeEditor.value = this.#undoStack[this.#undoPosition];
                             this.#syncToOriginal();
                             this.#updateStatus();
-                            setTimeout(() => {
-                                this.#isInternalUpdate = false;
-                            }, 10);
                         }
                     },
                     'y': () => {
                         e.preventDefault();
                         if (this.#redoStack.length > 0) {
-                            this.#isInternalUpdate = true;
                             const redoValue = this.#redoStack.pop();
                             this.#undoPosition++;
                             this.#undoStack[this.#undoPosition] = redoValue;
                             this.#bbcodeEditor.value = redoValue;
                             this.#syncToOriginal();
                             this.#updateStatus();
-                            setTimeout(() => {
-                                this.#isInternalUpdate = false;
-                            }, 10);
                         }
                     },
                     'l': () => {
@@ -14512,7 +14370,6 @@ class BBCodeEditor {
     setValue(value) {
         try {
             if (this.#bbcodeEditor) {
-                this.#isInternalUpdate = true;
                 this.#bbcodeEditor.value = value;
                 this.#syncToOriginal();
                 this.#saveState(value);
@@ -14531,14 +14388,9 @@ class BBCodeEditor {
                 if (!this.#isEditing) {
                     this.#autoSave();
                 }
-                
-                setTimeout(() => {
-                    this.#isInternalUpdate = false;
-                }, 10);
             }
         } catch (error) {
             console.error('Error setting value:', error);
-            this.#isInternalUpdate = false;
         }
     }
 
@@ -14579,19 +14431,14 @@ class BBCodeEditor {
                 clearTimeout(this.#statusMessageTimeout);
             }
 
-            // Clean up textarea sync observer
-            if (this.#textareaObserver) {
-                this.#textareaObserver.disconnect();
-                this.#textareaObserver = null;
-            }
-            
-            if (this.#formObserver) {
-                this.#formObserver.disconnect();
-                this.#formObserver = null;
-            }
-
             if (globalThis.forumObserver && this.#observerId) {
                 globalThis.forumObserver.unregister(this.#observerId);
+            }
+            
+            // Remove resize observer
+            if (this.#resizeObserver) {
+                this.#resizeObserver.disconnect();
+                this.#resizeObserver = null;
             }
             
             // Remove emoji picker if it exists
@@ -14624,7 +14471,7 @@ class BBCodeEditor {
         const initEditor = () => {
             try {
                 globalThis.bbcodeEditor = new BBCodeEditor();
-                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Emoji Support, Autoresize & Tiptap Sync)');
+                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Emoji Support & Autoresize)');
             } catch (error) {
                 console.error('Failed to initialize BBCodeEditor:', error);
                 const textarea = document.getElementById('Post');
