@@ -2915,6 +2915,8 @@ table.ww textarea#ffmsg {background: #FFF;
  border-radius: 50%;
  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2)}
 
+.List.st-editor-area .Item {padding:0!important}
+
 /*============================================
  theme adjustments============================================*/
 [data-theme="dark"] .st-emoji-preview img {filter: brightness(1.1)}
