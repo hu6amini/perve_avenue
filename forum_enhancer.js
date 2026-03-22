@@ -11729,10 +11729,6 @@ globalThis.addEventListener('pagehide', function() {
 });
 
 
-// ============================================
-// BBCODE EDITOR - Enhanced Edition with Full Emoji Support
-// ============================================
-
 'use strict';
 
 class BBCodeEditor {
@@ -11758,6 +11754,7 @@ class BBCodeEditor {
     #statusMessageTimeout = null;
     #isEditing = false;
     #currentEmojiCategory = 'smileys';
+    #resizeObserver = null;
     
     // Configuration
     static #CONFIG = {
@@ -11767,7 +11764,9 @@ class BBCodeEditor {
         STATUS_MESSAGE_DURATION: 3000,
         DRAFT_EXPIRY: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
         ALLOWED_HTML_TAGS: ['b', 'i', 'u', 'del', 'sup', 'sub', 'ol', 'ul', 'li', 'p', 'a', 'img', 'span', 'div', 'blockquote', 'pre', 'strong', 'em'],
-        ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target']
+        ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target'],
+        EDITOR_MIN_HEIGHT: 120,
+        EDITOR_MAX_HEIGHT: 400
     };
 
     // Comprehensive emoji collection organized by category
@@ -12329,12 +12328,10 @@ class BBCodeEditor {
             options: [
                 { value: '', text: 'Font' },
                 { value: 'Arial', text: 'Arial' },
-                { value: 'Bree Serif', text: 'Bree Serif' },
-                { value: 'Courier New', text: 'Courier New' },
-                { value: 'Quicksand', text: 'Quicksand' },
+                { value: 'Verdana', text: 'Verdana' },
                 { value: 'Tahoma', text: 'Tahoma' },
                 { value: 'Times New Roman', text: 'Times New Roman' },
-                { value: 'Verdana', text: 'Verdana' }
+                { value: 'Courier New', text: 'Courier New' }
             ]
         },
         {
@@ -12473,10 +12470,12 @@ class BBCodeEditor {
         
         .bbcode-textarea { 
             width: 100%; 
-            min-height: 200px; 
+            min-height: 120px; 
+            max-height: 400px;
+            resize: none;
+            overflow-y: auto;
             padding: 12px; 
             border: none; 
-            resize: vertical; 
             font-family: 'Consolas', 'Monaco', monospace; 
             font-size: 14px; 
             line-height: 1.5; 
@@ -12975,6 +12974,9 @@ class BBCodeEditor {
             // Attach event listeners
             this.#attachEventListeners();
             
+            // Setup autoresize
+            this.#setupAutoresize();
+            
             // Update status
             this.#updateStatus();
 
@@ -13019,6 +13021,31 @@ class BBCodeEditor {
             
             this.#showFallbackEditor();
         }
+    }
+
+    #setupAutoresize() {
+        if (!this.#bbcodeEditor) return;
+        
+        const autoResize = () => {
+            // Reset height to auto to get the correct scrollHeight
+            this.#bbcodeEditor.style.height = 'auto';
+            // Calculate new height (capped at max-height)
+            const scrollHeight = this.#bbcodeEditor.scrollHeight;
+            const maxHeight = BBCodeEditor.#CONFIG.EDITOR_MAX_HEIGHT;
+            const newHeight = Math.min(scrollHeight, maxHeight);
+            this.#bbcodeEditor.style.height = newHeight + 'px';
+        };
+        
+        // Attach resize handler
+        this.#bbcodeEditor.addEventListener('input', autoResize);
+        
+        // Also resize on window resize (in case container changes)
+        window.addEventListener('resize', () => {
+            autoResize();
+        });
+        
+        // Initial resize
+        autoResize();
     }
 
     #attachEventListeners() {
@@ -13228,7 +13255,7 @@ class BBCodeEditor {
                 </div>
                 <div class="bbcode-editor-area">
                     <textarea id="bbcode-editor" class="bbcode-textarea" 
-                        placeholder="Write your message here..." 
+                        placeholder="Write your message... BBCode & emoji supported" 
                         aria-label="BBCode editor content" 
                         data-forum-element="true">${escapedValue}</textarea>
                 </div>
@@ -13927,85 +13954,85 @@ class BBCodeEditor {
         }
     }
 
-#insertTag(tag, value = '') {
-    try {
-        const start = this.#bbcodeEditor.selectionStart;
-        const end = this.#bbcodeEditor.selectionEnd;
-        const text = this.#bbcodeEditor.value;
-        const selectedText = text.substring(start, end);
+    #insertTag(tag, value = '') {
+        try {
+            const start = this.#bbcodeEditor.selectionStart;
+            const end = this.#bbcodeEditor.selectionEnd;
+            const text = this.#bbcodeEditor.value;
+            const selectedText = text.substring(start, end);
 
-        const tagMap = {
-            'b': ['[b]', '[/b]'],
-            'i': ['[i]', '[/i]'],
-            'u': ['[u]', '[/u]'],
-            'del': ['[del]', '[/del]'],
-            'sup': ['[sup]', '[/sup]'],
-            'sub': ['[sub]', '[/sub]'],
-            'ul': ['[list]\n', '\n[/list]'],
-            'ol': ['[list=1]\n', '\n[/list]'],
-            'center': ['[center]', '[/center]'],
-            'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
-            'img': ['[img]', '[/img]'],
-            'quote': ['[quote]', '[/quote]'],
-            'code': ['[code]', '[/code]'],
-            'html': ['[html]', '[/html]'],
-            'spoiler': ['[spoiler]', '[/spoiler]'],
-            'font': [`[font=${value}]`, '[/font]'],
-            'size': [`[size=${value}]`, '[/size]'],
-            'color': [`[color=${value}]`, '[/color]']
-        };
+            const tagMap = {
+                'b': ['[b]', '[/b]'],
+                'i': ['[i]', '[/i]'],
+                'u': ['[u]', '[/u]'],
+                'del': ['[del]', '[/del]'],
+                'sup': ['[sup]', '[/sup]'],
+                'sub': ['[sub]', '[/sub]'],
+                'ul': ['[list]\n', '\n[/list]'],
+                'ol': ['[list=1]\n', '\n[/list]'],
+                'center': ['[center]', '[/center]'],
+                'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
+                'img': ['[img]', '[/img]'],
+                'quote': ['[quote]', '[/quote]'],
+                'code': ['[code]', '[/code]'],
+                'html': ['[html]', '[/html]'],
+                'spoiler': ['[spoiler]', '[/spoiler]'],
+                'font': [`[font=${value}]`, '[/font]'],
+                'size': [`[size=${value}]`, '[/size]'],
+                'color': [`[color=${value}]`, '[/color]']
+            };
 
-        const [openTag, closeTag] = tagMap[tag] || ['', ''];
+            const [openTag, closeTag] = tagMap[tag] || ['', ''];
 
-        let newText, newCursorStart, newCursorEnd;
+            let newText, newCursorStart, newCursorEnd;
 
-        if (start === end) {
-            // No text selected
-            if (tag === 'ul' || tag === 'ol') {
-                // List handling with placeholder items
-                newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
-                // Place cursor AFTER the list items
-                newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
-                newCursorEnd = newCursorStart;
+            if (start === end) {
+                // No text selected
+                if (tag === 'ul' || tag === 'ol') {
+                    // List handling with placeholder items
+                    newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
+                    // Place cursor AFTER the list items
+                    newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
+                } else {
+                    // For regular tags, insert both tags and place cursor BETWEEN them
+                    newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
+                    // Place cursor BETWEEN the tags (e.g., [b]|[/b])
+                    newCursorStart = newCursorEnd = start + openTag.length;
+                }
             } else {
-                // For regular tags, insert both tags and place cursor BETWEEN them
-                newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
-                // Place cursor BETWEEN the tags (e.g., [b]|[/b])
-                newCursorStart = newCursorEnd = start + openTag.length;
+                // Text is selected
+                if (tag === 'ul' || tag === 'ol') {
+                    // Convert selected lines to list items
+                    const items = selectedText.split('\n')
+                        .filter(item => item.trim())
+                        .map(item => '[*]' + item)
+                        .join('\n');
+                    newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
+                    // Place cursor AFTER the closing tag
+                    newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
+                } else {
+                    // Wrap selected text with tags
+                    newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
+                    // Place cursor AFTER the closing tag
+                    newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
+                }
             }
-        } else {
-            // Text is selected
-            if (tag === 'ul' || tag === 'ol') {
-                // Convert selected lines to list items
-                const items = selectedText.split('\n')
-                    .filter(item => item.trim())
-                    .map(item => '[*]' + item)
-                    .join('\n');
-                newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
-                // Place cursor AFTER the closing tag
-                newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
-                newCursorEnd = newCursorStart;
-            } else {
-                // Wrap selected text with tags
-                newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
-                // Place cursor AFTER the closing tag
-                newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
-            }
+
+            this.#bbcodeEditor.value = newText;
+            this.#bbcodeEditor.selectionStart = newCursorStart;
+            this.#bbcodeEditor.selectionEnd = newCursorEnd;
+
+            this.#syncToOriginal();
+            this.#saveState(newText);
+            this.#updateStatus();
+            this.#bbcodeEditor.focus();
+        } catch (error) {
+            console.error('Error inserting tag:', error);
         }
-
-        this.#bbcodeEditor.value = newText;
-        this.#bbcodeEditor.selectionStart = newCursorStart;
-        this.#bbcodeEditor.selectionEnd = newCursorEnd;
-
-        this.#syncToOriginal();
-        this.#saveState(newText);
-        this.#updateStatus();
-        this.#bbcodeEditor.focus();
-    } catch (error) {
-        console.error('Error inserting tag:', error);
     }
-}
-  
+
     #handleButtonClick(btn) {
         try {
             const tag = btn.getAttribute('data-tag');
@@ -14346,6 +14373,15 @@ class BBCodeEditor {
                 this.#saveState(value);
                 this.#updateStatus();
                 
+                // Trigger autoresize after setting value
+                if (this.#bbcodeEditor.style.height) {
+                    this.#bbcodeEditor.style.height = 'auto';
+                    const scrollHeight = this.#bbcodeEditor.scrollHeight;
+                    const maxHeight = BBCodeEditor.#CONFIG.EDITOR_MAX_HEIGHT;
+                    const newHeight = Math.min(scrollHeight, maxHeight);
+                    this.#bbcodeEditor.style.height = newHeight + 'px';
+                }
+                
                 // Only auto-save for new posts
                 if (!this.#isEditing) {
                     this.#autoSave();
@@ -14397,6 +14433,12 @@ class BBCodeEditor {
                 globalThis.forumObserver.unregister(this.#observerId);
             }
             
+            // Remove resize observer
+            if (this.#resizeObserver) {
+                this.#resizeObserver.disconnect();
+                this.#resizeObserver = null;
+            }
+            
             // Remove emoji picker if it exists
             this.#emojiPicker?.remove();
             
@@ -14427,7 +14469,7 @@ class BBCodeEditor {
         const initEditor = () => {
             try {
                 globalThis.bbcodeEditor = new BBCodeEditor();
-                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Emoji Support)');
+                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Emoji Support & Autoresize)');
             } catch (error) {
                 console.error('Failed to initialize BBCodeEditor:', error);
                 const textarea = document.getElementById('Post');
