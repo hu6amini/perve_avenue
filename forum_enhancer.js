@@ -1725,7 +1725,6 @@ if (!globalThis.mediaDimensionExtractor) {
         var container = document.createElement('div');
         container.className = 'fast-reply-user-info';
         container.style.cssText = 
-            'margin-bottom: 12px;' +
             'padding: 10px 15px;' +
             'background: linear-gradient(to right, #f8f9fa, #e9ecef);' +
             'border-radius: 8px;' +
@@ -12422,8 +12421,7 @@ class BBCodeEditor {
             border: 1px solid #ddd; 
             border-radius: 4px; 
             background: #fff; 
-            margin: 10px 0; 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            font-family: quicksand, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
             position: relative;
         } 
         
