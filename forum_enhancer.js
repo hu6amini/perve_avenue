@@ -11790,7 +11790,19 @@ class BBCodeEditor {
                 { emoji: '😌', name: 'Relieved Face' },
                 { emoji: '😍', name: 'Smiling Face with Heart-Eyes' },
                 { emoji: '😎', name: 'Smiling Face with Sunglasses' },
-                { emoji: '😏', name: 'Smirking Face' }
+                { emoji: '😏', name: 'Smirking Face' },
+                { emoji: '😐', name: 'Neutral Face' },
+                { emoji: '😑', name: 'Expressionless Face' },
+                { emoji: '😒', name: 'Unamused Face' },
+                { emoji: '😓', name: 'Downcast Face with Sweat' },
+                { emoji: '😔', name: 'Pensive Face' },
+                { emoji: '😕', name: 'Confused Face' },
+                { emoji: '😖', name: 'Confounded Face' },
+                { emoji: '😗', name: 'Kissing Face' },
+                { emoji: '😘', name: 'Face Blowing a Kiss' },
+                { emoji: '😙', name: 'Kissing Face with Smiling Eyes' },
+                { emoji: '😚', name: 'Kissing Face with Closed Eyes' },
+                { emoji: '😛', name: 'Face with Tongue' }
             ]
         },
         cats: {
