@@ -11730,3 +11730,3038 @@ globalThis.addEventListener('pagehide', function() {
 // ============================================
 // BBCODE Editor
 // ============================================
+'use strict';
+
+class BBCodeEditor {
+    #originalTextarea = null;
+    #editorWrapper = null;
+    #bbcodeEditor = null;
+    #statusElements = {};
+    #undoStack = [];
+    #redoStack = [];
+    #undoPosition = 0;
+    #observerId = null;
+    #initStarted = false;
+    #saveTimeout = null;
+    #autoSaveTimeout = null;
+    #clickHandler = null;
+    #changeHandler = null;
+    #lastCursorPosition = { start: 0, end: 0 };
+    #initializationError = null;
+    #observerReady = false;
+    #emojiPicker = null;
+    #emojiButton = null;
+    #draftKey = null;
+    #statusMessageTimeout = null;
+    #isEditing = false;
+    #currentEmojiCategory = 'smileys';
+    #resizeObserver = null;
+    
+    // Configuration
+    static #CONFIG = {
+        MAX_UNDO_STEPS: 100,
+        STATUS_DEBOUNCE_DELAY: 100,
+        AUTO_SAVE_DELAY: 2000,
+        STATUS_MESSAGE_DURATION: 3000,
+        DRAFT_EXPIRY: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+        ALLOWED_HTML_TAGS: ['b', 'i', 'u', 'del', 'sup', 'sub', 'ol', 'ul', 'li', 'p', 'a', 'img', 'span', 'div', 'blockquote', 'pre', 'strong', 'em'],
+        ALLOWED_ATTRIBUTES: ['href', 'src', 'alt', 'title', 'class', 'style', 'align', 'target'],
+        EDITOR_MIN_HEIGHT: 120,
+        EDITOR_MAX_HEIGHT: 400
+    };
+
+    // Comprehensive emoji collection organized by category
+    static #EMOJI_CATEGORIES = {
+        smileys: {
+            name: 'Smileys & Emotion',
+            emojis: [
+                { emoji: '😀', name: 'Grinning Face' },
+                { emoji: '😃', name: 'Grinning Face with Big Eyes' },
+                { emoji: '😄', name: 'Grinning Face with Smiling Eyes' },
+                { emoji: '😁', name: 'Beaming Face with Smiling Eyes' },
+                { emoji: '😆', name: 'Grinning Squinting Face' },
+                { emoji: '😅', name: 'Grinning Face with Sweat' },
+                { emoji: '🤣', name: 'Rolling on the Floor Laughing' },
+                { emoji: '😂', name: 'Face with Tears of Joy' },
+                { emoji: '🙂', name: 'Slightly Smiling Face' },
+                { emoji: '😉', name: 'Winking Face' },
+                { emoji: '😊', name: 'Smiling Face with Smiling Eyes' },
+                { emoji: '😇', name: 'Smiling Face with Halo' },
+                { emoji: '🥰', name: 'Smiling Face with Hearts' },
+                { emoji: '😍', name: 'Smiling Face with Heart-Eyes' },
+                { emoji: '😘', name: 'Face Blowing a Kiss' },
+                { emoji: '😚', name: 'Kissing Face with Closed Eyes' },
+                { emoji: '😋', name: 'Face Savoring Food' },
+                { emoji: '😜', name: 'Winking Face with Tongue' },
+                { emoji: '😝', name: 'Squinting Face with Tongue' },
+                { emoji: '😐', name: 'Neutral Face' },
+                { emoji: '😶', name: 'Face Without Mouth' },
+                { emoji: '😏', name: 'Smirking Face' },
+                { emoji: '😒', name: 'Unamused Face' },
+                { emoji: '😌', name: 'Relieved Face' },
+                { emoji: '😔', name: 'Pensive Face' },
+                { emoji: '😪', name: 'Sleepy Face' },
+                { emoji: '😷', name: 'Face with Medical Mask' },
+                { emoji: '😵', name: 'Face with Crossed-Out Eyes' },
+                { emoji: '😎', name: 'Smiling Face with Sunglasses' },
+                { emoji: '😲', name: 'Astonished Face' },
+                { emoji: '😳', name: 'Flushed Face' },
+                { emoji: '😨', name: 'Fearful Face' },
+                { emoji: '😰', name: 'Anxious Face with Sweat' },
+                { emoji: '😥', name: 'Sad but Relieved Face' },
+                { emoji: '😢', name: 'Crying Face' },
+                { emoji: '😭', name: 'Loudly Crying Face' },
+                { emoji: '😱', name: 'Face Screaming in Fear' },
+                { emoji: '😖', name: 'Confounded Face' },
+                { emoji: '😣', name: 'Persevering Face' },
+                { emoji: '😞', name: 'Disappointed Face' },
+                { emoji: '😓', name: 'Downcast Face with Sweat' },
+                { emoji: '😩', name: 'Weary Face' },
+                { emoji: '😫', name: 'Tired Face' },
+                { emoji: '😤', name: 'Face with Steam From Nose' },
+                { emoji: '😡', name: 'Enraged Face' },
+                { emoji: '😠', name: 'Angry Face' },
+                { emoji: '😈', name: 'Smiling Face with Horns' },
+                { emoji: '👿', name: 'Angry Face with Horns' },
+                { emoji: '💀', name: 'Skull' },
+                { emoji: '💩', name: 'Pile of Poo' },
+                { emoji: '👹', name: 'Ogre' },
+                { emoji: '👺', name: 'Goblin' },
+                { emoji: '👻', name: 'Ghost' },
+                { emoji: '👽', name: 'Alien' },
+                { emoji: '👾', name: 'Alien Monster' }
+            ]
+        },
+        cats: {
+            name: 'Cat Faces',
+            emojis: [
+                { emoji: '😺', name: 'Grinning Cat' },
+                { emoji: '😸', name: 'Grinning Cat with Smiling Eyes' },
+                { emoji: '😹', name: 'Cat with Tears of Joy' },
+                { emoji: '😻', name: 'Smiling Cat with Heart-Eyes' },
+                { emoji: '😼', name: 'Cat with Wry Smile' },
+                { emoji: '😽', name: 'Kissing Cat' },
+                { emoji: '🙀', name: 'Weary Cat' },
+                { emoji: '😿', name: 'Crying Cat' },
+                { emoji: '😾', name: 'Pouting Cat' },
+                { emoji: '🙈', name: 'See-No-Evil Monkey' },
+                { emoji: '🙉', name: 'Hear-No-Evil Monkey' },
+                { emoji: '🙊', name: 'Speak-No-Evil Monkey' }
+            ]
+        },
+        hearts: {
+            name: 'Hearts & Romance',
+            emojis: [
+                { emoji: '❤️', name: 'Heart' },
+                { emoji: '💔', name: 'Broken Heart' },
+                { emoji: '💌', name: 'Love Letter' },
+                { emoji: '💘', name: 'Heart with Arrow' },
+                { emoji: '💝', name: 'Heart with Ribbon' },
+                { emoji: '💖', name: 'Sparkling Heart' },
+                { emoji: '💗', name: 'Growing Heart' },
+                { emoji: '💓', name: 'Beating Heart' },
+                { emoji: '💞', name: 'Revolving Hearts' },
+                { emoji: '💕', name: 'Two Hearts' },
+                { emoji: '💟', name: 'Heart Decoration' },
+                { emoji: '💛', name: 'Yellow Heart' },
+                { emoji: '💚', name: 'Green Heart' },
+                { emoji: '💙', name: 'Blue Heart' },
+                { emoji: '💜', name: 'Purple Heart' },
+                { emoji: '💋', name: 'Kiss Mark' },
+                { emoji: '💯', name: 'Hundred Points' },
+                { emoji: '💢', name: 'Anger Symbol' },
+                { emoji: '💥', name: 'Collision' },
+                { emoji: '💫', name: 'Dizzy' },
+                { emoji: '💦', name: 'Sweat Droplets' },
+                { emoji: '💨', name: 'Dashing Away' },
+                { emoji: '💬', name: 'Speech Balloon' },
+                { emoji: '💭', name: 'Thought Balloon' },
+                { emoji: '💤', name: 'Zzz' }
+            ]
+        },
+        gestures: {
+            name: 'Hand Gestures',
+            emojis: [
+                { emoji: '👋', name: 'Waving Hand' },
+                { emoji: '✋', name: 'Raised Hand' },
+                { emoji: '👌', name: 'OK Hand' },
+                { emoji: '👈', name: 'Backhand Index Pointing Left' },
+                { emoji: '👉', name: 'Backhand Index Pointing Right' },
+                { emoji: '👆', name: 'Backhand Index Pointing Up' },
+                { emoji: '👇', name: 'Backhand Index Pointing Down' },
+                { emoji: '👍', name: 'Thumbs Up' },
+                { emoji: '👎', name: 'Thumbs Down' },
+                { emoji: '✊', name: 'Raised Fist' },
+                { emoji: '👊', name: 'Oncoming Fist' },
+                { emoji: '👏', name: 'Clapping Hands' },
+                { emoji: '🙌', name: 'Raising Hands' },
+                { emoji: '👐', name: 'Open Hands' },
+                { emoji: '🙏', name: 'Folded Hands' },
+                { emoji: '💅', name: 'Nail Polish' },
+                { emoji: '💪', name: 'Flexed Biceps' },
+                { emoji: '👂', name: 'Ear' },
+                { emoji: '👃', name: 'Nose' },
+                { emoji: '👀', name: 'Eyes' },
+                { emoji: '👅', name: 'Tongue' },
+                { emoji: '👄', name: 'Mouth' }
+            ]
+        },
+        people: {
+            name: 'People',
+            emojis: [
+                { emoji: '👶', name: 'Baby' },
+                { emoji: '👦', name: 'Boy' },
+                { emoji: '👧', name: 'Girl' },
+                { emoji: '👱', name: 'Person: Blond Hair' },
+                { emoji: '👨', name: 'Man' },
+                { emoji: '👩', name: 'Woman' },
+                { emoji: '👴', name: 'Old Man' },
+                { emoji: '👵', name: 'Old Woman' },
+                { emoji: '🙍', name: 'Person Frowning' },
+                { emoji: '🙎', name: 'Person Pouting' },
+                { emoji: '🙅', name: 'Person Gesturing No' },
+                { emoji: '🙆', name: 'Person Gesturing OK' },
+                { emoji: '💁', name: 'Person Tipping Hand' },
+                { emoji: '🙋', name: 'Person Raising Hand' },
+                { emoji: '🙇', name: 'Person Bowing' },
+                { emoji: '👮', name: 'Police Officer' },
+                { emoji: '💂', name: 'Guard' },
+                { emoji: '👷', name: 'Construction Worker' },
+                { emoji: '👸', name: 'Princess' },
+                { emoji: '👳', name: 'Person Wearing Turban' },
+                { emoji: '👲', name: 'Person with Skullcap' },
+                { emoji: '👰', name: 'Person with Veil' },
+                { emoji: '👼', name: 'Baby Angel' },
+                { emoji: '🎅', name: 'Santa Claus' },
+                { emoji: '💆', name: 'Person Getting Massage' },
+                { emoji: '💇', name: 'Person Getting Haircut' },
+                { emoji: '🚶', name: 'Person Walking' },
+                { emoji: '🏃', name: 'Person Running' },
+                { emoji: '💃', name: 'Woman Dancing' },
+                { emoji: '👯', name: 'People with Bunny Ears' },
+                { emoji: '🏇', name: 'Horse Racing' },
+                { emoji: '🏂', name: 'Snowboarder' },
+                { emoji: '🏄', name: 'Person Surfing' },
+                { emoji: '🚣', name: 'Person Rowing Boat' },
+                { emoji: '🏊', name: 'Person Swimming' },
+                { emoji: '🚴', name: 'Person Biking' },
+                { emoji: '🚵', name: 'Person Mountain Biking' },
+                { emoji: '🛀', name: 'Person Taking Bath' },
+                { emoji: '👭', name: 'Women Holding Hands' },
+                { emoji: '👫', name: 'Woman and Man Holding Hands' },
+                { emoji: '👬', name: 'Men Holding Hands' },
+                { emoji: '💏', name: 'Kiss' },
+                { emoji: '💑', name: 'Couple with Heart' },
+                { emoji: '👤', name: 'Bust in Silhouette' },
+                { emoji: '👥', name: 'Busts in Silhouette' },
+                { emoji: '👪', name: 'Family' },
+                { emoji: '👣', name: 'Footprints' }
+            ]
+        },
+        animals: {
+            name: 'Animals & Nature',
+            emojis: [
+                { emoji: '🐵', name: 'Monkey Face' },
+                { emoji: '🐒', name: 'Monkey' },
+                { emoji: '🐶', name: 'Dog Face' },
+                { emoji: '🐕', name: 'Dog' },
+                { emoji: '🐩', name: 'Poodle' },
+                { emoji: '🐺', name: 'Wolf' },
+                { emoji: '🐱', name: 'Cat Face' },
+                { emoji: '🐈', name: 'Cat' },
+                { emoji: '🐯', name: 'Tiger Face' },
+                { emoji: '🐅', name: 'Tiger' },
+                { emoji: '🐆', name: 'Leopard' },
+                { emoji: '🐴', name: 'Horse Face' },
+                { emoji: '🐎', name: 'Horse' },
+                { emoji: '🐮', name: 'Cow Face' },
+                { emoji: '🐂', name: 'Ox' },
+                { emoji: '🐃', name: 'Water Buffalo' },
+                { emoji: '🐄', name: 'Cow' },
+                { emoji: '🐷', name: 'Pig Face' },
+                { emoji: '🐖', name: 'Pig' },
+                { emoji: '🐗', name: 'Boar' },
+                { emoji: '🐽', name: 'Pig Nose' },
+                { emoji: '🐏', name: 'Ram' },
+                { emoji: '🐑', name: 'Ewe' },
+                { emoji: '🐐', name: 'Goat' },
+                { emoji: '🐪', name: 'Camel' },
+                { emoji: '🐫', name: 'Two-Hump Camel' },
+                { emoji: '🐘', name: 'Elephant' },
+                { emoji: '🐭', name: 'Mouse Face' },
+                { emoji: '🐁', name: 'Mouse' },
+                { emoji: '🐀', name: 'Rat' },
+                { emoji: '🐹', name: 'Hamster' },
+                { emoji: '🐰', name: 'Rabbit Face' },
+                { emoji: '🐇', name: 'Rabbit' },
+                { emoji: '🐻', name: 'Bear' },
+                { emoji: '🐨', name: 'Koala' },
+                { emoji: '🐼', name: 'Panda' },
+                { emoji: '🐾', name: 'Paw Prints' },
+                { emoji: '🐔', name: 'Chicken' },
+                { emoji: '🐓', name: 'Rooster' },
+                { emoji: '🐣', name: 'Hatching Chick' },
+                { emoji: '🐤', name: 'Baby Chick' },
+                { emoji: '🐥', name: 'Front-Facing Baby Chick' },
+                { emoji: '🐦', name: 'Bird' },
+                { emoji: '🐧', name: 'Penguin' },
+                { emoji: '🐸', name: 'Frog' },
+                { emoji: '🐊', name: 'Crocodile' },
+                { emoji: '🐢', name: 'Turtle' },
+                { emoji: '🐍', name: 'Snake' },
+                { emoji: '🐲', name: 'Dragon Face' },
+                { emoji: '🐉', name: 'Dragon' },
+                { emoji: '🐳', name: 'Spouting Whale' },
+                { emoji: '🐋', name: 'Whale' },
+                { emoji: '🐬', name: 'Dolphin' },
+                { emoji: '🐟', name: 'Fish' },
+                { emoji: '🐠', name: 'Tropical Fish' },
+                { emoji: '🐡', name: 'Blowfish' },
+                { emoji: '🐙', name: 'Octopus' },
+                { emoji: '🐚', name: 'Spiral Shell' },
+                { emoji: '🐌', name: 'Snail' },
+                { emoji: '🐛', name: 'Bug' },
+                { emoji: '🐜', name: 'Ant' },
+                { emoji: '🐝', name: 'Honeybee' },
+                { emoji: '🐞', name: 'Lady Beetle' }
+            ]
+        },
+        plants: {
+            name: 'Plants & Flowers',
+            emojis: [
+                { emoji: '💐', name: 'Bouquet' },
+                { emoji: '🌸', name: 'Cherry Blossom' },
+                { emoji: '💮', name: 'White Flower' },
+                { emoji: '🌹', name: 'Rose' },
+                { emoji: '🌺', name: 'Hibiscus' },
+                { emoji: '🌻', name: 'Sunflower' },
+                { emoji: '🌼', name: 'Blossom' },
+                { emoji: '🌷', name: 'Tulip' },
+                { emoji: '🌱', name: 'Seedling' },
+                { emoji: '🌲', name: 'Evergreen Tree' },
+                { emoji: '🌳', name: 'Deciduous Tree' },
+                { emoji: '🌴', name: 'Palm Tree' },
+                { emoji: '🌵', name: 'Cactus' },
+                { emoji: '🌾', name: 'Sheaf of Rice' },
+                { emoji: '🌿', name: 'Herb' },
+                { emoji: '🍀', name: 'Four Leaf Clover' },
+                { emoji: '🍁', name: 'Maple Leaf' },
+                { emoji: '🍂', name: 'Fallen Leaf' },
+                { emoji: '🍃', name: 'Leaf Fluttering in Wind' },
+                { emoji: '🍄', name: 'Mushroom' }
+            ]
+        },
+        food: {
+            name: 'Food & Drink',
+            emojis: [
+                { emoji: '🍇', name: 'Grapes' },
+                { emoji: '🍈', name: 'Melon' },
+                { emoji: '🍉', name: 'Watermelon' },
+                { emoji: '🍊', name: 'Tangerine' },
+                { emoji: '🍋', name: 'Lemon' },
+                { emoji: '🍌', name: 'Banana' },
+                { emoji: '🍍', name: 'Pineapple' },
+                { emoji: '🍎', name: 'Red Apple' },
+                { emoji: '🍏', name: 'Green Apple' },
+                { emoji: '🍐', name: 'Pear' },
+                { emoji: '🍑', name: 'Peach' },
+                { emoji: '🍒', name: 'Cherries' },
+                { emoji: '🍓', name: 'Strawberry' },
+                { emoji: '🍅', name: 'Tomato' },
+                { emoji: '🍆', name: 'Eggplant' },
+                { emoji: '🌽', name: 'Ear of Corn' },
+                { emoji: '🌰', name: 'Chestnut' },
+                { emoji: '🍞', name: 'Bread' },
+                { emoji: '🍖', name: 'Meat on Bone' },
+                { emoji: '🍗', name: 'Poultry Leg' },
+                { emoji: '🍔', name: 'Hamburger' },
+                { emoji: '🍟', name: 'French Fries' },
+                { emoji: '🍕', name: 'Pizza' },
+                { emoji: '🍳', name: 'Cooking' },
+                { emoji: '🍲', name: 'Pot of Food' },
+                { emoji: '🍱', name: 'Bento Box' },
+                { emoji: '🍘', name: 'Rice Cracker' },
+                { emoji: '🍙', name: 'Rice Ball' },
+                { emoji: '🍚', name: 'Cooked Rice' },
+                { emoji: '🍛', name: 'Curry Rice' },
+                { emoji: '🍜', name: 'Steaming Bowl' },
+                { emoji: '🍝', name: 'Spaghetti' },
+                { emoji: '🍠', name: 'Roasted Sweet Potato' },
+                { emoji: '🍢', name: 'Oden' },
+                { emoji: '🍣', name: 'Sushi' },
+                { emoji: '🍤', name: 'Fried Shrimp' },
+                { emoji: '🍥', name: 'Fish Cake with Swirl' },
+                { emoji: '🍡', name: 'Dango' },
+                { emoji: '🍦', name: 'Soft Ice Cream' },
+                { emoji: '🍧', name: 'Shaved Ice' },
+                { emoji: '🍨', name: 'Ice Cream' },
+                { emoji: '🍩', name: 'Doughnut' },
+                { emoji: '🍪', name: 'Cookie' },
+                { emoji: '🎂', name: 'Birthday Cake' },
+                { emoji: '🍰', name: 'Shortcake' },
+                { emoji: '🍫', name: 'Chocolate Bar' },
+                { emoji: '🍬', name: 'Candy' },
+                { emoji: '🍭', name: 'Lollipop' },
+                { emoji: '🍮', name: 'Custard' },
+                { emoji: '🍯', name: 'Honey Pot' },
+                { emoji: '🍼', name: 'Baby Bottle' },
+                { emoji: '🍵', name: 'Teacup Without Handle' },
+                { emoji: '🍶', name: 'Sake' },
+                { emoji: '🍷', name: 'Wine Glass' },
+                { emoji: '🍸', name: 'Cocktail Glass' },
+                { emoji: '🍹', name: 'Tropical Drink' },
+                { emoji: '🍺', name: 'Beer Mug' },
+                { emoji: '🍻', name: 'Clinking Beer Mugs' },
+                { emoji: '🍴', name: 'Fork and Knife' },
+                { emoji: '🔪', name: 'Kitchen Knife' }
+            ]
+        },
+        travel: {
+            name: 'Travel & Places',
+            emojis: [
+                { emoji: '🌍', name: 'Globe Showing Europe-Africa' },
+                { emoji: '🌎', name: 'Globe Showing Americas' },
+                { emoji: '🌏', name: 'Globe Showing Asia-Australia' },
+                { emoji: '🌐', name: 'Globe with Meridians' },
+                { emoji: '🗾', name: 'Map of Japan' },
+                { emoji: '🌋', name: 'Volcano' },
+                { emoji: '🗻', name: 'Mount Fuji' },
+                { emoji: '🏠', name: 'House' },
+                { emoji: '🏡', name: 'House with Garden' },
+                { emoji: '🏢', name: 'Office Building' },
+                { emoji: '🏣', name: 'Japanese Post Office' },
+                { emoji: '🏤', name: 'Post Office' },
+                { emoji: '🏥', name: 'Hospital' },
+                { emoji: '🏦', name: 'Bank' },
+                { emoji: '🏨', name: 'Hotel' },
+                { emoji: '🏩', name: 'Love Hotel' },
+                { emoji: '🏪', name: 'Convenience Store' },
+                { emoji: '🏫', name: 'School' },
+                { emoji: '🏬', name: 'Department Store' },
+                { emoji: '🏭', name: 'Factory' },
+                { emoji: '🏯', name: 'Japanese Castle' },
+                { emoji: '🏰', name: 'Castle' },
+                { emoji: '💒', name: 'Wedding' },
+                { emoji: '🗼', name: 'Tokyo Tower' },
+                { emoji: '🗽', name: 'Statue of Liberty' },
+                { emoji: '🌁', name: 'Foggy' },
+                { emoji: '🌃', name: 'Night with Stars' },
+                { emoji: '🌄', name: 'Sunrise Over Mountains' },
+                { emoji: '🌅', name: 'Sunrise' },
+                { emoji: '🌆', name: 'Cityscape at Dusk' },
+                { emoji: '🌇', name: 'Sunset' },
+                { emoji: '🌉', name: 'Bridge at Night' }
+            ]
+        },
+        activities: {
+            name: 'Activities',
+            emojis: [
+                { emoji: '🎠', name: 'Carousel Horse' },
+                { emoji: '🎡', name: 'Ferris Wheel' },
+                { emoji: '🎢', name: 'Roller Coaster' },
+                { emoji: '💈', name: 'Barber Pole' },
+                { emoji: '🎪', name: 'Circus Tent' },
+                { emoji: '🎃', name: 'Jack-O-Lantern' },
+                { emoji: '🎄', name: 'Christmas Tree' },
+                { emoji: '🎆', name: 'Fireworks' },
+                { emoji: '🎇', name: 'Sparkler' },
+                { emoji: '✨', name: 'Sparkles' },
+                { emoji: '🎈', name: 'Balloon' },
+                { emoji: '🎉', name: 'Party Popper' },
+                { emoji: '🎊', name: 'Confetti Ball' },
+                { emoji: '🎋', name: 'Tanabata Tree' },
+                { emoji: '🎍', name: 'Pine Decoration' },
+                { emoji: '🎎', name: 'Japanese Dolls' },
+                { emoji: '🎏', name: 'Carp Streamer' },
+                { emoji: '🎐', name: 'Wind Chime' },
+                { emoji: '🎑', name: 'Moon Viewing Ceremony' },
+                { emoji: '🎀', name: 'Ribbon' },
+                { emoji: '🎁', name: 'Wrapped Gift' },
+                { emoji: '🎫', name: 'Ticket' },
+                { emoji: '🏆', name: 'Trophy' },
+                { emoji: '🏀', name: 'Basketball' },
+                { emoji: '🏈', name: 'American Football' },
+                { emoji: '🏉', name: 'Rugby Football' },
+                { emoji: '🎾', name: 'Tennis' },
+                { emoji: '🎳', name: 'Bowling' },
+                { emoji: '🎣', name: 'Fishing Pole' },
+                { emoji: '🎽', name: 'Running Shirt' },
+                { emoji: '🎿', name: 'Skis' },
+                { emoji: '🎯', name: 'Bullseye' },
+                { emoji: '🔫', name: 'Water Pistol' },
+                { emoji: '🎱', name: 'Pool 8 Ball' },
+                { emoji: '🔮', name: 'Crystal Ball' },
+                { emoji: '🎮', name: 'Video Game' },
+                { emoji: '🎰', name: 'Slot Machine' },
+                { emoji: '🎲', name: 'Game Die' },
+                { emoji: '🃏', name: 'Joker' },
+                { emoji: '🎴', name: 'Flower Playing Cards' },
+                { emoji: '🎭', name: 'Performing Arts' },
+                { emoji: '🎨', name: 'Artist Palette' }
+            ]
+        },
+        objects: {
+            name: 'Objects',
+            emojis: [
+                { emoji: '👓', name: 'Glasses' },
+                { emoji: '👔', name: 'Necktie' },
+                { emoji: '👕', name: 'T-Shirt' },
+                { emoji: '👖', name: 'Jeans' },
+                { emoji: '👗', name: 'Dress' },
+                { emoji: '👘', name: 'Kimono' },
+                { emoji: '👙', name: 'Bikini' },
+                { emoji: '👚', name: 'Woman’s Clothes' },
+                { emoji: '👛', name: 'Purse' },
+                { emoji: '👜', name: 'Handbag' },
+                { emoji: '👝', name: 'Clutch Bag' },
+                { emoji: '🎒', name: 'Backpack' },
+                { emoji: '👞', name: 'Man’s Shoe' },
+                { emoji: '👟', name: 'Running Shoe' },
+                { emoji: '👠', name: 'High-Heeled Shoe' },
+                { emoji: '👡', name: 'Woman’s Sandal' },
+                { emoji: '👢', name: 'Woman’s Boot' },
+                { emoji: '👑', name: 'Crown' },
+                { emoji: '👒', name: 'Woman’s Hat' },
+                { emoji: '🎩', name: 'Top Hat' },
+                { emoji: '🎓', name: 'Graduation Cap' },
+                { emoji: '💄', name: 'Lipstick' },
+                { emoji: '💍', name: 'Ring' },
+                { emoji: '💎', name: 'Gem Stone' }
+            ]
+        },
+        symbols: {
+            name: 'Symbols',
+            emojis: [
+                { emoji: '🔇', name: 'Muted Speaker' },
+                { emoji: '🔈', name: 'Speaker Low Volume' },
+                { emoji: '🔉', name: 'Speaker Medium Volume' },
+                { emoji: '🔊', name: 'Speaker High Volume' },
+                { emoji: '📢', name: 'Loudspeaker' },
+                { emoji: '📣', name: 'Megaphone' },
+                { emoji: '📯', name: 'Postal Horn' },
+                { emoji: '🔔', name: 'Bell' },
+                { emoji: '🔕', name: 'Bell with Slash' },
+                { emoji: '🎼', name: 'Musical Score' },
+                { emoji: '🎵', name: 'Musical Note' },
+                { emoji: '🎶', name: 'Musical Notes' },
+                { emoji: '🎤', name: 'Microphone' },
+                { emoji: '🎧', name: 'Headphone' },
+                { emoji: '📻', name: 'Radio' },
+                { emoji: '🎷', name: 'Saxophone' },
+                { emoji: '🎺', name: 'Trumpet' },
+                { emoji: '🎸', name: 'Guitar' },
+                { emoji: '🎹', name: 'Musical Keyboard' },
+                { emoji: '🎻', name: 'Violin' },
+                { emoji: '📱', name: 'Mobile Phone' },
+                { emoji: '📲', name: 'Mobile Phone with Arrow' },
+                { emoji: '📞', name: 'Telephone Receiver' },
+                { emoji: '📟', name: 'Pager' },
+                { emoji: '📠', name: 'Fax Machine' },
+                { emoji: '🔋', name: 'Battery' },
+                { emoji: '🔌', name: 'Electric Plug' },
+                { emoji: '💻', name: 'Laptop' },
+                { emoji: '💽', name: 'Computer Disk' },
+                { emoji: '💾', name: 'Floppy Disk' },
+                { emoji: '💿', name: 'Optical Disk' },
+                { emoji: '📀', name: 'DVD' },
+                { emoji: '🎥', name: 'Movie Camera' },
+                { emoji: '🎬', name: 'Clapper Board' },
+                { emoji: '📺', name: 'Television' },
+                { emoji: '📷', name: 'Camera' },
+                { emoji: '📹', name: 'Video Camera' },
+                { emoji: '📼', name: 'Videocassette' },
+                { emoji: '🔍', name: 'Magnifying Glass Tilted Left' },
+                { emoji: '🔎', name: 'Magnifying Glass Tilted Right' },
+                { emoji: '💡', name: 'Light Bulb' },
+                { emoji: '🔦', name: 'Flashlight' },
+                { emoji: '🏮', name: 'Red Paper Lantern' }
+            ]
+        },
+        flags: {
+            name: 'Flags',
+            emojis: [
+                { emoji: '🏁', name: 'Chequered Flag' },
+                { emoji: '🚩', name: 'Triangular Flag' },
+                { emoji: '🎌', name: 'Crossed Flags' }
+            ]
+        }
+    };
+
+    // Toolbar configuration matching Tiptap editor layout with all BBCode options
+    static #TOOLBAR_GROUPS = [
+        {
+            name: 'textFormat',
+            buttons: [
+                { tag: 'b', title: 'Bold (Ctrl+B)', icon: '<i class="fa-regular fa-bold" aria-hidden="true"></i>' },
+                { tag: 'i', title: 'Italic (Ctrl+I)', icon: '<i class="fa-regular fa-italic" aria-hidden="true"></i>' },
+                { tag: 'u', title: 'Underline (Ctrl+U)', icon: '<i class="fa-regular fa-underline" aria-hidden="true"></i>' },
+                { tag: 'del', title: 'Strikethrough', icon: '<i class="fa-regular fa-strikethrough" aria-hidden="true"></i>' },
+                { tag: 'sup', title: 'Superscript', icon: '<i class="fa-regular fa-superscript" aria-hidden="true"></i>' },
+                { tag: 'sub', title: 'Subscript', icon: '<i class="fa-regular fa-subscript" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'alignment',
+            buttons: [
+                { tag: 'left', title: 'Align Left', icon: '<i class="fa-regular fa-align-left" aria-hidden="true"></i>' },
+                { tag: 'center', title: 'Align Center', icon: '<i class="fa-regular fa-align-center" aria-hidden="true"></i>' },
+                { tag: 'right', title: 'Align Right', icon: '<i class="fa-regular fa-align-right" aria-hidden="true"></i>' },
+                { tag: 'justify', title: 'Justify', icon: '<i class="fa-regular fa-align-justify" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'lists',
+            buttons: [
+                { tag: 'ul', title: 'Bullet List', icon: '<i class="fa-regular fa-list-ul" aria-hidden="true"></i>' },
+                { tag: 'ol', title: 'Numbered List', icon: '<i class="fa-regular fa-list-ol" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'indent',
+            buttons: [
+                { tag: 'indent', title: 'Increase Indent', icon: '<i class="fa-regular fa-indent" aria-hidden="true"></i>' },
+                { tag: 'outdent', title: 'Decrease Indent', icon: '<i class="fa-regular fa-outdent" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'links',
+            buttons: [
+                { tag: 'url', title: 'Insert Link (Ctrl+L)', icon: '<i class="fa-regular fa-link" aria-hidden="true"></i>' },
+                { tag: 'img', title: 'Insert Image (Ctrl+P)', icon: '<i class="fa-regular fa-image" aria-hidden="true"></i>' },
+                { tag: 'email', title: 'Insert Email Link', icon: '<i class="fa-regular fa-envelope" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'blocks',
+            buttons: [
+                { tag: 'quote', title: 'Quote (Ctrl+Q)', icon: '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' },
+                { tag: 'code', title: 'Code (Ctrl+K)', icon: '<i class="fa-regular fa-code-simple" aria-hidden="true"></i>' },
+                { tag: 'html', title: 'HTML', icon: '<i class="fa-regular fa-code" aria-hidden="true"></i>' },
+                { tag: 'spoiler', title: 'Spoiler', icon: '<i class="fa-regular fa-flag" aria-hidden="true"></i>' },
+                { tag: 'pre', title: 'Preformatted Text', icon: '<i class="fa-regular fa-text-size" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'font',
+            type: 'select',
+            icon: '<i class="fa-regular fa-font" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Font Family' },
+                { value: 'Arial', text: 'Arial' },
+                { value: 'Bree Serif', text: 'Bree Serif' },
+                { value: 'Courier New', text: 'Courier New' },
+                { value: 'Georgia', text: 'Georgia' },
+                { value: 'Impact', text: 'Impact' },
+                { value: 'Quicksand', text: 'Quicksand' },
+                { value: 'Tahoma', text: 'Tahoma' },
+                { value: 'Times New Roman', text: 'Times New Roman' },
+                { value: 'Verdana', text: 'Verdana' }
+            ]
+        },
+        {
+            name: 'size',
+            type: 'select',
+            icon: '<i class="fa-regular fa-text-height" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Font Size' },
+                { value: '8', text: '8px' },
+                { value: '10', text: '10px' },
+                { value: '12', text: '12px' },
+                { value: '14', text: '14px' },
+                { value: '18', text: '18px' },
+                { value: '24', text: '24px' },
+                { value: '36', text: '36px' },
+                { value: '48', text: '48px' }
+            ]
+        },
+        {
+            name: 'color',
+            type: 'select',
+            icon: '<i class="fa-regular fa-palette" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Text Color' },
+                { value: 'black', text: 'Black', style: 'color:black' },
+                { value: 'blue', text: 'Blue', style: 'color:blue' },
+                { value: 'red', text: 'Red', style: 'color:red' },
+                { value: 'purple', text: 'Purple', style: 'color:purple' },
+                { value: 'orange', text: 'Orange', style: 'color:orange' },
+                { value: 'yellow', text: 'Yellow', style: 'color:yellow' },
+                { value: 'gray', text: 'Gray', style: 'color:gray' },
+                { value: 'green', text: 'Green', style: 'color:green' },
+                { value: 'white', text: 'White', style: 'color:white' }
+            ]
+        },
+        {
+            name: 'background',
+            type: 'select',
+            icon: '<i class="fa-regular fa-highlighter" aria-hidden="true"></i>',
+            options: [
+                { value: '', text: 'Background Color' },
+                { value: 'yellow', text: 'Yellow', style: 'background-color:yellow' },
+                { value: 'lightblue', text: 'Light Blue', style: 'background-color:lightblue' },
+                { value: 'lightgreen', text: 'Light Green', style: 'background-color:lightgreen' },
+                { value: 'pink', text: 'Pink', style: 'background-color:pink' },
+                { value: 'gray', text: 'Gray', style: 'background-color:gray' }
+            ]
+        },
+        {
+            name: 'emoji',
+            buttons: [
+                { tag: 'emoji', title: 'Insert Emoji', icon: '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' }
+            ]
+        },
+        {
+            name: 'misc',
+            buttons: [
+                { tag: 'hr', title: 'Horizontal Rule', icon: '<i class="fa-regular fa-minus" aria-hidden="true"></i>' },
+                { tag: 'table', title: 'Insert Table', icon: '<i class="fa-regular fa-table" aria-hidden="true"></i>' },
+                { tag: 'video', title: 'Insert Video', icon: '<i class="fa-regular fa-video" aria-hidden="true"></i>' }
+            ]
+        }
+    ];
+
+    static #STYLES = `
+        .bbcode-editor-wrapper { 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            background: #fff; 
+            font-family: quicksand, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            position: relative;
+        } 
+        
+        .bbcode-toolbar { 
+            display: flex; 
+            flex-wrap: wrap; 
+            padding: 8px; 
+            background: #f8f9fa; 
+            border-bottom: 1px solid #ddd; 
+            gap: 8px; 
+            align-items: center;
+        } 
+        
+        .bbcode-toolbar-group { 
+            display: flex; 
+            gap: 4px; 
+            padding-right: 8px; 
+            border-right: 1px solid #ccc; 
+            align-items: center;
+        } 
+        
+        .bbcode-toolbar-group:last-child { 
+            border-right: none; 
+        } 
+        
+        .bbcode-btn { 
+            padding: 6px 10px; 
+            background: #fff; 
+            border: 1px solid #ccc; 
+            border-radius: 3px; 
+            cursor: pointer; 
+            font-size: 14px; 
+            min-width: 32px; 
+            transition: all 0.2s; 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        } 
+        
+        .bbcode-btn:hover { 
+            background: #e9ecef; 
+            border-color: #999; 
+        } 
+        
+        .bbcode-btn:active { 
+            background: #dee2e6; 
+            transform: translateY(1px); 
+        } 
+        
+        .bbcode-btn:focus-visible {
+            outline: 2px solid #0066cc;
+            outline-offset: 2px;
+        }
+        
+        .bbcode-btn i {
+            font-size: 16px;
+            line-height: 1;
+            pointer-events: none;
+        }
+        
+        .bbcode-select { 
+            padding: 5px; 
+            border: 1px solid #ccc; 
+            border-radius: 3px; 
+            background: #fff; 
+            font-size: 13px; 
+            min-width: 100px;
+        } 
+        
+        .bbcode-select:focus-visible {
+            outline: 2px solid #0066cc;
+            outline-offset: 2px;
+        }
+        
+        .bbcode-select-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .bbcode-select-group i {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .bbcode-textarea { 
+            width: 100%; 
+            min-height: 120px; 
+            max-height: 400px;
+            resize: none;
+            overflow-y: auto;
+            padding: 12px; 
+            border: none; 
+            font-family: 'Consolas', 'Monaco', monospace; 
+            font-size: 14px; 
+            line-height: 1.5; 
+            outline: none; 
+            box-sizing: border-box; 
+        } 
+        
+        .bbcode-textarea:focus-visible {
+            outline: 2px solid #0066cc;
+            outline-offset: -2px;
+        }
+        
+        .bbcode-statusbar { 
+            display: flex; 
+            gap: 20px; 
+            padding: 6px 12px; 
+            background: #f8f9fa; 
+            border-top: 1px solid #ddd; 
+            font-size: 12px; 
+            color: #666; 
+            position: relative;
+        } 
+        
+        .bbcode-statusbar span {
+            user-select: none;
+        }
+        
+        .bbcode-status-message {
+            margin-left: auto;
+            color: #28a745;
+            animation: fadeInOut 3s ease-in-out;
+        }
+        
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        .bbcode-utils { 
+            margin-left: auto; 
+            display: flex;
+            gap: 4px;
+        } 
+        
+        .undo-btn, .redo-btn { 
+            font-family: monospace; 
+            font-size: 18px; 
+        } 
+
+        .undo-btn i, .redo-btn i {
+            font-size: 18px;
+        }
+        
+        /* Emoji Picker Styles */
+        .bbcode-emoji-picker {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 0;
+            z-index: 1000;
+            width: 360px;
+            max-height: 400px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            margin-top: 4px;
+        }
+        
+        .bbcode-emoji-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .bbcode-emoji-category-btn {
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .bbcode-emoji-category-btn:hover {
+            background: #e9ecef;
+            border-color: #999;
+        }
+        
+        .bbcode-emoji-category-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+        
+        .bbcode-emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 4px;
+            padding: 12px;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+        
+        .bbcode-emoji-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 4px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 24px;
+        }
+        
+        .bbcode-emoji-item:hover {
+            background: #f0f0f0;
+            border-color: #999;
+            transform: scale(1.1);
+        }
+        
+        .bbcode-emoji-item:focus-visible {
+            outline: 2px solid #0066cc;
+            outline-offset: 2px;
+        }
+        
+        /* Draft indicator and restore button */
+        .bbcode-draft-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 8px;
+        }
+        
+        .bbcode-draft-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .bbcode-restore-draft {
+            background: none;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bbcode-restore-draft:hover {
+            background: #fff3cd;
+            border-color: #856404;
+        }
+        
+        .bbcode-restore-draft:focus-visible {
+            outline: 2px solid #856404;
+            outline-offset: 2px;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        
+        .bbcode-error {
+            color: #dc3545;
+            font-size: 12px;
+            padding: 4px 8px;
+            background: #f8d7da;
+            border-radius: 3px;
+            margin-top: 4px;
+        }
+
+        .bbcode-editor-fallback {
+            padding: 20px;
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .bbcode-draft-prompt {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 16px;
+            z-index: 10000;
+            max-width: 300px;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .bbcode-draft-prompt h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+        }
+        
+        .bbcode-draft-prompt p {
+            margin: 0 0 15px 0;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .bbcode-draft-prompt-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .bbcode-draft-prompt button {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .bbcode-draft-prompt .restore-btn {
+            background: #ffc107;
+            border-color: #856404;
+            color: #856404;
+        }
+        
+        .bbcode-draft-prompt .restore-btn:hover {
+            background: #ffcd39;
+        }
+        
+        .bbcode-draft-prompt .discard-btn {
+            background: #fff;
+            border-color: #ccc;
+        }
+        
+        .bbcode-draft-prompt .discard-btn:hover {
+            background: #f8f9fa;
+        }
+    `;
+
+    constructor() {
+        try {
+            this.#injectStyles();
+            this.#waitForObserver();
+        } catch (error) {
+            console.error('BBCode Editor initialization error:', error);
+            this.#initializationError = error;
+        }
+    }
+
+    #injectStyles() {
+        try {
+            if (!document.querySelector('style[data-bbcode-editor="true"]')) {
+                const style = document.createElement('style');
+                style.setAttribute('data-bbcode-editor', 'true');
+                style.textContent = BBCodeEditor.#STYLES;
+                document.head.appendChild(style);
+            }
+        } catch (error) {
+            console.error('Failed to inject styles:', error);
+        }
+    }
+
+    #waitForObserver() {
+        if (this.#initStarted) return;
+        this.#initStarted = true;
+
+        console.log('📝 BBCode Editor waiting for ForumCoreObserver...');
+
+        // Check if we're on body#send page (editing)
+        this.#checkIfEditing();
+
+        // Generate draft key based on current page
+        this.#generateDraftKey();
+
+        // Check if observer is already available
+        if (globalThis.forumObserver) {
+            this.#observerReady = true;
+            this.#registerWithObserver();
+            this.#checkForTextarea();
+            return;
+        }
+
+        // Listen for observer ready event
+        const observerReadyHandler = () => {
+            this.#observerReady = true;
+            window.removeEventListener('forum-observer-ready', observerReadyHandler);
+            this.#registerWithObserver();
+            this.#checkForTextarea();
+        };
+
+        window.addEventListener('forum-observer-ready', observerReadyHandler);
+
+        // Also check periodically for observer (in case event is missed)
+        let attempts = 0;
+        const checkInterval = setInterval(() => {
+            attempts++;
+            if (globalThis.forumObserver) {
+                clearInterval(checkInterval);
+                this.#observerReady = true;
+                window.removeEventListener('forum-observer-ready', observerReadyHandler);
+                this.#registerWithObserver();
+                this.#checkForTextarea();
+            } else if (attempts > 30) {
+                clearInterval(checkInterval);
+                console.warn('BBCode Editor: ForumObserver not available after 3 seconds');
+                // Fallback: try to initialize anyway
+                this.#checkForTextarea();
+            }
+        }, 100);
+
+        // Set a timeout to stop checking
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            window.removeEventListener('forum-observer-ready', observerReadyHandler);
+        }, 5000);
+    }
+
+    #checkIfEditing() {
+        // Check if we're on body#send page (editing an existing post)
+        this.#isEditing = document.body && document.body.id === 'send';
+        
+        // Also check URL parameters for edit indicator
+        if (window.location.search.includes('edit=') || window.location.pathname.includes('/edit/')) {
+            this.#isEditing = true;
+        }
+        
+        console.log(`📝 ${this.#isEditing ? 'Editing existing post' : 'Creating new post'}`);
+    }
+
+    #generateDraftKey() {
+        // For new posts: use pathname
+        // For edits: include post ID in draft key to avoid conflicts
+        if (this.#isEditing) {
+            // Try to extract post ID from URL or form
+            const postId = this.#extractPostId();
+            this.#draftKey = postId ? 
+                `bbcode-draft-edit-${postId}` : 
+                `bbcode-draft-${window.location.pathname}-edit`;
+        } else {
+            this.#draftKey = `bbcode-draft-${window.location.pathname}`;
+        }
+    }
+
+    #extractPostId() {
+        // Try to get post ID from various sources
+        const textarea = document.getElementById('Post');
+        if (textarea && textarea.dataset.postId) {
+            return textarea.dataset.postId;
+        }
+        
+        // Try from URL
+        const match = window.location.pathname.match(/\/edit\/(\d+)/) || 
+                     window.location.search.match(/post_id=(\d+)/) ||
+                     window.location.search.match(/edit=(\d+)/);
+        
+        return match ? match[1] : null;
+    }
+
+    #checkForTextarea() {
+        // Check if textarea exists already
+        this.#originalTextarea = document.getElementById('Post');
+        
+        if (this.#originalTextarea) {
+            if (!this.#originalTextarea.hasAttribute('data-editor-initialized')) {
+                this.#init();
+            }
+        } else {
+            // If we have the observer, let it handle detection
+            if (this.#observerReady && globalThis.forumObserver) {
+                console.log('📝 Will initialize when #Post appears');
+                // The observer will call us back when #Post appears
+            } else {
+                // Fallback: check periodically
+                const fallbackInterval = setInterval(() => {
+                    this.#originalTextarea = document.getElementById('Post');
+                    if (this.#originalTextarea && !this.#originalTextarea.hasAttribute('data-editor-initialized')) {
+                        clearInterval(fallbackInterval);
+                        this.#init();
+                    }
+                }, 200);
+                
+                setTimeout(() => clearInterval(fallbackInterval), 10000);
+            }
+        }
+    }
+
+    #showFallbackEditor() {
+        const textarea = document.getElementById('Post');
+        if (textarea && textarea.parentNode) {
+            const fallback = document.createElement('div');
+            fallback.className = 'bbcode-editor-fallback';
+            fallback.innerHTML = 'BBCode editor unavailable - using standard textarea';
+            textarea.parentNode.insertBefore(fallback, textarea);
+        }
+    }
+
+    #init() {
+        console.log('📝 Initializing BBCode Editor...');
+
+        try {
+            if (!this.#originalTextarea) {
+                this.#originalTextarea = document.getElementById('Post');
+                if (!this.#originalTextarea) {
+                    throw new Error('Textarea #Post not found');
+                }
+            }
+
+            // Prevent double initialization
+            if (this.#originalTextarea.hasAttribute('data-editor-initialized')) {
+                console.log('✅ BBCode Editor already initialized');
+                return;
+            }
+
+            this.#originalTextarea.setAttribute('data-editor-initialized', 'true');
+
+            const textareaContainer = this.#originalTextarea.parentNode;
+            if (!textareaContainer) {
+                throw new Error('Textarea container not found');
+            }
+
+            // Determine initial content
+            let initialValue = this.#originalTextarea.value || '';
+            let draftAvailable = false;
+            
+            // Only check for drafts if we're not editing an existing post
+            if (!this.#isEditing) {
+                const draft = this.#loadDraft();
+                if (draft) {
+                    draftAvailable = true;
+                    initialValue = draft;
+                }
+            }
+
+            // Hide original textarea
+            this.#originalTextarea.style.display = 'none';
+            this.#originalTextarea.setAttribute('data-bbcode-editor', 'true');
+            this.#originalTextarea.setAttribute('aria-hidden', 'true');
+
+            // Create editor wrapper
+            this.#editorWrapper = document.createElement('div');
+            this.#editorWrapper.className = 'bbcode-editor-wrapper';
+            this.#editorWrapper.setAttribute('role', 'application');
+            this.#editorWrapper.setAttribute('aria-label', 'BBCode editor');
+            this.#editorWrapper.setAttribute('data-forum-element', 'true');
+
+            const editorInitialValue = this.#safeForumToBBCode(initialValue);
+
+            this.#editorWrapper.innerHTML = this.#buildEditorHTML(editorInitialValue);
+            textareaContainer.insertBefore(this.#editorWrapper, this.#originalTextarea.nextSibling);
+
+            // Get reference to editor textarea
+            this.#bbcodeEditor = document.getElementById('bbcode-editor');
+            if (!this.#bbcodeEditor) {
+                throw new Error('BBCode editor textarea not found');
+            }
+
+            // Get status elements
+            this.#statusElements = {
+                chars: this.#editorWrapper.querySelector('.bbcode-char-count'),
+                words: this.#editorWrapper.querySelector('.bbcode-word-count'),
+                lines: this.#editorWrapper.querySelector('.bbcode-lines'),
+                cursor: this.#editorWrapper.querySelector('.bbcode-cursor-pos'),
+                message: this.#editorWrapper.querySelector('.bbcode-status-message')
+            };
+
+            // Get emoji button
+            this.#emojiButton = this.#editorWrapper.querySelector('[data-tag="emoji"]');
+
+            // Initialize undo stack
+            this.#undoStack = [editorInitialValue];
+            this.#undoPosition = 0;
+
+            // Attach event listeners
+            this.#attachEventListeners();
+            
+            // Setup autoresize
+            this.#setupAutoresize();
+            
+            // Update status
+            this.#updateStatus();
+
+            // Show draft indicator if draft was loaded (only for new posts)
+            if (!this.#isEditing && draftAvailable) {
+                this.#showDraftIndicator();
+                this.#showStatusMessage('Draft loaded', 'info');
+            }
+
+            // Set up beforeunload handler to save draft (only for new posts)
+            if (!this.#isEditing) {
+                window.addEventListener('beforeunload', () => {
+                    this.#autoSave();
+                });
+            }
+
+            // Set up form submit handler to clear draft
+            const form = this.#originalTextarea.form;
+            if (form) {
+                form.addEventListener('submit', () => {
+                    this.#clearDraft();
+                });
+            }
+
+            // Announce success
+            this.#announce('BBCode editor initialized');
+
+            console.log('✅ BBCode Editor initialized successfully');
+        } catch (error) {
+            console.error('BBCode Editor initialization failed:', error);
+            this.#initializationError = error;
+            
+            // Clean up on failure
+            if (this.#originalTextarea) {
+                this.#originalTextarea.style.display = '';
+                this.#originalTextarea.removeAttribute('data-editor-initialized');
+            }
+            
+            if (this.#editorWrapper && this.#editorWrapper.parentNode) {
+                this.#editorWrapper.remove();
+            }
+            
+            this.#showFallbackEditor();
+        }
+    }
+
+    #setupAutoresize() {
+        if (!this.#bbcodeEditor) return;
+        
+        const autoResize = () => {
+            // Reset height to auto to get the correct scrollHeight
+            this.#bbcodeEditor.style.height = 'auto';
+            // Calculate new height (capped at max-height)
+            const scrollHeight = this.#bbcodeEditor.scrollHeight;
+            const maxHeight = BBCodeEditor.#CONFIG.EDITOR_MAX_HEIGHT;
+            const newHeight = Math.min(scrollHeight, maxHeight);
+            this.#bbcodeEditor.style.height = newHeight + 'px';
+        };
+        
+        // Attach resize handler
+        this.#bbcodeEditor.addEventListener('input', autoResize);
+        
+        // Also resize on window resize (in case container changes)
+        window.addEventListener('resize', () => {
+            autoResize();
+        });
+        
+        // Initial resize
+        autoResize();
+    }
+
+    #attachEventListeners() {
+        try {
+            // Click handler for toolbar buttons
+            this.#clickHandler = (e) => {
+                try {
+                    const btn = e.target.closest('.bbcode-btn');
+                    if (btn) {
+                        e.preventDefault();
+                        this.#handleButtonClick(btn);
+                    } else {
+                        // Close emoji picker if clicking outside
+                        if (this.#emojiPicker && !this.#emojiPicker.contains(e.target)) {
+                            this.#closeEmojiPicker();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error in click handler:', error);
+                }
+            };
+
+            // Change handler for selects
+            this.#changeHandler = (e) => {
+                try {
+                    const select = e.target.closest('.bbcode-select');
+                    if (select) {
+                        this.#handleSelectChange(select);
+                    }
+                } catch (error) {
+                    console.error('Error in change handler:', error);
+                }
+            };
+
+            // Handle restore draft button clicks
+            this.#editorWrapper.addEventListener('click', (e) => {
+                if (e.target.classList.contains('bbcode-restore-draft')) {
+                    this.#restoreDraft();
+                }
+            });
+
+            this.#editorWrapper.addEventListener('click', this.#clickHandler);
+            this.#editorWrapper.addEventListener('change', this.#changeHandler);
+
+            // Editor textarea events
+            if (this.#bbcodeEditor) {
+                const debouncedUpdate = this.#debounce(() => this.#updateStatus(), BBCodeEditor.#CONFIG.STATUS_DEBOUNCE_DELAY);
+                const debouncedAutoSave = this.#debounce(() => this.#autoSave(), BBCodeEditor.#CONFIG.AUTO_SAVE_DELAY);
+                
+                this.#bbcodeEditor.addEventListener('input', () => {
+                    try {
+                        this.#syncToOriginal();
+                        this.#saveState(this.#bbcodeEditor.value);
+                        debouncedUpdate();
+                        
+                        // Only auto-save for new posts
+                        if (!this.#isEditing) {
+                            debouncedAutoSave();
+                        }
+                        
+                        // Notify observer of change
+                        if (this.#observerReady && globalThis.forumObserver) {
+                            this.#originalTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    } catch (error) {
+                        console.error('Error in input handler:', error);
+                    }
+                });
+                
+                this.#bbcodeEditor.addEventListener('keyup', debouncedUpdate);
+                
+                this.#bbcodeEditor.addEventListener('click', () => {
+                    try {
+                        this.#lastCursorPosition = {
+                            start: this.#bbcodeEditor.selectionStart,
+                            end: this.#bbcodeEditor.selectionEnd
+                        };
+                        this.#updateStatus();
+                        
+                        // Close emoji picker if open
+                        this.#closeEmojiPicker();
+                    } catch (error) {
+                        console.error('Error in click handler:', error);
+                    }
+                });
+                
+                this.#bbcodeEditor.addEventListener('keydown', (e) => {
+                    try {
+                        this.#handleKeydown(e);
+                        queueMicrotask(() => {
+                            this.#lastCursorPosition = {
+                                start: this.#bbcodeEditor.selectionStart,
+                                end: this.#bbcodeEditor.selectionEnd
+                            };
+                        });
+                    } catch (error) {
+                        console.error('Error in keydown handler:', error);
+                    }
+                });
+
+                this.#bbcodeEditor.addEventListener('paste', (e) => {
+                    try {
+                        e.preventDefault();
+                        const text = e.clipboardData.getData('text/plain');
+                        this.#insertTextAtCursor(text);
+                    } catch (error) {
+                        console.error('Error in paste handler:', error);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error attaching event listeners:', error);
+        }
+    }
+
+    #debounce(func, wait) {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                try {
+                    func.apply(this, args);
+                } catch (error) {
+                    console.error('Error in debounced function:', error);
+                }
+            }, wait);
+        };
+    }
+
+    #insertTextAtCursor(text) {
+        try {
+            const start = this.#bbcodeEditor.selectionStart;
+            const end = this.#bbcodeEditor.selectionEnd;
+            const value = this.#bbcodeEditor.value;
+            
+            this.#bbcodeEditor.value = value.substring(0, start) + text + value.substring(end);
+            
+            // Place cursor AFTER the inserted text
+            this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = start + text.length;
+            
+            this.#syncToOriginal();
+            this.#saveState(this.#bbcodeEditor.value);
+            this.#updateStatus();
+            
+            // Only auto-save for new posts
+            if (!this.#isEditing) {
+                this.#autoSave();
+            }
+            
+            // Ensure editor keeps focus
+            this.#bbcodeEditor.focus();
+        } catch (error) {
+            console.error('Error inserting text:', error);
+        }
+    }
+
+    #announce(message) {
+        try {
+            let announcer = document.getElementById('bbcode-announcer');
+            if (!announcer) {
+                announcer = document.createElement('div');
+                announcer.id = 'bbcode-announcer';
+                announcer.setAttribute('aria-live', 'polite');
+                announcer.setAttribute('aria-atomic', 'true');
+                announcer.style.position = 'absolute';
+                announcer.style.width = '1px';
+                announcer.style.height = '1px';
+                announcer.style.padding = '0';
+                announcer.style.margin = '-1px';
+                announcer.style.overflow = 'hidden';
+                announcer.style.clip = 'rect(0, 0, 0, 0)';
+                announcer.style.whiteSpace = 'nowrap';
+                announcer.style.border = '0';
+                document.body.appendChild(announcer);
+            }
+            announcer.textContent = message;
+        } catch (error) {
+            // Fail silently for announcements
+        }
+    }
+
+    #safeRegexReplace(text, pattern, replacement, flags = 'gis') {
+        try {
+            const regex = new RegExp(pattern, flags);
+            return text.replace(regex, replacement);
+        } catch (e) {
+            console.error('Regex error:', e);
+            return text;
+        }
+    }
+
+    #buildEditorHTML(initialValue) {
+        try {
+            const escapedValue = this.#escapeHtml(initialValue);
+            
+            return `
+                <div class="bbcode-toolbar" role="toolbar" aria-label="Formatting tools">
+                    ${this.#buildToolbarGroups()}
+                    <div class="bbcode-toolbar-group bbcode-utils">
+                        <button type="button" class="bbcode-btn undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo">
+                            <i class="fa-regular fa-rotate-left" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="bbcode-btn redo-btn" title="Redo (Ctrl+Y)" aria-label="Redo">
+                            <i class="fa-regular fa-rotate-right" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="bbcode-editor-area">
+                    <textarea id="bbcode-editor" class="bbcode-textarea" 
+                        placeholder="Write your message here..." 
+                        aria-label="BBCode editor content" 
+                        data-forum-element="true">${escapedValue}</textarea>
+                </div>
+                <div class="bbcode-statusbar" data-forum-element="true">
+                    <span class="bbcode-char-count">0 characters</span>
+                    <span class="bbcode-word-count">0 words</span>
+                    <span class="bbcode-lines">0 lines</span>
+                    <span class="bbcode-cursor-pos">Ln 1, Col 1</span>
+                    <span class="bbcode-status-message"></span>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error building editor HTML:', error);
+            return '<div class="bbcode-editor-fallback">Error loading editor</div>';
+        }
+    }
+
+    #buildToolbarGroups() {
+        try {
+            return BBCodeEditor.#TOOLBAR_GROUPS.map(group => {
+                let groupHtml = '<div class="bbcode-toolbar-group" role="group">';
+                
+                if (group.type === 'select') {
+                    groupHtml += '<div class="bbcode-select-group">';
+                    if (group.icon) {
+                        groupHtml += group.icon;
+                    }
+                    groupHtml += `<select class="bbcode-select" data-group="${group.name}" aria-label="${group.name} selector">`;
+                    groupHtml += group.options.map(opt => {
+                        const styleAttr = opt.style ? ` style="${opt.style}"` : '';
+                        return `<option value="${opt.value}"${styleAttr}>${opt.text}</option>`;
+                    }).join('');
+                    groupHtml += '</select>';
+                    groupHtml += '</div>';
+                } else {
+                    groupHtml += group.buttons.map(btn => 
+                        `<button type="button" class="bbcode-btn" 
+                            data-tag="${btn.tag}" 
+                            title="${btn.title}" 
+                            aria-label="${btn.title}">${btn.icon}</button>`
+                    ).join('');
+                }
+                
+                groupHtml += '</div>';
+                return groupHtml;
+            }).join('');
+        } catch (error) {
+            console.error('Error building toolbar groups:', error);
+            return '';
+        }
+    }
+
+    #escapeHtml(text) {
+        if (!text) return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
+    }
+
+    #safeForumToBBCode(forumHtml) {
+        try {
+            return this.#forumToBBCode(forumHtml);
+        } catch (e) {
+            console.error('Error converting forum HTML to BBCode:', e);
+            return forumHtml;
+        }
+    }
+
+    #showStatusMessage(message, type = 'info') {
+        try {
+            if (!this.#statusElements.message) return;
+            
+            const colors = {
+                info: '#17a2b8',
+                success: '#28a745',
+                warning: '#ffc107',
+                error: '#dc3545'
+            };
+            
+            this.#statusElements.message.textContent = message;
+            this.#statusElements.message.style.color = colors[type] || colors.info;
+            this.#statusElements.message.style.display = 'inline';
+            
+            if (this.#statusMessageTimeout) {
+                clearTimeout(this.#statusMessageTimeout);
+            }
+            
+            this.#statusMessageTimeout = setTimeout(() => {
+                if (this.#statusElements.message) {
+                    this.#statusElements.message.textContent = '';
+                    this.#statusElements.message.style.display = 'none';
+                }
+            }, BBCodeEditor.#CONFIG.STATUS_MESSAGE_DURATION);
+        } catch (error) {
+            console.error('Error showing status message:', error);
+        }
+    }
+
+    #showDraftIndicator() {
+        try {
+            const container = document.createElement('span');
+            container.className = 'bbcode-draft-indicator';
+            container.innerHTML = `
+                <span class="bbcode-draft-dot" title="Draft saved"></span>
+                <button type="button" class="bbcode-restore-draft" title="Restore original content">Restore original</button>
+            `;
+            this.#statusElements.chars?.appendChild(container);
+        } catch (error) {
+            console.error('Error showing draft indicator:', error);
+        }
+    }
+
+    #removeDraftIndicator() {
+        try {
+            const indicator = this.#editorWrapper?.querySelector('.bbcode-draft-indicator');
+            indicator?.remove();
+        } catch (error) {
+            console.error('Error removing draft indicator:', error);
+        }
+    }
+
+    #restoreDraft() {
+        try {
+            const draft = this.#loadDraft();
+            if (draft) {
+                this.setValue(draft);
+                this.#showStatusMessage('Draft restored', 'success');
+            }
+        } catch (error) {
+            console.error('Error restoring draft:', error);
+        }
+    }
+
+    #showError(message) {
+        try {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bbcode-error';
+            errorDiv.textContent = message;
+            errorDiv.setAttribute('role', 'alert');
+            this.#editorWrapper?.appendChild(errorDiv);
+            
+            setTimeout(() => errorDiv.remove(), 5000);
+        } catch (error) {
+            console.error('Error showing error message:', error);
+        }
+    }
+
+    #showDraftPrompt(draftContent, originalContent) {
+        try {
+            const prompt = document.createElement('div');
+            prompt.className = 'bbcode-draft-prompt';
+            prompt.setAttribute('role', 'dialog');
+            prompt.setAttribute('aria-label', 'Draft found');
+            
+            prompt.innerHTML = `
+                <h4>📝 Draft Found</h4>
+                <p>You have a saved draft from ${new Date().toLocaleDateString()}. Would you like to restore it?</p>
+                <div class="bbcode-draft-prompt-buttons">
+                    <button type="button" class="restore-btn">Restore Draft</button>
+                    <button type="button" class="discard-btn">Discard Draft</button>
+                </div>
+            `;
+            
+            document.body.appendChild(prompt);
+            
+            const restoreBtn = prompt.querySelector('.restore-btn');
+            const discardBtn = prompt.querySelector('.discard-btn');
+            
+            restoreBtn.addEventListener('click', () => {
+                this.setValue(draftContent);
+                this.#showDraftIndicator();
+                this.#showStatusMessage('Draft restored', 'success');
+                prompt.remove();
+            });
+            
+            discardBtn.addEventListener('click', () => {
+                this.#clearDraft();
+                this.setValue(originalContent);
+                this.#showStatusMessage('Draft discarded', 'info');
+                prompt.remove();
+            });
+            
+            // Auto-remove after 30 seconds
+            setTimeout(() => prompt.remove(), 30000);
+            
+        } catch (error) {
+            console.error('Error showing draft prompt:', error);
+        }
+    }
+
+    /**
+     * Auto-save functionality
+     */
+    #autoSave() {
+        try {
+            if (!this.#draftKey || !this.#bbcodeEditor || this.#isEditing) return;
+            
+            const value = this.#bbcodeEditor.value;
+            if (value.trim()) {
+                const draftData = {
+                    content: value,
+                    timestamp: Date.now(),
+                    url: window.location.pathname
+                };
+                localStorage.setItem(this.#draftKey, JSON.stringify(draftData));
+                this.#showDraftIndicator();
+                this.#showStatusMessage('Draft saved', 'success');
+            } else {
+                // Clear draft if empty
+                this.#clearDraft();
+            }
+        } catch (error) {
+            console.error('Error auto-saving:', error);
+        }
+    }
+
+    #loadDraft() {
+        try {
+            if (!this.#draftKey) return null;
+            
+            const draftData = localStorage.getItem(this.#draftKey);
+            if (!draftData) return null;
+            
+            try {
+                const parsed = JSON.parse(draftData);
+                // Check if draft is expired
+                if (Date.now() - parsed.timestamp > BBCodeEditor.#CONFIG.DRAFT_EXPIRY) {
+                    localStorage.removeItem(this.#draftKey);
+                    return null;
+                }
+                return parsed.content;
+            } catch {
+                // Legacy format (just string)
+                return draftData;
+            }
+        } catch (error) {
+            console.error('Error loading draft:', error);
+            return null;
+        }
+    }
+
+    #clearDraft() {
+        try {
+            if (this.#draftKey) {
+                localStorage.removeItem(this.#draftKey);
+                this.#removeDraftIndicator();
+            }
+        } catch (error) {
+            console.error('Error clearing draft:', error);
+        }
+    }
+
+    /**
+     * Emoji Picker functionality with categories - shows only emojis
+     */
+    #createEmojiPicker() {
+        try {
+            this.#emojiPicker = document.createElement('div');
+            this.#emojiPicker.className = 'bbcode-emoji-picker';
+            this.#emojiPicker.setAttribute('role', 'dialog');
+            this.#emojiPicker.setAttribute('aria-label', 'Emoji picker');
+            
+            // Create category tabs
+            const categoriesDiv = document.createElement('div');
+            categoriesDiv.className = 'bbcode-emoji-categories';
+            
+            for (const [key, category] of Object.entries(BBCodeEditor.#EMOJI_CATEGORIES)) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `bbcode-emoji-category-btn${key === this.#currentEmojiCategory ? ' active' : ''}`;
+                btn.textContent = category.name;
+                btn.setAttribute('data-category', key);
+                btn.setAttribute('title', category.name);
+                
+                btn.addEventListener('click', () => {
+                    this.#switchEmojiCategory(key);
+                });
+                
+                categoriesDiv.appendChild(btn);
+            }
+            
+            // Create emoji grid
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'bbcode-emoji-grid';
+            
+            this.#populateEmojiGrid(gridDiv, this.#currentEmojiCategory);
+            
+            this.#emojiPicker.appendChild(categoriesDiv);
+            this.#emojiPicker.appendChild(gridDiv);
+            this.#editorWrapper.appendChild(this.#emojiPicker);
+        } catch (error) {
+            console.error('Error creating emoji picker:', error);
+        }
+    }
+
+    #populateEmojiGrid(grid, categoryKey) {
+        try {
+            grid.innerHTML = '';
+            const category = BBCodeEditor.#EMOJI_CATEGORIES[categoryKey];
+            
+            if (!category) return;
+            
+            category.emojis.forEach(emoji => {
+                const item = document.createElement('div');
+                item.className = 'bbcode-emoji-item';
+                item.setAttribute('role', 'button');
+                item.setAttribute('tabindex', '0');
+                item.setAttribute('aria-label', emoji.name);
+                item.setAttribute('title', emoji.name);
+                item.textContent = emoji.emoji;
+                
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.#insertEmoji(emoji.emoji);
+                });
+                
+                item.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.#insertEmoji(emoji.emoji);
+                    }
+                });
+                
+                grid.appendChild(item);
+            });
+        } catch (error) {
+            console.error('Error populating emoji grid:', error);
+        }
+    }
+
+    #switchEmojiCategory(categoryKey) {
+        try {
+            this.#currentEmojiCategory = categoryKey;
+            
+            if (!this.#emojiPicker) return;
+            
+            // Update active category button
+            const buttons = this.#emojiPicker.querySelectorAll('.bbcode-emoji-category-btn');
+            buttons.forEach(btn => {
+                if (btn.getAttribute('data-category') === categoryKey) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // Update grid
+            const grid = this.#emojiPicker.querySelector('.bbcode-emoji-grid');
+            if (grid) {
+                this.#populateEmojiGrid(grid, categoryKey);
+            }
+        } catch (error) {
+            console.error('Error switching emoji category:', error);
+        }
+    }
+
+    #toggleEmojiPicker() {
+        try {
+            if (!this.#emojiPicker) {
+                this.#createEmojiPicker();
+            }
+            
+            if (this.#emojiPicker.style.display === 'flex') {
+                this.#closeEmojiPicker();
+            } else {
+                // Position picker near the emoji button
+                if (this.#emojiButton) {
+                    const rect = this.#emojiButton.getBoundingClientRect();
+                    const wrapperRect = this.#editorWrapper.getBoundingClientRect();
+                    
+                    this.#emojiPicker.style.position = 'absolute';
+                    this.#emojiPicker.style.top = (rect.bottom - wrapperRect.top) + 'px';
+                    this.#emojiPicker.style.left = (rect.left - wrapperRect.left) + 'px';
+                    this.#emojiPicker.style.display = 'flex';
+                    
+                    // Focus first category for accessibility
+                    setTimeout(() => {
+                        const firstCategory = this.#emojiPicker.querySelector('.bbcode-emoji-category-btn');
+                        if (firstCategory) firstCategory.focus();
+                    }, 100);
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling emoji picker:', error);
+        }
+    }
+
+    #closeEmojiPicker() {
+        if (this.#emojiPicker) {
+            this.#emojiPicker.style.display = 'none';
+        }
+    }
+
+    #insertEmoji(emoji) {
+        try {
+            this.#insertTextAtCursor(emoji);
+            this.#closeEmojiPicker();
+            this.#showStatusMessage(`Emoji inserted`, 'success');
+        } catch (error) {
+            console.error('Error inserting emoji:', error);
+        }
+    }
+
+    /**
+     * Validates if a string looks like a URL
+     */
+    #isValidUrl(string) {
+        if (!string || typeof string !== 'string') return false;
+        
+        // Trim whitespace
+        string = string.trim();
+        
+        // Must have at least something that looks like a domain
+        if (string.length < 3) return false;
+        
+        // Check for common URL patterns
+        const urlPatterns = [
+            /^https?:\/\//i,                    // http:// or https://
+            /^www\.[a-z0-9-]+(\.[a-z0-9-]+)+/i, // www.example.com
+            /^[a-z0-9-]+(\.[a-z0-9-]+)+\.[a-z]{2,}/i, // example.com
+            /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/|$)/i // domain with TLD
+        ];
+        
+        return urlPatterns.some(pattern => pattern.test(string));
+    }
+
+    /**
+     * Converts forum HTML to BBCode for the editor
+     */
+    #forumToBBCode(forumHtml) {
+        if (!forumHtml) return '';
+        
+        try {
+            let bbcode = forumHtml;
+
+            const processNested = (text, patterns) => {
+                let result = text;
+                let changed;
+                do {
+                    changed = false;
+                    for (const [pattern, replacement] of patterns) {
+                        try {
+                            const newResult = this.#safeRegexReplace(result, pattern, replacement);
+                            if (newResult !== result) {
+                                result = newResult;
+                                changed = true;
+                            }
+                        } catch (e) {
+                            console.warn('Pattern failed:', pattern, e);
+                        }
+                    }
+                } while (changed);
+                return result;
+            };
+
+            const patterns = [
+                // Basic formatting
+                [/<b>(.*?)<\/b>/gis, '[b]$1[/b]'],
+                [/<strong>(.*?)<\/strong>/gis, '[b]$1[/b]'],
+                [/<i>(.*?)<\/i>/gis, '[i]$1[/i]'],
+                [/<em>(.*?)<\/em>/gis, '[i]$1[/i]'],
+                [/<u>(.*?)<\/u>/gis, '[u]$1[/u]'],
+                [/<del>(.*?)<\/del>/gis, '[del]$1[/del]'],
+                [/<sup>(.*?)<\/sup>/gis, '[sup]$1[/sup]'],
+                [/<sub>(.*?)<\/sub>/gis, '[sub]$1[/sub]'],
+
+                // Alignment
+                [/<p[^>]*align="left"[^>]*>(.*?)<\/p>/gis, '[left]$1[/left]'],
+                [/<div[^>]*align="left"[^>]*>(.*?)<\/div>/gis, '[left]$1[/left]'],
+                [/<p[^>]*align="center"[^>]*>(.*?)<\/p>/gis, '[center]$1[/center]'],
+                [/<div[^>]*align="center"[^>]*>(.*?)<\/div>/gis, '[center]$1[/center]'],
+                [/<p[^>]*align="right"[^>]*>(.*?)<\/p>/gis, '[right]$1[/right]'],
+                [/<div[^>]*align="right"[^>]*>(.*?)<\/div>/gis, '[right]$1[/right]'],
+                [/<p[^>]*align="justify"[^>]*>(.*?)<\/p>/gis, '[justify]$1[/justify]'],
+                [/<div[^>]*align="justify"[^>]*>(.*?)<\/div>/gis, '[justify]$1[/justify]'],
+
+                // Lists with nested content
+                [/<ol[^>]*>([\s\S]*?)<\/ol>/gis, (_, items) => {
+                    items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
+                        liContent = processNested(liContent, patterns);
+                        return '[*]' + liContent + '\n';
+                    });
+                    items = items.replace(/<br\s*\/?>/gi, '');
+                    return '[list=1]\n' + items.trim() + '\n[/list]';
+                }],
+
+                [/<ul[^>]*>([\s\S]*?)<\/ul>/gis, (_, items) => {
+                    items = items.replace(/<li[^>]*>([\s\S]*?)<\/li>/gis, (_, liContent) => {
+                        liContent = processNested(liContent, patterns);
+                        return '[*]' + liContent + '\n';
+                    });
+                    items = items.replace(/<br\s*\/?>/gi, '');
+                    return '[list]\n' + items.trim() + '\n[/list]';
+                }],
+
+                // Indentation
+                [/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gis, '[indent]$1[/indent]'],
+                [/<div[^>]*style="margin-left:[^"]*">([\s\S]*?)<\/div>/gis, '[indent]$1[/indent]'],
+
+                // Links
+                [/<a[^>]*href="(.*?)"[^>]*>(.*?)<\/a>/gis, (_, url, text) => {
+                    url = url.replace(/&amp;/g, '&');
+                    text = text.replace(/<[^>]+>/g, '');
+                    if (url === text || text === '') {
+                        return '[url]' + url + '[/url]';
+                    }
+                    return '[url=' + url + ']' + text + '[/url]';
+                }],
+                [/<a[^>]*href="mailto:(.*?)"[^>]*>(.*?)<\/a>/gis, '[email=$1]$2[/email]'],
+
+                // Images - extract original URL from weserv if present
+                [/<img[^>]*src="https:\/\/images\.weserv\.nl\/\?url=(.*?)&[^"]*"[^>]*>/gis, (_, encodedUrl) => {
+                    try {
+                        const url = decodeURIComponent(encodedUrl);
+                        return '[img]' + url + '[/img]';
+                    } catch (e) {
+                        return '[img]' + encodedUrl + '[/img]';
+                    }
+                }],
+                [/<img[^>]*src="([^"]+)"[^>]*>/gis, '[img]$1[/img]'],
+
+                // Font styles
+                [/<span[^>]*font-family:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[font=$1]$2[/font]'],
+                [/<span[^>]*font-size:(\d+)pt[^>]*>(.*?)<\/span>/gis, (_, ptSize, content) => {
+                    const size = Math.round(parseInt(ptSize) / 0.75);
+                    return '[size=' + size + ']' + content + '[/size]';
+                }],
+                [/<span[^>]*color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[color=$1]$2[/color]'],
+                [/<span[^>]*background-color:([^;"']+)[^>]*>(.*?)<\/span>/gis, '[bgcolor=$1]$2[/bgcolor]'],
+
+                // Code/HTML blocks
+                [/<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[code]$1[/code]'],
+                [/<pre[^>]*>(.*?)<\/pre>/gis, '[code]$1[/code]'],
+                [/<div[^>]*class="code_top"[^>]*><b>HTML<\/b>.*?<div[^>]*class="code"[^>]*>(.*?)<\/div>\s*<\/div>/gis, '[html]$1[/html]'],
+
+                // Horizontal rule
+                [/<hr[^>]*>/gis, '[hr]'],
+
+                // Preserve existing BBCode tags
+                [/\[center\](.*?)\[\/center\]/gis, '[center]$1[/center]'],
+                [/\[left\](.*?)\[\/left\]/gis, '[left]$1[/left]'],
+                [/\[right\](.*?)\[\/right\]/gis, '[right]$1[/right]'],
+                [/\[justify\](.*?)\[\/justify\]/gis, '[justify]$1[/justify]'],
+                [/\[quote\](.*?)\[\/quote\]/gis, '[quote]$1[/quote]'],
+                [/\[spoiler\](.*?)\[\/spoiler\]/gis, '[spoiler]$1[/spoiler]'],
+                [/\[indent\](.*?)\[\/indent\]/gis, '[indent]$1[/indent]'],
+                [/\[bgcolor=(.*?)\](.*?)\[\/bgcolor\]/gis, '[bgcolor=$1]$2[/bgcolor]'],
+                [/\[email=(.*?)\](.*?)\[\/email\]/gis, '[email=$1]$2[/email]'],
+                [/\[hr\]/gis, '[hr]'],
+                [/\[table\](.*?)\[\/table\]/gis, '[table]$1[/table]'],
+                [/\[tr\](.*?)\[\/tr\]/gis, '[tr]$1[/tr]'],
+                [/\[td\](.*?)\[\/td\]/gis, '[td]$1[/td]'],
+                [/\[video\](.*?)\[\/video\]/gis, '[video]$1[/video]']
+            ];
+
+            bbcode = processNested(bbcode, patterns);
+
+            bbcode = bbcode.replace(/<br\s*\/?>/gi, '\n');
+            bbcode = bbcode.replace(/&nbsp;/g, ' ');
+            bbcode = bbcode.replace(/&amp;/g, '&');
+            bbcode = bbcode.replace(/&lt;/g, '<');
+            bbcode = bbcode.replace(/&gt;/g, '>');
+            bbcode = bbcode.replace(/&quot;/g, '"');
+            
+            bbcode = bbcode.replace(/<[^>]+>/g, '');
+            
+            bbcode = bbcode.replace(/\n\s*\n/g, '\n\n');
+
+            return bbcode.trim();
+        } catch (error) {
+            console.error('Error in forumToBBCode:', error);
+            return forumHtml;
+        }
+    }
+
+    /**
+     * Converts BBCode back to forum HTML for submission
+     */
+    #bbcodeToForum(bbcode) {
+        if (!bbcode) return '';
+        
+        try {
+            let forumHtml = bbcode;
+
+            // Basic formatting - convert to HTML
+            forumHtml = forumHtml.replace(/\[b\](.*?)\[\/b\]/gis, '<b>$1</b>');
+            forumHtml = forumHtml.replace(/\[i\](.*?)\[\/i\]/gis, '<i>$1</i>');
+            forumHtml = forumHtml.replace(/\[u\](.*?)\[\/u\]/gis, '<u>$1</u>');
+            forumHtml = forumHtml.replace(/\[del\](.*?)\[\/del\]/gis, '<del>$1</del>');
+            forumHtml = forumHtml.replace(/\[sup\](.*?)\[\/sup\]/gis, '<sup>$1</sup>');
+            forumHtml = forumHtml.replace(/\[sub\](.*?)\[\/sub\]/gis, '<sub>$1</sub>');
+
+            // Alignment
+            forumHtml = forumHtml.replace(/\[left\](.*?)\[\/left\]/gis, '<div align="left">$1</div>');
+            forumHtml = forumHtml.replace(/\[center\](.*?)\[\/center\]/gis, '<div align="center">$1</div>');
+            forumHtml = forumHtml.replace(/\[right\](.*?)\[\/right\]/gis, '<div align="right">$1</div>');
+            forumHtml = forumHtml.replace(/\[justify\](.*?)\[\/justify\]/gis, '<div align="justify">$1</div>');
+
+            // Lists with nested content
+            forumHtml = forumHtml.replace(/\[list=1\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
+                items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
+                    content = this.#bbcodeToForum(content);
+                    return '<li>' + content + '</li>';
+                });
+                return '<ol>' + items + '</ol>';
+            });
+
+            forumHtml = forumHtml.replace(/\[list\]([\s\S]*?)\[\/list\]/gis, (_, items) => {
+                items = items.replace(/\[\*]([\s\S]*?)(?=\n\[\*]|\n\[\/list]|$)/gis, (_, content) => {
+                    content = this.#bbcodeToForum(content);
+                    return '<li>' + content + '</li>';
+                });
+                return '<ul>' + items + '</ul>';
+            });
+
+            // Indentation
+            forumHtml = forumHtml.replace(/\[indent\](.*?)\[\/indent\]/gis, '<blockquote>$1</blockquote>');
+
+            // URLs - convert to HTML
+            forumHtml = forumHtml.replace(/\[url=(.*?)\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+            forumHtml = forumHtml.replace(/\[url\](.*?)\[\/url\]/gis, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+            // Email links
+            forumHtml = forumHtml.replace(/\[email=(.*?)\](.*?)\[\/email\]/gis, '<a href="mailto:$1">$2</a>');
+
+            // IMPORTANT: Skip image conversion - leave [IMG] tags as BBCode
+            // The forum's media dimension extractor and weserv optimizer will handle them
+
+            // Font styles - convert to HTML
+            forumHtml = forumHtml.replace(/\[font=(.*?)\](.*?)\[\/font\]/gis, '<span style="font-family:$1">$2</span>');
+            forumHtml = forumHtml.replace(/\[size=(.*?)\](.*?)\[\/size\]/gis, (_, size, content) => {
+                const ptSize = Math.round(parseInt(size) * 0.75) + 'pt';
+                return '<span style="font-size:' + ptSize + ';line-height:100%">' + content + '</span>';
+            });
+            forumHtml = forumHtml.replace(/\[color=(.*?)\](.*?)\[\/color\]/gis, '<span style="color:$1">$2</span>');
+            forumHtml = forumHtml.replace(/\[bgcolor=(.*?)\](.*?)\[\/bgcolor\]/gis, '<span style="background-color:$1">$2</span>');
+
+            // Code/HTML blocks - convert to HTML
+            forumHtml = forumHtml.replace(/\[code\](.*?)\[\/code\]/gis, '<div align="center"><div class="code_top" align="left"><b>CODE</b></div><div class="code" align="left">$1</div></div>');
+            forumHtml = forumHtml.replace(/\[html\](.*?)\[\/html\]/gis, '<div align="center"><div class="code_top" align="left"><b>HTML</b></div><div class="code" align="left">$1</div></div>');
+
+            // Horizontal rule
+            forumHtml = forumHtml.replace(/\[hr\]/gis, '<hr>');
+
+            // Tables
+            forumHtml = forumHtml.replace(/\[table\](.*?)\[\/table\]/gis, '<table border="1" cellpadding="4" cellspacing="0">$1</table>');
+            forumHtml = forumHtml.replace(/\[tr\](.*?)\[\/tr\]/gis, '<tr>$1</tr>');
+            forumHtml = forumHtml.replace(/\[td\](.*?)\[\/td\]/gis, '<td>$1</td>');
+
+            // Video placeholder - keep as BBCode for forum to handle
+            // IMPORTANT: Leave these as BBCode for the forum to handle natively
+            // [VIDEO], [CENTER], [QUOTE], [SPOILER] are left untouched
+
+            // Convert newlines to <br> tags
+            forumHtml = forumHtml.replace(/\n/g, '<br>');
+
+            return forumHtml;
+        } catch (error) {
+            console.error('Error in bbcodeToForum:', error);
+            return bbcode;
+        }
+    }
+
+    #syncToOriginal() {
+        try {
+            const editorValue = this.#bbcodeEditor.value;
+            const forumFormat = this.#bbcodeToForum(editorValue);
+            
+            if (this.#originalTextarea.value !== forumFormat) {
+                this.#originalTextarea.value = forumFormat;
+                const event = new Event('input', { bubbles: true });
+                this.#originalTextarea.dispatchEvent(event);
+            }
+        } catch (error) {
+            console.error('Error syncing to original:', error);
+        }
+    }
+
+    #syncFromOriginal() {
+        try {
+            const forumFormat = this.#originalTextarea.value;
+            const editorFormat = this.#safeForumToBBCode(forumFormat);
+            
+            if (this.#bbcodeEditor.value !== editorFormat) {
+                this.#bbcodeEditor.value = editorFormat;
+                this.#updateStatus();
+            }
+        } catch (error) {
+            console.error('Error syncing from original:', error);
+        }
+    }
+
+    #saveState(value) {
+        try {
+            if (this.#undoStack.length > BBCodeEditor.#CONFIG.MAX_UNDO_STEPS) {
+                this.#undoStack.shift();
+                this.#undoPosition--;
+            }
+
+            if (this.#undoStack[this.#undoPosition] !== value) {
+                this.#undoStack = this.#undoStack.slice(0, this.#undoPosition + 1);
+                this.#undoStack.push(value);
+                this.#redoStack = [];
+                this.#undoPosition = this.#undoStack.length - 1;
+            }
+        } catch (error) {
+            console.error('Error saving state:', error);
+        }
+    }
+
+    #updateStatus() {
+        try {
+            if (!this.#bbcodeEditor || !this.#statusElements.chars) return;
+
+            const text = this.#bbcodeEditor.value || '';
+            const charCount = text.length;
+            const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+            const lineCount = text.split('\n').length;
+            
+            if (this.#statusElements.chars) {
+                this.#statusElements.chars.textContent = charCount.toLocaleString() + ' characters';
+            }
+            if (this.#statusElements.words) {
+                this.#statusElements.words.textContent = wordCount.toLocaleString() + ' words';
+            }
+            if (this.#statusElements.lines) {
+                this.#statusElements.lines.textContent = lineCount.toLocaleString() + ' lines';
+            }
+            
+            const pos = this.#bbcodeEditor.selectionStart;
+            const lines = text.substring(0, pos).split('\n');
+            const lineNum = lines.length;
+            const colNum = lines[lines.length - 1].length + 1;
+            if (this.#statusElements.cursor) {
+                this.#statusElements.cursor.textContent = `Ln ${lineNum}, Col ${colNum}`;
+            }
+        } catch (error) {
+            console.error('Error updating status:', error);
+        }
+    }
+
+    #insertTag(tag, value = '') {
+        try {
+            const start = this.#bbcodeEditor.selectionStart;
+            const end = this.#bbcodeEditor.selectionEnd;
+            const text = this.#bbcodeEditor.value;
+            const selectedText = text.substring(start, end);
+
+            const tagMap = {
+                'b': ['[b]', '[/b]'],
+                'i': ['[i]', '[/i]'],
+                'u': ['[u]', '[/u]'],
+                'del': ['[del]', '[/del]'],
+                'sup': ['[sup]', '[/sup]'],
+                'sub': ['[sub]', '[/sub]'],
+                'left': ['[left]', '[/left]'],
+                'center': ['[center]', '[/center]'],
+                'right': ['[right]', '[/right]'],
+                'justify': ['[justify]', '[/justify]'],
+                'ul': ['[list]\n', '\n[/list]'],
+                'ol': ['[list=1]\n', '\n[/list]'],
+                'indent': ['[indent]', '[/indent]'],
+                'outdent': ['', ''], // Outdent is more complex - we'll handle specially
+                'url': [value ? `[url=${value}]` : '[url]', '[/url]'],
+                'img': ['[img]', '[/img]'],
+                'email': [value ? `[email=${value}]` : '[email]', '[/email]'],
+                'quote': ['[quote]', '[/quote]'],
+                'code': ['[code]', '[/code]'],
+                'html': ['[html]', '[/html]'],
+                'spoiler': ['[spoiler]', '[/spoiler]'],
+                'pre': ['[code]', '[/code]'],
+                'font': [`[font=${value}]`, '[/font]'],
+                'size': [`[size=${value}]`, '[/size]'],
+                'color': [`[color=${value}]`, '[/color]'],
+                'background': [`[bgcolor=${value}]`, '[/bgcolor]'],
+                'hr': ['[hr]\n', ''],
+                'table': ['[table]\n[tr][td]', '[/td][/tr]\n[/table]'],
+                'video': ['[video]', '[/video]']
+            };
+
+            const [openTag, closeTag] = tagMap[tag] || ['', ''];
+
+            // Handle outdent specially - try to reduce indentation of selected lines
+            if (tag === 'outdent') {
+                let newText = text;
+                let lines = newText.split('\n');
+                let modifiedLines = [];
+                let startLine = 0;
+                let endLine = lines.length - 1;
+                
+                // Find which lines are selected
+                let currentPos = 0;
+                for (let i = 0; i < lines.length; i++) {
+                    const lineEnd = currentPos + lines[i].length + 1;
+                    if (start >= currentPos && start <= lineEnd) startLine = i;
+                    if (end >= currentPos && end <= lineEnd) endLine = i;
+                    currentPos = lineEnd;
+                }
+                
+                // Remove indentation from selected lines
+                for (let i = 0; i < lines.length; i++) {
+                    if (i >= startLine && i <= endLine) {
+                        // Check for existing [indent] tags
+                        let line = lines[i];
+                        if (line.startsWith('[indent]')) {
+                            line = line.substring(8);
+                            if (line.endsWith('[/indent]')) {
+                                line = line.substring(0, line.length - 9);
+                            }
+                        }
+                        // Also check for space indentation
+                        line = line.replace(/^( {4}|\t)/, '');
+                        modifiedLines.push(line);
+                    } else {
+                        modifiedLines.push(lines[i]);
+                    }
+                }
+                newText = modifiedLines.join('\n');
+                
+                this.#bbcodeEditor.value = newText;
+                this.#bbcodeEditor.selectionStart = start;
+                this.#bbcodeEditor.selectionEnd = end;
+                this.#syncToOriginal();
+                this.#saveState(newText);
+                this.#updateStatus();
+                this.#bbcodeEditor.focus();
+                return;
+            }
+
+            let newText, newCursorStart, newCursorEnd;
+
+            if (start === end) {
+                // No text selected
+                if (tag === 'ul' || tag === 'ol') {
+                    // List handling with placeholder items
+                    newText = text.substring(0, start) + openTag + '[*]List item 1\n[*]List item 2\n[*]List item 3' + closeTag + text.substring(end);
+                    newCursorStart = start + openTag.length + '[*]List item 1\n[*]List item 2\n[*]List item 3'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'table') {
+                    newText = text.substring(0, start) + openTag + 'Cell 1' + closeTag + text.substring(end);
+                    newCursorStart = start + openTag.length + 'Cell 1'.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'hr') {
+                    newText = text.substring(0, start) + openTag + text.substring(end);
+                    newCursorStart = start + openTag.length;
+                    newCursorEnd = newCursorStart;
+                } else {
+                    // For regular tags, insert both tags and place cursor BETWEEN them
+                    newText = text.substring(0, start) + openTag + closeTag + text.substring(end);
+                    newCursorStart = newCursorEnd = start + openTag.length;
+                }
+            } else {
+                // Text is selected
+                if (tag === 'ul' || tag === 'ol') {
+                    // Convert selected lines to list items
+                    const items = selectedText.split('\n')
+                        .filter(item => item.trim())
+                        .map(item => '[*]' + item)
+                        .join('\n');
+                    newText = text.substring(0, start) + openTag + items + '\n' + closeTag + text.substring(end);
+                    newCursorStart = start + openTag.length + items.length + '\n'.length + closeTag.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'indent') {
+                    // Indent selected lines
+                    const lines = selectedText.split('\n');
+                    const indentedLines = lines.map(line => '[indent]' + line + '[/indent]');
+                    const indentedText = indentedLines.join('\n');
+                    newText = text.substring(0, start) + indentedText + text.substring(end);
+                    newCursorStart = start + indentedText.length;
+                    newCursorEnd = newCursorStart;
+                } else if (tag === 'table') {
+                    // Wrap selected text in table cells
+                    const cells = selectedText.split('\n')
+                        .filter(cell => cell.trim())
+                        .map(cell => '[tr][td]' + cell + '[/td][/tr]')
+                        .join('\n');
+                    newText = text.substring(0, start) + '[table]\n' + cells + '\n[/table]' + text.substring(end);
+                    newCursorStart = start + ('[table]\n' + cells + '\n[/table]').length;
+                    newCursorEnd = newCursorStart;
+                } else {
+                    // Wrap selected text with tags
+                    newText = text.substring(0, start) + openTag + selectedText + closeTag + text.substring(end);
+                    newCursorStart = newCursorEnd = start + openTag.length + selectedText.length + closeTag.length;
+                }
+            }
+
+            this.#bbcodeEditor.value = newText;
+            this.#bbcodeEditor.selectionStart = newCursorStart;
+            this.#bbcodeEditor.selectionEnd = newCursorEnd;
+
+            this.#syncToOriginal();
+            this.#saveState(newText);
+            this.#updateStatus();
+            this.#bbcodeEditor.focus();
+        } catch (error) {
+            console.error('Error inserting tag:', error);
+        }
+    }
+
+    #handleButtonClick(btn) {
+        try {
+            const tag = btn.getAttribute('data-tag');
+
+            if (btn.classList.contains('undo-btn')) {
+                if (this.#undoPosition > 0) {
+                    this.#undoPosition--;
+                    this.#bbcodeEditor.value = this.#undoStack[this.#undoPosition];
+                    this.#syncToOriginal();
+                    this.#updateStatus();
+                    this.#announce('Undo');
+                }
+                return;
+            }
+
+            if (btn.classList.contains('redo-btn')) {
+                if (this.#redoStack.length > 0) {
+                    const redoValue = this.#redoStack.pop();
+                    this.#undoPosition++;
+                    this.#undoStack[this.#undoPosition] = redoValue;
+                    this.#bbcodeEditor.value = redoValue;
+                    this.#syncToOriginal();
+                    this.#updateStatus();
+                    this.#announce('Redo');
+                }
+                return;
+            }
+
+            // Handle emoji picker
+            if (tag === 'emoji') {
+                this.#toggleEmojiPicker();
+                return;
+            }
+
+            if (tag === 'url') {
+                const url = prompt('Enter URL:', 'https://');
+                if (url && url.trim()) {
+                    const trimmedUrl = url.trim();
+                    if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        const selectedText = text.substring(start, end);
+
+                        let newText;
+                        let newCursorPos;
+
+                        if (selectedText) {
+                            newText = text.substring(0, start) + 
+                                `[url=${trimmedUrl}]${selectedText}[/url]` + 
+                                text.substring(end);
+                            newCursorPos = start + (`[url=${trimmedUrl}]`).length + selectedText.length + '[/url]'.length;
+                        } else {
+                            newText = text.substring(0, start) + 
+                                `[url]${trimmedUrl}[/url]` + 
+                                text.substring(end);
+                            newCursorPos = start + (`[url]`).length + trimmedUrl.length + '[/url]'.length;
+                        }
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#bbcodeEditor.focus();
+                        this.#showStatusMessage('Link inserted', 'success');
+                    } else {
+                        alert('Please enter a valid URL (e.g., https://example.com or www.example.com)');
+                    }
+                }
+                return;
+            }
+
+            if (tag === 'email') {
+                const email = prompt('Enter email address:', '');
+                if (email && email.trim()) {
+                    const trimmedEmail = email.trim();
+                    if (trimmedEmail.includes('@')) {
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        const selectedText = text.substring(start, end);
+
+                        let newText;
+                        let newCursorPos;
+
+                        if (selectedText) {
+                            newText = text.substring(0, start) + 
+                                `[email=${trimmedEmail}]${selectedText}[/email]` + 
+                                text.substring(end);
+                            newCursorPos = start + (`[email=${trimmedEmail}]`).length + selectedText.length + '[/email]'.length;
+                        } else {
+                            newText = text.substring(0, start) + 
+                                `[email]${trimmedEmail}[/email]` + 
+                                text.substring(end);
+                            newCursorPos = start + (`[email]`).length + trimmedEmail.length + '[/email]'.length;
+                        }
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#bbcodeEditor.focus();
+                        this.#showStatusMessage('Email link inserted', 'success');
+                    } else {
+                        alert('Please enter a valid email address');
+                    }
+                }
+                return;
+            }
+
+            if (tag === 'img') {
+                const imgUrl = prompt('Enter image URL:', 'https://');
+                if (imgUrl && imgUrl.trim()) {
+                    const trimmedUrl = imgUrl.trim();
+                    if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        
+                        const newText = text.substring(0, start) + 
+                            `[img]${trimmedUrl}[/img]` + 
+                            text.substring(end);
+                        
+                        const newCursorPos = start + (`[img]`).length + trimmedUrl.length + '[/img]'.length;
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#bbcodeEditor.focus();
+                        this.#showStatusMessage('Image inserted', 'success');
+                    } else {
+                        alert('Please enter a valid image URL (e.g., https://example.com/image.jpg)');
+                    }
+                }
+                return;
+            }
+
+            if (tag === 'video') {
+                const videoUrl = prompt('Enter video URL (YouTube, Vimeo, etc.):', 'https://');
+                if (videoUrl && videoUrl.trim()) {
+                    const trimmedUrl = videoUrl.trim();
+                    if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('youtube') || trimmedUrl.includes('vimeo')) {
+                        const start = this.#bbcodeEditor.selectionStart;
+                        const end = this.#bbcodeEditor.selectionEnd;
+                        const text = this.#bbcodeEditor.value;
+                        
+                        const newText = text.substring(0, start) + 
+                            `[video]${trimmedUrl}[/video]` + 
+                            text.substring(end);
+                        
+                        const newCursorPos = start + (`[video]`).length + trimmedUrl.length + '[/video]'.length;
+                        
+                        this.#bbcodeEditor.value = newText;
+                        this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                        
+                        this.#syncToOriginal();
+                        this.#saveState(newText);
+                        this.#updateStatus();
+                        this.#bbcodeEditor.focus();
+                        this.#showStatusMessage('Video inserted', 'success');
+                    } else {
+                        alert('Please enter a valid video URL');
+                    }
+                }
+                return;
+            }
+
+            if (tag === 'table') {
+                const rows = prompt('Enter number of rows:', '2');
+                const cols = prompt('Enter number of columns:', '2');
+                if (rows && cols) {
+                    const r = parseInt(rows) || 2;
+                    const c = parseInt(cols) || 2;
+                    let tableContent = '';
+                    for (let i = 0; i < r; i++) {
+                        tableContent += '[tr]\n';
+                        for (let j = 0; j < c; j++) {
+                            tableContent += `[td]Cell ${i+1},${j+1}[/td]\n`;
+                        }
+                        tableContent += '[/tr]\n';
+                    }
+                    const start = this.#bbcodeEditor.selectionStart;
+                    const end = this.#bbcodeEditor.selectionEnd;
+                    const text = this.#bbcodeEditor.value;
+                    
+                    const newText = text.substring(0, start) + 
+                        `[table]\n${tableContent}[/table]` + 
+                        text.substring(end);
+                    
+                    this.#bbcodeEditor.value = newText;
+                    this.#bbcodeEditor.selectionStart = start;
+                    this.#bbcodeEditor.selectionEnd = end;
+                    
+                    this.#syncToOriginal();
+                    this.#saveState(newText);
+                    this.#updateStatus();
+                    this.#bbcodeEditor.focus();
+                    this.#showStatusMessage('Table inserted', 'success');
+                }
+                return;
+            }
+
+            if (tag) {
+                this.#insertTag(tag);
+            }
+        } catch (error) {
+            console.error('Error handling button click:', error);
+        }
+    }
+
+    #handleSelectChange(select) {
+        try {
+            const value = select.value;
+            const group = select.getAttribute('data-group');
+
+            if (!value) return;
+
+            const groupMap = {
+                'color': 'color',
+                'size': 'size',
+                'font': 'font',
+                'background': 'background'
+            };
+
+            if (groupMap[group]) {
+                this.#insertTag(groupMap[group], value);
+                this.#announce(`${group} set to ${value}`);
+            }
+
+            select.selectedIndex = 0;
+        } catch (error) {
+            console.error('Error handling select change:', error);
+        }
+    }
+
+    #handleKeydown(e) {
+        try {
+            // Close emoji picker on Escape
+            if (e.key === 'Escape' && this.#emojiPicker?.style.display === 'flex') {
+                this.#closeEmojiPicker();
+                e.preventDefault();
+                return;
+            }
+
+            if (e.ctrlKey || e.metaKey) {
+                const key = e.key.toLowerCase();
+                const start = this.#bbcodeEditor.selectionStart;
+                const end = this.#bbcodeEditor.selectionEnd;
+                const selectedText = this.#bbcodeEditor.value.substring(start, end);
+
+                const shortcuts = {
+                    'b': () => {
+                        e.preventDefault();
+                        this.#insertTag('b');
+                    },
+                    'i': () => {
+                        e.preventDefault();
+                        this.#insertTag('i');
+                    },
+                    'u': () => {
+                        e.preventDefault();
+                        this.#insertTag('u');
+                    },
+                    'z': () => {
+                        e.preventDefault();
+                        if (this.#undoPosition > 0) {
+                            this.#undoPosition--;
+                            this.#bbcodeEditor.value = this.#undoStack[this.#undoPosition];
+                            this.#syncToOriginal();
+                            this.#updateStatus();
+                        }
+                    },
+                    'y': () => {
+                        e.preventDefault();
+                        if (this.#redoStack.length > 0) {
+                            const redoValue = this.#redoStack.pop();
+                            this.#undoPosition++;
+                            this.#undoStack[this.#undoPosition] = redoValue;
+                            this.#bbcodeEditor.value = redoValue;
+                            this.#syncToOriginal();
+                            this.#updateStatus();
+                        }
+                    },
+                    'l': () => {
+                        e.preventDefault();
+                        const url = prompt('Enter URL:');
+                        if (url && url.trim()) {
+                            const trimmedUrl = url.trim();
+                            if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
+                                const text = this.#bbcodeEditor.value;
+                                
+                                let newText;
+                                let newCursorPos;
+
+                                if (selectedText) {
+                                    newText = text.substring(0, start) + 
+                                        `[url=${trimmedUrl}]${selectedText}[/url]` + 
+                                        text.substring(end);
+                                    newCursorPos = start + (`[url=${trimmedUrl}]`).length + selectedText.length + '[/url]'.length;
+                                } else {
+                                    newText = text.substring(0, start) + 
+                                        `[url]${trimmedUrl}[/url]` + 
+                                        text.substring(end);
+                                    newCursorPos = start + (`[url]`).length + trimmedUrl.length + '[/url]'.length;
+                                }
+                                
+                                this.#bbcodeEditor.value = newText;
+                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                                
+                                this.#syncToOriginal();
+                                this.#saveState(newText);
+                                this.#updateStatus();
+                                this.#bbcodeEditor.focus();
+                                this.#showStatusMessage('Link inserted', 'success');
+                            } else {
+                                alert('Please enter a valid URL');
+                            }
+                        }
+                    },
+                    'p': () => {
+                        e.preventDefault();
+                        const imgUrl = prompt('Enter image URL:');
+                        if (imgUrl && imgUrl.trim()) {
+                            const trimmedUrl = imgUrl.trim();
+                            if (this.#isValidUrl(trimmedUrl) || trimmedUrl.includes('.') || trimmedUrl.startsWith('/')) {
+                                const text = this.#bbcodeEditor.value;
+                                
+                                const newText = text.substring(0, start) + 
+                                    `[img]${trimmedUrl}[/img]` + 
+                                    text.substring(end);
+                                
+                                const newCursorPos = start + (`[img]`).length + trimmedUrl.length + '[/img]'.length;
+                                
+                                this.#bbcodeEditor.value = newText;
+                                this.#bbcodeEditor.selectionStart = this.#bbcodeEditor.selectionEnd = newCursorPos;
+                                
+                                this.#syncToOriginal();
+                                this.#saveState(newText);
+                                this.#updateStatus();
+                                this.#bbcodeEditor.focus();
+                                this.#showStatusMessage('Image inserted', 'success');
+                            } else {
+                                alert('Please enter a valid image URL');
+                            }
+                        }
+                    },
+                    'q': () => {
+                        e.preventDefault();
+                        this.#insertTag('quote');
+                    },
+                    'k': () => {
+                        e.preventDefault();
+                        this.#insertTag('code');
+                    }
+                };
+
+                if (shortcuts[key]) {
+                    shortcuts[key]();
+                }
+            }
+        } catch (error) {
+            console.error('Error handling keydown:', error);
+        }
+    }
+
+    #registerWithObserver() {
+        try {
+            if (!globalThis.forumObserver) return;
+
+            // Register for SendPage to initialize when page loads
+            this.#observerId = globalThis.forumObserver.register({
+                id: 'bbcode-editor-init',
+                priority: 'high',
+                selector: '#Post',
+                pageTypes: ['SendPage'],
+                callback: (node) => {
+                    console.log('📝 ForumObserver triggered BBCode editor init');
+                    if (!this.#originalTextarea) {
+                        this.#originalTextarea = node;
+                        if (!this.#originalTextarea.hasAttribute('data-editor-initialized')) {
+                            this.#init();
+                        }
+                    }
+                }
+            });
+
+            // Register for preview updates if needed
+            globalThis.forumObserver.register({
+                id: 'bbcode-editor-preview',
+                priority: 'normal',
+                selector: '#preview, .preview, [id*="preview"]',
+                pageTypes: ['SendPage'],
+                callback: (node) => {
+                    // If preview area exists, make sure our content is synced
+                    if (this.#bbcodeEditor) {
+                        // Trigger any preview-related updates
+                        this.#originalTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }
+            });
+
+            console.log('📝 BBCode Editor registered with ForumObserver');
+        } catch (error) {
+            console.error('Error registering with observer:', error);
+        }
+    }
+
+    // Public API
+    getEditor() {
+        return this.#bbcodeEditor;
+    }
+
+    getValue() {
+        return this.#bbcodeEditor?.value;
+    }
+
+    setValue(value) {
+        try {
+            if (this.#bbcodeEditor) {
+                this.#bbcodeEditor.value = value;
+                this.#syncToOriginal();
+                this.#saveState(value);
+                this.#updateStatus();
+                
+                // Trigger autoresize after setting value
+                if (this.#bbcodeEditor.style.height) {
+                    this.#bbcodeEditor.style.height = 'auto';
+                    const scrollHeight = this.#bbcodeEditor.scrollHeight;
+                    const maxHeight = BBCodeEditor.#CONFIG.EDITOR_MAX_HEIGHT;
+                    const newHeight = Math.min(scrollHeight, maxHeight);
+                    this.#bbcodeEditor.style.height = newHeight + 'px';
+                }
+                
+                // Only auto-save for new posts
+                if (!this.#isEditing) {
+                    this.#autoSave();
+                }
+            }
+        } catch (error) {
+            console.error('Error setting value:', error);
+        }
+    }
+
+    clearDraft() {
+        this.#clearDraft();
+        this.#showStatusMessage('Draft cleared', 'info');
+    }
+
+    isEditing() {
+        return this.#isEditing;
+    }
+
+    destroy() {
+        try {
+            // Save final draft before destroying (only for new posts)
+            if (!this.#isEditing) {
+                this.#autoSave();
+            }
+
+            if (this.#editorWrapper) {
+                if (this.#clickHandler) {
+                    this.#editorWrapper.removeEventListener('click', this.#clickHandler);
+                }
+                if (this.#changeHandler) {
+                    this.#editorWrapper.removeEventListener('change', this.#changeHandler);
+                }
+            }
+
+            if (this.#saveTimeout) {
+                clearTimeout(this.#saveTimeout);
+            }
+
+            if (this.#autoSaveTimeout) {
+                clearTimeout(this.#autoSaveTimeout);
+            }
+
+            if (this.#statusMessageTimeout) {
+                clearTimeout(this.#statusMessageTimeout);
+            }
+
+            if (globalThis.forumObserver && this.#observerId) {
+                globalThis.forumObserver.unregister(this.#observerId);
+            }
+            
+            // Remove resize observer
+            if (this.#resizeObserver) {
+                this.#resizeObserver.disconnect();
+                this.#resizeObserver = null;
+            }
+            
+            // Remove emoji picker if it exists
+            this.#emojiPicker?.remove();
+            
+            this.#editorWrapper?.remove();
+            if (this.#originalTextarea) {
+                this.#originalTextarea.style.removeProperty('display');
+                this.#originalTextarea.removeAttribute('data-editor-initialized');
+            }
+
+            document.getElementById('bbcode-announcer')?.remove();
+
+            console.log('📝 BBCode Editor destroyed');
+        } catch (error) {
+            console.error('Error destroying editor:', error);
+        }
+    }
+}
+
+// Safe initialization with ForumObserver
+(function() {
+    if (globalThis.bbcodeEditor) {
+        console.log('📝 BBCodeEditor already exists');
+        return;
+    }
+
+    try {
+        // Initialize when DOM is ready
+        const initEditor = () => {
+            try {
+                globalThis.bbcodeEditor = new BBCodeEditor();
+                console.log('📝 BBCodeEditor initialized (Enhanced Edition with Full Toolbar & All BBCode Tags)');
+            } catch (error) {
+                console.error('Failed to initialize BBCodeEditor:', error);
+                const textarea = document.getElementById('Post');
+                if (textarea && textarea.parentNode) {
+                    const fallback = document.createElement('div');
+                    fallback.className = 'bbcode-editor-fallback';
+                    fallback.innerHTML = 'BBCode editor unavailable - using standard textarea';
+                    textarea.parentNode.insertBefore(fallback, textarea);
+                }
+            }
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initEditor);
+        } else {
+            // Use microtask to ensure ForumObserver is ready
+            queueMicrotask(initEditor);
+        }
+
+        // Also listen for ForumObserver ready event
+        window.addEventListener('forum-observer-ready', () => {
+            console.log('📝 ForumObserver ready, ensuring BBCodeEditor is initialized');
+            if (!globalThis.bbcodeEditor) {
+                queueMicrotask(() => {
+                    globalThis.bbcodeEditor = new BBCodeEditor();
+                });
+            }
+        });
+
+    } catch (error) {
+        console.error('Critical BBCodeEditor error:', error);
+    }
+})();
