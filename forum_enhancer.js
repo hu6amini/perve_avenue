@@ -826,7 +826,7 @@ if (!globalThis.mediaDimensionExtractor) {
     // ==============================
     var FAST_REPLY_CONFIG = {
         selectors: {
-            fastReply: '.fast.send .skin_tbl',
+            fastReply: '.send .skin_tbl',
             menuWrap: '.menuwrap',
             nick: '.nick',
             avatar: '.avatar',
@@ -2134,7 +2134,7 @@ if (!globalThis.mediaDimensionExtractor) {
         if (window.forumObserver && typeof window.forumObserver.register === 'function') {
             window.forumObserver.register({
                 id: 'forum_avatars_working',
-                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="], .fast.send .skin_tbl',
+                selector: '.summary li[class^="box_"], a.avatar[href*="MID="] .default-avatar, .post.box_visitatore, .popup.pop_points .users li a[href*="MID="], .send .skin_tbl',
                 callback: function(node) {
                     if (state.waitingForScripts) {
                         var info = shouldProcessElement(node);
