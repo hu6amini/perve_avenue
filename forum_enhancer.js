@@ -11738,7 +11738,7 @@ globalThis.addEventListener('pagehide', function() {
     
     const clickEditorButton = () => {
         const button = document.querySelector('.st-editor-toggle');
-        const editorArea = document.querySelector('.List.st-editor-area.st-editor-area-desktop');
+        const editorArea = document.querySelector('.List.st-editor-area.st-editor-area-desktop, .list.st-editor-area.st-editor-area-desktop');
         const hasActiveClass = editorArea?.classList.contains('st-editor-area-active');
         
         if (!hasActiveClass && button) {
