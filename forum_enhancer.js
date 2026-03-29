@@ -11726,3 +11726,83 @@ globalThis.addEventListener('pagehide', function() {
         globalThis.postModernizer.destroy();
     }
 });
+
+// ============================================
+// WYSIWYG Switch
+// ============================================
+// More robust version with retry and proper cleanup
+(function registerEditorToggle() {
+    let retryCount = 0;
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY = 1000;
+    
+    const clickEditorButton = () => {
+        const button = document.querySelector('.st-editor-toggle');
+        const editorArea = document.querySelector('.List.st-editor-area.st-editor-area-desktop');
+        const hasActiveClass = editorArea?.classList.contains('st-editor-area-active');
+        
+        if (!hasActiveClass && button) {
+            button.dispatchEvent(new PointerEvent('click', { 
+                bubbles: true,
+                cancelable: true
+            }));
+            return true;
+        }
+        return false;
+    };
+    
+    const tryRegister = () => {
+        if (globalThis.forumObserver) {
+            // Register with observer for continuous monitoring
+            const callbackId = globalThis.forumObserver.register({
+                id: 'visual-editor-toggle-clicker',
+                priority: 'critical', // Even higher priority
+                selector: '.st-editor-toggle',
+                pageTypes: ['topic', 'forum', 'send'],
+                maxRetries: 3,
+                callback: (buttonElement) => {
+                    // Check if this is the visual editor toggle specifically
+                    if (buttonElement?.getAttribute('title') === 'Visual editor') {
+                        clickEditorButton();
+                    }
+                }
+            });
+            
+            // Also force an immediate scan for existing buttons
+            globalThis.forumObserver.forceScan('.st-editor-toggle');
+            
+            console.log('✅ Editor toggle registered (ID: ' + callbackId + ')');
+            return true;
+        }
+        
+        return false;
+    };
+    
+    // Attempt registration with retry
+    if (!tryRegister() && retryCount < MAX_RETRIES) {
+        const intervalId = setInterval(() => {
+            retryCount++;
+            if (tryRegister() || retryCount >= MAX_RETRIES) {
+                clearInterval(intervalId);
+                if (retryCount >= MAX_RETRIES) {
+                    console.warn('⚠️ Editor toggle registration failed after ' + MAX_RETRIES + ' attempts');
+                    // Fallback to direct execution
+                    clickEditorButton();
+                }
+            }
+        }, RETRY_DELAY);
+    }
+    
+    // Also handle dynamically loaded editors (like preview)
+    if (globalThis.forumObserver) {
+        globalThis.forumObserver.register({
+            id: 'editor-preview-handler',
+            priority: 'medium',
+            selector: '#preview, .preview, .Item.preview',
+            callback: () => {
+                // When preview loads, check editor state again
+                setTimeout(clickEditorButton, 100);
+            }
+        });
+    }
+})();
