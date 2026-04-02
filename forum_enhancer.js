@@ -1723,12 +1723,9 @@ if (!globalThis.mediaDimensionExtractor) {
         container.className = 'fast-reply-user-info';
         container.style.cssText = 
             'padding: 10px 15px;' +
-            'background: linear-gradient(to right, #f8f9fa, #e9ecef);' +
-            'border-radius: 8px;' +
             'display: flex;' +
             'align-items: center;' +
-            'gap: 12px;' +
-            'border: 1px solid #dee2e6;';
+            'gap: 12px;';
         
         var label = document.createElement('span');
         label.style.cssText = 
