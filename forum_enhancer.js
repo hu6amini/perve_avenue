@@ -1483,9 +1483,6 @@ if (!globalThis.mediaDimensionExtractor) {
             'border-radius:50%;' +
             'object-fit:cover;' +
             'vertical-align:middle;' +
-            'border:2px solid #fff;' +
-            'box-shadow:0 2px 4px rgba(0,0,0,0.1);' +
-            'background-color:#f0f0f0;' +
             'display:inline-block;';
         
         if (isLikesList) {
