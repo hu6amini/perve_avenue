@@ -67,8 +67,8 @@
 
         /* Fallback to Font Awesome Free if Pro isn't available */
         .fa,
-        .fas,
         .far,
+        .fas,
         .fal,
         .fab {
             font-family: 'Font Awesome 6 Pro', 'Font Awesome 6 Free', 'Font Awesome 6 Brands', sans-serif;
@@ -76,8 +76,8 @@
         
         /* Ensure icons display properly */
         .fa,
-        .fas,
         .far,
+        .fas,
         .fab {
             -moz-osx-font-smoothing: grayscale;
             -webkit-font-smoothing: antialiased;
@@ -479,49 +479,49 @@
 </head>
 <body>
     <div class="header">
-        <h1><i class="fas fa-box"></i> Forum Scripts Manager - Editor</h1>
-        <p><i class="fas fa-code-branch"></i> Central hub with inline editing for all your forum enhancement scripts</p>
-        <p><i class="fas fa-lock"></i> Private dashboard - for your use only</p>
+        <h1><i class="far fa-box"></i> Forum Scripts Manager - Editor</h1>
+        <p><i class="far fa-code-branch"></i> Central hub with inline editing for all your forum enhancement scripts</p>
+        <p><i class="far fa-lock"></i> Private dashboard - for your use only</p>
     </div>
 
     <div class="controls">
         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Filter scripts by name or description...">
-        <button class="action-btn" id="copyAllUrlsBtn"><i class="fas fa-copy"></i> Copy All URLs</button>
-        <button class="action-btn primary" id="copyConsoleLoaderBtn"><i class="fas fa-terminal"></i> Copy Console Loader</button>
-        <button class="action-btn success" id="commitAllBtn"><i class="fas fa-cloud-upload-alt"></i> Commit All Changes</button>
-        <button class="action-btn" id="refreshBtn"><i class="fas fa-sync-alt"></i> Refresh</button>
+        <button class="action-btn" id="copyAllUrlsBtn"><i class="far fa-copy"></i> Copy All URLs</button>
+        <button class="action-btn primary" id="copyConsoleLoaderBtn"><i class="far fa-terminal"></i> Copy Console Loader</button>
+        <button class="action-btn success" id="commitAllBtn"><i class="far fa-cloud-upload-alt"></i> Commit All Changes</button>
+        <button class="action-btn" id="refreshBtn"><i class="far fa-sync-alt"></i> Refresh</button>
     </div>
 
     <div class="script-grid" id="scripts-container"></div>
 
     <div class="install-script">
-        <h2><i class="fas fa-download"></i> Quick Installation Script</h2>
+        <h2><i class="far fa-download"></i> Quick Installation Script</h2>
         <p>Copy this code to use in your browser console or bookmarklet:</p>
         <pre id="install-code"></pre>
         <div class="button-group">
             <button class="copy-btn" onclick="copyInstallCode()">
-                <i class="fas fa-copy"></i> Copy Installation Script
+                <i class="far fa-copy"></i> Copy Installation Script
             </button>
             <button class="copy-btn secondary" id="copyBookmarkletBtn">
-                <i class="fas fa-bookmark"></i> Copy Bookmarklet
+                <i class="far fa-bookmark"></i> Copy Bookmarklet
             </button>
         </div>
     </div>
 
     <div class="footer">
-        <p><i class="fas fa-lightbulb"></i> Tip: Click Edit on any card to modify the script. Changes are saved to localStorage until you commit.</p>
+        <p><i class="far fa-lightbulb"></i> Tip: Click Edit on any card to modify the script. Changes are saved to localStorage until you commit.</p>
         <p><i class="fab fa-github"></i> Changes can be committed directly to GitHub</p>
     </div>
 
     <div class="modal" id="commitModal">
         <div class="modal-content">
-            <h3><i class="fas fa-cloud-upload-alt"></i> Commit Changes to GitHub</h3>
+            <h3><i class="far fa-cloud-upload-alt"></i> Commit Changes to GitHub</h3>
             <p>Fill in the information below to commit your changes:</p>
             <input type="text" id="commitMessage" placeholder="Commit message" style="width:100%;">
             <input type="password" id="githubToken" placeholder="GitHub Personal Access Token" style="width:100%;">
             <div class="button-group" style="justify-content: flex-end; margin-top: 15px;">
-                <button class="copy-btn secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-                <button class="copy-btn success" onclick="commitToGitHub()"><i class="fas fa-check"></i> Commit to GitHub</button>
+                <button class="copy-btn secondary" onclick="closeModal()"><i class="far fa-times"></i> Cancel</button>
+                <button class="copy-btn success" onclick="commitToGitHub()"><i class="far fa-check"></i> Commit to GitHub</button>
             </div>
         </div>
     </div>
@@ -573,7 +573,7 @@
             if (saved) {
                 const edits = JSON.parse(saved);
                 editedScripts = new Map(Object.entries(edits));
-                showStatus(`<i class="fas fa-database"></i> Loaded ${editedScripts.size} saved edits from localStorage`);
+                showStatus(`<i class="far fa-database"></i> Loaded ${editedScripts.size} saved edits from localStorage`);
             }
         }
 
@@ -587,7 +587,7 @@
             const status = document.createElement('div');
             status.className = 'status';
             status.style.background = isError ? '#ef4444' : '#10b981';
-            status.innerHTML = `<i class="fas ${isError ? 'fa-exclamation-triangle' : 'fa-check-circle'}"></i> ${message}`;
+            status.innerHTML = `<i class="far ${isError ? 'fa-exclamation-triangle' : 'fa-check-circle'}"></i> ${message}`;
             document.body.appendChild(status);
             setTimeout(() => status.remove(), 3000);
         }
@@ -649,9 +649,9 @@
             editorDiv.innerHTML = `
                 <textarea class="editor-textarea" id="editor-${file.replace(/\./g, '-')}">${escapeHtml(content)}</textarea>
                 <div class="editor-actions">
-                    <button class="copy-btn secondary" onclick="cancelEdit('${file}')"><i class="fas fa-times"></i> Cancel</button>
-                    <button class="copy-btn edit" onclick="saveScriptContent('${file}', document.getElementById('editor-${file.replace(/\./g, '-')}').value)"><i class="fas fa-save"></i> Save to localStorage</button>
-                    <button class="copy-btn success" onclick="saveAndCommit('${file}')"><i class="fas fa-cloud-upload-alt"></i> Save & Commit</button>
+                    <button class="copy-btn secondary" onclick="cancelEdit('${file}')"><i class="far fa-times"></i> Cancel</button>
+                    <button class="copy-btn edit" onclick="saveScriptContent('${file}', document.getElementById('editor-${file.replace(/\./g, '-')}').value)"><i class="far fa-save"></i> Save to localStorage</button>
+                    <button class="copy-btn success" onclick="saveAndCommit('${file}')"><i class="far fa-cloud-upload-alt"></i> Save & Commit</button>
                 </div>
             `;
             card.appendChild(editorDiv);
@@ -762,7 +762,7 @@
             );
 
             if (filteredScripts.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af;"><i class="fas fa-search"></i> No scripts found matching your search</div>';
+                container.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af;"><i class="far fa-search"></i> No scripts found matching your search</div>';
                 return;
             }
 
@@ -771,27 +771,27 @@
                 return `
                 <div class="script-card" data-script="${script.file}">
                     <h3>
-                        <span><i class="fas fa-code"></i> ${script.name} ${hasEdits ? '<i class="fas fa-edit" style="color:#f59e0b;"></i>' : ''}</span>
-                        <span class="version-badge"><i class="fas fa-tag"></i> ${scriptVersions[script.file] || 'v1.0.0'}${hasEdits ? ' (edited)' : ''}</span>
+                        <span><i class="far fa-code"></i> ${script.name} ${hasEdits ? '<i class="far fa-edit" style="color:#f59e0b;"></i>' : ''}</span>
+                        <span class="version-badge"><i class="far fa-tag"></i> ${scriptVersions[script.file] || 'v1.0.0'}${hasEdits ? ' (edited)' : ''}</span>
                     </h3>
-                    <p><i class="fas fa-info-circle"></i> ${script.description}</p>
+                    <p><i class="far fa-info-circle"></i> ${script.description}</p>
                     <div class="script-url">
-                        <i class="fas fa-link"></i> ${rawBase}${script.file}
+                        <i class="far fa-link"></i> ${rawBase}${script.file}
                     </div>
                     <div class="button-group">
                         <button class="copy-btn" onclick="copyToClipboard('${rawBase}${script.file}', 'URL copied!')">
-                            <i class="fas fa-copy"></i> Copy URL
+                            <i class="far fa-copy"></i> Copy URL
                         </button>
                         <button class="copy-btn secondary" onclick="copyToClipboard('fetch(\\'${rawBase}${script.file}\\').then(r=>r.text()).then(eval)', 'Console command copied!')">
-                            <i class="fas fa-terminal"></i> Console Load
+                            <i class="far fa-terminal"></i> Console Load
                         </button>
                         <button class="copy-btn edit" onclick="toggleEditMode('${script.file}')">
-                            <i class="fas fa-edit"></i> ${hasEdits ? 'Edit (has changes)' : 'Edit'}
+                            <i class="far fa-edit"></i> ${hasEdits ? 'Edit (has changes)' : 'Edit'}
                         </button>
-                        ${hasEdits ? `<button class="copy-btn success" onclick="openCommitModal('${script.file}')"><i class="fas fa-cloud-upload-alt"></i> Commit</button>` : ''}
+                        ${hasEdits ? `<button class="copy-btn success" onclick="openCommitModal('${script.file}')"><i class="far fa-cloud-upload-alt"></i> Commit</button>` : ''}
                     </div>
                     <a href="${rawBase}${script.file}" target="_blank" class="raw-link">
-                        <i class="fas fa-external-link-alt"></i> View Raw →
+                        <i class="far fa-external-link-alt"></i> View Raw →
                     </a>
                 </div>
             `}).join('');
