@@ -5,12 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Forum Scripts Manager - Editor</title>
     
-    <!-- Preload critical Font Awesome fonts -->
-    <link rel="preload" href="https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2" as="font" type="font/woff2" crossorigin>
-    
-    <!-- Font Awesome CSS -->
+    <!-- Font Awesome 6 (Free) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <style>
@@ -21,73 +16,6 @@
             padding: 20px;
             background: #111827;
         }
-        
-        /* Font Awesome font-face definitions */
-        @font-face {
-            font-family: 'Font Awesome 6 Pro';
-            src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
-                 url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2) format("woff2");
-            font-weight: 400;
-            font-style: normal;
-            font-display: swap;
-            size-adjust: 100%;
-            descent-override: 0%;
-            ascent-override: 100%;
-            line-gap-override: 0%;
-            unicode-range: u+f000-ffff;
-        }
-
-        @font-face {
-            font-family: 'Font Awesome 6 Pro';
-            src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
-                 url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2) format("woff2");
-            font-weight: 400;
-            font-style: normal;
-            font-display: swap;
-            size-adjust: 100%;
-            descent-override: 0%;
-            ascent-override: 100%;
-            line-gap-override: 0%;
-            unicode-range: u+f000-ffff;
-        }
-
-        @font-face {
-            font-family: 'Font Awesome 6 Pro';
-            src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
-                 url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2) format("woff2");
-            font-weight: 900;
-            font-style: normal;
-            font-display: swap;
-            size-adjust: 100%;
-            descent-override: 0%;
-            ascent-override: 100%;
-            line-gap-override: 0%;
-            unicode-range: u+f000-ffff;
-        }
-
-        /* Fallback to Font Awesome Free if Pro isn't available */
-        .fa,
-        .fas,
-        .far,
-        .fal,
-        .fab {
-            font-family: 'Font Awesome 6 Pro', 'Font Awesome 6 Free', 'Font Awesome 6 Brands', sans-serif;
-        }
-        
-        /* Ensure icons display properly */
-        .fa,
-        .fas,
-        .far,
-        .fab {
-            -moz-osx-font-smoothing: grayscale;
-            -webkit-font-smoothing: antialiased;
-            display: inline-block;
-            font-style: normal;
-            font-variant: normal;
-            text-rendering: auto;
-            line-height: 1;
-        }
-        
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -95,14 +23,15 @@
             border-radius: 12px;
             margin-bottom: 30px;
         }
-        
+        .header i {
+            margin-right: 10px;
+        }
         .controls {
             display: flex;
             gap: 12px;
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
-        
         .search-box {
             flex: 1;
             padding: 12px 16px;
@@ -112,11 +41,13 @@
             color: white;
             font-size: 14px;
         }
-        
         .search-box::placeholder {
             color: #9ca3af;
         }
-        
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+        }
         .action-btn {
             background: #374151;
             color: white;
@@ -127,48 +58,38 @@
             font-size: 14px;
             font-weight: 500;
             transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        
-        .action-btn i {
-            margin-right: 8px;
-        }
-        
         .action-btn:hover {
             background: #4b5563;
             transform: translateY(-1px);
         }
-        
         .action-btn.primary {
             background: #667eea;
         }
-        
         .action-btn.primary:hover {
             background: #5a67d8;
         }
-        
         .action-btn.success {
             background: #10b981;
         }
-        
         .action-btn.success:hover {
             background: #059669;
         }
-        
         .action-btn.warning {
             background: #f59e0b;
         }
-        
         .action-btn.warning:hover {
             background: #d97706;
         }
-        
         .script-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
-        
         .script-card {
             background: #1f2937;
             border-radius: 12px;
@@ -177,42 +98,37 @@
             transition: transform 0.2s, box-shadow 0.2s;
             border: 1px solid #374151;
         }
-        
         .script-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 12px rgba(0,0,0,0.4);
             border-color: #667eea;
         }
-        
         .script-card.editing {
             border-color: #10b981;
             box-shadow: 0 0 0 2px #10b981;
         }
-        
         .script-card h3 {
             margin: 0 0 10px 0;
             color: #f3f4f6;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
         }
-        
         .script-card h3 i {
             margin-right: 8px;
             color: #667eea;
         }
-        
         .script-card p {
             color: #9ca3af;
             font-size: 14px;
             margin: 0 0 12px 0;
         }
-        
         .script-card p i {
             margin-right: 6px;
-            font-size: 12px;
+            color: #667eea;
         }
-        
         .script-url {
             font-family: monospace;
             font-size: 11px;
@@ -223,18 +139,16 @@
             margin: 10px 0;
             color: #9ca3af;
         }
-        
         .script-url i {
             margin-right: 6px;
+            color: #667eea;
         }
-        
         .button-group {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
             margin-top: 12px;
         }
-        
         .copy-btn {
             background: #667eea;
             color: white;
@@ -245,77 +159,53 @@
             font-size: 12px;
             font-weight: 500;
             transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
-        
-        .copy-btn i {
-            margin-right: 6px;
-            font-size: 11px;
-        }
-        
         .copy-btn:hover {
             background: #5a67d8;
             transform: scale(1.02);
         }
-        
         .copy-btn.secondary {
             background: #374151;
         }
-        
         .copy-btn.secondary:hover {
             background: #4b5563;
         }
-        
         .copy-btn.edit {
             background: #f59e0b;
         }
-        
         .copy-btn.edit:hover {
             background: #d97706;
         }
-        
-        .copy-btn.success {
-            background: #10b981;
-        }
-        
-        .copy-btn.success:hover {
-            background: #059669;
-        }
-        
         .raw-link {
             color: #667eea;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             margin-top: 10px;
             font-size: 12px;
         }
-        
-        .raw-link i {
-            margin-right: 4px;
-        }
-        
         .raw-link:hover {
             text-decoration: underline;
         }
-        
         .version-badge {
             font-size: 11px;
             background: #374151;
             padding: 2px 8px;
             border-radius: 12px;
             color: #9ca3af;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
-        
-        .version-badge i {
-            margin-right: 4px;
-            font-size: 10px;
-        }
-        
         .editor-container {
             margin-top: 15px;
             border-top: 1px solid #374151;
             padding-top: 15px;
         }
-        
         .editor-textarea {
             width: 100%;
             min-height: 300px;
@@ -329,18 +219,15 @@
             margin: 10px 0;
             resize: vertical;
         }
-        
         .editor-textarea:focus {
             outline: none;
             border-color: #667eea;
         }
-        
         .editor-actions {
             display: flex;
             gap: 8px;
             justify-content: flex-end;
         }
-        
         .install-script {
             background: #1f2937;
             color: white;
@@ -349,18 +236,15 @@
             margin-top: 20px;
             border: 1px solid #374151;
         }
-        
         .install-script h2 i {
-            margin-right: 10px;
+            margin-right: 8px;
         }
-        
         code {
             background: #111827;
             padding: 2px 6px;
             border-radius: 4px;
             color: #68d391;
         }
-        
         pre {
             background: #111827;
             padding: 15px;
@@ -370,7 +254,6 @@
             font-size: 12px;
             margin: 10px 0;
         }
-        
         .status {
             position: fixed;
             bottom: 20px;
@@ -382,12 +265,10 @@
             font-size: 12px;
             animation: slideIn 0.3s ease;
             z-index: 1000;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        
-        .status i {
-            margin-right: 6px;
-        }
-        
         @keyframes slideIn {
             from {
                 transform: translateX(100%);
@@ -398,7 +279,6 @@
                 opacity: 1;
             }
         }
-        
         .footer {
             text-align: center;
             margin-top: 30px;
@@ -406,11 +286,9 @@
             color: #6b7280;
             font-size: 12px;
         }
-        
         .footer i {
             margin-right: 6px;
         }
-        
         .modal {
             display: none;
             position: fixed;
@@ -423,7 +301,6 @@
             justify-content: center;
             align-items: center;
         }
-        
         .modal-content {
             background: #1f2937;
             border-radius: 12px;
@@ -433,46 +310,32 @@
             max-height: 80vh;
             overflow-y: auto;
         }
-        
-        .modal-content h3 i {
-            margin-right: 8px;
+        .modal-content h3 {
+            color: white;
+            margin-top: 0;
         }
-        
         .modal-content input {
             background: #111827;
             border: 1px solid #374151;
             color: white;
-            padding: 8px;
+            padding: 10px;
             border-radius: 6px;
+            width: 100%;
             margin: 10px 0;
         }
-        
-        /* Icon animations */
-        .fa-spin {
-            animation: fa-spin 2s infinite linear;
+        .modal-content input:focus {
+            outline: none;
+            border-color: #667eea;
         }
-        
-        @keyframes fa-spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .copy-btn i,
-        .action-btn i {
-            transition: transform 0.2s;
-        }
-        
-        .copy-btn:hover i,
-        .action-btn:hover i {
-            transform: scale(1.1);
-        }
-        
         @media (max-width: 768px) {
             .script-grid {
                 grid-template-columns: 1fr;
             }
             .controls {
                 flex-direction: column;
+            }
+            .button-group {
+                justify-content: center;
             }
         }
     </style>
@@ -486,10 +349,18 @@
 
     <div class="controls">
         <input type="text" class="search-box" id="searchBox" placeholder="🔍 Filter scripts by name or description...">
-        <button class="action-btn" id="copyAllUrlsBtn"><i class="fas fa-copy"></i> Copy All URLs</button>
-        <button class="action-btn primary" id="copyConsoleLoaderBtn"><i class="fas fa-terminal"></i> Copy Console Loader</button>
-        <button class="action-btn success" id="commitAllBtn"><i class="fas fa-cloud-upload-alt"></i> Commit All Changes</button>
-        <button class="action-btn" id="refreshBtn"><i class="fas fa-sync-alt"></i> Refresh</button>
+        <button class="action-btn" id="copyAllUrlsBtn">
+            <i class="fas fa-copy"></i> Copy All URLs
+        </button>
+        <button class="action-btn primary" id="copyConsoleLoaderBtn">
+            <i class="fas fa-terminal"></i> Copy Console Loader
+        </button>
+        <button class="action-btn success" id="commitAllBtn">
+            <i class="fas fa-cloud-upload-alt"></i> Commit All Changes
+        </button>
+        <button class="action-btn" id="refreshBtn">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
     </div>
 
     <div class="script-grid" id="scripts-container"></div>
@@ -510,18 +381,22 @@
 
     <div class="footer">
         <p><i class="fas fa-lightbulb"></i> Tip: Click Edit on any card to modify the script. Changes are saved to localStorage until you commit.</p>
-        <p><i class="fab fa-github"></i> Changes can be committed directly to GitHub</p>
+        <p><i class="fab fa-github"></i> Connected to GitHub - Commit changes directly to your repository</p>
     </div>
 
     <div class="modal" id="commitModal">
         <div class="modal-content">
             <h3><i class="fas fa-cloud-upload-alt"></i> Commit Changes to GitHub</h3>
             <p>Fill in the information below to commit your changes:</p>
-            <input type="text" id="commitMessage" placeholder="Commit message" style="width:100%;">
-            <input type="password" id="githubToken" placeholder="GitHub Personal Access Token" style="width:100%;">
-            <div class="button-group" style="justify-content: flex-end; margin-top: 15px;">
-                <button class="copy-btn secondary" onclick="closeModal()"><i class="fas fa-times"></i> Cancel</button>
-                <button class="copy-btn success" onclick="commitToGitHub()"><i class="fas fa-check"></i> Commit to GitHub</button>
+            <input type="text" id="commitMessage" placeholder="Commit message (e.g., Updated forum enhancer)">
+            <input type="password" id="githubToken" placeholder="GitHub Personal Access Token (needs 'repo' scope)">
+            <div class="button-group" style="justify-content: flex-end; margin-top: 20px;">
+                <button class="copy-btn secondary" onclick="closeModal()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="copy-btn success" onclick="commitToGitHub()">
+                    <i class="fas fa-cloud-upload-alt"></i> Commit to GitHub
+                </button>
             </div>
         </div>
     </div>
@@ -594,9 +469,9 @@
 
         function copyToClipboard(text, successMessage = 'Copied to clipboard!') {
             navigator.clipboard.writeText(text).then(() => {
-                showStatus(successMessage);
+                showStatus(`<i class="fas fa-copy"></i> ${successMessage}`);
             }).catch(() => {
-                showStatus('Failed to copy', true);
+                showStatus('<i class="fas fa-exclamation-triangle"></i> Failed to copy', true);
             });
         }
 
@@ -619,7 +494,7 @@
         async function saveScriptContent(file, content) {
             editedScripts.set(file, content);
             saveEdits();
-            showStatus(`✅ ${file} saved to localStorage (not yet committed to GitHub)`);
+            showStatus(`<i class="fas fa-save"></i> ${file} saved to localStorage (not yet committed to GitHub)`);
             
             const card = document.querySelector(`.script-card[data-script="${file}"]`);
             if (card && card.classList.contains('editing')) {
@@ -649,9 +524,15 @@
             editorDiv.innerHTML = `
                 <textarea class="editor-textarea" id="editor-${file.replace(/\./g, '-')}">${escapeHtml(content)}</textarea>
                 <div class="editor-actions">
-                    <button class="copy-btn secondary" onclick="cancelEdit('${file}')"><i class="fas fa-times"></i> Cancel</button>
-                    <button class="copy-btn edit" onclick="saveScriptContent('${file}', document.getElementById('editor-${file.replace(/\./g, '-')}').value)"><i class="fas fa-save"></i> Save to localStorage</button>
-                    <button class="copy-btn success" onclick="saveAndCommit('${file}')"><i class="fas fa-cloud-upload-alt"></i> Save & Commit</button>
+                    <button class="copy-btn secondary" onclick="cancelEdit('${file}')">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button class="copy-btn edit" onclick="saveScriptContent('${file}', document.getElementById('editor-${file.replace(/\./g, '-')}').value)">
+                        <i class="fas fa-save"></i> Save to localStorage
+                    </button>
+                    <button class="copy-btn success" onclick="saveAndCommit('${file}')">
+                        <i class="fas fa-cloud-upload-alt"></i> Save & Commit
+                    </button>
                 </div>
             `;
             card.appendChild(editorDiv);
@@ -699,13 +580,13 @@
             const targetFile = document.getElementById('commitModal').dataset.file;
             
             if (!token) {
-                showStatus('GitHub token required', true);
+                showStatus('<i class="fas fa-exclamation-triangle"></i> GitHub token required', true);
                 return;
             }
             
             const files = targetFile === 'all' ? Array.from(editedScripts.keys()) : [targetFile];
             
-            showStatus(`Committing ${files.length} file(s) to GitHub...`);
+            showStatus(`<i class="fas fa-cloud-upload-alt"></i> Committing ${files.length} file(s) to GitHub...`);
             
             for (const file of files) {
                 const content = editedScripts.get(file);
@@ -733,21 +614,21 @@
                     });
                     
                     if (commitResponse.ok) {
-                        showStatus(`✅ ${file} committed to GitHub`);
+                        showStatus(`<i class="fas fa-check-circle"></i> ${file} committed to GitHub`);
                         editedScripts.delete(file);
                         saveEdits();
                     } else {
                         const error = await commitResponse.json();
-                        showStatus(`❌ Failed to commit ${file}: ${error.message}`, true);
+                        showStatus(`<i class="fas fa-exclamation-triangle"></i> Failed to commit ${file}: ${error.message}`, true);
                     }
                 } catch (error) {
-                    showStatus(`❌ Error committing ${file}: ${error.message}`, true);
+                    showStatus(`<i class="fas fa-exclamation-triangle"></i> Error committing ${file}: ${error.message}`, true);
                 }
             }
             
             closeModal();
             if (targetFile === 'all' && editedScripts.size === 0) {
-                showStatus('All changes committed to GitHub!');
+                showStatus('<i class="fas fa-check-circle"></i> All changes committed to GitHub!');
             }
             renderScripts();
         }
@@ -771,7 +652,7 @@
                 return `
                 <div class="script-card" data-script="${script.file}">
                     <h3>
-                        <span><i class="fas fa-code"></i> ${script.name} ${hasEdits ? '<i class="fas fa-edit" style="color:#f59e0b;"></i>' : ''}</span>
+                        <span><i class="fas ${script.file.includes('.css') ? 'fa-paint-brush' : 'fa-code'}"></i> ${script.name} ${hasEdits ? '<i class="fas fa-edit" style="color:#f59e0b"></i>' : ''}</span>
                         <span class="version-badge"><i class="fas fa-tag"></i> ${scriptVersions[script.file] || 'v1.0.0'}${hasEdits ? ' (edited)' : ''}</span>
                     </h3>
                     <p><i class="fas fa-info-circle"></i> ${script.description}</p>
@@ -860,7 +741,7 @@
 
         function commitAllChanges() {
             if (editedScripts.size === 0) {
-                showStatus('No changes to commit', true);
+                showStatus('<i class="fas fa-info-circle"></i> No changes to commit', true);
                 return;
             }
             openCommitModal('all');
