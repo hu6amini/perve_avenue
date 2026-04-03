@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
             background: #111827;
@@ -19,68 +19,188 @@
             border-radius: 12px;
             margin-bottom: 30px;
         }
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .search-box {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            background: #1f2937;
+            color: white;
+            font-size: 14px;
+        }
+        .search-box::placeholder {
+            color: #9ca3af;
+        }
+        .action-btn {
+            background: #374151;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .action-btn:hover {
+            background: #4b5563;
+            transform: translateY(-1px);
+        }
+        .action-btn.primary {
+            background: #667eea;
+        }
+        .action-btn.primary:hover {
+            background: #5a67d8;
+        }
         .script-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
         .script-card {
-            background: white;
+            background: #1f2937;
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid #374151;
+        }
+        .script-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.4);
+            border-color: #667eea;
         }
         .script-card h3 {
             margin: 0 0 10px 0;
-            color: #333;
+            color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .script-card p {
+            color: #9ca3af;
+            font-size: 14px;
+            margin: 0 0 12px 0;
         }
         .script-url {
             font-family: monospace;
-            font-size: 12px;
-            background: #f0f0f0;
+            font-size: 11px;
+            background: #111827;
             padding: 8px;
             border-radius: 6px;
             word-break: break-all;
             margin: 10px 0;
+            color: #9ca3af;
+        }
+        .button-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
         }
         .copy-btn {
             background: #667eea;
             color: white;
             border: none;
-            padding: 8px 16px;
+            padding: 6px 12px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
         }
         .copy-btn:hover {
             background: #5a67d8;
+            transform: scale(1.02);
+        }
+        .copy-btn.secondary {
+            background: #374151;
+        }
+        .copy-btn.secondary:hover {
+            background: #4b5563;
         }
         .raw-link {
             color: #667eea;
             text-decoration: none;
             display: inline-block;
             margin-top: 10px;
+            font-size: 12px;
+        }
+        .raw-link:hover {
+            text-decoration: underline;
+        }
+        .version-badge {
+            font-size: 11px;
+            background: #374151;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: #9ca3af;
         }
         .install-script {
-            background: #2d3748;
+            background: #1f2937;
             color: white;
             padding: 20px;
             border-radius: 12px;
             margin-top: 20px;
+            border: 1px solid #374151;
         }
         code {
-            background: #1a202c;
+            background: #111827;
             padding: 2px 6px;
             border-radius: 4px;
             color: #68d391;
         }
         pre {
-            background: #1a202c;
+            background: #111827;
             padding: 15px;
             border-radius: 8px;
             overflow-x: auto;
             color: #e2e8f0;
+            font-size: 12px;
+            margin: 10px 0;
+        }
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            color: #6b7280;
+            font-size: 12px;
+        }
+        @media (max-width: 768px) {
+            .script-grid {
+                grid-template-columns: 1fr;
+            }
+            .controls {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -91,39 +211,118 @@
         <p>🔒 Private dashboard - for your use only</p>
     </div>
 
+    <div class="controls">
+        <input type="text" class="search-box" id="searchBox" placeholder="🔍 Filter scripts by name or description...">
+        <button class="action-btn" id="copyAllUrlsBtn">📋 Copy All URLs</button>
+        <button class="action-btn primary" id="copyConsoleLoaderBtn">🚀 Copy Console Loader</button>
+        <button class="action-btn" id="refreshBtn">🔄 Refresh</button>
+    </div>
+
     <div class="script-grid" id="scripts-container"></div>
 
     <div class="install-script">
         <h2>📝 Quick Installation Script</h2>
         <p>Copy this code to use in your browser console or bookmarklet:</p>
         <pre id="install-code"></pre>
-        <button class="copy-btn" onclick="copyInstallCode()">Copy Installation Script</button>
+        <div class="button-group">
+            <button class="copy-btn" onclick="copyInstallCode()">Copy Installation Script</button>
+            <button class="copy-btn secondary" id="copyBookmarkletBtn">📌 Copy Bookmarklet</button>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>💡 Tip: Use the Console Loader to instantly load all scripts on any forum page</p>
     </div>
 
     <script>
+        // Script versions and dependencies
+        const scriptVersions = {
+            "dynamic_loader.js": "v1.2.0",
+            "forum_core_observer.js": "v2.1.0",
+            "forum_enhancer.js": "v1.3.2",
+            "media-optimizer.js": "v1.0.5",
+            "forum_style.css": "v1.1.0",
+            "all.min.css": "v1.0.0"
+        };
+
+        const scriptDependencies = {
+            "forum_enhancer.js": ["forum_core_observer.js", "dynamic_loader.js"],
+            "media-optimizer.js": ["forum_core_observer.js"],
+            "forum_style.css": [],
+            "all.min.css": [],
+            "dynamic_loader.js": [],
+            "forum_core_observer.js": []
+        };
+
         const scripts = [
-            { name: "Dynamic Loader", file: "dynamic_loader.js", description: "Handles dynamic content loading" },
-            { name: "Forum Core Observer", file: "forum_core_observer.js", description: "Core mutation observer for DOM changes" },
-            { name: "Forum Enhancer", file: "forum_enhancer.js", description: "Main forum enhancement features" },
-            { name: "Media Optimizer", file: "media-optimizer.js", description: "Image and media optimization" },
-            { name: "Forum Styles", file: "forum_style.css", description: "Custom CSS styles" },
-            { name: "All Minified", file: "all.min.css", description: "Minified combined styles" }
+            { name: "Dynamic Loader", file: "dynamic_loader.js", description: "Handles dynamic content loading and AJAX requests" },
+            { name: "Forum Core Observer", file: "forum_core_observer.js", description: "Core mutation observer for DOM changes and script coordination" },
+            { name: "Forum Enhancer", file: "forum_enhancer.js", description: "Main forum enhancement features and UI improvements" },
+            { name: "Media Optimizer", file: "media-optimizer.js", description: "Image and media optimization with WebP support" },
+            { name: "Forum Styles", file: "forum_style.css", description: "Custom CSS styles for modern forum appearance" },
+            { name: "All Minified", file: "all.min.css", description: "Minified combined styles for production" }
         ];
 
-        const repoName = window.location.pathname.split('/')[1] || 'your-repo-name';
-        const rawBase = `https://raw.githubusercontent.com/${window.location.hostname.split('.')[0]}/${repoName}/main/`;
+        // Detect correct base URL
+        const isUserPage = window.location.hostname === 'hu6amini.github.io' && window.location.pathname === '/';
+        const repoName = window.location.pathname.split('/')[1] || 'hu6amini.github.io';
+        const rawBase = isUserPage 
+            ? 'https://raw.githubusercontent.com/hu6amini/hu6amini.github.io/main/'
+            : `https://raw.githubusercontent.com/hu6amini/${repoName}/main/`;
+
+        let currentFilter = '';
+
+        function showStatus(message, isError = false) {
+            const status = document.createElement('div');
+            status.className = 'status';
+            status.style.background = isError ? '#ef4444' : '#10b981';
+            status.textContent = message;
+            document.body.appendChild(status);
+            setTimeout(() => status.remove(), 2000);
+        }
+
+        function copyToClipboard(text, successMessage = 'Copied to clipboard!') {
+            navigator.clipboard.writeText(text).then(() => {
+                showStatus(successMessage);
+            }).catch(() => {
+                showStatus('Failed to copy', true);
+            });
+        }
 
         function renderScripts() {
             const container = document.getElementById('scripts-container');
-            container.innerHTML = scripts.map(script => `
-                <div class="script-card">
-                    <h3>${script.name}</h3>
+            const filteredScripts = scripts.filter(script => 
+                currentFilter === '' || 
+                script.name.toLowerCase().includes(currentFilter) || 
+                script.description.toLowerCase().includes(currentFilter) ||
+                script.file.toLowerCase().includes(currentFilter)
+            );
+
+            if (filteredScripts.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af;">No scripts found matching your search</div>';
+                return;
+            }
+
+            container.innerHTML = filteredScripts.map(script => `
+                <div class="script-card" data-script="${script.file}">
+                    <h3>
+                        ${script.name}
+                        <span class="version-badge">${scriptVersions[script.file] || 'v1.0.0'}</span>
+                    </h3>
                     <p>${script.description}</p>
                     <div class="script-url">${rawBase}${script.file}</div>
-                    <button class="copy-btn" onclick="copyToClipboard('${rawBase}${script.file}')">
-                        📋 Copy URL
-                    </button>
-                    <br>
+                    <div class="button-group">
+                        <button class="copy-btn" onclick="copyToClipboard('${rawBase}${script.file}', 'URL copied!')">
+                            📋 Copy URL
+                        </button>
+                        <button class="copy-btn secondary" onclick="copyToClipboard('fetch(\\'${rawBase}${script.file}\\').then(r=>r.text()).then(eval)', 'Console command copied!')">
+                            🖥️ Console Load
+                        </button>
+                        ${scriptDependencies[script.file]?.length ? 
+                            `<button class="copy-btn secondary" onclick="showDependencies('${script.file}')">
+                                📦 Deps (${scriptDependencies[script.file].length})
+                            </button>` : ''}
+                    </div>
                     <a href="${rawBase}${script.file}" target="_blank" class="raw-link">🔗 View Raw →</a>
                 </div>
             `).join('');
@@ -133,16 +332,19 @@
             const scriptUrls = scripts.map(s => `'${rawBase}${s.file}'`).join(',\n    ');
             return `// ==UserScript==
 // @name         Forum Enhancement Pack
-// @namespace    your-forum-enhancer
+// @namespace    forum-enhancer
 // @version      1.0
-// @description  Load all forum scripts
+// @description  Load all forum scripts automatically
 // @match        *://your-forum.com/*
 // @grant        none
 // ==/UserScript==
 
 (function() {
+    'use strict';
+    
     const scripts = [${scriptUrls}];
     
+    // Load all scripts
     scripts.forEach(src => {
         const script = document.createElement('script');
         script.src = src;
@@ -155,22 +357,78 @@
     css.rel = 'stylesheet';
     css.href = '${rawBase}forum_style.css';
     document.head.appendChild(css);
+    
+    console.log('✅ Forum Enhancement Pack loaded');
 })();`;
         }
 
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text);
-            alert('URL copied to clipboard!');
+        function generateBookmarklet() {
+            const loaderCode = scripts.map(s => 
+                `fetch('${rawBase}${s.file}').then(r=>r.text()).then(eval).catch(e=>console.error('${s.file} failed',e))`
+            ).join(';');
+            return `javascript:(function(){${loaderCode};console.log('✅ Forum scripts loaded')})();`;
         }
 
-        function copyInstallCode() {
-            const code = document.getElementById('install-code').textContent;
-            navigator.clipboard.writeText(code);
-            alert('Installation script copied!');
+        function generateConsoleLoader() {
+            const loaderCode = scripts.map(s => 
+                `fetch('${rawBase}${s.file}').then(r=>r.text()).then(eval).catch(e=>console.error('${s.file} failed', e))`
+            ).join(';\n');
+            return `// Paste this in your forum's console (F12) to load all scripts\n\n${loaderCode}\n\nconsole.log('✅ All forum scripts loaded');`;
         }
 
+        function copyConsoleLoader() {
+            const code = generateConsoleLoader();
+            copyToClipboard(code, 'Console loader copied! Paste in forum console (F12)');
+        }
+
+        function copyBookmarklet() {
+            const code = generateBookmarklet();
+            copyToClipboard(code, 'Bookmarklet copied! Create a new bookmark and paste this as the URL');
+        }
+
+        function copyAllUrls() {
+            const urls = scripts.map(s => `${rawBase}${s.file}`).join('\n');
+            copyToClipboard(urls, 'All URLs copied!');
+        }
+
+        function showDependencies(scriptFile) {
+            const deps = scriptDependencies[scriptFile] || [];
+            if (deps.length === 0) {
+                showStatus(`${scriptFile} has no dependencies`, false);
+            } else {
+                showStatus(`${scriptFile} depends on: ${deps.join(', ')}`, false);
+            }
+        }
+
+        function refreshPage() {
+            location.reload();
+        }
+
+        // Search functionality
+        document.getElementById('searchBox')?.addEventListener('input', (e) => {
+            currentFilter = e.target.value.toLowerCase();
+            renderScripts();
+        });
+
+        // Button handlers
+        document.getElementById('copyAllUrlsBtn')?.addEventListener('click', copyAllUrls);
+        document.getElementById('copyConsoleLoaderBtn')?.addEventListener('click', copyConsoleLoader);
+        document.getElementById('copyBookmarkletBtn')?.addEventListener('click', copyBookmarklet);
+        document.getElementById('refreshBtn')?.addEventListener('click', refreshPage);
+
+        // Initialize
         renderScripts();
         document.getElementById('install-code').textContent = generateInstallScript();
+
+        // Make functions global for onclick handlers
+        window.copyToClipboard = copyToClipboard;
+        window.copyInstallCode = () => copyToClipboard(document.getElementById('install-code').textContent, 'Installation script copied!');
+        window.showDependencies = showDependencies;
+
+        // Display stats in console
+        console.log(`📊 Forum Scripts Manager loaded with ${scripts.length} scripts`);
+        console.log(`📁 Repository: ${repoName}`);
+        console.log(`🔗 Raw base URL: ${rawBase}`);
     </script>
 </body>
-                                                      </html>
+</html>
