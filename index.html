@@ -10,16 +10,30 @@
     <link rel="preload" href="https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2" as="font" type="font/woff2" crossorigin>
     
+    <!-- Preconnect to Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Preload critical Quicksand weights -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600&display=swap" as="style" crossorigin>
+
+    <!-- Load Quicksand with all weights you need -->
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <!-- Font Awesome CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <style>
+        /* Apply Quicksand as default font */
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: 'Quicksand', system-ui, -apple-system, sans-serif;
             max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
             background: #111827;
+            font-weight: 400;
+            font-size: 16px;
+            line-height: 1.5;
         }
         
         /* Font Awesome font-face definitions */
@@ -96,6 +110,16 @@
             margin-bottom: 30px;
         }
         
+        .header h1 {
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        
+        .header p {
+            font-weight: 400;
+            opacity: 0.95;
+        }
+        
         .controls {
             display: flex;
             gap: 12px;
@@ -111,6 +135,8 @@
             background: #1f2937;
             color: white;
             font-size: 14px;
+            font-family: 'Quicksand', system-ui, sans-serif;
+            font-weight: 400;
         }
         
         .search-box::placeholder {
@@ -126,6 +152,7 @@
             cursor: pointer;
             font-size: 14px;
             font-weight: 500;
+            font-family: 'Quicksand', system-ui, sans-serif;
             transition: all 0.2s;
         }
         
@@ -195,6 +222,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            font-weight: 600;
+            font-size: 18px;
         }
         
         .script-card h3 i {
@@ -206,6 +235,8 @@
             color: #9ca3af;
             font-size: 14px;
             margin: 0 0 12px 0;
+            font-weight: 400;
+            line-height: 1.5;
         }
         
         .script-card p i {
@@ -214,7 +245,7 @@
         }
         
         .script-url {
-            font-family: monospace;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
             font-size: 11px;
             background: #111827;
             padding: 8px;
@@ -244,6 +275,7 @@
             cursor: pointer;
             font-size: 12px;
             font-weight: 500;
+            font-family: 'Quicksand', system-ui, sans-serif;
             transition: all 0.2s;
         }
         
@@ -287,6 +319,7 @@
             display: inline-block;
             margin-top: 10px;
             font-size: 12px;
+            font-weight: 500;
         }
         
         .raw-link i {
@@ -303,6 +336,7 @@
             padding: 2px 8px;
             border-radius: 12px;
             color: #9ca3af;
+            font-weight: 500;
         }
         
         .version-badge i {
@@ -350,8 +384,17 @@
             border: 1px solid #374151;
         }
         
+        .install-script h2 {
+            font-weight: 600;
+            margin-top: 0;
+        }
+        
         .install-script h2 i {
             margin-right: 10px;
+        }
+        
+        .install-script p {
+            font-weight: 400;
         }
         
         code {
@@ -359,6 +402,8 @@
             padding: 2px 6px;
             border-radius: 4px;
             color: #68d391;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
         }
         
         pre {
@@ -369,6 +414,7 @@
             color: #e2e8f0;
             font-size: 12px;
             margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', monospace;
         }
         
         .status {
@@ -379,9 +425,11 @@
             color: white;
             padding: 8px 16px;
             border-radius: 8px;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: 500;
             animation: slideIn 0.3s ease;
             z-index: 1000;
+            font-family: 'Quicksand', system-ui, sans-serif;
         }
         
         .status i {
@@ -405,6 +453,7 @@
             padding: 20px;
             color: #6b7280;
             font-size: 12px;
+            font-weight: 400;
         }
         
         .footer i {
@@ -432,19 +481,38 @@
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
+            font-family: 'Quicksand', system-ui, sans-serif;
+        }
+        
+        .modal-content h3 {
+            font-weight: 600;
+            margin-top: 0;
         }
         
         .modal-content h3 i {
             margin-right: 8px;
         }
         
+        .modal-content p {
+            font-weight: 400;
+        }
+        
         .modal-content input {
             background: #111827;
             border: 1px solid #374151;
             color: white;
-            padding: 8px;
+            padding: 10px 12px;
             border-radius: 6px;
             margin: 10px 0;
+            font-family: 'Quicksand', system-ui, sans-serif;
+            font-size: 14px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .modal-content input:focus {
+            outline: none;
+            border-color: #667eea;
         }
         
         /* Icon animations */
@@ -473,6 +541,12 @@
             }
             .controls {
                 flex-direction: column;
+            }
+            body {
+                padding: 12px;
+            }
+            .header h1 {
+                font-size: 1.5rem;
             }
         }
     </style>
@@ -517,8 +591,8 @@
         <div class="modal-content">
             <h3><i class="far fa-cloud-upload-alt"></i> Commit Changes to GitHub</h3>
             <p>Fill in the information below to commit your changes:</p>
-            <input type="text" id="commitMessage" placeholder="Commit message" style="width:100%;">
-            <input type="password" id="githubToken" placeholder="GitHub Personal Access Token" style="width:100%;">
+            <input type="text" id="commitMessage" placeholder="Commit message">
+            <input type="password" id="githubToken" placeholder="GitHub Personal Access Token">
             <div class="button-group" style="justify-content: flex-end; margin-top: 15px;">
                 <button class="copy-btn secondary" onclick="closeModal()"><i class="far fa-times"></i> Cancel</button>
                 <button class="copy-btn success" onclick="commitToGitHub()"><i class="far fa-check"></i> Commit to GitHub</button>
