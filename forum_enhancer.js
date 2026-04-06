@@ -2824,7 +2824,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-picker',
                 callback: replaceCustomEmojis,
-                selector: '.picker-custom-grid, .picker-custom-item, .image-thumbnail',
+                selector: '.picker-custom-grid, .picker-custom-item, .image-thumbnail, .ve-emoji-list',
                 priority: 'high',
                 pageTypes: ['topic', 'blog', 'search', 'forum']
             });
