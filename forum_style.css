@@ -3333,4 +3333,4 @@ input[type="radio"]:checked::before
 }
 
 /*Hidden*/
-.nascosta,.box_visitatore .u_title::before,.send .bottom-editor .left.Sub, #topic .send input[type="submit"][name="sub-mit"], #send .send input[type="submit"][name="sub-mit"], #topic .send input[type="submit"][name="submit_post"], #send .send input[type="submit"][name="submit_post"], #send .send button[name="preview"], #send .send .right.Sub.right-bottom-icons img[alt="File Attachments"], #topic .send button[name="full"] img, .send .Break.Sub, #topic .send input.forminput[type="submit"], #send #topic .send input.forminput[type="submit"]{display:none!important}
+.nascosta,.box_visitatore .u_title::before,.send .bottom-editor .left.Sub, #topic .send input[type="submit"][name="sub-mit"], #send .send input[type="submit"][name="sub-mit"], #topic .send input[type="submit"][name="submit_post"], #send .send input[type="submit"][name="submit_post"], #send .send .right.Sub.right-bottom-icons img[alt="File Attachments"], #topic .send button[name="full"] img, .send .Break.Sub, #topic .send input.forminput[type="submit"], #send #topic .send input.forminput[type="submit"]{display:none!important}
