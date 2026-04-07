@@ -238,6 +238,9 @@ class MediaDimensionExtractor {
         // Skip if node is not in DOM
         if (!node || !node.isConnected) return;
         
+        // Skip if this entire node is inside ProseMirror
+        if (this.#isInsideProseMirror(node)) return;
+        
         const images = node.getElementsByTagName('img');
         const iframes = node.getElementsByTagName('iframe');
         const videos = node.getElementsByTagName('video');
@@ -245,6 +248,8 @@ class MediaDimensionExtractor {
         // Process images
         for (let i = 0, len = images.length; i < len; i++) {
             const img = images[i];
+            // Skip images inside ProseMirror
+            if (this.#isInsideProseMirror(img)) continue;
             if (img.isConnected && !this.#processedMedia.has(img)) {
                 this.#processImage(img);
             }
@@ -270,6 +275,9 @@ class MediaDimensionExtractor {
     #processSingleMedia(media) {
         if (!media || !media.isConnected) return;
         if (this.#processedMedia.has(media)) return;
+        
+        // Skip if inside ProseMirror
+        if (this.#isInsideProseMirror(media)) return;
 
         const tag = media.tagName;
         
@@ -288,7 +296,17 @@ class MediaDimensionExtractor {
         this.#processedMedia.add(media);
     }
 
+    #isInsideProseMirror(element) {
+        // Check if element or any parent has .tiptap or .ProseMirror class
+        return element.closest('.tiptap, .ProseMirror') !== null;
+    }
+
     #processImage(img) {
+        // Skip images inside ProseMirror editors
+        if (this.#isInsideProseMirror(img)) {
+            return;
+        }
+        
         // ULTRA-AGGRESSIVE twemoji detection - MUST BE FIRST
         const isTwemoji = img.src.includes('twemoji') || 
                         img.classList.contains('twemoji') ||
