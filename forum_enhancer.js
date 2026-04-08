@@ -2686,9 +2686,6 @@ window.videoIframeUtils = {
 };
 
 //Twemoji
-twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
-
-//Default emojis to Twemoji
 (function() {
     'use strict';
     
@@ -2839,6 +2836,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
         replaceCustomEmojis(document.body);
         
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+            // For emoji picker (including .ve-emoji-list)
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-picker',
                 callback: replaceCustomEmojis,
@@ -2847,6 +2845,16 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
                 pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             
+            // For the visual editor emoji list specifically
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-ve-editor',
+                callback: replaceCustomEmojis,
+                selector: '.ve-emoji-list, .ve-emoji-item, [class*="ve-emoji"]',
+                priority: 'high',
+                pageTypes: ['topic', 'forum', 'send']
+            });
+            
+            // For post content
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-content',
                 callback: replaceCustomEmojis,
@@ -2855,6 +2863,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
                 pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             
+            // For quotes
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-quotes',
                 callback: replaceCustomEmojis,
@@ -2862,6 +2871,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
                 priority: 'normal'
             });
             
+            // For user content
             globalThis.forumObserver.register({
                 id: 'emoji-replacer-user-content',
                 callback: replaceCustomEmojis,
@@ -2873,9 +2883,11 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
             
             setTimeout(function() {
                 const pickerGrid = document.querySelector('.picker-custom-grid');
-                if (pickerGrid) {
-                    console.log('Found existing emoji picker, processing...');
-                    replaceCustomEmojis(pickerGrid);
+                const veEmojiList = document.querySelector('.ve-emoji-list');
+                if (pickerGrid || veEmojiList) {
+                    console.log('Found existing emoji pickers, processing...');
+                    if (pickerGrid) replaceCustomEmojis(pickerGrid);
+                    if (veEmojiList) replaceCustomEmojis(veEmojiList);
                 }
             }, 500);
             
@@ -2931,12 +2943,16 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
         isReady: function() { return !!window.twemoji; },
         forcePickerUpdate: function() {
             const pickerGrid = document.querySelector('.picker-custom-grid');
+            const veEmojiList = document.querySelector('.ve-emoji-list');
             if (pickerGrid) {
                 console.log('Force-updating emoji picker...');
                 replaceCustomEmojis(pickerGrid);
-                return true;
             }
-            return false;
+            if (veEmojiList) {
+                console.log('Force-updating VE emoji list...');
+                replaceCustomEmojis(veEmojiList);
+            }
+            return !!(pickerGrid || veEmojiList);
         }
     };
     
