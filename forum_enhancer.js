@@ -2686,7 +2686,10 @@ window.videoIframeUtils = {
 };
 
 //Twemoji
-// Twemoji - Fast instant conversion for emojis
+//Twemoji
+twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
+
+//Default emojis to Twemoji
 (function() {
     'use strict';
     
@@ -2752,130 +2755,134 @@ window.videoIframeUtils = {
     const PROCESSED_CLASS = 'twemoji-processed';
     const TWEMOJI_BASE_URL = TWEMOJI_CONFIG.base + 'svg/';
     
-    // Fast replacement - no scrolling needed
+    function getEmojiSelectors(src) {
+        return [
+            'img[src="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
+            'img[data-emoticon-url="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
+            'img[data-emoticon-preview="' + src + '"]:not(.' + PROCESSED_CLASS + ')'
+        ];
+    }
+    
     function replaceCustomEmojis(container) {
-        if (!container || !container.querySelectorAll) return 0;
-        
-        let convertedCount = 0;
+        if (!container || !container.querySelectorAll) return;
         
         for (const [oldSrc, newFile] of EMOJI_MAP) {
-            const filename = oldSrc.split('/').pop();
-            // Use attribute selector that's faster and more flexible
-            const imgs = container.querySelectorAll(`img[src*="${filename}"]:not(.${PROCESSED_CLASS})`);
+            const selectors = getEmojiSelectors(oldSrc);
             
-            for (let i = 0; i < imgs.length; i++) {
-                const img = imgs[i];
-                const originalSrc = img.src;
+            for (const selector of selectors) {
+                const imgs = container.querySelectorAll(selector);
                 
-                img.src = TWEMOJI_BASE_URL + newFile;
-                img.classList.add('twemoji', PROCESSED_CLASS);
-                img.loading = 'lazy';
-                img.decoding = 'async';
-                
-                // Preserve alt text
-                if (img.alt) {
-                    img.alt = img.alt;
-                }
-                
-                img.onerror = function() {
-                    this.src = originalSrc;
-                    this.classList.remove(PROCESSED_CLASS);
-                };
-                
-                convertedCount++;
-            }
-        }
-        
-        return convertedCount;
-    }
-    
-    // Fast Twemoji parse
-    function runTwemoji(container) {
-        if (window.twemoji && window.twemoji.parse) {
-            // Use microtask for faster execution
-            queueMicrotask(() => {
-                twemoji.parse(container, TWEMOJI_CONFIG);
-            });
-        }
-    }
-    
-    // Combined fast processing
-    function processEmojis(container) {
-        if (!container) return;
-        replaceCustomEmojis(container);
-        runTwemoji(container);
-    }
-    
-    // Intercept image loading - convert them AS THEY APPEAR
-    function setupInstantConversion() {
-        // Use MutationObserver with very specific, fast settings
-        const observer = new MutationObserver((mutations) => {
-            let needsProcessing = false;
-            
-            for (const mutation of mutations) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            // Check if this is an emoji image or contains emoji images
-                            if (node.tagName === 'IMG') {
-                                if (node.src && node.src.includes('img.forumfree.net/html/emoticons/')) {
-                                    processEmojis(node);
-                                }
-                            } else if (node.querySelectorAll) {
-                                const emojiImgs = node.querySelectorAll('img[src*="img.forumfree.net/html/emoticons/"]:not(.twemoji-processed)');
-                                if (emojiImgs.length > 0) {
-                                    processEmojis(node);
-                                    needsProcessing = true;
-                                }
-                            }
-                        }
+                for (let i = 0; i < imgs.length; i++) {
+                    const img = imgs[i];
+                    
+                    const originalAttrs = {
+                        src: img.src,
+                        alt: img.alt,
+                        dataEmoticonUrl: img.getAttribute('data-emoticon-url'),
+                        dataEmoticonPreview: img.getAttribute('data-emoticon-preview'),
+                        dataText: img.getAttribute('data-text')
+                    };
+                    
+                    img.src = TWEMOJI_BASE_URL + newFile;
+                    img.classList.add('twemoji', PROCESSED_CLASS);
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
+                    
+                    if (originalAttrs.dataEmoticonUrl) {
+                        img.setAttribute('data-emoticon-url', originalAttrs.dataEmoticonUrl);
                     }
+                    if (originalAttrs.dataEmoticonPreview) {
+                        img.setAttribute('data-emoticon-preview', originalAttrs.dataEmoticonPreview);
+                    }
+                    if (originalAttrs.dataText) {
+                        img.setAttribute('data-text', originalAttrs.dataText);
+                    }
+                    if (originalAttrs.alt) {
+                        img.alt = originalAttrs.alt;
+                    }
+                    
+                    img.onerror = function() {
+                        console.warn('Failed to load emoji: ' + newFile);
+                        this.src = originalAttrs.src;
+                        this.classList.remove(PROCESSED_CLASS);
+                        
+                        if (originalAttrs.dataEmoticonUrl) {
+                            this.setAttribute('data-emoticon-url', originalAttrs.dataEmoticonUrl);
+                        }
+                        if (originalAttrs.dataEmoticonPreview) {
+                            this.setAttribute('data-emoticon-preview', originalAttrs.dataEmoticonPreview);
+                        }
+                        if (originalAttrs.dataText) {
+                            this.setAttribute('data-text', originalAttrs.dataText);
+                        }
+                        if (originalAttrs.alt) {
+                            this.alt = originalAttrs.alt;
+                        }
+                    };
                 }
             }
-            
-            if (needsProcessing) {
-                // Use microtask for immediate processing
-                queueMicrotask(() => {
-                    const dropdown = document.querySelector('.ve-emoji-dropdown');
-                    if (dropdown) processEmojis(dropdown);
-                });
+        }
+        
+        if (window.twemoji && window.twemoji.parse) {
+            if (typeof requestIdleCallback !== 'undefined') {
+                requestIdleCallback(function() {
+                    twemoji.parse(container, TWEMOJI_CONFIG);
+                }, { timeout: 1000 });
+            } else {
+                setTimeout(function() {
+                    twemoji.parse(container, TWEMOJI_CONFIG);
+                }, 0);
             }
-        });
-        
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: false,
-            characterData: false
-        });
-        
-        return observer;
-    }
-    
-    // Pre-convert common emoji patterns
-    function preConvertCommonPatterns() {
-        // Convert any existing emojis immediately
-        processEmojis(document.body);
+        }
     }
     
     function initEmojiReplacement() {
-        preConvertCommonPatterns();
-        setupInstantConversion();
+        replaceCustomEmojis(document.body);
         
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-            // Lightweight registrations
             globalThis.forumObserver.register({
-                id: 'emoji-replacer-fast',
-                callback: processEmojis,
-                selector: '.ve-emoji-list, .ve-emoji-dropdown, .post, .article, .content',
+                id: 'emoji-replacer-picker',
+                callback: replaceCustomEmojis,
+                selector: '.picker-custom-grid, .picker-custom-item, .image-thumbnail, .ve-emoji-list',
                 priority: 'high',
-                pageTypes: ['topic', 'blog', 'search', 'forum', 'send']
+                pageTypes: ['topic', 'blog', 'search', 'forum']
             });
             
-            console.log('✅ Fast emoji replacer ready');
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-content',
+                callback: replaceCustomEmojis,
+                selector: '.post, .article, .content, .reply, .comment, .color, td[align], div[align]',
+                priority: 'normal',
+                pageTypes: ['topic', 'blog', 'search', 'forum']
+            });
+            
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-quotes',
+                callback: replaceCustomEmojis,
+                selector: '.quote, .code, .spoiler, .modern-quote, .modern-spoiler',
+                priority: 'normal'
+            });
+            
+            globalThis.forumObserver.register({
+                id: 'emoji-replacer-user-content',
+                callback: replaceCustomEmojis,
+                selector: '.signature, .user-info, .profile-content, .post-content',
+                priority: 'low'
+            });
+            
+            console.log('Emoji replacer fully integrated with ForumCoreObserver');
+            
+            setTimeout(function() {
+                const pickerGrid = document.querySelector('.picker-custom-grid');
+                if (pickerGrid) {
+                    console.log('Found existing emoji picker, processing...');
+                    replaceCustomEmojis(pickerGrid);
+                }
+            }, 500);
+            
+        } else {
+            console.error('ForumCoreObserver not available - emoji replacement disabled');
         }
-        
-        console.log('🚀 Instant emoji conversion active');
     }
     
     function checkAndInit() {
@@ -2884,36 +2891,69 @@ window.videoIframeUtils = {
             return;
         }
         
-        let attempts = 0;
-        const checkInterval = setInterval(function() {
-            attempts++;
+        var checkInterval = setInterval(function() {
             if (window.twemoji) {
                 clearInterval(checkInterval);
                 initEmojiReplacement();
-            } else if (attempts > 50) {
-                clearInterval(checkInterval);
-                console.warn('⚠️ Twemoji not loaded, continuing without it');
-                initEmojiReplacement();
             }
         }, 100);
+        
+        setTimeout(function() {
+            clearInterval(checkInterval);
+            if (!window.twemoji) {
+                console.warn('Twemoji not loaded after 5 seconds, proceeding without it');
+                initEmojiReplacement();
+            }
+        }, 5000);
+    }
+    
+    function startInitialization() {
+        if (typeof queueMicrotask !== 'undefined') {
+            queueMicrotask(checkAndInit);
+        } else {
+            setTimeout(checkAndInit, 0);
+        }
     }
     
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', checkAndInit);
+        document.onreadystatechange = function() {
+            if (document.readyState === 'interactive' || document.readyState === 'complete') {
+                document.onreadystatechange = null;
+                startInitialization();
+            }
+        };
     } else {
-        checkAndInit();
+        startInitialization();
     }
     
-    // Expose API
     window.emojiReplacer = {
-        process: processEmojis,
-        forceUpdate: () => {
-            processEmojis(document.body);
-            const dropdown = document.querySelector('.ve-emoji-dropdown');
-            if (dropdown) processEmojis(dropdown);
-            return true;
+        replace: replaceCustomEmojis,
+        init: initEmojiReplacement,
+        isReady: function() { return !!window.twemoji; },
+        forcePickerUpdate: function() {
+            const pickerGrid = document.querySelector('.picker-custom-grid');
+            if (pickerGrid) {
+                console.log('Force-updating emoji picker...');
+                replaceCustomEmojis(pickerGrid);
+                return true;
+            }
+            return false;
         }
     };
+    
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        const isLikelyEmojiTrigger = target.matches(
+            '[onclick*="emoticon"], [onclick*="smiley"], ' +
+            '.emoticon-btn, .smiley-btn, button:has(img[src*="emoticon"])'
+        );
+        
+        if (isLikelyEmojiTrigger) {
+            setTimeout(function() {
+                window.emojiReplacer.forcePickerUpdate();
+            }, 300);
+        }
+    }, { passive: true });
     
 })();
 
