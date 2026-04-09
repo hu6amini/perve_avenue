@@ -2686,6 +2686,7 @@ window.videoIframeUtils = {
 };
 
 //Twemoji
+//Twemoji
 twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcdn.com/v/latest/",className:"twemoji",size:"svg"});
 
 //Default emojis to Twemoji
@@ -2754,6 +2755,39 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
     const PROCESSED_CLASS = 'twemoji-processed';
     const TWEMOJI_BASE_URL = TWEMOJI_CONFIG.base + 'svg/';
     
+    // Check if container or its parent is a skipped area
+    function shouldSkipContainer(container) {
+        if (!container) return false;
+        
+        // Skip the emoji dropdown picker
+        if (container.closest && container.closest('.ve-emoji-dropdown')) {
+            return true;
+        }
+        
+        // Skip the editor content area
+        if (container.closest && container.closest('.ve-content.color')) {
+            return true;
+        }
+        
+        // Check if container itself is the skipped element
+        if (container.matches) {
+            if (container.matches('.ve-emoji-dropdown, .ve-content.color')) {
+                return true;
+            }
+        }
+        
+        // Skip contenteditable areas (typing areas)
+        if (container.closest && container.closest('[contenteditable="true"]')) {
+            return true;
+        }
+        
+        if (container.getAttribute && container.getAttribute('contenteditable') === 'true') {
+            return true;
+        }
+        
+        return false;
+    }
+    
     function getEmojiSelectors(src) {
         return [
             'img[src="' + src + '"]:not(.' + PROCESSED_CLASS + ')',
@@ -2763,6 +2797,11 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
     }
     
     function replaceCustomEmojis(container) {
+        // Skip editor areas entirely
+        if (shouldSkipContainer(container)) {
+            return;
+        }
+        
         if (!container || !container.querySelectorAll) return;
         
         for (const [oldSrc, newFile] of EMOJI_MAP) {
@@ -2773,6 +2812,11 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
                 
                 for (let i = 0; i < imgs.length; i++) {
                     const img = imgs[i];
+                    
+                    // Double-check each image isn't in a skipped area
+                    if (shouldSkipContainer(img)) {
+                        continue;
+                    }
                     
                     const originalAttrs = {
                         src: img.src,
@@ -2823,14 +2867,21 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
         }
         
         if (window.twemoji && window.twemoji.parse) {
-            if (typeof requestIdleCallback !== 'undefined') {
-                requestIdleCallback(function() {
-                    twemoji.parse(container, TWEMOJI_CONFIG);
-                }, { timeout: 1000 });
-            } else {
-                setTimeout(function() {
-                    twemoji.parse(container, TWEMOJI_CONFIG);
-                }, 0);
+            // Don't run twemoji.parse on skipped areas
+            if (!shouldSkipContainer(container)) {
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(function() {
+                        if (!shouldSkipContainer(container)) {
+                            twemoji.parse(container, TWEMOJI_CONFIG);
+                        }
+                    }, { timeout: 1000 });
+                } else {
+                    setTimeout(function() {
+                        if (!shouldSkipContainer(container)) {
+                            twemoji.parse(container, TWEMOJI_CONFIG);
+                        }
+                    }, 0);
+                }
             }
         }
     }
@@ -2873,7 +2924,7 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
             
             setTimeout(function() {
                 const pickerGrid = document.querySelector('.picker-custom-grid');
-                if (pickerGrid) {
+                if (pickerGrid && !shouldSkipContainer(pickerGrid)) {
                     console.log('Found existing emoji picker, processing...');
                     replaceCustomEmojis(pickerGrid);
                 }
@@ -2931,18 +2982,19 @@ twemoji.parse(document.body,{folder:"svg",ext:".svg",base:"https://twemoji.maxcd
         isReady: function() { return !!window.twemoji; },
         forcePickerUpdate: function() {
             const pickerGrid = document.querySelector('.picker-custom-grid');
-            if (pickerGrid) {
+            if (pickerGrid && !shouldSkipContainer(pickerGrid)) {
                 console.log('Force-updating emoji picker...');
                 replaceCustomEmojis(pickerGrid);
                 return true;
             }
             return false;
-        }
+        },
+        shouldSkip: shouldSkipContainer
     };
     
     document.addEventListener('click', function(e) {
         const target = e.target;
-        const isLikelyEmojiTrigger = target.matches(
+        const isLikelyEmojiTrigger = target.matches && target.matches(
             '[onclick*="emoticon"], [onclick*="smiley"], ' +
             '.emoticon-btn, .smiley-btn, button:has(img[src*="emoticon"])'
         );
