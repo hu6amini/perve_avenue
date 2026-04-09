@@ -11,7 +11,7 @@
             jpg: '90',
             jpeg: '90',     
             webp: '90',
-            avif: '85',
+            avif: '85',      // Kept for reference but no longer used
             png: '100',
             gif: '100',
             unknown: '90'
@@ -27,15 +27,7 @@
             'forum-user-avatar', 'forum-likes-avatar',
             'avatar-size-', 'images.weserv.nl', 'wsrv.nl',
             'data:image'
-        ].map(function(p) { return p.toLowerCase(); }),
-        excludeSelectors: [
-            '.send',
-            '.Item[style*="text-align: center"][style*="padding: 2px 0"]',
-            '.st-editor-container',
-            '.ve-container',
-            '.tiptap',
-            '.ProseMirror'
-        ]
+        ].map(function(p) { return p.toLowerCase(); })
     };
     
     // ===== STATE MANAGEMENT =====
@@ -61,21 +53,6 @@
     // ===== UTILITY FUNCTIONS =====
     function isMediaElement(el) {
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
-    }
-    
-    function isInExcludedContainer(el) {
-        if (!el) return false;
-        
-        for (var i = 0; i < CONFIG.excludeSelectors.length; i++) {
-            try {
-                if (el.closest(CONFIG.excludeSelectors[i])) {
-                    return true;
-                }
-            } catch(e) {
-                // Handle invalid selector gracefully
-            }
-        }
-        return false;
     }
     
     function shouldSkip(url, el) {
@@ -315,9 +292,6 @@
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
-        // Skip if in excluded container
-        if (isInExcludedContainer(video)) return;
-        
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
@@ -359,11 +333,6 @@
     
     // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
-        // Skip if in excluded container - NO ATTRIBUTES WHATSOEVER
-        if (isInExcludedContainer(el)) {
-            return el;
-        }
-        
         if (!isMediaElement(el)) return el;
         
         if (el.tagName === 'IFRAME') {
@@ -399,6 +368,7 @@
         var originalFormat = detectFormat(originalSrc);
         var isGif = originalFormat === 'gif';
         
+        // AVIF REMOVED - Always use WebP for non-GIF images
         var outputFormat = isGif ? 'webp' : 'webp';
         
         var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
@@ -452,12 +422,6 @@
     }
     
     function optimizeImage(img) {
-        // CRITICAL: If in excluded container, do ABSOLUTELY NOTHING
-        // No attribute changes, no processing, no tracking, no nothing
-        if (isInExcludedContainer(img)) {
-            return;
-        }
-        
         if (!img.src || img.src.indexOf('data:') === 0) return;
         
         applyLazyAttributes(img);
@@ -468,10 +432,7 @@
         if (skip) {
             state.processed.add(img);
             state.stats.skipped++;
-            // Only add attribute if NOT in excluded container (already checked above, but for safety)
-            if (!isInExcludedContainer(img)) {
-                img.setAttribute('data-optimized', 'skipped');
-            }
+            img.setAttribute('data-optimized', 'skipped');
             return;
         }
         
@@ -510,11 +471,6 @@
                 var node = nodes[i];
                 if (node.nodeType !== 1) continue;
                 
-                // Skip entire excluded containers and their children
-                if (isInExcludedContainer(node)) {
-                    continue;
-                }
-                
                 if (node.tagName === 'IMG' || node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
                     applyLazyAttributes(node);
                     if (node.tagName === 'IMG') {
@@ -525,13 +481,12 @@
                 if (node.querySelectorAll) {
                     var allMedia = node.querySelectorAll('img, iframe, video');
                     for (var j = 0; j < allMedia.length; j++) {
-                        var mediaEl = allMedia[j];
-                        if (!isInExcludedContainer(mediaEl)) {
-                            applyLazyAttributes(mediaEl);
-                            if (mediaEl.tagName === 'IMG') {
-                                optimizeImage(mediaEl);
-                            }
-                        }
+                        applyLazyAttributes(allMedia[j]);
+                    }
+                    
+                    var images = node.querySelectorAll('img');
+                    for (var k = 0; k < images.length; k++) {
+                        optimizeImage(images[k]);
                     }
                 }
             }
@@ -543,18 +498,15 @@
     window.Image = function(width, height) {
         var img = new OriginalImage(width, height);
         
-        // Check exclusion before applying any attributes
-        if (!isInExcludedContainer(img)) {
-            img.setAttribute('loading', CONFIG.lazy);
-            img.setAttribute('decoding', CONFIG.async);
-        }
+        img.setAttribute('loading', CONFIG.lazy);
+        img.setAttribute('decoding', CONFIG.async);
         
         var originalSrcDesc = Object.getOwnPropertyDescriptor(img, 'src');
         if (originalSrcDesc && originalSrcDesc.set) {
             Object.defineProperty(img, 'src', {
                 set: function(value) {
                     originalSrcDesc.set.call(this, value);
-                    if (value && value.indexOf('data:') !== 0 && !isInExcludedContainer(this)) {
+                    if (value && value.indexOf('data:') !== 0) {
                         optimizeImage(this);
                     }
                 },
@@ -572,7 +524,7 @@
         Object.defineProperty(HTMLImageElement.prototype, 'src', {
             set: function(value) {
                 srcDescriptor.set.call(this, value);
-                if (value && value.indexOf('data:') !== 0 && this.isConnected && !isInExcludedContainer(this)) {
+                if (value && value.indexOf('data:') !== 0 && this.isConnected) {
                     optimizeImage(this);
                 }
             },
@@ -585,7 +537,7 @@
     Element.prototype.setAttribute = function(name, value) {
         originalSetAttribute.call(this, name, value);
         
-        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0 && !isInExcludedContainer(this)) {
+        if (name === 'src' && this.tagName === 'IMG' && value && value.indexOf('data:') !== 0) {
             optimizeImage(this);
         }
     };
@@ -594,7 +546,7 @@
     document.createElement = function(tagName, options) {
         var element = originalCreateElement.call(this, tagName, options);
         
-        if (tagName.toLowerCase() === 'img' && !isInExcludedContainer(element)) {
+        if (tagName.toLowerCase() === 'img') {
             applyLazyAttributes(element);
         }
         
@@ -609,26 +561,18 @@
         var allImages = document.querySelectorAll('img');
         for (var i = 0; i < allImages.length; i++) {
             var img = allImages[i];
-            if (!isInExcludedContainer(img)) {
-                applyLazyAttributes(img);
-                optimizeImage(img);
-            }
+            applyLazyAttributes(img);
+            optimizeImage(img);
         }
         
         var allIframes = document.querySelectorAll('iframe');
         for (var j = 0; j < allIframes.length; j++) {
-            var iframe = allIframes[j];
-            if (!isInExcludedContainer(iframe)) {
-                applyLazyAttributes(iframe);
-            }
+            applyLazyAttributes(allIframes[j]);
         }
         
         var allVideos = document.querySelectorAll('video');
         for (var k = 0; k < allVideos.length; k++) {
-            var video = allVideos[k];
-            if (!isInExcludedContainer(video)) {
-                applyLazyAttributes(video);
-            }
+            applyLazyAttributes(allVideos[k]);
         }
         
         if (document.body) {
@@ -647,33 +591,25 @@
                     
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
                     for (var i = 0; i < missedImages.length; i++) {
-                        var img = missedImages[i];
-                        if (!isInExcludedContainer(img)) {
-                            optimizeImage(img);
-                        }
+                        optimizeImage(missedImages[i]);
                     }
                     
                     var missedIframes = document.querySelectorAll('iframe:not([loading])');
                     for (var j = 0; j < missedIframes.length; j++) {
-                        var iframe = missedIframes[j];
-                        if (!isInExcludedContainer(iframe)) {
-                            applyLazyAttributes(iframe);
-                        }
+                        applyLazyAttributes(missedIframes[j]);
                     }
                     
                     var missedVideos = document.querySelectorAll('video:not([data-video-processed])');
                     for (var k = 0; k < missedVideos.length; k++) {
-                        var video = missedVideos[k];
-                        if (!isInExcludedContainer(video)) {
-                            applyLazyAttributes(video);
-                        }
+                        applyLazyAttributes(missedVideos[k]);
                     }
                 }
             }, 50);
         }
         
-        // ===== DISPATCH READY EVENT =====
+        // ===== DISPATCH READY EVENT (Optimized with requestIdleCallback) =====
         setTimeout(function() {
+            // Critical: dispatch the event immediately with minimal data
             window.dispatchEvent(new CustomEvent('weserv-ready', {
                 detail: { 
                     stats: {
@@ -687,18 +623,20 @@
                 }
             }));
             
+            // Non-critical: logging can happen when browser is idle
             if ('requestIdleCallback' in window) {
                 requestIdleCallback(function() {
                     console.log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
                 }, { timeout: 2000 });
             } else {
+                // Fallback for browsers without requestIdleCallback
                 setTimeout(function() {
                     console.log('📢 Dispatched weserv-ready event with ' + state.stats.optimized + ' images optimized');
                 }, 0);
             }
         }, 100);
         
-        // ===== PERFORMANCE REPORT =====
+        // ===== PERFORMANCE REPORT (Optimized with requestIdleCallback) =====
         window.addEventListener('load', function() {
             setTimeout(function() {
                 if ('requestIdleCallback' in window) {
