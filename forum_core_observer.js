@@ -2,8 +2,8 @@
 
 class ForumCoreObserver {
     #observer = null;
-    #iframeObservers = null; // Initialize as null, will be set in constructor
-    #shadowObservers = null; // Initialize as null, will be set in constructor
+    #iframeObservers = null;
+    #shadowObservers = null;
     #intersectionObserver = null;
     #resizeObserver = null;
     #animationObserver = null;
@@ -53,8 +53,8 @@ class ForumCoreObserver {
             debounceThreshold: 100,
             idleCallbackTimeout: 2000,
             searchPageBatchSize: 10,
-            styleMutationThrottle: 16, // 60fps
-            maxContinuousProcessing: 100 // ms before yielding
+            styleMutationThrottle: 16,
+            maxContinuousProcessing: 100
         },
         memory: {
             maxProcessedNodes: 10000,
@@ -63,9 +63,9 @@ class ForumCoreObserver {
             maxCallbackRetries: 3
         },
         priorities: {
-            childList: 1,      // High
-            attributes: 2,      // Medium
-            characterData: 3    // Low
+            childList: 1,
+            attributes: 2,
+            characterData: 3
         }
     };
     
@@ -107,6 +107,41 @@ class ForumCoreObserver {
         this.#mutationMetrics.lastError = args.join(' ');
     }
     
+    // ===== EDITOR DETECTION HELPER =====
+    #isInEditor(element) {
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+        
+        try {
+            // Check if element or any parent is in wysiwyg editor
+            if (element.closest) {
+                return !!(
+                    element.closest('.tiptap') ||
+                    element.closest('.ProseMirror') ||
+                    element.closest('[contenteditable="true"]') ||
+                    element.closest('[role="textbox"]')
+                );
+            }
+            
+            // Fallback for older browsers
+            let parent = element;
+            while (parent && parent !== document.body) {
+                if (parent.classList && (
+                    parent.classList.contains('tiptap') ||
+                    parent.classList.contains('ProseMirror')
+                )) {
+                    return true;
+                }
+                if (parent.getAttribute && parent.getAttribute('contenteditable') === 'true') {
+                    return true;
+                }
+                parent = parent.parentElement;
+            }
+            return false;
+        } catch(e) {
+            return false;
+        }
+    }
+    
     #init() {
         try {
             this.#observer = new MutationObserver(this.#handleMutationsWithRetry.bind(this));
@@ -121,7 +156,6 @@ class ForumCoreObserver {
             
             document.addEventListener('load', this.#handleLoadEvents.bind(this), true);
             
-            // Observe dynamically added styles
             this.#observeStyleChanges();
             
             this.#log('ForumCoreObserver initialized (GLOBAL - enhanced mode)');
@@ -182,7 +216,6 @@ class ForumCoreObserver {
                 subtree: true
             });
         } else {
-            // Wait for head to be available
             const headCheck = setInterval(() => {
                 if (document.head) {
                     clearInterval(headCheck);
@@ -196,13 +229,12 @@ class ForumCoreObserver {
     }
     
     #handleNewStyles(styleNode) {
-        // Process any elements that might be affected by new styles
         setTimeout(() => {
             const affectedSelectors = this.#extractSelectorsFromStyles(styleNode);
             affectedSelectors.forEach(selector => {
                 try {
                     document.querySelectorAll(selector).forEach(el => {
-                        if (!this.#processedNodes.has(el)) {
+                        if (!this.#processedNodes.has(el) && !this.#isInEditor(el)) {
                             this.#processNode(el);
                         }
                     });
@@ -214,7 +246,6 @@ class ForumCoreObserver {
     }
     
     #extractSelectorsFromStyles(styleNode) {
-        // Simplified selector extraction
         const selectors = [];
         try {
             const sheet = styleNode.sheet || 
@@ -239,7 +270,6 @@ class ForumCoreObserver {
             }
         }, true);
         
-        // Observe existing iframes
         if (document.querySelectorAll) {
             document.querySelectorAll('iframe').forEach(iframe => this.#observeIframe(iframe));
         }
@@ -247,7 +277,6 @@ class ForumCoreObserver {
     
     #observeIframe(iframe) {
         try {
-            // FIX: Ensure iframe is valid
             if (!iframe || !iframe.contentDocument) {
                 return;
             }
@@ -260,18 +289,15 @@ class ForumCoreObserver {
                 iframeObserver.observe(iframeDoc.documentElement, 
                     ForumCoreObserver.#CONFIG.observer);
                 
-                // FIX: Ensure #iframeObservers exists
                 if (!this.#iframeObservers) {
                     this.#iframeObservers = new WeakMap();
                 }
                 
                 this.#iframeObservers.set(iframe, iframeObserver);
                 
-                // Process existing content in iframe
                 this.#scanIframeContent(iframeDoc);
             }
         } catch (e) {
-            // Cross-origin iframe - can't observe
             this.#log('Cannot observe cross-origin iframe');
         }
     }
@@ -281,7 +307,7 @@ class ForumCoreObserver {
         
         const elements = doc.querySelectorAll('*');
         elements.forEach(el => {
-            if (!this.#processedNodes.has(el)) {
+            if (!this.#processedNodes.has(el) && !this.#isInEditor(el)) {
                 this.#processNode(el);
             }
         });
@@ -295,7 +321,7 @@ class ForumCoreObserver {
                         const affectedNodes = new Set();
                         this.#collectAllElements(node, affectedNodes);
                         affectedNodes.forEach(el => {
-                            if (el && !this.#processedNodes.has(el)) {
+                            if (el && !this.#processedNodes.has(el) && !this.#isInEditor(el)) {
                                 this.#processNode(el);
                             }
                         });
@@ -309,18 +335,17 @@ class ForumCoreObserver {
         this.#intersectionObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    if (!this.#processedNodes.has(entry.target)) {
+                    if (!this.#processedNodes.has(entry.target) && !this.#isInEditor(entry.target)) {
                         this.#processNode(entry.target);
                     }
                     this.#intersectionObserver.unobserve(entry.target);
                 }
             });
         }, { 
-            rootMargin: '200px', // Load slightly before visible
+            rootMargin: '200px',
             threshold: 0.01 
         });
         
-        // Observe lazy-load candidates
         this.#observeLazyElements();
     }
     
@@ -334,7 +359,7 @@ class ForumCoreObserver {
             try {
                 if (document.querySelectorAll) {
                     document.querySelectorAll(selector).forEach(el => {
-                        if (el && !this.#processedNodes.has(el)) {
+                        if (el && !this.#processedNodes.has(el) && !this.#isInEditor(el)) {
                             this.#intersectionObserver.observe(el);
                         }
                     });
@@ -350,15 +375,13 @@ class ForumCoreObserver {
             this.#resizeObserver = new ResizeObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-                        // Element became visible through resize
-                        if (!this.#processedNodes.has(entry.target)) {
+                        if (!this.#processedNodes.has(entry.target) && !this.#isInEditor(entry.target)) {
                             this.#processNode(entry.target);
                         }
                     }
                 });
             });
             
-            // Observe containers that might expand
             const containerSelectors = [
                 '.post-content', '.expandable', '.collapsible',
                 '.dropdown-content', '.modal-content'
@@ -382,25 +405,23 @@ class ForumCoreObserver {
     
     #setupAnimationObserver() {
         if (typeof AnimationObserver !== 'undefined') {
-            // Use AnimationObserver if available
             this.#animationObserver = new AnimationObserver((animations) => {
                 animations.forEach(animation => {
                     const target = animation.effect ? animation.effect.target : null;
-                    if (target && !this.#processedNodes.has(target)) {
+                    if (target && !this.#processedNodes.has(target) && !this.#isInEditor(target)) {
                         this.#processNode(target);
                     }
                 });
             });
         } else {
-            // Fallback: listen for animation events
             document.addEventListener('animationstart', (e) => {
-                if (e.target && !this.#processedNodes.has(e.target)) {
+                if (e.target && !this.#processedNodes.has(e.target) && !this.#isInEditor(e.target)) {
                     this.#processNode(e.target);
                 }
             }, true);
             
             document.addEventListener('transitionstart', (e) => {
-                if (e.target && !this.#processedNodes.has(e.target)) {
+                if (e.target && !this.#processedNodes.has(e.target) && !this.#isInEditor(e.target)) {
                     this.#processNode(e.target);
                 }
             }, true);
@@ -410,10 +431,9 @@ class ForumCoreObserver {
     #handleLoadEvents(e) {
         const target = e.target;
         if (target && target.nodeType === Node.ELEMENT_NODE) {
-            // Handle image loads, font loads, etc.
             if (target.tagName === 'IMG' || target.tagName === 'VIDEO' || 
                 target.tagName === 'IFRAME' || target.tagName === 'SCRIPT') {
-                if (!this.#processedNodes.has(target)) {
+                if (!this.#processedNodes.has(target) && !this.#isInEditor(target)) {
                     this.#processNode(target);
                 }
             }
@@ -421,32 +441,25 @@ class ForumCoreObserver {
     }
     
     #setupScriptCoordination() {
-        // Listen for Weserv ready event
         window.addEventListener('weserv-ready', (e) => {
             this.#scriptsReady.weserv = true;
             this.#log('Weserv ready event received', e.detail || '');
             
-            // Trigger dimension extractor if it exists
             if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.refresh === 'function') {
                 queueMicrotask(() => {
                     globalThis.mediaDimensionExtractor.refresh();
                 });
             }
             
-            // Check if both are ready
             this.#checkAllScriptsReady();
         }, { once: true, passive: true });
         
-        // Listen for Dimension Extractor ready
         window.addEventListener('dimension-extractor-ready', (e) => {
             this.#scriptsReady.dimensionExtractor = true;
             this.#log('Dimension extractor ready', e.detail || '');
-            
-            // Check if both are ready
             this.#checkAllScriptsReady();
         }, { once: true, passive: true });
         
-        // Fallback: Check after load
         window.addEventListener('load', () => {
             setTimeout(() => {
                 if (!this.#scriptsReady.weserv && document.querySelector('img[data-optimized="true"]')) {
@@ -463,7 +476,6 @@ class ForumCoreObserver {
         if (this.#scriptsReady.weserv && this.#scriptsReady.dimensionExtractor) {
             this.#log('All media scripts ready and coordinated');
             
-            // Process any images that might have been missed
             if (globalThis.mediaDimensionExtractor && typeof globalThis.mediaDimensionExtractor.forceReprocessElement === 'function') {
                 if ('requestIdleCallback' in window) {
                     requestIdleCallback(() => {
@@ -471,7 +483,7 @@ class ForumCoreObserver {
                         if (unprocessed.length) {
                             this.#log(`Processing ${unprocessed.length} missed images`);
                             unprocessed.forEach(img => {
-                                if (img) {
+                                if (img && !this.#isInEditor(img)) {
                                     globalThis.mediaDimensionExtractor.forceReprocessElement(img);
                                 }
                             });
@@ -483,7 +495,7 @@ class ForumCoreObserver {
                         if (unprocessed.length) {
                             this.#log(`Processing ${unprocessed.length} missed images`);
                             unprocessed.forEach(img => {
-                                if (img) {
+                                if (img && !this.#isInEditor(img)) {
                                     globalThis.mediaDimensionExtractor.forceReprocessElement(img);
                                 }
                             });
@@ -495,12 +507,12 @@ class ForumCoreObserver {
     }
     
     #detectPageState() {
-        var pathname = window.location.pathname || '';
-        var className = document.body ? document.body.className : '';
-        var theme = document.documentElement ? document.documentElement.dataset?.theme : null;
-        var prefersDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+        const pathname = window.location.pathname || '';
+        const className = document.body ? document.body.className : '';
+        const theme = document.documentElement ? document.documentElement.dataset?.theme : null;
+        const prefersDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
         
-        var selectors = {
+        const selectors = {
             forum: '.board, .big_list',
             topic: '.modern-topic-title, .post',
             blog: '#blog, .article',
@@ -509,8 +521,8 @@ class ForumCoreObserver {
             modernized: '.post-modernized'
         };
         
-        var pageChecks = {};
-        for (var key in selectors) {
+        const pageChecks = {};
+        for (const key in selectors) {
             if (selectors.hasOwnProperty(key)) {
                 try {
                     pageChecks[key] = document.querySelector(selectors[key]) || null;
@@ -602,7 +614,7 @@ class ForumCoreObserver {
                     if (document.querySelectorAll) {
                         const elements = document.querySelectorAll(selector);
                         elements.forEach(element => {
-                            if (element) {
+                            if (element && !this.#isInEditor(element)) {
                                 this.#processedNodes.delete(element);
                                 this.#processNode(element);
                             }
@@ -631,7 +643,7 @@ class ForumCoreObserver {
             try {
                 if (document.querySelectorAll) {
                     document.querySelectorAll(selector).forEach(el => {
-                        if (el) {
+                        if (el && !this.#isInEditor(el)) {
                             el.setAttribute('data-theme', theme);
                         }
                     });
@@ -662,23 +674,43 @@ class ForumCoreObserver {
     }
     
     #handleMutations(mutations) {
-        this.#mutationMetrics.totalMutations += mutations.length;
+        // Filter out editor mutations FIRST
+        const filteredMutations = [];
+        for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
+            const target = mutation.target;
+            
+            // Skip editor content completely
+            if (target && target.nodeType === Node.ELEMENT_NODE) {
+                if (this.#isInEditor(target)) {
+                    continue;
+                }
+            } else if (target && target.parentElement) {
+                if (this.#isInEditor(target.parentElement)) {
+                    continue;
+                }
+            }
+            
+            filteredMutations.push(mutation);
+        }
+        
+        // Process only non-editor mutations
+        if (filteredMutations.length === 0) return;
+        
+        this.#mutationMetrics.totalMutations += filteredMutations.length;
         this.#mutationMetrics.lastMutationTime = Date.now();
         
         const startTime = performance.now();
         
-        for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
+        for (let i = 0; i < filteredMutations.length; i++) {
+            const mutation = filteredMutations[i];
             
-            // Skip if no target
             if (!mutation || !mutation.target) continue;
             
-            // Prevent infinite loops
             if (mutation.target && mutation.target.dataset && mutation.target.dataset.observerOrigin === 'forum-script') {
                 continue;
             }
             
-            // Check if we should process this mutation
             if (this.#shouldProcessMutation(mutation)) {
                 const priority = this.#getMutationPriority(mutation);
                 if (priority && this.#priorityQueue[priority]) {
@@ -686,7 +718,6 @@ class ForumCoreObserver {
                 }
             }
             
-            // Yield if we're taking too long
             if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxContinuousProcessing) {
                 setTimeout(() => this.#processMutationQueue(), 0);
                 return;
@@ -703,27 +734,26 @@ class ForumCoreObserver {
         
         const basePriority = ForumCoreObserver.#CONFIG.priorities[mutation.type] || 2;
         
-        // Adjust priority based on context
         if (mutation.type === 'attributes') {
             if (mutation.attributeName === 'src' || mutation.attributeName === 'href') {
-                return 'high'; // Resource changes are high priority
+                return 'high';
             }
             if (mutation.attributeName === 'class' && 
                 mutation.target && mutation.target.classList && mutation.target.classList.contains('lazy')) {
-                return 'high'; // Lazy loading classes are high priority
+                return 'high';
             }
         }
         
         if (mutation.type === 'childList' && 
             mutation.addedNodes && mutation.addedNodes.length > 10) {
-            return 'medium'; // Large batches can be medium priority
+            return 'medium';
         }
         
         return basePriority === 1 ? 'high' : basePriority === 2 ? 'medium' : 'low';
     }
     
     #shouldProcessMutation(mutation) {
-        var target = mutation.target;
+        const target = mutation.target;
         
         if (!target) return false;
         
@@ -735,27 +765,23 @@ class ForumCoreObserver {
         // Skip hidden elements
         if (target.nodeType === Node.ELEMENT_NODE) {
             try {
-                var style = window.getComputedStyle(target);
+                const style = window.getComputedStyle(target);
                 if (style.display === 'none' || style.visibility === 'hidden') {
-                    // But track if they might become visible
                     if (mutation.type === 'attributes' && 
                         (mutation.attributeName === 'class' || mutation.attributeName === 'style')) {
-                        return true; // Might become visible
+                        return true;
                     }
                     return false;
                 }
             } catch (e) {
-                // Ignore style computation errors
                 return true;
             }
         }
         
-        // Theme changes are always important
         if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
             return true;
         }
         
-        // Throttle style mutations
         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
             const now = Date.now();
             if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
@@ -763,14 +789,13 @@ class ForumCoreObserver {
             }
             this.#lastStyleMutation = now;
             
-            var oldValue = mutation.oldValue || '';
-            var newValue = target.getAttribute ? target.getAttribute('style') || '' : '';
+            const oldValue = mutation.oldValue || '';
+            const newValue = target.getAttribute ? target.getAttribute('style') || '' : '';
             return this.#styleChangeAffectsDOM(oldValue, newValue);
         }
         
-        // Text changes in important elements
         if (mutation.type === 'characterData') {
-            var parent = target.parentElement;
+            const parent = target.parentElement;
             return parent ? this.#shouldObserveTextChanges(parent) : false;
         }
         
@@ -780,14 +805,14 @@ class ForumCoreObserver {
     #shouldObserveTextChanges(element) {
         if (!element || !element.tagName) return false;
         
-        var tagName = element.tagName.toLowerCase();
+        const tagName = element.tagName.toLowerCase();
         
         if (tagName === 'a' || tagName === 'button' || tagName === 'input' || 
             tagName === 'textarea' || tagName === 'select') {
             return true;
         }
         
-        var classList = element.classList;
+        const classList = element.classList;
         if (classList) {
             if (classList.contains('post') || classList.contains('article') || 
                 classList.contains('comment') || classList.contains('quote') || 
@@ -800,12 +825,12 @@ class ForumCoreObserver {
     }
     
     #styleChangeAffectsDOM(oldStyle, newStyle) {
-        var visibilityProps = ['display', 'visibility', 'opacity', 'position', 'width', 'height'];
-        var oldProps = this.#parseStyleString(oldStyle);
-        var newProps = this.#parseStyleString(newStyle);
+        const visibilityProps = ['display', 'visibility', 'opacity', 'position', 'width', 'height'];
+        const oldProps = this.#parseStyleString(oldStyle);
+        const newProps = this.#parseStyleString(newStyle);
         
-        for (var i = 0; i < visibilityProps.length; i++) {
-            var prop = visibilityProps[i];
+        for (let i = 0; i < visibilityProps.length; i++) {
+            const prop = visibilityProps[i];
             if (oldProps.get(prop) !== newProps.get(prop)) {
                 return true;
             }
@@ -817,15 +842,15 @@ class ForumCoreObserver {
     #parseStyleString(styleString) {
         if (!styleString) return new Map();
         
-        var result = new Map();
-        var pairs = styleString.split(';');
+        const result = new Map();
+        const pairs = styleString.split(';');
         
-        for (var i = 0; i < pairs.length; i++) {
-            var pair = pairs[i];
-            var colonIndex = pair.indexOf(':');
+        for (let i = 0; i < pairs.length; i++) {
+            const pair = pairs[i];
+            const colonIndex = pair.indexOf(':');
             if (colonIndex > -1) {
-                var key = pair.substring(0, colonIndex).trim();
-                var value = pair.substring(colonIndex + 1).trim();
+                const key = pair.substring(0, colonIndex).trim();
+                const value = pair.substring(colonIndex + 1).trim();
                 if (key && value) {
                     result.set(key, value);
                 }
@@ -839,26 +864,24 @@ class ForumCoreObserver {
         if (this.#isProcessing) return;
         
         this.#isProcessing = true;
-        var startTime = performance.now();
+        let startTime = performance.now();
         
         try {
-            // Process by priority
             const priorities = ['high', 'medium', 'low'];
             
             for (const priority of priorities) {
                 const queue = this.#priorityQueue[priority];
                 
                 while (queue && queue.length) {
-                    var batchSize = Math.min(
+                    const batchSize = Math.min(
                         priority === 'high' ? 25 : 
                         priority === 'medium' ? 50 : 100,
                         queue.length
                     );
                     
-                    var batch = queue.splice(0, batchSize);
+                    const batch = queue.splice(0, batchSize);
                     await this.#processMutationBatch(batch, priority);
                     
-                    // Update watermark
                     const totalQueue = (this.#priorityQueue.high ? this.#priorityQueue.high.length : 0) + 
                                       (this.#priorityQueue.medium ? this.#priorityQueue.medium.length : 0) + 
                                       (this.#priorityQueue.low ? this.#priorityQueue.low.length : 0);
@@ -867,7 +890,6 @@ class ForumCoreObserver {
                         totalQueue
                     );
                     
-                    // Check time limit
                     if (performance.now() - startTime > ForumCoreObserver.#CONFIG.performance.maxProcessingTime) {
                         await new Promise(resolve => setTimeout(resolve, 0));
                         startTime = performance.now();
@@ -880,30 +902,28 @@ class ForumCoreObserver {
             this.#isProcessing = false;
             this.#mutationMetrics.processedMutations++;
             
-            var processingTime = performance.now() - startTime;
+            const processingTime = performance.now() - startTime;
             this.#mutationMetrics.averageProcessingTime = 
                 this.#mutationMetrics.averageProcessingTime * 0.9 + processingTime * 0.1;
         }
     }
     
     async #processMutationBatch(mutations, priority) {
-        var affectedNodes = new Set();
+        const affectedNodes = new Set();
         
-        for (var i = 0; i < mutations.length; i++) {
-            var mutation = mutations[i];
+        for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
             
             if (!mutation || !mutation.target) continue;
             
             switch (mutation.type) {
                 case 'childList':
-                    // Process added nodes
                     if (mutation.addedNodes) {
-                        for (var j = 0; j < mutation.addedNodes.length; j++) {
-                            var node = mutation.addedNodes[j];
-                            if (node && node.nodeType === Node.ELEMENT_NODE) {
+                        for (let j = 0; j < mutation.addedNodes.length; j++) {
+                            const node = mutation.addedNodes[j];
+                            if (node && node.nodeType === Node.ELEMENT_NODE && !this.#isInEditor(node)) {
                                 this.#collectAllElements(node, affectedNodes);
                                 
-                                // Check for shadow DOM
                                 if (node.shadowRoot) {
                                     this.#collectAllElements(node.shadowRoot, affectedNodes);
                                     this.#observeShadowRoot(node.shadowRoot, node);
@@ -912,10 +932,9 @@ class ForumCoreObserver {
                         }
                     }
                     
-                    // Process removed nodes (clean up)
                     if (mutation.removedNodes) {
-                        for (var j = 0; j < mutation.removedNodes.length; j++) {
-                            var node = mutation.removedNodes[j];
+                        for (let j = 0; j < mutation.removedNodes.length; j++) {
+                            const node = mutation.removedNodes[j];
                             if (node && node.nodeType === Node.ELEMENT_NODE) {
                                 this.#cleanupRemovedNode(node);
                             }
@@ -924,7 +943,7 @@ class ForumCoreObserver {
                     break;
                     
                 case 'attributes':
-                    if (mutation.target) {
+                    if (mutation.target && !this.#isInEditor(mutation.target)) {
                         affectedNodes.add(mutation.target);
                         
                         if (mutation.attributeName === 'data-theme') {
@@ -935,7 +954,6 @@ class ForumCoreObserver {
                             }
                         }
                         
-                        // Check if element became visible
                         if (mutation.attributeName === 'class' || mutation.attributeName === 'style') {
                             try {
                                 const style = window.getComputedStyle(mutation.target);
@@ -951,8 +969,8 @@ class ForumCoreObserver {
                     
                 case 'characterData':
                     if (mutation.target) {
-                        var parent = mutation.target.parentElement;
-                        if (parent) {
+                        const parent = mutation.target.parentElement;
+                        if (parent && !this.#isInEditor(parent)) {
                             affectedNodes.add(parent);
                         }
                     }
@@ -960,11 +978,11 @@ class ForumCoreObserver {
             }
         }
         
-        var nodeArray = Array.from(affectedNodes);
-        var nodesToProcess = [];
+        const nodeArray = Array.from(affectedNodes);
+        const nodesToProcess = [];
         
-        for (var k = 0; k < nodeArray.length; k++) {
-            var node = nodeArray[k];
+        for (let k = 0; k < nodeArray.length; k++) {
+            const node = nodeArray[k];
             if (node && !this.#processedNodes.has(node)) {
                 nodesToProcess.push(node);
                 this.#nodeTimestamps.set(node, Date.now());
@@ -975,19 +993,18 @@ class ForumCoreObserver {
         
         this.#mutationMetrics.totalNodesProcessed += nodesToProcess.length;
         
-        // Process with concurrency based on priority
-        var CONCURRENCY_LIMIT = priority === 'high' ? 8 : priority === 'medium' ? 4 : 2;
-        var chunks = [];
+        const CONCURRENCY_LIMIT = priority === 'high' ? 8 : priority === 'medium' ? 4 : 2;
+        const chunks = [];
         
-        for (var l = 0; l < nodesToProcess.length; l += CONCURRENCY_LIMIT) {
+        for (let l = 0; l < nodesToProcess.length; l += CONCURRENCY_LIMIT) {
             chunks.push(nodesToProcess.slice(l, l + CONCURRENCY_LIMIT));
         }
         
-        for (var m = 0; m < chunks.length; m++) {
-            var chunk = chunks[m];
-            var promises = [];
+        for (let m = 0; m < chunks.length; m++) {
+            const chunk = chunks[m];
+            const promises = [];
             
-            for (var n = 0; n < chunk.length; n++) {
+            for (let n = 0; n < chunk.length; n++) {
                 promises.push(this.#processNode(chunk[n]));
             }
             
@@ -1004,7 +1021,7 @@ class ForumCoreObserver {
             mutations.forEach(mutation => {
                 if (mutation.type === 'childList') {
                     mutation.addedNodes.forEach(node => {
-                        if (node && node.nodeType === Node.ELEMENT_NODE) {
+                        if (node && node.nodeType === Node.ELEMENT_NODE && !this.#isInEditor(node)) {
                             const affectedNodes = new Set();
                             this.#collectAllElements(node, affectedNodes);
                             affectedNodes.forEach(el => {
@@ -1020,7 +1037,6 @@ class ForumCoreObserver {
         
         shadowObserver.observe(shadowRoot, ForumCoreObserver.#CONFIG.observer);
         
-        // FIX: Ensure #shadowObservers exists
         if (!this.#shadowObservers) {
             this.#shadowObservers = new WeakMap();
         }
@@ -1031,11 +1047,9 @@ class ForumCoreObserver {
     #cleanupRemovedNode(node) {
         if (!node) return;
         
-        // Clean up any references to removed node
         this.#processedNodes.delete(node);
         this.#nodeTimestamps.delete(node);
         
-        // Clean up shadow DOM observer
         if (this.#shadowObservers && this.#shadowObservers.has(node)) {
             const observer = this.#shadowObservers.get(node);
             if (observer && typeof observer.disconnect === 'function') {
@@ -1044,7 +1058,6 @@ class ForumCoreObserver {
             this.#shadowObservers.delete(node);
         }
         
-        // Clean up iframe observer
         if (this.#iframeObservers && this.#iframeObservers.has(node)) {
             const observer = this.#iframeObservers.get(node);
             if (observer && typeof observer.disconnect === 'function') {
@@ -1053,12 +1066,10 @@ class ForumCoreObserver {
             this.#iframeObservers.delete(node);
         }
         
-        // Unobserve from intersection observer
         if (this.#intersectionObserver && typeof this.#intersectionObserver.unobserve === 'function') {
             this.#intersectionObserver.unobserve(node);
         }
         
-        // Unobserve from resize observer
         if (this.#resizeObserver && typeof this.#resizeObserver.unobserve === 'function') {
             this.#resizeObserver.unobserve(node);
         }
@@ -1069,14 +1080,13 @@ class ForumCoreObserver {
         
         collection.add(root);
         
-        // Check for shadow DOM
         if (root.shadowRoot) {
             this.#collectAllElements(root.shadowRoot, collection);
         }
         
         if (root.children) {
-            var children = root.children;
-            for (var i = 0; i < children.length; i++) {
+            const children = root.children;
+            for (let i = 0; i < children.length; i++) {
                 this.#collectAllElements(children[i], collection);
             }
         }
@@ -1085,41 +1095,42 @@ class ForumCoreObserver {
     async #processNode(node) {
         if (!node || this.#processedNodes.has(node)) return;
         
-        var matchingCallbacks = this.#getMatchingCallbacks(node);
+        // Skip editor content completely
+        if (this.#isInEditor(node)) {
+            return;
+        }
+        
+        const matchingCallbacks = this.#getMatchingCallbacks(node);
         if (!matchingCallbacks || !matchingCallbacks.length) return;
         
-        // FIX: Initialize all priority groups even if empty
-        var priorityGroups = {
+        const priorityGroups = {
             critical: [],
             high: [],
             normal: [],
             low: []
         };
         
-        for (var i = 0; i < matchingCallbacks.length; i++) {
-            var callback = matchingCallbacks[i];
+        for (let i = 0; i < matchingCallbacks.length; i++) {
+            const callback = matchingCallbacks[i];
             if (!callback) continue;
             
-            // FIX: Provide a default priority if missing
-            var priority = callback.priority || 'normal';
+            let priority = callback.priority || 'normal';
             
-            // FIX: Validate that the priority group exists
             if (!priorityGroups[priority]) {
-                priority = 'normal'; // Fallback to normal if invalid priority
+                priority = 'normal';
             }
             
-            // Check retry count
             if (callback.retryCount > (callback.maxRetries || ForumCoreObserver.#CONFIG.memory.maxCallbackRetries)) {
-                continue; // Skip if too many retries
+                continue;
             }
             
             priorityGroups[priority].push(callback);
         }
         
-        var priorities = ['critical', 'high', 'normal', 'low'];
-        for (var j = 0; j < priorities.length; j++) {
-            var priority = priorities[j];
-            var callbacks = priorityGroups[priority];
+        const priorities = ['critical', 'high', 'normal', 'low'];
+        for (let j = 0; j < priorities.length; j++) {
+            const priority = priorities[j];
+            const callbacks = priorityGroups[priority];
             
             if (!callbacks || !callbacks.length) continue;
             
@@ -1137,14 +1148,13 @@ class ForumCoreObserver {
     #getMatchingCallbacks(node) {
         if (!node) return [];
         
-        var matching = [];
-        var callbackValues = Array.from(this.#callbacks.values());
+        const matching = [];
+        const callbackValues = Array.from(this.#callbacks.values());
         
-        for (var i = 0; i < callbackValues.length; i++) {
-            var callback = callbackValues[i];
+        for (let i = 0; i < callbackValues.length; i++) {
+            const callback = callbackValues[i];
             if (!callback) continue;
             
-            // Check if callback should run on this page type
             if (callback.pageTypes && !this.#matchesPageType(callback.pageTypes)) {
                 continue;
             }
@@ -1156,7 +1166,6 @@ class ForumCoreObserver {
                         continue;
                     }
                 } catch (e) {
-                    // Invalid selector, skip
                     continue;
                 }
             }
@@ -1170,10 +1179,10 @@ class ForumCoreObserver {
     #matchesPageType(pageTypes) {
         if (!pageTypes || !Array.isArray(pageTypes)) return true;
         
-        for (var i = 0; i < pageTypes.length; i++) {
-            var type = pageTypes[i];
+        for (let i = 0; i < pageTypes.length; i++) {
+            const type = pageTypes[i];
             if (!type) continue;
-            var key = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
+            const key = 'is' + type.charAt(0).toUpperCase() + type.slice(1);
             if (this.#pageState[key]) {
                 return true;
             }
@@ -1185,15 +1194,14 @@ class ForumCoreObserver {
     async #executeCallbacks(callbacks, node) {
         if (!callbacks || !callbacks.length || !node) return;
         
-        var promises = [];
+        const promises = [];
         
-        for (var i = 0; i < callbacks.length; i++) {
-            var callback = callbacks[i];
+        for (let i = 0; i < callbacks.length; i++) {
+            const callback = callbacks[i];
             if (!callback || typeof callback.fn !== 'function') continue;
             
             promises.push((async () => {
                 try {
-                    // Set origin to prevent infinite loops
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         node.dataset.observerOrigin = 'forum-script';
                     }
@@ -1204,7 +1212,6 @@ class ForumCoreObserver {
                         await callback.fn(node);
                     }
                     
-                    // Reset retry count on success
                     if (callback) {
                         callback.retryCount = 0;
                     }
@@ -1215,14 +1222,12 @@ class ForumCoreObserver {
                     }
                     this.#error('Callback ' + (callback ? callback.id : 'unknown') + ' failed (attempt ' + (callback ? callback.retryCount : '?') + '):', error);
                     
-                    // Schedule retry if under limit
                     if (callback && callback.retryCount <= (callback.maxRetries || ForumCoreObserver.#CONFIG.memory.maxCallbackRetries)) {
                         setTimeout(() => {
                             this.#processNode(node);
-                        }, 1000 * callback.retryCount); // Exponential backoff
+                        }, 1000 * callback.retryCount);
                     }
                 } finally {
-                    // Clean up origin marker
                     if (node && node.nodeType === Node.ELEMENT_NODE) {
                         delete node.dataset.observerOrigin;
                     }
@@ -1236,13 +1241,13 @@ class ForumCoreObserver {
     #deferCallbacks(callbacks, node, priority) {
         if (!callbacks || !callbacks.length || !node) return;
         
-        var delays = {
+        const delays = {
             high: 50,
             normal: 100,
             low: 500
         };
         
-        var delay = delays[priority] || 100;
+        const delay = delays[priority] || 100;
         
         if (typeof scheduler !== 'undefined' && scheduler.postTask) {
             scheduler.postTask(() => {
@@ -1265,7 +1270,7 @@ class ForumCoreObserver {
     }
     
     #scanExistingContent() {
-        var forumSelectors = [
+        const forumSelectors = [
             '.post', '.article', '.btn', '.forminput', '.points_up', '.points_down',
             '.st-emoji-container', '.modern-quote', '.modern-profile', '.modern-topic-title',
             '.menu', '.tabs', '.code', '.spoiler', '.poll', '.tag li', '.online .thumbs a',
@@ -1278,24 +1283,23 @@ class ForumCoreObserver {
             '[data-forum-element="true"]'
         ];
         
-        var previewSelectors = [
+        const previewSelectors = [
             '#preview', '#ajaxObject', '.preview', '.Item.preview', 
             '[id*="preview"]', '.preview-content', '.post-preview'
         ];
         
-        var allSelectors = forumSelectors.concat(previewSelectors);
+        const allSelectors = forumSelectors.concat(previewSelectors);
         
-        for (var i = 0; i < allSelectors.length; i++) {
-            var selector = allSelectors[i];
+        for (let i = 0; i < allSelectors.length; i++) {
+            const selector = allSelectors[i];
             try {
                 if (document.querySelectorAll) {
-                    var nodes = document.querySelectorAll(selector);
-                    for (var j = 0; j < nodes.length; j++) {
-                        var node = nodes[j];
-                        if (node && !this.#processedNodes.has(node)) {
+                    const nodes = document.querySelectorAll(selector);
+                    for (let j = 0; j < nodes.length; j++) {
+                        const node = nodes[j];
+                        if (node && !this.#isInEditor(node) && !this.#processedNodes.has(node)) {
                             this.#processNode(node);
                             
-                            // Check for shadow DOM
                             if (node.shadowRoot) {
                                 this.#collectAllElements(node.shadowRoot, new Set());
                             }
@@ -1307,10 +1311,8 @@ class ForumCoreObserver {
             }
         }
         
-        // Scan for shadow DOM hosts
         this.#scanForShadowDOM();
         
-        // Scan for iframes
         if (document.querySelectorAll) {
             document.querySelectorAll('iframe').forEach(iframe => {
                 if (iframe) {
@@ -1349,10 +1351,8 @@ class ForumCoreObserver {
         const now = Date.now();
         let cleanupCount = 0;
         
-        // Clean up old nodes from timestamp map
         for (const [node, timestamp] of this.#nodeTimestamps) {
             if (node && (force || now - timestamp > ForumCoreObserver.#CONFIG.memory.nodeTTL)) {
-                // Check if node still exists in DOM
                 if (!document.body || !document.body.contains(node)) {
                     this.#processedNodes.delete(node);
                     this.#nodeTimestamps.delete(node);
@@ -1365,11 +1365,9 @@ class ForumCoreObserver {
             this.#log(`Cleaned up ${cleanupCount} old nodes`);
         }
         
-        // Check if we need to clear the entire WeakSet
         if (this.#nodeTimestamps.size > ForumCoreObserver.#CONFIG.memory.maxProcessedNodes) {
             this.#log('Processed nodes approaching limit, clearing cache');
             this.#processedNodes = new WeakSet();
-            // Keep timestamps for nodes that still exist
             const newTimestamps = new Map();
             for (const [node, timestamp] of this.#nodeTimestamps) {
                 if (node && document.body && document.body.contains(node)) {
@@ -1393,7 +1391,6 @@ class ForumCoreObserver {
     }
     
     #pause() {
-        // FIX: Guard against this being destroyed or not fully initialized
         if (!this.#observer && !this.#iframeObservers && !this.#shadowObservers) {
             this.#log('Pause called but no observers active');
             return;
@@ -1403,10 +1400,8 @@ class ForumCoreObserver {
             this.#observer.disconnect();
         }
         
-        // FIX: Check if #iframeObservers exists and is iterable
         if (this.#iframeObservers && typeof this.#iframeObservers.forEach === 'function') {
             try {
-                // Use forEach instead of for...of for WeakMap
                 this.#iframeObservers.forEach((observer, iframe) => {
                     if (observer && typeof observer.disconnect === 'function') {
                         observer.disconnect();
@@ -1417,7 +1412,6 @@ class ForumCoreObserver {
             }
         }
         
-        // FIX: Check shadow observers similarly
         if (this.#shadowObservers && typeof this.#shadowObservers.forEach === 'function') {
             try {
                 this.#shadowObservers.forEach((observer, host) => {
@@ -1438,8 +1432,8 @@ class ForumCoreObserver {
             this.#resizeObserver.disconnect();
         }
         
-        var timeoutIds = Array.from(this.#debounceTimeouts.values());
-        for (var i = 0; i < timeoutIds.length; i++) {
+        const timeoutIds = Array.from(this.#debounceTimeouts.values());
+        for (let i = 0; i < timeoutIds.length; i++) {
             clearTimeout(timeoutIds[i]);
         }
         this.#debounceTimeouts.clear();
@@ -1452,7 +1446,6 @@ class ForumCoreObserver {
         
         this.#observer.observe(document.documentElement, ForumCoreObserver.#CONFIG.observer);
         
-        // Resume iframe observers
         if (document.querySelectorAll) {
             document.querySelectorAll('iframe').forEach(iframe => {
                 if (iframe && (!this.#iframeObservers || !this.#iframeObservers.has(iframe))) {
@@ -1461,7 +1454,6 @@ class ForumCoreObserver {
             });
         }
         
-        // Resume shadow DOM observers
         this.#scanForShadowDOM();
     }
     
@@ -1473,10 +1465,10 @@ class ForumCoreObserver {
             return null;
         }
         
-        var id = settings.id || 'callback_' + Date.now() + '_' + 
+        const id = settings.id || 'callback_' + Date.now() + '_' + 
             (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2));
         
-        var callback = {
+        const callback = {
             id: id,
             fn: settings.callback,
             priority: settings.priority || 'normal',
@@ -1495,10 +1487,10 @@ class ForumCoreObserver {
         if (this.#initialScanComplete && callback.selector) {
             try {
                 if (document.querySelectorAll) {
-                    var nodes = document.querySelectorAll(callback.selector);
-                    for (var i = 0; i < nodes.length; i++) {
-                        var node = nodes[i];
-                        if (node && !this.#processedNodes.has(node)) {
+                    const nodes = document.querySelectorAll(callback.selector);
+                    for (let i = 0; i < nodes.length; i++) {
+                        const node = nodes[i];
+                        if (node && !this.#isInEditor(node) && !this.#processedNodes.has(node)) {
                             this.#processNode(node);
                         }
                     }
@@ -1514,7 +1506,7 @@ class ForumCoreObserver {
     registerDebounced(settings) {
         if (!settings || typeof settings.callback !== 'function') return null;
         
-        var id = this.register(settings);
+        const id = this.register(settings);
         
         this.#debouncedCallbacks.set(id, {
             callback: settings.callback,
@@ -1549,7 +1541,7 @@ class ForumCoreObserver {
     unregister(callbackId) {
         if (!callbackId) return false;
         
-        var removed = false;
+        let removed = false;
         
         if (this.#callbacks.has(callbackId)) {
             this.#callbacks.delete(callbackId);
@@ -1585,10 +1577,10 @@ class ForumCoreObserver {
         
         try {
             if (document.querySelectorAll) {
-                var nodes = document.querySelectorAll(selector);
-                for (var i = 0; i < nodes.length; i++) {
-                    var node = nodes[i];
-                    if (node && !this.#processedNodes.has(node)) {
+                const nodes = document.querySelectorAll(selector);
+                for (let i = 0; i < nodes.length; i++) {
+                    const node = nodes[i];
+                    if (node && !this.#isInEditor(node) && !this.#processedNodes.has(node)) {
                         this.#processNode(node);
                     }
                 }
@@ -1601,10 +1593,10 @@ class ForumCoreObserver {
     forceReprocess(selector) {
         try {
             if (document.querySelectorAll) {
-                var nodes = document.querySelectorAll(selector);
-                for (var i = 0; i < nodes.length; i++) {
-                    var node = nodes[i];
-                    if (node) {
+                const nodes = document.querySelectorAll(selector);
+                for (let i = 0; i < nodes.length; i++) {
+                    const node = nodes[i];
+                    if (node && !this.#isInEditor(node)) {
                         this.#processedNodes.delete(node);
                         this.#processNode(node);
                     }
@@ -1694,7 +1686,6 @@ class ForumCoreObserver {
             clearTimeout(this.#resetTimeout);
         }
         
-        // Disconnect all observers
         if (this.#intersectionObserver) {
             this.#intersectionObserver.disconnect();
         }
@@ -1703,7 +1694,6 @@ class ForumCoreObserver {
             this.#resizeObserver.disconnect();
         }
         
-        // Clear all maps and sets
         this.#callbacks.clear();
         this.#debouncedCallbacks.clear();
         this.#processedNodes = new WeakSet();
@@ -1730,13 +1720,11 @@ class ForumCoreObserver {
 // Initialize globally with enhanced features
 if (!globalThis.forumObserver) {
     try {
-        // Check if we should enable debug mode
         const debug = (localStorage && localStorage.getItem('forum-observer-debug') === 'true') || 
                      (window.location && window.location.hash === '#observer-debug');
         
         globalThis.forumObserver = ForumCoreObserver.create(debug);
         
-        // Convenience global functions
         globalThis.registerForumScript = function(settings) {
             return globalThis.forumObserver ? globalThis.forumObserver.register(settings) : null;
         };
@@ -1757,7 +1745,6 @@ if (!globalThis.forumObserver) {
             return globalThis.forumObserver ? globalThis.forumObserver.getStats() : null;
         };
         
-        // Debug helper
         if (debug) {
             globalThis.forumObserverDebug = {
                 enable: () => {
@@ -1778,7 +1765,6 @@ if (!globalThis.forumObserver) {
             console.log('🔧 ForumObserver debug mode enabled. Use forumObserverDebug object.');
         }
         
-        // Clean up on page unload
         globalThis.addEventListener('pagehide', function() {
             if (globalThis.forumObserver) {
                 globalThis.forumObserver.destroy();
@@ -1786,12 +1772,11 @@ if (!globalThis.forumObserver) {
             }
         }, { once: true });
         
-        console.log('🚀 ForumCoreObserver ready (ENHANCED GLOBAL MODE) with full DOM coverage');
+        console.log('🚀 ForumCoreObserver ready (ENHANCED GLOBAL MODE) with editor skipping');
         
     } catch (error) {
         console.error('Failed to initialize ForumCoreObserver:', error);
         
-        // Provide fallback that logs warnings
         globalThis.forumObserver = new Proxy({}, {
             get: function(target, prop) {
                 const methods = ['register', 'registerDebounced', 'registerThemeAware', 'unregister', 
