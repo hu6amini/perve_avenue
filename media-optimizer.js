@@ -27,7 +27,11 @@
             'forum-user-avatar', 'forum-likes-avatar',
             'avatar-size-', 'images.weserv.nl', 'wsrv.nl',
             'data:image'
-        ].map(function(p) { return p.toLowerCase(); })
+        ].map(function(p) { return p.toLowerCase(); }),
+        excludeSelectors: [
+            '.send',
+            '.Item[style*="text-align: center"][style*="padding: 2px 0"]'
+        ]
     };
     
     // ===== STATE MANAGEMENT =====
@@ -53,6 +57,22 @@
     // ===== UTILITY FUNCTIONS =====
     function isMediaElement(el) {
         return el && (el.tagName === 'IMG' || el.tagName === 'IFRAME' || el.tagName === 'VIDEO');
+    }
+    
+    function isInExcludedContainer(el) {
+        if (!el) return false;
+        
+        for (var i = 0; i < CONFIG.excludeSelectors.length; i++) {
+            try {
+                if (el.closest(CONFIG.excludeSelectors[i])) {
+                    return true;
+                }
+            } catch(e) {
+                // Handle invalid selector gracefully
+                console.warn('Invalid exclude selector:', CONFIG.excludeSelectors[i]);
+            }
+        }
+        return false;
     }
     
     function shouldSkip(url, el) {
@@ -424,6 +444,14 @@
     function optimizeImage(img) {
         if (!img.src || img.src.indexOf('data:') === 0) return;
         
+        // Check exclusion first (cheapest operation)
+        if (isInExcludedContainer(img)) {
+            state.processed.add(img);
+            state.stats.skipped++;
+            img.setAttribute('data-optimized', 'excluded-container');
+            return;
+        }
+        
         applyLazyAttributes(img);
         
         if (state.processed.has(img)) return;
@@ -697,6 +725,17 @@
         console.log('Autoplay videos:', state.videos.autoplayVideos);
         console.log('Videos with poster:', videosWithPoster);
         console.log('Videos missing poster:', finalVideos.length - videosWithPoster);
+        
+        // Add excluded container stats to report
+        var excludedCount = 0;
+        for (var e = 0; e < finalImages.length; e++) {
+            if (finalImages[e].getAttribute('data-optimized') === 'excluded-container') {
+                excludedCount++;
+            }
+        }
+        if (excludedCount > 0) {
+            console.log('Images excluded by container rules:', excludedCount);
+        }
         
         if (state.stats.failed > 0) {
             console.warn('Optimization failures:', state.stats.failed);
