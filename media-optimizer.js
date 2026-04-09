@@ -31,9 +31,10 @@
         excludeSelectors: [
             '.send',
             '.Item[style*="text-align: center"][style*="padding: 2px 0"]',
-            '.st-editor-container',  // Add this to exclude the entire editor
-            '.ve-container',          // Visual editor container
-            '.tiptap'                 // ProseMirror/Tiptap editor
+            '.st-editor-container',
+            '.ve-container',
+            '.tiptap',
+            '.ProseMirror'
         ]
     };
     
@@ -314,6 +315,9 @@
     
     // ===== VIDEO HANDLING =====
     function setupVideoLazyLoading(video) {
+        // Skip if in excluded container
+        if (isInExcludedContainer(video)) return;
+        
         if (state.processed.has(video)) return;
         state.processed.add(video);
         state.videos.total++;
@@ -355,7 +359,7 @@
     
     // ===== LAZY LOADING & DECODING =====
     function applyLazyAttributes(el) {
-        // Skip if in excluded container
+        // Skip if in excluded container - NO ATTRIBUTES WHATSOEVER
         if (isInExcludedContainer(el)) {
             return el;
         }
@@ -448,7 +452,8 @@
     }
     
     function optimizeImage(img) {
-        // COMPLETELY IGNORE if in excluded container - no attributes, no changes, nothing
+        // CRITICAL: If in excluded container, do ABSOLUTELY NOTHING
+        // No attribute changes, no processing, no tracking, no nothing
         if (isInExcludedContainer(img)) {
             return;
         }
@@ -463,7 +468,10 @@
         if (skip) {
             state.processed.add(img);
             state.stats.skipped++;
-            img.setAttribute('data-optimized', 'skipped');
+            // Only add attribute if NOT in excluded container (already checked above, but for safety)
+            if (!isInExcludedContainer(img)) {
+                img.setAttribute('data-optimized', 'skipped');
+            }
             return;
         }
         
