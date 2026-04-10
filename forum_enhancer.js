@@ -779,7 +779,7 @@ if (!globalThis.mediaDimensionExtractor) {
             'profile_card': 80,
             'deleted_user': 60,
             'likes_list': 30,
-            'fast_reply': 40  // Added fast reply size
+            'fast_reply': 40
         },
         
         selectors: {
@@ -836,6 +836,14 @@ if (!globalThis.mediaDimensionExtractor) {
         coordination: {
             maxWaitTime: 5000,
             checkInterval: 100
+        },
+        
+        // Prefetch configuration
+        prefetch: {
+            enabled: true,
+            batchSize: 50,
+            delayBetweenBatches: 100,
+            maxUsersToPrefetch: 500
         }
     };
 
@@ -865,7 +873,7 @@ if (!globalThis.mediaDimensionExtractor) {
         processedAvatars: new WeakSet(),
         processedDeletedUsers: new WeakSet(),
         processedLikesList: new WeakSet(),
-        processedFastReply: new WeakSet(), // Added for fast reply
+        processedFastReply: new WeakSet(),
         isInitialized: false,
         cacheVersion: '2.2',
         
@@ -889,6 +897,13 @@ if (!globalThis.mediaDimensionExtractor) {
             currentUser: null,
             initialized: false
         }
+    };
+
+    // Prefetch state
+    var prefetchState = {
+        isPrefetching: false,
+        prefetchedUsers: new Map(),
+        pendingPrefetchIds: []
     };
 
     // ==============================
@@ -953,6 +968,143 @@ if (!globalThis.mediaDimensionExtractor) {
             cleanup();
             callback();
         }, AVATAR_CONFIG.coordination.maxWaitTime);
+    }
+
+    // ==============================
+    // PREFETCH FUNCTIONS
+    // ==============================
+
+    function prefetchUserAvatars() {
+        if (!AVATAR_CONFIG.prefetch.enabled || prefetchState.isPrefetching) return;
+        
+        // Collect all user IDs from the page
+        var userIds = new Set();
+        
+        // Get users from posts
+        var posts = document.querySelectorAll('.summary li[class^="box_"]');
+        for (var i = 0; i < posts.length; i++) {
+            var classMatch = posts[i].className.match(/\bbox_m(\d+)\b/);
+            if (classMatch) userIds.add(classMatch[1]);
+        }
+        
+        // Get users from profile cards
+        var avatars = document.querySelectorAll('a.avatar[href*="MID="]');
+        for (var j = 0; j < avatars.length; j++) {
+            var hrefMatch = avatars[j].href.match(/MID=(\d+)/);
+            if (hrefMatch) userIds.add(hrefMatch[1]);
+        }
+        
+        // Get users from menu wrap (current user)
+        var menuWrap = document.querySelector('.menuwrap a[href*="MID="]');
+        if (menuWrap) {
+            var menuMatch = menuWrap.href.match(/MID=(\d+)/);
+            if (menuMatch) userIds.add(menuMatch[1]);
+        }
+        
+        var uniqueUserIds = Array.from(userIds).slice(0, AVATAR_CONFIG.prefetch.maxUsersToPrefetch);
+        
+        if (uniqueUserIds.length === 0) return;
+        
+        console.log(`🔄 Prefetching avatars for ${uniqueUserIds.length} users...`);
+        prefetchState.isPrefetching = true;
+        
+        function fetchBatch(startIndex) {
+            var batch = uniqueUserIds.slice(startIndex, startIndex + AVATAR_CONFIG.prefetch.batchSize);
+            
+            if (batch.length === 0) {
+                prefetchState.isPrefetching = false;
+                console.log(`✅ Avatar prefetch complete. Cached ${prefetchState.prefetchedUsers.size} users.`);
+                return;
+            }
+            
+            var url = '/api.php?mid=' + batch.join(',');
+            
+            fetch(url)
+                .then(function(response) {
+                    if (!response.ok) throw new Error('Prefetch API failed');
+                    return response.json();
+                })
+                .then(function(data) {
+                    // Cache the fetched data
+                    for (var userId in data) {
+                        if (data.hasOwnProperty(userId)) {
+                            var numericId = userId.replace('m', '');
+                            prefetchState.prefetchedUsers.set(numericId, data[userId]);
+                            
+                            // Also pre-cache avatars for common sizes
+                            var sizes = [30, 40, 60, 80];
+                            sizes.forEach(function(size) {
+                                if (data[userId].avatar && data[userId].avatar.trim() !== '' && data[userId].avatar !== 'http') {
+                                    var cacheKey = numericId + '_' + size;
+                                    var cacheData = {
+                                        url: data[userId].avatar,
+                                        username: cleanUsername(data[userId].nickname),
+                                        timestamp: Date.now(),
+                                        size: size,
+                                        cacheVersion: state.cacheVersion,
+                                        source: 'forum'
+                                    };
+                                    
+                                    try {
+                                        localStorage.setItem(getCacheKey(numericId, size), JSON.stringify(cacheData));
+                                        state.userCache[cacheKey] = cacheData;
+                                    } catch (e) {}
+                                }
+                            });
+                        }
+                    }
+                    
+                    setTimeout(function() {
+                        fetchBatch(startIndex + AVATAR_CONFIG.prefetch.batchSize);
+                    }, AVATAR_CONFIG.prefetch.delayBetweenBatches);
+                })
+                .catch(function(error) {
+                    console.warn('⚠️ Avatar prefetch error:', error);
+                    setTimeout(function() {
+                        fetchBatch(startIndex + AVATAR_CONFIG.prefetch.batchSize);
+                    }, AVATAR_CONFIG.prefetch.delayBetweenBatches);
+                });
+        }
+        
+        fetchBatch(0);
+    }
+
+    function setupLikesPopupObserver() {
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    var popup = mutation.target;
+                    if (popup.style.display === 'block') {
+                        // Popup opened, prefetch any missing users in this popup
+                        var links = popup.querySelectorAll('.users li a[href*="MID="]');
+                        var missingUserIds = [];
+                        
+                        links.forEach(function(link) {
+                            var match = link.href.match(/MID=(\d+)/);
+                            if (match && match[1] && !prefetchState.prefetchedUsers.has(match[1])) {
+                                missingUserIds.push(match[1]);
+                            }
+                        });
+                        
+                        if (missingUserIds.length > 0) {
+                            // Fetch missing users immediately
+                            var url = '/api.php?mid=' + missingUserIds.join(',');
+                            fetch(url).then(r => r.json()).then(data => {
+                                for (var id in data) {
+                                    var numId = id.replace('m', '');
+                                    prefetchState.prefetchedUsers.set(numId, data[id]);
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+        });
+        
+        var likesPopup = document.querySelector('.popup.pop_points');
+        if (likesPopup) {
+            observer.observe(likesPopup, { attributes: true });
+        }
     }
 
     // ==============================
@@ -1273,6 +1425,23 @@ if (!globalThis.mediaDimensionExtractor) {
     function getAvatarFromCache(userId, size, isLikesList) {
         var cacheKey = userId + '_' + size;
         
+        // Check prefetch cache first (fastest)
+        if (prefetchState.prefetchedUsers.has(userId)) {
+            var userData = prefetchState.prefetchedUsers.get(userId);
+            if (userData.avatar && userData.avatar.trim() !== '' && userData.avatar !== 'http') {
+                if (!isLikesList || (isLikesList && !userData.avatar.includes('dicebear.com'))) {
+                    return {
+                        url: userData.avatar,
+                        username: cleanUsername(userData.nickname),
+                        timestamp: Date.now(),
+                        size: size,
+                        cacheVersion: state.cacheVersion,
+                        source: 'prefetch'
+                    };
+                }
+            }
+        }
+        
         if (state.userCache[cacheKey]) {
             var cached = state.userCache[cacheKey];
             var isGenerated = cached.url && cached.url.includes('dicebear.com');
@@ -1313,6 +1482,28 @@ if (!globalThis.mediaDimensionExtractor) {
         }
         
         return null;
+    }
+
+    function processLikesListImmediately(linkElement, userId, size, username) {
+        if (userId && prefetchState.prefetchedUsers.has(userId)) {
+            var userData = prefetchState.prefetchedUsers.get(userId);
+            var avatarUrl = userData.avatar;
+            var finalUsername = cleanUsername(userData.nickname);
+            
+            if (avatarUrl && avatarUrl.trim() !== '' && avatarUrl !== 'http') {
+                testImageUrl(avatarUrl, function(success) {
+                    if (success) {
+                        insertLikesListAvatar(linkElement, userId, size, avatarUrl, finalUsername);
+                    } else {
+                        markAvatarAsBroken(avatarUrl);
+                        var fallbackUrl = generateLetterAvatar(userId, finalUsername, size);
+                        insertLikesListAvatar(linkElement, userId, size, fallbackUrl, finalUsername);
+                    }
+                });
+                return true;
+            }
+        }
+        return false;
     }
 
     function processAvatarQueue() {
@@ -1734,59 +1925,57 @@ if (!globalThis.mediaDimensionExtractor) {
         return img;
     }
 
-function createFastReplyUserInfo(user) {
-    if (!user) return null;
-    
-    var container = document.createElement('div');
-    container.className = 'fast-reply-user-info';
-    container.style.cssText = 
-        'padding: 10px 15px;' +
-        'display: flex;' +
-        'align-items: center;' +
-        'gap: 12px;';
-    
-    var label = document.createElement('span');
-    label.style.cssText = 
-        'color: #6c757d;' +
-        'font-size: 13px;' +
-        'margin-right: 5px;';
-    label.textContent = 'Replying as:';
-    
-    var avatarLink = document.createElement('a');
-    // FIX: Add the leading "/?" and ensure correct path format
-    avatarLink.href = user.userId ? '/?act=Profile&MID=' + user.userId : '#';
-    avatarLink.className = 'avatar';
-    avatarLink.rel = 'nofollow';
-    avatarLink.style.display = 'flex';
-    
-    var avatarImg = createFastReplyAvatarImg(user.avatarUrl, user.username, user.userId);
-    avatarLink.appendChild(avatarImg);
-    
-    var usernameLink = document.createElement('a');
-    // FIX: Use the same corrected href format
-    usernameLink.href = avatarLink.href;
-    usernameLink.className = 'fast-reply-username';
-    usernameLink.style.cssText = 
-        'font-weight: 600;' +
-        'color: #007bff;' +
-        'text-decoration: none;' +
-        'font-size: 15px;' +
-        'margin-left: 5px;';
-    usernameLink.textContent = user.username;
-    
-    usernameLink.addEventListener('mouseenter', function() {
-        this.style.textDecoration = 'underline';
-    });
-    usernameLink.addEventListener('mouseleave', function() {
-        this.style.textDecoration = 'none';
-    });
-    
-    container.appendChild(label);
-    container.appendChild(avatarLink);
-    container.appendChild(usernameLink);
-    
-    return container;
-}
+    function createFastReplyUserInfo(user) {
+        if (!user) return null;
+        
+        var container = document.createElement('div');
+        container.className = 'fast-reply-user-info';
+        container.style.cssText = 
+            'padding: 10px 15px;' +
+            'display: flex;' +
+            'align-items: center;' +
+            'gap: 12px;';
+        
+        var label = document.createElement('span');
+        label.style.cssText = 
+            'color: #6c757d;' +
+            'font-size: 13px;' +
+            'margin-right: 5px;';
+        label.textContent = 'Replying as:';
+        
+        var avatarLink = document.createElement('a');
+        avatarLink.href = user.userId ? '/?act=Profile&MID=' + user.userId : '#';
+        avatarLink.className = 'avatar';
+        avatarLink.rel = 'nofollow';
+        avatarLink.style.display = 'flex';
+        
+        var avatarImg = createFastReplyAvatarImg(user.avatarUrl, user.username, user.userId);
+        avatarLink.appendChild(avatarImg);
+        
+        var usernameLink = document.createElement('a');
+        usernameLink.href = avatarLink.href;
+        usernameLink.className = 'fast-reply-username';
+        usernameLink.style.cssText = 
+            'font-weight: 600;' +
+            'color: #007bff;' +
+            'text-decoration: none;' +
+            'font-size: 15px;' +
+            'margin-left: 5px;';
+        usernameLink.textContent = user.username;
+        
+        usernameLink.addEventListener('mouseenter', function() {
+            this.style.textDecoration = 'underline';
+        });
+        usernameLink.addEventListener('mouseleave', function() {
+            this.style.textDecoration = 'none';
+        });
+        
+        container.appendChild(label);
+        container.appendChild(avatarLink);
+        container.appendChild(usernameLink);
+        
+        return container;
+    }
 
     function addFastReplyUserInfo(node) {
         if (state.processedFastReply.has(node)) return;
@@ -2004,6 +2193,14 @@ function createFastReplyUserInfo(user) {
         var username = extractUsernameFromElement(element, config.type, userId);
         
         if (userId && config.type !== 'deleted_user') {
+            // For likes list, try immediate prefetch first
+            if (config.type === 'likes_list') {
+                if (processLikesListImmediately(element, userId, config.size, username)) {
+                    state.processedLikesList.add(element);
+                    return;
+                }
+            }
+            
             var cached = getAvatarFromCache(userId, config.size, config.type === 'likes_list');
             if (cached) {
                 insertAvatarForProcessedItem({
@@ -2073,7 +2270,6 @@ function createFastReplyUserInfo(user) {
                 }
             }
             
-            // Also check for fast reply
             if (node.matches && node.matches(FAST_REPLY_CONFIG.selectors.fastReply)) {
                 addFastReplyUserInfo(node);
             } else if (node.querySelector) {
@@ -2136,7 +2332,6 @@ function createFastReplyUserInfo(user) {
             }
         }
         
-        // Process fast reply
         addFastReplyUserInfo(document);
     }
 
@@ -2164,7 +2359,6 @@ function createFastReplyUserInfo(user) {
                 priority: 'high'
             });
             
-            // Also register for menuWrap changes to update fast reply
             window.forumObserver.register({
                 id: 'fast_reply_user_update',
                 selector: FAST_REPLY_CONFIG.selectors.menuWrap,
@@ -2199,6 +2393,12 @@ function createFastReplyUserInfo(user) {
             }
             
             processExistingElements();
+            
+            // Start prefetching user avatars in the background
+            setTimeout(function() {
+                prefetchUserAvatars();
+                setupLikesPopupObserver();
+            }, 1000);
             
             state.isInitialized = true;
             
@@ -2261,7 +2461,6 @@ function createFastReplyUserInfo(user) {
             initAvatarSystem();
         },
         
-        // Fast reply specific methods
         refreshFastReply: refreshFastReplyUser,
         
         getCurrentUser: function() {
@@ -2371,7 +2570,8 @@ function createFastReplyUserInfo(user) {
                 cacheVersion: state.cacheVersion,
                 scriptsReady: state.scriptsReady,
                 waitingForScripts: state.waitingForScripts,
-                pendingElements: state.pendingElements.length
+                pendingElements: state.pendingElements.length,
+                prefetchedUsers: prefetchState.prefetchedUsers.size
             };
         },
         
@@ -2407,6 +2607,13 @@ function createFastReplyUserInfo(user) {
             if (window.mediaDimensionExtractor && element) {
                 window.mediaDimensionExtractor.forceReprocessElement(element);
             }
+        },
+        
+        getPrefetchStats: function() {
+            return {
+                prefetchedUsers: prefetchState.prefetchedUsers.size,
+                isPrefetching: prefetchState.isPrefetching
+            };
         }
     };
 
