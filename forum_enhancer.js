@@ -751,6 +751,7 @@ if (!globalThis.mediaDimensionExtractor) {
 
 // ==============================
 // Complete Working Avatar System - COORDINATED WITH MEDIA SCRIPTS
+// OPTIMIZED FOR FAST LIKES POPUP LOADING
 // ==============================
 
 (function() {
@@ -875,7 +876,7 @@ if (!globalThis.mediaDimensionExtractor) {
         processedLikesList: new WeakSet(),
         processedFastReply: new WeakSet(),
         isInitialized: false,
-        cacheVersion: '2.2',
+        cacheVersion: '2.3',
         
         // Performance tracking
         processingQueue: [],
@@ -1014,6 +1015,8 @@ if (!globalThis.mediaDimensionExtractor) {
             if (batch.length === 0) {
                 prefetchState.isPrefetching = false;
                 console.log(`✅ Avatar prefetch complete. Cached ${prefetchState.prefetchedUsers.size} users.`);
+                // Preload images after prefetch completes
+                setTimeout(preloadLikesAvatars, 500);
                 return;
             }
             
@@ -1069,6 +1072,27 @@ if (!globalThis.mediaDimensionExtractor) {
         fetchBatch(0);
     }
 
+    function preloadLikesAvatars() {
+        // Preload images for users in the prefetch cache
+        var preloadedCount = 0;
+        var entries = Array.from(prefetchState.prefetchedUsers.entries());
+        
+        entries.forEach(function(entry) {
+            var userData = entry[1];
+            var avatarUrl = userData.avatar;
+            
+            if (avatarUrl && avatarUrl.trim() !== '' && avatarUrl !== 'http' && !avatarUrl.includes('dicebear.com')) {
+                var img = new Image();
+                img.src = avatarUrl;
+                preloadedCount++;
+            }
+        });
+        
+        if (preloadedCount > 0) {
+            console.log(`🖼️ Preloaded ${preloadedCount} custom avatars for faster display`);
+        }
+    }
+
     function setupLikesPopupObserver() {
         var observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
@@ -1105,6 +1129,24 @@ if (!globalThis.mediaDimensionExtractor) {
         if (likesPopup) {
             observer.observe(likesPopup, { attributes: true });
         }
+    }
+
+    function backgroundValidateAvatar(userId, avatarUrl, username, size) {
+        if (!avatarUrl || avatarUrl.includes('dicebear.com')) return;
+        
+        testImageUrl(avatarUrl, function(success) {
+            if (!success) {
+                markAvatarAsBroken(avatarUrl);
+                
+                // Update all instances of this avatar in the current page
+                var avatars = document.querySelectorAll(`img.forum-likes-avatar[data-username="${username}"]`);
+                avatars.forEach(function(img) {
+                    if (img.src === avatarUrl) {
+                        img.src = generateLetterAvatar(userId, username, size);
+                    }
+                });
+            }
+        });
     }
 
     // ==============================
@@ -1429,7 +1471,19 @@ if (!globalThis.mediaDimensionExtractor) {
         if (prefetchState.prefetchedUsers.has(userId)) {
             var userData = prefetchState.prefetchedUsers.get(userId);
             if (userData.avatar && userData.avatar.trim() !== '' && userData.avatar !== 'http') {
-                if (!isLikesList || (isLikesList && !userData.avatar.includes('dicebear.com'))) {
+                // For likes list, return immediately with error handling to be done on insertion
+                if (isLikesList) {
+                    return {
+                        url: userData.avatar,
+                        username: cleanUsername(userData.nickname),
+                        timestamp: Date.now(),
+                        size: size,
+                        cacheVersion: state.cacheVersion,
+                        source: 'prefetch'
+                    };
+                }
+                // For non-likes, validate
+                if (!isBrokenAvatarUrl(userData.avatar)) {
                     return {
                         url: userData.avatar,
                         username: cleanUsername(userData.nickname),
@@ -1491,15 +1545,8 @@ if (!globalThis.mediaDimensionExtractor) {
             var finalUsername = cleanUsername(userData.nickname);
             
             if (avatarUrl && avatarUrl.trim() !== '' && avatarUrl !== 'http') {
-                testImageUrl(avatarUrl, function(success) {
-                    if (success) {
-                        insertLikesListAvatar(linkElement, userId, size, avatarUrl, finalUsername);
-                    } else {
-                        markAvatarAsBroken(avatarUrl);
-                        var fallbackUrl = generateLetterAvatar(userId, finalUsername, size);
-                        insertLikesListAvatar(linkElement, userId, size, fallbackUrl, finalUsername);
-                    }
-                });
+                // Insert with error handling but no pre-testing
+                insertLikesListAvatarFast(linkElement, userId, size, avatarUrl, finalUsername);
                 return true;
             }
         }
@@ -1732,6 +1779,86 @@ if (!globalThis.mediaDimensionExtractor) {
         }, { once: true });
         
         return img;
+    }
+
+    // ==============================
+    // FAST LIKES LIST AVATAR INSERTION
+    // ==============================
+
+    function insertLikesListAvatarFast(linkElement, userId, size, avatarUrl, username) {
+        var span = linkElement.closest('span');
+        if (!span) return;
+        
+        if (span.querySelector('img.forum-likes-avatar')) {
+            return;
+        }
+        
+        var img = new Image();
+        img.className = 'forum-likes-avatar avatar-size-' + size;
+        img.alt = username ? 'Avatar for ' + username : '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.width = size;
+        img.height = size;
+        img.dataset.needsDimensions = 'true';
+        
+        img.style.cssText = 
+            'width:' + size + 'px;' +
+            'height:' + size + 'px;' +
+            'border-radius:50%;' +
+            'object-fit:cover;' +
+            'vertical-align:middle;' +
+            'display:inline-block;' +
+            'margin-right:8px;' +
+            'margin-left:4px;' +
+            'border:1px solid #ddd;' +
+            'box-shadow:0 1px 2px rgba(0,0,0,0.1);';
+        
+        img.src = avatarUrl;
+        
+        if (username) {
+            img.dataset.username = username;
+        }
+        
+        // Keep error handling for 404 fallback
+        img.addEventListener('error', function onError() {
+            if (!this.src.includes('dicebear.com')) {
+                markAvatarAsBroken(avatarUrl);
+                
+                // Remove the broken image from prefetch cache
+                if (userId && prefetchState.prefetchedUsers.has(userId)) {
+                    var userData = prefetchState.prefetchedUsers.get(userId);
+                    userData.avatar = null;
+                    prefetchState.prefetchedUsers.set(userId, userData);
+                }
+                
+                // Clear from localStorage cache
+                var cacheKey = getCacheKey(userId, size);
+                localStorage.removeItem(cacheKey);
+                delete state.userCache[cacheKey];
+                
+                // Replace with generated avatar
+                var fallbackUrl = generateLetterAvatar(userId, username || '', size);
+                this.src = fallbackUrl;
+            }
+            this.removeEventListener('error', onError);
+        }, { once: true });
+        
+        span.insertBefore(img, linkElement);
+        span.classList.add('has-forum-avatar');
+        
+        // Background validation without blocking display
+        if (!avatarUrl.includes('dicebear.com')) {
+            setTimeout(function() {
+                backgroundValidateAvatar(userId, avatarUrl, username, size);
+            }, 100);
+        }
+        
+        if (window.mediaDimensionExtractor) {
+            setTimeout(function() {
+                window.mediaDimensionExtractor.forceReprocessElement(img);
+            }, 10);
+        }
     }
 
     // ==============================
