@@ -1,10 +1,12 @@
 /*============================================
  midnight emerald skin - forum css
  NON-CRITICAL STYLES - EXTERNAL FILE
+ FULLY HARMONIZED WITH φ(1.618)
 ============================================*/
 
 /*============================================
- font face declarations============================================*/
+ font face declarations
+============================================*/
 /* Regular (400) - for regular icons */
 @font-face {
   font-family: 'Font Awesome 6 Pro';
@@ -13,7 +15,6 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  /* Font metric overrides to prevent layout shift */
   size-adjust: 100%;
   descent-override: 0%;
   ascent-override: 100%;
@@ -29,7 +30,6 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  /* Font metric overrides to prevent layout shift */
   size-adjust: 100%;
   descent-override: 0%;
   ascent-override: 100%;
@@ -37,7 +37,7 @@
   unicode-range: u+f000-ffff;
 }
 
-/* Solid (900) - for solid icons - THIS WAS MISSING */
+/* Solid (900) - for solid icons */
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
@@ -45,7 +45,6 @@
   font-weight: 900;
   font-style: normal;
   font-display: swap;
-  /* Font metric overrides to prevent layout shift */
   size-adjust: 100%;
   descent-override: 0%;
   ascent-override: 100%;
@@ -61,7 +60,8 @@
  font-display: swap}
 
 /*============================================
- twemoji scale============================================*/
+ twemoji scale - harmonized
+============================================*/
 .twemoji {height: 1.25em;
  content-visibility: auto;
  width: 1.25em;
@@ -114,18 +114,16 @@ pre .twemoji {height: 1.1em;
  vertical-align: -0.15em}
 
 /*============================================
- animations & keyframes============================================*/
+ animations & keyframes - harmonized
+============================================*/
 @keyframes pulse {0%, 100% {transform: scale(1)}
- 50% {transform: scale(1.1)}}
+ 50% {transform: scale(1.05)}}
 
-@keyframes menudown {from {opacity: 0; transform: translatey(-10px)}
- to {opacity: 1; transform: translatey(0)}}
+@keyframes menudown {from {opacity: 0; transform: translateY(calc(var(--space-sm) * -1))}
+ to {opacity: 1; transform: translateY(0)}}
 
 @keyframes subtle-pulse {0%, 100% {box-shadow: var(--shadow-md)}
- 50% {box-shadow:
- 0 4px 12px rgba(5, 150, 105, 0.15),
- 0 0 0 1px rgba(5, 150, 105, 0.1),
- 0 0 20px rgba(5, 150, 105, 0.08)}}
+ 50% {box-shadow: var(--shadow-lg), 0 0 0 var(--pad-1) rgba(5, 150, 105, 0.1)}}
 
 @keyframes pulse-new {0%, 100% {opacity: 1; transform: scale(1)}
  50% {opacity: 0.8; transform: scale(1.05)}}
@@ -133,8 +131,11 @@ pre .twemoji {height: 1.1em;
 @keyframes fade-in {from {opacity: 0}
  to {opacity: 1}}
 
+@keyframes spin {to {transform: translate(-50%, -50%) rotate(360deg)}}
+
 /*============================================
- modern breadcrumb============================================*/
+ modern breadcrumb - harmonized
+============================================*/
 .modern-breadcrumb {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
@@ -155,11 +156,11 @@ pre .twemoji {height: 1.1em;
  font-weight: 500;
  gap: var(--space-sm);
  padding: var(--space-xs) var(--space-sm);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .breadcrumb-item:hover {background: var(--hover-color);
  color: var(--text-primary);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .breadcrumb-item.home {color: var(--primary-color)}
 
@@ -168,125 +169,128 @@ pre .twemoji {height: 1.1em;
 .breadcrumb-item i {font-size: var(--text-sm)}
 
 /*============================================
- tabs============================================*/
+ tabs - harmonized
+============================================*/
 .tabs li {vertical-align: bottom;
- margin-left: 5px}
+ margin-left: var(--space-xs)}
 
 .tabs li:first-child {margin: 0}
 
 .tabs.no_rotate li {margin: 0;
- margin-top: 5px}
+ margin-top: var(--space-xs)}
 
-.tabs.no_rotate.alternative li {margin-top: 10px}
+.tabs.no_rotate.alternative li {margin-top: var(--space-sm)}
 
 .tabs a {display: block;
  margin: 0;
  padding: var(--pad-2) var(--pad-4);
  text-decoration: none;
  font-weight: bold;
- color: #FFF;
- box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
- border-radius: 2px;
- background: #37474E;
- transition: all 0.3s ease}
+ color: var(--text-primary);
+ box-shadow: var(--shadow-sm);
+ border-radius: var(--radius-sm);
+ background: var(--surface-light);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .tabs a:hover,
-.tabs .current a {color: #E8EAF6;
- background: #303F9F;
- transform: translatey(-1px)}
+.tabs .current a {color: var(--text-primary);
+ background: var(--primary-color);
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .tabs.top {text-align: right;
  position: relative;
- top: 20px}
+ top: var(--space-lg)}
 
 .tabs.bottom {text-align: right;
  position: relative;
- bottom: 20px}
+ bottom: var(--space-lg)}
 
-.tabs.rotate {height: 24px;
- padding: 10px 105px}
+.tabs.rotate {height: var(--space-xl);
+ padding: var(--space-sm) var(--space-xxl)}
 
-.tabs.left.rotate {left: -24px}
+.tabs.left.rotate {left: var(--space-xl)}
 
-.tabs.no_rotate {padding: 130px 0}
+.tabs.no_rotate {padding: var(--space-xxl) 0}
 
-.tabs2 .current div {background: #E8EAF6 !important;
- border: 1px solid #C5CAE9;
- color: #7986CB}
+.tabs2 .current div {background: var(--hover-color) !important;
+ border: 1px solid var(--border-color);
+ color: var(--primary-color)}
 
-.tabs2 div:hover {background: #E8EAF6}
+.tabs2 div:hover {background: var(--hover-color)}
 
-.tabs2 div {transition: all 0.3s ease;
+.tabs2 div {transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  border: 1px solid transparent}
 
 /*============================================
- content & note styles============================================*/
+ content & note styles - harmonized
+============================================*/
 .note {background: none;
  box-shadow: none;
- line-height: 34px;
- top: 5px;
- animation: 5s fade-in;
- color: #888}
+ line-height: calc(var(--space-xl) * 1.3);
+ top: var(--space-xs);
+ animation: fade-in 0.5s ease;
+ color: var(--text-tertiary)}
 
 .note span {display: inline-block;
- line-height: 20px;
+ line-height: var(--space-lg);
  padding: var(--pad-4) var(--pad-5);
- border-radius: 2px;
- background: #FFF;
- color: #888}
+ border-radius: var(--radius-sm);
+ background: var(--surface-color);
+ color: var(--text-tertiary)}
 
 .nav {font-weight: bold;
  letter-spacing: 0.05em}
 
-.nav a {color: #535353;
+.nav a {color: var(--text-secondary);
  border-bottom: 1px dotted transparent}
 
-.nav a:hover {border-color: #535353;
- color: #535353}
+.nav a:hover {border-color: var(--text-secondary);
+ color: var(--text-secondary)}
 
-.nav .fa {font-size: 12px;
- color: #A5A5A5}
+.nav .fa {font-size: var(--text-sm);
+ color: var(--text-tertiary)}
 
 #blog .nav,
 #forum .nav,
 #topic .nav {margin: 0 auto;
  padding: var(--pad-4);
- border: 1px solid #DDD;
- border-radius: 2px}
+ border: 1px solid var(--border-color);
+ border-radius: var(--radius-sm)}
 
 .footer {margin: var(--space-lg) auto;
  font-size: var(--text-xs);
- color: #999;
+ color: var(--text-tertiary);
  text-align: center}
 
 /*============================================
- enhanced post content============================================*/
-.big_list .aa > .fa {font-size: 15px;
- color: #888}
+ enhanced post content - harmonized
+============================================*/
+.big_list .aa > .fa {font-size: var(--text-md);
+ color: var(--text-tertiary)}
 
-.big_list .chiusa .aa > .fa {color: #CDCDCD}
+.big_list .chiusa .aa > .fa {color: var(--text-muted)}
 
-.annuncio .aa > .fa {font-size: 20px !important;
- color: #C067D3}
+.annuncio .aa > .fa {font-size: var(--text-xl) !important;
+ color: var(--secondary-color)}
 
-.importante .aa > .fa {font-size: 20px !important;
- color: #E8CB45}
+.importante .aa > .fa {font-size: var(--text-xl) !important;
+ color: var(--warning-color)}
 
-.big_list .off.calda .aa .fa {color: rgba(217, 75, 75, 0.7)}
+.big_list .off.calda .aa .fa {color: rgba(220, 38, 38, 0.7)}
 
-.big_list .spostata .aa .fa {color: #E0E0E0}
+.big_list .spostata .aa .fa {color: var(--text-tertiary)}
 
-.big_list .on .bb .new_post {color: #E84545}
+.big_list .on .bb .new_post {color: var(--danger-color)}
 
 a.new_post {padding: var(--pad-2) var(--pad-4);
- color: #5C6BC0;
- border-radius: 50px}
+ color: var(--primary-color);
+ border-radius: var(--radius-full)}
 
-.big_list .off.sondaggio .aa > .fa {color: #60B6DC}
+.big_list .off.sondaggio .aa > .fa {color: var(--accent-color)}
 
 .mods,
-.subs {background: #FAFAFA;
- margin-top: 5px;
+.subs {background: var(--bg-color);
+ margin-top: var(--space-xs);
  padding: var(--pad-2)}
 
 .mods a,
@@ -297,28 +301,29 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
 
 .desc {font-weight: 400;
  font-size: var(--text-sm);
- color: #888}
+ color: var(--text-tertiary)}
 
-.desc .topic {margin: 5px 1px !important}
+.desc .topic {margin: var(--space-xs) var(--space-micro) !important}
 
 .when {color: var(--text-tertiary)}
 
 .where i {font-size: var(--text-sm);
- color: #535353}
+ color: var(--text-secondary)}
 
 .forum .title.top .yy {text-align: left}
 
-.focus {background: #5C6BC0;
- border-bottom: 1px solid #7986CB}
+.focus {background: var(--primary-color);
+ border-bottom: 1px solid var(--border-color)}
 
-.focus .yy {background: #5C6BC0 !important;
+.focus .yy {background: var(--primary-color) !important;
  border: 0 !important}
 
 .cp .focus *,
-.forum .focus * {color: #FFF !important}
+.forum .focus * {color: var(--text-primary) !important}
 
 /*============================================
- modern topic title============================================*/
+ modern topic title - harmonized
+============================================*/
 .modern-topic-title {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
@@ -336,7 +341,7 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
 .pages-section {flex: 1}
 
 .topic-title {color: var(--text-primary);
- font-family: 'Bree Serif';
+ font-family: var(--font-heading);
  font-size: var(--text-xl);
  font-weight: 400;
  line-height: 1.3;
@@ -350,7 +355,7 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  color: var(--text-secondary);
  display: flex;
  font-size: var(--text-sm);
- gap: 6px}
+ gap: var(--space-xs)}
 
 .topic-stats i {color: var(--primary-color)}
 
@@ -358,7 +363,8 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  gap: var(--space-sm)}
 
 /*============================================
- modern navigation============================================*/
+ modern navigation - harmonized
+============================================*/
 .modern-nav {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
@@ -389,20 +395,20 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  display: inline-flex;
  font-size: var(--text-sm);
  font-weight: 500;
- gap: 6px;
+ gap: var(--space-xs);
  padding: var(--btn-padding-sm);
  text-decoration: none;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .page-number {background: var(--bg-color);
  border: 1px solid var(--border-color);
  color: var(--text-secondary);
  justify-content: center;
- min-width: 36px}
+ min-width: var(--editor-btn-size)}
 
 .page-number:hover {background: var(--hover-color);
  color: var(--text-primary);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .page-number.current {background: var(--primary-color);
  border-color: var(--primary-color);
@@ -416,7 +422,7 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
 .page-jump:hover,
 .last-post:hover {background: var(--hover-color);
  color: var(--text-primary);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .actions-section {align-items: center;
  display: flex}
@@ -448,15 +454,16 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  color: var(--text-primary)}
 
 /*============================================
- post enhancements============================================*/
+ post enhancements - harmonized
+============================================*/
 .st-emoji-animate,
 .st-emoji-rep .st-emoji-preview.st-emoji-animate > * {animation: none !important}
 
 .st-emoji-preview:not(.st-emoji-counter + .st-emoji-preview)::before {content: '\f118';
  color: var(--text-secondary);
  display: flex;
- width: 32px;
- height: 32px;
+ width: var(--editor-btn-size);
+ height: var(--editor-btn-size);
  justify-content: center;
  align-items: center;
  font-family: "Font Awesome 6 Pro"}
@@ -475,7 +482,7 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  border-radius: 0 0 var(--radius) var(--radius);
  border-top: 1px solid var(--border-color);
  display: flex;
- gap: 12px;
+ gap: var(--space-sm);
  justify-content: space-between;
  padding: var(--space-md) var(--space-lg)}
 
@@ -484,34 +491,35 @@ a.new_post {padding: var(--pad-2) var(--pad-4);
  border: none;
  border-radius: 0;
  display: flex;
- gap: 12px;
+ gap: var(--space-sm);
  margin: 0 auto 0 0;
  padding: 0}
 
 .post-actions:hover {border-color: transparent;
  box-shadow: none}
 
-#markdiv {background: #FFF;
- padding-top: 10px;
- margin: 18px;
- border: 1px solid #EEE}
+#markdiv {background: var(--surface-color);
+ padding-top: var(--space-sm);
+ margin: var(--space-lg);
+ border: 1px solid var(--border-color);
+ border-radius: var(--radius-sm)}
 
 #markdiv form {margin-bottom: 0 !important;
- margin-top: 10px}
+ margin-top: var(--space-sm)}
 
-#markdiv span {font-size: 14px;
- font-weight: 300;}
+#markdiv span {font-size: var(--text-sm);
+ font-weight: 300}
 
 #markdiv mark {cursor: pointer;
- background: #E8EAF6;
+ background: var(--hover-color);
  padding: var(--pad-2);
- border-radius: 2px;
- color: #3F51B5;
+ border-radius: var(--radius-sm);
+ color: var(--primary-color);
  font-weight: 500}
 
 mark span {white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;}
+ overflow: hidden;
+ text-overflow: ellipsis}
 
 .edit {display: inline-flex;
  align-items: center;
@@ -527,8 +535,8 @@ mark span {white-space: nowrap;
 .edit time {font-weight: 400;
  color: var(--text-secondary)}
 
-.fancyborder {border: 1px dotted #CBC8B9 !important;
- background: #F6F6F2}
+.fancyborder {border: 1px dotted var(--border-color) !important;
+ background: var(--bg-color)}
 
 .post .mini_buttons.points a:hover {opacity: 1}
 
@@ -537,15 +545,15 @@ mark span {white-space: nowrap;
  align-items: center;
  gap: var(--space-sm)}
 
-.u_status {width: 70px;
- height: 19px;
- margin: 10px auto;
- border: 1px solid}
+.u_status {width: calc(var(--space-xl) * 2.5);
+ height: var(--space-lg);
+ margin: var(--space-sm) auto;
+ border: 1px solid var(--border-color)}
 
 .u_status dt,
 .br_status {display: none}
 
-.badge {border-radius: 12px;
+.badge {border-radius: var(--radius-lg);
  color: #FFF;
  font-size: var(--text-xs);
  font-weight: 700;
@@ -561,7 +569,7 @@ mark span {white-space: nowrap;
  gap: var(--space-sm);
  margin: 0}
 
-/* NEW Post Badge */
+/* NEW Post Badge - harmonized */
 .post-new-badge {background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
  color: white;
  font-size: 0.6875rem;
@@ -569,9 +577,9 @@ mark span {white-space: nowrap;
  text-transform: uppercase;
  letter-spacing: 0.05em;
  padding: var(--pad-2) var(--pad-3);
- border-radius: 10px;
- box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
- margin-left: 8px;
+ border-radius: var(--radius-sm);
+ box-shadow: var(--shadow-sm);
+ margin-left: var(--space-sm);
  animation: pulse-new 2s ease-in-out infinite;
  position: relative;
  overflow: hidden}
@@ -581,13 +589,13 @@ mark span {white-space: nowrap;
  top: 0;
  left: 0;
  right: 0;
- height: 2px;
+ height: var(--pad-1);
  background: rgba(255, 255, 255, 0.3)}
 
 .post-badges {display: flex;
  align-items: center;
- gap: 8px;
- margin-left: 12px}
+ gap: var(--space-sm);
+ margin-left: var(--space-sm)}
 
 .post:has(#newpost) {position: relative}
 
@@ -596,17 +604,18 @@ mark span {white-space: nowrap;
  left: 0;
  top: 0;
  bottom: 0;
- width: 3px;
+ width: var(--pad-1);
  background: linear-gradient(to bottom, var(--primary-color), var(--accent-color));
  border-radius: var(--radius) 0 0 var(--radius);
  z-index: 1}
 
-.post:has(#newpost).focus::before {width: 5px;
+.post:has(#newpost).focus::before {width: var(--pad-2);
  background: linear-gradient(to bottom, var(--primary-color), var(--secondary-color));
- box-shadow: 0 0 10px rgba(124, 58, 237, 0.3)}
+ box-shadow: 0 0 var(--space-sm) rgba(124, 58, 237, 0.3)}
 
 /*============================================
- modern list styles for posts(grid)============================================*/
+ modern list styles for posts (grid) - harmonized
+============================================*/
 .post-modernized ul,
 .post-modernized ol {padding-left: 0;
  margin: var(--space-sm) 0 var(--space-md) 0;
@@ -640,7 +649,7 @@ mark span {white-space: nowrap;
 
 .post-modernized ol li::before {content: counter(post-list-counter) ".";
  color: var(--primary-color);
- font-family: 'Bree Serif';
+ font-family: var(--font-heading);
  font-weight: 400;
  min-width: 1.8em;
  text-align: right;
@@ -653,12 +662,13 @@ mark span {white-space: nowrap;
  padding-top: 0.1em}
 
 /*============================================
- points & reactions============================================*/
+ points & reactions - harmonized
+============================================*/
 .points {align-items: center;
  color: var(--accent-color);
  display: flex;
  font-size: 0;
- gap: 8px}
+ gap: var(--space-sm)}
 
 .points .opacity {background: var(--surface-color);
  cursor: pointer;
@@ -673,27 +683,27 @@ mark span {white-space: nowrap;
  cursor: pointer;
  display: flex !important;
  font-size: var(--text-sm);
- height: 32px;
+ height: var(--editor-btn-size);
  justify-content: center;
  padding: var(--pad-2);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 32px}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: var(--editor-btn-size)}
 
 .points_up:hover {background: rgba(16, 185, 129, 0.1);
  border-color: var(--success-color);
  color: var(--text-primary);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .points_down:hover {background: rgba(220, 38, 38, 0.1);
  border-color: var(--danger-color);
  color: var(--text-primary);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .points_up img,
 .points_down img {filter: brightness(0) saturate(100%) invert(85%) sepia(12%) saturate(171%) hue-rotate(173deg) brightness(89%) contrast(86%);
- height: 16px;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 16px}
+ height: var(--text-base);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: var(--text-base)}
 
 .points_up:hover img {filter: brightness(0) saturate(100%) invert(54%) sepia(98%) saturate(374%) hue-rotate(122deg) brightness(95%) contrast(101%)}
 
@@ -702,16 +712,16 @@ mark span {white-space: nowrap;
 .points_pos,
 .points_neg,
 .st-emoji-counter {border: 1px solid;
- border-radius: 12px;
+ border-radius: var(--radius-lg);
  font-size: var(--text-xs);
  font-weight: 600;
- min-width: 24px;
+ min-width: var(--space-xl);
  padding: var(--pad-1) var(--pad-2);
  text-align: center}
 
 .points_pos,
 .points_neg {font-size: var(--text-sm);
- min-width: 32px;
+ min-width: var(--editor-btn-size);
  padding: var(--pad-1) var(--pad-3)}
 
 .points_pos {background: rgba(16, 185, 129, 0.15);
@@ -725,7 +735,7 @@ mark span {white-space: nowrap;
 .points a:not(.points.active.points a) {background: var(--surface-color);
  color: var(--text-secondary);
  text-decoration: none;
- transition: color 0.3s ease}
+ transition: color 0.2s ease}
 
 .points a:hover {color: var(--text-primary)}
 
@@ -734,27 +744,27 @@ mark span {white-space: nowrap;
 .st-emoji-container {background: var(--bg-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
- gap: 8px;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ gap: var(--space-sm);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  flex-wrap: wrap}
 
 .st-emoji-container:not(.st-emoji-container.active) {background: var(--surface-color)}
 
 .st-emoji-container:hover {border-color: var(--primary-color);
  box-shadow: var(--shadow);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .st-emoji-preview {align-items: center;
  cursor: pointer;
  display: flex;
- height: 32px;
+ height: var(--editor-btn-size);
  justify-content: center;
- width: 32px}
+ width: var(--editor-btn-size)}
 
-.st-emoji-preview img {border-radius: 4px;
- height: 20px;
- transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 20px}
+.st-emoji-preview img {border-radius: var(--radius-sm);
+ height: var(--text-xl);
+ transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: var(--text-xl)}
 
 .st-emoji-preview:hover img {transform: scale(1.2)}
 
@@ -780,8 +790,8 @@ mark span {white-space: nowrap;
 .st-emoji-animate {animation: pulse 0.6s ease-in-out}
 
 .points_up i,
-.points_down i {font-size: 14px;
- transition: color 0.3s ease}
+.points_down i {font-size: var(--text-sm);
+ transition: color 0.2s ease}
 
 .points_up:hover i {color: var(--success-color)}
 
@@ -795,17 +805,18 @@ mark span {white-space: nowrap;
 .post_neg .points_up.opacity.active i {color: var(--danger-color)}
 
 /*============================================
- modern table container & styles============================================*/
+ modern table container & styles - harmonized
+============================================*/
 .table-container {border-radius: var(--radius); 
  overflow: hidden; 
  box-shadow: var(--shadow-sm); 
  margin: var(--space-md) 0; 
  background: var(--surface-color); 
  border: 1px solid var(--border-color); 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)} 
  
 .table-container:hover {box-shadow: var(--shadow); 
- transform: translatey(-1px)} 
+ transform: translateY(calc(var(--phi-inverse) * -1px))} 
  
 .table-container .ve-table {width: 100%; 
  border-collapse: collapse; 
@@ -824,8 +835,8 @@ mark span {white-space: nowrap;
  padding: var(--pad-4) var(--pad-5); 
  border-bottom: 2px solid var(--primary-color); 
  border-right: 1px solid var(--border-color); 
- font-family: 'Bree Serif'; 
- transition: background-color 0.3s ease} 
+ font-family: var(--font-heading); 
+ transition: background-color 0.2s ease} 
  
 .table-container .ve-table th:last-child {border-right: none} 
  
@@ -836,7 +847,7 @@ mark span {white-space: nowrap;
  color: var(--text-secondary); 
  font-size: var(--text-sm); 
  line-height: 1.5; 
- transition: background-color 0.3s ease} 
+ transition: background-color 0.2s ease} 
  
 .table-container .ve-table td:last-child {border-right: none} 
  
@@ -844,9 +855,9 @@ mark span {white-space: nowrap;
  
 /* Striped Rows */ 
 .table-container .ve-table tbody tr {background: var(--bg-color)} 
-.ve-table img {max-height: 125px; width:auto} 
+.ve-table img {max-height: calc(var(--space-xxl) * 1.5); width: auto} 
  
-/* Responsive Design */ 
+/* Responsive Design - harmonized */ 
 @media(max-width: 768px) {.table-container {margin: var(--space-sm) 0; 
  border-radius: calc(var(--radius) * 0.75)} 
  
@@ -857,7 +868,7 @@ mark span {white-space: nowrap;
  .table-container .ve-table th, 
  .table-container .ve-table td {padding: var(--pad-3) var(--pad-4); 
  white-space: nowrap; 
- min-width: 100px} 
+ min-width: var(--space-xxl)} 
  
  .table-container .ve-table th {font-size: var(--text-xs)} 
  
@@ -869,7 +880,7 @@ mark span {white-space: nowrap;
  
  .table-container .ve-table th, 
  .table-container .ve-table td {padding: var(--pad-2) var(--pad-3); 
- min-width: 80px}} 
+ min-width: calc(var(--space-xl) * 3)}} 
  
 /* Light Theme Adjustments */ 
 [data-theme="light"] .table-container {border-color: var(--border-color); 
@@ -883,7 +894,7 @@ mark span {white-space: nowrap;
  
 [data-theme="light"] .table-container .ve-table tbody tr:nth-child(even) {background: var(--bg-color)} 
  
-/* Caption Support(optional) */ 
+/* Caption Support */ 
 .table-container .ve-table caption {caption-side: bottom; 
  padding: var(--pad-3) var(--pad-4); 
  color: var(--text-tertiary); 
@@ -891,10 +902,11 @@ mark span {white-space: nowrap;
  font-style: italic; 
  text-align: center; 
  border-top: 1px solid var(--border-color); 
- margin-top: -1px}
+ margin-top: calc(var(--phi-inverse) * -1px)}
 
 /*============================================
- modern embedded link styles - proper alignment============================================*/ 
+ modern embedded link styles - harmonized
+============================================*/ 
 .modern-embedded-link {background: var(--surface-color); 
  border: 1px solid var(--border-color); 
  border-radius: var(--radius); 
@@ -902,22 +914,22 @@ mark span {white-space: nowrap;
  display: flex; 
  margin: var(--space-md) 0; 
  overflow: hidden; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)} 
  
 .modern-embedded-link:hover {box-shadow: var(--shadow); 
- transform: translatey(-1px); 
+ transform: translateY(calc(var(--phi-inverse) * -1px)); 
  border-color: var(--primary-color)} 
  
 .embedded-link-container {display: flex; 
  align-items: stretch; 
- width: 100%; /* Changed from height: 100% to width: 100% */ 
+ width: 100%; 
  text-decoration: none; 
  color: inherit; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)} 
  
 .embedded-link-container:hover {background: var(--hover-color)} 
  
-.embedded-link-image {flex: 0 0 180px; 
+.embedded-link-image {flex: 0 0 calc(var(--space-xl) * 4.5); 
  background: var(--bg-color); 
  overflow: hidden; 
  display: flex; 
@@ -931,23 +943,21 @@ mark span {white-space: nowrap;
  width: 100%; 
  height: 100%; 
  object-fit: cover; 
- transition: transform 0.3s ease} 
+ transition: transform 0.2s ease} 
  
 .embedded-link-container:hover .embedded-link-image img {transform: scale(1.05)} 
  
-.embedded-link-content {flex: 1 1 0%; /* Changed from flex: 1 to be more explicit */ 
- min-width: 0; /* Crucial for text truncation */ 
- width: 100%; /* Ensure it takes full width */ 
+.embedded-link-content {flex: 1 1 0%; 
+ min-width: 0; 
+ width: 100%; 
  padding: var(--pad-5) var(--pad-6); 
  display: flex; 
  flex-direction: column; 
  justify-content: space-between; 
  box-sizing: border-box} 
  
-/* Force the content to always expand fully */ 
 .embedded-link-container {min-width: 0} 
  
-/* Fix alignment - target specific classes to override host CSS */ 
 .modern-embedded-link .embedded-link-domain {display: flex; 
  align-items: center; 
  gap: var(--space-xs); 
@@ -960,10 +970,10 @@ mark span {white-space: nowrap;
  
 .embedded-link-domain a.embedded-link-container {gap: var(--space-xs)} 
  
-.modern-embedded-link .embedded-link-favicon {width: 16px; 
- height: 16px; 
- min-width: 16px; 
- min-height: 16px; 
+.modern-embedded-link .embedded-link-favicon {width: var(--text-base); 
+ height: var(--text-base); 
+ min-width: var(--text-base); 
+ min-height: var(--text-base); 
  border-radius: var(--pad-2); 
  object-fit: contain; 
  display: inline-block; 
@@ -973,15 +983,15 @@ mark span {white-space: nowrap;
 .modern-embedded-link .embedded-link-domain span {font-weight: 500; 
  text-transform: lowercase; 
  display: inline-block; 
- flex: 1; /* Allow span to take remaining space */ 
- min-width: 0; /* Allow text truncation */ 
+ flex: 1; 
+ min-width: 0; 
  overflow: hidden; 
  text-overflow: ellipsis; 
  white-space: nowrap} 
  
 .modern-embedded-link .embedded-link-title {font-size: var(--text-base); 
  font-weight: 400; 
- line-height: 1.618; 
+ line-height: var(--phi); 
  margin: 0 0 var(--space-xs) 0; 
  color: var(--text-primary); 
  display: -webkit-box; 
@@ -993,7 +1003,7 @@ mark span {white-space: nowrap;
  width: 100%} 
  
 .modern-embedded-link .embedded-link-description {font-size: var(--text-sm); 
- line-height: 1.618; 
+ line-height: var(--phi); 
  color: var(--text-secondary); 
  margin: 0 0 var(--space-sm) 0; 
  display: -webkit-box; 
@@ -1014,29 +1024,26 @@ mark span {white-space: nowrap;
 .modern-embedded-link .embedded-link-read-more {font-size: var(--text-xs); 
  color: var(--primary-color); 
  font-weight: 500; 
- transition: color 0.3s ease; 
+ transition: color 0.2s ease; 
  display: inline-block; 
  text-align: left; 
  width: 100%} 
  
 .modern-embedded-link .embedded-link-container:hover .embedded-link-read-more {color: var(--primary-light)} 
  
-/* No image version - ensure content takes full width */ 
 .modern-embedded-link:not(:has(.embedded-link-image)) .embedded-link-container {display: block} 
  
 .modern-embedded-link:not(:has(.embedded-link-image)) .embedded-link-content {width: 100%; 
  flex: none} 
  
-/* Ensure the entire link container stretches */ 
 .embedded-link-container {display: flex; 
  width: 100%; 
  align-items: stretch} 
  
-/* Alternative approach: Use grid layout for better control */ 
 @media(min-width: 769px) {.modern-embedded-link .embedded-link-container {display: grid; 
- grid-template-columns: 180px 1fr; /* Fixed image width, flexible content */ 
+ grid-template-columns: calc(var(--space-xl) * 4.5) 1fr; 
  grid-template-rows: auto; 
- min-height: 140px} 
+ min-height: calc(var(--space-xl) * 3.5)} 
  
  .modern-embedded-link .embedded-link-image {grid-column: 1; 
  width: 100%; 
@@ -1048,18 +1055,17 @@ mark span {white-space: nowrap;
  flex-direction: column; 
  justify-content: space-between}} 
  
-/* Responsive styles */ 
 @media(max-width: 768px) {.modern-embedded-link .embedded-link-container {flex-direction: column; 
  min-height: auto} 
  
- .modern-embedded-link .embedded-link-image {flex: 0 0 140px; 
+ .modern-embedded-link .embedded-link-image {flex: 0 0 calc(var(--space-xl) * 3.5); 
  width: 100%} 
  
  .modern-embedded-link .embedded-link-image img {position: relative; 
- height: 140px} 
+ height: calc(var(--space-xl) * 3.5)} 
  
  .modern-embedded-link .embedded-link-content {padding: var(--pad-4) var(--pad-5); 
- width: 100%; /* Ensure full width on mobile */ 
+ width: 100%; 
  flex: 1 1 auto} 
  
  .modern-embedded-link .embedded-link-title {font-size: var(--text-sm); 
@@ -1068,9 +1074,9 @@ mark span {white-space: nowrap;
  .modern-embedded-link .embedded-link-description {font-size: var(--text-xs); 
  margin-bottom: var(--space-xs)}} 
  
-@media(max-width: 480px) {.modern-embedded-link .embedded-link-image {flex: 0 0 100px} 
+@media(max-width: 480px) {.modern-embedded-link .embedded-link-image {flex: 0 0 calc(var(--space-xl) * 2.5)} 
  
- .modern-embedded-link .embedded-link-image img {height: 100px} 
+ .modern-embedded-link .embedded-link-image img {height: calc(var(--space-xl) * 2.5)} 
  
  .modern-embedded-link .embedded-link-content {padding: var(--pad-3) var(--pad-4); 
  width: 100%} 
@@ -1078,66 +1084,64 @@ mark span {white-space: nowrap;
  .modern-embedded-link .embedded-link-title {font-size: var(--text-sm); 
  margin-bottom: var(--pad-1)}} 
  
-/* Additional fix: Ensure the modern-embedded-link container itself expands */ 
 .modern-embedded-link {width: 100%; 
  max-width: 100%} 
  
-/* If the issue persists, try this more aggressive approach */ 
-.embedded-link-content {flex: 1 1 100%; /* Force it to take all available space */ 
+.embedded-link-content {flex: 1 1 100%; 
  min-width: 0; 
  width: 100%; 
  box-sizing: border-box} 
  
-/* For short text content, ensure elements expand */ 
 .embedded-link-title, 
 .embedded-link-description, 
 .embedded-link-meta {width: 100%; 
  display: block}
 
 /*============================================
- modern poll styles============================================*/ 
+ modern poll styles - harmonized
+============================================*/ 
 .modern-poll {background: var(--surface-color); 
  border: 1px solid var(--border-color); 
  border-radius: var(--radius); 
  box-shadow: var(--shadow-sm); 
  margin: var(--space-md) 0; 
  overflow: hidden; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)} 
  
 .modern-poll:hover {box-shadow: var(--shadow); 
- transform: translatey(-1px)} 
+ transform: translateY(calc(var(--phi-inverse) * -1px))} 
  
 .poll-header {align-items: center; 
  background: var(--bg-color); 
  border-bottom: 1px solid var(--border-color); 
  display: flex; 
- gap: 12px; 
+ gap: var(--space-sm); 
  justify-content: space-between; 
  padding: var(--space-md)} 
  
 .poll-icon {align-items: center; 
  background: var(--secondary-color); 
- border-radius: 6px; 
+ border-radius: var(--radius-sm); 
  display: flex; 
  flex-shrink: 0; 
- height: 28px; 
+ height: calc(var(--space-xl) * 1.2); 
  justify-content: center; 
- width: 28px} 
+ width: calc(var(--space-xl) * 1.2)} 
  
 .poll-icon i {color: #FFF; 
- font-size: 12px} 
+ font-size: var(--text-sm)} 
  
 .poll-title {color: var(--text-primary); 
-display:flex; 
+ display: flex; 
  font-size: var(--text-sm); 
-flex: 1; 
+ flex: 1; 
  margin: 0} 
  
 .poll-stats {align-items: center; 
  color: var(--text-tertiary); 
  display: flex; 
  font-size: var(--text-xs); 
- gap: 6px; 
+ gap: var(--space-xs); 
  white-space: nowrap} 
  
 .poll-choices {padding: var(--space-md)} 
@@ -1148,21 +1152,21 @@ flex: 1;
  border-radius: var(--radius); 
  cursor: pointer; 
  display: flex; 
- gap: 12px; 
- margin-bottom: 10px; 
+ gap: var(--space-sm); 
+ margin-bottom: var(--space-sm); 
  padding: var(--space-sm); 
  position: relative; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)} 
  
 .poll-choice:last-child {margin-bottom: 0} 
  
 .poll-choice:hover {background: var(--hover-color); 
  border-color: var(--primary-color); 
- transform: translatex(2px)} 
+ transform: translateX(var(--space-micro))} 
  
 .poll-choice.selected {background: rgba(5, 150, 105, 0.1); 
  border-color: var(--primary-color); 
- box-shadow: 0 2px 8px rgba(5, 150, 105, 0.15)} 
+ box-shadow: 0 var(--pad-1) calc(var(--space-sm) * 1.5) rgba(5, 150, 105, 0.15)} 
  
 .poll-choice.max {background: rgba(124, 58, 237, 0.1); 
  border-color: var(--secondary-color)} 
@@ -1172,7 +1176,7 @@ flex: 1;
  
 .choice-label {color: var(--text-primary); 
  cursor: pointer; 
- display:flex; 
+ display: flex; 
  flex: 1; 
  font-size: var(--text-sm); 
  font-weight: 500; 
@@ -1185,26 +1189,26 @@ flex: 1;
  
 .choice-stats {align-items: center; 
  display: flex; 
- gap: 12px; 
+ gap: var(--space-sm); 
  margin-left: auto} 
  
 .choice-percentage {color: var(--text-secondary); 
  font-size: var(--text-xs); 
  font-weight: 600; 
- min-width: 50px; 
+ min-width: calc(var(--space-xl) * 2); 
  text-align: right} 
  
 .poll-choice.max .choice-percentage {color: var(--secondary-color); 
  font-weight: 700} 
  
 .choice-bar {background: var(--bg-color); 
- border-radius: 4px; 
- height: 8px; 
+ border-radius: var(--radius-sm); 
+ height: var(--space-sm); 
  overflow: hidden; 
- width: 100px} 
+ width: calc(var(--space-xxl) * 2.5)} 
  
 .choice-fill {background: var(--primary-color); 
- border-radius: 4px; 
+ border-radius: var(--radius-sm); 
  height: 100%; 
  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); 
  width: 0} 
@@ -1214,7 +1218,7 @@ flex: 1;
 .choice-votes {color: var(--text-tertiary); 
  font-size: var(--text-xs); 
  font-weight: 500; 
- min-width: 40px; 
+ min-width: calc(var(--space-xl) * 1.5); 
  text-align: right} 
  
 .poll-choice.max .choice-votes {color: var(--secondary-color); 
@@ -1224,12 +1228,12 @@ flex: 1;
  background: var(--bg-color); 
  border-top: 1px solid var(--border-color); 
  display: flex; 
- gap: 12px; 
+ gap: var(--space-sm); 
  justify-content: space-between; 
  padding: var(--space-md)} 
  
 .poll-message {color: var(--text-secondary); 
-display:flex; 
+ display: flex; 
  font-size: var(--text-sm); 
  flex: 1; 
  margin: 0} 
@@ -1238,16 +1242,16 @@ display:flex;
  font-weight: 600} 
  
 .poll-message .poll-choice-name {background: rgba(5, 150, 105, 0.15); 
- border-radius: 4px; 
+ border-radius: var(--radius-sm); 
  color: var(--primary-color); 
  display: inline-block; 
  font-weight: 600; 
- margin: 0 4px; 
- padding: 2px 6px} 
+ margin: 0 var(--space-micro); 
+ padding: var(--pad-1) var(--pad-2)} 
  
 .poll-actions {align-items: center; 
  display: flex; 
- gap: 8px} 
+ gap: var(--space-sm)} 
  
 .poll-btn {align-items: center; 
  background: var(--primary-color); 
@@ -1256,18 +1260,18 @@ display:flex;
  color: #FFF; 
  cursor: pointer; 
  display: inline-flex;
- font-family: quicksand;
+ font-family: var(--font-primary);
  font-size: var(--text-sm); 
  font-weight: 500; 
- gap: 6px; 
+ gap: var(--space-xs); 
  padding: var(--pad-3) var(--pad-5); 
  text-decoration: none; 
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)} 
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)} 
  
 .poll-btn:hover {background: var(--primary-dark); 
  border-color: var(--primary-dark); 
  color: #FFF; 
- transform: translatey(-1px)} 
+ transform: translateY(calc(var(--phi-inverse) * -1px))} 
  
 .poll-btn.secondary {background: transparent; 
  border-color: var(--border-color); 
@@ -1280,20 +1284,21 @@ display:flex;
 .poll-btn.delete {background: var(--danger-color); 
  border-color: var(--danger-color)} 
  
-.poll-btn.delete:hover {background: #C53030; 
- border-color: #C53030} 
+.poll-btn.delete:hover {background: var(--danger-color); 
+ border-color: var(--danger-color); 
+ filter: brightness(0.9)} 
  
-.poll-btn i {font-size: 12px} 
+.poll-btn i {font-size: var(--text-sm)} 
  
 .poll-form {margin: 0} 
  
 .poll-form .modern-poll {margin: 0} 
  
 [data-theme="light"] .poll-choice.selected {background: rgba(5, 150, 105, 0.08); 
- box-shadow: 0 2px 8px rgba(5, 150, 105, 0.1)} 
+ box-shadow: 0 var(--pad-1) calc(var(--space-sm) * 1.5) rgba(5, 150, 105, 0.1)} 
  
 [data-theme="light"] .poll-choice.max {background: rgba(124, 58, 237, 0.08); 
- box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1)} 
+ box-shadow: 0 var(--pad-1) calc(var(--space-sm) * 1.5) rgba(124, 58, 237, 0.1)} 
  
 @media(max-width: 768px) {.poll-choice {flex-wrap: wrap; 
  gap: var(--space-sm)} 
@@ -1321,21 +1326,22 @@ display:flex;
  .poll-actions {justify-content: flex-end}}
 
 /*============================================
- poll notification============================================*/ 
+ poll notification - harmonized
+============================================*/ 
 .poll-notification {position: fixed; 
- bottom: 20px; 
- right: 20px; 
- padding: 12px 20px; 
+ bottom: var(--space-lg); 
+ right: var(--space-lg); 
+ padding: var(--pad-3) var(--pad-5); 
  background: var(--primary-color); 
  color: white; 
  border-radius: var(--radius); 
  box-shadow: var(--shadow-lg); 
- z-index: 9; 
+ z-index: var(--z-modal); 
  font-weight: 500; 
  display: flex; 
  align-items: center; 
- gap: 8px; 
- transform: translatex(calc(100% + 20px)); 
+ gap: var(--space-sm); 
+ transform: translateX(calc(100% + var(--space-lg))); 
  opacity: 0; 
  transition: transform 0.3s ease-out, opacity 0.3s ease-out; 
  pointer-events: none; 
@@ -1343,14 +1349,13 @@ display:flex;
  
 .poll-notification.warning {background: var(--warning-color)} 
  
-.poll-notification i {font-size: 14px} 
+.poll-notification i {font-size: var(--text-sm)} 
 .poll-choice {position: relative; cursor: pointer} 
  
 .choice-radio {cursor: pointer; z-index: 1} 
  
 .choice-label {cursor: pointer; z-index: 1; position: relative} 
  
-/* Make the entire choice area clickable */ 
 .poll-choice::after {content: ''; 
  position: absolute; 
  top: 0; 
@@ -1361,7 +1366,8 @@ display:flex;
  cursor: pointer}
 
 /*============================================
- modern quote styles============================================*/
+ modern quote styles - harmonized
+============================================*/
 .modern-quote {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-left: 4px solid var(--primary-color);
@@ -1369,11 +1375,11 @@ display:flex;
  box-shadow: var(--shadow-sm);
  margin: var(--space-md) 0;
  overflow: hidden;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .modern-quote:hover {border-left-color: var(--primary-light);
  box-shadow: var(--shadow);
- transform: translatex(2px)}
+ transform: translateX(var(--space-micro))}
 
 .quote-header {align-items: center;
  background: var(--bg-color);
@@ -1384,20 +1390,20 @@ display:flex;
 
 .quote-icon {align-items: center;
  background: var(--primary-color);
- border-radius: 6px;
+ border-radius: var(--radius-sm);
  display: flex;
  flex-shrink: 0;
- height: 28px;
+ height: calc(var(--space-xl) * 1.2);
  justify-content: center;
- width: 28px}
+ width: calc(var(--space-xl) * 1.2)}
 
 .quote-icon i {color: #FFF;
- font-size: 12px}
+ font-size: var(--text-sm)}
 
 .quote-info {display: flex;
  flex: 1;
  flex-direction: column;
- gap: 2px;
+ gap: var(--space-micro);
  min-width: 0}
 
 .quote-author {align-items: center;
@@ -1406,7 +1412,7 @@ display:flex;
  flex-wrap: wrap;
  font-size: var(--text-sm);
  font-weight: 600;
- gap: 6px}
+ gap: var(--space-xs)}
 
 .quote-said {color: var(--text-secondary);
  font-size: 0.8125rem;
@@ -1416,25 +1422,25 @@ display:flex;
 .quote-meta {align-items: center;
  display: flex;
  flex: 1;
- gap: 10px;
+ gap: var(--space-sm);
  min-width: 0}
 
 .quote-content {color: var(--text-primary);
  font-size: var(--text-base);
  overflow: hidden;
  padding: var(--space-md);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
-.quote-content.collapsible-content {max-height: 250px;
+.quote-content.collapsible-content {max-height: calc(var(--space-xxl) * 6);
  overflow: hidden;
- padding-bottom: 24px;
+ padding-bottom: var(--space-xl);
  position: relative}
 
 .quote-content.collapsible-content::after {background: linear-gradient(to bottom, transparent, var(--bg-color) 80%);
  border-radius: 0 0 var(--radius) var(--radius);
  bottom: 0;
  content: '';
- height: 40px;
+ height: calc(var(--space-xl) * 1.5);
  left: 0;
  pointer-events: none;
  position: absolute;
@@ -1457,27 +1463,27 @@ display:flex;
  color: var(--text-secondary);
  cursor: pointer;
  display: flex;
- font-family: quicksand;
+ font-family: var(--font-primary);
  font-size: 0.8125rem;
  font-weight: 500;
- gap: 6px;
+ gap: var(--space-xs);
  justify-content: center;
  padding: var(--pad-4) var(--pad-5);
  text-align: center;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  width: 100%}
 
 .quote-expand-btn:hover {background: var(--hover-color);
  color: var(--text-primary)}
 
 .quote-expand-btn i {color: var(--primary-color);
- font-size: 11px;
- transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ font-size: var(--text-sm);
+ transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .modern-quote .modern-quote {background: var(--bg-color);
  border-left-color: rgba(5, 150, 105, 0.2);
  border-left-width: 2px;
- margin: 12px 0}
+ margin: var(--space-sm) 0}
 
 .modern-quote .modern-quote .quote-header {background: var(--surface-color);
  padding: var(--pad-4) var(--pad-5)}
@@ -1488,7 +1494,8 @@ display:flex;
  max-width: 100%}
 
 /*============================================
- modern spoiler styles============================================*/
+ modern spoiler styles - harmonized
+============================================*/
 .modern-spoiler {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-left: 4px solid var(--warning-color);
@@ -1496,7 +1503,7 @@ display:flex;
  box-shadow: var(--shadow-sm);
  margin: var(--space-md) 0;
  overflow: hidden;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .modern-spoiler:hover {box-shadow: var(--shadow);
  border-left-color: rgba(245, 158, 11, 0.5)}
@@ -1506,29 +1513,29 @@ display:flex;
  border-bottom: 1px solid var(--border-color);
  cursor: pointer;
  display: flex;
- gap: 10px;
+ gap: var(--space-sm);
  justify-content: space-between;
  padding: var(--space-md);
- transition: background-color 0.3s ease}
+ transition: background-color 0.2s ease}
 
 .spoiler-header:hover {background: var(--hover-color)}
 
 .spoiler-icon {align-items: center;
  background: var(--warning-color);
- border-radius: 6px;
+ border-radius: var(--radius-sm);
  display: flex;
  flex-shrink: 0;
- height: 28px;
+ height: calc(var(--space-xl) * 1.2);
  justify-content: center;
- width: 28px}
+ width: calc(var(--space-xl) * 1.2)}
 
 .spoiler-icon i {color: #FFF;
- font-size: 12px}
+ font-size: var(--text-sm)}
 
 .spoiler-info {display: flex;
  flex: 1;
  flex-direction: column;
- gap: 2px;
+ gap: var(--space-micro);
  min-width: 0}
 
 .spoiler-title {align-items: center;
@@ -1537,7 +1544,7 @@ display:flex;
  flex-wrap: wrap;
  font-size: var(--text-sm);
  font-weight: 600;
- gap: 6px}
+ gap: var(--space-xs)}
 
 .spoiler-toggle {align-items: center;
  background: transparent;
@@ -1545,19 +1552,19 @@ display:flex;
  color: var(--text-secondary);
  cursor: pointer;
  display: flex;
- font-family: quicksand;
+ font-family: var(--font-primary);
  font-size: 0.8125rem;
  font-weight: 500;
- gap: 6px;
+ gap: var(--space-xs);
  justify-content: center;
  padding: var(--pad-1) var(--pad-2);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .spoiler-toggle:hover {color: var(--text-primary)}
 
 .spoiler-toggle i {color: var(--warning-color);
- font-size: 11px;
- transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ font-size: var(--text-sm);
+ transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .spoiler-toggle i.fa-chevron-down,
 .spoiler-toggle i.fa-chevron-up {transform: none}
@@ -1566,7 +1573,7 @@ display:flex;
  font-size: var(--text-base);
  overflow: hidden;
  padding: 0 var(--space-md);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  background: var(--bg-color);
  max-height: 0}
 
@@ -1583,14 +1590,14 @@ display:flex;
  border-radius: 0 0 var(--radius) var(--radius);
  bottom: 0;
  content: '';
- height: 40px;
+ height: calc(var(--space-xl) * 1.5);
  left: 0;
  pointer-events: none;
  position: absolute;
  right: 0;
  z-index: 1;
  opacity: 1;
- transition: opacity 0.3s ease}
+ transition: opacity 0.2s ease}
 
 .modern-spoiler.expanded .spoiler-content.collapsible-content::after {opacity: 0}
 
@@ -1601,22 +1608,22 @@ display:flex;
  color: var(--text-secondary);
  cursor: pointer;
  display: none;
- font-family: quicksand;
+ font-family: var(--font-primary);
  font-size: 0.8125rem;
  font-weight: 500;
- gap: 6px;
+ gap: var(--space-xs);
  justify-content: center;
  padding: var(--pad-4) var(--pad-5);
  text-align: center;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  width: 100%}
 
 .spoiler-expand-btn:hover {background: var(--hover-color);
  color: var(--text-primary)}
 
 .spoiler-expand-btn i {color: var(--warning-color);
- font-size: 11px;
- transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ font-size: var(--text-sm);
+ transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .spoiler-expand-btn.clicked i {transform: rotate(180deg)}
 
@@ -1625,7 +1632,7 @@ display:flex;
 .modern-spoiler .modern-spoiler {background: var(--surface-color);
  border-left-color: rgba(245, 158, 11, 0.2);
  border-left-width: 2px;
- margin: 12px 0}
+ margin: var(--space-sm) 0}
 
 .modern-spoiler .modern-spoiler .spoiler-header {background: var(--surface-color);
  padding: var(--pad-4) var(--pad-5)}
@@ -1634,10 +1641,10 @@ display:flex;
 
 [data-theme="light"] .modern-spoiler {background: var(--surface-color);
  border-left-color: rgba(245, 158, 11, 0.2);
- box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05)}
+ box-shadow: var(--shadow-sm)}
 
 [data-theme="light"] .modern-spoiler:hover {border-left-color: rgba(245, 158, 11, 0.3);
- box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08)}
+ box-shadow: var(--shadow)}
 
 [data-theme="light"] .spoiler-content.collapsible-content::after {background: linear-gradient(to bottom, transparent, var(--surface-color) 80%)}
 
@@ -1646,25 +1653,22 @@ display:flex;
 .spoiler-expand-btn:focus {outline: 2px solid var(--warning-color);
  outline-offset: 2px}
 
-.spoiler-content,
-.spoiler-content.collapsible-content,
-.spoiler-expand-btn {transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
-
 .spoiler-content pre,
 .spoiler-content code {background: var(--surface-color);
  border: 1px solid var(--border-color);
- border-radius: 4px;
+ border-radius: var(--radius-sm);
  color: var(--text-primary);
- font-family: monospace;
+ font-family: var(--font-mono);
  font-size: var(--text-sm);
  padding: var(--pad-1) var(--pad-2)}
 
-.spoiler-content pre {margin: 8px 0;
+.spoiler-content pre {margin: var(--space-sm) 0;
  overflow-x: auto;
  padding: var(--pad-3)}
 
 /*============================================
- modern code styles============================================*/
+ modern code styles - harmonized
+============================================*/
 .modern-code {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-left: 4px solid var(--accent-color);
@@ -1672,44 +1676,44 @@ display:flex;
  box-shadow: var(--shadow);
  margin: var(--space-md) 0;
  overflow: hidden;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .modern-code:hover {border-left-color: var(--primary-color);
  box-shadow: var(--shadow-md);
- transform: translatex(2px)}
+ transform: translateX(var(--space-micro))}
 
 .code-header {align-items: center;
  background: var(--bg-color);
  border-bottom: 1px solid var(--border-color);
  cursor: default;
  display: flex;
- gap: 12px;
+ gap: var(--space-sm);
  justify-content: space-between;
  padding: var(--space-md);
- transition: background-color 0.3s ease}
+ transition: background-color 0.2s ease}
 
 .code-header:hover {background: var(--bg-color)}
 
 .code-icon {align-items: center;
  background: var(--accent-color);
- border-radius: 6px;
+ border-radius: var(--radius-sm);
  display: flex;
  flex-shrink: 0;
- height: 28px;
+ height: calc(var(--space-xl) * 1.2);
  justify-content: center;
- width: 28px}
+ width: calc(var(--space-xl) * 1.2)}
 
 .code-icon i {color: #FFF;
- font-size: 12px}
+ font-size: var(--text-sm)}
 
 .code-info {display: flex;
  flex: 1;
  flex-direction: column;
- gap: 2px;
+ gap: var(--space-micro);
  min-width: 0}
 
 .code-title {color: var(--text-primary);
- font-family: 'Courier New', monospace;
+ font-family: var(--font-mono);
  font-size: var(--text-sm);
  font-weight: 600;
  letter-spacing: 0.05em;
@@ -1722,11 +1726,11 @@ display:flex;
  color: var(--text-secondary);
  cursor: pointer;
  display: flex;
- height: 32px;
+ height: var(--editor-btn-size);
  justify-content: center;
  padding: 0;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 32px}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: var(--editor-btn-size)}
 
 .code-copy-btn:hover {background: var(--hover-color);
  border-color: var(--accent-color);
@@ -1736,9 +1740,9 @@ display:flex;
  max-height: none;
  overflow-x: auto;
  padding: var(--space-md);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
-.code-content.collapsible-content {max-height: 250px;
+.code-content.collapsible-content {max-height: calc(var(--space-xxl) * 6);
  overflow: hidden;
  position: relative}
 
@@ -1746,7 +1750,7 @@ display:flex;
  border-radius: 0 0 var(--radius) var(--radius);
  bottom: 0;
  content: '';
- height: 40px;
+ height: calc(var(--space-xl) * 1.5);
  left: 0;
  pointer-events: none;
  position: absolute;
@@ -1756,7 +1760,7 @@ display:flex;
 .code-content pre {background: transparent;
  border: none;
  color: var(--text-primary);
- font-family: 'Courier New', monospace;
+ font-family: var(--font-mono);
  font-size: var(--text-sm);
  line-height: 1.6;
  margin: 0;
@@ -1784,8 +1788,8 @@ display:flex;
 
 .line-number {color: var(--text-tertiary);
  display: inline-block;
- margin-right: 16px;
- min-width: 24px;
+ margin-right: var(--text-base);
+ min-width: var(--space-xl);
  text-align: right;
  user-select: none}
 
@@ -1796,22 +1800,22 @@ display:flex;
  color: var(--text-secondary);
  cursor: pointer;
  display: flex;
- font-family: quicksand;
+ font-family: var(--font-primary);
  font-size: 0.8125rem;
  font-weight: 500;
- gap: 6px;
+ gap: var(--space-xs);
  justify-content: center;
  padding: var(--pad-4) var(--pad-5);
  text-align: center;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  width: 100%}
 
 .code-expand-btn:hover {background: var(--hover-color);
  color: var(--text-primary)}
 
 .code-expand-btn i {color: var(--accent-color);
- font-size: 11px;
- transition: transform 0.3s ease}
+ font-size: var(--text-sm);
+ transition: transform 0.2s ease}
 
 .modern-code.expanded .code-expand-btn {display: none}
 
@@ -1819,50 +1823,51 @@ display:flex;
 
 [data-theme="light"] .modern-code {background: var(--surface-color);
  border-left-color: rgba(14, 165, 233, 0.2);
- box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05)}
+ box-shadow: var(--shadow-sm)}
 
 [data-theme="light"] .modern-code:hover {border-left-color: rgba(14, 165, 233, 0.3);
- box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08)}
+ box-shadow: var(--shadow)}
 
 [data-theme="light"] .code-content.collapsible-content::after {background: linear-gradient(to bottom, transparent, var(--surface-color) 80%)}
 
 /*============================================
- modern attachment styles============================================*/
+ modern attachment styles - harmonized
+============================================*/
 .modern-attachment {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
  box-shadow: var(--shadow-sm);
  margin: var(--space-md) 0;
  overflow: hidden;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .modern-attachment:hover {box-shadow: var(--shadow);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .attachment-header {align-items: center;
  background: var(--bg-color);
  border-bottom: 1px solid var(--border-color);
  display: flex;
- gap: 12px;
+ gap: var(--space-sm);
  justify-content: space-between;
  padding: var(--space-md)}
 
 .attachment-icon {align-items: center;
  background: var(--accent-color);
- border-radius: 6px;
+ border-radius: var(--radius-sm);
  display: flex;
  flex-shrink: 0;
- height: 28px;
+ height: calc(var(--space-xl) * 1.2);
  justify-content: center;
- width: 28px}
+ width: calc(var(--space-xl) * 1.2)}
 
 .attachment-icon i {color: #FFF;
- font-size: 12px}
+ font-size: var(--text-sm)}
 
 .attachment-info {display: flex;
  flex: 1;
  flex-direction: column;
- gap: 2px;
+ gap: var(--space-micro);
  min-width: 0}
 
 .attachment-title {color: var(--text-primary);
@@ -1876,7 +1881,7 @@ display:flex;
  white-space: nowrap}
 
 .attachment-actions {display: flex;
- gap: 8px}
+ gap: var(--space-sm)}
 
 .attachment-download-btn,
 .attachment-view-btn {align-items: center;
@@ -1886,11 +1891,11 @@ display:flex;
  color: var(--text-secondary);
  cursor: pointer;
  display: flex;
- height: 28px;
+ height: calc(var(--space-xl) * 1.2);
  justify-content: center;
  text-decoration: none;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 28px}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: calc(var(--space-xl) * 1.2)}
 
 .attachment-download-btn:hover {background: rgba(16, 185, 129, 0.1);
  border-color: var(--success-color);
@@ -1905,10 +1910,10 @@ display:flex;
 
 .attachment-preview img {border-radius: var(--radius);
  display: block;
- object-fit: contain; margin: 3px}
+ object-fit: contain; margin: var(--space-micro)}
 
 .attachment-image-link {display: block;
- max-width:800px;}
+ max-width: calc(var(--space-xxl) * 12);}
 
 .attachment-stats {background: var(--bg-color);
  display: flex;
@@ -1920,26 +1925,26 @@ display:flex;
  color: var(--text-tertiary);
  display: flex;
  font-size: var(--text-xs);
- gap: 6px; margin: 0}
+ gap: var(--space-xs); margin: 0}
 
 .stat-item i {color: var(--primary-color);
- font-size: 10px}
+ font-size: var(--text-sm)}
 
 .modern-attachment.image-attachment .attachment-icon {background: var(--primary-color)}
 .modern-attachment.file-attachment .attachment-icon {background: var(--secondary-color)}
 
 /* =========================================== */
-/* FORUM MEDIA WRAPPER                 */
+/* FORUM MEDIA WRAPPER - harmonized            */
 /* =========================================== */
 
 .standard-media-wrapper {position: relative;
  width: 100%;
- padding-bottom: 56.25%; /* Default 16: 9 */
- margin: 1em 0;
+ padding-bottom: 56.25%;
+ margin: var(--space-md) 0;
  overflow: hidden;
- background: var(--bg-secondary, #F5F5F5);
- border-radius: var(--radius-sm, 8px);
- box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1)}
+ background: var(--bg-color);
+ border-radius: var(--radius-sm);
+ box-shadow: var(--shadow-sm)}
 
 .standard-media-wrapper {position: absolute;
  top: 0;
@@ -1948,7 +1953,6 @@ display:flex;
  height: 100%;
  border: 0}
 
-/* Specific styling for different media types */
 .standard-media-wrapper.lite-youtube-wrapper {background: #000}
 
 .standard-media-wrapper.lite-vimeo-wrapper {background: #1AB7EA}
@@ -1957,31 +1961,28 @@ display:flex;
 
 .standard-media-wrapper.video-wrapper video {object-fit: contain}
 
-/* Loading state */
 .standard-media-wrapper.loading::before {content: '';
  position: absolute;
  top: 50%;
  left: 50%;
  transform: translate(-50%, -50%);
- width: 40px;
- height: 40px;
+ width: calc(var(--space-xl) * 1.5);
+ height: calc(var(--space-xl) * 1.5);
  border: 3px solid rgba(255, 255, 255, 0.3);
  border-radius: 50%;
- border-top-color: var(--primary-color, #3498DB);
+ border-top-color: var(--primary-color);
  animation: spin 1s ease-in-out infinite;
  z-index: 1}
 
-@keyframes spin {to {transform: translate(-50%, -50%) rotate(360deg)}}
-
 /* =========================================== */
-/* FORUM AVATAR SYSTEM STYLES                  */
+/* FORUM AVATAR SYSTEM STYLES - harmonized     */
 /* =========================================== */
 
 .forum-avatar-container {
     display: inline-block;
     vertical-align: middle;
     position: relative;
-    transition: transform .2s ease;
+    transition: transform 0.2s ease;
 }
 
 .forum-avatar-container:hover {
@@ -1992,32 +1993,32 @@ display:flex;
     cursor: pointer;
     border-radius: 50%;
     object-fit: cover;
-    background-color: #f0f0f0;
+    background-color: var(--surface-light);
     display: inline-block;
     vertical-align: middle;
-    border: 2px solid #fff;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 2px solid var(--text-primary);
+    box-shadow: var(--shadow-sm);
 }
 
-/* Size-specific classes */
 .avatar-size-60 {
-    width: 60px;
-    height: 60px;
+    width: calc(var(--space-xl) * 2.3);
+    height: calc(var(--space-xl) * 2.3);
 }
 
 .avatar-size-80 {
-    width: 80px;
-    height: 80px;
+    width: calc(var(--space-xl) * 3);
+    height: calc(var(--space-xl) * 3);
 }
 
 /*============================================
- blog styles============================================*/
+ blog styles - harmonized
+============================================*/
 .blog .skin_tbl {background: transparent;
  border: 0}
 
-#centerdiv {margin: 0 215px}
+#centerdiv {margin: 0 calc(var(--space-xl) * 5.5)}
 
-.sidebar {width: 190px;
+.sidebar {width: calc(var(--space-xl) * 4.8);
  font-size: var(--text-xs)}
 
 .blog .skin_tbl {box-shadow: none}
@@ -2026,7 +2027,7 @@ display:flex;
 .tags a:link,
 .tags a:visited {font-size: var(--text-xs);
  font-weight: normal;
- color: #7BE}
+ color: var(--accent-color)}
 
 .color .tags {font-size: var(--text-xs)}
 
@@ -2034,51 +2035,51 @@ display:flex;
 
 .sidebox .stitle {font-size: var(--text-base);
  text-align: center;
- margin-bottom: 9px;
+ margin-bottom: var(--space-sm);
  font-weight: bold;
  text-transform: uppercase}
 
-.stitle {border-bottom: 3px solid;
- padding-bottom: 8px}
+.stitle {border-bottom: 3px solid var(--border-color);
+ padding-bottom: var(--space-sm)}
 
 .sidebox {padding: var(--space-sm);
- background: #F6F6F6;
- border-radius: 2px;
- border: 1px solid #DDD}
+ background: var(--bg-color);
+ border-radius: var(--radius-sm);
+ border: 1px solid var(--border-color)}
 
-.sidebox .avatar {border-radius: 30px;
+.sidebox .avatar {border-radius: var(--radius-xl);
  overflow: hidden}
 
-.stitle a {color: #535353;
+.stitle a {color: var(--text-secondary);
  border-bottom: 1px dotted transparent}
 
-.stitle a:hover {color: #535353;
- border-color: #535353}
+.stitle a:hover {color: var(--text-secondary);
+ border-color: var(--text-secondary)}
 
-.sidebox li {padding: 2px 0}
+.sidebox li {padding: var(--space-micro) 0}
 
 .side_calendar {padding: var(--pad-4)}
 
 .side_calendar .stitle {padding-bottom: var(--pad-4)}
 
 .side_calendar tr {text-align: center;
- background: #535353;
- color: #FFF}
+ background: var(--surface-color);
+ color: var(--text-primary)}
 
 .side_calendar td {font-size: var(--text-xs);
- background: #DDD;
- color: #535353}
+ background: var(--surface-light);
+ color: var(--text-secondary)}
 
-.side_calendar td:nth-child(even) {background: #FFF}
+.side_calendar td:nth-child(even) {background: var(--surface-color)}
 
 .side_calendar .current {font-weight: bold;
- color: #FFF;
- background: #535353 !important}
+ color: var(--text-primary);
+ background: var(--surface-color) !important}
 
 .side_stats .left,
 .side_online .left {display: none}
 
-.side_stats .groups dd {margin: 2px}
+.side_stats .groups dd {margin: var(--space-micro)}
 
 .sidebox .list {font-size: var(--text-xs)}
 
@@ -2091,18 +2092,19 @@ display:flex;
 .side_tag .stitle {padding-bottom: var(--pad-4)}
 
 /*============================================
- tagboard & chat============================================*/
+ tagboard & chat - harmonized
+============================================*/
 .tag,
-.chat {margin-bottom: 30px}
+.chat {margin-bottom: var(--space-xl)}
 
 .tag li,
 .side_tag li {text-align: left;
  padding: var(--pad-4);
- border-bottom: 1px solid #EEE;
+ border-bottom: 1px solid var(--border-color);
  font-size: var(--text-sm);
- line-height: 20px}
+ line-height: var(--space-lg)}
 
-.tag .when {color: #C1C1C1;
+.tag .when {color: var(--text-tertiary);
  float: right;
  font-size: var(--text-xs)}
 
@@ -2114,84 +2116,86 @@ display:flex;
 .side_tag .textinput {font-size: 0.95em;
  padding: var(--pad-1)}
 
-table.ww {margin-top: 10px;
- background: #F5F5F5}
+table.ww {margin-top: var(--space-sm);
+ background: var(--bg-color)}
 
-table.ww textarea#ffmsg {background: #FFF;
- border-bottom: 2px solid #D8D8D8;
- color: #888;
+table.ww textarea#ffmsg {background: var(--surface-color);
+ border-bottom: 2px solid var(--border-color);
+ color: var(--text-secondary);
  font-size: var(--text-xs)}
 
-.tag a {color: #FF5722}
+.tag a {color: var(--warning-color)}
 
-.tag .mtitle {color: #FF5722}
+.tag .mtitle {color: var(--warning-color)}
 
-.tag .mback {border-bottom: 5px solid #FF5722}
+.tag .mback {border-bottom: 5px solid var(--warning-color)}
 
 /*============================================
- user lists & online status============================================*/
+ user lists & online status - harmonized
+============================================*/
 .online .yy a {font-weight: bold}
 
 .members .thumbs a,
 .online .thumbs a,
 .group .thumbs a {padding: var(--pad-4);
- height: 50px;
- width: 50px}
+ height: calc(var(--space-xl) * 2);
+ width: calc(var(--space-xl) * 2)}
 
 .members .thumbs a *,
 .online .thumbs a *,
-.group .thumbs a * {width: 50px;
- height: 50px;
+.group .thumbs a * {width: calc(var(--space-xl) * 2);
+ height: calc(var(--space-xl) * 2);
  min-height: auto;
  border-radius: 50%;
- background: #FFF;
- border: 2px solid #FFF;
- transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+ background: var(--surface-color);
+ border: 2px solid var(--text-primary);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  transform: scale(0.8)}
 
 .members li:hover .thumbs a *,
 .online li:hover .thumbs a *,
 .group li:hover .thumbs a * {transform: scale(1)}
 
-.online .bb .nick {color: #333 !important}
+.online .bb .nick {color: var(--text-secondary) !important}
 
-.online .bb .nick div {color: #676767}
+.online .bb .nick div {color: var(--text-tertiary)}
 
 .online .yy * {text-align: left}
 
 /*============================================
- statistics============================================*/
-#board .stats .list li {background: #FFF}
+ statistics - harmonized
+============================================*/
+#board .stats .list li {background: var(--surface-color)}
 
 #board .stats .skin_tbl.top {border: 0;
  box-shadow: none;
- border-radius: 3px 3px 0 0;
+ border-radius: var(--radius-sm) var(--radius-sm) 0 0;
  margin-bottom: 0}
 
 #board .stats .skin_tbl.bottom {box-shadow: none;
- border-color: #7B7B7B;
- color: #8F8F8F;
- border-radius: 0 0 2px 2px}
+ border-color: var(--border-color);
+ color: var(--text-tertiary);
+ border-radius: 0 0 var(--radius-sm) var(--radius-sm)}
 
 #board .stats .aa {display: none}
 
-#board .stats .mback {background: #FAFAFA;
- border-bottom: 1px solid #DDD;
- border-top: 1px solid #DDD}
+#board .stats .mback {background: var(--bg-color);
+ border-bottom: 1px solid var(--border-color);
+ border-top: 1px solid var(--border-color)}
 
-#board .stats .mtitle {color: #7B7B7B;
+#board .stats .mtitle {color: var(--text-tertiary);
  text-align: center}
 
 #board .stats .bottom .mback {border-radius: 0}
 
-#board .stats .top .mback {border-radius: 2px 2px 0 0}
+#board .stats .top .mback {border-radius: var(--radius-sm) var(--radius-sm) 0 0}
 
-.groups dd a span {background: #E9E9E9;
+.groups dd a span {background: var(--surface-light);
  padding: var(--pad-1) var(--pad-2);
- color: #535353;
+ color: var(--text-secondary);
  font-weight: normal}
 
-.groups dd {margin: 5px 5px 0 0}
+.groups dd {margin: var(--space-xs) var(--space-xs) 0 0}
 
 .groups dd a:hover {opacity: 0.6}
 
@@ -2199,7 +2203,7 @@ table.ww textarea#ffmsg {background: #FFF;
 .groups dd:after {content: ' '}
 
 .users li:before {content: ' - ';
- color: #535353;
+ color: var(--text-secondary);
  font-weight: bold}
 
 .users li:first-child:before {content: none}
@@ -2216,15 +2220,15 @@ table.ww textarea#ffmsg {background: #FFF;
  text-align: center}
 
 #board .stats .bottom .zz > div:first-child > * > * {font-size: var(--text-base);
- color: #1A237E87}
+ color: var(--text-secondary)}
 
 #board .stats .bottom .zz > div:first-child > * {display: inline-block;
- margin: 2px;
- background: #E8EAF6;
+ margin: var(--space-micro);
+ background: var(--bg-color);
  padding: var(--pad-5) 0;
  width: 11.85%;
  text-align: center;
- border: 1px solid #C5CAE9}
+ border: 1px solid var(--border-color)}
 
 #board .stats #top a > b,
 #board .stats .bottom .lastreg dd span,
@@ -2249,9 +2253,9 @@ table.ww textarea#ffmsg {background: #FFF;
 .side_stats .users a:before,
 .side_stats .groups a > span:before,
 .online .big_list .nick > a:before,
-.members .big_list .bb > div:before {font-family: fontawesome;
+.members .big_list .bb > div:before {font-family: 'Font Awesome 6 Pro';
  font-weight: normal;
- margin-right: 2px}
+ margin-right: var(--space-micro)}
 
 .stats .gruppo1:before,
 .side_stats .gruppo1:before,
@@ -2274,74 +2278,76 @@ table.ww textarea#ffmsg {background: #FFF;
 .members .gruppo3:before {content: "\f086"}
 
 /*============================================
- user colors & groups============================================*/
+ user colors & groups - harmonized
+============================================*/
 .box_visitatore .details {border: 0;
  background: transparent}
 
-.utente {color: #595959;
+.utente {color: var(--text-secondary);
  font-weight: normal !important}
 
-.male {color: #5AD}
+.male {color: #3B82F6}
 
-.female {color: #E57}
+.female {color: #EC4899}
 
 .daconvalidare {font-style: italic;
- color: #757575}
+ color: var(--text-tertiary)}
 
 .amministratore,
-.gruppo1 {color: #58A72E;
+.gruppo1 {color: var(--success-color);
  font-weight: bold}
 
 .groups dd a .amministratore,
-.groups dd a .gruppo1 {background: #58A72E;
+.groups dd a .gruppo1 {background: var(--success-color);
  color: #FFF}
 
 .box_amministratore .details .avatar img,
-.box_gruppo1 .details .avatar img {border-color: #58A72E}
+.box_gruppo1 .details .avatar img {border-color: var(--success-color)}
 
 .moderatore,
-.gruppo2 {color: #4178C9;
+.gruppo2 {color: var(--accent-color);
  font-weight: bold}
 
 .groups dd a .moderatore,
-.groups dd a .gruppo2 {background: #4178C9;
+.groups dd a .gruppo2 {background: var(--accent-color);
  color: #FFF}
 
 .box_moderatore .details .avatar img,
-.box_gruppo2 .details .avatar img {border-color: #4178C9}
+.box_gruppo2 .details .avatar img {border-color: var(--accent-color)}
 
-.gruppo3 {color: #3ABA83;
+.gruppo3 {color: var(--primary-color);
  font-weight: bold}
 
-.groups dd a .gruppo3 {background: #3ABA83;
+.groups dd a .gruppo3 {background: var(--primary-color);
  color: #FFF}
 
-.box_gruppo3 .details .avatar img {border-color: #3ABA83}
+.box_gruppo3 .details .avatar img {border-color: var(--primary-color)}
 
-.gruppo4 {color: #8268AF;
+.gruppo4 {color: var(--secondary-color);
  font-weight: bold}
 
-.groups dd a .gruppo4 {background: #8268AF;
+.groups dd a .gruppo4 {background: var(--secondary-color);
  color: #FFF}
 
-.box_gruppo4 .details .avatar img {border-color: #8268AF}
+.box_gruppo4 .details .avatar img {border-color: var(--secondary-color)}
 
-.groups dd a .gruppo5 {background: #373737;
+.groups dd a .gruppo5 {background: var(--surface-light);
  color: #FFF}
 
 .gruppo6,
 .gruppo7,
-.gruppo8 {color: #717171;
+.gruppo8 {color: var(--text-tertiary);
  font-style: italic}
 
-.gruppo12 {color: #E27F14;
+.gruppo12 {color: var(--warning-color);
  font-weight: bold}
 
-.groups dd a .gruppo12 {background: #E27F14;
+.groups dd a .gruppo12 {background: var(--warning-color);
  color: #FFF}
 
 /*============================================
- profile styles============================================*/
+ profile styles - harmonized
+============================================*/
 .modern-profile {background: var(--surface-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
@@ -2367,9 +2373,9 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .profile-avatar {border: 3px solid var(--primary-color);
  border-radius: 50%;
- height: 80px;
+ height: calc(var(--space-xl) * 3);
  object-fit: cover;
- width: 80px}
+ width: calc(var(--space-xl) * 3)}
 
 .profile-basic-info {display: flex;
  flex-direction: column;
@@ -2385,7 +2391,7 @@ table.ww textarea#ffmsg {background: #FFF;
  display: flex;
  font-size: var(--text-sm);
  font-weight: 500;
- gap: 6px}
+ gap: var(--space-xs)}
 
 .profile-status i {font-size: var(--text-xs)}
 
@@ -2397,10 +2403,10 @@ table.ww textarea#ffmsg {background: #FFF;
  border-color: var(--success-color);
  color: #FFF}
 
-.btn-posts:hover {background: #0DA271;
- border-color: #0DA271;
+.btn-posts:hover {background: var(--primary-dark);
+ border-color: var(--primary-dark);
  color: #FFF;
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
 .profile-tabs {background: var(--bg-color);
  border-bottom: 1px solid var(--border-color);
@@ -2413,7 +2419,7 @@ table.ww textarea#ffmsg {background: #FFF;
  padding: var(--space-md) var(--space-lg);
  position: relative;
  text-decoration: none;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .profile-tab:hover {background: var(--hover-color);
  color: var(--text-primary)}
@@ -2431,7 +2437,7 @@ table.ww textarea#ffmsg {background: #FFF;
  border-bottom: 1px solid var(--border-color);
  display: grid;
  gap: var(--space-md);
- grid-template-columns: 200px 1fr;
+ grid-template-columns: calc(var(--space-xl) * 5) 1fr;
  padding: var(--space-md) 0}
 
 .profile-field:last-child {border-bottom: none}
@@ -2454,7 +2460,7 @@ table.ww textarea#ffmsg {background: #FFF;
 .profile-gender .field-value {text-transform: capitalize}
 
 .user-badge {background: var(--primary-color);
- border-radius: 12px;
+ border-radius: var(--radius-lg);
  color: #FFF;
  font-size: var(--text-xs);
  font-weight: 600;
@@ -2465,11 +2471,11 @@ table.ww textarea#ffmsg {background: #FFF;
 .gender-badge {align-items: center;
  background: var(--bg-color);
  border: 1px solid var(--border-color);
- border-radius: 12px;
+ border-radius: var(--radius-lg);
  display: inline-flex;
  font-size: var(--text-xs);
  font-weight: 500;
- gap: 6px;
+ gap: var(--space-xs);
  padding: var(--badge-padding)}
 
 .gender-badge.male {border-color: #3B82F6;
@@ -2480,7 +2486,7 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .stat-with-icon {align-items: center;
  display: flex;
- gap: 12px}
+ gap: var(--space-sm)}
 
 .stat-with-icon i {color: var(--primary-color);
  font-size: 1.25rem}
@@ -2495,45 +2501,46 @@ table.ww textarea#ffmsg {background: #FFF;
  font-size: var(--text-xs)}
 
 .profile-friends .field-value {display: grid;
- gap: 12px;
- grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
- padding: 8px 0}
+ gap: var(--space-sm);
+ grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-xl) * 2), 1fr));
+ padding: var(--space-sm) 0}
 
 .friend-avatar {border-radius: 50%;
  display: block;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .friend-avatar img {border: 2px solid var(--border-color);
  border-radius: 50%;
- height: 50px;
+ height: calc(var(--space-xl) * 2);
  object-fit: cover;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 50px}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: calc(var(--space-xl) * 2)}
 
 .friend-avatar:hover img {border-color: var(--primary-color);
  transform: scale(1.1)}
 
 .profile-interests .field-value {display: flex;
  flex-wrap: wrap;
- gap: 12px}
+ gap: var(--space-sm)}
 
 .interest-image {border-radius: var(--radius);
  display: block;
  overflow: hidden;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .interest-image img {border: 1px solid var(--border-color);
  border-radius: var(--radius);
- height: 60px;
+ height: calc(var(--space-xl) * 2.3);
  object-fit: cover;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
- width: 60px}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ width: calc(var(--space-xl) * 2.3)}
 
 .interest-image:hover img {border-color: var(--primary-color);
  transform: scale(1.05)}
 
 /*============================================
- pagination============================================*/
+ pagination - harmonized
+============================================*/
 .pages2 {font-size: var(--text-xs)}
 
 .pages2:before,
@@ -2549,21 +2556,21 @@ table.ww textarea#ffmsg {background: #FFF;
 .pages2 a:link,
 .pages2 a:visited {opacity: 0.6;
  padding: var(--pad-2) var(--pad-4);
- background: #F8F8F8;
- color: #333;
+ background: var(--bg-color);
+ color: var(--text-secondary);
  font-weight: bold;
- border-radius: 2px;
- border: 1px solid #DDD;
- transition: opacity 0.3s ease}
+ border-radius: var(--radius-sm);
+ border: 1px solid var(--border-color);
+ transition: opacity 0.2s ease}
 
 .pages2 a:hover {opacity: 0.9}
 
 .top .pages {text-align: center;
- padding-bottom: 15px;
- margin-top: 5px}
+ padding-bottom: var(--space-md);
+ margin-top: var(--space-xs)}
 
 .bottom .pages {text-align: center;
- padding-top: 20px}
+ padding-top: var(--space-lg)}
 
 .left .pages {padding: 0}
 
@@ -2581,36 +2588,37 @@ table.ww textarea#ffmsg {background: #FFF;
 .pages li a,
 .pages .current {padding: var(--pad-1) var(--pad-2);
  font-size: 1.1em;
- color: #535353;
- background: #FFF;
- border-radius: 2px;
- transition: all 0.3s ease}
+ color: var(--text-secondary);
+ background: var(--surface-color);
+ border-radius: var(--radius-sm);
+ transition: all 0.2s ease}
 
-.pages li a {border: 1px solid #EEE}
+.pages li a {border: 1px solid var(--border-color)}
 
-.pages li a:hover {background: #F8F8F8;
- color: #AAA}
+.pages li a:hover {background: var(--hover-color);
+ color: var(--text-tertiary)}
 
 .focus .pages2 li a {background: transparent;
  opacity: 1}
 
 .pages .current {font-size: 1.2em;
  color: #FFF;
- background: #5C6BC0;
- box-shadow: 0 0}
+ background: var(--primary-color);
+ box-shadow: none}
 
 .pages .jump a,
 .pages .lastpost a {padding-top: var(--pad-1);
  font-weight: 400;
- box-shadow: 0 0;
- border: 1px solid #EEE}
+ box-shadow: none;
+ border: 1px solid var(--border-color)}
 
 /*============================================
- control panel============================================*/
-.cp .sunbar.top {border-radius: 2px 2px 0 0}
+ control panel - harmonized
+============================================*/
+.cp .sunbar.top {border-radius: var(--radius-sm) var(--radius-sm) 0 0}
 
 .cp .tabs {text-align: left;
- margin-bottom: 10px}
+ margin-bottom: var(--space-sm)}
 
 .cp .tabs .current a {font-size: var(--text-base);
  font-weight: bold;
@@ -2622,20 +2630,21 @@ table.ww textarea#ffmsg {background: #FFF;
 #send .send .sunbar {padding-left: 2%;
  padding-right: 2%;
  text-align: right;
- background: #E8EAF6 !important;
- color: #7986CB}
+ background: var(--hover-color) !important;
+ color: var(--primary-color)}
 
-#msg .cp .web {font: 14px verdana}
+#msg .cp .web {font: var(--text-sm) var(--font-primary)}
 
-.tagged.focus {background: #5C6BC0 !important}
+.tagged.focus {background: var(--primary-color) !important}
 
 #user .forum .yy {width: 14%;
- border-left: 1px solid #EEE;
- border-right: 1px solid #EEE;
- background: #FAFAFA}
+ border-left: 1px solid var(--border-color);
+ border-right: 1px solid var(--border-color);
+ background: var(--bg-color)}
 
 /*============================================
- reply & send============================================*/
+ reply & send - harmonized
+============================================*/
 .fast.send .sunbar {font-weight: bold;
  font-size: var(--text-xs);
  text-shadow: none}
@@ -2643,8 +2652,8 @@ table.ww textarea#ffmsg {background: #FFF;
 .sunbar {text-align: center;
  font-size: var(--text-base);
  font-weight: bold;
- color: #535353;
- background: #FFF !important}
+ color: var(--text-secondary);
+ background: var(--surface-color) !important}
 
 .summary .skin_tbl {border: 0}
 
@@ -2657,125 +2666,131 @@ table.ww textarea#ffmsg {background: #FFF;
 .summary .quote,
 .summary .code {font-size: var(--text-xs)}
 
-.summary .sunbar.top {border-radius: 2px 2px 0 0}
+.summary .sunbar.top {border-radius: var(--radius-sm) var(--radius-sm) 0 0}
 
-.summary .sunbar.bottom {border-radius: 0 0 2px 2px}
+.summary .sunbar.bottom {border-radius: 0 0 var(--radius-sm) var(--radius-sm)}
 
-.send .codebuttons {transition: all 0.3s ease}
+.send .codebuttons {transition: all 0.2s ease}
 
-.send .codebuttons:hover {background: #5C6BC0;
+.send .codebuttons:hover {background: var(--primary-color);
  color: #FFF;
- border: 1px solid #5C6BC0}
+ border: 1px solid var(--primary-color)}
 
 /*============================================
- polls============================================*/
-.poll li {border-bottom: 1px solid #DDD;
+ polls - harmonized
+============================================*/
+.poll li {border-bottom: 1px solid var(--border-color);
  font-size: var(--text-base);
  font-weight: 300}
 
-.poll li.max {background: #E8EAF6;
- border-bottom: 1px solid #C5CAE9}
+.poll li.max {background: var(--hover-color);
+ border-bottom: 1px solid var(--border-color)}
 
-.bar {background: #E8EAF6;
- height: 20px;
- line-height: 20px;
+.bar {background: var(--bg-color);
+ height: var(--space-lg);
+ line-height: var(--space-lg);
  font-size: var(--text-xs);
- border-radius: 2px}
+ border-radius: var(--radius-sm)}
 
-.bar div {background: #AADDF4;
- border-radius: 3px 0 0 3px}
+.bar div {background: var(--accent-color);
+ border-radius: var(--radius-sm) 0 0 var(--radius-sm)}
 
-.max .bar {background: #E0E0E0;
- color: #535353}
+.max .bar {background: var(--surface-light);
+ color: var(--text-secondary)}
 
-.max .bar div {background: #9FA8DA}
+.max .bar div {background: var(--secondary-color)}
 
 .bar,
-.bar span {color: #3949AB !important}
+.bar span {color: var(--primary-color) !important}
 
 /*============================================
- discussions============================================*/
+ discussions - harmonized
+============================================*/
 .title input.forminput {font-weight: normal;
  color: #FFF;
- background: #5C6BC0;
+ background: var(--primary-color);
  border: none;
  padding: var(--pad-3) var(--pad-5);
  font-size: var(--text-xs)}
 
-.title input.forminput:hover {background: #E8EAF6;
- color: #5C6BC0}
+.title input.forminput:hover {background: var(--hover-color);
+ color: var(--primary-color)}
 
-.title .forminput {color: #7986CB;
- background: #E8EAF6;
- border: 1px solid #C5CAE9;
- transition: all 0.3s ease}
+.title .forminput {color: var(--primary-color);
+ background: var(--hover-color);
+ border: 1px solid var(--border-color);
+ transition: all 0.2s ease}
 
 /*============================================
- tag system============================================*/
-.atwho-view ul {border-radius: 2px}
+ tag system - harmonized
+============================================*/
+.atwho-view ul {border-radius: var(--radius-sm)}
 
 .atwho-view ul li,
-.atwho-view ul li * {color: #3F51B5}
+.atwho-view ul li * {color: var(--primary-color)}
 
-.atwho-view ul li {background: #E8EAF6;
- border-bottom: 1px solid #C5CAE9}
+.atwho-view ul li {background: var(--bg-color);
+ border-bottom: 1px solid var(--border-color)}
 
-.atwho-view {border-radius: 2px;
+.atwho-view {border-radius: var(--radius-sm);
  margin: 0;
  padding: 0}
 
-.atwho-view ul li.cur {background: #7986CB}
+.atwho-view ul li.cur {background: var(--primary-color)}
 
-.atwho-view ul li:first-child {border-radius: 2px 2px 0 0}
+.atwho-view ul li:first-child {border-radius: var(--radius-sm) var(--radius-sm) 0 0}
 
-.atwho-view ul li:last-child {border-radius: 0 0 2px 2px;
+.atwho-view ul li:last-child {border-radius: 0 0 var(--radius-sm) var(--radius-sm);
  border-bottom: 0 solid}
 
 /*============================================
- registration============================================*/
-.reg {margin-bottom: 30px;
+ registration - harmonized
+============================================*/
+.reg {margin-bottom: var(--space-xl);
  padding: var(--pad-1);
- border-radius: 5px}
+ border-radius: var(--radius-sm)}
 
 .reg .skin_tbl {border: 0}
 
 /*============================================
- credits============================================*/
-.credits a {background: #E8EAF6;
+ credits - harmonized
+============================================*/
+.credits a {background: var(--hover-color);
  padding: var(--pad-2) var(--pad-4);
- color: #3F51B5;
- border-radius: 2px;
- margin-left: 5px;
+ color: var(--primary-color);
+ border-radius: var(--radius-sm);
+ margin-left: var(--space-xs);
  font-weight: 600}
 
-.credits {margin-bottom: 10px;
- background: #FFF;
+.credits {margin-bottom: var(--space-sm);
+ background: var(--surface-color);
  display: inline-block;
  padding: var(--pad-4) var(--pad-5);
- border-radius: 2px}
+ border-radius: var(--radius-sm)}
 
 /*============================================
- post actions & controls============================================*/
+ post actions & controls - harmonized
+============================================*/
 .modern-bottom-actions {display: flex;
  align-items: center;
- gap: 12px;
+ gap: var(--space-sm);
  margin: 0}
 
 .moderator-controls {display: flex;
  align-items: center;
- gap: 12px}
+ gap: var(--space-sm)}
 
 .multiquote-control {display: flex;
  align-items: center;
- gap: 8px}
+ gap: var(--space-sm)}
 
-.multiquote-btn {width: 32px;
- height: 32px;
+.multiquote-btn {width: var(--editor-btn-size);
+ height: var(--editor-btn-size);
  background: var(--bg-color);
  border: 1px solid var(--border-color);
  border-radius: var(--radius);
  color: var(--text-secondary);
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  margin: 0;
  padding: var(--pad-2)}
 
@@ -2790,7 +2805,7 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .ip-address-control {display: flex;
  align-items: center;
- gap: 6px;
+ gap: var(--space-xs);
  font-size: var(--text-sm)}
 
 .ip-label {color: var(--text-tertiary);
@@ -2800,7 +2815,7 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .ip-link {color: var(--accent-color);
  text-decoration: none;
- transition: color 0.3s ease}
+ transition: color 0.2s ease}
 
 .ip-link:hover {color: var(--primary-color)}
 
@@ -2811,10 +2826,11 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .user-checkbox-container {display: flex;
  align-items: center;
- margin-left: 8px}
+ margin-left: var(--space-sm)}
 
 /*============================================
- enhanced anchor navigation & quote buttons============================================*/
+ enhanced anchor navigation & quote buttons - harmonized
+============================================*/
 .anchor-container {position: absolute;
  width: 0;
  height: 0;
@@ -2825,21 +2841,21 @@ table.ww textarea#ffmsg {background: #FFF;
  justify-content: center;
  background: var(--surface-color);
  border: 1px solid var(--border-color);
- border-radius: 6px;
+ border-radius: var(--radius-sm);
  color: var(--text-tertiary);
  cursor: pointer;
- width: 28px;
- height: 28px;
+ width: calc(var(--space-xl) * 1.2);
+ height: calc(var(--space-xl) * 1.2);
  padding: 0;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
  position: relative}
 
 .quote-jump-btn:hover {background: var(--hover-color);
  border-color: var(--primary-color);
  color: var(--primary-color);
- transform: translatey(-1px)}
+ transform: translateY(calc(var(--phi-inverse) * -1px))}
 
-.quote-jump-btn:active {transform: translatey(0)}
+.quote-jump-btn:active {transform: translateY(0)}
 
 .quote-jump-btn.loading {cursor: wait;
  opacity: 0.7}
@@ -2848,13 +2864,13 @@ table.ww textarea#ffmsg {background: #FFF;
  border-color: var(--border-color)}
 
 .cross-page-indicator {position: absolute;
- top: -4px;
- right: -4px;
+ top: calc(var(--phi-inverse) * -4px);
+ right: calc(var(--phi-inverse) * -4px);
  background: var(--accent-color);
  color: white;
  font-size: 0.6rem;
- width: 12px;
- height: 12px;
+ width: var(--space-sm);
+ height: var(--space-sm);
  border-radius: 50%;
  display: flex;
  align-items: center;
@@ -2865,11 +2881,12 @@ table.ww textarea#ffmsg {background: #FFF;
  outline-offset: 2px}
 
 /*============================================
- default avatar styles============================================*/
-.default-avatar {width: 60px;
- height: 60px;
- min-width: 60px;
- min-height: 60px;
+ default avatar styles - harmonized
+============================================*/
+.default-avatar {width: calc(var(--space-xl) * 2.3);
+ height: calc(var(--space-xl) * 2.3);
+ min-width: calc(var(--space-xl) * 2.3);
+ min-height: calc(var(--space-xl) * 2.3);
  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
  display: flex;
  align-items: center;
@@ -2878,22 +2895,22 @@ table.ww textarea#ffmsg {background: #FFF;
  font-size: 1.5rem;
  margin: 0;
  border-radius: 50%;
- transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .default-avatar:hover {transform: scale(1.05);
  box-shadow: var(--shadow-md)}
 
-.user-info .default-avatar {width: 60px;
- height: 60px;
+.user-info .default-avatar {width: calc(var(--space-xl) * 2.3);
+ height: calc(var(--space-xl) * 2.3);
  font-size: 1.5rem}
 
-.menuwrap .default-avatar {width: 30px;
- height: 30px;
+.menuwrap .default-avatar {width: calc(var(--space-xl) * 1.2);
+ height: calc(var(--space-xl) * 1.2);
  font-size: 0.875rem;
  border-width: 1px}
 
-.profile-avatar.default-avatar {width: 80px;
- height: 80px;
+.profile-avatar.default-avatar {width: calc(var(--space-xl) * 3);
+ height: calc(var(--space-xl) * 3);
  font-size: 2rem;
  border-width: 3px}
 
@@ -2906,36 +2923,37 @@ table.ww textarea#ffmsg {background: #FFF;
 
 .default-avatar.online::after {content: '';
  position: absolute;
- bottom: 2px;
- right: 2px;
- width: 12px;
- height: 12px;
+ bottom: var(--space-micro);
+ right: var(--space-micro);
+ width: var(--space-sm);
+ height: var(--space-sm);
  background: var(--success-color);
- border: 2px solid white;
+ border: 2px solid var(--text-primary);
  border-radius: 50%;
- box-shadow: 0 0 4px rgba(0, 0, 0, 0.2)}
+ box-shadow: var(--shadow-sm)}
 
-.List.st-editor-area .Item {padding:0!important}
+.List.st-editor-area .Item {padding: 0 !important}
 
 /*============================================
- theme adjustments============================================*/
+ theme adjustments - harmonized
+============================================*/
 [data-theme="dark"] .st-emoji-preview img {filter: brightness(1.1)}
 
 [data-theme="light"] .st-emoji-preview img {filter: brightness(0.95)}
 
 [data-theme="light"] .modern-quote {background: var(--surface-color);
  border-left-color: rgba(5, 150, 105, 0.2);
- box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05)}
+ box-shadow: var(--shadow-sm)}
 
 [data-theme="light"] .modern-quote:hover {border-left-color: rgba(5, 150, 105, 0.3);
- box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08)}
+ box-shadow: var(--shadow)}
 
 [data-theme="light"] .quote-content.collapsible-content::after {background: linear-gradient(to bottom, transparent, var(--surface-color) 80%)}
 
-[data-theme="light"] .post-new-badge {box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+[data-theme="light"] .post-new-badge {box-shadow: var(--shadow);
  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1)}
 
-[data-theme="light"] .post:has(#newpost)::before {box-shadow: 0 0 10px rgba(5, 150, 105, 0.3)}
+[data-theme="light"] .post:has(#newpost)::before {box-shadow: 0 0 var(--space-sm) rgba(5, 150, 105, 0.3)}
 
 [data-theme="light"] .quote-jump-btn {background: var(--surface-color);
  border-color: var(--border-color)}
@@ -2943,17 +2961,13 @@ table.ww textarea#ffmsg {background: #FFF;
 [data-theme="light"] .quote-jump-btn:hover {background: var(--hover-color);
  border-color: var(--primary-color)}
 
-[data-theme="light"] .default-avatar {box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1)}
+[data-theme="light"] .default-avatar {box-shadow: var(--shadow-sm)}
 
-[data-theme="light"] .default-avatar:hover {box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15)}
+[data-theme="light"] .default-avatar:hover {box-shadow: var(--shadow)}
 
 .quote-link:focus,
 .quote-expand-btn:focus {outline: 2px solid var(--primary-color);
  outline-offset: 2px}
-
-.quote-content,
-.quote-content.collapsible-content,
-.quote-expand-btn {transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)}
 
 .quote-content a {color: var(--primary-color);
  font-weight: 500;
@@ -2964,18 +2978,19 @@ table.ww textarea#ffmsg {background: #FFF;
 .quote-content pre,
 .quote-content code {background: var(--bg-color);
  border: 1px solid var(--border-color);
- border-radius: 4px;
+ border-radius: var(--radius-sm);
  color: var(--text-primary);
- font-family: monospace;
+ font-family: var(--font-mono);
  font-size: var(--text-sm);
  padding: var(--pad-1) var(--pad-2)}
 
-.quote-content pre {margin: 8px 0;
+.quote-content pre {margin: var(--space-sm) 0;
  overflow-x: auto;
  padding: var(--pad-3)}
 
 /*============================================
- responsive styles============================================*/
+ responsive styles - harmonized
+============================================*/
 @media(max-width: 768px) {:root {--space-md: 0.875rem;
  --space-lg: 1.25rem;
  --space-xl: 2rem}
@@ -3010,7 +3025,7 @@ table.ww textarea#ffmsg {background: #FFF;
  .breadcrumb-item {font-size: var(--text-xs);
  padding: var(--space-xs)}
 
- .breadcrumb-text {max-width: 120px;
+ .breadcrumb-text {max-width: calc(var(--space-xxl) * 3);
  overflow: hidden;
  text-overflow: ellipsis;
  white-space: nowrap}
@@ -3036,26 +3051,26 @@ table.ww textarea#ffmsg {background: #FFF;
  gap: var(--space-xs)}
 
  .profile-friends .field-value {gap: var(--space-sm);
- grid-template-columns: repeat(auto-fill, minmax(45px, 1fr))}
+ grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-xl) * 1.8), 1fr))}
 
- .friend-avatar img {height: 45px;
- width: 45px}
+ .friend-avatar img {height: calc(var(--space-xl) * 1.8);
+ width: calc(var(--space-xl) * 1.8)}
 
- .post {scroll-margin-top: 80px}
+ .post {scroll-margin-top: calc(var(--space-xl) * 2)}
 
  .post.focus {animation: subtle-pulse 1.5s ease-in-out 2}
 
  .post-new-badge {font-size: 0.625rem;
  padding: var(--pad-1) var(--pad-2);
- margin-left: 6px}
+ margin-left: var(--space-xs)}
 
- .post-badges {margin-left: 8px;
- gap: 6px}
+ .post-badges {margin-left: var(--space-sm);
+ gap: var(--space-xs)}
 
- .quote-icon {height: 24px;
- width: 24px}
+ .quote-icon {height: var(--space-xl);
+ width: var(--space-xl)}
 
- .quote-icon i {font-size: 11px}
+ .quote-icon i {font-size: var(--text-sm)}
 
  .modern-quote {border-left-width: 2px;
  margin: var(--space-sm) 0}
@@ -3069,7 +3084,7 @@ table.ww textarea#ffmsg {background: #FFF;
  .quote-content {font-size: var(--text-sm);
  padding: var(--space-sm)}
 
- .quote-content.collapsible-content {max-height: 180px}
+ .quote-content.collapsible-content {max-height: calc(var(--space-xxl) * 4.5)}
 
  .modern-quote img,
  .modern-quote {height: auto !important;
@@ -3078,18 +3093,18 @@ table.ww textarea#ffmsg {background: #FFF;
  .quote-expand-btn {font-size: var(--text-xs);
  padding: var(--space-sm)}
 
- .quote-jump-btn {width: 32px;
- height: 32px}
+ .quote-jump-btn {width: var(--editor-btn-size);
+ height: var(--editor-btn-size)}
 
  .modern-spoiler {border-left-width: 2px;
  margin: var(--space-sm) 0}
 
  .spoiler-header {padding: var(--space-sm)}
 
- .spoiler-icon {height: 24px;
- width: 24px}
+ .spoiler-icon {height: var(--space-xl);
+ width: var(--space-xl)}
 
- .spoiler-icon i {font-size: 11px}
+ .spoiler-icon i {font-size: var(--text-sm)}
 
  .spoiler-title {font-size: var(--text-xs)}
 
@@ -3112,16 +3127,16 @@ table.ww textarea#ffmsg {background: #FFF;
  .st-emoji-container {justify-content: center}
 
  .points_up,
- .points_down {width: 36px;
- height: 36px}
+ .points_down {width: calc(var(--editor-btn-size) * 1.1);
+ height: calc(var(--editor-btn-size) * 1.1)}
 
  .points_up img,
- .points_down img {width: 18px;
- height: 18px}
+ .points_down img {width: var(--text-base);
+ height: var(--text-base)}
 
  .points_pos,
  .points_neg {font-size: var(--text-xs);
- min-width: 28px;
+ min-width: calc(var(--space-xl) * 1.2);
  padding: var(--pad-1) var(--pad-2)}
 
  .modern-bottom-actions {flex-direction: column;
@@ -3134,12 +3149,12 @@ table.ww textarea#ffmsg {background: #FFF;
 
  .multiquote-control {justify-content: flex-start}
 
- .user-info .default-avatar {width: 50px;
- height: 50px;
+ .user-info .default-avatar {width: calc(var(--space-xl) * 2);
+ height: calc(var(--space-xl) * 2);
  font-size: 1.25rem}
 
- .profile-avatar.default-avatar {width: 70px;
- height: 70px;
+ .profile-avatar.default-avatar {width: calc(var(--space-xl) * 2.6);
+ height: calc(var(--space-xl) * 2.6);
  font-size: 1.75rem}
 
  #centerdiv {margin: 0}
@@ -3185,11 +3200,12 @@ table.ww textarea#ffmsg {background: #FFF;
  .btn, .modern-btn {padding: var(--space-xs) var(--space-sm);
  font-size: var(--text-xs)}
 
- .profile-avatar {width: 60px;
- height: 60px}}
+ .profile-avatar {width: calc(var(--space-xl) * 2.3);
+ height: calc(var(--space-xl) * 2.3)}}
 
 /*============================================
- high contrast mode support============================================*/
+ high contrast mode support
+============================================*/
 @media(prefers-contrast: high) {:root {--border-color: #000;
  --hover-color: rgba(0, 0, 0, 0.1);
  --active-color: rgba(0, 0, 0, 0.2)}
@@ -3201,7 +3217,8 @@ table.ww textarea#ffmsg {background: #FFF;
  .btn, .modern-btn, .post, .modern-quote, .modern-spoiler, .modern-code {border-width: 2px}}
 
 /*============================================
- reduced motion preferences============================================*/
+ reduced motion preferences
+============================================*/
 @media(prefers-reduced-motion: reduce) {*, *::before, *::after {animation-duration: 0.01ms !important;
  animation-iteration-count: 1 !important;
  transition-duration: 0.01ms !important}
@@ -3209,128 +3226,129 @@ table.ww textarea#ffmsg {background: #FFF;
  .post.focus,
  .post-new-badge {animation: none !important}}
 
-/*Checkboxes*/
+/*============================================
+ checkboxes & radio buttons - harmonized
+============================================*/
 input[type="checkbox"] {
-  align-items:center;
-  appearance:none;
-  background:none;
-  border:1px solid var(--border-color);
-  border-radius:3px;
-  display:flex;
-  font-size:.75rem;
-  height:1rem;
-  justify-content:center;
-  margin:0;
-  outline-style:none;
-  padding:0;
-  text-align:center;
-  width:1rem;
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex;
+  font-size: 0.75rem;
+  height: var(--text-base);
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  text-align: center;
+  width: var(--text-base);
 }
 
 input[type="checkbox"]:checked {
-  background:var(--primary-color);
-  border-color:var(--primary-color);
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
 input[type="checkbox"]:checked::before {
-  color:#fff;
-  content:'\f00c';
-  font-family:"Font Awesome 6 Pro";
+  color: #fff;
+  content: '\f00c';
+  font-family: "Font Awesome 6 Pro";
   font-weight: 900;
 }
 
 .post input[type="checkbox"]:checked {
-  background:none !important;
-  border-color:var(--border-color) !important;
+  background: none !important;
+  border-color: var(--border-color) !important;
 }
 
 .post input[type="checkbox"]:checked::before {
-  content:'' !important;
+  content: '' !important;
 }
 
 .post.focus input[type="checkbox"]:not([data-type="taskItem"]):not(ul[data-type="taskList"] input[type="checkbox"]) {
-  background:var(--primary-color) !important;
-  border-color:var(--primary-color) !important;
+  background: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
 }
 
 .post.focus input[type="checkbox"]:not([data-type="taskItem"]):not(ul[data-type="taskList"] input[type="checkbox"])::before {
-  color:#fff !important;
-  content:'\f00c' !important;
-  font-family:"Font Awesome 6 Pro" !important;
+  color: #fff !important;
+  content: '\f00c' !important;
+  font-family: "Font Awesome 6 Pro" !important;
   font-weight: 900 !important;
 }
 
 .post ul[data-type="taskList"] input[type="checkbox"],
 .post li[data-type="taskItem"] input[type="checkbox"],
 .post input[type="checkbox"][data-type="taskItem"] {
-  background:none !important;
-  border-color:var(--border-color) !important;
+  background: none !important;
+  border-color: var(--border-color) !important;
 }
 
 .post ul[data-type="taskList"] input[type="checkbox"]:checked,
 .post li[data-type="taskItem"] input[type="checkbox"]:checked,
 .post input[type="checkbox"][data-type="taskItem"]:checked {
-  background:var(--primary-color) !important;
-  border-color:var(--primary-color) !important;
+  background: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
 }
 
 .post ul[data-type="taskList"] input[type="checkbox"]:checked::before,
 .post li[data-type="taskItem"] input[type="checkbox"]:checked::before,
 .post input[type="checkbox"][data-type="taskItem"]:checked::before {
-  color:#fff !important;
-  content:'\f00c' !important;
-  font-family:"Font Awesome 6 Pro" !important;
+  color: #fff !important;
+  content: '\f00c' !important;
+  font-family: "Font Awesome 6 Pro" !important;
   font-weight: 900 !important;
 }
 
 .post.focus ul[data-type="taskList"] input[type="checkbox"] {
-  background:none !important;
-  border-color:var(--border-color) !important;
+  background: none !important;
+  border-color: var(--border-color) !important;
 }
 
 .post.focus ul[data-type="taskList"] input[type="checkbox"]:checked {
-  background:var(--primary-color) !important;
-  border-color:var(--primary-color) !important;
+  background: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
 }
 
 .post.focus ul[data-type="taskList"] input[type="checkbox"]:checked::before {
-  color:#fff !important;
-  content:'\f00c' !important;
-  font-family:"Font Awesome 6 Pro" !important;
+  color: #fff !important;
+  content: '\f00c' !important;
+  font-family: "Font Awesome 6 Pro" !important;
   font-weight: 900 !important;
 }
 
-input[type="radio"]
-{
-  align-items:center;
-  appearance:none;
-  background:none;
-  border:1px solid var(--border-color);
-  border-radius:50%;
-  display:flex;
-  font-size:.5rem;
-  height:1rem;
-  justify-content:center;
-  margin:0;
-  outline-style:none;
-  padding:0;
-  text-align:center;
-  width:1rem;
+input[type="radio"] {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  font-size: 0.5rem;
+  height: var(--text-base);
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  text-align: center;
+  width: var(--text-base);
 }
 
-input[type="radio"]:checked
-{
-  background:var(--primary-color);
-  border-color:var(--primary-color);
+input[type="radio"]:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-input[type="radio"]:checked::before
-{
-  color:#fff;
-  content:'\f111';
-  font-family:"Font Awesome 6 Pro";
-  font-weight:900;
+input[type="radio"]:checked::before {
+  color: #fff;
+  content: '\f111';
+  font-family: "Font Awesome 6 Pro";
+  font-weight: 900;
 }
 
-/*Hidden*/
-.nascosta,.box_visitatore .u_title::before,.send .bottom-editor .left.Sub, #topic .send input[type="submit"][name="sub-mit"], #send .send input[type="submit"][name="sub-mit"], #topic .send input[type="submit"][name="submit_post"], #send .send input[type="submit"][name="submit_post"], #send .send .right.Sub.right-bottom-icons img[alt="File Attachments"], #topic .send button[name="full"] img, .send .Break.Sub, #topic .send input.forminput[type="submit"], #send #topic .send input.forminput[type="submit"]{display:none!important}
+/*============================================
+ hidden elements - keep as is
+============================================*/
+.nascosta, .box_visitatore .u_title::before, .send .bottom-editor .left.Sub, #topic .send input[type="submit"][name="sub-mit"], #send .send input[type="submit"][name="sub-mit"], #topic .send input[type="submit"][name="submit_post"], #send .send input[type="submit"][name="submit_post"], #send .send .right.Sub.right-bottom-icons img[alt="File Attachments"], #topic .send button[name="full"] img, .send .Break.Sub, #topic .send input.forminput[type="submit"], #send #topic .send input.forminput[type="submit"] {display: none !important}
