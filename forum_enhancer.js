@@ -7048,7 +7048,7 @@ class PostModernizer {
                 '<div class="poll-actions">' +
                 '<button type="button" class="poll-btn delete cancel-vote-btn">' +
                 '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
-                'Cancel Vote' +
+                'Cancel vote' +
                 '</button>' +
                 '</div>';
         } else if (isResultsState) {
