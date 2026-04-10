@@ -1734,57 +1734,59 @@ if (!globalThis.mediaDimensionExtractor) {
         return img;
     }
 
-    function createFastReplyUserInfo(user) {
-        if (!user) return null;
-        
-        var container = document.createElement('div');
-        container.className = 'fast-reply-user-info';
-        container.style.cssText = 
-            'padding: 10px 15px;' +
-            'display: flex;' +
-            'align-items: center;' +
-            'gap: 12px;';
-        
-        var label = document.createElement('span');
-        label.style.cssText = 
-            'color: #6c757d;' +
-            'font-size: 13px;' +
-            'margin-right: 5px;';
-        label.textContent = 'Replying as:';
-        
-        var avatarLink = document.createElement('a');
-        avatarLink.href = user.userId ? 'act=Profile&MID=' + user.userId : '#';
-        avatarLink.className = 'avatar';
-        avatarLink.rel = 'nofollow';
-        avatarLink.style.display = 'flex';
-        
-        var avatarImg = createFastReplyAvatarImg(user.avatarUrl, user.username, user.userId);
-        avatarLink.appendChild(avatarImg);
-        
-        var usernameLink = document.createElement('a');
-        usernameLink.href = avatarLink.href;
-        usernameLink.className = 'fast-reply-username';
-        usernameLink.style.cssText = 
-            'font-weight: 600;' +
-            'color: #007bff;' +
-            'text-decoration: none;' +
-            'font-size: 15px;' +
-            'margin-left: 5px;';
-        usernameLink.textContent = user.username;
-        
-        usernameLink.addEventListener('mouseenter', function() {
-            this.style.textDecoration = 'underline';
-        });
-        usernameLink.addEventListener('mouseleave', function() {
-            this.style.textDecoration = 'none';
-        });
-        
-        container.appendChild(label);
-        container.appendChild(avatarLink);
-        container.appendChild(usernameLink);
-        
-        return container;
-    }
+function createFastReplyUserInfo(user) {
+    if (!user) return null;
+    
+    var container = document.createElement('div');
+    container.className = 'fast-reply-user-info';
+    container.style.cssText = 
+        'padding: 10px 15px;' +
+        'display: flex;' +
+        'align-items: center;' +
+        'gap: 12px;';
+    
+    var label = document.createElement('span');
+    label.style.cssText = 
+        'color: #6c757d;' +
+        'font-size: 13px;' +
+        'margin-right: 5px;';
+    label.textContent = 'Replying as:';
+    
+    var avatarLink = document.createElement('a');
+    // FIX: Add the leading "/?" and ensure correct path format
+    avatarLink.href = user.userId ? '/?act=Profile&MID=' + user.userId : '#';
+    avatarLink.className = 'avatar';
+    avatarLink.rel = 'nofollow';
+    avatarLink.style.display = 'flex';
+    
+    var avatarImg = createFastReplyAvatarImg(user.avatarUrl, user.username, user.userId);
+    avatarLink.appendChild(avatarImg);
+    
+    var usernameLink = document.createElement('a');
+    // FIX: Use the same corrected href format
+    usernameLink.href = avatarLink.href;
+    usernameLink.className = 'fast-reply-username';
+    usernameLink.style.cssText = 
+        'font-weight: 600;' +
+        'color: #007bff;' +
+        'text-decoration: none;' +
+        'font-size: 15px;' +
+        'margin-left: 5px;';
+    usernameLink.textContent = user.username;
+    
+    usernameLink.addEventListener('mouseenter', function() {
+        this.style.textDecoration = 'underline';
+    });
+    usernameLink.addEventListener('mouseleave', function() {
+        this.style.textDecoration = 'none';
+    });
+    
+    container.appendChild(label);
+    container.appendChild(avatarLink);
+    container.appendChild(usernameLink);
+    
+    return container;
+}
 
     function addFastReplyUserInfo(node) {
         if (state.processedFastReply.has(node)) return;
