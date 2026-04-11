@@ -4313,7 +4313,12 @@ input[type="radio"]:checked::before {
  font-family: var(--font-heading) !important;
  font-size: var(--text-base) !important;
  padding: var(--space-sm) !important;
- text-align:left}
+ text-align:left;
+ display: flex;
+ align-items:center;
+ gap: var(--space-xs)}
+
+.cronRow .sunbar.center.Item::before{content:'\f133'}
 
 .cronRow .list {padding: var(--space-sm)}
 
