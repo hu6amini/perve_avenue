@@ -4139,7 +4139,8 @@ input[type="radio"]:checked::before {
  justify-content:center;
  align-items: center;
  height:auto!important;
- width:auto!important}
+ width:auto!important;
+ font-size:0!important}
 
 .ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1; left:0!important; top:0!important}
 .ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3; right:0!important; top:0!important}
@@ -4147,6 +4148,8 @@ input[type="radio"]:checked::before {
 .ui-datepicker .ui-datepicker-next span, .ui-datepicker .ui-datepicker-prev span {display:flex!important;
  justify-content:center;
  align-items: center}
+
+.ui-datepicker .ui-datepicker-buttonpane button {margin:0!important}
 
 .ui-datepicker-prev:hover,
 .ui-datepicker-next:hover {background: var(--hover-color) !important;
@@ -4167,10 +4170,10 @@ margin-top: 0!important}
  text-indent: 0 !important}
 
 .ui-datepicker-prev .ui-icon-circle-triangle-w::before {font-family: "Font Awesome 6 Pro";
- content: '\f053' !important}
+ content: '\f053' !important; font-size:var(--text-sm)!important}
 
 .ui-datepicker-next .ui-icon-circle-triangle-e::before {font-family: "Font Awesome 6 Pro";
- content: '\f054' !important}
+ content: '\f054' !important; font-size:var(--text-sm)!important}
 
 /* Calendar table */
 .ui-datepicker-calendar {border-collapse: collapse !important;
