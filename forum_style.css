@@ -5,9 +5,8 @@
 ============================================*/
 
 /*============================================
- font face declarations - harmonized
+ font face declarations
 ============================================*/
-/* Regular (400) - for regular icons */
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
@@ -22,7 +21,6 @@
   unicode-range: u+f000-ffff;
 }
 
-/* Brands (400) - for brand icons */
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
@@ -37,7 +35,6 @@
   unicode-range: u+f000-ffff;
 }
 
-/* Solid (900) - for solid icons */
 @font-face {
   font-family: 'Font Awesome 6 Pro';
   src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
@@ -62,7 +59,7 @@
 }
 
 /*============================================
- twemoji scale - harmonized
+ twemoji scale
 ============================================*/
 .twemoji {
   height: 1.25em;
@@ -90,7 +87,7 @@ code .twemoji,
 pre .twemoji {height: 1.1em; width: 1.1em; vertical-align: -0.15em;}
 
 /*============================================
- animations & keyframes - harmonized
+ animations & keyframes
 ============================================*/
 @keyframes pulse {
   0%, 100% {transform: scale(1);}
@@ -122,7 +119,7 @@ pre .twemoji {height: 1.1em; width: 1.1em; vertical-align: -0.15em;}
 }
 
 /*============================================
- modern breadcrumb - harmonized
+ modern breadcrumb
 ============================================*/
 .modern-breadcrumb {
   background: var(--surface-color);
@@ -168,7 +165,7 @@ pre .twemoji {height: 1.1em; width: 1.1em; vertical-align: -0.15em;}
 }
 
 /*============================================
- tabs - harmonized
+ tabs
 ============================================*/
 .tabs li {
   vertical-align: bottom;
@@ -236,7 +233,7 @@ pre .twemoji {height: 1.1em; width: 1.1em; vertical-align: -0.15em;}
 .tabs2 div {transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid transparent;}
 
 /*============================================
- content & note styles - harmonized
+ content & note styles
 ============================================*/
 .note {
   background: none;
@@ -294,7 +291,7 @@ pre .twemoji {height: 1.1em; width: 1.1em; vertical-align: -0.15em;}
 }
 
 /*============================================
- enhanced post content - harmonized
+ enhanced post content
 ============================================*/
 .big_list .aa > .fa {
   font-size: var(--text-md);
@@ -357,7 +354,7 @@ a.new_post {
 .forum .focus * {color: #FFF !important;}
 
 /*============================================
- modern topic title - harmonized
+ modern topic title
 ============================================*/
 .modern-topic-title {
   background: var(--surface-color);
@@ -406,7 +403,7 @@ a.new_post {
 .topic-actions {display: flex; gap: var(--space-sm);}
 
 /*============================================
- modern navigation - harmonized
+ modern navigation
 ============================================*/
 .modern-nav {
   background: var(--surface-color);
@@ -542,7 +539,7 @@ a.new_post {
 }
 
 /*============================================
- post enhancements - harmonized
+ post enhancements
 ============================================*/
 .st-emoji-animate,
 .st-emoji-rep .st-emoji-preview.st-emoji-animate > * {animation: none !important;}
@@ -685,7 +682,7 @@ mark span {
   margin: 0;
 }
 
-/* NEW Post Badge - harmonized */
+/* NEW Post Badge */
 .post-new-badge {
   background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
   color: white;
@@ -740,7 +737,7 @@ mark span {
 }
 
 /*============================================
- modern list styles for posts (grid) - harmonized
+ modern list styles for posts (grid)
 ============================================*/
 .post-modernized ul,
 .post-modernized ol {
@@ -800,7 +797,7 @@ mark span {
 }
 
 /*============================================
- points & reactions - harmonized
+ points & reactions
 ============================================*/
 .points {
   align-items: center;
@@ -984,7 +981,7 @@ mark span {
 .post_neg .points_up.opacity.active i {color: var(--danger-color);}
 
 /*============================================
- modern table container & styles - harmonized
+ modern table container & styles
 ============================================*/
 .table-container {
   border-radius: var(--radius);
@@ -1041,71 +1038,8 @@ mark span {
 .table-container .ve-table tbody tr {background: var(--bg-color);}
 .ve-table img {max-height: 125px; width: auto;}
 
-/* Responsive Design - using em for accessibility */
-@media (max-width: 48em) { /* 768px */
-  .table-container {
-    margin: var(--space-sm) 0;
-    border-radius: calc(var(--radius) * 0.75);
-  }
-  
-  .table-container .ve-table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .table-container .ve-table th,
-  .table-container .ve-table td {
-    padding: var(--pad-3) var(--pad-4);
-    white-space: nowrap;
-    min-width: 100px;
-  }
-  
-  .table-container .ve-table th {font-size: var(--text-xs);}
-  .table-container .ve-table td {font-size: var(--text-xs);}
-}
-
-@media (max-width: 30em) { /* 480px */
-  .table-container {
-    border-radius: calc(var(--radius) * 0.5);
-    margin: var(--space-xs) 0;
-  }
-  
-  .table-container .ve-table th,
-  .table-container .ve-table td {
-    padding: var(--pad-2) var(--pad-3);
-    min-width: 80px;
-  }
-}
-
-/* Light Theme Adjustments */
-[data-theme="light"] .table-container {
-  border-color: var(--border-color);
-  background: var(--surface-color);
-}
-
-[data-theme="light"] .table-container .ve-table th {
-  background: var(--bg-color);
-  color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
-}
-
-[data-theme="light"] .table-container .ve-table td {color: var(--text-secondary);}
-[data-theme="light"] .table-container .ve-table tbody tr:nth-child(even) {background: var(--bg-color);}
-
-.table-container .ve-table caption {
-  caption-side: bottom;
-  padding: var(--pad-3) var(--pad-4);
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-style: italic;
-  text-align: center;
-  border-top: 1px solid var(--border-color);
-  margin-top: -1px;
-}
-
 /*============================================
- modern embedded link styles - harmonized
+ modern embedded link styles
 ============================================*/
 .modern-embedded-link {
   background: var(--surface-color);
@@ -1363,7 +1297,7 @@ mark span {
 }
 
 /*============================================
- modern poll styles - harmonized
+ modern poll styles
 ============================================*/
 .modern-poll {
   background: var(--surface-color);
@@ -1672,7 +1606,7 @@ mark span {
 }
 
 /*============================================
- poll notification - harmonized
+ poll notification
 ============================================*/
 .poll-notification {
   position: fixed;
@@ -1714,7 +1648,7 @@ mark span {
 }
 
 /*============================================
- modern quote styles - harmonized
+ modern quote styles
 ============================================*/
 .modern-quote {
   background: var(--surface-color);
@@ -1935,7 +1869,7 @@ mark span {
 }
 
 /*============================================
- modern spoiler styles - harmonized
+ modern spoiler styles
 ============================================*/
 .modern-spoiler {
   background: var(--surface-color);
@@ -2151,7 +2085,7 @@ mark span {
 }
 
 /*============================================
- modern code styles - harmonized
+ modern code styles
 ============================================*/
 .modern-code {
   background: var(--surface-color);
@@ -2290,7 +2224,7 @@ mark span {
   white-space: pre-wrap;
 }
 
-/* Syntax highlighting - harmonized */
+/* Syntax highlighting */
 .code-keyword {color: var(--primary-color); font-weight: 600;}
 .code-string {color: var(--success-color);}
 .code-comment {color: var(--text-tertiary); font-style: italic;}
@@ -2359,7 +2293,7 @@ mark span {
 }
 
 /*============================================
- modern attachment styles - harmonized
+ modern attachment styles
 ============================================*/
 .modern-attachment {
   background: var(--surface-color);
@@ -2495,7 +2429,7 @@ mark span {
 .modern-attachment.file-attachment .attachment-icon {background: var(--secondary-color);}
 
 /*============================================
- FORUM MEDIA WRAPPER - harmonized
+ FORUM MEDIA WRAPPER
 ============================================*/
 .standard-media-wrapper {
   position: relative;
@@ -2538,7 +2472,7 @@ mark span {
 }
 
 /*============================================
- FORUM AVATAR SYSTEM STYLES - harmonized
+ FORUM AVATAR SYSTEM STYLES
 ============================================*/
 .forum-avatar-container {
   display: inline-block;
@@ -2571,7 +2505,7 @@ mark span {
 }
 
 /*============================================
- blog styles - harmonized
+ blog styles
 ============================================*/
 .blog .skin_tbl {
   background: transparent;
@@ -2666,7 +2600,7 @@ mark span {
 .side_tag .stitle {padding-bottom: var(--pad-4);}
 
 /*============================================
- tagboard & chat - harmonized
+ tagboard & chat
 ============================================*/
 .tag,
 .chat {margin-bottom: var(--space-xl);}
@@ -2715,7 +2649,7 @@ table.ww textarea#ffmsg {
 .tag .mback {border-bottom: 5px solid var(--warning-color);}
 
 /*============================================
- user lists & online status - harmonized
+ user lists & online status
 ============================================*/
 .online .yy a {font-weight: bold;}
 
@@ -2749,7 +2683,7 @@ table.ww textarea#ffmsg {
 .online .yy * {text-align: left;}
 
 /*============================================
- statistics - harmonized
+ statistics
 ============================================*/
 #board .stats .list li {background: var(--surface-color);}
 
@@ -2848,7 +2782,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- user colors & groups - harmonized
+ user colors & groups
 ============================================*/
 .box_visitatore .details {
   border: 0;
@@ -2944,7 +2878,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- profile styles - harmonized
+ profile styles
 ============================================*/
 .modern-profile {
   background: var(--surface-color);
@@ -3208,7 +3142,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- pagination - harmonized
+ pagination
 ============================================*/
 .pages2 {font-size: var(--text-xs);}
 .pages2:before,
@@ -3294,7 +3228,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- control panel - harmonized
+ control panel
 ============================================*/
 .cp .sunbar.top {border-radius: var(--radius-sm) var(--radius-sm) 0 0;}
 .cp .tabs {
@@ -3328,7 +3262,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- reply & send - harmonized
+ reply & send
 ============================================*/
 .fast.send .sunbar {
   font-weight: bold;
@@ -3358,7 +3292,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- polls - harmonized
+ polls
 ============================================*/
 .poll li {
   border-bottom: 1px solid var(--border-color);
@@ -3389,7 +3323,7 @@ table.ww textarea#ffmsg {
 .bar span {color: var(--primary-color) !important;}
 
 /*============================================
- discussions - harmonized
+ discussions
 ============================================*/
 .title input.forminput {
   font-weight: normal;
@@ -3411,7 +3345,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- tag system - harmonized
+ tag system
 ============================================*/
 .atwho-view ul {border-radius: var(--radius-sm);}
 .atwho-view ul li,
@@ -3434,7 +3368,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- registration - harmonized
+ registration
 ============================================*/
 .reg {
   margin-bottom: var(--space-xl);
@@ -3444,7 +3378,7 @@ table.ww textarea#ffmsg {
 .reg .skin_tbl {border: 0;}
 
 /*============================================
- credits - harmonized
+ credits
 ============================================*/
 .credits a {
   background: var(--hover-color);
@@ -3463,7 +3397,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- post actions & controls - harmonized
+ post actions & controls
 ============================================*/
 .modern-bottom-actions {
   display: flex;
@@ -3529,7 +3463,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- enhanced anchor navigation & quote buttons - harmonized
+ enhanced anchor navigation & quote buttons
 ============================================*/
 .anchor-container {
   position: absolute;
@@ -3588,7 +3522,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- default avatar styles - harmonized
+ default avatar styles
 ============================================*/
 .default-avatar {
   width: 60px;
@@ -3647,7 +3581,7 @@ table.ww textarea#ffmsg {
 .List.st-editor-area .Item {padding: 0 !important;}
 
 /*============================================
- theme adjustments - harmonized
+ theme adjustments
 ============================================*/
 [data-theme="dark"] .st-emoji-preview img {filter: brightness(1.1);}
 [data-theme="light"] .st-emoji-preview img {filter: brightness(0.95);}
@@ -3680,7 +3614,7 @@ table.ww textarea#ffmsg {
 [data-theme="light"] .default-avatar:hover {box-shadow: var(--shadow);}
 
 /*============================================
- responsive styles - using em for accessibility
+ responsive styles (using em)
 ============================================*/
 @media (max-width: 48em) { /* 768px */
   :root {
@@ -3969,7 +3903,7 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
- checkboxes & radios - harmonized
+ checkboxes & radios
 ============================================*/
 input[type="checkbox"] {
   align-items: center;
@@ -4074,7 +4008,7 @@ input[type="radio"]:checked::before {
 }
 
 /*============================================
- hidden elements - keep as is
+ hidden elements
 ============================================*/
 .nascosta,
 .box_visitatore .u_title::before,
