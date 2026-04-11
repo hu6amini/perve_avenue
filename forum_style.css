@@ -4313,7 +4313,8 @@ input[type="radio"]:checked::before {
  font-family: var(--font-heading) !important;
  font-size: var(--text-base) !important;
  margin-bottom: var(--space-sm) !important;
- padding: var(--space-sm) !important}
+ padding: var(--space-sm) !important;
+ text-align:left}
 
 /* Label styling */
 .cronRow .Sub.Item label {color: var(--text-secondary) !important;
