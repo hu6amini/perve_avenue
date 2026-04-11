@@ -4134,7 +4134,10 @@ input[type="radio"]:checked::before {
  cursor: pointer !important;
  top: var(--space-sm) !important;
  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
- position:relative!important}
+ position:relative!important;
+ display:flex;
+ justify-content:center;
+ align-items: center}
 
 .ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1; left:0!important; top:0!important}
 .ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3; right:0!important; top:0!important}
@@ -4143,6 +4146,12 @@ input[type="radio"]:checked::before {
 .ui-datepicker-next:hover {background: var(--hover-color) !important;
  border-color: var(--primary-color) !important;
  transform: translatey(calc(var(--phi-inverse) * -1px)) !important}
+
+.ui-datepicker .ui-datepicker-next span, .ui-datepicker .ui-datepicker-prev span {position: relative!important;
+left: 0!important;
+margin-left: 0!important;
+top: 0!important;
+margin-top: 0!important}
 
 .ui-datepicker-prev .ui-icon,
 .ui-datepicker-next .ui-icon {background: none !important;
