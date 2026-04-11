@@ -3244,7 +3244,6 @@ table.ww textarea#ffmsg {
 .sunbar {
   text-align: center;
   font-size: var(--text-base);
-  font-weight: bold;
   color: var(--text-secondary);
   background: #FFF !important;
 }
