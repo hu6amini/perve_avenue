@@ -4305,16 +4305,22 @@ input[type="radio"]:checked::before {
 #cron_load {vertical-align: middle !important}
 
 /* Cron row container */
-.cronRow {margin: var(--space-md) 0 !important}
+.cronRow {margin:0 !important}
 
 .cronRow .sunbar.center.Item {background: var(--bg-color) !important;
  border-bottom: 2px solid var(--primary-color) !important;
  color: var(--text-primary) !important;
  font-family: var(--font-heading) !important;
  font-size: var(--text-base) !important;
- margin-bottom: var(--space-sm) !important;
  padding: var(--space-sm) !important;
  text-align:left}
+
+.cronRow .list {padding: var(--space-sm);
+display:flex;
+align-items:center;
+gap: var(--space-sm)}
+
+.cronRow .list .Sub.Item {width:auto!important}
 
 /* Label styling */
 .cronRow .Sub.Item label {color: var(--text-secondary) !important;
