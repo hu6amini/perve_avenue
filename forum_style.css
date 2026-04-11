@@ -1539,12 +1539,12 @@ mark span {
   color: var(--text-primary);
 }
 .poll-btn.delete {
-  background: var(--danger-color);
-  border-color: var(--danger-color);
+  background: var(--danger-color)!important;
+  border-color: var(--danger-color)!important;
 }
 .poll-btn.delete:hover {
-  background: #C53030;
-  border-color: #C53030;
+  background: #C53030!important;
+  border-color: #C53030!important;
 }
 .poll-btn i {
   font-size: var(--text-sm);
