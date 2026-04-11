@@ -4315,8 +4315,9 @@ input[type="radio"]:checked::before {
  padding: var(--space-sm) !important;
  text-align:left}
 
-.cronRow .list {padding: var(--space-sm);
-display:flex;
+.cronRow .list {padding: var(--space-sm)}
+
+.cronRow .list li {display:flex;
 align-items:center;
 gap: var(--space-sm)}
 
