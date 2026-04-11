@@ -1,7 +1,7 @@
 /*============================================
  midnight emerald skin - forum css
  NON-CRITICAL STYLES - EXTERNAL FILE
- HARMONIZED WITH φ(1.618) – 10/10 REFINED
+ HARMONIZED WITH φ(1.618)
 ============================================*/
 
 /*============================================
@@ -800,7 +800,7 @@ mark span {
 }
 
 /*============================================
- points & reactions - harmonized (touch targets)
+ points & reactions - harmonized
 ============================================*/
 .points {
   align-items: center;
@@ -816,7 +816,6 @@ mark span {
   opacity: 1 !important;
 }
 
-/* Increased minimum size using max() for accessibility */
 .points_up,
 .points_down {
   align-items: center;
@@ -827,11 +826,11 @@ mark span {
   cursor: pointer;
   display: flex !important;
   font-size: var(--text-sm);
-  height: max(var(--editor-btn-size), 2.25rem);
-  width: max(var(--editor-btn-size), 2.25rem);
+  height: var(--editor-btn-size);
   justify-content: center;
   padding: var(--pad-2);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  width: var(--editor-btn-size);
 }
 
 .points_up:hover {
@@ -928,8 +927,8 @@ mark span {
   cursor: pointer;
   display: flex;
   height: var(--editor-btn-size);
-  width: var(--editor-btn-size);
   justify-content: center;
+  width: var(--editor-btn-size);
 }
 
 .st-emoji-preview img {
@@ -1364,7 +1363,7 @@ mark span {
 }
 
 /*============================================
- modern poll styles - harmonized (touch targets)
+ modern poll styles - harmonized
 ============================================*/
 .modern-poll {
   background: var(--surface-color);
@@ -1432,7 +1431,7 @@ mark span {
   display: flex;
   gap: var(--space-md);
   margin-bottom: var(--space-sm);
-  padding: max(var(--space-sm), 0.75rem);
+  padding: var(--space-sm);
   position: relative;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -2224,10 +2223,10 @@ mark span {
   cursor: pointer;
   display: flex;
   height: var(--editor-btn-size);
-  width: var(--editor-btn-size);
   justify-content: center;
   padding: 0;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  width: var(--editor-btn-size);
 }
 
 .code-copy-btn:hover {
@@ -2434,10 +2433,10 @@ mark span {
   cursor: pointer;
   display: flex;
   height: 28px;
-  width: 28px;
   justify-content: center;
   text-decoration: none;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 28px;
 }
 
 .attachment-download-btn:hover {
@@ -3547,8 +3546,8 @@ table.ww textarea#ffmsg {
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   cursor: pointer;
-  width: max(var(--editor-btn-size), 2rem);
-  height: max(var(--editor-btn-size), 2rem);
+  width: 28px;
+  height: 28px;
   padding: 0;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
