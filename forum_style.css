@@ -4144,8 +4144,7 @@ input[type="radio"]:checked::before {
 .ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1; left:0!important; top:0!important}
 .ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3; right:0!important; top:0!important}
 
-.ui-datepicker-prev span,
-.ui-datepicker-next span{display:flex;
+.ui-datepicker .ui-datepicker-next span, .ui-datepicker .ui-datepicker-prev span {display:flex!important;
  justify-content:center;
  align-items: center}
 
