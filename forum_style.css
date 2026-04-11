@@ -4137,10 +4137,17 @@ input[type="radio"]:checked::before {
  position:relative!important;
  display:flex;
  justify-content:center;
- align-items: center}
+ align-items: center;
+ height:auto!important;
+ width:auto!important}
 
 .ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1; left:0!important; top:0!important}
 .ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3; right:0!important; top:0!important}
+
+.ui-datepicker-prev,
+.ui-datepicker-next{display:flex;
+ justify-content:center;
+ align-items: center}
 
 .ui-datepicker-prev:hover,
 .ui-datepicker-next:hover {background: var(--hover-color) !important;
