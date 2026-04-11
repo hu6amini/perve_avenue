@@ -3238,7 +3238,6 @@ table.ww textarea#ffmsg {
  reply & send - harmonized
 ============================================*/
 .fast.send .sunbar {
-  font-weight: bold;
   font-size: var(--text-xs);
   text-shadow: none;
 }
