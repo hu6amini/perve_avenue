@@ -4321,6 +4321,9 @@ input[type="radio"]:checked::before {
 align-items:center;
 gap: var(--space-sm)}
 
+#TopicTime {cursor:pointer;
+width:100%!important}
+
 .cronRow .list .Sub.Item {width:auto!important}
 
 /* Label styling */
