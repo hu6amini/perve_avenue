@@ -4119,16 +4119,12 @@ input[type="radio"]:checked::before {
  display:flex; 
  justify-content: center}
 
-.ui-datepicker .ui-datepicker-next, .ui-datepicker .ui-datepicker-prev {position:relative!important}
-.ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1}
-.ui-datepicker .ui-datepicker-title {margin: 0!important; order:2}
-.ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3}
-
 /* Month/Year title */
 .ui-datepicker-title {color: var(--text-primary) !important;
  font-family: var(--font-heading) !important;
  font-size: var(--text-base) !important;
- font-weight: 500 !important}
+ font-weight: 500 !important;
+ margin: 0!important; order:2}
 
 /* Navigation arrows */
 .ui-datepicker-prev,
@@ -4137,7 +4133,11 @@ input[type="radio"]:checked::before {
  border-radius: var(--radius-sm) !important;
  cursor: pointer !important;
  top: var(--space-sm) !important;
- transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important}
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+ position:relative!important}
+
+.ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1; left:0!important; top:0!important}
+.ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3; right:0!important; top:0!important}
 
 .ui-datepicker-prev:hover,
 .ui-datepicker-next:hover {background: var(--hover-color) !important;
