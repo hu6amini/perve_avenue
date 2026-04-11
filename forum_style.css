@@ -4115,7 +4115,14 @@ input[type="radio"]:checked::before {
  border-bottom: 1px solid var(--border-color) !important;
  border-radius: var(--radius) var(--radius) 0 0 !important;
  margin: calc(var(--space-sm) * -1) calc(var(--space-md) * -1) var(--space-md) calc(var(--space-md) * -1) !important;
- padding: var(--space-sm) var(--space-md) !important}
+ padding: var(--space-sm) var(--space-md) !important;
+ display:flex; 
+ justify-content: center}
+
+.ui-datepicker .ui-datepicker-next, .ui-datepicker .ui-datepicker-prev {position:relative!important}
+.ui-datepicker .ui-datepicker-prev {margin-right:auto; order: 1}
+.ui-datepicker .ui-datepicker-title {margin: 0!important; order:2}
+.ui-datepicker .ui-datepicker-next {margin-left:auto; order: 3}
 
 /* Month/Year title */
 .ui-datepicker-title {color: var(--text-primary) !important;
