@@ -4158,7 +4158,8 @@ input[type="radio"]:checked::before {
 left: 0!important;
 margin-left: 0!important;
 top: 0!important;
-margin-top: 0!important; font-size:0!important}
+margin-top: 0!important; font-size:0!important;
+padding: 0 var(--space-sm) !important}
 
 .ui-datepicker-prev .ui-icon,
 .ui-datepicker-next .ui-icon {background: none !important;
