@@ -922,14 +922,14 @@ mark span {
 }
 .points_up.active,
 .post_pos .points_up.opacity {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: var(--success-color);
+  background: rgba(16, 185, 129, 0.2)!important;
+  border-color: var(--success-color)!important;
 }
 .points_down.active,
 .post_neg .points_up.opacity,
 .post_neg .points_up.opacity.active {
-  background: rgba(220, 38, 38, 0.2);
-  border-color: var(--danger-color);
+  background: rgba(220, 38, 38, 0.2)!important;
+  border-color: var(--danger-color)!important;
 }
 .st-emoji-container.active {
   background: rgba(5, 150, 105, 0.1);
