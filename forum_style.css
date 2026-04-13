@@ -4396,9 +4396,9 @@ gap: var(--space-sm)}
  font-size: var(--text-sm) !important;
  font-weight: 500 !important}
 
-.ui-datepicker .ui-datepicker-buttonpane {border: none!important;
- background: none!important;
- color: var(--text-secondary)!important; border-top:1px solid var(--border-color)}
+.ui-datepicker .ui-datepicker-buttonpane {background: none!important;
+ color: var(--text-secondary)!important; 
+ border-top:1px solid var(--border-color)}
 
 /* Light theme adjustments */
 [data-theme="light"] .ui-datepicker {box-shadow: var(--shadow) !important}
