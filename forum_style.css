@@ -3601,6 +3601,37 @@ table.ww textarea#ffmsg {
 }
 
 /*============================================
+ WYSIWYG Icons
+============================================*/
+
+.ve-toolbar [class*=" lc-icon-"]::before {font-family: 'Font Awesome 6 Pro' !important;
+ font-size: var(--text-base)}
+.lc-icon-bold::before {content: '\f032' !important}
+.lc-icon-italic::before {content: '\f033' !important}
+.lc-icon-underline::before {content: '\f0cd' !important}
+.lc-icon-strikethrough::before {content: '\f0cc' !important}
+.lc-icon-list::before {content: '\f0ca' !important}
+.lc-icon-list-ordered::before {content: '\f0cb' !important}
+.lc-icon-list-todo::before {content: '\f0ae' !important}
+.lc-icon-quote::before {content: '\f10d' !important}
+.lc-icon-code-xml::before {content: '\f121' !important}
+.lc-icon-octagon-alert::before {content: '\f024' !important}
+.lc-icon-pilcrow::before {content: '\f1dd' !important}
+.lc-icon-wrap-text::before {content: '\e090' !important}
+.lc-icon-diamond-minus::before {content: '\f86c' !important}
+.lc-icon-link::before {content: '\f0c1' !important}
+.lc-icon-image::before {content: '\f03e' !important}
+.lc-icon-grid-2x2::before {content: '\f0ce' !important}
+.lc-icon-smile-plus::before {content: '\f118' !important}
+.lc-icon-palette::before {content: '\f53f' !important}
+.lc-icon-paintbrush::before {content: '\f55d' !important}
+.lc-icon-text::before {content: '\f036' !important}
+.lc-icon-undo-2::before {content: '\f0e2' !important}
+.lc-icon-redo-2::before {content: '\f01e' !important}
+.lc-icon-remove-formatting::before {content: '\f87d' !important}
+.lc-icon-grip-vertical::before {content: '\e411' !important}
+
+/*============================================
  theme adjustments - harmonized
 ============================================*/
 [data-theme="dark"] .st-emoji-preview img {
