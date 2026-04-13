@@ -845,7 +845,7 @@ mark span {
 .st-emoji-counter {
   border: 1px solid;
   border-radius: var(--radius-lg);
-  font-size: var(--text-xs);
+  font-size: var(--text-xs)!important;
   font-weight: 600;
   min-width: 24px;
   padding: var(--pad-1) var(--pad-2);
@@ -858,14 +858,14 @@ mark span {
   padding: var(--pad-1) var(--pad-3);
 }
 .points_pos {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: rgba(16, 185, 129, 0.3);
-  color: var(--success-color);
+  background: rgba(16, 185, 129, 0.15)!important;
+  border-color: rgba(16, 185, 129, 0.3)!important;
+  color: var(--success-color)!important;
 }
 .points_neg {
-  background: rgba(220, 38, 38, 0.15);
-  border-color: rgba(220, 38, 38, 0.3);
-  color: var(--danger-color);
+  background: rgba(220, 38, 38, 0.15)!important;
+  border-color: rgba(220, 38, 38, 0.3)!important;
+  color: var(--danger-color)!important;
 }
 .points a:not(.points.active.points a) {
   background: var(--surface-color);
