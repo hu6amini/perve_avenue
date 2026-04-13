@@ -4114,7 +4114,6 @@ input[type="radio"]:checked::before {
  border-right: none !important;
  border-bottom: 1px solid var(--border-color) !important;
  border-radius: var(--radius) var(--radius) 0 0 !important;
- margin: calc(var(--space-sm) * -1) calc(var(--space-md) * -1) var(--space-md) calc(var(--space-md) * -1) !important;
  padding: var(--space-sm) var(--space-md) !important;
  display:flex; 
  justify-content: center}
@@ -4252,7 +4251,11 @@ margin-top: 0!important; font-size:0!important}
 .ui-timepicker-div dl {display: flex !important;
  flex-wrap: wrap !important;
  gap: var(--space-sm) !important;
- margin: 0 !important}
+ margin: 0 !important;
+ color:var(--text-secondary);
+ align-items:center}
+
+.ui-timepicker-div.ui-timepicker-oneLine dl dd.ui_tpicker_minute:before, .ui-timepicker-div.ui-timepicker-oneLine dl dd.ui_tpicker_second:before {margin-right: var(--space-sm)}
 
 .ui-timepicker-div dt {color: var(--text-secondary) !important;
  font-size: var(--text-xs) !important;
@@ -4395,7 +4398,7 @@ gap: var(--space-sm)}
 
 .ui-datepicker .ui-datepicker-buttonpane {border: none!important;
  background: none!important;
- color: var(--text-secondary)!important}
+ color: var(--text-secondary)!important; border-top:1px solid var(--border-color)}
 
 /* Light theme adjustments */
 [data-theme="light"] .ui-datepicker {box-shadow: var(--shadow) !important}
