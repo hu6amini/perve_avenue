@@ -3630,6 +3630,20 @@ table.ww textarea#ffmsg {
 .lc-icon-redo-2::before {content: '\f01e' !important}
 .lc-icon-remove-formatting::before {content: '\f87d' !important}
 .lc-icon-grip-vertical::before {content: '\e411' !important}
+.lc-icon-copy::before {content: '\f0c5' !important}
+.lc-icon-clipboard::before {content: '\f0ea' !important}
+
+#send [class*=" lc-icon-"]::before, #topic [class*=" lc-icon-"]::before {font-family: 'Font Awesome 6 Pro' !important}
+.lc-icon-subscript::before {content:'\f12c'!important}
+.lc-icon-superscript::before {content:'\f12b'!important}
+.lc-icon-case-upper::before {content:'\41'!important}
+.lc-icon-a-large-small::before {content:'\f894'!important}
+.lc-icon-paint-roller::before {content:'\f55d'!important}
+.lc-icon-scan::before {content:'\f2d0'!important}
+.lc-icon-calendar-plus::before {content:'\f133'!important}
+.lc-icon-info::before {content:'\f05a'!important}
+.lc-icon-chevron-right::before {content:'\f054'!important}
+.lc-icon-chevron-left::before {content:'\f053'!important}
 
 /*============================================
  theme adjustments - harmonized
