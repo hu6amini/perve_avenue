@@ -4382,10 +4382,10 @@ gap: var(--space-sm)}
 
 /* Light theme overrides if needed */
 [data-theme="light"] #TopicTime {
-    color: var(--text-primary, #111827) !important;
+    color: var(--text-primary) !important;
 }
 [data-theme="light"] #TopicTime::placeholder {
-    color: var(--text-tertiary, #6B7280);
+    color: var(--text-tertiary);
 }
 
 /* Label styling */
