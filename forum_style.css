@@ -3632,6 +3632,7 @@ table.ww textarea#ffmsg {
 .lc-icon-grip-vertical::before {content: '\e411' !important}
 .lc-icon-copy::before {content: '\f0c5' !important}
 .lc-icon-clipboard::before {content: '\f0ea' !important}
+.lc-icon-redo::before {content: '\f00c' !important}
 
 #send [class*=" lc-icon-"]::before, #topic [class*=" lc-icon-"]::before {font-family: 'Font Awesome 6 Pro' !important}
 .lc-icon-subscript::before {content:'\f12c'!important}
