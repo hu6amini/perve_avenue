@@ -4351,10 +4351,42 @@ margin-top: 0!important; font-size:0!important}
 align-items:center;
 gap: var(--space-sm)}
 
-#TopicTime {cursor:pointer;
-width:100%!important}
-
 .cronRow .list .Sub.Item {width:auto!important}
+
+/* Date picker input inside the converted button */
+#TopicTime {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-primary, #F9FAFB) !important;
+    font-family: var(--font-primary, "Quicksand", sans-serif) !important;
+    font-size: var(--text-sm, 0.875rem) !important;
+    font-weight: 500 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    width: auto !important;
+    flex: 1 !important;
+    text-align: left !important;
+    outline: none !important;
+    height: 100% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+/* Optional: placeholder styling (to match the button's placeholder text) */
+#TopicTime::placeholder {
+    color: var(--text-tertiary);
+    font-weight: 500;
+    opacity: 1;
+}
+
+/* Light theme overrides if needed */
+[data-theme="light"] #TopicTime {
+    color: var(--text-primary, #111827) !important;
+}
+[data-theme="light"] #TopicTime::placeholder {
+    color: var(--text-tertiary, #6B7280);
+}
 
 /* Label styling */
 .cronRow .Sub.Item label {color: var(--text-secondary) !important;
