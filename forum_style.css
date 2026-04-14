@@ -4415,6 +4415,7 @@ gap: var(--space-sm)}
     margin: 0 !important;
     cursor: pointer !important;
     width: calc(26ch + 20px) !important;
+   max-width:calc(26ch + 20px) !important;
     flex: 1 !important;
     text-align: left !important;
     outline: none !important;
