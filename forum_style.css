@@ -4420,7 +4420,7 @@ gap: var(--space-sm)}
     height: 100% !important;
     display: inline-flex !important;
     align-items: center !important;
-}
+    text-align:center}
 
 /* Optional: placeholder styling (to match the button's placeholder text) */
 #TopicTime::placeholder {
