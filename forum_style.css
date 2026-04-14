@@ -4135,7 +4135,7 @@ input[type="radio"]:checked::before {
 #topic .send button[name="full"] img,
 .send .Break.Sub,
 #topic .send input.forminput[type="submit"],
-#send #topic .send input.forminput[type="submit"],#cron_load,#topic .Justify.top-editor .left.Sub,#send .Justify.top-editor .left.Sub,#topic .Justify.top-editor .right.Sub.right-top-icons,#send .Justify.top-editor .right.Sub.right-top-icons,#send button[name="preview"]:not,(.forminput.btn.btn-secondary),label[for="TopicTime"] {display: none !important;
+#send #topic .send input.forminput[type="submit"],#cron_load,#topic .Justify.top-editor .left.Sub,#send .Justify.top-editor .left.Sub,#topic .Justify.top-editor .right.Sub.right-top-icons,#send .Justify.top-editor .right.Sub.right-top-icons,#send button[name="preview"]:not(.forminput.btn.btn-secondary),label[for="TopicTime"] {display: none !important;
 }
 
 /*============================================
