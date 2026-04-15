@@ -1055,19 +1055,19 @@ mark span {
     min-width: 80px;
   }
 }
-[data-theme="light"] .table-container {
+[data-theme="emerald-light"] .table-container {
   border-color: var(--border-color);
   background: var(--surface-color);
 }
-[data-theme="light"] .table-container .ve-table th {
+[data-theme="emerald-light"] .table-container .ve-table th {
   background: var(--bg-color);
   color: var(--primary-color);
   border-bottom-color: var(--primary-color);
 }
-[data-theme="light"] .table-container .ve-table td {
+[data-theme="emerald-light"] .table-container .ve-table td {
   color: var(--text-secondary);
 }
-[data-theme="light"] .table-container .ve-table tbody tr:nth-child(even) {
+[data-theme="emerald-light"] .table-container .ve-table tbody tr:nth-child(even) {
   background: var(--bg-color);
 }
 .table-container .ve-table caption {
@@ -1559,11 +1559,11 @@ mark span {
 .poll-form .modern-poll {
   margin: 0;
 }
-[data-theme="light"] .poll-choice.selected {
+[data-theme="emerald-light"] .poll-choice.selected {
   background: rgba(5, 150, 105, 0.08);
   box-shadow: 0 2px 8px rgba(5, 150, 105, 0.1);
 }
-[data-theme="light"] .poll-choice.max {
+[data-theme="emerald-light"] .poll-choice.max {
   background: rgba(124, 58, 237, 0.08);
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1);
 }
@@ -1808,16 +1808,16 @@ mark span {
   height: auto;
   max-width: 100%;
 }
-[data-theme="light"] .modern-quote {
+[data-theme="emerald-light"] .modern-quote {
   background: var(--surface-color);
   border-left-color: rgba(5, 150, 105, 0.2);
   box-shadow: var(--shadow-sm);
 }
-[data-theme="light"] .modern-quote:hover {
+[data-theme="emerald-light"] .modern-quote:hover {
   border-left-color: rgba(5, 150, 105, 0.3);
   box-shadow: var(--shadow);
 }
-[data-theme="light"] .quote-content.collapsible-content::after {
+[data-theme="emerald-light"] .quote-content.collapsible-content::after {
   background: linear-gradient(to bottom, transparent, var(--surface-color) 80%);
 }
 .quote-link:focus,
@@ -2026,16 +2026,16 @@ mark span {
 .modern-spoiler .modern-spoiler .spoiler-content {
   padding: var(--pad-5);
 }
-[data-theme="light"] .modern-spoiler {
+[data-theme="emerald-light"] .modern-spoiler {
   background: var(--surface-color);
   border-left-color: rgba(245, 158, 11, 0.2);
   box-shadow: var(--shadow-sm);
 }
-[data-theme="light"] .modern-spoiler:hover {
+[data-theme="emerald-light"] .modern-spoiler:hover {
   border-left-color: rgba(245, 158, 11, 0.3);
   box-shadow: var(--shadow);
 }
-[data-theme="light"] .spoiler-content.collapsible-content::after {
+[data-theme="emerald-light"] .spoiler-content.collapsible-content::after {
   background: linear-gradient(to bottom, transparent, var(--surface-color) 80%);
 }
 .spoiler-header:focus,
@@ -2239,16 +2239,16 @@ mark span {
 .modern-code.expanded .code-content.collapsible-content::after {
   opacity: 0;
 }
-[data-theme="light"] .modern-code {
+[data-theme="emerald-light"] .modern-code {
   background: var(--surface-color);
   border-left-color: rgba(14, 165, 233, 0.2);
   box-shadow: var(--shadow-sm);
 }
-[data-theme="light"] .modern-code:hover {
+[data-theme="emerald-light"] .modern-code:hover {
   border-left-color: rgba(14, 165, 233, 0.3);
   box-shadow: var(--shadow);
 }
-[data-theme="light"] .code-content.collapsible-content::after {
+[data-theme="emerald-light"] .code-content.collapsible-content::after {
   background: linear-gradient(to bottom, transparent, var(--surface-color) 80%);
 }
 
@@ -3652,40 +3652,40 @@ table.ww textarea#ffmsg {
 [data-theme="dark"] .st-emoji-preview img {
   filter: brightness(1.1);
 }
-[data-theme="light"] .st-emoji-preview img {
+[data-theme="emerald-light"] .st-emoji-preview img {
   filter: brightness(0.95);
 }
-[data-theme="light"] .modern-quote {
+[data-theme="emerald-light"] .modern-quote {
   background: var(--surface-color);
   border-left-color: rgba(5, 150, 105, 0.2);
   box-shadow: var(--shadow-sm);
 }
-[data-theme="light"] .modern-quote:hover {
+[data-theme="emerald-light"] .modern-quote:hover {
   border-left-color: rgba(5, 150, 105, 0.3);
   box-shadow: var(--shadow);
 }
-[data-theme="light"] .quote-content.collapsible-content::after {
+[data-theme="emerald-light"] .quote-content.collapsible-content::after {
   background: linear-gradient(to bottom, transparent, var(--surface-color) 80%);
 }
-[data-theme="light"] .post-new-badge {
+[data-theme="emerald-light"] .post-new-badge {
   box-shadow: var(--shadow);
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 }
-[data-theme="light"] .post:has(#newpost)::before {
+[data-theme="emerald-light"] .post:has(#newpost)::before {
   box-shadow: 0 0 10px rgba(5, 150, 105, 0.3);
 }
-[data-theme="light"] .quote-jump-btn {
+[data-theme="emerald-light"] .quote-jump-btn {
   background: var(--surface-color);
   border-color: var(--border-color);
 }
-[data-theme="light"] .quote-jump-btn:hover {
+[data-theme="emerald-light"] .quote-jump-btn:hover {
   background: var(--hover-color);
   border-color: var(--primary-color);
 }
-[data-theme="light"] .default-avatar {
+[data-theme="emerald-light"] .default-avatar {
   box-shadow: var(--shadow-sm);
 }
-[data-theme="light"] .default-avatar:hover {
+[data-theme="emerald-light"] .default-avatar:hover {
   box-shadow: var(--shadow);
 }
 
@@ -4427,10 +4427,10 @@ gap: var(--space-sm)}
 }
 
 /* Light theme overrides if needed */
-[data-theme="light"] #TopicTime {
+[data-theme="emerald-light"] #TopicTime {
     color: var(--text-primary) !important;
 }
-[data-theme="light"] #TopicTime::placeholder {
+[data-theme="emerald-light"] #TopicTime::placeholder {
     color: var(--text-tertiary);
 }
 
@@ -4444,13 +4444,13 @@ gap: var(--space-sm)}
  border-top:1px solid var(--border-color)}
 
 /* Light theme adjustments */
-[data-theme="light"] .ui-datepicker {box-shadow: var(--shadow) !important}
+[data-theme="emerald-light"] .ui-datepicker {box-shadow: var(--shadow) !important}
 
-[data-theme="light"] .ui-datepicker-calendar td a,
-[data-theme="light"] .ui-datepicker-calendar td span {background: #FFF !important}
+[data-theme="emerald-light"] .ui-datepicker-calendar td a,
+[data-theme="emerald-light"] .ui-datepicker-calendar td span {background: #FFF !important}
 
-[data-theme="light"] .ui-datepicker-calendar .ui-datepicker-today a,
-[data-theme="light"] .ui-datepicker-calendar .ui-datepicker-today span {background: rgba(5, 150, 105, 0.1) !important}
+[data-theme="emerald-light"] .ui-datepicker-calendar .ui-datepicker-today a,
+[data-theme="emerald-light"] .ui-datepicker-calendar .ui-datepicker-today span {background: rgba(5, 150, 105, 0.1) !important}
 
 /* Responsive adjustments */
 @media(max-width: 48em) {.ui-datepicker {width: 280px !important;
