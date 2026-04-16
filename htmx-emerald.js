@@ -221,141 +221,49 @@ function escapeHtml(text) {
 
 
 
-// This function hides original posts and shows modern ones
-function transformToModernView() {
-  // Show loading indicator
-  $('#posts-container').addClass('htmx-request');
-  
-  setTimeout(() => {
-    // Hide all original .post elements
-    $('.post').each(function() {
-      const $original = $(this);
-      const postId = $original.attr('id');
-      
-      // Store original if not already stored
-      if (!$original.data('original-html')) {
-        $original.data('original-html', $original[0].outerHTML);
-      }
-      
-      // Hide original
-      $original.css('display', 'none');
-      
-      // Check if modern version already exists
-      if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
-        // Extract data and create modern version
-        const postData = extractPostData($original);
-        const modernHtml = generateModernPost(postData);
-        
-        // Insert after the hidden original
-        $original.after(modernHtml);
-      } else {
-        // Show existing modern version
-        $(`.post-card[data-original-id="${postId}"]`).show();
-      }
-    });
-    
-    $('#posts-container').removeClass('htmx-request');
-    
-    // Attach event handlers to new buttons
-    attachModernEventHandlers();
-  }, 100);
-}
-
-// Function to revert to original view
-function revertToOriginalView() {
-  $('.post-card').remove();
-  $('.post').show();
-}
-
-// Attach handlers to modern UI buttons
-function attachModernEventHandlers() {
-  // Quote buttons
-  $('.action-icon[data-action="quote"]').off('click').on('click', function() {
-    const pid = $(this).data('pid');
-    // Find original post and trigger its quote functionality
-    const originalPost = $(`#ee${pid}`);
-    if (originalPost.length) {
-      const quoteLink = originalPost.find('a[href*="CODE=02"]').attr('href');
-      if (quoteLink) window.location.href = quoteLink;
-    }
-  });
-  
-  // Edit buttons
-  $('.action-icon[data-action="edit"]').off('click').on('click', function() {
-    const pid = $(this).data('pid');
-    const originalPost = $(`#ee${pid}`);
-    if (originalPost.length) {
-      const editLink = originalPost.find('a[href*="CODE=08"]').attr('href');
-      if (editLink) window.location.href = editLink;
-    }
-  });
-  
-  // Delete buttons
-  $('.action-icon[data-action="delete"]').off('click').on('click', function() {
-    if (confirm('Are you sure you want to delete this post?')) {
-      const pid = $(this).data('pid');
-      if (typeof delete_post === 'function') {
-        delete_post(pid);
-      }
-    }
-  });
-  
-  // Report buttons
-  $('.action-icon[data-action="report"]').off('click').on('click', function() {
-    const pid = $(this).data('pid');
-    const reportBtn = $(`#ee${pid} .report_button`);
-    if (reportBtn.length && typeof reportBtn.click === 'function') {
-      reportBtn.click();
-    }
-  });
-  
-  // Share buttons
-  $('.action-icon[data-action="share"]').off('click').on('click', function() {
-    const pid = $(this).data('pid');
-    const postUrl = window.location.href.split('#')[0] + `#entry${pid}`;
-    navigator.clipboard.writeText(postUrl);
-    // Optional: Show a toast notification
-    alert('Link copied to clipboard!');
-  });
-  
-  // Reaction buttons
-  $('.reaction-btn').off('click').on('click', function() {
-    const $card = $(this).closest('.post-card');
-    const postId = $card.data('post-id');
-    const originalPost = $(`#ee${postId}`);
-    
-    if (originalPost.length) {
-      const likeLink = originalPost.find('.points_up');
-      if (likeLink.length && likeLink.attr('onclick')) {
-        const onclickAttr = likeLink.attr('onclick');
-        eval(onclickAttr);
-      }
-    }
-  });
-}
-
-// Initialize when document is ready
+// Simple initialization - Modern View ONLY
 $(document).ready(function() {
-  // Add a container wrapper if not present
+  // Add container wrapper
   if (!$('#posts-container').length) {
     $('.post').first().parent().wrapInner('<div id="posts-container"></div>');
   }
   
-  // Add toggle button
-  const toggleHtml = `
-    <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
-      <button id="modernViewBtn" class="reaction-btn" style="background: #2563eb; color: white; border: none;">
-        <i class="fas fa-magic"></i> Modern View
-      </button>
-      <button id="originalViewBtn" class="reaction-btn">
-        <i class="fas fa-history"></i> Original View
-      </button>
+  // Transform all posts to modern view
+  $('.post').each(function() {
+    const $original = $(this);
+    const postId = $original.attr('id');
+    
+    // Store original HTML just in case
+    if (!$original.data('original-html')) {
+      $original.data('original-html', $original[0].outerHTML);
+    }
+    
+    // Extract data and create modern version
+    const postData = extractPostData($original);
+    const modernHtml = generateModernPost(postData);
+    
+    // Hide original and insert modern version
+    $original.css('display', 'none');
+    $original.after(modernHtml);
+  });
+  
+  // Attach event handlers to modern UI
+  attachModernEventHandlers();
+  
+  // Optional: Add a small indicator that you're using modern view
+  $('body').prepend(`
+    <div style="background: #2563eb; color: white; text-align: center; padding: 4px; font-size: 12px; position: sticky; top: 0; z-index: 1000;">
+      <i class="fas fa-magic"></i> Modern Forum View Active — 
+      <a href="#" id="toggleOriginalLink" style="color: white; text-decoration: underline;">Switch to original</a>
     </div>
-  `;
+  `);
   
-  $('#posts-container').before(toggleHtml);
-  
-  // Attach toggle events
-  $('#modernViewBtn').on('click', transformToModernView);
-  $('#originalViewBtn').on('click', revertToOriginalView);
+  $('#toggleOriginalLink').on('click', function(e) {
+    e.preventDefault();
+    if (confirm('Switch back to original forum view?')) {
+      $('.post-card').remove();
+      $('.post').show();
+      $(this).closest('div').remove();
+    }
+  });
 });
