@@ -117,28 +117,28 @@ function extractPostData(originalPostElement) {
 function generateModernPost(data) {
   const reactionsHtml = data.hasLikes || data.customReactions.length > 0
     ? `
-      <button class="reaction-btn" aria-label="Like this post">
+      <button class="reaction-btn" data-action="like" data-pid="${data.postId}" aria-label="Like this post">
         <i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>
         ${data.likes > 0 ? `<span class="reaction-count" aria-label="${data.likes} likes">${data.likes}</span>` : ''}
       </button>
       ${data.customReactions.map(r => `
-        <button class="reaction-btn" aria-label="Laugh reaction">
+        <button class="reaction-btn" data-action="react" data-pid="${data.postId}" aria-label="Laugh reaction">
           <img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" alt="laughing face emoji" class="reaction-emoji-img" width="16" height="16">
           <span class="reaction-count" aria-label="${r.count} reactions">${r.count}</span>
         </button>
       `).join('')}
     `
     : `
-      <button class="reaction-btn" aria-label="Like this post">
+      <button class="reaction-btn" data-action="like" data-pid="${data.postId}" aria-label="Like this post">
         <i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>
       </button>
-      <button class="reaction-btn" aria-label="Add reaction">
+      <button class="reaction-btn" data-action="react" data-pid="${data.postId}" aria-label="Add reaction">
         <i class="fa-regular fa-face-smile" aria-hidden="true"></i>
       </button>
     `;
   
   return `
-    <article class="post-card" data-post-id="${data.postId}" aria-labelledby="post${data.postId}-title" data-original-id="ee${data.postId}">
+    <article class="post-card" data-post-id="${data.postId}" data-original-id="ee${data.postId}" aria-labelledby="post${data.postId}-title">
       <div class="post-header-modern">
         <div class="post-meta-left">
           <div class="post-number-badge">
@@ -149,19 +149,19 @@ function generateModernPost(data) {
           </div>
         </div>
         <div class="action-buttons-group">
-          <button class="action-icon" title="Quote" aria-label="Quote post" data-action="quote" data-pid="${data.postId}">
+          <button class="action-icon" data-action="quote" data-pid="${data.postId}" title="Quote" aria-label="Quote post">
             <i class="fa-regular fa-quote-left" aria-hidden="true"></i>
           </button>
-          <button class="action-icon" title="Edit" aria-label="Edit post" data-action="edit" data-pid="${data.postId}">
+          <button class="action-icon" data-action="edit" data-pid="${data.postId}" title="Edit" aria-label="Edit post">
             <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
           </button>
-          <button class="action-icon" title="Share" aria-label="Share post" data-action="share" data-pid="${data.postId}">
+          <button class="action-icon" data-action="share" data-pid="${data.postId}" title="Share" aria-label="Share post">
             <i class="fa-regular fa-share-nodes" aria-hidden="true"></i>
           </button>
-          <button class="action-icon report-action" title="Report" aria-label="Report post" data-action="report" data-pid="${data.postId}">
+          <button class="action-icon report-action" data-action="report" data-pid="${data.postId}" title="Report" aria-label="Report post">
             <i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>
           </button>
-          <button class="action-icon delete-action" title="Delete" aria-label="Delete post" data-action="delete" data-pid="${data.postId}">
+          <button class="action-icon delete-action" data-action="delete" data-pid="${data.postId}" title="Delete" aria-label="Delete post">
             <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
           </button>
         </div>
@@ -219,6 +219,306 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Global event handler using event delegation
+function setupGlobalEventDelegation() {
+  // Remove any existing handlers to avoid duplicates
+  $(document).off('click.modernView');
+  
+  // Use event delegation for all modern view buttons
+  $(document).on('click.modernView', '.action-icon[data-action="quote"]', function(e) {
+    e.preventDefault();
+    const pid = $(this).data('pid');
+    const originalPost = $(`#ee${pid}`);
+    if (originalPost.length) {
+      const quoteLink = originalPost.find('a[href*="CODE=02"]').attr('href');
+      if (quoteLink) window.location.href = quoteLink;
+    }
+  });
+  
+  $(document).on('click.modernView', '.action-icon[data-action="edit"]', function(e) {
+    e.preventDefault();
+    const pid = $(this).data('pid');
+    const originalPost = $(`#ee${pid}`);
+    if (originalPost.length) {
+      const editLink = originalPost.find('a[href*="CODE=08"]').attr('href');
+      if (editLink) window.location.href = editLink;
+    }
+  });
+  
+  $(document).on('click.modernView', '.action-icon[data-action="delete"]', function(e) {
+    e.preventDefault();
+    if (confirm('Are you sure you want to delete this post?')) {
+      const pid = $(this).data('pid');
+      if (typeof delete_post === 'function') {
+        delete_post(pid);
+      }
+    }
+  });
+  
+  // CRITICAL: Report button handler with retry logic for dynamically loaded content
+  $(document).on('click.modernView', '.action-icon[data-action="report"]', function(e) {
+    e.preventDefault();
+    const pid = $(this).data('pid');
+    const $originalPost = $(`#ee${pid}`);
+    
+    if ($originalPost.length) {
+      // Try to find the report button
+      let $reportBtn = $originalPost.find('.report_button');
+      
+      if ($reportBtn.length) {
+        // If found, trigger it
+        if (typeof $reportBtn.trigger === 'function') {
+          $reportBtn.trigger('click');
+        } else if ($reportBtn[0].click) {
+          $reportBtn[0].click();
+        }
+      } else {
+        // If not found, wait for it with retry mechanism
+        let retries = 0;
+        const maxRetries = 20; // 2 seconds max (100ms intervals)
+        
+        const checkForReportButton = setInterval(() => {
+          $reportBtn = $(`#ee${pid} .report_button`);
+          
+          if ($reportBtn.length) {
+            clearInterval(checkForReportButton);
+            if (typeof $reportBtn.trigger === 'function') {
+              $reportBtn.trigger('click');
+            } else if ($reportBtn[0].click) {
+              $reportBtn[0].click();
+            }
+          } else if (retries >= maxRetries) {
+            clearInterval(checkForReportButton);
+            console.warn('Report button not found for post', pid);
+            alert('Report function not available yet. Please try again in a moment.');
+          }
+          retries++;
+        }, 100);
+      }
+    }
+  });
+  
+  $(document).on('click.modernView', '.action-icon[data-action="share"]', function(e) {
+    e.preventDefault();
+    const pid = $(this).data('pid');
+    const postUrl = window.location.href.split('#')[0] + `#entry${pid}`;
+    navigator.clipboard.writeText(postUrl).then(() => {
+      // Optional: Show a temporary tooltip
+      const $btn = $(this);
+      const originalTitle = $btn.attr('title');
+      $btn.attr('title', 'Copied!');
+      setTimeout(() => $btn.attr('title', originalTitle), 1500);
+    }).catch(() => {
+      alert('Link copied to clipboard!');
+    });
+  });
+  
+  // Reaction handlers
+  $(document).on('click.modernView', '.reaction-btn[data-action="like"]', function(e) {
+    e.preventDefault();
+    const $btn = $(this);
+    const pid = $btn.data('pid');
+    const originalPost = $(`#ee${pid}`);
+    
+    if (originalPost.length) {
+      // Check if it's a positive or negative vote
+      const $pointsSpan = originalPost.find('.points');
+      const $likeBtn = $pointsSpan.find('.points_up');
+      
+      if ($likeBtn.length && $likeBtn.attr('onclick')) {
+        const onclickAttr = $likeBtn.attr('onclick');
+        // Execute the original onclick
+        eval(onclickAttr);
+        
+        // Update button appearance optimistically
+        $btn.addClass('liked');
+        const countSpan = $btn.find('.reaction-count');
+        if (countSpan.length) {
+          let currentCount = parseInt(countSpan.text()) || 0;
+          countSpan.text(currentCount + 1);
+        } else {
+          $btn.append('<span class="reaction-count">1</span>');
+        }
+      }
+    }
+  });
+  
+  $(document).on('click.modernView', '.reaction-btn[data-action="react"]', function(e) {
+    e.preventDefault();
+    const pid = $(this).data('pid');
+    const originalPost = $(`#ee${pid}`);
+    
+    if (originalPost.length) {
+      // Try to open the emoji picker if it exists
+      const $emojiContainer = originalPost.find('.st-emoji-post');
+      if ($emojiContainer.length && $emojiContainer.attr('data-touch')) {
+        // Trigger the emoji picker
+        $emojiContainer.trigger('click');
+      }
+    }
+  });
+}
+
+// MutationObserver to watch for dynamically added report buttons
+function setupMutationObserver() {
+  const observer = new MutationObserver(function(mutations) {
+    let needsReattach = false;
+    
+    mutations.forEach(function(mutation) {
+      // Check if new nodes were added
+      if (mutation.type === 'childList' && mutation.addedNodes.length) {
+        mutation.addedNodes.forEach(function(node) {
+          // Check if the added node or its descendants contain report buttons
+          if ($(node).find('.report_button').length || 
+              ($(node).hasClass && $(node).hasClass('report_button'))) {
+            needsReattach = true;
+          }
+        });
+      }
+      
+      // Check for attribute changes on report buttons
+      if (mutation.type === 'attributes' && 
+          mutation.target && 
+          $(mutation.target).hasClass('report_button')) {
+        needsReattach = true;
+      }
+    });
+    
+    // If new report buttons were added, reattach handlers to ensure they work
+    if (needsReattach) {
+      // Reinitialize the event delegation (it's already set up, but we can refresh)
+      setupGlobalEventDelegation();
+    }
+  });
+  
+  // Start observing the entire document for changes
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'onclick', 'data-pid']
+  });
+  
+  return observer;
+}
+
+// Function to transform to modern view
+function transformToModernView() {
+  // Show loading indicator
+  $('#posts-container').addClass('htmx-request');
+  
+  setTimeout(() => {
+    // Hide all original .post elements and create modern versions
+    $('.post').each(function() {
+      const $original = $(this);
+      const postId = $original.attr('id');
+      
+      // Store original if not already stored
+      if (!$original.data('original-html')) {
+        $original.data('original-html', $original[0].outerHTML);
+      }
+      
+      // Check if modern version already exists
+      if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
+        // Extract data and create modern version
+        const postData = extractPostData($original);
+        const modernHtml = generateModernPost(postData);
+        
+        // Hide original and insert modern version after it
+        $original.css('display', 'none');
+        $original.after(modernHtml);
+      } else {
+        // Just hide original and show existing modern version
+        $original.css('display', 'none');
+        $(`.post-card[data-original-id="${postId}"]`).show();
+      }
+    });
+    
+    $('#posts-container').removeClass('htmx-request');
+    
+    // Ensure event handlers are attached
+    setupGlobalEventDelegation();
+  }, 100);
+}
+
+// Function to revert to original view
+function revertToOriginalView() {
+  $('.post-card').remove();
+  $('.post').css('display', '');
+}
+
+// Function to refresh modern view (useful when new posts are added)
+function refreshModernView() {
+  if ($('.post-card').length > 0) {
+    // We're in modern view, refresh it
+    revertToOriginalView();
+    transformToModernView();
+  }
+}
+
+// Initialize when document is ready
+$(document).ready(function() {
+  // Add a container wrapper if not present
+  if (!$('#posts-container').length && $('.post').length) {
+    $('.post').first().parent().wrapInner('<div id="posts-container"></div>');
+  }
+  
+  // Add toggle buttons if they don't exist
+  if ($('#modernViewBtn').length === 0) {
+    const toggleHtml = `
+      <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; position: sticky; top: 0; background: white; z-index: 100; padding: 0.5rem 0;">
+        <button id="modernViewBtn" class="reaction-btn" style="background: #2563eb; color: white; border: none;">
+          <i class="fas fa-magic"></i> Modern View
+        </button>
+        <button id="originalViewBtn" class="reaction-btn">
+          <i class="fas fa-history"></i> Original View
+        </button>
+        <button id="refreshModernBtn" class="reaction-btn" style="display: none;">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+    `;
+    
+    $('#posts-container').before(toggleHtml);
+  }
+  
+  // Attach toggle events
+  $('#modernViewBtn').off('click').on('click', transformToModernView);
+  $('#originalViewBtn').off('click').on('click', revertToOriginalView);
+  
+  // Setup global event delegation
+  setupGlobalEventDelegation();
+  
+  // Setup mutation observer to watch for dynamically loaded content
+  const observer = setupMutationObserver();
+  
+  // Optional: Check for URL parameter to auto-enable modern view
+  if (window.location.hash === '#modern-view') {
+    setTimeout(transformToModernView, 500);
+  }
+  
+  // Expose functions globally for debugging
+  window.modernForum = {
+    transformToModernView: transformToModernView,
+    revertToOriginalView: revertToOriginalView,
+    refreshModernView: refreshModernView
+  };
+});
+
+// Also watch for HTMX dynamic content loading
+document.addEventListener('htmx:afterSwap', function(event) {
+  // If we're in modern view, refresh after HTMX loads new content
+  if ($('.post-card').length > 0) {
+    setTimeout(refreshModernView, 100);
+  }
+});
+
+// Watch for AJAX calls that might load new posts
+$(document).ajaxComplete(function(event, xhr, settings) {
+  if ($('.post-card').length > 0 && settings.url && settings.url.includes('t=')) {
+    setTimeout(refreshModernView, 200);
+  }
+});
 
 
 
