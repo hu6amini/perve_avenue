@@ -1,4 +1,4 @@
-// Function to extract data from original posts
+// Add this to your page - this extracts data from original posts
 function extractPostData(originalPostElement) {
   const $post = $(originalPostElement);
   const postId = $post.attr('id').replace('ee', '');
@@ -42,6 +42,7 @@ function extractPostData(originalPostElement) {
   
   // Extract post content
   const postContent = $post.find('.right.Item table.color').clone();
+  // Remove signature and edit info for now
   postContent.find('.signature').remove();
   postContent.find('.edit').remove();
   const contentHtml = postContent.html() || '';
@@ -218,31 +219,46 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Function to transform to modern view
+
+
+
+
+// This function hides original posts and shows modern ones
 function transformToModernView() {
+  // Show loading indicator
   $('#posts-container').addClass('htmx-request');
   
   setTimeout(() => {
+    // Hide all original .post elements
     $('.post').each(function() {
       const $original = $(this);
       const postId = $original.attr('id');
       
+      // Store original if not already stored
       if (!$original.data('original-html')) {
         $original.data('original-html', $original[0].outerHTML);
       }
       
+      // Hide original
       $original.css('display', 'none');
       
+      // Check if modern version already exists
       if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
+        // Extract data and create modern version
         const postData = extractPostData($original);
         const modernHtml = generateModernPost(postData);
+        
+        // Insert after the hidden original
         $original.after(modernHtml);
       } else {
+        // Show existing modern version
         $(`.post-card[data-original-id="${postId}"]`).show();
       }
     });
     
     $('#posts-container').removeClass('htmx-request');
+    
+    // Attach event handlers to new buttons
     attachModernEventHandlers();
   }, 100);
 }
@@ -255,8 +271,10 @@ function revertToOriginalView() {
 
 // Attach handlers to modern UI buttons
 function attachModernEventHandlers() {
+  // Quote buttons
   $('.action-icon[data-action="quote"]').off('click').on('click', function() {
     const pid = $(this).data('pid');
+    // Find original post and trigger its quote functionality
     const originalPost = $(`#ee${pid}`);
     if (originalPost.length) {
       const quoteLink = originalPost.find('a[href*="CODE=02"]').attr('href');
@@ -264,6 +282,7 @@ function attachModernEventHandlers() {
     }
   });
   
+  // Edit buttons
   $('.action-icon[data-action="edit"]').off('click').on('click', function() {
     const pid = $(this).data('pid');
     const originalPost = $(`#ee${pid}`);
@@ -273,6 +292,7 @@ function attachModernEventHandlers() {
     }
   });
   
+  // Delete buttons
   $('.action-icon[data-action="delete"]').off('click').on('click', function() {
     if (confirm('Are you sure you want to delete this post?')) {
       const pid = $(this).data('pid');
@@ -282,6 +302,7 @@ function attachModernEventHandlers() {
     }
   });
   
+  // Report buttons
   $('.action-icon[data-action="report"]').off('click').on('click', function() {
     const pid = $(this).data('pid');
     const reportBtn = $(`#ee${pid} .report_button`);
@@ -290,13 +311,16 @@ function attachModernEventHandlers() {
     }
   });
   
+  // Share buttons
   $('.action-icon[data-action="share"]').off('click').on('click', function() {
     const pid = $(this).data('pid');
     const postUrl = window.location.href.split('#')[0] + `#entry${pid}`;
     navigator.clipboard.writeText(postUrl);
+    // Optional: Show a toast notification
     alert('Link copied to clipboard!');
   });
   
+  // Reaction buttons
   $('.reaction-btn').off('click').on('click', function() {
     const $card = $(this).closest('.post-card');
     const postId = $card.data('post-id');
@@ -312,66 +336,28 @@ function attachModernEventHandlers() {
   });
 }
 
-// Initialize when document is ready - MODERN VIEW AS DEFAULT
+// Initialize when document is ready
 $(document).ready(function() {
   // Add a container wrapper if not present
   if (!$('#posts-container').length) {
     $('.post').first().parent().wrapInner('<div id="posts-container"></div>');
   }
   
-  // Add toggle button with Modern as active by default
+  // Add toggle button
   const toggleHtml = `
-    <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+    <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
       <button id="modernViewBtn" class="reaction-btn" style="background: #2563eb; color: white; border: none;">
         <i class="fas fa-magic"></i> Modern View
       </button>
       <button id="originalViewBtn" class="reaction-btn">
         <i class="fas fa-history"></i> Original View
       </button>
-      <span id="viewStatus" style="margin-left: auto; font-size: 0.75rem; color: #6b7280;">
-        <i class="fas fa-check-circle" style="color: #10B981;"></i> Modern view active
-      </span>
     </div>
   `;
   
   $('#posts-container').before(toggleHtml);
   
-  // Store user preference in localStorage
-  function saveViewPreference(view) {
-    localStorage.setItem('forumViewPreference', view);
-  }
-  
-  function getViewPreference() {
-    return localStorage.getItem('forumViewPreference') || 'modern'; // Default to 'modern'
-  }
-  
-  // Apply the saved preference
-  const savedView = getViewPreference();
-  if (savedView === 'modern') {
-    transformToModernView();
-  } else {
-    // Ensure original posts are visible and modern ones hidden
-    $('.post-card').remove();
-    $('.post').show();
-    $('#modernViewBtn').css('background', '#e5e7eb').css('color', '#374151');
-    $('#originalViewBtn').css('background', '#2563eb').css('color', 'white');
-    $('#viewStatus').html('<i class="fas fa-history"></i> Original view active');
-  }
-  
-  // Attach toggle events with preference saving
-  $('#modernViewBtn').on('click', function() {
-    saveViewPreference('modern');
-    transformToModernView();
-    $(this).css('background', '#2563eb').css('color', 'white');
-    $('#originalViewBtn').css('background', '#e5e7eb').css('color', '#374151');
-    $('#viewStatus').html('<i class="fas fa-check-circle" style="color: #10B981;"></i> Modern view active');
-  });
-  
-  $('#originalViewBtn').on('click', function() {
-    saveViewPreference('original');
-    revertToOriginalView();
-    $(this).css('background', '#2563eb').css('color', 'white');
-    $('#modernViewBtn').css('background', '#e5e7eb').css('color', '#374151');
-    $('#viewStatus').html('<i class="fas fa-history"></i> Original view active');
-  });
+  // Attach toggle events
+  $('#modernViewBtn').on('click', transformToModernView);
+  $('#originalViewBtn').on('click', revertToOriginalView);
 });
