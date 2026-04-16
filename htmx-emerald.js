@@ -1,48 +1,50 @@
-// Function to check which action buttons are available in the original post
-function getAvailableActions($originalPost, postId) {
+// Function to check which action buttons should be shown based on original post content
+function getAvailableActions($originalPost) {
     const actions = {
         quote: false,
         edit: false,
-        delete: false,
+        share: true,  // Always available
         report: false,
-        share: true  // Share is always available (our own addition)
+        delete: false
     };
     
-    // Check for Quote button (usually always present for all users)
+    // Check for Quote button (usually always present for non-locked posts)
     if ($originalPost.find('a[href*="CODE=02"]').length > 0) {
         actions.quote = true;
     }
     
-    // Check for Edit button (typically only for post author or moderators)
+    // Check for Edit button (only visible to post author and moderators/admins)
     if ($originalPost.find('a[href*="CODE=08"]').length > 0) {
         actions.edit = true;
     }
     
-    // Check for Delete button (typically only for post author or moderators)
+    // Check for Report button (may be loaded dynamically, but we'll handle it)
+    // We'll set report to true if the structure exists or will exist
+    if ($originalPost.find('.report_button').length > 0 || 
+        $originalPost.find('[data-pid]').filter(function() {
+            return $(this).hasClass('report_button') || $(this).find('span:contains("Report")').length;
+        }).length > 0) {
+        actions.report = true;
+    } else {
+        // Report button might load later, so we'll check periodically
+        actions.report = true; // Assume it will be available
+    }
+    
+    // Check for Delete button (only visible to post author and moderators/admins)
     if ($originalPost.find('a[href*="javascript:delete_post"]').length > 0 ||
-        $originalPost.find('a[onclick*="delete_post"]').length > 0) {
+        $originalPost.find('a:contains("Delete")').length > 0) {
         actions.delete = true;
     }
-    
-    // Report button is handled specially - it's dynamically loaded
-    // We'll still check if it exists, but it might load later
-    if ($originalPost.find('.report_button').length > 0) {
-        actions.report = true;
-    }
-    
-    // Also check for any custom permissions via user class or data attributes
-    const userClasses = $originalPost.attr('class') || '';
-    const isOwnPost = userClasses.includes(`box_m${postId}`); // Example logic
     
     return actions;
 }
 
 // Function to generate action buttons HTML based on available actions
-function generateActionButtons(actions, postId) {
+function generateActionButtons(postId, availableActions) {
     const buttons = [];
     
-    // Quote button (if available)
-    if (actions.quote) {
+    // Quote button (always show if available)
+    if (availableActions.quote) {
         buttons.push(`
             <button class="action-icon" title="Quote" aria-label="Quote post" data-action="quote" data-pid="${postId}">
                 <i class="fa-regular fa-quote-left" aria-hidden="true"></i>
@@ -50,8 +52,8 @@ function generateActionButtons(actions, postId) {
         `);
     }
     
-    // Edit button (if available)
-    if (actions.edit) {
+    // Edit button
+    if (availableActions.edit) {
         buttons.push(`
             <button class="action-icon" title="Edit" aria-label="Edit post" data-action="edit" data-pid="${postId}">
                 <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
@@ -59,31 +61,24 @@ function generateActionButtons(actions, postId) {
         `);
     }
     
-    // Share button (ALWAYS present as requested)
+    // Share button (always present)
     buttons.push(`
         <button class="action-icon" title="Share" aria-label="Share post" data-action="share" data-pid="${postId}">
             <i class="fa-regular fa-share-nodes" aria-hidden="true"></i>
         </button>
     `);
     
-    // Report button (if available now or will be loaded later)
-    if (actions.report) {
+    // Report button (if available)
+    if (availableActions.report) {
         buttons.push(`
             <button class="action-icon report-action" title="Report" aria-label="Report post" data-action="report" data-pid="${postId}">
                 <i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>
             </button>
         `);
-    } else {
-        // Still add the button but disable it until report loads, or add with observer
-        buttons.push(`
-            <button class="action-icon report-action pending-report" title="Report (loading...)" aria-label="Report post" data-action="report" data-pid="${postId}" disabled style="opacity: 0.5;">
-                <i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>
-            </button>
-        `);
     }
     
-    // Delete button (if available - destructive action always last)
-    if (actions.delete) {
+    // Delete button
+    if (availableActions.delete) {
         buttons.push(`
             <button class="action-icon delete-action" title="Delete" aria-label="Delete post" data-action="delete" data-pid="${postId}">
                 <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
@@ -94,63 +89,157 @@ function generateActionButtons(actions, postId) {
     return buttons.join('');
 }
 
-// Enhanced function to check for report button availability with MutationObserver
-function setupSmartReportObserver() {
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.type === 'childList') {
-                $(mutation.addedNodes).each(function() {
-                    const $node = $(this);
-                    
-                    // Check for newly added report buttons
-                    if ($node.is('.report_button') || $node.find('.report_button').length) {
-                        const reportBtns = $node.is('.report_button') ? $node : $node.find('.report_button');
-                        
-                        reportBtns.each(function() {
-                            const pid = $(this).data('pid');
-                            console.log(`Report button loaded for post ${pid}`);
-                            
-                            // Find the corresponding modern report button
-                            const modernReportBtn = $(`.action-icon[data-action="report"][data-pid="${pid}"]`);
-                            
-                            if (modernReportBtn.length) {
-                                // Enable the button and update its appearance
-                                modernReportBtn.prop('disabled', false)
-                                    .css('opacity', '1')
-                                    .attr('title', 'Report')
-                                    .removeClass('pending-report');
-                                
-                                // Attach the click handler
-                                modernReportBtn.off('click.modern').on('click.modern', function(e) {
-                                    e.preventDefault();
-                                    const reportPid = $(this).data('pid');
-                                    const originalBtn = $(`.report_button[data-pid="${reportPid}"]`);
-                                    if (originalBtn.length) {
-                                        originalBtn.click();
-                                    }
-                                });
-                            } else {
-                                // Modern button doesn't exist yet (post might not be transformed)
-                                // Store that report is now available for this post
-                                window.pendingReports = window.pendingReports || {};
-                                window.pendingReports[pid] = true;
-                            }
-                        });
-                    }
-                });
-            }
-        });
-    });
+// Enhanced extractPostData function with permission checking
+function extractPostData(originalPostElement) {
+    const $post = $(originalPostElement);
+    const postId = $post.attr('id').replace('ee', '');
     
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    // Get available actions for this specific user and post
+    const availableActions = getAvailableActions($post);
     
-    return observer;
+    // Store the actions in the post data
+    const postData = {
+        postId: postId,
+        username: $post.find('.nick a').first().text().trim(),
+        avatarUrl: getAvatarUrl($post),
+        roleBadge: getRoleBadge($post),
+        roleIcon: getRoleIcon($post),
+        roleLabel: getRoleLabel($post),
+        postCount: $post.find('.u_posts dd a').text().trim() || '0',
+        reputation: getReputation($post),
+        isOnline: isUserOnline($post),
+        userTitle: getUserTitle($post),
+        contentHtml: getContentHtml($post),
+        signatureHtml: $post.find('.signature').html() || '',
+        editInfo: getEditInfo($post),
+        likes: getLikesCount($post),
+        hasLikes: hasLikes($post),
+        customReactions: getCustomReactions($post),
+        ipAddress: getIpAddress($post),
+        postNumber: $post.index() + 1,
+        timeAgo: getTimeAgo($post),
+        availableActions: availableActions  // Add the actions to the data
+    };
+    
+    return postData;
 }
 
-// Updated generateModernPost function with dynamic action buttons
+// Helper functions for cleaner code
+function getAvatarUrl($post) {
+    let avatarUrl = $post.find('.avatar img').attr('src');
+    if (avatarUrl && avatarUrl.includes('weserv.nl')) {
+        const urlParams = new URLSearchParams(avatarUrl.split('?')[1]);
+        avatarUrl = urlParams.get('url');
+    }
+    return avatarUrl;
+}
+
+function getRoleBadge($post) {
+    const groupText = $post.find('.u_group dd').text().trim();
+    return groupText === 'Administrator' ? 'admin' : 'developer';
+}
+
+function getRoleIcon($post) {
+    const groupText = $post.find('.u_group dd').text().trim();
+    return groupText === 'Administrator' ? 'fa-crown' : 'fa-code';
+}
+
+function getRoleLabel($post) {
+    return $post.find('.u_group dd').text().trim() || 'Member';
+}
+
+function getReputation($post) {
+    let reputation = $post.find('.u_reputation dd a').text().trim();
+    return reputation.replace('+', '');
+}
+
+function isUserOnline($post) {
+    const statusTitle = $post.find('.u_status').attr('title') || '';
+    return statusTitle.toLowerCase().includes('online');
+}
+
+function getUserTitle($post) {
+    let userTitle = $post.find('.u_title').text().trim();
+    if (userTitle === 'Member') {
+        const stars = $post.find('.u_rank i.fa-star').length;
+        if (stars === 3) userTitle = 'Famous';
+        else if (stars === 2) userTitle = 'Senior';
+        else if (stars === 1) userTitle = 'Junior';
+    }
+    return userTitle;
+}
+
+function getContentHtml($post) {
+    const postContent = $post.find('.right.Item table.color').clone();
+    postContent.find('.signature').remove();
+    postContent.find('.edit').remove();
+    return postContent.html() || '';
+}
+
+function getEditInfo($post) {
+    let editInfo = '';
+    const editText = $post.find('.edit').text().trim();
+    if (editText) {
+        editInfo = editText.replace('Edited by', 'Edited');
+    }
+    return editInfo;
+}
+
+function getLikesCount($post) {
+    const pointsSpan = $post.find('.points');
+    if (pointsSpan.find('.points_pos').length) {
+        const likeText = pointsSpan.find('.points_pos').text();
+        return parseInt(likeText) || 0;
+    }
+    return 0;
+}
+
+function hasLikes($post) {
+    return $post.find('.points .points_pos').length > 0;
+}
+
+function getCustomReactions($post) {
+    const reactions = [];
+    $post.find('.st-emoji-post .st-emoji-counter').each(function() {
+        const count = $(this).data('count') || 1;
+        if (count > 0) {
+            reactions.push({ emoji: '😆', count: count });
+        }
+    });
+    return reactions;
+}
+
+function getIpAddress($post) {
+    let ipAddress = $post.find('.ip_address dd a').text().trim();
+    if (ipAddress) {
+        ipAddress = ipAddress.substring(0, ipAddress.lastIndexOf('.')) + '.xxx';
+    }
+    return ipAddress;
+}
+
+function getTimeAgo($post) {
+    let timestamp = $post.find('.when').attr('title') || '';
+    let timeAgo = '';
+    if (timestamp) {
+        const postDate = new Date(timestamp);
+        const now = new Date();
+        const diffMonths = (now.getFullYear() - postDate.getFullYear()) * 12 + (now.getMonth() - postDate.getMonth());
+        if (diffMonths >= 1) {
+            timeAgo = `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+        } else {
+            const diffDays = Math.floor((now - postDate) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 1) {
+                timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+            } else {
+                const diffHours = Math.floor((now - postDate) / (1000 * 60 * 60));
+                timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            }
+        }
+    }
+    return timeAgo;
+}
+
+// Updated generateModernPost function with permission-aware buttons
 function generateModernPost(data) {
     const reactionsHtml = data.hasLikes || data.customReactions.length > 0
         ? `
@@ -174,9 +263,6 @@ function generateModernPost(data) {
           </button>
         `;
     
-    // Get the action buttons HTML based on available actions
-    const actionButtonsHtml = generateActionButtons(data.availableActions, data.postId);
-    
     return `
         <article class="post-card" data-post-id="${data.postId}" data-original-id="ee${data.postId}" aria-labelledby="post${data.postId}-title">
             <div class="post-header-modern">
@@ -189,7 +275,7 @@ function generateModernPost(data) {
                     </div>
                 </div>
                 <div class="action-buttons-group">
-                    ${actionButtonsHtml}
+                    ${generateActionButtons(data.postId, data.availableActions)}
                 </div>
             </div>
             <div class="user-area">
@@ -239,129 +325,9 @@ function generateModernPost(data) {
     `;
 }
 
-// Updated extractPostData to include available actions
-function extractPostData(originalPostElement) {
-    const $post = $(originalPostElement);
-    const postId = $post.attr('id').replace('ee', '');
-    
-    // Extract available actions from original post
-    const availableActions = getAvailableActions($post, postId);
-    
-    // Rest of your existing extraction code...
-    // (keep all the existing extraction logic from before)
-    
-    // Extract username
-    const username = $post.find('.nick a').first().text().trim();
-    
-    // Extract avatar
-    let avatarUrl = $post.find('.avatar img').attr('src');
-    if (avatarUrl && avatarUrl.includes('weserv.nl')) {
-        const urlParams = new URLSearchParams(avatarUrl.split('?')[1]);
-        avatarUrl = urlParams.get('url');
-    }
-    
-    // Extract user group/role
-    const groupText = $post.find('.u_group dd').text().trim();
-    const isAdmin = groupText === 'Administrator';
-    const roleBadge = isAdmin ? 'admin' : 'developer';
-    const roleIcon = isAdmin ? 'fa-crown' : 'fa-code';
-    const roleLabel = groupText || 'Member';
-    
-    // Extract post count
-    const postCount = $post.find('.u_posts dd a').text().trim() || '0';
-    
-    // Extract reputation
-    let reputation = $post.find('.u_reputation dd a').text().trim();
-    reputation = reputation.replace('+', '');
-    
-    // Extract status
-    const statusTitle = $post.find('.u_status').attr('title') || '';
-    const isOnline = statusTitle.toLowerCase().includes('online');
-    
-    // Extract title/rank
-    let userTitle = $post.find('.u_title').text().trim();
-    if (userTitle === 'Member') {
-        const stars = $post.find('.u_rank i.fa-star').length;
-        if (stars === 3) userTitle = 'Famous';
-        else if (stars === 2) userTitle = 'Senior';
-        else if (stars === 1) userTitle = 'Junior';
-    }
-    
-    // Extract post content
-    const postContent = $post.find('.right.Item table.color').clone();
-    postContent.find('.signature').remove();
-    postContent.find('.edit').remove();
-    const contentHtml = postContent.html() || '';
-    
-    // Extract signature
-    const signatureHtml = $post.find('.signature').html() || '';
-    
-    // Extract edit info
-    let editInfo = '';
-    const editText = $post.find('.edit').text().trim();
-    if (editText) {
-        editInfo = editText.replace('Edited by', 'Edited');
-    }
-    
-    // Extract reactions/likes
-    let likes = 0;
-    let hasLikes = false;
-    const pointsSpan = $post.find('.points');
-    if (pointsSpan.find('.points_pos').length) {
-        const likeText = pointsSpan.find('.points_pos').text();
-        likes = parseInt(likeText) || 0;
-        hasLikes = likes > 0;
-    }
-    
-    // Extract custom emoji reactions
-    let customReactions = [];
-    $post.find('.st-emoji-post .st-emoji-counter').each(function() {
-        const count = $(this).data('count') || 1;
-        if (count > 0) {
-            customReactions.push({ emoji: '😆', count: count });
-        }
-    });
-    
-    // Extract IP address
-    let ipAddress = $post.find('.ip_address dd a').text().trim();
-    if (ipAddress) {
-        ipAddress = ipAddress.substring(0, ipAddress.lastIndexOf('.')) + '.xxx';
-    }
-    
-    // Extract post number
-    const postNumber = $post.index() + 1;
-    
-    // Extract timestamp
-    let timestamp = $post.find('.when').attr('title') || '';
-    let timeAgo = '';
-    if (timestamp) {
-        const postDate = new Date(timestamp);
-        const now = new Date();
-        const diffMonths = (now.getFullYear() - postDate.getFullYear()) * 12 + (now.getMonth() - postDate.getMonth());
-        if (diffMonths >= 1) {
-            timeAgo = `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
-        } else {
-            const diffDays = Math.floor((now - postDate) / (1000 * 60 * 60 * 24));
-            if (diffDays >= 1) {
-                timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-            } else {
-                const diffHours = Math.floor((now - postDate) / (1000 * 60 * 60));
-                timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-            }
-        }
-    }
-    
-    return {
-        postId, username, avatarUrl, roleBadge, roleIcon, roleLabel,
-        postCount, reputation, isOnline, userTitle, contentHtml,
-        signatureHtml, editInfo, likes, hasLikes, customReactions,
-        ipAddress, postNumber, timeAgo, availableActions
-    };
-}
-
-// Update the event handlers to only work if the button exists
+// Enhanced event handler with permission checks
 function attachModernEventHandlers() {
-    // Quote handler (only if quote button exists)
+    // Quote button (only if exists)
     $(document).off('click.modern', '.action-icon[data-action="quote"]')
                .on('click.modern', '.action-icon[data-action="quote"]', function() {
         const pid = $(this).data('pid');
@@ -369,10 +335,11 @@ function attachModernEventHandlers() {
         if (originalPost.length) {
             const quoteLink = originalPost.find('a[href*="CODE=02"]').attr('href');
             if (quoteLink) window.location.href = quoteLink;
+            else showToast('Quote function not available for this post');
         }
     });
     
-    // Edit handler (only if edit button exists)
+    // Edit button (only if exists in original)
     $(document).off('click.modern', '.action-icon[data-action="edit"]')
                .on('click.modern', '.action-icon[data-action="edit"]', function() {
         const pid = $(this).data('pid');
@@ -380,21 +347,58 @@ function attachModernEventHandlers() {
         if (originalPost.length) {
             const editLink = originalPost.find('a[href*="CODE=08"]').attr('href');
             if (editLink) window.location.href = editLink;
+            else showToast('Edit function not available for this post');
         }
     });
     
-    // Delete handler (only if delete button exists)
+    // Delete button (only if exists in original)
     $(document).off('click.modern', '.action-icon[data-action="delete"]')
                .on('click.modern', '.action-icon[data-action="delete"]', function() {
-        if (confirm('Are you sure you want to delete this post?')) {
-            const pid = $(this).data('pid');
-            if (typeof delete_post === 'function') {
-                delete_post(pid);
+        const pid = $(this).data('pid');
+        const originalPost = $(`#ee${pid}`);
+        if (originalPost.length && originalPost.find('a[href*="javascript:delete_post"]').length) {
+            if (confirm('Are you sure you want to delete this post?')) {
+                if (typeof delete_post === 'function') {
+                    delete_post(pid);
+                }
             }
+        } else {
+            showToast('Delete function not available for this post');
         }
     });
     
-    // Share handler (ALWAYS present)
+    // Report button (handle dynamic loading)
+    $(document).off('click.modern', '.action-icon[data-action="report"]')
+               .on('click.modern', '.action-icon[data-action="report"]', function(e) {
+        e.preventDefault();
+        const pid = $(this).data('pid');
+        
+        // Check if report button exists or will exist
+        const originalBtn = $(`#ee${pid} .report_button`);
+        if (originalBtn.length) {
+            originalBtn.click();
+        } else {
+            // Wait for report button to load (for dynamic content)
+            showToast('Loading report function...');
+            const checkInterval = setInterval(() => {
+                const loadedBtn = $(`.report_button[data-pid="${pid}"]`);
+                if (loadedBtn.length) {
+                    clearInterval(checkInterval);
+                    loadedBtn.click();
+                }
+            }, 100);
+            
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!$(`.report_button[data-pid="${pid}"]`).length) {
+                    showToast('Report function unavailable. Please refresh the page.');
+                }
+            }, 5000);
+        }
+    });
+    
+    // Share button (always available)
     $(document).off('click.modern', '.action-icon[data-action="share"]')
                .on('click.modern', '.action-icon[data-action="share"]', function() {
         const pid = $(this).data('pid');
@@ -403,18 +407,7 @@ function attachModernEventHandlers() {
         showToast('Link copied to clipboard!');
     });
     
-    // Report handler - only for enabled report buttons
-    $(document).off('click.modern', '.action-icon[data-action="report"]:not([disabled])')
-               .on('click.modern', '.action-icon[data-action="report"]:not([disabled])', function(e) {
-        e.preventDefault();
-        const pid = $(this).data('pid');
-        const originalBtn = $(`.report_button[data-pid="${pid}"]`);
-        if (originalBtn.length) {
-            originalBtn.click();
-        }
-    });
-    
-    // Reaction handlers
+    // Reaction handlers (only if original has like functionality)
     $(document).off('click.modern', '.reaction-btn[data-action="like"]')
                .on('click.modern', '.reaction-btn[data-action="like"]', function() {
         const $card = $(this).closest('.post-card');
@@ -428,9 +421,71 @@ function attachModernEventHandlers() {
                 eval(onclickAttr);
             } else if (likeLink.length) {
                 likeLink.click();
+            } else {
+                showToast('Like function not available for this post');
             }
         }
     });
+}
+
+// Helper function to show toast messages
+function showToast(message, duration = 3000) {
+    const toast = $(`<div class="modern-toast">${message}</div>`);
+    $('body').append(toast);
+    toast.css({
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        background: '#333',
+        color: 'white',
+        padding: '10px 20px',
+        borderRadius: '8px',
+        zIndex: '100000',
+        animation: 'fadeInOut 0.3s ease'
+    });
+    setTimeout(() => {
+        toast.fadeOut(300, () => toast.remove());
+    }, duration);
+}
+
+// Update the transformToModernView function to use the enhanced extraction
+function transformToModernView() {
+    $('#posts-container').addClass('htmx-request');
+    
+    setTimeout(() => {
+        $('.post').each(function() {
+            const $original = $(this);
+            const postId = $original.attr('id');
+            
+            if (!originalPostsData.has(postId)) {
+                originalPostsData.set(postId, $original[0].outerHTML);
+            }
+            
+            $original.css('display', 'none');
+            
+            if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
+                const postData = extractPostData($original);
+                const modernHtml = generateModernPost(postData);
+                $original.after(modernHtml);
+            } else {
+                $(`.post-card[data-original-id="${postId}"]`).show();
+            }
+        });
+        
+        $('#posts-container').removeClass('htmx-request');
+        attachModernEventHandlers();
+        localStorage.setItem('forumViewMode', 'modern');
+        
+        // Log which actions were available for debugging
+        $('.post-card').each(function() {
+            const $card = $(this);
+            const postId = $card.data('post-id');
+            const buttons = $card.find('.action-icon').map(function() {
+                return $(this).data('action');
+            }).get();
+            console.log(`Post ${postId} available actions:`, buttons);
+        });
+    }, 100);
 }
 
 
