@@ -4475,3 +4475,362 @@ gap: var(--space-sm)}
  .ui-datepicker-prev:hover,
  .ui-datepicker-next:hover,
  .ui-datepicker-calendar td a:hover {transform: none !important}}
+
+/*============================================
+ EMOJI PICKER & REACTIONS POPUP - EMERALD THEME
+ Scoped to prevent WYSIWYG conflicts
+============================================*/
+
+/* ============================================
+   REACTIONS POPUP (st-emoji-pop)
+   For post reactions
+============================================ */
+
+/* Main reactions popup container */
+.st-emoji-pop[data-theme="light"],
+.cs-fui.st-emoji-pop[data-theme="light"] {
+  background: var(--surface-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  overflow: hidden;
+}
+
+/* Container inside reactions popup */
+.st-emoji-pop .cs-fui-container,
+.cs-fui.st-emoji-pop .cs-fui-container {
+  background: var(--surface-color) !important;
+}
+
+/* Reactions list */
+.st-emoji-pop .st-emoji-list,
+.cs-fui.st-emoji-pop .st-emoji-list {
+  background: var(--surface-color) !important;
+  margin: 0;
+  padding: var(--space-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  list-style: none;
+}
+
+/* Individual reaction items */
+.st-emoji-pop .st-emoji-info,
+.cs-fui.st-emoji-pop .st-emoji-info {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Reaction button/content */
+.st-emoji-pop .st-emoji-content,
+.cs-fui.st-emoji-pop .st-emoji-content {
+  background: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-sm) !important;
+  cursor: pointer;
+  padding: var(--space-xs);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.st-emoji-pop .st-emoji-content:hover,
+.cs-fui.st-emoji-pop .st-emoji-content:hover {
+  background: var(--hover-color) !important;
+  border-color: var(--primary-color) !important;
+  transform: scale(1.1);
+}
+
+/* Reaction images */
+.st-emoji-pop .st-emoji-content img,
+.cs-fui.st-emoji-pop .st-emoji-content img {
+  width: 24px !important;
+  height: 24px !important;
+  object-fit: contain;
+  display: block;
+}
+
+/* Arrow for reactions popup */
+.st-emoji-pop .cs-fui-arrow,
+.cs-fui.st-emoji-pop .cs-fui-arrow {
+  filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.st-emoji-pop .cs-fui-arrow::before,
+.cs-fui.st-emoji-pop .cs-fui-arrow::before {
+  background: var(--surface-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* ============================================
+   WYSIWYG EDITOR DROPDOWN (ve-dropdown)
+   Keep existing styles but ensure no conflict
+============================================ */
+
+/* Target ONLY emoji-related ve-dropdown, not editor toolbars */
+.ve-popover.ve-dropdown:not(.st-emoji-pop),
+.cs-fui.ve-popover.ve-dropdown:not(.st-emoji-pop) {
+  background: var(--surface-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  overflow: hidden;
+}
+
+/* Emoji list container in editor */
+.ve-emoji-list-container {
+  background: var(--surface-color) !important;
+}
+
+.ve-emoji-list-title {
+  color: var(--text-secondary) !important;
+  border-bottom-color: var(--border-color) !important;
+}
+
+.ve-emoji-list {
+  background: var(--surface-color) !important;
+}
+
+/* WYSIWYG emoji buttons - preserve existing editor button styles */
+.ve-emoji-btn {
+  background: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-sm) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.ve-emoji-btn:hover {
+  background: var(--hover-color) !important;
+  border-color: var(--primary-color) !important;
+  transform: scale(1.05) !important;
+}
+
+/* Bottom buttons in emoji dropdown */
+.ve-emoji-buttons {
+  border-top-color: var(--border-color) !important;
+}
+
+.ve-emoji-buttons .ve-btn {
+  background: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+.ve-emoji-buttons .ve-btn:hover {
+  background: var(--hover-color) !important;
+  border-color: var(--primary-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ============================================
+   FULL EMOJI PICKER (emoji-picker)
+   For the expanded picker view
+============================================ */
+
+/* Main picker container - ONLY when inside emoji picker context */
+.emoji-picker[data-theme="light"],
+.emoji-picker:not([data-theme]) {
+  background: var(--surface-color) !important;
+  border-radius: var(--radius) !important;
+}
+
+/* Category tabs */
+.emoji-picker .emoji-category-tabs {
+  background: var(--bg-color) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.emoji-picker .category-tab {
+  background: transparent !important;
+  border: none !important;
+}
+
+.emoji-picker .category-tab:hover {
+  background: var(--hover-color) !important;
+}
+
+.emoji-picker .category-tab.active {
+  background: var(--primary-color) !important;
+}
+
+.emoji-picker .category-tab.active .category-icon img {
+  filter: brightness(0) invert(1);
+}
+
+/* Scroll area */
+.emoji-picker .emoji-scroll {
+  background: var(--surface-color) !important;
+}
+
+.emoji-picker .emoji-scroll::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+.emoji-picker .emoji-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.emoji-picker .emoji-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-color);
+}
+
+/* Category labels */
+.emoji-picker .emoji-category-label {
+  background: var(--surface-color) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Emoji grid */
+.emoji-picker .emoji-grid {
+  background: var(--surface-color) !important;
+}
+
+/* Emoji buttons */
+.emoji-picker .emoji-btn {
+  background: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.emoji-picker .emoji-btn:hover {
+  background: var(--hover-color) !important;
+  border-color: var(--primary-color) !important;
+  transform: scale(1.08) !important;
+}
+
+/* Emoji images */
+.emoji-picker .emoji-btn .twemoji,
+.emoji-picker .emoji-btn img {
+  width: 24px !important;
+  height: 24px !important;
+  object-fit: contain;
+}
+
+/* Search container */
+.emoji-picker .picker-search-container {
+  background: var(--surface-color) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.emoji-picker .picker-search-input {
+  background: var(--bg-color) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.emoji-picker .picker-search-input:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 var(--editor-focus-ring) var(--focus-ring) !important;
+  outline: none !important;
+}
+
+.emoji-picker .picker-search-input::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+.emoji-picker .picker-search-status-label {
+  color: var(--text-tertiary) !important;
+}
+
+/* GIF panel */
+.emoji-picker .panel-content[data-panel="gif"] {
+  background: var(--surface-color) !important;
+}
+
+.emoji-picker .picker-custom-grid {
+  background: var(--surface-color) !important;
+}
+
+.emoji-picker .picker-custom-loading {
+  opacity: 0.7;
+}
+
+/* ============================================
+   WYSIWYG EDITOR TOOLBAR BUTTONS
+   Explicitly preserved - do not override
+============================================ */
+
+/* Ensure editor toolbar buttons keep their styles */
+.ve-toolbar .ve-btn,
+.ve-container .ve-btn:not(.ve-emoji-btn):not(.st-emoji-content) {
+  /* These styles are already defined in critical CSS */
+  /* This selector ensures they aren't overridden by emoji picker styles */
+}
+
+/* Editor toolbar icons - preserve Font Awesome mapping */
+.ve-toolbar [class*=" lc-icon-"]::before {
+  font-family: 'Font Awesome 6 Pro' !important;
+  font-size: var(--text-base);
+}
+
+/* ============================================
+   COMMON CS-FUI OVERRIDES
+   Only for emoji-related components
+============================================ */
+
+/* Arrow styling for all emoji popups */
+.cs-fui-arrow {
+  filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.cs-fui-arrow::before {
+  background: var(--surface-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* ============================================
+   DARK THEME SUPPORT FOR EMOJI PICKERS
+============================================ */
+
+[data-theme="dark"] .emoji-picker,
+[data-theme="dark"] .st-emoji-pop,
+[data-theme="dark"] .ve-popover.ve-dropdown {
+  --border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ============================================
+   RESPONSIVE EMOJI PICKERS
+============================================ */
+
+@media (max-width: 768px) {
+  .st-emoji-pop .st-emoji-content img,
+  .cs-fui.st-emoji-pop .st-emoji-content img {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  .emoji-picker .emoji-grid {
+    grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)) !important;
+  }
+  
+  .emoji-picker .emoji-btn .twemoji,
+  .emoji-picker .emoji-btn img {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  .emoji-picker .emoji-scroll {
+    max-height: 300px !important;
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .st-emoji-pop .st-emoji-content,
+  .emoji-picker .emoji-btn,
+  .ve-emoji-btn {
+    transition: none !important;
+  }
+  
+  .st-emoji-pop .st-emoji-content:hover,
+  .emoji-picker .emoji-btn:hover,
+  .ve-emoji-btn:hover {
+    transform: none !important;
+  }
+}
