@@ -1,6 +1,6 @@
 // ================================================
 // Forum Modernizer - Maximum htmx Edition
-// Robust .u_rank icon + title parsing (handles all your ranks)
+// Final fixed .u_rank parsing (correctly extracts fa-medal, fa-fire, fa-star, etc.)
 // ================================================
 
 (function () {
@@ -15,7 +15,7 @@
     };
 
     // ============================================================================
-    // DATA EXTRACTION - Improved .u_rank parser
+    // DATA EXTRACTION - Robust rank parsing
     // ============================================================================
     function extractPostData($post) {
         const fullId = $post.attr('id');
@@ -41,24 +41,22 @@
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        // === ROBUST RANK PARSING ===
+        // === FIXED & ROBUST RANK PARSING ===
         let userTitle = 'Member';
-        let rankIconClass = 'fa-medal';   // safe default
+        let rankIconClass = 'fa-medal';
 
         const $uRank = $post.find('.u_rank').first();
         if ($uRank.length) {
-            // Get rank name from the <span> (last span usually contains the name)
-            const rankSpan = $uRank.find('span').last().text().trim();
-            if (rankSpan) userTitle = rankSpan;
+            // Rank name from the last <span>
+            const rankText = $uRank.find('span').last().text().trim();
+            if (rankText) userTitle = rankText;
 
-            // Find the LAST <i> element that has a fa- class (most reliable for your structure)
-            const $icons = $uRank.find('i');
-            if ($icons.length) {
-                const lastIcon = $icons.last()[0];
-                const classes = lastIcon.className || '';
-
-                // Improved regex: match the actual icon name after fa-regular / fa-solid etc.
-                const match = classes.match(/fa-(?:regular|solid|light|brands)?-?([a-z0-9-]+)/i);
+            // Get the last <i> and extract the real icon name (after fa-regular / fa-solid etc.)
+            const $lastIcon = $uRank.find('i').last();
+            if ($lastIcon.length) {
+                const classAttr = $lastIcon.attr('class') || '';
+                // This regex correctly captures the icon name (medal, fire, star, trophy, shield, etc.)
+                const match = classAttr.match(/fa-(?:regular|solid|light|brands)?\s+fa-([a-z0-9-]+)/i);
                 if (match && match[1]) {
                     rankIconClass = `fa-${match[1]}`;
                 }
@@ -123,24 +121,19 @@
                         <div class="post-timestamp"><time>${data.timeAgo}</time></div>
                     </div>
                     <div class="action-buttons-group">
-                        <button class="action-icon" title="Quote" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleQuote(this)">
+                        <button class="action-icon" title="Quote" data-pid="${data.postId}" hx-on:click="forumModernizer.handleQuote(this)">
                             <i class="fa-regular fa-quote-left"></i>
                         </button>
-                        <button class="action-icon" title="Edit" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleEdit(this)">
+                        <button class="action-icon" title="Edit" data-pid="${data.postId}" hx-on:click="forumModernizer.handleEdit(this)">
                             <i class="fa-regular fa-pen-to-square"></i>
                         </button>
-                        <button class="action-icon" title="Share" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleShare(this)">
+                        <button class="action-icon" title="Share" data-pid="${data.postId}" hx-on:click="forumModernizer.handleShare(this)">
                             <i class="fa-regular fa-share-nodes"></i>
                         </button>
-                        <button class="action-icon report-action" title="Report" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleReport(this)">
+                        <button class="action-icon report-action" title="Report" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReport(this)">
                             <i class="fa-regular fa-circle-exclamation"></i>
                         </button>
-                        <button class="action-icon delete-action" title="Delete" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleDelete(this)">
+                        <button class="action-icon delete-action" title="Delete" data-pid="${data.postId}" hx-on:click="forumModernizer.handleDelete(this)">
                             <i class="fa-regular fa-trash-can"></i>
                         </button>
                     </div>
@@ -148,7 +141,7 @@
 
                 <div class="user-area">
                     <div class="avatar-modern">
-                        <img class="avatar-circle" src="${data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username)}"
+                        <img class="avatar-circle" src="${data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username)}" 
                              alt="${data.username}" width="70" height="70" loading="lazy">
                     </div>
                     <div class="user-details">
@@ -186,13 +179,11 @@
 
                 <div class="post-footer-modern">
                     <div class="reaction-cluster">
-                        <button class="reaction-btn" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleLike(this)">
+                        <button class="reaction-btn" data-pid="${data.postId}" hx-on:click="forumModernizer.handleLike(this)">
                             <i class="fa-regular fa-thumbs-up"></i>
                             ${data.likes > 0 ? `<span class="reaction-count">${data.likes}</span>` : ''}
                         </button>
-                        <button class="reaction-btn ${data.hasReactions ? 'reaction-placeholder' : ''}" data-pid="${data.postId}"
-                                hx-on:click="forumModernizer.handleReact(this)">
+                        <button class="reaction-btn ${data.hasReactions ? 'reaction-placeholder' : ''}" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReact(this)">
                             ${data.hasReactions ?
                                 `<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="laugh">` :
                                 `<i class="fa-regular fa-face-smile"></i>`}
@@ -212,28 +203,23 @@
         return div.innerHTML;
     }
 
-    // ============================================================================
-    // HANDLERS (all via hx-on)
-    // ============================================================================
+    // Handlers (unchanged)
     window.forumModernizer = {
         handleQuote(elt) {
             const pid = elt.dataset.pid;
             const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`);
             if (link) location.href = link.href;
         },
-
         handleEdit(elt) {
             const pid = elt.dataset.pid;
             const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`);
             if (link) location.href = link.href;
         },
-
         handleDelete(elt) {
             if (confirm('Are you sure you want to delete this post?')) {
                 if (typeof window.delete_post === 'function') window.delete_post(elt.dataset.pid);
             }
         },
-
         handleShare(elt) {
             const pid = elt.dataset.pid;
             const url = location.href.split('#')[0] + `#entry${pid}`;
@@ -243,21 +229,18 @@
                 setTimeout(() => elt.innerHTML = original, 1500);
             });
         },
-
         handleReport(elt) {
             const pid = elt.dataset.pid;
             let btn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`) ||
                       document.querySelector(`.report_button[data-pid="${pid}"]`);
             if (btn) btn.click();
         },
-
         handleLike(elt) {
             const pid = elt.dataset.pid;
             const likeBtn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .points .points_up`);
             if (likeBtn) likeBtn.click();
             setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
         },
-
         handleReact(elt) {
             const pid = elt.dataset.pid;
             const emojiContainer = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .st-emoji-container`);
@@ -286,9 +269,6 @@
         }
     }
 
-    // ============================================================================
-    // Convert legacy → modern
-    // ============================================================================
     function convertToModern(postEl) {
         const $post = $(postEl);
         const postId = $post.attr('id');
@@ -304,16 +284,11 @@
 
         $post.after(newCard);
 
-        if (typeof htmx !== 'undefined') {
-            htmx.process(newCard);
-        }
+        if (typeof htmx !== 'undefined') htmx.process(newCard);
     }
 
-    // ============================================================================
-    // Initialization
-    // ============================================================================
     function initialize() {
-        console.log('[ForumModernizer] Starting with robust rank parsing');
+        console.log('[ForumModernizer] Starting with final rank fix');
 
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
@@ -333,8 +308,7 @@
 
             document.addEventListener('htmx:afterSwap', (evt) => {
                 if (evt.detail.target.id === CONFIG.CONTAINER_ID) {
-                    const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
-                    if (saved === 'modern') {
+                    if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
                         evt.detail.target.classList.add('view-modern');
                     }
                 }
