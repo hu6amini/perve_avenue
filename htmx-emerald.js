@@ -1,8 +1,4 @@
-// ================================================
-// Forum Modernizer - Maximum htmx Edition
-// Final robust .u_rank parser (correct prefix + icon name)
-// ================================================
-
+// Forum Modernizer - htmx-first approach (final clean version)
 (function () {
     'use strict';
 
@@ -14,9 +10,6 @@
         REACTION_DELAY: 500
     };
 
-    // ============================================================================
-    // DATA EXTRACTION - Final fixed rank parsing
-    // ============================================================================
     function extractPostData($post) {
         const fullId = $post.attr('id');
         if (!fullId) return null;
@@ -41,27 +34,22 @@
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        // === FINAL ROBUST RANK PARSING ===
+        // Rank parsing (works for all your ranks)
         let userTitle = 'Member';
-        let rankIconClass = 'fa-medal fa-regular';   // safe default with style
+        let rankIconClass = 'fa-medal fa-regular';
 
         const $uRank = $post.find('.u_rank').first();
         if ($uRank.length) {
-            // Rank name
             const rankText = $uRank.find('span').last().text().trim();
             if (rankText) userTitle = rankText;
 
-            // Get icon - take the last <i> and extract both style and icon name
             const $icon = $uRank.find('i').last();
             if ($icon.length) {
                 const classAttr = $icon.attr('class') || '';
-
-                // Match both the style (regular/solid) and the icon name
                 const match = classAttr.match(/fa-(regular|solid|light|brands)?\s*fa-([a-z0-9-]+)/i);
                 if (match) {
                     const style = match[1] ? `fa-${match[1]}` : 'fa-regular';
-                    const iconName = match[2];
-                    rankIconClass = `${style} fa-${iconName}`;
+                    rankIconClass = `${style} fa-${match[2]}`;
                 }
             }
         }
@@ -108,9 +96,6 @@
         };
     }
 
-    // ============================================================================
-    // GENERATE MODERN CARD
-    // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
 
@@ -206,15 +191,50 @@
         return div.innerHTML;
     }
 
-    // Handlers (unchanged)
     window.forumModernizer = {
-        handleQuote(elt) { /* ... same as before */ },
-        handleEdit(elt) { /* ... */ },
-        handleDelete(elt) { /* ... */ },
-        handleShare(elt) { /* ... */ },
-        handleReport(elt) { /* ... */ },
-        handleLike(elt) { /* ... */ },
-        handleReact(elt) { /* ... */ }
+        handleQuote(elt) {
+            const pid = elt.dataset.pid;
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`);
+            if (link) location.href = link.href;
+        },
+        handleEdit(elt) {
+            const pid = elt.dataset.pid;
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`);
+            if (link) location.href = link.href;
+        },
+        handleDelete(elt) {
+            if (confirm('Are you sure you want to delete this post?')) {
+                if (typeof window.delete_post === 'function') window.delete_post(elt.dataset.pid);
+            }
+        },
+        handleShare(elt) {
+            const pid = elt.dataset.pid;
+            const url = location.href.split('#')[0] + `#entry${pid}`;
+            navigator.clipboard.writeText(url).then(() => {
+                const original = elt.innerHTML;
+                elt.innerHTML = '<i class="fas fa-check"></i>';
+                setTimeout(() => elt.innerHTML = original, 1500);
+            });
+        },
+        handleReport(elt) {
+            const pid = elt.dataset.pid;
+            let btn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`) ||
+                      document.querySelector(`.report_button[data-pid="${pid}"]`);
+            if (btn) btn.click();
+        },
+        handleLike(elt) {
+            const pid = elt.dataset.pid;
+            const likeBtn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .points .points_up`);
+            if (likeBtn) likeBtn.click();
+            setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
+        },
+        handleReact(elt) {
+            const pid = elt.dataset.pid;
+            const emojiContainer = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .st-emoji-container`);
+            if (emojiContainer) emojiContainer.click();
+            else this.handleLike(elt);
+            setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
+        }
     };
 
     function refreshReactionDisplay(postId) {
@@ -255,12 +275,12 @@
     }
 
     function initialize() {
-        console.log('[ForumModernizer] Starting with final rank fix');
+        console.log('[ForumModernizer] htmx-first version loaded');
 
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
-            if (firstPost && firstPost.parentElement) {
+            if (firstPost?.parentElement) {
                 firstPost.parentElement.id = CONFIG.CONTAINER_ID;
                 container = firstPost.parentElement;
             }
@@ -285,8 +305,6 @@
         if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
             document.getElementById(CONFIG.CONTAINER_ID)?.classList.add('view-modern');
         }
-
-        console.log('[ForumModernizer] Ready');
     }
 
     if (document.readyState === 'loading') {
