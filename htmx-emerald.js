@@ -1,12 +1,12 @@
 /**
- * Forum Modernizer - Enhanced with working endpoints from test results
+ * Forum Modernizer - Pure Modern View Only
+ * No view toggles, always shows modern cards
  */
 
 (function() {
     'use strict';
 
     const CONFIG = {
-        STORAGE_KEY: 'forumModernView',
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
@@ -70,6 +70,7 @@
             }
         }
 
+        // Clean post content - remove bottomborder and extra <br> tags
         const contentClone = $post.find('.right.Item table.color').clone();
         contentClone.find('.signature, .edit').remove();
         contentClone.find('.bottomborder').remove();
@@ -265,13 +266,22 @@
     }
 
     // ============================================================================
+    // HIDE ORIGINAL POSTS
+    // ============================================================================
+    
+    function hideOriginalPosts() {
+        document.querySelectorAll(CONFIG.POST_SELECTOR).forEach(post => {
+            post.style.display = 'none';
+        });
+    }
+
+    // ============================================================================
     // GLOBAL EVENT HANDLERS
     // ============================================================================
     
     window.forumModernizer = {
         handleQuote(elt) {
             const pid = elt.dataset.pid;
-            // Try to find the quote link - it might be in a different format
             const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`) ||
                         document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a:contains("Quote")`);
             if (link) location.href = link.href;
@@ -333,8 +343,9 @@
     // ============================================================================
     
     function initialize() {
-        console.log('[ForumModernizer] Loaded');
+        console.log('[ForumModernizer] Loading modern view only...');
 
+        // Ensure container exists
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
@@ -344,27 +355,27 @@
             }
         }
 
+        // Convert all existing posts to modern
         document.querySelectorAll(CONFIG.POST_SELECTOR).forEach(convertToModern);
 
+        // Hide original posts
+        hideOriginalPosts();
+
+        // Setup htmx handlers for dynamically loaded content
         if (typeof htmx !== 'undefined') {
             htmx.onLoad((target) => {
                 target.querySelectorAll?.(CONFIG.POST_SELECTOR).forEach(convertToModern);
-            });
-
-            document.addEventListener('htmx:afterSwap', (evt) => {
-                if (evt.detail.target.id === CONFIG.CONTAINER_ID) {
-                    if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
-                        evt.detail.target.classList.add('view-modern');
-                    }
-                }
+                // Hide any new original posts that appear
+                target.querySelectorAll?.(CONFIG.POST_SELECTOR).forEach(post => {
+                    post.style.display = 'none';
+                });
             });
         }
 
-        if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
-            document.getElementById(CONFIG.CONTAINER_ID)?.classList.add('view-modern');
-        }
+        console.log('[ForumModernizer] Ready - modern view only');
     }
 
+    // Start initialization
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initialize);
     } else {
