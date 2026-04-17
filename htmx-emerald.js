@@ -1,8 +1,3 @@
-<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"
-        integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz"
-        crossorigin="anonymous"></script>
-
-<script>
 // ================================================
 // Forum Modernizer - Maximum htmx Edition
 // Robust .u_rank icon + title parsing (handles all your ranks)
