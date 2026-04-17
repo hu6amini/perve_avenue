@@ -1,6 +1,11 @@
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"
+        integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz"
+        crossorigin="anonymous"></script>
+
+<script>
 // ================================================
 // Forum Modernizer - Maximum htmx Edition
-// Fixed rank icon parsing
+// Robust .u_rank icon + title parsing (handles all your ranks)
 // ================================================
 
 (function () {
@@ -15,7 +20,7 @@
     };
 
     // ============================================================================
-    // DATA EXTRACTION - Fixed .u_rank handling
+    // DATA EXTRACTION - Improved .u_rank parser
     // ============================================================================
     function extractPostData($post) {
         const fullId = $post.attr('id');
@@ -41,24 +46,26 @@
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        // === FIXED RANK LOGIC ===
+        // === ROBUST RANK PARSING ===
         let userTitle = 'Member';
         let rankIconClass = 'fa-medal';   // safe default
 
         const $uRank = $post.find('.u_rank').first();
         if ($uRank.length) {
-            // Get the rank name from the <span> inside .u_rank
-            const rankText = $uRank.find('span').text().trim();
-            if (rankText) userTitle = rankText;
+            // Get rank name from the <span> (last span usually contains the name)
+            const rankSpan = $uRank.find('span').last().text().trim();
+            if (rankSpan) userTitle = rankSpan;
 
-            // Get the icon class correctly (last fa-xxx class wins)
-            const $icon = $uRank.find('i').first();
-            if ($icon.length) {
-                const classes = $icon.attr('class') || '';
-                // Extract the actual icon name (e.g. "fire", "star", "crown", etc.)
-                const iconMatch = classes.match(/fa-(?:solid|regular|light|brands)?-?([a-z0-9-]+)/i);
-                if (iconMatch && iconMatch[1]) {
-                    rankIconClass = `fa-${iconMatch[1]}`;
+            // Find the LAST <i> element that has a fa- class (most reliable for your structure)
+            const $icons = $uRank.find('i');
+            if ($icons.length) {
+                const lastIcon = $icons.last()[0];
+                const classes = lastIcon.className || '';
+
+                // Improved regex: match the actual icon name after fa-regular / fa-solid etc.
+                const match = classes.match(/fa-(?:regular|solid|light|brands)?-?([a-z0-9-]+)/i);
+                if (match && match[1]) {
+                    rankIconClass = `fa-${match[1]}`;
                 }
             }
         }
@@ -211,7 +218,7 @@
     }
 
     // ============================================================================
-    // HANDLERS
+    // HANDLERS (all via hx-on)
     // ============================================================================
     window.forumModernizer = {
         handleQuote(elt) {
@@ -285,7 +292,7 @@
     }
 
     // ============================================================================
-    // Convert legacy post to modern card
+    // Convert legacy → modern
     // ============================================================================
     function convertToModern(postEl) {
         const $post = $(postEl);
@@ -311,7 +318,7 @@
     // Initialization
     // ============================================================================
     function initialize() {
-        console.log('[ForumModernizer] Starting with fixed rank icon parsing');
+        console.log('[ForumModernizer] Starting with robust rank parsing');
 
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
