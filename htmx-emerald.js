@@ -1,7 +1,7 @@
 /**
- * Forum Modernizer - Complete htmx Integration
- * Catches ALL dynamically loaded content including plugins
- * Uses every htmx dynamic content feature
+ * Forum Modernizer - Full htmx Integration
+ * Uses hx-trigger="load", hx-trigger="revealed", and htmx.onLoad()
+ * Handles all dynamically loaded content including lazy-loaded plugins
  */
 
 (function() {
@@ -16,9 +16,15 @@
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
-        SETTLE_DELAY: 100,  // Increased for plugin loading
-        REACTION_POLL_INTERVAL: 500,  // Poll for reaction buttons that load later
-        MAX_REACTION_WAIT: 5000  // Max time to wait for reactions
+        
+        // Timing for various features
+        REACTION_WAIT_DELAY: 500,    // Wait for reaction buttons to load
+        SETTLE_DELAY: 100,           // CSS transition settle time
+        POLL_INTERVAL: 2000,         // Poll for missing elements (fallback)
+        
+        // Retry settings
+        MAX_RETRIES: 5,
+        RETRY_DELAY: 300
     };
     
     // ============================================================================
@@ -28,8 +34,9 @@
     let state = {
         isModernView: false,
         htmxAvailable: typeof htmx !== 'undefined',
-        pendingReactions: new Map(),  // Track posts waiting for reaction buttons
-        reactionObservers: []  // Store observers for cleanup
+        processedPosts: new Set(),      // Track which posts have been converted
+        pendingReactions: new Map(),    // Track posts waiting for reactions
+        retryCounters: new Map()        // Retry counters for each post
     };
     
     // ============================================================================
@@ -39,6 +46,12 @@
     function log(...args) {
         if (console && console.log) {
             console.log('[ForumModernizer]', ...args);
+        }
+    }
+    
+    function warn(...args) {
+        if (console && console.warn) {
+            console.warn('[ForumModernizer]', ...args);
         }
     }
     
@@ -59,8 +72,53 @@
         return div.innerHTML;
     }
     
+    // Wait for an element to appear in the DOM (using htmx patterns)
+    function waitForElement(selector, timeout = 5000) {
+        return new Promise((resolve, reject) => {
+            // Check if element already exists
+            const existing = document.querySelector(selector);
+            if (existing) {
+                resolve(existing);
+                return;
+            }
+            
+            // Use htmx:load event if available
+            if (state.htmxAvailable) {
+                const handler = (event) => {
+                    const element = event.detail.elt;
+                    if (element && element.matches && element.matches(selector)) {
+                        document.removeEventListener('htmx:load', handler);
+                        resolve(element);
+                    }
+                };
+                document.addEventListener('htmx:load', handler);
+                
+                // Timeout
+                setTimeout(() => {
+                    document.removeEventListener('htmx:load', handler);
+                    reject(new Error(`Timeout waiting for ${selector}`));
+                }, timeout);
+            } else {
+                // Fallback to MutationObserver
+                const observer = new MutationObserver((mutations) => {
+                    const element = document.querySelector(selector);
+                    if (element) {
+                        observer.disconnect();
+                        resolve(element);
+                    }
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+                
+                setTimeout(() => {
+                    observer.disconnect();
+                    reject(new Error(`Timeout waiting for ${selector}`));
+                }, timeout);
+            }
+        });
+    }
+    
     // ============================================================================
-    // DATA EXTRACTION - Enhanced for plugin content
+    // DATA EXTRACTION - Enhanced to handle lazy-loaded reactions
     // ============================================================================
     
     function extractPostData($post) {
@@ -85,10 +143,8 @@
         const roleBadgeClass = isAdmin ? 'admin' : 'member';
         const roleIcon = isAdmin ? 'fa-crown' : 'fa-user';
         
-        // Post count
+        // Stats
         const postCount = $post.find('.u_posts dd a').text().trim() || '0';
-        
-        // Reputation
         let reputation = $post.find('.u_reputation dd a').text().trim();
         reputation = reputation.replace('+', '');
         
@@ -105,7 +161,7 @@
             else if (stars === 1) userTitle = 'Junior';
         }
         
-        // Post content
+        // Content
         const postContent = $post.find('.right.Item table.color').clone();
         postContent.find('.signature').remove();
         postContent.find('.edit').remove();
@@ -117,25 +173,40 @@
         // Edit info
         let editInfo = '';
         const editText = $post.find('.edit').text().trim();
-        if (editText) {
-            editInfo = editText;
-        }
+        if (editText) editInfo = editText;
         
-        // Likes - from .points (may load later)
+        // Likes - check multiple possible locations
         let likes = 0;
         const pointsPos = $post.find('.points .points_pos');
         if (pointsPos.length) {
             likes = parseInt(pointsPos.text()) || 0;
+        } else {
+            // Check for points span with positive value
+            const pointsSpan = $post.find('.points');
+            if (pointsSpan.text().match(/\+?\d+/)) {
+                const match = pointsSpan.text().match(/\+?(\d+)/);
+                if (match) likes = parseInt(match[1]) || 0;
+            }
         }
         
-        // Reaction plugin data (st-emoji) - may not exist yet!
-        const hasReactions = $post.find('.st-emoji-post').length > 0;
+        // Reactions - check for st-emoji plugin data
+        let hasReactions = false;
         let reactionCount = 0;
+        let reactionData = [];
         
-        // Check multiple possible reaction locations
-        $post.find('.st-emoji-post .st-emoji-counter, .st-emoji-container .st-emoji-counter').each(function() {
-            reactionCount += parseInt($(this).data('count') || $(this).text() || 1);
+        // Method 1: Check for st-emoji counters
+        $post.find('.st-emoji-post .st-emoji-counter').each(function() {
+            hasReactions = true;
+            const count = parseInt($(this).data('count') || $(this).text() || 1);
+            reactionCount += count;
+            reactionData.push({ type: 'emoji', count: count });
         });
+        
+        // Method 2: Check for reaction buttons that might load later
+        if (!hasReactions && $post.find('.st-emoji-container').length) {
+            hasReactions = true;
+            reactionCount = 1; // Placeholder, will be updated later
+        }
         
         // IP address
         let ipAddress = $post.find('.ip_address dd a').text().trim();
@@ -172,13 +243,69 @@
         return {
             postId, username, avatarUrl, groupText, isAdmin, roleBadgeClass, roleIcon,
             postCount, reputation, isOnline, userTitle, contentHtml,
-            signatureHtml, editInfo, likes, hasReactions, reactionCount,
+            signatureHtml, editInfo, likes, hasReactions, reactionCount, reactionData,
             ipAddress, postNumber, timeAgo
         };
     }
     
     // ============================================================================
-    // MODERN POST GENERATION with placeholders for reactions
+    // DYNAMIC REACTION UPDATER - Uses htmx polling for late-loading reactions
+    // ============================================================================
+    
+    function updateReactionData($post, postId) {
+        // Check if reaction button has loaded yet
+        const $reactionContainer = $post.find('.st-emoji-post .st-emoji-container');
+        const $reactionCounter = $post.find('.st-emoji-post .st-emoji-counter');
+        
+        if ($reactionCounter.length && $reactionCounter.data('count')) {
+            // Reaction data is available
+            const count = $reactionCounter.data('count');
+            log(`Reaction data loaded for post ${postId}: ${count}`);
+            
+            // Update the modern card if it exists
+            const $modernCard = $(`.post-card[data-original-id="${CONFIG.POST_ID_PREFIX}${postId}"]`);
+            if ($modernCard.length) {
+                const $reactionBtn = $modernCard.find('.reaction-btn[data-action="react"]');
+                if ($reactionBtn.length) {
+                    const $countSpan = $reactionBtn.find('.reaction-count');
+                    if ($countSpan.length) {
+                        $countSpan.text(count);
+                    } else {
+                        $reactionBtn.append(`<span class="reaction-count">${count}</span>`);
+                    }
+                    log(`Updated modern card reaction count for post ${postId}`);
+                }
+            }
+            
+            // Remove from pending
+            state.pendingReactions.delete(postId);
+            state.retryCounters.delete(postId);
+            return true;
+        }
+        
+        if ($reactionContainer.length && !$reactionCounter.length) {
+            // Container exists but counter hasn't loaded yet
+            const retries = state.retryCounters.get(postId) || 0;
+            
+            if (retries < CONFIG.MAX_RETRIES) {
+                state.retryCounters.set(postId, retries + 1);
+                log(`Waiting for reaction data on post ${postId} (attempt ${retries + 1}/${CONFIG.MAX_RETRIES})`);
+                
+                // Schedule another check using htmx's load polling pattern
+                setTimeout(() => updateReactionData($post, postId), CONFIG.RETRY_DELAY * (retries + 1));
+                return false;
+            } else {
+                log(`Reaction data timeout for post ${postId}, using placeholder`);
+                state.pendingReactions.delete(postId);
+                return false;
+            }
+        }
+        
+        return false;
+    }
+    
+    // ============================================================================
+    // MODERN POST GENERATION - With placeholder for reactions
     // ============================================================================
     
     function generateModernPost(data) {
@@ -188,27 +315,41 @@
                          (data.userTitle === 'Senior' ? 'fa-star' : 'fa-medal');
         const statusColor = data.isOnline ? '#10B981' : '#6B7280';
         
-        // Create reaction area with placeholder that will be updated
-        const reactionPlaceholderId = `reactions-${data.postId}`;
+        // Generate reactions HTML with placeholder for late-loading data
+        let reactionsHtml = '';
         
-        // Initial reactions HTML (will be updated when plugin loads)
-        let reactionsHtml = `
-            <div id="${reactionPlaceholderId}" class="reaction-placeholder" data-post-id="${data.postId}">
-                <button class="reaction-btn reaction-loading" data-action="like" data-pid="${data.postId}">
-                    <i class="fa-regular fa-thumbs-up"></i>
-                    ${data.likes > 0 ? `<span class="reaction-count">${data.likes}</span>` : ''}
-                </button>
-                <button class="reaction-btn reaction-loading" data-action="react" data-pid="${data.postId}">
-                    <i class="fa-regular fa-face-smile"></i>
-                </button>
-                <span class="reaction-loading-indicator" style="font-size: 11px; color: #999;">
-                    <i class="fas fa-spinner fa-spin"></i> Loading reactions...
-                </span>
-            </div>
+        // Like button
+        const likeButton = `
+            <button class="reaction-btn" data-action="like" data-pid="${data.postId}">
+                <i class="fa-regular fa-thumbs-up"></i>
+                ${data.likes > 0 ? `<span class="reaction-count">${data.likes}</span>` : ''}
+            </button>
         `;
         
+        // Reaction button - with placeholder that will be updated
+        let reactButton = '';
+        if (data.hasReactions) {
+            reactButton = `
+                <button class="reaction-btn reaction-placeholder" data-action="react" data-pid="${data.postId}" data-waiting="true">
+                    <img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" class="reaction-emoji-img" width="16" height="16" alt="laugh">
+                    <span class="reaction-count reaction-placeholder-count">${data.reactionCount > 0 ? data.reactionCount : '...'}</span>
+                    <span class="htmx-indicator" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            `;
+        } else {
+            reactButton = `
+                <button class="reaction-btn" data-action="react" data-pid="${data.postId}">
+                    <i class="fa-regular fa-face-smile"></i>
+                </button>
+            `;
+        }
+        
+        reactionsHtml = likeButton + reactButton;
+        
         return `
-            <div class="post-card" data-post-id="${data.postId}" data-original-id="${CONFIG.POST_ID_PREFIX}${data.postId}">
+            <div class="post-card" data-post-id="${data.postId}" data-original-id="${CONFIG.POST_ID_PREFIX}${data.postId}" data-reactions-ready="false">
                 <div class="post-header-modern">
                     <div class="post-meta-left">
                         <div class="post-number-badge">
@@ -266,7 +407,7 @@
                     ${data.signatureHtml ? `<div class="signature-modern">${data.signatureHtml}</div>` : ''}
                 </div>
                 <div class="post-footer-modern">
-                    <div class="reaction-cluster" data-reaction-container="${data.postId}">
+                    <div class="reaction-cluster">
                         ${reactionsHtml}
                     </div>
                     ${data.ipAddress ? `<div class="ip-info"><i class="fa-regular fa-globe"></i> IP: ${data.ipAddress}</div>` : ''}
@@ -276,119 +417,16 @@
     }
     
     // ============================================================================
-    // UPDATE REACTIONS - Sync with plugin when it loads
+    // CONVERT A SINGLE POST - With reaction waiting
     // ============================================================================
     
-    function updateReactionButtons(postId) {
-        const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${postId}`);
-        const $modernCard = $(`.post-card[data-post-id="${postId}"]`);
-        const $reactionContainer = $modernCard.find('.reaction-cluster');
-        
-        if (!$originalPost.length || !$modernCard.length) return false;
-        
-        // Extract updated reaction data from original post
-        const postData = extractPostData($originalPost);
-        if (!postData) return false;
-        
-        // Check if reaction plugin has loaded
-        const hasPluginReactions = $originalPost.find('.st-emoji-post .st-emoji-counter').length > 0;
-        
-        let newReactionsHtml = '';
-        
-        if (postData.likes > 0 || hasPluginReactions) {
-            newReactionsHtml = `
-                <button class="reaction-btn" data-action="like" data-pid="${postId}">
-                    <i class="fa-regular fa-thumbs-up"></i>
-                    ${postData.likes > 0 ? `<span class="reaction-count">${postData.likes}</span>` : ''}
-                </button>
-            `;
-            
-            if (hasPluginReactions) {
-                // Try to extract the actual emoji from the plugin
-                const emojiImg = $originalPost.find('.st-emoji-post img').first().attr('src') || 
-                                'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg';
-                newReactionsHtml += `
-                    <button class="reaction-btn" data-action="react" data-pid="${postId}">
-                        <img src="${emojiImg}" class="reaction-emoji-img" width="16" height="16" alt="reaction">
-                        <span class="reaction-count">${postData.reactionCount}</span>
-                    </button>
-                `;
-            } else {
-                newReactionsHtml += `
-                    <button class="reaction-btn" data-action="react" data-pid="${postId}">
-                        <i class="fa-regular fa-face-smile"></i>
-                    </button>
-                `;
-            }
-        } else {
-            newReactionsHtml = `
-                <button class="reaction-btn" data-action="like" data-pid="${postId}">
-                    <i class="fa-regular fa-thumbs-up"></i>
-                </button>
-                <button class="reaction-btn" data-action="react" data-pid="${postId}">
-                    <i class="fa-regular fa-face-smile"></i>
-                </button>
-            `;
-        }
-        
-        $reactionContainer.html(newReactionsHtml);
-        log(`Updated reactions for post ${postId}`);
-        return true;
-    }
-    
-    // ============================================================================
-    // WAIT FOR REACTION PLUGIN USING MUTATION OBSERVER (only for this specific case)
-    // ============================================================================
-    
-    function watchForReactionPlugin(postId) {
-        return new Promise((resolve) => {
-            const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${postId}`);
-            
-            if (!$originalPost.length) {
-                resolve(false);
-                return;
-            }
-            
-            // Check if reactions already exist
-            if ($originalPost.find('.st-emoji-post').length > 0) {
-                resolve(updateReactionButtons(postId));
-                return;
-            }
-            
-            // Watch for the reaction plugin to load
-            const observer = new MutationObserver((mutations, obs) => {
-                if ($originalPost.find('.st-emoji-post').length > 0) {
-                    log(`Reaction plugin loaded for post ${postId}`);
-                    updateReactionButtons(postId);
-                    obs.disconnect();
-                    resolve(true);
-                }
-            });
-            
-            observer.observe($originalPost[0], {
-                childList: true,
-                subtree: true
-            });
-            
-            // Timeout after 5 seconds
-            setTimeout(() => {
-                observer.disconnect();
-                log(`Reaction plugin timeout for post ${postId}`);
-                resolve(false);
-            }, CONFIG.MAX_REACTION_WAIT);
-            
-            state.reactionObservers.push(observer);
-        });
-    }
-    
-    // ============================================================================
-    // CONVERT A SINGLE POST with reaction waiting
-    // ============================================================================
-    
-    async function convertPostToModern($post) {
+    function convertPostToModern($post) {
         const postId = $post.attr('id');
         
         if (!postId) return;
+        if (state.processedPosts.has(postId)) return;
+        
+        log(`Converting post: ${postId}`);
         
         // Check if modern card already exists
         if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
@@ -396,21 +434,104 @@
             if (postData) {
                 const modernCard = generateModernPost(postData);
                 $post.after(modernCard);
-                log(`Created modern card for post: ${postId}`);
+                state.processedPosts.add(postId);
                 
-                // Start watching for reaction plugin
-                watchForReactionPlugin(postData.postId);
+                // If post has reactions that might load later, start watching
+                if (postData.hasReactions || $post.find('.st-emoji-container').length) {
+                    state.pendingReactions.set(postId, $post);
+                    log(`Watching for reaction data on post ${postId}`);
+                    
+                    // Use htmx's load polling pattern to check for reactions
+                    setTimeout(() => updateReactionData($post, postId), CONFIG.REACTION_WAIT_DELAY);
+                }
             }
-        } else if (state.isModernView) {
-            // Update existing modern card's reactions
-            updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
         }
         
         // Hide original if modern view is active
         if (state.isModernView) {
             $post.hide();
+        } else {
+            $post.show();
         }
     }
+    
+    // ============================================================================
+    // REACTION OBSERVER - Using htmx events for plugin-loaded content
+    // ============================================================================
+    
+    function setupReactionObserver() {
+        if (!state.htmxAvailable) return;
+        
+        log('Setting up reaction observer using htmx events');
+        
+        // Listen for htmx:load events that might contain reaction data
+        document.addEventListener('htmx:load', function(event) {
+            const element = event.detail.elt;
+            
+            // Check if this element is a reaction counter or container
+            if ($(element).is('.st-emoji-counter, .st-emoji-container')) {
+                log('Reaction element loaded via htmx:', element);
+                
+                // Find which post this belongs to
+                const $parentPost = $(element).closest('.post');
+                if ($parentPost.length) {
+                    const postId = $parentPost.attr('id');
+                    if (postId) {
+                        log(`Reaction data loaded for post ${postId}`);
+                        updateReactionData($parentPost, postId.replace(CONFIG.POST_ID_PREFIX, ''));
+                    }
+                }
+            }
+        });
+        
+        // Also listen for the special 'revealed' event for lazy-loaded reactions
+        document.addEventListener('htmx:revealed', function(event) {
+            const element = event.detail.elt;
+            log('Element revealed:', element);
+            
+            if ($(element).find('.st-emoji-counter, .st-emoji-container').length) {
+                const $parentPost = $(element).closest('.post');
+                if ($parentPost.length) {
+                    const postId = $parentPost.attr('id');
+                    if (postId) {
+                        updateReactionData($parentPost, postId.replace(CONFIG.POST_ID_PREFIX, ''));
+                    }
+                }
+            }
+        });
+    }
+    
+    // ============================================================================
+    // HTMX-BASED POLLING FOR MISSING REACTIONS (using every trigger)
+    // ============================================================================
+    
+    function setupReactionPolling() {
+        // Create a hidden polling element using htmx's 'every' trigger
+        // This checks for missing reaction data periodically
+        const pollingHtml = `
+            <div id="reaction-polling" 
+                 hx-trigger="every ${CONFIG.POLL_INTERVAL}ms"
+                 hx-on::every="checkMissingReactions()"
+                 style="display: none;">
+            </div>
+        `;
+        
+        // Add polling element to body if htmx is available
+        if (state.htmxAvailable && !$('#reaction-polling').length) {
+            $('body').append(pollingHtml);
+            log('Reaction polling enabled');
+        }
+    }
+    
+    // Global function for polling to check missing reactions
+    window.checkMissingReactions = function() {
+        // Check each pending reaction
+        state.pendingReactions.forEach(($post, postId) => {
+            if ($post && $post.length) {
+                updateReactionData($post, postId);
+            }
+        });
+    };
     
     // ============================================================================
     // CORE FUNCTIONS
@@ -427,17 +548,9 @@
             return;
         }
         
-        // Convert any posts that don't have modern cards yet
-        $originalPosts.each(async function() {
-            const $post = $(this);
-            const postId = $post.attr('id');
-            
-            if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
-                await convertPostToModern($post);
-            } else {
-                // Update existing card's reactions
-                updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
-            }
+        // Convert any unconverted posts
+        $originalPosts.each(function() {
+            convertPostToModern($(this));
         });
         
         // Hide all original posts
@@ -445,6 +558,11 @@
         
         // Show all modern cards
         $container.find('.post-card').show();
+        
+        // Mark any pending reactions to check again
+        state.pendingReactions.forEach(($post, postId) => {
+            setTimeout(() => updateReactionData($post, postId), 500);
+        });
         
         state.isModernView = true;
         localStorage.setItem(CONFIG.STORAGE_KEY, 'modern');
@@ -489,13 +607,10 @@
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             if ($originalPost.length) {
                 const $quoteLink = $originalPost.find('a[href*="CODE=02"]');
-                if ($quoteLink.length) {
-                    window.location.href = $quoteLink.attr('href');
-                }
+                if ($quoteLink.length) window.location.href = $quoteLink.attr('href');
             }
         });
         
@@ -504,13 +619,10 @@
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             if ($originalPost.length) {
                 const $editLink = $originalPost.find('a[href*="CODE=08"]');
-                if ($editLink.length) {
-                    window.location.href = $editLink.attr('href');
-                }
+                if ($editLink.length) window.location.href = $editLink.attr('href');
             }
         });
         
@@ -519,7 +631,6 @@
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            
             if (confirm('Are you sure you want to delete this post?')) {
                 if (typeof window.delete_post === 'function') {
                     window.delete_post(pid);
@@ -533,7 +644,6 @@
             e.stopPropagation();
             const pid = $(this).data('pid');
             const url = window.location.href.split('#')[0] + `#entry${pid}`;
-            
             navigator.clipboard.writeText(url).then(() => {
                 const $btn = $(this);
                 const originalIcon = $btn.html();
@@ -549,12 +659,8 @@
             const pid = $(this).data('pid');
             
             let $reportBtn = $(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`);
-            if (!$reportBtn.length) {
-                $reportBtn = $(`.report_button[data-pid="${pid}"]`);
-            }
-            if ($reportBtn.length) {
-                $reportBtn[0].click();
-            }
+            if (!$reportBtn.length) $reportBtn = $(`.report_button[data-pid="${pid}"]`);
+            if ($reportBtn.length) $reportBtn[0].click();
         });
         
         // LIKE
@@ -562,175 +668,105 @@
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             if ($originalPost.length) {
                 const $likeSpan = $originalPost.find('.points .points_up');
                 if ($likeSpan.length) {
                     const onclickAttr = $likeSpan.attr('onclick');
-                    if (onclickAttr) {
-                        eval(onclickAttr);
-                    } else {
-                        $likeSpan.click();
-                    }
+                    if (onclickAttr) eval(onclickAttr);
+                    else $likeSpan.click();
                 }
             }
         });
         
-        // CUSTOM REACTION
+        // REACT - Enhanced to wait for reaction plugin
         $(document).on('click.forumModernizer', '.reaction-btn[data-action="react"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
+            const $btn = $(this);
+            
+            // Show loading indicator
+            $btn.addClass('htmx-request');
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
+            
+            // Try multiple ways to trigger the reaction plugin
             const $emojiContainer = $originalPost.find('.st-emoji-post .st-emoji-container');
+            
             if ($emojiContainer.length) {
+                // Trigger the emoji picker
                 $emojiContainer.click();
+                $btn.removeClass('htmx-request');
             } else {
-                $(this).siblings('.reaction-btn[data-action="like"]').click();
+                // Wait for the reaction plugin to load
+                log(`Waiting for reaction plugin on post ${pid}`);
+                
+                waitForElement(`#${CONFIG.POST_ID_PREFIX}${pid} .st-emoji-container`, 3000)
+                    .then(container => {
+                        log(`Reaction plugin loaded for post ${pid}`);
+                        $(container).click();
+                        $btn.removeClass('htmx-request');
+                    })
+                    .catch(() => {
+                        log(`Reaction plugin timeout for post ${pid}, falling back to like`);
+                        $btn.siblings('.reaction-btn[data-action="like"]').click();
+                        $btn.removeClass('htmx-request');
+                    });
             }
         });
     }
     
     // ============================================================================
-    // COMPREHENSIVE HTMX HANDLERS - Catching EVERYTHING
+    // HTMX INTEGRATION
     // ============================================================================
     
     function setupHtmxHandlers() {
         if (!state.htmxAvailable) {
-            log('htmx not available, using fallback observers');
-            setupFallbackObservers();
+            log('htmx not available');
             return;
         }
         
-        log('Setting up comprehensive htmx handlers');
+        log('Setting up htmx handlers');
         
-        // 1. htmx.onLoad() - catches ALL content loaded by htmx
-        htmx.onLoad(async function(target) {
-            log('htmx.onLoad triggered');
+        // Use htmx.onLoad for all new content
+        htmx.onLoad(function(target) {
+            log('htmx.onLoad:', target);
             
-            // Convert posts
-            const newPosts = $(target).find('.post');
-            if (newPosts.length) {
-                log(`Found ${newPosts.length} new posts via htmx.onLoad`);
-                for (const post of newPosts) {
-                    await convertPostToModern($(post));
-                }
-            }
+            // Convert any new posts
+            $(target).find('.post').each(function() {
+                convertPostToModern($(this));
+            });
             
             if ($(target).is('.post')) {
-                await convertPostToModern($(target));
+                convertPostToModern($(target));
             }
             
-            // Check for reaction plugin elements that just loaded
-            $(target).find('.st-emoji-post, .st-emoji-container').each(function() {
+            // Check for reaction elements in new content
+            $(target).find('.st-emoji-counter, .st-emoji-container').each(function() {
                 const $parentPost = $(this).closest('.post');
                 if ($parentPost.length) {
                     const postId = $parentPost.attr('id');
                     if (postId) {
-                        updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
+                        updateReactionData($parentPost, postId.replace(CONFIG.POST_ID_PREFIX, ''));
                     }
                 }
             });
         });
         
-        // 2. htmx:load event
-        document.addEventListener('htmx:load', function(event) {
-            log('htmx:load event');
-            const element = event.detail.elt;
-            
+        // Use htmx:afterSwap for settle timing
+        document.addEventListener('htmx:afterSwap', function(event) {
             if (state.isModernView) {
-                $(element).find('.post').hide();
-                $(element).find('.post-card').show();
+                $(event.detail.target).find('.post').hide();
+                $(event.detail.target).find('.post-card').show();
             }
         });
         
-        // 3. htmx:afterSwap event
-        document.addEventListener('htmx:afterSwap', function(event) {
-            log('htmx:afterSwap completed');
-            
-            // Re-check for reaction buttons after swap settles
-            setTimeout(() => {
-                $(event.detail.target).find('.post').each(function() {
-                    const postId = $(this).attr('id');
-                    if (postId) {
-                        updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
-                    }
-                });
-            }, CONFIG.SETTLE_DELAY);
-        });
+        // Setup reaction observer
+        setupReactionObserver();
         
-        // 4. htmx:beforeSwap - modify response if needed
-        document.addEventListener('htmx:beforeSwap', function(event) {
-            // You could inject reaction placeholders here if needed
-            log('htmx:beforeSwap');
-        });
-    }
-    
-    // ============================================================================
-    // FALLBACK OBSERVERS (when htmx not available)
-    // ============================================================================
-    
-    function setupFallbackObservers() {
-        log('Setting up fallback MutationObserver');
-        
-        // Watch for new posts
-        const postObserver = new MutationObserver((mutations) => {
-            mutations.forEach(async (mutation) => {
-                if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            const $node = $(node);
-                            if ($node.is('.post') || $node.find('.post').length) {
-                                const posts = $node.is('.post') ? $node : $node.find('.post');
-                                for (const post of posts) {
-                                    await convertPostToModern($(post));
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        });
-        
-        postObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        state.reactionObservers.push(postObserver);
-        
-        // Watch for reaction plugin loading
-        const reactionObserver = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                    for (const node of mutation.addedNodes) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            const $node = $(node);
-                            if ($node.is('.st-emoji-post, .st-emoji-container') || 
-                                $node.find('.st-emoji-post, .st-emoji-container').length) {
-                                
-                                const $parentPost = $node.closest('.post');
-                                if ($parentPost.length) {
-                                    const postId = $parentPost.attr('id');
-                                    if (postId) {
-                                        updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        });
-        
-        reactionObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        state.reactionObservers.push(reactionObserver);
+        // Setup polling for missing reactions
+        setupReactionPolling();
     }
     
     // ============================================================================
@@ -738,19 +774,17 @@
     // ============================================================================
     
     function createViewButtons() {
-        if ($('#modern-view-btn').length > 0) {
-            return;
-        }
+        if ($('#modern-view-btn').length > 0) return;
         
         const $container = $(`#${CONFIG.CONTAINER_ID}`);
         if (!$container.length) return;
         
         const buttonHtml = `
             <div id="forum-view-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <button id="modern-view-btn" class="view-toggle-btn" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer;">
+                <button id="modern-view-btn" class="view-toggle-btn">
                     <i class="fas fa-magic"></i> Modern View
                 </button>
-                <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer;">
+                <button id="classic-view-btn" class="view-toggle-btn active">
                     <i class="fas fa-history"></i> Classic View
                 </button>
                 <span id="view-status" style="font-size: 12px; color: #666;"></span>
@@ -759,15 +793,43 @@
         
         $container.before(buttonHtml);
         
-        $('#modern-view-btn').off('click').on('click', switchToModernView);
-        $('#classic-view-btn').off('click').on('click', switchToClassicView);
+        // Style buttons
+        $('<style>')
+            .prop('type', 'text/css')
+            .html(`
+                .view-toggle-btn {
+                    padding: 8px 18px;
+                    border-radius: 8px;
+                    border: 1px solid #ccc;
+                    background: white;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: all 0.2s ease;
+                }
+                .view-toggle-btn.active {
+                    background: #2563eb !important;
+                    color: white !important;
+                    border-color: #2563eb !important;
+                }
+                .view-toggle-btn:hover:not(.active) {
+                    background: #f3f4f6 !important;
+                }
+                .htmx-request {
+                    opacity: 0.7;
+                    cursor: wait;
+                }
+            `)
+            .appendTo('head');
+        
+        $('#modern-view-btn').on('click', switchToModernView);
+        $('#classic-view-btn').on('click', switchToClassicView);
     }
     
     // ============================================================================
     // INITIALIZATION
     // ============================================================================
     
-    async function initialize() {
+    function initialize() {
         log('========================================');
         log('Forum Modernizer v2.1 - Full htmx Integration');
         log(`htmx available: ${state.htmxAvailable}`);
@@ -792,31 +854,30 @@
         const $container = $(`#${CONFIG.CONTAINER_ID}`);
         const $posts = $container.find(CONFIG.POST_SELECTOR);
         
-        log(`Found ${$posts.length} existing posts`);
+        $posts.each(function() {
+            convertPostToModern($(this));
+        });
         
-        for (const post of $posts) {
-            await convertPostToModern($(post));
-        }
-        
-        // Check saved preference
+        // Restore preference
         const savedView = localStorage.getItem(CONFIG.STORAGE_KEY);
         if (savedView === 'modern') {
-            await switchToModernView();
-            $('#view-status').html('<i class="fas fa-check-circle"></i> Modern view active');
+            $posts.hide();
+            $container.find('.post-card').show();
+            state.isModernView = true;
+            $('#modern-view-btn').addClass('active');
+            $('#classic-view-btn').removeClass('active');
         } else {
             $posts.show();
             $container.find('.post-card').hide();
-            $('#view-status').html('<i class="fas fa-info-circle"></i> Classic view active');
+            state.isModernView = false;
         }
         
+        $('#view-status').html(`<i class="fas fa-info-circle"></i> ${state.isModernView ? 'Modern view active' : 'Classic view active'}`);
+        
         log('Initialization complete!');
-        log('Watching for: posts, reactions, plugins, and all dynamic content');
     }
     
-    // ============================================================================
-    // START
-    // ============================================================================
-    
+    // Start
     if (document.readyState === 'loading') {
         $(document).ready(initialize);
     } else {
