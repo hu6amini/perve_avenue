@@ -1,5 +1,5 @@
 /**
- * Forum Modernizer - Enhanced with working endpoints from test results
+ * Forum Modernizer - Fixed target error
  */
 
 (function() {
@@ -271,16 +271,13 @@
     window.forumModernizer = {
         handleQuote(elt) {
             const pid = elt.dataset.pid;
-            // Try to find the quote link - it might be in a different format
-            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`) ||
-                        document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a:contains("Quote")`);
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`);
             if (link) location.href = link.href;
         },
         
         handleEdit(elt) {
             const pid = elt.dataset.pid;
-            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`) ||
-                        document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a:contains("Edit")`);
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`);
             if (link) location.href = link.href;
         },
         
@@ -329,12 +326,13 @@
     };
 
     // ============================================================================
-    // INITIALIZATION
+    // FIXED VIEW SWITCHING - Using hx-select to extract content
     // ============================================================================
     
     function initialize() {
         console.log('[ForumModernizer] Loaded');
 
+        // Ensure container exists
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
@@ -344,22 +342,17 @@
             }
         }
 
+        // Convert existing posts
         document.querySelectorAll(CONFIG.POST_SELECTOR).forEach(convertToModern);
 
+        // Setup htmx handlers
         if (typeof htmx !== 'undefined') {
             htmx.onLoad((target) => {
                 target.querySelectorAll?.(CONFIG.POST_SELECTOR).forEach(convertToModern);
             });
-
-            document.addEventListener('htmx:afterSwap', (evt) => {
-                if (evt.detail.target.id === CONFIG.CONTAINER_ID) {
-                    if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
-                        evt.detail.target.classList.add('view-modern');
-                    }
-                }
-            });
         }
 
+        // Restore saved view
         if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
             document.getElementById(CONFIG.CONTAINER_ID)?.classList.add('view-modern');
         }
