@@ -1,4 +1,4 @@
-// Forum Modernizer - htmx-first approach (final clean version)
+// Forum Modernizer - htmx-first (cleaned content + no role badge icons)
 (function () {
     'use strict';
 
@@ -10,6 +10,9 @@
         REACTION_DELAY: 500
     };
 
+    // ============================================================================
+    // DATA EXTRACTION
+    // ============================================================================
     function extractPostData($post) {
         const fullId = $post.attr('id');
         if (!fullId) return null;
@@ -26,7 +29,6 @@
         const groupText = $post.find('.u_group dd').text().trim();
         const isAdmin = groupText === 'Administrator';
         const roleBadgeClass = isAdmin ? 'admin' : 'member';
-        const roleIcon = isAdmin ? 'fa-crown' : 'fa-user';
 
         const postCount = $post.find('.u_posts dd a').text().trim() || '0';
         let reputation = $post.find('.u_reputation dd a').text().trim().replace('+', '');
@@ -34,7 +36,7 @@
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        // Rank parsing (works for all your ranks)
+        // Rank parsing
         let userTitle = 'Member';
         let rankIconClass = 'fa-medal fa-regular';
 
@@ -54,8 +56,19 @@
             }
         }
 
+        // Clean post content - remove bottomborder and extra <br> tags around it
         const contentClone = $post.find('.right.Item table.color').clone();
         contentClone.find('.signature, .edit').remove();
+
+        // Remove the bottomborder div and surrounding <br> tags
+        contentClone.find('.bottomborder').remove();
+        contentClone.find('br').each(function() {
+            const $br = $(this);
+            if ($br.prev().is('br') || $br.next().is('.bottomborder') || $br.prev().is('.bottomborder')) {
+                $br.remove();
+            }
+        });
+
         const contentHtml = contentClone.html() || '';
 
         const signatureHtml = $post.find('.signature').html() || '';
@@ -89,13 +102,16 @@
         }
 
         return {
-            postId, username, avatarUrl, groupText, roleBadgeClass, roleIcon,
+            postId, username, avatarUrl, groupText, roleBadgeClass,
             postCount, reputation, isOnline, userTitle, rankIconClass,
             contentHtml, signatureHtml, editInfo, likes, hasReactions, reactionCount,
             ipAddress, postNumber, timeAgo
         };
     }
 
+    // ============================================================================
+    // GENERATE MODERN CARD (no icons in role badges)
+    // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
 
@@ -136,7 +152,7 @@
                         <div class="username-row"><span class="username">${escapeHtml(data.username)}</span></div>
                         <div class="badge-container">
                             <span class="role-badge ${data.roleBadgeClass}">
-                                <i class="fas ${data.roleIcon}"></i> ${escapeHtml(data.groupText || 'Member')}
+                                ${escapeHtml(data.groupText || 'Member')}
                             </span>
                         </div>
                         <div class="user-stats-grid">
@@ -275,12 +291,12 @@
     }
 
     function initialize() {
-        console.log('[ForumModernizer] htmx-first version loaded');
+        console.log('[ForumModernizer] Loaded - clean content + no role icons');
 
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
-            if (firstPost?.parentElement) {
+            if (firstPost && firstPost.parentElement) {
                 firstPost.parentElement.id = CONFIG.CONTAINER_ID;
                 container = firstPost.parentElement;
             }
