@@ -1,5 +1,9 @@
-// Forum Modernizer - htmx-first (cleaned content + no role badge icons)
-(function () {
+/**
+ * Forum Modernizer - Complete Version
+ * Features: Clean content extraction, no role badge icons, full accessibility
+ */
+
+(function() {
     'use strict';
 
     const CONFIG = {
@@ -11,32 +15,52 @@
     };
 
     // ============================================================================
+    // UTILITIES
+    // ============================================================================
+    
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ============================================================================
     // DATA EXTRACTION
     // ============================================================================
+    
     function extractPostData($post) {
         const fullId = $post.attr('id');
         if (!fullId) return null;
 
         const postId = fullId.replace(CONFIG.POST_ID_PREFIX, '');
 
+        // Username
         const username = $post.find('.nick a').first().text().trim() || 'Unknown';
+        
+        // Avatar
         let avatarUrl = $post.find('.avatar img').attr('src');
         if (avatarUrl && avatarUrl.includes('weserv.nl')) {
             const urlParams = new URLSearchParams(avatarUrl.split('?')[1]);
             avatarUrl = urlParams.get('url') || avatarUrl;
         }
 
+        // User group / role
         const groupText = $post.find('.u_group dd').text().trim();
         const isAdmin = groupText === 'Administrator';
         const roleBadgeClass = isAdmin ? 'admin' : 'member';
 
+        // Post count
         const postCount = $post.find('.u_posts dd a').text().trim() || '0';
+        
+        // Reputation
         let reputation = $post.find('.u_reputation dd a').text().trim().replace('+', '');
 
+        // Online/Offline status
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        // Rank parsing
+        // Rank / User title parsing
         let userTitle = 'Member';
         let rankIconClass = 'fa-medal fa-regular';
 
@@ -56,7 +80,7 @@
             }
         }
 
-        // Clean post content - remove bottomborder and extra <br> tags around it
+        // Clean post content - remove bottomborder and extra <br> tags
         const contentClone = $post.find('.right.Item table.color').clone();
         contentClone.find('.signature, .edit').remove();
 
@@ -71,34 +95,51 @@
 
         const contentHtml = contentClone.html() || '';
 
+        // Signature
         const signatureHtml = $post.find('.signature').html() || '';
+        
+        // Edit info
         const editInfo = $post.find('.edit').text().trim();
 
+        // Likes
         let likes = 0;
         const pointsPos = $post.find('.points .points_pos');
         if (pointsPos.length) likes = parseInt(pointsPos.text()) || 0;
 
+        // Reactions (emoji plugin)
         let hasReactions = false;
         let reactionCount = 0;
-        $post.find('.st-emoji-post .st-emoji-counter').each(function () {
+        $post.find('.st-emoji-post .st-emoji-counter').each(function() {
             hasReactions = true;
             reactionCount += parseInt($(this).data('count') || $(this).text() || 1);
         });
         if (!hasReactions && $post.find('.st-emoji-container').length) hasReactions = true;
 
+        // IP address (masked)
         let ipAddress = $post.find('.ip_address dd a').text().trim();
         if (ipAddress) {
             const parts = ipAddress.split('.');
             if (parts.length === 4) ipAddress = `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
         }
 
+        // Post number in thread
         const postNumber = $post.index() + 1;
 
+        // Time ago calculation
         let timeAgo = 'Recently';
         const whenTitle = $post.find('.when').attr('title');
         if (whenTitle) {
             const diffDays = Math.floor((Date.now() - new Date(whenTitle)) / 86400000);
-            timeAgo = diffDays >= 1 ? `${diffDays} day${diffDays > 1 ? 's' : ''} ago` : 'Just now';
+            if (diffDays >= 1) {
+                timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+            } else {
+                const diffHours = Math.floor((Date.now() - new Date(whenTitle)) / 3600000);
+                if (diffHours >= 1) {
+                    timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+                } else {
+                    timeAgo = 'Just now';
+                }
+            }
         }
 
         return {
@@ -110,8 +151,9 @@
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (no icons in role badges)
+    // GENERATE MODERN CARD
     // ============================================================================
+    
     function generateModernPost(data) {
         if (!data) return '';
 
@@ -121,24 +163,28 @@
             <div class="post-card" data-post-id="${data.postId}" data-original-id="${CONFIG.POST_ID_PREFIX}${data.postId}">
                 <div class="post-header-modern">
                     <div class="post-meta-left">
-                        <div class="post-number-badge"><i class="fas fa-hashtag"></i> ${data.postNumber}</div>
-                        <div class="post-timestamp"><time>${data.timeAgo}</time></div>
+                        <div class="post-number-badge" aria-label="Post number ${data.postNumber}">
+                            <i class="fas fa-hashtag" aria-hidden="true"></i> ${data.postNumber}
+                        </div>
+                        <div class="post-timestamp">
+                            <time datetime="${data.timeAgo === 'Just now' ? new Date().toISOString() : ''}">${data.timeAgo}</time>
+                        </div>
                     </div>
-                    <div class="action-buttons-group">
-                        <button class="action-icon" title="Quote" data-pid="${data.postId}" hx-on:click="forumModernizer.handleQuote(this)">
-                            <i class="fa-regular fa-quote-left"></i>
+                    <div class="action-buttons-group" role="group" aria-label="Post actions">
+                        <button class="action-icon" title="Quote" aria-label="Quote this post" data-pid="${data.postId}" hx-on:click="forumModernizer.handleQuote(this)">
+                            <i class="fa-regular fa-quote-left" aria-hidden="true"></i>
                         </button>
-                        <button class="action-icon" title="Edit" data-pid="${data.postId}" hx-on:click="forumModernizer.handleEdit(this)">
-                            <i class="fa-regular fa-pen-to-square"></i>
+                        <button class="action-icon" title="Edit" aria-label="Edit this post" data-pid="${data.postId}" hx-on:click="forumModernizer.handleEdit(this)">
+                            <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
                         </button>
-                        <button class="action-icon" title="Share" data-pid="${data.postId}" hx-on:click="forumModernizer.handleShare(this)">
-                            <i class="fa-regular fa-share-nodes"></i>
+                        <button class="action-icon" title="Share" aria-label="Share this post" data-pid="${data.postId}" hx-on:click="forumModernizer.handleShare(this)">
+                            <i class="fa-regular fa-share-nodes" aria-hidden="true"></i>
                         </button>
-                        <button class="action-icon report-action" title="Report" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReport(this)">
-                            <i class="fa-regular fa-circle-exclamation"></i>
+                        <button class="action-icon report-action" title="Report" aria-label="Report this post" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReport(this)">
+                            <i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>
                         </button>
-                        <button class="action-icon delete-action" title="Delete" data-pid="${data.postId}" hx-on:click="forumModernizer.handleDelete(this)">
-                            <i class="fa-regular fa-trash-can"></i>
+                        <button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-pid="${data.postId}" hx-on:click="forumModernizer.handleDelete(this)">
+                            <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
@@ -146,27 +192,30 @@
                 <div class="user-area">
                     <div class="avatar-modern">
                         <img class="avatar-circle" src="${data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username)}" 
-                             alt="${data.username}" width="60" height="60" loading="lazy">
+                             alt="Avatar of ${escapeHtml(data.username)}" 
+                             width="70" height="70" loading="lazy">
                     </div>
                     <div class="user-details">
-                        <div class="username-row"><span class="username">${escapeHtml(data.username)}</span></div>
+                        <div class="username-row">
+                            <span class="username" id="post-author-${data.postId}">${escapeHtml(data.username)}</span>
+                        </div>
                         <div class="badge-container">
-                            <span class="role-badge ${data.roleBadgeClass}">
+                            <span class="role-badge ${data.roleBadgeClass}" aria-label="Role: ${escapeHtml(data.groupText || 'Member')}">
                                 ${escapeHtml(data.groupText || 'Member')}
                             </span>
                         </div>
-                        <div class="user-stats-grid">
-                            <span class="stat-pill">
-                                <i class="${data.rankIconClass}"></i> ${data.userTitle}
+                        <div class="user-stats-grid" aria-label="User statistics">
+                            <span class="stat-pill" aria-label="User title: ${data.userTitle}">
+                                <i class="${data.rankIconClass}" aria-hidden="true"></i> ${data.userTitle}
                             </span>
-                            <span class="stat-pill">
-                                <i class="fa-regular fa-comments"></i> ${data.postCount} posts
+                            <span class="stat-pill" aria-label="Post count: ${data.postCount}">
+                                <i class="fa-regular fa-comments" aria-hidden="true"></i> ${data.postCount} posts
                             </span>
-                            <span class="stat-pill">
-                                <i class="fa-regular fa-thumbs-up"></i> ${data.reputation > 0 ? '+' : ''}${data.reputation} rep
+                            <span class="stat-pill" aria-label="Reputation: ${data.reputation > 0 ? '+' : ''}${data.reputation}">
+                                <i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ${data.reputation > 0 ? '+' : ''}${data.reputation} rep
                             </span>
-                            <span class="stat-pill">
-                                <i class="fa-regular fa-circle" style="color: ${statusColor}"></i> 
+                            <span class="stat-pill" aria-label="Status: ${data.isOnline ? 'Online' : 'Offline'}">
+                                <i class="fa-regular fa-circle" style="color: ${statusColor}" aria-hidden="true"></i> 
                                 ${data.isOnline ? 'Online' : 'Offline'}
                             </span>
                         </div>
@@ -176,102 +225,58 @@
                 <div class="post-body">
                     <div class="post-text-content">
                         ${data.contentHtml}
-                        ${data.editInfo ? `<div class="edit-indicator"><i class="fa-regular fa-pen-to-square"></i> ${escapeHtml(data.editInfo)}</div>` : ''}
+                        ${data.editInfo ? `<div class="edit-indicator" aria-label="Post has been edited"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ${escapeHtml(data.editInfo)}</div>` : ''}
                     </div>
-                    ${data.signatureHtml ? `<div class="signature-modern">${data.signatureHtml}</div>` : ''}
+                    ${data.signatureHtml ? `<div class="signature-modern" aria-label="User signature">${data.signatureHtml}</div>` : ''}
                 </div>
 
                 <div class="post-footer-modern">
-                    <div class="reaction-cluster">
-                        <button class="reaction-btn" data-pid="${data.postId}" hx-on:click="forumModernizer.handleLike(this)">
-                            <i class="fa-regular fa-thumbs-up"></i>
-                            ${data.likes > 0 ? `<span class="reaction-count">${data.likes}</span>` : ''}
+                    <div class="reaction-cluster" role="group" aria-label="Post reactions">
+                        <button class="reaction-btn" aria-label="Like this post" data-pid="${data.postId}" hx-on:click="forumModernizer.handleLike(this)">
+                            <i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>
+                            ${data.likes > 0 ? `<span class="reaction-count" aria-label="${data.likes} likes">${data.likes}</span>` : ''}
                         </button>
-                        <button class="reaction-btn ${data.hasReactions ? 'reaction-placeholder' : ''}" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReact(this)">
+                        <button class="reaction-btn ${data.hasReactions ? 'reaction-placeholder' : ''}" aria-label="Add a reaction" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReact(this)">
                             ${data.hasReactions ?
-                                `<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="laugh">` :
-                                `<i class="fa-regular fa-face-smile"></i>`}
-                            ${data.reactionCount > 0 ? `<span class="reaction-count">${data.reactionCount}</span>` : ''}
+                                `<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji" aria-label="Laugh reaction">` :
+                                `<i class="fa-regular fa-face-smile" aria-hidden="true"></i>`}
+                            ${data.reactionCount > 0 ? `<span class="reaction-count" aria-label="${data.reactionCount} reactions">${data.reactionCount}</span>` : ''}
                         </button>
                     </div>
-                    ${data.ipAddress ? `<div class="ip-info"><i class="fa-regular fa-globe"></i> IP: ${data.ipAddress}</div>` : ''}
+                    ${data.ipAddress ? `<div class="ip-info" aria-label="IP address (masked)"><i class="fa-regular fa-globe" aria-hidden="true"></i> IP: ${data.ipAddress}</div>` : ''}
                 </div>
             </div>
         `;
     }
 
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    window.forumModernizer = {
-        handleQuote(elt) {
-            const pid = elt.dataset.pid;
-            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`);
-            if (link) location.href = link.href;
-        },
-        handleEdit(elt) {
-            const pid = elt.dataset.pid;
-            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`);
-            if (link) location.href = link.href;
-        },
-        handleDelete(elt) {
-            if (confirm('Are you sure you want to delete this post?')) {
-                if (typeof window.delete_post === 'function') window.delete_post(elt.dataset.pid);
-            }
-        },
-        handleShare(elt) {
-            const pid = elt.dataset.pid;
-            const url = location.href.split('#')[0] + `#entry${pid}`;
-            navigator.clipboard.writeText(url).then(() => {
-                const original = elt.innerHTML;
-                elt.innerHTML = '<i class="fas fa-check"></i>';
-                setTimeout(() => elt.innerHTML = original, 1500);
-            });
-        },
-        handleReport(elt) {
-            const pid = elt.dataset.pid;
-            let btn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`) ||
-                      document.querySelector(`.report_button[data-pid="${pid}"]`);
-            if (btn) btn.click();
-        },
-        handleLike(elt) {
-            const pid = elt.dataset.pid;
-            const likeBtn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .points .points_up`);
-            if (likeBtn) likeBtn.click();
-            setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
-        },
-        handleReact(elt) {
-            const pid = elt.dataset.pid;
-            const emojiContainer = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .st-emoji-container`);
-            if (emojiContainer) emojiContainer.click();
-            else this.handleLike(elt);
-            setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
-        }
-    };
-
+    // ============================================================================
+    // REACTION DISPLAY REFRESH
+    // ============================================================================
+    
     function refreshReactionDisplay(postId) {
         const $post = $(`#${CONFIG.POST_ID_PREFIX}${postId}`);
         if (!$post.length) return;
+        
         const countEl = $post.find('.st-emoji-post .st-emoji-counter').first();
         if (countEl.length) {
             const count = countEl.data('count') || countEl.text();
-            const modernBtn = document.querySelector(`.post-card[data-original-id="${CONFIG.POST_ID_PREFIX}${postId}"] .reaction-btn`);
+            const modernBtn = document.querySelector(`.post-card[data-original-id="${CONFIG.POST_ID_PREFIX}${postId}"] .reaction-btn:last-child`);
             if (modernBtn) {
                 let span = modernBtn.querySelector('.reaction-count');
-                if (!span) {
+                if (!span && count > 0) {
                     span = document.createElement('span');
                     span.className = 'reaction-count';
                     modernBtn.appendChild(span);
                 }
-                span.textContent = count;
+                if (span) span.textContent = count;
             }
         }
     }
 
+    // ============================================================================
+    // CONVERT POST TO MODERN
+    // ============================================================================
+    
     function convertToModern(postEl) {
         const $post = $(postEl);
         const postId = $post.attr('id');
@@ -290,9 +295,75 @@
         if (typeof htmx !== 'undefined') htmx.process(newCard);
     }
 
-    function initialize() {
-        console.log('[ForumModernizer] Loaded - clean content + no role icons');
+    // ============================================================================
+    // GLOBAL EVENT HANDLERS (exposed via window.forumModernizer)
+    // ============================================================================
+    
+    window.forumModernizer = {
+        handleQuote(elt) {
+            const pid = elt.dataset.pid;
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`);
+            if (link) location.href = link.href;
+        },
+        
+        handleEdit(elt) {
+            const pid = elt.dataset.pid;
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`);
+            if (link) location.href = link.href;
+        },
+        
+        handleDelete(elt) {
+            if (confirm('Are you sure you want to delete this post?')) {
+                if (typeof window.delete_post === 'function') {
+                    window.delete_post(elt.dataset.pid);
+                }
+            }
+        },
+        
+        handleShare(elt) {
+            const pid = elt.dataset.pid;
+            const url = location.href.split('#')[0] + `#entry${pid}`;
+            navigator.clipboard.writeText(url).then(() => {
+                const original = elt.innerHTML;
+                elt.innerHTML = '<i class="fas fa-check"></i>';
+                setTimeout(() => elt.innerHTML = original, 1500);
+            });
+        },
+        
+        handleReport(elt) {
+            const pid = elt.dataset.pid;
+            let btn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`) ||
+                      document.querySelector(`.report_button[data-pid="${pid}"]`);
+            if (btn) btn.click();
+        },
+        
+        handleLike(elt) {
+            const pid = elt.dataset.pid;
+            const likeBtn = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .points .points_up`);
+            if (likeBtn) likeBtn.click();
+            setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
+        },
+        
+        handleReact(elt) {
+            const pid = elt.dataset.pid;
+            const emojiContainer = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} .st-emoji-container`);
+            if (emojiContainer) {
+                emojiContainer.click();
+            } else {
+                window.forumModernizer.handleLike(elt);
+            }
+            setTimeout(() => refreshReactionDisplay(pid), CONFIG.REACTION_DELAY);
+        }
+    };
 
+    // ============================================================================
+    // INITIALIZATION
+    // ============================================================================
+    
+    function initialize() {
+        console.log('[ForumModernizer] Loaded - clean content + accessibility enabled');
+
+        // Ensure container exists
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
@@ -302,8 +373,10 @@
             }
         }
 
+        // Convert all existing posts
         document.querySelectorAll(CONFIG.POST_SELECTOR).forEach(convertToModern);
 
+        // Setup htmx handlers if available
         if (typeof htmx !== 'undefined') {
             htmx.onLoad((target) => {
                 target.querySelectorAll?.(CONFIG.POST_SELECTOR).forEach(convertToModern);
@@ -318,14 +391,19 @@
             });
         }
 
+        // Restore saved view preference
         if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
             document.getElementById(CONFIG.CONTAINER_ID)?.classList.add('view-modern');
         }
+        
+        console.log('[ForumModernizer] Ready');
     }
 
+    // Start initialization
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initialize);
     } else {
         initialize();
     }
+    
 })();
