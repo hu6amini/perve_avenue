@@ -1,26 +1,52 @@
 /**
- * Forum Modernizer - Preserves original posts, only hides/shows them
- * All original functionality remains intact
+ * Forum Modernizer - Powered by htmx
+ * Uses htmx's native onLoad() and events for dynamic content handling
+ * No MutationObserver needed - let htmx do the work!
  */
 
 (function() {
     'use strict';
     
+    // ============================================================================
+    // CONFIGURATION
+    // ============================================================================
+    
     const CONFIG = {
         STORAGE_KEY: 'forumModernView',
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
-        CONTAINER_ID: 'posts-container'
+        CONTAINER_ID: 'posts-container',
+        SETTLE_DELAY: 50  // Delay for CSS transitions
     };
+    
+    // ============================================================================
+    // STATE
+    // ============================================================================
     
     let state = {
         isModernView: false,
-        initialized: false
+        htmxAvailable: typeof htmx !== 'undefined'
     };
     
+    // ============================================================================
+    // LOGGING
+    // ============================================================================
+    
     function log(...args) {
-        console.log('[ForumModernizer]', ...args);
+        if (console && console.log) {
+            console.log('[ForumModernizer]', ...args);
+        }
     }
+    
+    function error(...args) {
+        if (console && console.error) {
+            console.error('[ForumModernizer]', ...args);
+        }
+    }
+    
+    // ============================================================================
+    // UTILITIES
+    // ============================================================================
     
     function escapeHtml(text) {
         if (!text) return '';
@@ -35,6 +61,8 @@
     
     function extractPostData($post) {
         const fullId = $post.attr('id');
+        if (!fullId) return null;
+        
         const postId = fullId.replace(CONFIG.POST_ID_PREFIX, '');
         
         // Username - from .nick a
@@ -50,6 +78,8 @@
         // Group - from .u_group dd
         const groupText = $post.find('.u_group dd').text().trim();
         const isAdmin = groupText === 'Administrator';
+        const roleBadgeClass = isAdmin ? 'admin' : 'member';
+        const roleIcon = isAdmin ? 'fa-crown' : 'fa-user';
         
         // Post count - from .u_posts dd a
         const postCount = $post.find('.u_posts dd a').text().trim() || '0';
@@ -134,7 +164,7 @@
         }
         
         return {
-            postId, username, avatarUrl, groupText, isAdmin,
+            postId, username, avatarUrl, groupText, isAdmin, roleBadgeClass, roleIcon,
             postCount, reputation, isOnline, userTitle, contentHtml,
             signatureHtml, editInfo, likes, hasReactions, reactionCount,
             ipAddress, postNumber, timeAgo
@@ -146,11 +176,11 @@
     // ============================================================================
     
     function generateModernPost(data) {
+        if (!data) return '';
+        
         const titleIcon = data.userTitle === 'Famous' ? 'fa-fire' : 
                          (data.userTitle === 'Senior' ? 'fa-star' : 'fa-medal');
         const statusColor = data.isOnline ? '#10B981' : '#6B7280';
-        const roleBadgeClass = data.isAdmin ? 'admin' : 'member';
-        const roleIcon = data.isAdmin ? 'fa-crown' : 'fa-user';
         
         // Reactions HTML
         let reactionsHtml = '';
@@ -162,7 +192,7 @@
                 </button>
                 ${data.hasReactions ? `
                 <button class="reaction-btn" data-action="react" data-pid="${data.postId}">
-                    <img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" class="reaction-emoji-img" width="16" height="16">
+                    <img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" class="reaction-emoji-img" width="16" height="16" alt="laugh">
                     <span class="reaction-count">${data.reactionCount}</span>
                 </button>
                 ` : ''}
@@ -217,8 +247,8 @@
                             <span class="username">${escapeHtml(data.username)}</span>
                         </div>
                         <div class="badge-container">
-                            <span class="role-badge ${roleBadgeClass}">
-                                <i class="fas ${roleIcon}"></i> ${escapeHtml(data.groupText || 'Member')}
+                            <span class="role-badge ${data.roleBadgeClass}">
+                                <i class="fas ${data.roleIcon}"></i> ${escapeHtml(data.groupText || 'Member')}
                             </span>
                         </div>
                         <div class="user-stats-grid">
@@ -247,6 +277,31 @@
     }
     
     // ============================================================================
+    // CONVERT A SINGLE POST (used by htmx.onLoad)
+    // ============================================================================
+    
+    function convertPostToModern($post) {
+        const postId = $post.attr('id');
+        
+        if (!postId) return;
+        
+        // Check if modern card already exists
+        if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
+            const postData = extractPostData($post);
+            if (postData) {
+                const modernCard = generateModernPost(postData);
+                $post.after(modernCard);
+                log(`Created modern card for post: ${postId}`);
+            }
+        }
+        
+        // Hide original if modern view is active
+        if (state.isModernView) {
+            $post.hide();
+        }
+    }
+    
+    // ============================================================================
     // CORE FUNCTIONS - Hide original, show modern
     // ============================================================================
     
@@ -261,34 +316,25 @@
             return;
         }
         
-        // Check if modern cards already exist
-        const $existingCards = $container.find('.post-card');
-        
-        if ($existingCards.length === 0) {
-            // Generate and insert modern cards
-            let modernHtml = '';
-            $originalPosts.each(function() {
-                const postData = extractPostData($(this));
+        // Convert any posts that don't have modern cards yet
+        $originalPosts.each(function() {
+            const $post = $(this);
+            const postId = $post.attr('id');
+            
+            if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
+                const postData = extractPostData($post);
                 if (postData) {
-                    modernHtml += generateModernPost(postData);
+                    const modernCard = generateModernPost(postData);
+                    $post.after(modernCard);
                 }
-            });
-            
-            // Insert after each original post
-            $originalPosts.each(function(index) {
-                const $this = $(this);
-                const modernCard = $(modernHtml).eq(index);
-                $this.after(modernCard);
-            });
-            
-            log(`Created ${$originalPosts.length} modern cards`);
-        } else {
-            log('Modern cards already exist, just showing them');
-            $existingCards.show();
-        }
+            }
+        });
         
-        // Hide original posts
+        // Hide all original posts
         $originalPosts.hide();
+        
+        // Show all modern cards
+        $container.find('.post-card').show();
         
         state.isModernView = true;
         localStorage.setItem(CONFIG.STORAGE_KEY, 'modern');
@@ -329,51 +375,45 @@
         log('Attaching event handlers');
         
         // QUOTE - Find and click the original quote link
-        $(document).on('click', '.action-icon[data-action="quote"]', function(e) {
+        $(document).on('click.forumModernizer', '.action-icon[data-action="quote"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
             log('Quote post:', pid);
             
-            // Find the hidden original post
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-            
             if ($originalPost.length) {
-                // Look for the quote link - from your HTML: href*="CODE=02"
                 const $quoteLink = $originalPost.find('a[href*="CODE=02"]');
                 if ($quoteLink.length) {
-                    log('Found quote link, navigating to:', $quoteLink.attr('href'));
                     window.location.href = $quoteLink.attr('href');
                 } else {
-                    log('Quote link not found for post', pid);
+                    log('Quote link not found');
                 }
-            } else {
-                log('Original post not found:', CONFIG.POST_ID_PREFIX + pid);
             }
         });
         
         // EDIT - Find and click the original edit link
-        $(document).on('click', '.action-icon[data-action="edit"]', function(e) {
+        $(document).on('click.forumModernizer', '.action-icon[data-action="edit"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
             log('Edit post:', pid);
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-            
             if ($originalPost.length) {
-                // Look for edit link - from your HTML: href*="CODE=08"
                 const $editLink = $originalPost.find('a[href*="CODE=08"]');
                 if ($editLink.length) {
-                    log('Found edit link, navigating to:', $editLink.attr('href'));
                     window.location.href = $editLink.attr('href');
                 } else {
-                    log('Edit link not found for post', pid);
+                    log('Edit link not found');
                 }
             }
         });
         
         // DELETE - Use the global delete_post function
-        $(document).on('click', '.action-icon[data-action="delete"]', function(e) {
+        $(document).on('click.forumModernizer', '.action-icon[data-action="delete"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
             
             if (confirm('Are you sure you want to delete this post?')) {
@@ -387,8 +427,9 @@
         });
         
         // SHARE - Copy URL to clipboard
-        $(document).on('click', '.action-icon[data-action="share"]', function(e) {
+        $(document).on('click.forumModernizer', '.action-icon[data-action="share"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
             const url = window.location.href.split('#')[0] + `#entry${pid}`;
             
@@ -402,8 +443,9 @@
         });
         
         // REPORT - Find and click the original report button
-        $(document).on('click', '.action-icon[data-action="report"]', function(e) {
+        $(document).on('click.forumModernizer', '.action-icon[data-action="report"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
             log('Report post:', pid);
             
@@ -415,68 +457,113 @@
             }
             
             if ($reportBtn.length) {
-                log('Found report button, triggering click');
-                // Trigger the click event properly
                 $reportBtn[0].click();
             } else {
-                log('Report button not found for post', pid);
-                // Fallback: try to find any report button in the original post
-                const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-                const anyReport = $originalPost.find('.report_button');
-                if (anyReport.length) {
-                    anyReport[0].click();
-                }
+                log('Report button not found');
             }
         });
         
         // LIKE - Find and trigger the original like button
-        $(document).on('click', '.reaction-btn[data-action="like"]', function(e) {
+        $(document).on('click.forumModernizer', '.reaction-btn[data-action="like"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
             log('Like post:', pid);
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-            
             if ($originalPost.length) {
-                // Find the like button/span
                 const $likeSpan = $originalPost.find('.points .points_up');
-                
                 if ($likeSpan.length) {
                     const onclickAttr = $likeSpan.attr('onclick');
                     if (onclickAttr) {
-                        log('Executing like onclick');
                         eval(onclickAttr);
                     } else {
                         $likeSpan.click();
-                    }
-                } else {
-                    // Alternative: find .points a
-                    const $pointsLink = $originalPost.find('.points a');
-                    if ($pointsLink.length && $pointsLink.attr('onclick')) {
-                        eval($pointsLink.attr('onclick'));
                     }
                 }
             }
         });
         
         // CUSTOM REACTION - Trigger the emoji reaction
-        $(document).on('click', '.reaction-btn[data-action="react"]', function(e) {
+        $(document).on('click.forumModernizer', '.reaction-btn[data-action="react"]', function(e) {
             e.preventDefault();
+            e.stopPropagation();
             const pid = $(this).data('pid');
-            log('Custom reaction for post:', pid);
+            log('Custom reaction:', pid);
             
-            // Find the emoji reaction area in original post
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             const $emojiContainer = $originalPost.find('.st-emoji-post .st-emoji-container');
-            
             if ($emojiContainer.length) {
-                // Trigger click on the emoji container
                 $emojiContainer.click();
             } else {
-                // Fallback to like
                 $(this).siblings('.reaction-btn[data-action="like"]').click();
             }
         });
+    }
+    
+    // ============================================================================
+    // HTMX INTEGRATION - Let htmx handle dynamic content!
+    // ============================================================================
+    
+    function setupHtmxHandlers() {
+        if (!state.htmxAvailable) {
+            log('htmx not available, using fallback');
+            return;
+        }
+        
+        log('Setting up htmx handlers for dynamic content');
+        
+        // Method 1: htmx.onLoad() - catches ALL content loaded by htmx
+        htmx.onLoad(function(target) {
+            log('htmx.onLoad triggered for:', target);
+            
+            // Convert any new posts in the loaded content
+            $(target).find('.post').each(function() {
+                convertPostToModern($(this));
+            });
+            
+            // Check if target itself is a post
+            if ($(target).is('.post')) {
+                convertPostToModern($(target));
+            }
+            
+            // Re-attach handlers to any new modern cards
+            $(target).find('.action-icon, .reaction-btn').each(function() {
+                // Handlers are attached via delegation, so no need to re-bind
+                log('New interactive element detected');
+            });
+        });
+        
+        // Method 2: Listen to htmx:load event for additional processing
+        document.addEventListener('htmx:load', function(event) {
+            const element = event.detail.elt;
+            log('htmx:load event for:', element);
+            
+            // Additional initialization for new content
+            if (state.isModernView) {
+                // Ensure new posts are properly hidden if needed
+                $(element).find('.post').hide();
+            }
+        });
+        
+        // Method 3: Listen to htmx:afterSwap for CSS transition timing
+        document.addEventListener('htmx:afterSwap', function(event) {
+            log('htmx:afterSwap completed for:', event.detail.target);
+            
+            // After swap is complete, ensure all modern cards are visible
+            if (state.isModernView) {
+                $(event.detail.target).find('.post-card').show();
+                $(event.detail.target).find('.post').hide();
+            }
+        });
+        
+        // Method 4: Listen for htmx:beforeSwap to modify content before insertion
+        document.addEventListener('htmx:beforeSwap', function(event) {
+            // You can modify the response before it's swapped in
+            log('htmx:beforeSwap - response length:', event.detail.xhr.responseText?.length);
+        });
+        
+        log('htmx handlers configured');
     }
     
     // ============================================================================
@@ -496,26 +583,44 @@
         }
         
         const buttonHtml = `
-            <div id="forum-view-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
-                <button id="modern-view-btn" class="view-toggle-btn" style="padding: 6px 16px; border-radius: 6px; border: 1px solid #ccc; background: white; cursor: pointer;">
+            <div id="forum-view-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <button id="modern-view-btn" class="view-toggle-btn" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
                     <i class="fas fa-magic"></i> Modern View
                 </button>
-                <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 6px 16px; border-radius: 6px; border: 1px solid #ccc; background: white; cursor: pointer;">
+                <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
                     <i class="fas fa-history"></i> Classic View
                 </button>
-                <span style="font-size: 12px; color: #666;">Switch between post display modes</span>
+                <span id="view-status" style="font-size: 12px; color: #666;"></span>
             </div>
         `;
         
         $container.before(buttonHtml);
         
+        // Style active button
+        $('<style>')
+            .prop('type', 'text/css')
+            .html(`
+                #modern-view-btn.active, #classic-view-btn.active {
+                    background: #2563eb !important;
+                    color: white !important;
+                    border-color: #2563eb !important;
+                }
+                .view-toggle-btn {
+                    transition: all 0.2s ease;
+                }
+                .view-toggle-btn:hover:not(.active) {
+                    background: #f3f4f6 !important;
+                }
+            `)
+            .appendTo('head');
+        
         // Bind button events
-        $('#modern-view-btn').on('click', function(e) {
+        $('#modern-view-btn').off('click').on('click', function(e) {
             e.preventDefault();
             switchToModernView();
         });
         
-        $('#classic-view-btn').on('click', function(e) {
+        $('#classic-view-btn').off('click').on('click', function(e) {
             e.preventDefault();
             switchToClassicView();
         });
@@ -524,48 +629,37 @@
     }
     
     // ============================================================================
-    // MUTATION OBSERVER - Handle dynamically loaded posts
+    // INITIAL CONVERSION OF EXISTING POSTS
     // ============================================================================
     
-    function setupMutationObserver() {
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                    // Check if new posts were added
-                    $(mutation.addedNodes).each(function() {
-                        const $node = $(this);
-                        if ($node.is(CONFIG.POST_SELECTOR) || $node.find(CONFIG.POST_SELECTOR).length) {
-                            log('New posts detected');
-                            // If modern view is active, convert the new posts
-                            if (state.isModernView) {
-                                const $newPosts = $node.is(CONFIG.POST_SELECTOR) ? $node : $node.find(CONFIG.POST_SELECTOR);
-                                $newPosts.each(function() {
-                                    const $newPost = $(this);
-                                    const postId = $newPost.attr('id');
-                                    
-                                    // Check if modern card already exists
-                                    if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
-                                        const postData = extractPostData($newPost);
-                                        if (postData) {
-                                            const modernCard = generateModernPost(postData);
-                                            $newPost.after(modernCard);
-                                            $newPost.hide();
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    });
-                }
-            });
+    function initializeExistingPosts() {
+        const $container = $(`#${CONFIG.CONTAINER_ID}`);
+        const $posts = $container.find(CONFIG.POST_SELECTOR);
+        
+        log(`Found ${$posts.length} existing posts`);
+        
+        // Create modern cards for all existing posts (hidden initially)
+        $posts.each(function() {
+            convertPostToModern($(this));
         });
         
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        log('MutationObserver started');
+        // If saved preference is modern, hide originals and show modern
+        const savedView = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (savedView === 'modern') {
+            log('Restoring modern view from preference');
+            $posts.hide();
+            $container.find('.post-card').show();
+            state.isModernView = true;
+            $('#modern-view-btn').addClass('active');
+            $('#classic-view-btn').removeClass('active');
+        } else {
+            // Default: classic view - originals visible, modern hidden
+            $posts.show();
+            $container.find('.post-card').hide();
+            state.isModernView = false;
+            $('#classic-view-btn').addClass('active');
+            $('#modern-view-btn').removeClass('active');
+        }
     }
     
     // ============================================================================
@@ -574,7 +668,8 @@
     
     function initialize() {
         log('========================================');
-        log('Forum Modernizer initializing');
+        log('Forum Modernizer v2.0 - htmx Powered');
+        log(`htmx available: ${state.htmxAvailable}`);
         log('========================================');
         
         // Create container if needed
@@ -584,36 +679,35 @@
                 $firstPost.parent().wrapInner(`<div id="${CONFIG.CONTAINER_ID}"></div>`);
                 log('Created posts container');
             } else {
-                log('ERROR: No posts found on page');
+                error('No posts found on page');
                 return;
             }
         }
         
-        // Create view buttons
+        // Create view toggle buttons
         createViewButtons();
         
-        // Attach event handlers
+        // Attach event handlers (uses delegation, works for all elements)
         attachEventHandlers();
         
-        // Setup mutation observer for dynamic content
-        setupMutationObserver();
+        // Setup htmx handlers for dynamic content
+        setupHtmxHandlers();
         
-        // Check saved preference
-        const savedView = localStorage.getItem(CONFIG.STORAGE_KEY);
-        if (savedView === 'modern') {
-            log('Restoring modern view from preference');
-            setTimeout(switchToModernView, 100);
-        } else {
-            // Ensure classic view is active (original posts visible)
-            $(`#${CONFIG.CONTAINER_ID}`).find(CONFIG.POST_SELECTOR).show();
-            $(`#${CONFIG.CONTAINER_ID}`).find('.post-card').remove();
-        }
+        // Initialize existing posts
+        initializeExistingPosts();
         
-        state.initialized = true;
+        // Update status display
+        const statusText = state.isModernView ? 'Modern view active' : 'Classic view active';
+        $('#view-status').html(`<i class="fas fa-info-circle"></i> ${statusText}`);
+        
         log('Initialization complete!');
+        log('Dynamic posts loaded via htmx will be automatically converted');
     }
     
-    // Start
+    // ============================================================================
+    // START
+    // ============================================================================
+    
     if (document.readyState === 'loading') {
         $(document).ready(initialize);
     } else {
