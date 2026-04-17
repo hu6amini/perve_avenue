@@ -1,6 +1,6 @@
 // ================================================
 // Forum Modernizer - Maximum htmx Edition
-// All interactions via hx-on, view switching via htmx, minimal transformation layer
+// Updated to use .u_rank properly
 // ================================================
 
 (function () {
@@ -15,7 +15,7 @@
     };
 
     // ============================================================================
-    // DATA EXTRACTION (legacy post → data object)
+    // DATA EXTRACTION - Updated for .u_rank
     // ============================================================================
     function extractPostData($post) {
         const fullId = $post.attr('id');
@@ -41,12 +41,23 @@
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        let userTitle = $post.find('.u_title').text().trim();
-        if (userTitle === 'Member') {
-            const stars = $post.find('.u_rank i.fa-star').length;
-            if (stars === 3) userTitle = 'Famous';
-            else if (stars === 2) userTitle = 'Senior';
-            else if (stars === 1) userTitle = 'Junior';
+        // === UPDATED RANK LOGIC ===
+        let userTitle = 'Member';
+        let rankIconClass = 'fa-medal';   // default
+
+        const $uRank = $post.find('.u_rank').first();
+        if ($uRank.length) {
+            const rankText = $uRank.find('span').text().trim();
+            if (rankText) userTitle = rankText;
+
+            // Use the actual icon class from the original rank element
+            const $icon = $uRank.find('i');
+            if ($icon.length) {
+                const originalClass = $icon.attr('class') || '';
+                // Extract the icon name (e.g. fa-fire, fa-star, etc.)
+                const match = originalClass.match(/fa-(solid|regular|light|brands)?-?([a-z0-9-]+)/i);
+                if (match) rankIconClass = `fa-${match[2]}`;
+            }
         }
 
         const contentClone = $post.find('.right.Item table.color').clone();
@@ -85,20 +96,18 @@
 
         return {
             postId, username, avatarUrl, groupText, roleBadgeClass, roleIcon,
-            postCount, reputation, isOnline, userTitle, contentHtml,
-            signatureHtml, editInfo, likes, hasReactions, reactionCount,
+            postCount, reputation, isOnline, userTitle, rankIconClass,
+            contentHtml, signatureHtml, editInfo, likes, hasReactions, reactionCount,
             ipAddress, postNumber, timeAgo
         };
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (with pure hx-on attributes)
+    // GENERATE MODERN CARD
     // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
 
-        const titleIcon = data.userTitle === 'Famous' ? 'fa-fire' :
-                         (data.userTitle === 'Senior' ? 'fa-star' : 'fa-medal');
         const statusColor = data.isOnline ? '#10B981' : '#6B7280';
 
         return `
@@ -145,10 +154,19 @@
                             </span>
                         </div>
                         <div class="user-stats-grid">
-                            <span class="stat-pill"><i class="fa-regular ${titleIcon}"></i> ${data.userTitle}</span>
-                            <span class="stat-pill"><i class="fa-regular fa-comments"></i> ${data.postCount} posts</span>
-                            <span class="stat-pill"><i class="fa-regular fa-thumbs-up"></i> ${data.reputation > 0 ? '+' : ''}${data.reputation} rep</span>
-                            <span class="stat-pill"><i class="fa-regular fa-circle" style="color: ${statusColor}"></i> ${data.isOnline ? 'Online' : 'Offline'}</span>
+                            <span class="stat-pill">
+                                <i class="fa-regular ${data.rankIconClass}"></i> ${data.userTitle}
+                            </span>
+                            <span class="stat-pill">
+                                <i class="fa-regular fa-comments"></i> ${data.postCount} posts
+                            </span>
+                            <span class="stat-pill">
+                                <i class="fa-regular fa-thumbs-up"></i> ${data.reputation > 0 ? '+' : ''}${data.reputation} rep
+                            </span>
+                            <span class="stat-pill">
+                                <i class="fa-regular fa-circle" style="color: ${statusColor}"></i> 
+                                ${data.isOnline ? 'Online' : 'Offline'}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -190,7 +208,7 @@
     }
 
     // ============================================================================
-    // HANDLERS - All called via hx-on (pure htmx)
+    // HANDLERS (unchanged - all via hx-on)
     // ============================================================================
     window.forumModernizer = {
         handleQuote(elt) {
@@ -264,7 +282,7 @@
     }
 
     // ============================================================================
-    // Convert legacy post to modern card
+    // Convert legacy → modern
     // ============================================================================
     function convertToModern(postEl) {
         const $post = $(postEl);
@@ -281,19 +299,17 @@
 
         $post.after(newCard);
 
-        // Let htmx process the new card (this makes hx-on work)
         if (typeof htmx !== 'undefined') {
             htmx.process(newCard);
         }
     }
 
     // ============================================================================
-    // Initialization
+    // Init
     // ============================================================================
     function initialize() {
-        console.log('[ForumModernizer] Starting - htmx powered');
+        console.log('[ForumModernizer] Starting with updated .u_rank support');
 
-        // Ensure container exists
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
@@ -303,16 +319,13 @@
             }
         }
 
-        // Convert all current legacy posts
         document.querySelectorAll(CONFIG.POST_SELECTOR).forEach(convertToModern);
 
-        // htmx handles new content automatically
         if (typeof htmx !== 'undefined') {
             htmx.onLoad((target) => {
                 target.querySelectorAll?.(CONFIG.POST_SELECTOR).forEach(convertToModern);
             });
 
-            // Re-apply modern view after any container swap
             document.addEventListener('htmx:afterSwap', (evt) => {
                 if (evt.detail.target.id === CONFIG.CONTAINER_ID) {
                     const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
@@ -323,15 +336,13 @@
             });
         }
 
-        // Restore saved preference
         if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
             document.getElementById(CONFIG.CONTAINER_ID)?.classList.add('view-modern');
         }
 
-        console.log('[ForumModernizer] Ready - All actions handled by htmx');
+        console.log('[ForumModernizer] Ready');
     }
 
-    // Start
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initialize);
     } else {
