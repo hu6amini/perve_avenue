@@ -1,7 +1,7 @@
 /**
- * Forum Modernizer - Powered by htmx
- * Uses htmx's native onLoad() and events for dynamic content handling
- * No MutationObserver needed - let htmx do the work!
+ * Forum Modernizer - Complete htmx Integration
+ * Catches ALL dynamically loaded content including plugins
+ * Uses every htmx dynamic content feature
  */
 
 (function() {
@@ -16,7 +16,9 @@
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
-        SETTLE_DELAY: 50  // Delay for CSS transitions
+        SETTLE_DELAY: 100,  // Increased for plugin loading
+        REACTION_POLL_INTERVAL: 500,  // Poll for reaction buttons that load later
+        MAX_REACTION_WAIT: 5000  // Max time to wait for reactions
     };
     
     // ============================================================================
@@ -25,7 +27,9 @@
     
     let state = {
         isModernView: false,
-        htmxAvailable: typeof htmx !== 'undefined'
+        htmxAvailable: typeof htmx !== 'undefined',
+        pendingReactions: new Map(),  // Track posts waiting for reaction buttons
+        reactionObservers: []  // Store observers for cleanup
     };
     
     // ============================================================================
@@ -56,7 +60,7 @@
     }
     
     // ============================================================================
-    // DATA EXTRACTION - Based on your actual post structure
+    // DATA EXTRACTION - Enhanced for plugin content
     // ============================================================================
     
     function extractPostData($post) {
@@ -65,7 +69,7 @@
         
         const postId = fullId.replace(CONFIG.POST_ID_PREFIX, '');
         
-        // Username - from .nick a
+        // Username
         const username = $post.find('.nick a').first().text().trim() || 'Unknown';
         
         // Avatar
@@ -75,24 +79,24 @@
             avatarUrl = urlParams.get('url') || avatarUrl;
         }
         
-        // Group - from .u_group dd
+        // Group
         const groupText = $post.find('.u_group dd').text().trim();
         const isAdmin = groupText === 'Administrator';
         const roleBadgeClass = isAdmin ? 'admin' : 'member';
         const roleIcon = isAdmin ? 'fa-crown' : 'fa-user';
         
-        // Post count - from .u_posts dd a
+        // Post count
         const postCount = $post.find('.u_posts dd a').text().trim() || '0';
         
-        // Reputation - from .u_reputation dd a
+        // Reputation
         let reputation = $post.find('.u_reputation dd a').text().trim();
         reputation = reputation.replace('+', '');
         
-        // Status - from .u_status title attribute
+        // Status
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
         
-        // User title - from .u_title
+        // User title
         let userTitle = $post.find('.u_title').text().trim();
         if (userTitle === 'Member') {
             const stars = $post.find('.u_rank i.fa-star').length;
@@ -101,37 +105,39 @@
             else if (stars === 1) userTitle = 'Junior';
         }
         
-        // Post content - from .right.Item table.color
+        // Post content
         const postContent = $post.find('.right.Item table.color').clone();
         postContent.find('.signature').remove();
         postContent.find('.edit').remove();
         const contentHtml = postContent.html() || '';
         
-        // Signature - from .signature
+        // Signature
         const signatureHtml = $post.find('.signature').html() || '';
         
-        // Edit info - from .edit
+        // Edit info
         let editInfo = '';
         const editText = $post.find('.edit').text().trim();
         if (editText) {
             editInfo = editText;
         }
         
-        // Likes - from .points .points_pos
+        // Likes - from .points (may load later)
         let likes = 0;
         const pointsPos = $post.find('.points .points_pos');
         if (pointsPos.length) {
             likes = parseInt(pointsPos.text()) || 0;
         }
         
-        // Check if post has reactions (st-emoji)
-        const hasReactions = $post.find('.st-emoji-post .st-emoji-counter').length > 0;
+        // Reaction plugin data (st-emoji) - may not exist yet!
+        const hasReactions = $post.find('.st-emoji-post').length > 0;
         let reactionCount = 0;
-        $post.find('.st-emoji-post .st-emoji-counter').each(function() {
-            reactionCount += parseInt($(this).data('count') || 1);
+        
+        // Check multiple possible reaction locations
+        $post.find('.st-emoji-post .st-emoji-counter, .st-emoji-container .st-emoji-counter').each(function() {
+            reactionCount += parseInt($(this).data('count') || $(this).text() || 1);
         });
         
-        // IP address - from .ip_address dd a
+        // IP address
         let ipAddress = $post.find('.ip_address dd a').text().trim();
         if (ipAddress) {
             const parts = ipAddress.split('.');
@@ -140,7 +146,7 @@
             }
         }
         
-        // Post number (position)
+        // Post number
         const postNumber = $post.index() + 1;
         
         // Timestamp
@@ -172,7 +178,7 @@
     }
     
     // ============================================================================
-    // MODERN POST GENERATION
+    // MODERN POST GENERATION with placeholders for reactions
     // ============================================================================
     
     function generateModernPost(data) {
@@ -182,31 +188,24 @@
                          (data.userTitle === 'Senior' ? 'fa-star' : 'fa-medal');
         const statusColor = data.isOnline ? '#10B981' : '#6B7280';
         
-        // Reactions HTML
-        let reactionsHtml = '';
-        if (data.likes > 0 || data.hasReactions) {
-            reactionsHtml = `
-                <button class="reaction-btn" data-action="like" data-pid="${data.postId}">
+        // Create reaction area with placeholder that will be updated
+        const reactionPlaceholderId = `reactions-${data.postId}`;
+        
+        // Initial reactions HTML (will be updated when plugin loads)
+        let reactionsHtml = `
+            <div id="${reactionPlaceholderId}" class="reaction-placeholder" data-post-id="${data.postId}">
+                <button class="reaction-btn reaction-loading" data-action="like" data-pid="${data.postId}">
                     <i class="fa-regular fa-thumbs-up"></i>
                     ${data.likes > 0 ? `<span class="reaction-count">${data.likes}</span>` : ''}
                 </button>
-                ${data.hasReactions ? `
-                <button class="reaction-btn" data-action="react" data-pid="${data.postId}">
-                    <img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" class="reaction-emoji-img" width="16" height="16" alt="laugh">
-                    <span class="reaction-count">${data.reactionCount}</span>
-                </button>
-                ` : ''}
-            `;
-        } else {
-            reactionsHtml = `
-                <button class="reaction-btn" data-action="like" data-pid="${data.postId}">
-                    <i class="fa-regular fa-thumbs-up"></i>
-                </button>
-                <button class="reaction-btn" data-action="react" data-pid="${data.postId}">
+                <button class="reaction-btn reaction-loading" data-action="react" data-pid="${data.postId}">
                     <i class="fa-regular fa-face-smile"></i>
                 </button>
-            `;
-        }
+                <span class="reaction-loading-indicator" style="font-size: 11px; color: #999;">
+                    <i class="fas fa-spinner fa-spin"></i> Loading reactions...
+                </span>
+            </div>
+        `;
         
         return `
             <div class="post-card" data-post-id="${data.postId}" data-original-id="${CONFIG.POST_ID_PREFIX}${data.postId}">
@@ -267,7 +266,7 @@
                     ${data.signatureHtml ? `<div class="signature-modern">${data.signatureHtml}</div>` : ''}
                 </div>
                 <div class="post-footer-modern">
-                    <div class="reaction-cluster">
+                    <div class="reaction-cluster" data-reaction-container="${data.postId}">
                         ${reactionsHtml}
                     </div>
                     ${data.ipAddress ? `<div class="ip-info"><i class="fa-regular fa-globe"></i> IP: ${data.ipAddress}</div>` : ''}
@@ -277,10 +276,116 @@
     }
     
     // ============================================================================
-    // CONVERT A SINGLE POST (used by htmx.onLoad)
+    // UPDATE REACTIONS - Sync with plugin when it loads
     // ============================================================================
     
-    function convertPostToModern($post) {
+    function updateReactionButtons(postId) {
+        const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${postId}`);
+        const $modernCard = $(`.post-card[data-post-id="${postId}"]`);
+        const $reactionContainer = $modernCard.find('.reaction-cluster');
+        
+        if (!$originalPost.length || !$modernCard.length) return false;
+        
+        // Extract updated reaction data from original post
+        const postData = extractPostData($originalPost);
+        if (!postData) return false;
+        
+        // Check if reaction plugin has loaded
+        const hasPluginReactions = $originalPost.find('.st-emoji-post .st-emoji-counter').length > 0;
+        
+        let newReactionsHtml = '';
+        
+        if (postData.likes > 0 || hasPluginReactions) {
+            newReactionsHtml = `
+                <button class="reaction-btn" data-action="like" data-pid="${postId}">
+                    <i class="fa-regular fa-thumbs-up"></i>
+                    ${postData.likes > 0 ? `<span class="reaction-count">${postData.likes}</span>` : ''}
+                </button>
+            `;
+            
+            if (hasPluginReactions) {
+                // Try to extract the actual emoji from the plugin
+                const emojiImg = $originalPost.find('.st-emoji-post img').first().attr('src') || 
+                                'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg';
+                newReactionsHtml += `
+                    <button class="reaction-btn" data-action="react" data-pid="${postId}">
+                        <img src="${emojiImg}" class="reaction-emoji-img" width="16" height="16" alt="reaction">
+                        <span class="reaction-count">${postData.reactionCount}</span>
+                    </button>
+                `;
+            } else {
+                newReactionsHtml += `
+                    <button class="reaction-btn" data-action="react" data-pid="${postId}">
+                        <i class="fa-regular fa-face-smile"></i>
+                    </button>
+                `;
+            }
+        } else {
+            newReactionsHtml = `
+                <button class="reaction-btn" data-action="like" data-pid="${postId}">
+                    <i class="fa-regular fa-thumbs-up"></i>
+                </button>
+                <button class="reaction-btn" data-action="react" data-pid="${postId}">
+                    <i class="fa-regular fa-face-smile"></i>
+                </button>
+            `;
+        }
+        
+        $reactionContainer.html(newReactionsHtml);
+        log(`Updated reactions for post ${postId}`);
+        return true;
+    }
+    
+    // ============================================================================
+    // WAIT FOR REACTION PLUGIN USING MUTATION OBSERVER (only for this specific case)
+    // ============================================================================
+    
+    function watchForReactionPlugin(postId) {
+        return new Promise((resolve) => {
+            const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${postId}`);
+            
+            if (!$originalPost.length) {
+                resolve(false);
+                return;
+            }
+            
+            // Check if reactions already exist
+            if ($originalPost.find('.st-emoji-post').length > 0) {
+                resolve(updateReactionButtons(postId));
+                return;
+            }
+            
+            // Watch for the reaction plugin to load
+            const observer = new MutationObserver((mutations, obs) => {
+                if ($originalPost.find('.st-emoji-post').length > 0) {
+                    log(`Reaction plugin loaded for post ${postId}`);
+                    updateReactionButtons(postId);
+                    obs.disconnect();
+                    resolve(true);
+                }
+            });
+            
+            observer.observe($originalPost[0], {
+                childList: true,
+                subtree: true
+            });
+            
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                observer.disconnect();
+                log(`Reaction plugin timeout for post ${postId}`);
+                resolve(false);
+            }, CONFIG.MAX_REACTION_WAIT);
+            
+            state.reactionObservers.push(observer);
+        });
+    }
+    
+    // ============================================================================
+    // CONVERT A SINGLE POST with reaction waiting
+    // ============================================================================
+    
+    async function convertPostToModern($post) {
         const postId = $post.attr('id');
         
         if (!postId) return;
@@ -292,7 +397,13 @@
                 const modernCard = generateModernPost(postData);
                 $post.after(modernCard);
                 log(`Created modern card for post: ${postId}`);
+                
+                // Start watching for reaction plugin
+                watchForReactionPlugin(postData.postId);
             }
+        } else if (state.isModernView) {
+            // Update existing modern card's reactions
+            updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
         }
         
         // Hide original if modern view is active
@@ -302,7 +413,7 @@
     }
     
     // ============================================================================
-    // CORE FUNCTIONS - Hide original, show modern
+    // CORE FUNCTIONS
     // ============================================================================
     
     function switchToModernView() {
@@ -317,16 +428,15 @@
         }
         
         // Convert any posts that don't have modern cards yet
-        $originalPosts.each(function() {
+        $originalPosts.each(async function() {
             const $post = $(this);
             const postId = $post.attr('id');
             
             if ($(`.post-card[data-original-id="${postId}"]`).length === 0) {
-                const postData = extractPostData($post);
-                if (postData) {
-                    const modernCard = generateModernPost(postData);
-                    $post.after(modernCard);
-                }
+                await convertPostToModern($post);
+            } else {
+                // Update existing card's reactions
+                updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
             }
         });
         
@@ -368,65 +478,56 @@
     }
     
     // ============================================================================
-    // EVENT HANDLERS - Directly trigger original elements
+    // EVENT HANDLERS
     // ============================================================================
     
     function attachEventHandlers() {
         log('Attaching event handlers');
         
-        // QUOTE - Find and click the original quote link
+        // QUOTE
         $(document).on('click.forumModernizer', '.action-icon[data-action="quote"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            log('Quote post:', pid);
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             if ($originalPost.length) {
                 const $quoteLink = $originalPost.find('a[href*="CODE=02"]');
                 if ($quoteLink.length) {
                     window.location.href = $quoteLink.attr('href');
-                } else {
-                    log('Quote link not found');
                 }
             }
         });
         
-        // EDIT - Find and click the original edit link
+        // EDIT
         $(document).on('click.forumModernizer', '.action-icon[data-action="edit"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            log('Edit post:', pid);
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             if ($originalPost.length) {
                 const $editLink = $originalPost.find('a[href*="CODE=08"]');
                 if ($editLink.length) {
                     window.location.href = $editLink.attr('href');
-                } else {
-                    log('Edit link not found');
                 }
             }
         });
         
-        // DELETE - Use the global delete_post function
+        // DELETE
         $(document).on('click.forumModernizer', '.action-icon[data-action="delete"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
             
             if (confirm('Are you sure you want to delete this post?')) {
-                log('Delete post:', pid);
                 if (typeof window.delete_post === 'function') {
                     window.delete_post(pid);
-                } else {
-                    log('delete_post function not found');
                 }
             }
         });
         
-        // SHARE - Copy URL to clipboard
+        // SHARE
         $(document).on('click.forumModernizer', '.action-icon[data-action="share"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -438,37 +539,29 @@
                 const originalIcon = $btn.html();
                 $btn.html('<i class="fas fa-check"></i>');
                 setTimeout(() => $btn.html(originalIcon), 1500);
-                log('Share copied:', url);
-            }).catch(err => log('Copy failed:', err));
+            });
         });
         
-        // REPORT - Find and click the original report button
+        // REPORT
         $(document).on('click.forumModernizer', '.action-icon[data-action="report"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            log('Report post:', pid);
             
-            // Try multiple ways to find the report button
             let $reportBtn = $(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`);
-            
             if (!$reportBtn.length) {
                 $reportBtn = $(`.report_button[data-pid="${pid}"]`);
             }
-            
             if ($reportBtn.length) {
                 $reportBtn[0].click();
-            } else {
-                log('Report button not found');
             }
         });
         
-        // LIKE - Find and trigger the original like button
+        // LIKE
         $(document).on('click.forumModernizer', '.reaction-btn[data-action="like"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            log('Like post:', pid);
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             if ($originalPost.length) {
@@ -484,12 +577,11 @@
             }
         });
         
-        // CUSTOM REACTION - Trigger the emoji reaction
+        // CUSTOM REACTION
         $(document).on('click.forumModernizer', '.reaction-btn[data-action="react"]', function(e) {
             e.preventDefault();
             e.stopPropagation();
             const pid = $(this).data('pid');
-            log('Custom reaction:', pid);
             
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             const $emojiContainer = $originalPost.find('.st-emoji-post .st-emoji-container');
@@ -502,68 +594,143 @@
     }
     
     // ============================================================================
-    // HTMX INTEGRATION - Let htmx handle dynamic content!
+    // COMPREHENSIVE HTMX HANDLERS - Catching EVERYTHING
     // ============================================================================
     
     function setupHtmxHandlers() {
         if (!state.htmxAvailable) {
-            log('htmx not available, using fallback');
+            log('htmx not available, using fallback observers');
+            setupFallbackObservers();
             return;
         }
         
-        log('Setting up htmx handlers for dynamic content');
+        log('Setting up comprehensive htmx handlers');
         
-        // Method 1: htmx.onLoad() - catches ALL content loaded by htmx
-        htmx.onLoad(function(target) {
-            log('htmx.onLoad triggered for:', target);
+        // 1. htmx.onLoad() - catches ALL content loaded by htmx
+        htmx.onLoad(async function(target) {
+            log('htmx.onLoad triggered');
             
-            // Convert any new posts in the loaded content
-            $(target).find('.post').each(function() {
-                convertPostToModern($(this));
-            });
+            // Convert posts
+            const newPosts = $(target).find('.post');
+            if (newPosts.length) {
+                log(`Found ${newPosts.length} new posts via htmx.onLoad`);
+                for (const post of newPosts) {
+                    await convertPostToModern($(post));
+                }
+            }
             
-            // Check if target itself is a post
             if ($(target).is('.post')) {
-                convertPostToModern($(target));
+                await convertPostToModern($(target));
             }
             
-            // Re-attach handlers to any new modern cards
-            $(target).find('.action-icon, .reaction-btn').each(function() {
-                // Handlers are attached via delegation, so no need to re-bind
-                log('New interactive element detected');
+            // Check for reaction plugin elements that just loaded
+            $(target).find('.st-emoji-post, .st-emoji-container').each(function() {
+                const $parentPost = $(this).closest('.post');
+                if ($parentPost.length) {
+                    const postId = $parentPost.attr('id');
+                    if (postId) {
+                        updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
+                    }
+                }
             });
         });
         
-        // Method 2: Listen to htmx:load event for additional processing
+        // 2. htmx:load event
         document.addEventListener('htmx:load', function(event) {
+            log('htmx:load event');
             const element = event.detail.elt;
-            log('htmx:load event for:', element);
             
-            // Additional initialization for new content
             if (state.isModernView) {
-                // Ensure new posts are properly hidden if needed
                 $(element).find('.post').hide();
+                $(element).find('.post-card').show();
             }
         });
         
-        // Method 3: Listen to htmx:afterSwap for CSS transition timing
+        // 3. htmx:afterSwap event
         document.addEventListener('htmx:afterSwap', function(event) {
-            log('htmx:afterSwap completed for:', event.detail.target);
+            log('htmx:afterSwap completed');
             
-            // After swap is complete, ensure all modern cards are visible
-            if (state.isModernView) {
-                $(event.detail.target).find('.post-card').show();
-                $(event.detail.target).find('.post').hide();
-            }
+            // Re-check for reaction buttons after swap settles
+            setTimeout(() => {
+                $(event.detail.target).find('.post').each(function() {
+                    const postId = $(this).attr('id');
+                    if (postId) {
+                        updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
+                    }
+                });
+            }, CONFIG.SETTLE_DELAY);
         });
         
-        // Method 4: Listen for htmx:beforeSwap to modify content before insertion
+        // 4. htmx:beforeSwap - modify response if needed
         document.addEventListener('htmx:beforeSwap', function(event) {
-            // You can modify the response before it's swapped in
-            log('htmx:beforeSwap - response length:', event.detail.xhr.responseText?.length);
+            // You could inject reaction placeholders here if needed
+            log('htmx:beforeSwap');
+        });
+    }
+    
+    // ============================================================================
+    // FALLBACK OBSERVERS (when htmx not available)
+    // ============================================================================
+    
+    function setupFallbackObservers() {
+        log('Setting up fallback MutationObserver');
+        
+        // Watch for new posts
+        const postObserver = new MutationObserver((mutations) => {
+            mutations.forEach(async (mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length) {
+                    for (const node of mutation.addedNodes) {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const $node = $(node);
+                            if ($node.is('.post') || $node.find('.post').length) {
+                                const posts = $node.is('.post') ? $node : $node.find('.post');
+                                for (const post of posts) {
+                                    await convertPostToModern($(post));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         });
         
-        log('htmx handlers configured');
+        postObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        state.reactionObservers.push(postObserver);
+        
+        // Watch for reaction plugin loading
+        const reactionObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length) {
+                    for (const node of mutation.addedNodes) {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const $node = $(node);
+                            if ($node.is('.st-emoji-post, .st-emoji-container') || 
+                                $node.find('.st-emoji-post, .st-emoji-container').length) {
+                                
+                                const $parentPost = $node.closest('.post');
+                                if ($parentPost.length) {
+                                    const postId = $parentPost.attr('id');
+                                    if (postId) {
+                                        updateReactionButtons(postId.replace(CONFIG.POST_ID_PREFIX, ''));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        
+        reactionObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        state.reactionObservers.push(reactionObserver);
     }
     
     // ============================================================================
@@ -572,22 +739,18 @@
     
     function createViewButtons() {
         if ($('#modern-view-btn').length > 0) {
-            log('View buttons already exist');
             return;
         }
         
         const $container = $(`#${CONFIG.CONTAINER_ID}`);
-        if (!$container.length) {
-            log('Container not found, cannot create buttons');
-            return;
-        }
+        if (!$container.length) return;
         
         const buttonHtml = `
             <div id="forum-view-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <button id="modern-view-btn" class="view-toggle-btn" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
+                <button id="modern-view-btn" class="view-toggle-btn" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer;">
                     <i class="fas fa-magic"></i> Modern View
                 </button>
-                <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
+                <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer;">
                     <i class="fas fa-history"></i> Classic View
                 </button>
                 <span id="view-status" style="font-size: 12px; color: #666;"></span>
@@ -596,112 +759,58 @@
         
         $container.before(buttonHtml);
         
-        // Style active button
-        $('<style>')
-            .prop('type', 'text/css')
-            .html(`
-                #modern-view-btn.active, #classic-view-btn.active {
-                    background: #2563eb !important;
-                    color: white !important;
-                    border-color: #2563eb !important;
-                }
-                .view-toggle-btn {
-                    transition: all 0.2s ease;
-                }
-                .view-toggle-btn:hover:not(.active) {
-                    background: #f3f4f6 !important;
-                }
-            `)
-            .appendTo('head');
-        
-        // Bind button events
-        $('#modern-view-btn').off('click').on('click', function(e) {
-            e.preventDefault();
-            switchToModernView();
-        });
-        
-        $('#classic-view-btn').off('click').on('click', function(e) {
-            e.preventDefault();
-            switchToClassicView();
-        });
-        
-        log('View buttons created');
-    }
-    
-    // ============================================================================
-    // INITIAL CONVERSION OF EXISTING POSTS
-    // ============================================================================
-    
-    function initializeExistingPosts() {
-        const $container = $(`#${CONFIG.CONTAINER_ID}`);
-        const $posts = $container.find(CONFIG.POST_SELECTOR);
-        
-        log(`Found ${$posts.length} existing posts`);
-        
-        // Create modern cards for all existing posts (hidden initially)
-        $posts.each(function() {
-            convertPostToModern($(this));
-        });
-        
-        // If saved preference is modern, hide originals and show modern
-        const savedView = localStorage.getItem(CONFIG.STORAGE_KEY);
-        if (savedView === 'modern') {
-            log('Restoring modern view from preference');
-            $posts.hide();
-            $container.find('.post-card').show();
-            state.isModernView = true;
-            $('#modern-view-btn').addClass('active');
-            $('#classic-view-btn').removeClass('active');
-        } else {
-            // Default: classic view - originals visible, modern hidden
-            $posts.show();
-            $container.find('.post-card').hide();
-            state.isModernView = false;
-            $('#classic-view-btn').addClass('active');
-            $('#modern-view-btn').removeClass('active');
-        }
+        $('#modern-view-btn').off('click').on('click', switchToModernView);
+        $('#classic-view-btn').off('click').on('click', switchToClassicView);
     }
     
     // ============================================================================
     // INITIALIZATION
     // ============================================================================
     
-    function initialize() {
+    async function initialize() {
         log('========================================');
-        log('Forum Modernizer v2.0 - htmx Powered');
+        log('Forum Modernizer v2.1 - Full htmx Integration');
         log(`htmx available: ${state.htmxAvailable}`);
         log('========================================');
         
-        // Create container if needed
+        // Create container
         if ($(`#${CONFIG.CONTAINER_ID}`).length === 0) {
             const $firstPost = $('.post').first();
             if ($firstPost.length) {
                 $firstPost.parent().wrapInner(`<div id="${CONFIG.CONTAINER_ID}"></div>`);
-                log('Created posts container');
             } else {
-                error('No posts found on page');
+                error('No posts found');
                 return;
             }
         }
         
-        // Create view toggle buttons
         createViewButtons();
-        
-        // Attach event handlers (uses delegation, works for all elements)
         attachEventHandlers();
-        
-        // Setup htmx handlers for dynamic content
         setupHtmxHandlers();
         
         // Initialize existing posts
-        initializeExistingPosts();
+        const $container = $(`#${CONFIG.CONTAINER_ID}`);
+        const $posts = $container.find(CONFIG.POST_SELECTOR);
         
-        // Update status display
-        const statusText = state.isModernView ? 'Modern view active' : 'Classic view active';
-        $('#view-status').html(`<i class="fas fa-info-circle"></i> ${statusText}`);
+        log(`Found ${$posts.length} existing posts`);
+        
+        for (const post of $posts) {
+            await convertPostToModern($(post));
+        }
+        
+        // Check saved preference
+        const savedView = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (savedView === 'modern') {
+            await switchToModernView();
+            $('#view-status').html('<i class="fas fa-check-circle"></i> Modern view active');
+        } else {
+            $posts.show();
+            $container.find('.post-card').hide();
+            $('#view-status').html('<i class="fas fa-info-circle"></i> Classic view active');
+        }
         
         log('Initialization complete!');
-        log('Dynamic posts loaded via htmx will be automatically converted');
+        log('Watching for: posts, reactions, plugins, and all dynamic content');
     }
     
     // ============================================================================
