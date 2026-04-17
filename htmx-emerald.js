@@ -1,7 +1,6 @@
 /**
- * Forum Modernizer - Fixed for page refresh
- * Ensures htmx is fully loaded before initialization
- * Uses proper event persistence across refreshes
+ * Forum Modernizer - Fixed for Page Refresh
+ * Proper initialization timing and state persistence
  */
 
 (function() {
@@ -16,9 +15,17 @@
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
+        
+        // Timing
         REACTION_WAIT_DELAY: 500,
+        SETTLE_DELAY: 100,
+        POLL_INTERVAL: 2000,
         MAX_RETRIES: 5,
-        RETRY_DELAY: 300
+        RETRY_DELAY: 300,
+        
+        // Initialization delays
+        INIT_DELAY: 100,      // Wait for DOM
+        HTMX_WAIT: 200        // Wait for htmx to be ready
     };
     
     // ============================================================================
@@ -27,11 +34,12 @@
     
     let state = {
         isModernView: false,
-        htmxAvailable: false,
+        htmxAvailable: typeof htmx !== 'undefined',
         processedPosts: new Set(),
         pendingReactions: new Map(),
         retryCounters: new Map(),
-        initialized: false
+        initialized: false,
+        restorePending: false
     };
     
     // ============================================================================
@@ -61,29 +69,52 @@
         return div.innerHTML;
     }
     
-    // Wait for htmx to be fully ready
-    function waitForHtmx() {
-        return new Promise((resolve) => {
-            if (typeof htmx !== 'undefined' && htmx.version) {
-                log('htmx already loaded, version:', htmx.version);
-                resolve(true);
+    // Wait for htmx to be ready
+    function waitForHtmx(callback) {
+        if (typeof htmx !== 'undefined' && htmx.onLoad) {
+            callback();
+            return;
+        }
+        
+        let attempts = 0;
+        const maxAttempts = 20; // 2 seconds max
+        
+        const checkInterval = setInterval(() => {
+            attempts++;
+            if (typeof htmx !== 'undefined' && htmx.onLoad) {
+                clearInterval(checkInterval);
+                log('htmx became available');
+                callback();
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                log('htmx not available, continuing without');
+                callback();
+            }
+        }, 100);
+    }
+    
+    // Wait for element to exist
+    function waitForElement(selector, timeout = 5000) {
+        return new Promise((resolve, reject) => {
+            const existing = document.querySelector(selector);
+            if (existing) {
+                resolve(existing);
                 return;
             }
             
-            // Wait for htmx to initialize
-            let attempts = 0;
-            const checkInterval = setInterval(() => {
-                attempts++;
-                if (typeof htmx !== 'undefined' && htmx.version) {
-                    clearInterval(checkInterval);
-                    log('htmx detected after', attempts, 'attempts');
-                    resolve(true);
-                } else if (attempts > 50) {
-                    clearInterval(checkInterval);
-                    log('htmx not detected, using fallback mode');
-                    resolve(false);
+            const observer = new MutationObserver(() => {
+                const element = document.querySelector(selector);
+                if (element) {
+                    observer.disconnect();
+                    resolve(element);
                 }
-            }, 100);
+            });
+            
+            observer.observe(document.body, { childList: true, subtree: true });
+            setTimeout(() => {
+                observer.disconnect();
+                reject(new Error(`Timeout waiting for ${selector}`));
+            }, timeout);
         });
     }
     
@@ -158,7 +189,8 @@
         
         $post.find('.st-emoji-post .st-emoji-counter').each(function() {
             hasReactions = true;
-            reactionCount += parseInt($(this).data('count') || $(this).text() || 1);
+            const count = parseInt($(this).data('count') || $(this).text() || 1);
+            reactionCount += count;
         });
         
         if (!hasReactions && $post.find('.st-emoji-container').length) {
@@ -330,13 +362,18 @@
                         $reactionBtn.append(`<span class="reaction-count">${count}</span>`);
                     }
                     $reactionBtn.removeClass('reaction-placeholder');
-                    log(`Updated reaction count for post ${postId}`);
                 }
             }
             
             state.pendingReactions.delete(postId);
             state.retryCounters.delete(postId);
             return true;
+        }
+        
+        const retries = state.retryCounters.get(postId) || 0;
+        if (retries < CONFIG.MAX_RETRIES && $post.find('.st-emoji-container').length) {
+            state.retryCounters.set(postId, retries + 1);
+            setTimeout(() => updateReactionData($post, postId), CONFIG.RETRY_DELAY * (retries + 1));
         }
         
         return false;
@@ -351,26 +388,28 @@
         if (!postId) return;
         if (state.processedPosts.has(postId)) return;
         
-        const modernCardExists = $(`.post-card[data-original-id="${postId}"]`).length > 0;
-        
-        if (!modernCardExists) {
+        const $existingCard = $(`.post-card[data-original-id="${postId}"]`);
+        if ($existingCard.length === 0) {
             const postData = extractPostData($post);
             if (postData) {
                 const modernCard = generateModernPost(postData);
                 $post.after(modernCard);
                 state.processedPosts.add(postId);
                 
-                if (postData.hasReactions) {
+                if (postData.hasReactions || $post.find('.st-emoji-container').length) {
                     state.pendingReactions.set(postId, $post);
                     setTimeout(() => updateReactionData($post, postId), CONFIG.REACTION_WAIT_DELAY);
                 }
             }
         }
         
+        // Apply current view state
         if (state.isModernView) {
             $post.hide();
+            $(`.post-card[data-original-id="${postId}"]`).show();
         } else {
             $post.show();
+            $(`.post-card[data-original-id="${postId}"]`).hide();
         }
     }
     
@@ -382,24 +421,30 @@
         log('Switching to modern view...');
         
         const $container = $(`#${CONFIG.CONTAINER_ID}`);
-        const $originalPosts = $container.find(CONFIG.POST_SELECTOR);
+        if (!$container.length) {
+            error('Container not found');
+            return;
+        }
         
-        if (!$originalPosts.length) return;
+        const $posts = $container.find(CONFIG.POST_SELECTOR);
         
-        $originalPosts.each(function() {
-            convertPostToModern($(this));
+        // Convert any unconverted posts
+        $posts.each(function() {
+            const $post = $(this);
+            const postId = $post.attr('id');
+            if (!state.processedPosts.has(postId)) {
+                convertPostToModern($post);
+            }
         });
         
-        $originalPosts.hide();
+        // Hide originals, show modern
+        $posts.hide();
         $container.find('.post-card').show();
-        
-        state.pendingReactions.forEach(($post, postId) => {
-            setTimeout(() => updateReactionData($post, postId), 500);
-        });
         
         state.isModernView = true;
         localStorage.setItem(CONFIG.STORAGE_KEY, 'modern');
         
+        // Update buttons
         $('#modern-view-btn').addClass('active');
         $('#classic-view-btn').removeClass('active');
         $('#view-status').html('<i class="fas fa-info-circle"></i> Modern view active');
@@ -411,6 +456,7 @@
         log('Switching to classic view...');
         
         const $container = $(`#${CONFIG.CONTAINER_ID}`);
+        if (!$container.length) return;
         
         $container.find(CONFIG.POST_SELECTOR).show();
         $container.find('.post-card').hide();
@@ -426,43 +472,34 @@
     }
     
     // ============================================================================
-    // EVENT HANDLERS - Using event delegation (works after refresh)
+    // EVENT HANDLERS
     // ============================================================================
     
     function attachEventHandlers() {
-        log('Attaching event handlers');
-        
         // Remove old handlers first to avoid duplicates
         $(document).off('.forumModernizer');
         
-        // QUOTE
+        // Quote
         $(document).on('click.forumModernizer', '.action-icon[data-action="quote"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-            if ($originalPost.length) {
-                const $quoteLink = $originalPost.find('a[href*="CODE=02"]');
-                if ($quoteLink.length) window.location.href = $quoteLink.attr('href');
-            }
+            const $quoteLink = $originalPost.find('a[href*="CODE=02"]');
+            if ($quoteLink.length) window.location.href = $quoteLink.attr('href');
         });
         
-        // EDIT
+        // Edit
         $(document).on('click.forumModernizer', '.action-icon[data-action="edit"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-            if ($originalPost.length) {
-                const $editLink = $originalPost.find('a[href*="CODE=08"]');
-                if ($editLink.length) window.location.href = $editLink.attr('href');
-            }
+            const $editLink = $originalPost.find('a[href*="CODE=08"]');
+            if ($editLink.length) window.location.href = $editLink.attr('href');
         });
         
-        // DELETE
+        // Delete
         $(document).on('click.forumModernizer', '.action-icon[data-action="delete"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             if (confirm('Are you sure you want to delete this post?')) {
                 if (typeof window.delete_post === 'function') {
@@ -471,10 +508,9 @@
             }
         });
         
-        // SHARE
+        // Share
         $(document).on('click.forumModernizer', '.action-icon[data-action="share"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             const url = window.location.href.split('#')[0] + `#entry${pid}`;
             navigator.clipboard.writeText(url).then(() => {
@@ -485,36 +521,31 @@
             });
         });
         
-        // REPORT
+        // Report
         $(document).on('click.forumModernizer', '.action-icon[data-action="report"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             let $reportBtn = $(`#${CONFIG.POST_ID_PREFIX}${pid} .report_button`);
             if (!$reportBtn.length) $reportBtn = $(`.report_button[data-pid="${pid}"]`);
             if ($reportBtn.length) $reportBtn[0].click();
         });
         
-        // LIKE
+        // Like
         $(document).on('click.forumModernizer', '.reaction-btn[data-action="like"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
-            if ($originalPost.length) {
-                const $likeSpan = $originalPost.find('.points .points_up');
-                if ($likeSpan.length) {
-                    const onclickAttr = $likeSpan.attr('onclick');
-                    if (onclickAttr) eval(onclickAttr);
-                    else $likeSpan.click();
-                }
+            const $likeSpan = $originalPost.find('.points .points_up');
+            if ($likeSpan.length) {
+                const onclickAttr = $likeSpan.attr('onclick');
+                if (onclickAttr) eval(onclickAttr);
+                else $likeSpan.click();
             }
         });
         
-        // REACT
+        // React
         $(document).on('click.forumModernizer', '.reaction-btn[data-action="react"]', function(e) {
             e.preventDefault();
-            e.stopPropagation();
             const pid = $(this).data('pid');
             const $originalPost = $(`#${CONFIG.POST_ID_PREFIX}${pid}`);
             const $emojiContainer = $originalPost.find('.st-emoji-post .st-emoji-container');
@@ -524,51 +555,30 @@
                 $(this).siblings('.reaction-btn[data-action="like"]').click();
             }
         });
-        
-        log('Event handlers attached');
     }
     
     // ============================================================================
-    // HTMX INTEGRATION - Fixed for page refresh
+    // HTMX SETUP
     // ============================================================================
     
     function setupHtmxHandlers() {
-        if (typeof htmx === 'undefined' || !htmx.version) {
-            log('htmx not available, skipping htmx handlers');
+        if (typeof htmx === 'undefined' || !htmx.onLoad) {
+            log('htmx not available');
             return;
         }
         
         log('Setting up htmx handlers');
         
-        // Use htmx.onLoad if available
-        if (typeof htmx.onLoad === 'function') {
-            htmx.onLoad(function(target) {
-                log('htmx.onLoad triggered');
-                $(target).find('.post').each(function() {
-                    convertPostToModern($(this));
-                });
-                if ($(target).is('.post')) {
-                    convertPostToModern($(target));
-                }
+        htmx.onLoad(function(target) {
+            log('htmx.onLoad triggered');
+            $(target).find('.post').each(function() {
+                convertPostToModern($(this));
             });
-        }
-        
-        // Listen for htmx:load event
-        document.addEventListener('htmx:load', function(event) {
-            log('htmx:load event');
-            const element = event.detail.elt;
-            if ($(element).find('.st-emoji-counter, .st-emoji-container').length) {
-                const $parentPost = $(element).closest('.post');
-                if ($parentPost.length) {
-                    const postId = $parentPost.attr('id');
-                    if (postId) {
-                        setTimeout(() => updateReactionData($parentPost, postId.replace(CONFIG.POST_ID_PREFIX, '')), 100);
-                    }
-                }
+            if ($(target).is('.post')) {
+                convertPostToModern($(target));
             }
         });
         
-        // Listen for htmx:afterSwap
         document.addEventListener('htmx:afterSwap', function(event) {
             if (state.isModernView) {
                 $(event.detail.target).find('.post').hide();
@@ -578,112 +588,104 @@
     }
     
     // ============================================================================
-    // CREATE VIEW BUTTONS
+    // CREATE UI
     // ============================================================================
     
-    function createViewButtons() {
-        if ($('#modern-view-btn').length > 0) return;
-        
-        const $container = $(`#${CONFIG.CONTAINER_ID}`);
-        if (!$container.length) return;
-        
-        const buttonHtml = `
-            <div id="forum-view-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 0;">
-                <button id="modern-view-btn" class="view-toggle-btn" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
-                    <i class="fas fa-magic"></i> Modern View
-                </button>
-                <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
-                    <i class="fas fa-history"></i> Classic View
-                </button>
-                <span id="view-status" style="font-size: 12px; color: #666;"></span>
-            </div>
-        `;
-        
-        $container.before(buttonHtml);
-        
-        // Style buttons
-        if (!$('#forum-modernizer-styles').length) {
-            $('<style id="forum-modernizer-styles">')
-                .prop('type', 'text/css')
-                .html(`
-                    .view-toggle-btn.active {
-                        background: #2563eb !important;
-                        color: white !important;
-                        border-color: #2563eb !important;
-                    }
-                    .view-toggle-btn:hover:not(.active) {
-                        background: #f3f4f6 !important;
-                    }
-                    .post-card {
-                        margin-bottom: 20px;
-                    }
-                `)
-                .appendTo('head');
+    function createUI() {
+        // Create container if needed
+        if ($(`#${CONFIG.CONTAINER_ID}`).length === 0) {
+            const $firstPost = $('.post').first();
+            if ($firstPost.length) {
+                $firstPost.parent().wrapInner(`<div id="${CONFIG.CONTAINER_ID}"></div>`);
+                log('Created container');
+            }
         }
         
-        $('#modern-view-btn').off('click').on('click', switchToModernView);
-        $('#classic-view-btn').off('click').on('click', switchToClassicView);
+        // Create buttons if needed
+        if ($('#modern-view-btn').length === 0) {
+            const $container = $(`#${CONFIG.CONTAINER_ID}`);
+            if ($container.length) {
+                const buttonHtml = `
+                    <div id="forum-view-controls" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 0;">
+                        <button id="modern-view-btn" class="view-toggle-btn" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
+                            <i class="fas fa-magic"></i> Modern View
+                        </button>
+                        <button id="classic-view-btn" class="view-toggle-btn active" style="padding: 8px 18px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; font-size: 14px;">
+                            <i class="fas fa-history"></i> Classic View
+                        </button>
+                        <span id="view-status" style="font-size: 12px; color: #666;"></span>
+                    </div>
+                `;
+                $container.before(buttonHtml);
+                
+                // Add styles
+                $('<style>')
+                    .prop('type', 'text/css')
+                    .html(`
+                        .view-toggle-btn.active {
+                            background: #2563eb !important;
+                            color: white !important;
+                            border-color: #2563eb !important;
+                        }
+                        .view-toggle-btn:hover:not(.active) {
+                            background: #f3f4f6 !important;
+                        }
+                        .post-card {
+                            margin-bottom: 20px;
+                        }
+                    `)
+                    .appendTo('head');
+                
+                $('#modern-view-btn').on('click', switchToModernView);
+                $('#classic-view-btn').on('click', switchToClassicView);
+            }
+        }
     }
     
     // ============================================================================
-    // INITIALIZE EXISTING POSTS
+    // RESTORE VIEW STATE
     // ============================================================================
     
-    function initializeExistingPosts() {
-        const $container = $(`#${CONFIG.CONTAINER_ID}`);
-        const $posts = $container.find(CONFIG.POST_SELECTOR);
-        
-        log(`Found ${$posts.length} existing posts`);
-        
-        // Create modern cards for all posts
-        $posts.each(function() {
-            const $post = $(this);
-            const postId = $post.attr('id');
-            
-            if (!state.processedPosts.has(postId)) {
-                const postData = extractPostData($post);
-                if (postData) {
-                    const modernCard = generateModernPost(postData);
-                    $post.after(modernCard);
-                    state.processedPosts.add(postId);
-                    
-                    if (postData.hasReactions) {
-                        state.pendingReactions.set(postId, $post);
-                        setTimeout(() => updateReactionData($post, postId), CONFIG.REACTION_WAIT_DELAY);
-                    }
-                }
-            }
-        });
-        
-        // Apply saved view preference
+    function restoreViewState() {
         const savedView = localStorage.getItem(CONFIG.STORAGE_KEY);
+        log(`Saved view preference: ${savedView}`);
         
         if (savedView === 'modern') {
-            $posts.hide();
-            $container.find('.post-card').show();
-            state.isModernView = true;
-            $('#modern-view-btn').addClass('active');
-            $('#classic-view-btn').removeClass('active');
-            $('#view-status').html('<i class="fas fa-info-circle"></i> Modern view active');
+            // Need to wait for all posts to be processed first
+            const $posts = $(`#${CONFIG.CONTAINER_ID}`).find(CONFIG.POST_SELECTOR);
+            const expectedCount = $posts.length;
+            
+            const checkReady = setInterval(() => {
+                const processedCount = state.processedPosts.size;
+                if (processedCount >= expectedCount || processedCount === expectedCount) {
+                    clearInterval(checkReady);
+                    log(`All posts processed (${processedCount}/${expectedCount}), restoring modern view`);
+                    switchToModernView();
+                }
+            }, 50);
+            
+            // Timeout fallback
+            setTimeout(() => {
+                clearInterval(checkReady);
+                if (!state.isModernView) {
+                    log('Restore timeout, forcing modern view');
+                    switchToModernView();
+                }
+            }, 3000);
         } else {
-            $posts.show();
-            $container.find('.post-card').hide();
-            state.isModernView = false;
             $('#classic-view-btn').addClass('active');
             $('#modern-view-btn').removeClass('active');
             $('#view-status').html('<i class="fas fa-info-circle"></i> Classic view active');
         }
-        
-        log('Existing posts initialized');
     }
     
     // ============================================================================
-    // MAIN INITIALIZATION - Fixed order
+    // INITIALIZATION - With proper timing
     // ============================================================================
     
-    async function initialize() {
+    function initialize() {
         if (state.initialized) {
-            log('Already initialized, skipping');
+            log('Already initialized');
             return;
         }
         
@@ -691,45 +693,67 @@
         log('Forum Modernizer initializing...');
         log('========================================');
         
-        // Wait for htmx to be ready
-        const htmxReady = await waitForHtmx();
-        state.htmxAvailable = htmxReady;
+        // Create UI first
+        createUI();
         
-        // Create container if needed
-        if ($(`#${CONFIG.CONTAINER_ID}`).length === 0) {
-            const $firstPost = $('.post').first();
-            if ($firstPost.length) {
-                $firstPost.parent().wrapInner(`<div id="${CONFIG.CONTAINER_ID}"></div>`);
-                log('Created posts container');
-            } else {
-                error('No posts found on page');
-                return;
-            }
+        // Get all existing posts
+        const $container = $(`#${CONFIG.CONTAINER_ID}`);
+        if (!$container.length) {
+            error('Container not found, retrying...');
+            setTimeout(initialize, 500);
+            return;
         }
         
-        // Create UI buttons
-        createViewButtons();
+        const $posts = $container.find(CONFIG.POST_SELECTOR);
+        log(`Found ${$posts.length} posts`);
         
-        // Attach event handlers (always needed)
+        // Process all posts
+        $posts.each(function() {
+            convertPostToModern($(this));
+        });
+        
+        // Attach event handlers
         attachEventHandlers();
         
         // Setup htmx handlers if available
-        if (state.htmxAvailable) {
+        if (typeof htmx !== 'undefined') {
             setupHtmxHandlers();
         }
         
-        // Initialize existing posts
-        initializeExistingPosts();
+        // Restore view state
+        restoreViewState();
         
         state.initialized = true;
         log('Initialization complete!');
     }
     
-    // Start after DOM is ready
+    // ============================================================================
+    // START - With multiple initialization attempts
+    // ============================================================================
+    
+    let initAttempts = 0;
+    const maxInitAttempts = 10;
+    
+    function tryInitialize() {
+        initAttempts++;
+        
+        // Check if posts exist
+        if ($('.post').length > 0) {
+            log(`Posts found on attempt ${initAttempts}, initializing`);
+            initialize();
+        } else if (initAttempts < maxInitAttempts) {
+            log(`Waiting for posts (attempt ${initAttempts}/${maxInitAttempts})...`);
+            setTimeout(tryInitialize, 200);
+        } else {
+            error('No posts found after maximum attempts');
+        }
+    }
+    
+    // Start when DOM is ready
     if (document.readyState === 'loading') {
-        $(document).ready(initialize);
+        $(document).ready(tryInitialize);
     } else {
-        initialize();
+        tryInitialize();
     }
     
 })();
