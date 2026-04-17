@@ -146,7 +146,7 @@
                 <div class="user-area">
                     <div class="avatar-modern">
                         <img class="avatar-circle" src="${data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username)}" 
-                             alt="${data.username}" width="70" height="70" loading="lazy">
+                             alt="${data.username}" width="60" height="60" loading="lazy">
                     </div>
                     <div class="user-details">
                         <div class="username-row"><span class="username">${escapeHtml(data.username)}</span></div>
