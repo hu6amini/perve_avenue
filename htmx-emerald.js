@@ -1,6 +1,5 @@
 /**
- * Forum Modernizer - Complete Version
- * Features: Clean content extraction, no role badge icons, full accessibility
+ * Forum Modernizer - Enhanced with working endpoints from test results
  */
 
 (function() {
@@ -35,32 +34,23 @@
 
         const postId = fullId.replace(CONFIG.POST_ID_PREFIX, '');
 
-        // Username
         const username = $post.find('.nick a').first().text().trim() || 'Unknown';
-        
-        // Avatar
         let avatarUrl = $post.find('.avatar img').attr('src');
         if (avatarUrl && avatarUrl.includes('weserv.nl')) {
             const urlParams = new URLSearchParams(avatarUrl.split('?')[1]);
             avatarUrl = urlParams.get('url') || avatarUrl;
         }
 
-        // User group / role
         const groupText = $post.find('.u_group dd').text().trim();
         const isAdmin = groupText === 'Administrator';
         const roleBadgeClass = isAdmin ? 'admin' : 'member';
 
-        // Post count
         const postCount = $post.find('.u_posts dd a').text().trim() || '0';
-        
-        // Reputation
         let reputation = $post.find('.u_reputation dd a').text().trim().replace('+', '');
 
-        // Online/Offline status
         const statusTitle = $post.find('.u_status').attr('title') || '';
         const isOnline = statusTitle.toLowerCase().includes('online');
 
-        // Rank / User title parsing
         let userTitle = 'Member';
         let rankIconClass = 'fa-medal fa-regular';
 
@@ -80,11 +70,8 @@
             }
         }
 
-        // Clean post content - remove bottomborder and extra <br> tags
         const contentClone = $post.find('.right.Item table.color').clone();
         contentClone.find('.signature, .edit').remove();
-
-        // Remove the bottomborder div and surrounding <br> tags
         contentClone.find('.bottomborder').remove();
         contentClone.find('br').each(function() {
             const $br = $(this);
@@ -94,19 +81,13 @@
         });
 
         const contentHtml = contentClone.html() || '';
-
-        // Signature
         const signatureHtml = $post.find('.signature').html() || '';
-        
-        // Edit info
         const editInfo = $post.find('.edit').text().trim();
 
-        // Likes
         let likes = 0;
         const pointsPos = $post.find('.points .points_pos');
         if (pointsPos.length) likes = parseInt(pointsPos.text()) || 0;
 
-        // Reactions (emoji plugin)
         let hasReactions = false;
         let reactionCount = 0;
         $post.find('.st-emoji-post .st-emoji-counter').each(function() {
@@ -115,31 +96,19 @@
         });
         if (!hasReactions && $post.find('.st-emoji-container').length) hasReactions = true;
 
-        // IP address (masked)
         let ipAddress = $post.find('.ip_address dd a').text().trim();
         if (ipAddress) {
             const parts = ipAddress.split('.');
             if (parts.length === 4) ipAddress = `${parts[0]}.${parts[1]}.${parts[2]}.xxx`;
         }
 
-        // Post number in thread
         const postNumber = $post.index() + 1;
 
-        // Time ago calculation
         let timeAgo = 'Recently';
         const whenTitle = $post.find('.when').attr('title');
         if (whenTitle) {
             const diffDays = Math.floor((Date.now() - new Date(whenTitle)) / 86400000);
-            if (diffDays >= 1) {
-                timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-            } else {
-                const diffHours = Math.floor((Date.now() - new Date(whenTitle)) / 3600000);
-                if (diffHours >= 1) {
-                    timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-                } else {
-                    timeAgo = 'Just now';
-                }
-            }
+            timeAgo = diffDays >= 1 ? `${diffDays} day${diffDays > 1 ? 's' : ''} ago` : 'Just now';
         }
 
         return {
@@ -167,7 +136,7 @@
                             <i class="fas fa-hashtag" aria-hidden="true"></i> ${data.postNumber}
                         </div>
                         <div class="post-timestamp">
-                            <time datetime="${data.timeAgo === 'Just now' ? new Date().toISOString() : ''}">${data.timeAgo}</time>
+                            <time>${data.timeAgo}</time>
                         </div>
                     </div>
                     <div class="action-buttons-group" role="group" aria-label="Post actions">
@@ -197,7 +166,7 @@
                     </div>
                     <div class="user-details">
                         <div class="username-row">
-                            <span class="username" id="post-author-${data.postId}">${escapeHtml(data.username)}</span>
+                            <span class="username">${escapeHtml(data.username)}</span>
                         </div>
                         <div class="badge-container">
                             <span class="role-badge ${data.roleBadgeClass}" aria-label="Role: ${escapeHtml(data.groupText || 'Member')}">
@@ -238,7 +207,7 @@
                         </button>
                         <button class="reaction-btn ${data.hasReactions ? 'reaction-placeholder' : ''}" aria-label="Add a reaction" data-pid="${data.postId}" hx-on:click="forumModernizer.handleReact(this)">
                             ${data.hasReactions ?
-                                `<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji" aria-label="Laugh reaction">` :
+                                `<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji">` :
                                 `<i class="fa-regular fa-face-smile" aria-hidden="true"></i>`}
                             ${data.reactionCount > 0 ? `<span class="reaction-count" aria-label="${data.reactionCount} reactions">${data.reactionCount}</span>` : ''}
                         </button>
@@ -296,19 +265,22 @@
     }
 
     // ============================================================================
-    // GLOBAL EVENT HANDLERS (exposed via window.forumModernizer)
+    // GLOBAL EVENT HANDLERS
     // ============================================================================
     
     window.forumModernizer = {
         handleQuote(elt) {
             const pid = elt.dataset.pid;
-            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`);
+            // Try to find the quote link - it might be in a different format
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=02"]`) ||
+                        document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a:contains("Quote")`);
             if (link) location.href = link.href;
         },
         
         handleEdit(elt) {
             const pid = elt.dataset.pid;
-            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`);
+            const link = document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a[href*="CODE=08"]`) ||
+                        document.querySelector(`#${CONFIG.POST_ID_PREFIX}${pid} a:contains("Edit")`);
             if (link) location.href = link.href;
         },
         
@@ -361,9 +333,8 @@
     // ============================================================================
     
     function initialize() {
-        console.log('[ForumModernizer] Loaded - clean content + accessibility enabled');
+        console.log('[ForumModernizer] Loaded');
 
-        // Ensure container exists
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (!container) {
             const firstPost = document.querySelector(CONFIG.POST_SELECTOR);
@@ -373,10 +344,8 @@
             }
         }
 
-        // Convert all existing posts
         document.querySelectorAll(CONFIG.POST_SELECTOR).forEach(convertToModern);
 
-        // Setup htmx handlers if available
         if (typeof htmx !== 'undefined') {
             htmx.onLoad((target) => {
                 target.querySelectorAll?.(CONFIG.POST_SELECTOR).forEach(convertToModern);
@@ -391,15 +360,11 @@
             });
         }
 
-        // Restore saved view preference
         if (localStorage.getItem(CONFIG.STORAGE_KEY) === 'modern') {
             document.getElementById(CONFIG.CONTAINER_ID)?.classList.add('view-modern');
         }
-        
-        console.log('[ForumModernizer] Ready');
     }
 
-    // Start initialization
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initialize);
     } else {
