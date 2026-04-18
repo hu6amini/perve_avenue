@@ -36,7 +36,7 @@ var ForumEventBus = (function() {
         var results = [];
         for (var i = 0; i < events[eventName].length; i++) {
             try {
-                var result = events[eventName][i](data);  // FIXED: added [i] and call with data
+                var result = events[eventName]i;
                 results.push(result);
             } catch(e) {
                 console.error('[EventBus] Error in ' + eventName + ' handler:', e);
