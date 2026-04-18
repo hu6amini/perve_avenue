@@ -362,6 +362,8 @@ img {
       font-weight: 700;
       font-size: 1.25rem;
       color: var(--text-primary);
+      cursor:pointer; 
+      display:flex;
     }
 
 /* Badge container */
@@ -369,7 +371,6 @@ img {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
-      margin: 0.2rem 0 0.4rem 0;
     }
 
 .role-badge {
@@ -401,7 +402,6 @@ img {
       display: flex;
       flex-wrap: wrap;
       gap: 0.8rem;
-      margin-top: 0.2rem;
     }
 
 .user-stats div {
