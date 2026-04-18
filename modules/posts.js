@@ -273,10 +273,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</button>';
         }
         
-        // Has reactions with counters - show combined image+count buttons
+        // Has reactions with counters - show only the reaction image buttons (no separate add button)
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
-        // Show each reaction image with its count (combine image and count in same button)
         // Group reactions by image src to combine counts
         var reactionMap = new Map();
         
@@ -303,11 +302,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '<span class="reaction-count">' + reaction.count + '</span>' +
                 '</button>';
         });
-        
-        // Add the add reaction button (smiley face)
-        reactionHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-face-smile"></i>' +
-            '</button>';
         
         reactionHtml += '</div>';
         return reactionHtml;
@@ -540,30 +534,14 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
-        // Check if this is an image reaction button or the add button
-        var isAddButton = buttonElement.classList.contains('reaction-add-btn');
-        
-        if (isAddButton) {
-            // Click the emoji container to add a reaction
-            var emojiContainer = originalPost.querySelector('.st-emoji-container');
-            if (emojiContainer) {
-                var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
-                trigger.click();
-            }
+        // Find the emoji container
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (emojiContainer) {
+            var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
+            trigger.click();
         } else {
-            // This is an existing reaction button - click it to add/remove that reaction
-            var reactionImg = buttonElement.querySelector('img');
-            if (reactionImg) {
-                var alt = reactionImg.getAttribute('alt');
-                // Find the corresponding reaction element in the original post
-                var matchingReaction = originalPost.querySelector('.st-emoji-preview img[alt="' + alt + '"]');
-                if (matchingReaction) {
-                    var reactionContainer = matchingReaction.closest('.st-emoji-container');
-                    if (reactionContainer) {
-                        reactionContainer.click();
-                    }
-                }
-            }
+            // Fallback to like
+            handleLike(pid);
         }
         
         setTimeout(function() {
@@ -782,7 +760,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             // Check for reaction containers
                             var emojiContainers = node.querySelectorAll ? node.querySelectorAll('.st-emoji-container') : [];
-                            if (node.classList && node.classList.contains('st-emoji-container')) {
+                            if (node.classList && node.classList.contains('.st-emoji-container')) {
                                 emojiContainers = [node];
                             }
                             
