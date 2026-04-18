@@ -95,30 +95,45 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var title = statusTitle.getAttribute('title') || '';
         return title.toLowerCase().includes('online');
     }
-    function getUserTitle($post) {
-        var titleSpan = $post.querySelector('.u_title');
-        if (!titleSpan) return 'Member';
-        var title = titleSpan.textContent.trim();
+    function getUserTitleAndIcon($post) {
+        var uRankSpan = $post.querySelector('.u_rank');
+        if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
+        
+        // Get the icon element
+        var icon = uRankSpan.querySelector('i');
+        var iconClass = '';
+        if (icon) {
+            // Get the full icon class from the original
+            var classAttr = icon.getAttribute('class') || '';
+            // Ensure it has fa-regular (or keep original style)
+            if (classAttr.includes('fa-solid')) {
+                classAttr = classAttr.replace('fa-solid', 'fa-regular');
+            }
+            iconClass = classAttr;
+        } else {
+            iconClass = 'fa-medal fa-regular';
+        }
+        
+        // Get the rank text (the span content or direct text)
+        var rankSpan = uRankSpan.querySelector('span');
+        var title = '';
+        if (rankSpan) {
+            title = rankSpan.textContent.trim();
+        } else {
+            // If no span, get the text content excluding the icon
+            var textContent = uRankSpan.textContent || '';
+            title = textContent.replace(icon ? icon.textContent : '', '').trim();
+        }
+        
+        // Map common titles if needed
         if (title === 'Member') {
             var stars = $post.querySelectorAll('.u_rank i.fa-star').length;
-            if (stars === 3) return 'Famous';
-            if (stars === 2) return 'Senior';
-            if (stars === 1) return 'Junior';
+            if (stars === 3) title = 'Famous';
+            else if (stars === 2) title = 'Senior';
+            else if (stars === 1) title = 'Junior';
         }
-        return title;
-    }
-    function getRankIconClass($post) {
-        var uRank = $post.querySelector('.u_rank');
-        if (!uRank) return 'fa-medal fa-regular';
-        var icon = uRank.querySelector('i:last-child');
-        if (!icon) return 'fa-medal fa-regular';
-        var classAttr = icon.getAttribute('class') || '';
-        var match = classAttr.match(/fa-(regular|solid|light|brands)?\s*fa-([a-z0-9-]+)/i);
-        if (match) {
-            var style = match[1] ? 'fa-' + match[1] : 'fa-regular';
-            return style + ' fa-' + match[2];
-        }
-        return 'fa-medal fa-regular';
+        
+        return { title: title || 'Member', iconClass: iconClass || 'fa-medal fa-regular' };
     }
     function getCleanContent($post) {
         var contentTable = $post.querySelector('.right.Item table.color');
@@ -247,6 +262,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var postId = getPostId($post);
         if (!postId) return null;
         var reactionData = getReactionData($post);
+        var userTitleData = getUserTitleAndIcon($post);
         
         // Store reaction data for later updates
         if (reactionData.hasReactions) {
@@ -262,8 +278,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
             postCount: getPostCount($post),
             reputation: getReputation($post),
             isOnline: getIsOnline($post),
-            userTitle: getUserTitle($post),
-            rankIconClass: getRankIconClass($post),
+            userTitle: userTitleData.title,
+            rankIconClass: userTitleData.iconClass,
             contentHtml: getCleanContent($post),
             signatureHtml: getSignatureHtml($post),
             editInfo: getEditInfo($post),
