@@ -468,9 +468,9 @@ img {
  modern wrapper container
 ============================================*/
 #modern-forum-wrapper {
-    max-width: 1400px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: var(--space-lg);
+    padding: 0 var(--space-md);
 }
 
 #modern-posts-container {
