@@ -199,12 +199,13 @@ img {
 
 /* Post header */
 .post-header-modern {
+    align-items: center;
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: var(--space-md) var(--space-lg);
-    background: var(--bg-color);
+    padding: var(--pad-5) var(--pad-6);
     border-bottom: 1px solid var(--border-color);
+    gap: var(--space-md);
+    flex-wrap: wrap;
 }
 
 .post-meta-left {
