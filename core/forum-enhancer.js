@@ -1,410 +1,215 @@
 // core/forum-enhancer.js
-// Main orchestrator for Forum Modernizer Suite
-// Coordinates all modules and initializes the enhancement system
-
 (function() {
     'use strict';
 
-    // ============================================================================
-    // CONFIGURATION
-    // ============================================================================
-
     const ENHANCER_CONFIG = {
         name: 'Forum Enhancer',
-        version: '1.0.0',
-        debug: false,
-        autoInitialize: true,
-        createWrapper: true,
+        version: '1.1.0',
+        debug: false,                    // set to true for verbose logs
         wrapperId: 'modern-forum-wrapper',
         hideOriginal: true,
         modules: {
-            posts: true,
-            navigation: false,
-            sidebar: false,
-            footer: false
+            posts: true
         }
     };
-
-    // ============================================================================
-    // MODULE REGISTRY
-    // ============================================================================
 
     const modules = [];
     const moduleStatus = new Map();
 
-    function log(message, type) {
+    function log(msg, type = 'info') {
         if (!ENHANCER_CONFIG.debug && type !== 'error') return;
-        
-        const prefix = '[ForumEnhancer]';
-        if (type === 'error') {
-            console.error(prefix, message);
-        } else if (type === 'warn') {
-            console.warn(prefix, message);
-        } else {
-            console.log(prefix, message);
-        }
+        const prefix = `[ForumEnhancer ${ENHANCER_CONFIG.version}]`;
+        if (type === 'error') console.error(prefix, msg);
+        else if (type === 'warn') console.warn(prefix, msg);
+        else console.log(prefix, msg);
     }
 
-    function registerModule(name, module, dependencies) {
-        modules.push({
-            name: name,
-            module: module,
-            dependencies: dependencies || [],
-            initialized: false,
-            enabled: ENHANCER_CONFIG.modules[name] !== false
-        });
-        
-        if (ENHANCER_CONFIG.debug) {
-            log('Registered module: ' + name);
-        }
+    function registerModule(name, module, dependencies = []) {
+        modules.push({ name, module, dependencies, initialized: false, enabled: ENHANCER_CONFIG.modules[name] !== false });
+        if (ENHANCER_CONFIG.debug) log(`Registered module: ${name}`);
     }
-
-    // ============================================================================
-    // DEPENDENCY CHECKING
-    // ============================================================================
 
     function checkDependencies(module) {
-        if (!module.dependencies || module.dependencies.length === 0) {
-            return true;
-        }
-        
-        for (var i = 0; i < module.dependencies.length; i++) {
-            var depName = module.dependencies[i];
-            var dep = modules.find(function(m) { return m.name === depName; });
-            
-            if (!dep || !dep.initialized) {
-                log('Module ' + module.name + ' waiting for dependency: ' + depName, 'warn');
-                return false;
-            }
-        }
-        return true;
+        return !module.dependencies.length || module.dependencies.every(dep => {
+            const found = modules.find(m => m.name === dep);
+            return found && found.initialized;
+        });
     }
 
     function initializeModule(module) {
-        if (module.initialized) return true;
-        if (!module.enabled) {
-            log('Module ' + module.name + ' is disabled, skipping', 'warn');
-            return false;
-        }
+        if (module.initialized || !module.enabled) return false;
         if (!checkDependencies(module)) return false;
-        
+
         try {
-            if (module.module && typeof module.module.initialize === 'function') {
+            if (typeof module.module.initialize === 'function') {
                 module.module.initialize();
                 module.initialized = true;
-                moduleStatus.set(module.name, { status: 'initialized', timestamp: Date.now() });
-                log('✓ Initialized: ' + module.name);
+                moduleStatus.set(module.name, { status: 'initialized', ts: Date.now() });
+                log(`✓ Initialized: ${module.name}`);
                 return true;
             }
-        } catch (error) {
-            log('Failed to initialize ' + module.name + ': ' + error.message, 'error');
-            moduleStatus.set(module.name, { status: 'failed', error: error.message });
+        } catch (err) {
+            log(`Failed to initialize ${module.name}: ${err.message}`, 'error');
+            moduleStatus.set(module.name, { status: 'failed', error: err.message });
         }
         return false;
     }
 
-    function initializeAllModules() {
-        log('Initializing all modules...');
-        
-        var maxAttempts = 10;
-        var attempt = 0;
-        var remainingModules = modules.filter(function(m) { return m.enabled && !m.initialized; });
-        
-        while (remainingModules.length > 0 && attempt < maxAttempts) {
-            var initializedAny = false;
-            
-            for (var i = 0; i < modules.length; i++) {
-                var module = modules[i];
-                if (module.enabled && !module.initialized) {
-                    if (initializeModule(module)) {
-                        initializedAny = true;
-                    }
+    async function initializeAllModules() {
+        log('Starting module initialization...');
+        let changed = true;
+        let attempts = 0;
+        const maxAttempts = 15;
+
+        while (changed && attempts < maxAttempts) {
+            changed = false;
+            for (const mod of modules) {
+                if (!mod.initialized && mod.enabled && checkDependencies(mod)) {
+                    if (initializeModule(mod)) changed = true;
                 }
             }
-            
-            if (!initializedAny) break;
-            remainingModules = modules.filter(function(m) { return m.enabled && !m.initialized; });
-            attempt++;
+            attempts++;
         }
-        
-        var failedModules = modules.filter(function(m) { return m.enabled && !m.initialized; });
-        if (failedModules.length > 0) {
-            log('Warning: ' + failedModules.length + ' modules failed to initialize', 'warn');
-        }
-        
-        return modules.filter(function(m) { return m.initialized; }).length;
+
+        const initialized = modules.filter(m => m.initialized).length;
+        log(`${initialized}/${modules.length} modules initialized`);
+        return initialized;
     }
-
-    // ============================================================================
-    // DEPENDENCY CHECKING (Core)
-    // ============================================================================
-
-    function checkDependenciesAvailable() {
-        var required = ['ForumDOMUtils', 'ForumEventBus'];
-        var missing = [];
-        
-        for (var i = 0; i < required.length; i++) {
-            if (typeof window[required[i]] === 'undefined') {
-                missing.push(required[i]);
-            }
-        }
-        
-        if (missing.length > 0) {
-            log('Missing required dependencies: ' + missing.join(', '), 'error');
-            return false;
-        }
-        
-        log('All core dependencies available');
-        return true;
-    }
-
-    // ============================================================================
-    // WAIT FOR DOM READY
-    // ============================================================================
-
-    function domReady() {
-        return new Promise(function(resolve) {
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', resolve);
-            } else {
-                resolve();
-            }
-        });
-    }
-
-    // ============================================================================
-    // WAIT FOR FORUM OBSERVER
-    // ============================================================================
-
-    function waitForForumObserver() {
-        return new Promise(function(resolve) {
-            if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
-                resolve(globalThis.forumObserver);
-                return;
-            }
-            
-            var attempts = 0;
-            var maxAttempts = 50;
-            var interval = setInterval(function() {
-                attempts++;
-                if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
-                    clearInterval(interval);
-                    resolve(globalThis.forumObserver);
-                } else if (attempts >= maxAttempts) {
-                    clearInterval(interval);
-                    log('ForumCoreObserver not detected after ' + maxAttempts + ' attempts', 'warn');
-                    resolve(null);
-                }
-            }, 100);
-        });
-    }
-
-    // ============================================================================
-    // WRAPPER CREATION
-    // ============================================================================
 
     function createModernWrapper() {
-        var existingWrapper = document.getElementById(ENHANCER_CONFIG.wrapperId);
-        if (existingWrapper) {
-            return existingWrapper;
-        }
-        
-        var wrapper = document.createElement('div');
+        let wrapper = document.getElementById(ENHANCER_CONFIG.wrapperId);
+        if (wrapper) return wrapper;
+
+        wrapper = document.createElement('div');
         wrapper.id = ENHANCER_CONFIG.wrapperId;
         wrapper.className = 'modern-forum-wrapper';
-        
         document.body.insertBefore(wrapper, document.body.firstChild);
-        
-        var postsContainer = document.createElement('div');
+
+        const postsContainer = document.createElement('div');
         postsContainer.id = 'modern-posts-container';
         postsContainer.className = 'modern-posts-container';
         wrapper.appendChild(postsContainer);
-        
-        log('Created modern wrapper: ' + ENHANCER_CONFIG.wrapperId);
+
+        log('Modern wrapper created');
         return wrapper;
+    }
+
+    function injectModernCSS() {
+        if (document.getElementById('forum-modern-css')) return;
+
+        const style = document.createElement('style');
+        style.id = 'forum-modern-css';
+        style.textContent = `
+            body.forum-modernized .topic .List,
+            body.forum-modernized .topic .mainbg,
+            body.forum-modernized .post:not(.post-card),
+            body.forum-modernized .forum-header,
+            body.forum-modernized .forum-footer,
+            body.forum-modernized .signature,
+            body.forum-modernized .edit { 
+                display: none !important; 
+            }
+
+            #modern-forum-wrapper { 
+                display: block !important; 
+                min-height: 100vh;
+            }
+
+            .modern-posts-container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 1rem;
+            }
+
+            /* Modern card base styles - expand as needed */
+            .post-card {
+                background: var(--card-bg, #fff);
+                border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+                margin-bottom: 1.5rem;
+                padding: 1.25rem;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+            .post-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            }
+
+            @media (max-width: 768px) {
+                .post-card { margin-bottom: 1rem; padding: 1rem; }
+            }
+        `;
+        document.head.appendChild(style);
+        log('Modern CSS injected');
     }
 
     function hideOriginalContent() {
         document.body.classList.add('forum-modernized');
-        
-        var originalPostsContainer = document.querySelector('.topic .List, .topic .mainbg');
-        if (originalPostsContainer) {
-            window._originalPostsContainer = originalPostsContainer;
-        }
-        
-        log('Original content hidden (CSS handles visibility)');
+        log('Legacy UI hidden via body class + CSS');
     }
 
-    // ============================================================================
-    // REGISTER MODULES
-    // ============================================================================
-
-    function registerAllModules() {
-        if (typeof ForumPostsModule !== 'undefined') {
-            registerModule('posts', ForumPostsModule, []);
-        } else {
-            log('ForumPostsModule not found, posts enhancement disabled', 'warn');
-            ENHANCER_CONFIG.modules.posts = false;
-        }
+    function waitForForumObserver() {
+        return new Promise(resolve => {
+            if (globalThis.forumObserver) {
+                resolve(globalThis.forumObserver);
+                return;
+            }
+            let attempts = 0;
+            const interval = setInterval(() => {
+                attempts++;
+                if (globalThis.forumObserver || attempts > 60) {
+                    clearInterval(interval);
+                    resolve(globalThis.forumObserver || null);
+                }
+            }, 80);
+        });
     }
-
-    // ============================================================================
-    // PUBLIC API
-    // ============================================================================
-
-    const ForumEnhancer = {
-        version: ENHANCER_CONFIG.version,
-        name: ENHANCER_CONFIG.name,
-        
-        registerModule: registerModule,
-        
-        enableModule: function(moduleName) {
-            if (ENHANCER_CONFIG.modules.hasOwnProperty(moduleName)) {
-                ENHANCER_CONFIG.modules[moduleName] = true;
-                var module = modules.find(function(m) { return m.name === moduleName; });
-                if (module) {
-                    module.enabled = true;
-                    initializeModule(module);
-                }
-                log('Enabled module: ' + moduleName);
-            }
-        },
-        
-        disableModule: function(moduleName) {
-            if (ENHANCER_CONFIG.modules.hasOwnProperty(moduleName)) {
-                ENHANCER_CONFIG.modules[moduleName] = false;
-                var module = modules.find(function(m) { return m.name === moduleName; });
-                if (module) {
-                    module.enabled = false;
-                }
-                log('Disabled module: ' + moduleName);
-            }
-        },
-        
-        getModuleStatus: function() {
-            var status = {};
-            modules.forEach(function(m) {
-                status[m.name] = {
-                    enabled: m.enabled,
-                    initialized: m.initialized,
-                    dependencies: m.dependencies
-                };
-            });
-            return status;
-        },
-        
-        getStats: function() {
-            var initialized = modules.filter(function(m) { return m.initialized; }).length;
-            var enabled = modules.filter(function(m) { return m.enabled; }).length;
-            
-            return {
-                version: ENHANCER_CONFIG.version,
-                modules: {
-                    total: modules.length,
-                    enabled: enabled,
-                    initialized: initialized,
-                    failed: enabled - initialized
-                },
-                debug: ENHANCER_CONFIG.debug,
-                timestamp: Date.now()
-            };
-        },
-        
-        enableDebug: function() {
-            ENHANCER_CONFIG.debug = true;
-            log('Debug mode enabled');
-            if (typeof ForumEventBus !== 'undefined') {
-                ForumEventBus.enableDebug();
-            }
-        },
-        
-        disableDebug: function() {
-            ENHANCER_CONFIG.debug = false;
-            if (typeof ForumEventBus !== 'undefined') {
-                ForumEventBus.disableDebug();
-            }
-        },
-        
-        reinitialize: function() {
-            log('Reinitializing all modules...');
-            modules.forEach(function(m) {
-                m.initialized = false;
-            });
-            initializeAllModules();
-        },
-        
-        getObserver: function() {
-            return globalThis.forumObserver || null;
-        },
-        
-        getWrapper: function() {
-            return document.getElementById(ENHANCER_CONFIG.wrapperId);
-        },
-        
-        getPostsContainer: function() {
-            return document.getElementById('modern-posts-container');
-        }
-    };
-
-    // ============================================================================
-    // INITIALIZATION
-    // ============================================================================
 
     async function initialize() {
         log('========================================');
-        log(ENHANCER_CONFIG.name + ' v' + ENHANCER_CONFIG.version);
+        log(`${ENHANCER_CONFIG.name} v${ENHANCER_CONFIG.version} starting`);
         log('========================================');
-        
-        if (!checkDependenciesAvailable()) {
-            log('Cannot start - missing dependencies', 'error');
-            return;
+
+        await new Promise(r => {
+            if (document.readyState !== 'loading') r();
+            else document.addEventListener('DOMContentLoaded', r);
+        });
+
+        createModernWrapper();
+        injectModernCSS();
+        if (ENHANCER_CONFIG.hideOriginal) hideOriginalContent();
+
+        const observer = await waitForForumObserver();
+        log(observer ? 'ForumCoreObserver ready' : 'Running without observer (dynamic updates limited)', observer ? 'info' : 'warn');
+
+        // Register modules
+        if (typeof ForumPostsModule !== 'undefined') {
+            registerModule('posts', ForumPostsModule);
         }
-        
-        await domReady();
-        log('DOM ready');
-        
-        if (ENHANCER_CONFIG.createWrapper) {
-            createModernWrapper();
-        }
-        
-        if (ENHANCER_CONFIG.hideOriginal) {
-            hideOriginalContent();
-        }
-        
-        var observer = await waitForForumObserver();
-        if (observer) {
-            log('ForumCoreObserver detected and ready');
-        } else {
-            log('Running without ForumCoreObserver (dynamic content may not auto-enhance)', 'warn');
-        }
-        
-        registerAllModules();
-        
-        var initializedCount = initializeAllModules();
-        log(initializedCount + ' of ' + modules.length + ' modules initialized');
-        
+
+        await initializeAllModules();
+
         if (typeof ForumEventBus !== 'undefined') {
             ForumEventBus.trigger('forum:enhancer:ready', {
                 version: ENHANCER_CONFIG.version,
-                modules: initializedCount,
-                observer: !!observer,
-                wrapper: document.getElementById(ENHANCER_CONFIG.wrapperId)
+                observer: !!observer
             });
         }
-        
-        log('========================================');
-        log(ENHANCER_CONFIG.name + ' is ready!');
-        log('========================================');
+
+        log('Forum Enhancer is now fully operational ✓');
     }
 
-    // ============================================================================
-    // EXPOSE GLOBALLY
-    // ============================================================================
+    // Public API
+    window.ForumEnhancer = {
+        version: ENHANCER_CONFIG.version,
+        enableDebug: () => { ENHANCER_CONFIG.debug = true; log('Debug enabled'); },
+        disableDebug: () => { ENHANCER_CONFIG.debug = false; },
+        reinitialize: () => initializeAllModules(),
+        getWrapper: () => document.getElementById(ENHANCER_CONFIG.wrapperId),
+        getPostsContainer: () => document.getElementById('modern-posts-container')
+    };
 
-    window.ForumEnhancer = ForumEnhancer;
-    
-    if (ENHANCER_CONFIG.autoInitialize) {
-        initialize();
-    }
-    
+    // Auto-start
+    initialize().catch(err => log(`Fatal init error: ${err.message}`, 'error'));
+
 })();
