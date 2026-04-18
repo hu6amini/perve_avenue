@@ -438,10 +438,11 @@ img {
 
 .post-text-content img {
       max-width: 100%;
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius);
       display: block;
       margin: 0.75rem 0;
-      height:auto
+      height:auto;
+ content-visibility: auto;
     }
 
 /* Edit indicator */
