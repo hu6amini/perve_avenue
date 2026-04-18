@@ -1,4 +1,4 @@
-// modules/posts.js - Updated reaction handling
+// modules/posts.js
 // Forum Modernizer - Posts Module
 // Transforms .post elements into modern card layout and renders into wrapper container
 var ForumPostsModule = (function(Utils, EventBus) {
@@ -165,31 +165,31 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Look for the st-emoji-container (the reaction plugin container)
         var emojiContainer = $post.querySelector('.st-emoji-container');
         if (emojiContainer) {
-            hasReactions = true;
-            
-            // Get counters - they can be inside or outside the preview
-            var allCounters = emojiContainer.querySelectorAll('.st-emoji-counter');
-            allCounters.forEach(function(counter) {
-                var count = parseInt(counter.getAttribute('data-count') || counter.textContent || 0);
-                reactionCount += count;
-            });
-            
-            // Get reaction images from preview
-            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
-            if (previewDiv) {
-                var images = previewDiv.querySelectorAll('img');
-                images.forEach(function(img) {
-                    var alt = img.getAttribute('alt') || '';
-                    var src = img.getAttribute('src') || '';
-                    if (src) {
-                        reactions.push({
-                            alt: alt,
-                            src: src,
-                            name: alt.replace(/:/g, ''),
-                            count: 1 // Each image represents one reaction type
-                        });
-                    }
+            // Get counters
+            var counters = emojiContainer.querySelectorAll('.st-emoji-counter');
+            if (counters.length > 0) {
+                hasReactions = true;
+                counters.forEach(function(counter) {
+                    var count = parseInt(counter.getAttribute('data-count') || counter.textContent || 0);
+                    reactionCount += count;
                 });
+                
+                // Get reaction images from preview
+                var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
+                if (previewDiv) {
+                    var images = previewDiv.querySelectorAll('img');
+                    images.forEach(function(img) {
+                        var alt = img.getAttribute('alt') || '';
+                        var src = img.getAttribute('src') || '';
+                        if (src) {
+                            reactions.push({
+                                alt: alt,
+                                src: src,
+                                name: alt.replace(/:/g, '')
+                            });
+                        }
+                    });
+                }
             }
         }
         
@@ -266,44 +266,45 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // GENERATE REACTION BUTTONS HTML
     // ============================================================================
     function generateReactionButtons(data) {
-        // If no reactions at all, show simple smiley button
-        if (!data.hasReactions || data.reactions.length === 0) {
+        // If no reactions have counters, just show the add reaction button (smiley face)
+        if (!data.hasReactions || data.reactionCount === 0) {
             return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
                 '<i class="fa-regular fa-face-smile"></i>' +
                 '</button>';
         }
         
-        // Has reactions - show reaction images with their counts combined
+        // Has reactions with counters - show combined image+count buttons
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
+        // Show each reaction image with its count (combine image and count in same button)
         // Group reactions by image src to combine counts
         var reactionMap = new Map();
+        
         for (var i = 0; i < data.reactions.length; i++) {
             var reaction = data.reactions[i];
             var src = reaction.src;
             if (reactionMap.has(src)) {
                 var existing = reactionMap.get(src);
-                existing.count += reaction.count;
+                existing.count++;
             } else {
                 reactionMap.set(src, {
                     src: src,
                     alt: reaction.alt,
                     name: reaction.name,
-                    count: reaction.count
+                    count: 1
                 });
             }
         }
         
-        // Create buttons for each unique reaction with its count
+        // Create buttons for each unique reaction
         reactionMap.forEach(function(reaction) {
-            var countHtml = reaction.count > 0 ? '<span class="reaction-count">' + reaction.count + '</span>' : '';
-            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name) + '" data-pid="' + data.postId + '">' +
+            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
                 '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
-                countHtml +
+                '<span class="reaction-count">' + reaction.count + '</span>' +
                 '</button>';
         });
         
-        // Add the add reaction button
+        // Add the add reaction button (smiley face)
         reactionHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
             '<i class="fa-regular fa-face-smile"></i>' +
             '</button>';
@@ -429,12 +430,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
         '</div>';
     }
     // ============================================================================
-    // REACTION DISPLAY REFRESH (with image support)
+    // REACTION DISPLAY REFRESH
     // ============================================================================
     function refreshReactionDisplay(postId) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (!originalPost) {
-            console.log('[PostsModule] Original post not found for ID:', postId);
             return;
         }
         
@@ -443,7 +443,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
         if (!modernCard) {
-            console.log('[PostsModule] Modern card not found for post:', postId);
             return;
         }
         
@@ -473,8 +472,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         } else {
             postReactionsDiv.innerHTML = newReactionsHtml;
         }
-        
-        console.log('[PostsModule] Refreshed reactions for post:', postId, 'Reactions:', reactionData.reactionCount);
     }
     // ============================================================================
     // EVENT HANDLERS
@@ -543,15 +540,30 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
-        // Try to find and click the emoji container
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (emojiContainer) {
-            // Find the trigger element inside the container
-            var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
-            trigger.click();
+        // Check if this is an image reaction button or the add button
+        var isAddButton = buttonElement.classList.contains('reaction-add-btn');
+        
+        if (isAddButton) {
+            // Click the emoji container to add a reaction
+            var emojiContainer = originalPost.querySelector('.st-emoji-container');
+            if (emojiContainer) {
+                var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
+                trigger.click();
+            }
         } else {
-            // Fallback to like if emoji container not found
-            handleLike(pid);
+            // This is an existing reaction button - click it to add/remove that reaction
+            var reactionImg = buttonElement.querySelector('img');
+            if (reactionImg) {
+                var alt = reactionImg.getAttribute('alt');
+                // Find the corresponding reaction element in the original post
+                var matchingReaction = originalPost.querySelector('.st-emoji-preview img[alt="' + alt + '"]');
+                if (matchingReaction) {
+                    var reactionContainer = matchingReaction.closest('.st-emoji-container');
+                    if (reactionContainer) {
+                        reactionContainer.click();
+                    }
+                }
+            }
         }
         
         setTimeout(function() {
@@ -745,13 +757,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 selector: '.st-emoji-container',
                 priority: 'medium',
                 callback: function(node) {
-                    console.log('[PostsModule] Reaction container detected:', node);
                     // Find the parent post
                     var postEl = node.closest('.post');
                     if (postEl && isValidPost(postEl)) {
                         var postId = getPostId(postEl);
                         if (postId) {
-                            console.log('[PostsModule] Reaction container found for post:', postId);
                             // Small delay to ensure the reaction plugin has fully loaded
                             setTimeout(function() {
                                 refreshReactionDisplay(postId);
@@ -761,27 +771,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 }
             });
             
-            // Also register for st-emoji-preview containers (images)
-            globalThis.forumObserver.register({
-                id: 'posts-module-reaction-images',
-                selector: '.st-emoji-preview img',
-                priority: 'low',
-                callback: function(node) {
-                    console.log('[PostsModule] Reaction image detected');
-                    // Find the parent post
-                    var postEl = node.closest('.post');
-                    if (postEl && isValidPost(postEl)) {
-                        var postId = getPostId(postEl);
-                        if (postId) {
-                            refreshReactionDisplay(postId);
-                        }
-                    }
-                }
-            });
-            
-            console.log('[PostsModule] Registered with ForumCoreObserver (posts + reactions)');
-        } else {
-            console.log('[PostsModule] ForumCoreObserver not available, dynamic content will not auto-convert');
+            console.log('[PostsModule] Registered with ForumCoreObserver');
         }
         
         // Also set up a MutationObserver as fallback specifically for reactions
@@ -792,7 +782,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             // Check for reaction containers
                             var emojiContainers = node.querySelectorAll ? node.querySelectorAll('.st-emoji-container') : [];
-                            if (node.classList && node.classList.contains('.st-emoji-container')) {
+                            if (node.classList && node.classList.contains('st-emoji-container')) {
                                 emojiContainers = [node];
                             }
                             
@@ -827,7 +817,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
        
         console.log('[PostsModule] Ready - ' + validPosts + ' posts converted');
-        console.log('[PostsModule] Reaction observers active - will detect reaction plugin loading');
     }
     // ============================================================================
     // PUBLIC API
