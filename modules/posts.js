@@ -299,10 +299,10 @@ function generateModernPost(data) {
                     '<i class="fa-regular fa-pen-to-square"></i>' +
                 '</button>' +
                 '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-share-from-square"></i>' +
+                    '<i class="fa-regular fa-share-nodes"></i>' +
                 '</button>' +
                 '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-flag"></i>' +
+                    '<i class="fa-regular fa-circle-exclamation"></i>' +
                 '</button>' +
                 '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
                     '<i class="fa-regular fa-trash-can"></i>' +
