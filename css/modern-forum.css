@@ -467,7 +467,7 @@ img {
     }
 
 /* Post footer */
-.post-footer-modern {
+.post-footer {
       background: var(--bg-color);
       border-top: 1px solid var(--border-color);
       padding: var(--pad-4) var(--pad-6);
@@ -479,7 +479,7 @@ img {
     }
 
 /* Reaction cluster */
-.reaction-cluster {
+.post-reactions {
       display: flex;
       gap: 0.8rem;
       align-items: center;
@@ -522,7 +522,7 @@ img {
 
 
 /* IP info */
-.ip-info {
+.post-ip {
       font-size: 0.7rem;
       color: var(--text-tertiary);
     }
