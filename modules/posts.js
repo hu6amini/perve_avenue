@@ -1,6 +1,6 @@
 // modules/posts.js
 // Forum Modernizer - Posts Module
-// Transforms .post elements into modern card layout
+// Transforms .post elements into modern card layout and renders into wrapper container
 
 var ForumPostsModule = (function(Utils, EventBus) {
     'use strict';
@@ -17,8 +17,36 @@ var ForumPostsModule = (function(Utils, EventBus) {
     };
 
     // ============================================================================
-    // DATA EXTRACTION
+    // HELPER FUNCTIONS
     // ============================================================================
+
+    function getPostsContainer() {
+        // First try to get the modern wrapper container
+        var modernContainer = document.getElementById('modern-posts-container');
+        if (modernContainer) {
+            return modernContainer;
+        }
+        
+        // Fallback to original container
+        var originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
+        if (originalContainer) {
+            return originalContainer;
+        }
+        
+        // Create container if neither exists
+        var newContainer = document.createElement('div');
+        newContainer.id = CONFIG.CONTAINER_ID;
+        newContainer.className = 'modern-posts-container';
+        
+        var wrapper = document.getElementById('modern-forum-wrapper');
+        if (wrapper) {
+            wrapper.appendChild(newContainer);
+        } else {
+            document.body.appendChild(newContainer);
+        }
+        
+        return newContainer;
+    }
 
     function isValidPost(postEl) {
         if (!postEl) return false;
@@ -33,6 +61,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
         if (!fullId.startsWith(CONFIG.POST_ID_PREFIX)) return null;
         return fullId.replace(CONFIG.POST_ID_PREFIX, '');
     }
+
+    // ============================================================================
+    // DATA EXTRACTION
+    // ============================================================================
 
     function getUsername($post) {
         var nickLink = $post.querySelector('.nick a');
@@ -560,45 +592,31 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // CONVERT POST TO MODERN
+    // CONVERT TO MODERN CARD (returns card element)
     // ============================================================================
 
-    function convertToModern(postEl, index) {
-        // Skip if not a valid post element
-        if (!isValidPost(postEl)) {
-            return;
-        }
-
+    function convertToModernCard(postEl, index) {
+        if (!isValidPost(postEl)) return null;
+        
         var postId = getPostId(postEl);
-        if (!postId) return;
-
-        var existingCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
-        if (existingCard) return;
-
+        if (!postId) return null;
+        
         var data = extractPostData(postEl, index);
-        if (!data) return;
-
+        if (!data) return null;
+        
         var modernHTML = generateModernPost(data);
         var tempDiv = document.createElement('div');
         tempDiv.innerHTML = modernHTML;
         var newCard = tempDiv.firstElementChild;
-
-        postEl.parentNode.insertBefore(newCard, postEl.nextSibling);
-
-        // Trigger event
+        
+        // Store reference to original post
+        newCard.setAttribute('data-original-id', postEl.id);
+        
         if (EventBus) {
             EventBus.trigger('post:converted', { postId: postId, element: postEl, card: newCard });
         }
-    }
-
-    function hideOriginalPosts() {
-        var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
-        for (var i = 0; i < posts.length; i++) {
-            // Only hide posts that are valid (have ee prefix)
-            if (isValidPost(posts[i])) {
-                Utils.hideElement(posts[i]);
-            }
-        }
+        
+        return newCard;
     }
 
     // ============================================================================
@@ -608,51 +626,53 @@ var ForumPostsModule = (function(Utils, EventBus) {
     function initialize() {
         console.log('[PostsModule] Initializing...');
 
-        // Ensure container exists
-        var container = document.getElementById(CONFIG.CONTAINER_ID);
-        if (!container) {
-            var firstPost = document.querySelector(CONFIG.POST_SELECTOR);
-            if (firstPost && firstPost.parentElement) {
-                firstPost.parentElement.id = CONFIG.CONTAINER_ID;
-                container = firstPost.parentElement;
-            }
-        }
-
-        // Convert all existing posts
+        // Get or create the posts container
+        var container = getPostsContainer();
+        
+        // Clear container if needed (to avoid duplicates)
+        container.innerHTML = '';
+        
+        // Get all original posts
         var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
         var validPosts = 0;
+        
+        // Convert each post and append to container
         for (var i = 0; i < posts.length; i++) {
             if (isValidPost(posts[i])) {
-                convertToModern(posts[i], validPosts);
-                validPosts++;
+                var modernCard = convertToModernCard(posts[i], validPosts);
+                if (modernCard) {
+                    container.appendChild(modernCard);
+                    validPosts++;
+                }
             }
         }
-
-        console.log('[PostsModule] Found ' + validPosts + ' valid posts');
-
-        // Hide original posts (only the valid ones)
-        hideOriginalPosts();
-
+        
+        // Hide original posts (CSS already does this)
+        // But keep them in DOM for functionality
+        
         // Attach event handlers
         attachEventHandlers();
-
-        // Register with ForumCoreObserver for dynamic content
+        
+        // Register with ForumCoreObserver for new posts
         if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
             globalThis.forumObserver.register({
                 id: 'posts-module',
                 selector: CONFIG.POST_SELECTOR,
                 priority: 'high',
                 callback: function(node) {
-                    // Only process if it's a valid post
                     if (!isValidPost(node)) return;
                     
+                    // Find the index for this post
                     var allPosts = Utils.getAllElements(CONFIG.POST_SELECTOR);
                     var validIndex = 0;
                     for (var i = 0; i < allPosts.length; i++) {
                         if (isValidPost(allPosts[i])) {
                             if (allPosts[i] === node) {
-                                convertToModern(node, validIndex);
-                                Utils.hideElement(node);
+                                var modernCard = convertToModernCard(node, validIndex);
+                                if (modernCard) {
+                                    var container = getPostsContainer();
+                                    container.appendChild(modernCard);
+                                }
                                 break;
                             }
                             validIndex++;
@@ -664,12 +684,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
         } else {
             console.log('[PostsModule] ForumCoreObserver not available, dynamic content will not auto-convert');
         }
-
+        
         // Trigger ready event
         if (EventBus) {
             EventBus.trigger('posts:ready', { count: validPosts });
         }
-
+        
         console.log('[PostsModule] Ready - ' + validPosts + ' posts converted');
     }
 
@@ -679,8 +699,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
 
     return {
         initialize: initialize,
-        convertToModern: convertToModern,
+        convertToModernCard: convertToModernCard,
         refreshReactionDisplay: refreshReactionDisplay,
+        getPostsContainer: getPostsContainer,
         isValidPost: isValidPost,
         CONFIG: CONFIG
     };
