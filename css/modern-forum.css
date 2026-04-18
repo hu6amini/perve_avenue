@@ -1,0 +1,237 @@
+/* css/modern-forum.css */
+
+/* ========================================
+   BASE LAYOUT - Hide original, show wrapper
+   ======================================== */
+
+/* Hide original forum content immediately */
+body#topic .topic,
+body#topic .main_content,
+body#topic .footer,
+body#forum .board,
+.post {
+    display: none !important;
+}
+
+/* Show modern wrapper */
+#modern-forum-wrapper {
+    display: block !important;
+}
+
+/* ========================================
+   MODERN WRAPPER STYLES
+   ======================================== */
+
+.modern-forum-wrapper {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.modern-posts-container {
+    margin-top: 20px;
+}
+
+/* ========================================
+   POST CARDS
+   ======================================== */
+
+.post-card {
+    background: var(--card-bg, #ffffff);
+    border-radius: 12px;
+    margin-bottom: 25px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+}
+
+.post-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Post header */
+.post-header-modern {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: var(--header-bg, #f9fafb);
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.post-meta-left {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.post-number-badge {
+    background: #e5e7eb;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.post-timestamp {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+/* Action buttons */
+.action-buttons-group {
+    display: flex;
+    gap: 5px;
+}
+
+.action-icon {
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    color: #6b7280;
+    transition: all 0.2s ease;
+}
+
+.action-icon:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.delete-action:hover {
+    color: #dc3545;
+}
+
+.report-action:hover {
+    color: #fd7e14;
+}
+
+/* User area */
+.user-area {
+    display: flex;
+    gap: 15px;
+    padding: 15px 20px;
+}
+
+.avatar-circle {
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.username {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: #1f2937;
+}
+
+/* Role badges */
+.role-badge {
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    font-size: 12px;
+}
+
+.role-badge.admin {
+    background: #dc3545;
+    color: white;
+}
+
+.role-badge.member {
+    background: #6c757d;
+    color: white;
+}
+
+/* User stats */
+.user-stats-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.stat-pill {
+    font-size: 12px;
+    color: #666;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Post body */
+.post-body {
+    padding: 0 20px 20px 20px;
+}
+
+.post-text-content {
+    line-height: 1.6;
+}
+
+.edit-indicator {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #999;
+    font-style: italic;
+}
+
+.signature-modern {
+    margin-top: 15px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 13px;
+    color: #666;
+}
+
+/* Post footer */
+.post-footer-modern {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+}
+
+.reaction-cluster {
+    display: flex;
+    gap: 8px;
+}
+
+.reaction-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    padding: 5px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.reaction-btn:hover {
+    background: #f3f4f6;
+    transform: scale(1.02);
+}
+
+.ip-info {
+    font-size: 11px;
+    color: #999;
+    font-family: monospace;
+}
+
+/* Loading state */
+.modern-forum-wrapper:empty {
+    min-height: 200px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading-shimmer 1.5s infinite;
+}
+
+@keyframes loading-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
