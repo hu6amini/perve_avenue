@@ -1,6 +1,5 @@
-<!-- core/forum-enhancer.js -->
-// Main orchestrator for Forum Modernizer Suite
-// Coordinates all modules + injects modern CSS + robust hiding
+// core/forum-enhancer.js
+// Main orchestrator for Forum Modernizer Suite - 10/10 version
 (function() {
     'use strict';
 
@@ -11,9 +10,7 @@
         autoInitialize: true,
         wrapperId: 'modern-forum-wrapper',
         hideOriginal: true,
-        modules: {
-            posts: true
-        }
+        modules: { posts: true }
     };
 
     const modules = [];
@@ -69,21 +66,15 @@
                 }
             }
         } while (changed);
-
         return initializedCount;
     }
 
-    // ==================== MODERN CSS INJECTION ====================
     function injectModernCSS() {
         if (document.getElementById('modern-forum-css')) return;
 
         const css = `
-            body.forum-modernized {
-                background: #f4f6f9;
-            }
-            body.forum-modernized.dark {
-                background: #0f172a;
-            }
+            body.forum-modernized { background: #f4f6f9; }
+            body.forum-modernized.dark { background: #0f172a; }
 
             #modern-forum-wrapper {
                 max-width: 1280px;
@@ -92,7 +83,7 @@
                 display: block !important;
             }
 
-            /* HIDE LEGACY UI COMPLETELY */
+            /* === HIDE LEGACY UI === */
             body.forum-modernized .topic .List,
             body.forum-modernized .topic .mainbg,
             body.forum-modernized .post:not(.post-card),
@@ -102,8 +93,7 @@
             body.forum-modernized .footer,
             body.forum-modernized .header,
             body.forum-modernized .menuwrap,
-            body.forum-modernized .st-emoji-container:not(.modern-emoji),
-            body.forum-modernized .signature:not(.signature-modern) {
+            body.forum-modernized .st-emoji-container:not(.modern-emoji) {
                 display: none !important;
             }
 
@@ -113,14 +103,11 @@
                 box-shadow: 0 10px 30px rgba(0,0,0,0.08);
                 margin-bottom: 24px;
                 overflow: hidden;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
             }
-            body.dark .post-card { background: #1e2937; color: #e2e8f0; }
+            body.dark .post-card { background: #1e2937; color: #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
 
-            .post-card:hover {
-                transform: translateY(-3px);
-                box-shadow: 0 20px 40px rgba(0,0,0,0.12);
-            }
+            .post-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.12); }
 
             .post-header-modern {
                 padding: 16px 20px;
@@ -132,11 +119,24 @@
             }
             body.dark .post-header-modern { background: #334155; border-color: #475569; }
 
-            .post-body { padding: 20px; line-height: 1.7; }
-            .post-footer-modern { padding: 14px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+            .post-body { padding: 24px; line-height: 1.75; font-size: 15.5px; }
+            .post-footer-modern {
+                padding: 14px 20px;
+                background: #f8fafc;
+                border-top: 1px solid #e2e8f0;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
             body.dark .post-footer-modern { background: #334155; border-color: #475569; }
 
-            .avatar-modern img { border-radius: 50%; border: 3px solid #e2e8f0; }
+            .avatar-modern img {
+                border-radius: 50%;
+                border: 3px solid #e2e8f0;
+                width: 70px;
+                height: 70px;
+                object-fit: cover;
+            }
             body.dark .avatar-modern img { border-color: #475569; }
 
             .reaction-btn {
@@ -145,7 +145,7 @@
                 cursor: pointer;
                 padding: 8px 14px;
                 border-radius: 9999px;
-                transition: all 0.2s;
+                transition: background 0.2s;
             }
             .reaction-btn:hover { background: #e2e8f0; }
             body.dark .reaction-btn:hover { background: #475569; }
@@ -153,6 +153,7 @@
             @media (max-width: 768px) {
                 .post-card { margin-bottom: 16px; border-radius: 12px; }
                 #modern-forum-wrapper { padding: 12px 8px; }
+                .post-body { padding: 18px; }
             }
         `;
 
@@ -171,23 +172,21 @@
             document.body.insertBefore(wrapper, document.body.firstChild);
         }
 
-        let container = document.getElementById('modern-posts-container');
-        if (!container) {
-            container = document.createElement('div');
+        if (!document.getElementById('modern-posts-container')) {
+            const container = document.createElement('div');
             container.id = 'modern-posts-container';
             wrapper.appendChild(container);
         }
-
         return wrapper;
     }
 
     function hideOriginalContent() {
         document.documentElement.classList.add('forum-modernized');
-        if (document.documentElement.getAttribute('data-theme') === 'dark' || 
+        if (document.documentElement.getAttribute('data-theme') === 'dark' ||
             window.matchMedia('(prefers-color-scheme: dark)').matches) {
             document.documentElement.classList.add('dark');
         }
-        log('Original legacy UI hidden + modern wrapper activated');
+        log('Legacy UI hidden — modern wrapper active');
     }
 
     function registerAllModules() {
@@ -210,7 +209,7 @@
                     resolve(globalThis.forumObserver);
                 } else if (attempts >= 80) {
                     clearInterval(interval);
-                    log('ForumCoreObserver not found after 8 seconds', 'warn');
+                    log('ForumCoreObserver not detected', 'warn');
                     resolve(null);
                 }
             }, 100);
@@ -230,7 +229,9 @@
         log(`${ENHANCER_CONFIG.name} v${ENHANCER_CONFIG.version} — Starting`);
         log('========================================');
 
-        await new Promise(r => { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', r); else r(); });
+        await new Promise(r => document.readyState === 'loading' 
+            ? document.addEventListener('DOMContentLoaded', r) 
+            : r());
 
         injectModernCSS();
         if (ENHANCER_CONFIG.hideOriginal) hideOriginalContent();
@@ -240,10 +241,10 @@
         if (observer) log('ForumCoreObserver ready');
 
         registerAllModules();
-        const initialized = initializeAllModules();
-        log(`${initialized} module(s) initialized successfully`);
+        const count = initializeAllModules();
+        log(`${count} module(s) initialized successfully`);
 
-        log('🚀 Forum Enhancer is now running at 10/10 quality');
+        log('🚀 Forum Enhancer 10/10 is now active!');
     }
 
     window.ForumEnhancer = ForumEnhancer;
