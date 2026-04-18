@@ -230,6 +230,20 @@ img {
     color: transparent;
 }
 
+.default-avatar {width: 60px;
+ height: 60px;
+ min-width: 60px;
+ min-height: 60px;
+ background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ color: white;
+ font-size: 1.5rem;
+ margin: 0;
+ border-radius: 50% !important;
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
+
 /*============================================
  modern post card styles
 ============================================*/
