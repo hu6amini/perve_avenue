@@ -298,7 +298,7 @@ img {
 .action-icon {
       background: transparent;
       border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius);
       width: var(--btn-height);
       height: var(--btn-height);
       display: inline-flex;
@@ -564,63 +564,31 @@ img {
 /*============================================
  responsive styles
 ============================================*/
-@media (max-width: 48em) {
-    .post-header-modern {
-        flex-direction: column;
-        gap: var(--space-sm);
-        align-items: stretch;
+/* responsive - mobile first */
+    @media (max-width: 680px) {
+      body { padding: 1rem; }
+      .user-area { flex-direction: column; align-items: center; text-align: center; }
+      .username-row { justify-content: center; }
+      .badge-container { justify-content: center; }
+      .user-stats-grid { justify-content: center; }
+      .post-footer-modern { flex-direction: column; align-items: flex-start; }
+      .topic-title { font-size: 1.4rem; }
+      .action-buttons-group { flex-wrap: wrap; justify-content: flex-end; }
     }
-    
-    .post-meta-left {
-        justify-content: space-between;
-    }
-    
-    .action-buttons-group {
-        justify-content: flex-end;
-    }
-    
-    .user-area {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-    }
-    
-    .user-details {
-        text-align: center;
-    }
-    
-    .user-stats-grid {
-        justify-content: center;
-    }
-    
-    .post-footer-modern {
-        flex-direction: column;
-        gap: var(--space-sm);
-    }
-    
-    .reaction-cluster {
-        justify-content: center;
-    }
-    
-    #modern-forum-wrapper {
-        padding: var(--space-md);
-    }
-}
 
-/*============================================
- reduced motion preferences
-============================================*/
-@media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
+    /* Performance: lazy loading friendly */
+    img, .avatar-circle {
+      content-visibility: auto;
     }
     
-    .post-card:hover {
-        transform: none;
+    /* Reduce motion if user prefers */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
     }
-}
 
 /*============================================
  emoji styles
