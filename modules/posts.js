@@ -364,6 +364,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Avatar URL
         var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
         
+        // Avatar HTML - clickable div that triggers original avatar link
+        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">' +
+            '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
+        '</div>';
+        
         return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
             '<div class="post-card-header">' +
                 '<div class="post-meta">' +
@@ -393,9 +398,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</div>' +
             '</div>' +
             '<div class="post-card-body">' +
-                '<div class="post-avatar">' +
-                    '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
-                '</div>' +
+                avatarHtml +
                 '<div class="post-user-info">' +
                     '<div class="user-name" data-pid="' + data.postId + '">' +
                         Utils.escapeHtml(data.username) +
@@ -484,6 +487,17 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
+    function handleAvatarClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        // Find the avatar link in the original post
+        var avatarLink = originalPost.querySelector('.avatar');
+        if (avatarLink && avatarLink.tagName === 'A') {
+            // Trigger a click on the original avatar link
+            avatarLink.click();
+        }
+    }
     function handleUsernameClick(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -577,6 +591,16 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ATTACH EVENT LISTENERS
     // ============================================================================
     function attachEventHandlers() {
+        // Avatar click handler - trigger the original avatar link
+        document.addEventListener('click', function(e) {
+            var avatarDiv = e.target.closest('.post-avatar');
+            if (avatarDiv) {
+                e.preventDefault();
+                var pid = avatarDiv.getAttribute('data-pid');
+                if (pid) handleAvatarClick(pid);
+            }
+        });
+        
         // Username click handler - trigger the original nickname link
         document.addEventListener('click', function(e) {
             var userNameDiv = e.target.closest('.user-name');
