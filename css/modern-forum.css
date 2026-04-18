@@ -251,7 +251,7 @@ img {
     }
 
 /* Post header */
-.post-header-modern {
+.post-card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
