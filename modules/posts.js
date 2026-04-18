@@ -16,8 +16,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
         REACTION_DELAY: 500
     };
 
-    // Guard against double initialization
-    var IS_INITIALIZED = false;
+    // Track converted posts to prevent duplicates
+    var convertedPostIds = new Set();
+    var isInitialized = false;
 
     // ============================================================================
     // HELPER FUNCTIONS
@@ -66,7 +67,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // DATA EXTRACTION
+    // DATA EXTRACTION (same as before)
     // ============================================================================
 
     function getUsername($post) {
@@ -604,6 +605,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var postId = getPostId(postEl);
         if (!postId) return null;
         
+        // Check if already converted
+        if (convertedPostIds.has(postId)) {
+            return null;
+        }
+        
         var data = extractPostData(postEl, index);
         if (!data) return null;
         
@@ -614,6 +620,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         // Store reference to original post
         newCard.setAttribute('data-original-id', postEl.id);
+        
+        // Mark as converted
+        convertedPostIds.add(postId);
         
         if (EventBus) {
             EventBus.trigger('post:converted', { postId: postId, element: postEl, card: newCard });
@@ -628,18 +637,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
 
     function initialize() {
         // Prevent double initialization
-        if (IS_INITIALIZED) {
-            console.log('[PostsModule] Already initialized, skipping...');
+        if (isInitialized) {
+            console.log('[PostsModule] Already initialized, skipping');
             return;
         }
-
+        
         console.log('[PostsModule] Initializing...');
 
         // Get or create the posts container
         var container = getPostsContainer();
         
-        // Clear container before appending to prevent duplicates
+        // Clear container if needed (to avoid duplicates)
         container.innerHTML = '';
+        
+        // Reset converted posts tracking
+        convertedPostIds.clear();
         
         // Get all original posts
         var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
@@ -656,8 +668,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
         
-        // Mark as initialized
-        IS_INITIALIZED = true;
+        // Hide original posts (CSS already does this)
+        // But keep them in DOM for functionality
         
         // Attach event handlers
         attachEventHandlers();
@@ -670,6 +682,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 priority: 'high',
                 callback: function(node) {
                     if (!isValidPost(node)) return;
+                    
+                    var postId = getPostId(node);
+                    
+                    // Skip if already converted
+                    if (convertedPostIds.has(postId)) {
+                        return;
+                    }
                     
                     // Find the index for this post
                     var allPosts = Utils.getAllElements(CONFIG.POST_SELECTOR);
@@ -694,6 +713,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
             console.log('[PostsModule] ForumCoreObserver not available, dynamic content will not auto-convert');
         }
         
+        // Mark as initialized
+        isInitialized = true;
+        
         // Trigger ready event
         if (EventBus) {
             EventBus.trigger('posts:ready', { count: validPosts });
@@ -712,6 +734,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
         refreshReactionDisplay: refreshReactionDisplay,
         getPostsContainer: getPostsContainer,
         isValidPost: isValidPost,
+        reset: function() {
+            convertedPostIds.clear();
+            isInitialized = false;
+        },
         CONFIG: CONFIG
     };
 
