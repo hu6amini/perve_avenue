@@ -413,7 +413,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                             '<i class="fa-regular fa-message" aria-hidden="true"></i> ' + data.postCount + ' posts' +
                         '</div>' +
                         '<div class="user-reputation">' +
-                            '<i class="fa-regular fa-star" aria-hidden="true"></i> ' + data.reputation + ' rep' +
+                            '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + data.reputation + ' rep' +
                         '</div>' +
                         '<div class="user-status" style="color: ' + statusColor + '">' +
                             '<i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText +
