@@ -31,12 +31,12 @@ var ForumEventBus = (function() {
     }
    
     function trigger(eventName, data) {
-        if (!events[eventName]) return;
+        if (!events[eventName]) return [];
        
         var results = [];
         for (var i = 0; i < events[eventName].length; i++) {
             try {
-                var result = events[eventName]i;
+                var result = events[eventName][i](data);
                 results.push(result);
             } catch(e) {
                 console.error('[EventBus] Error in ' + eventName + ' handler:', e);
@@ -79,3 +79,8 @@ var ForumEventBus = (function() {
         clear: clear
     };
 })();
+
+// Signal that event-bus is ready
+if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('event-bus-ready'));
+}
