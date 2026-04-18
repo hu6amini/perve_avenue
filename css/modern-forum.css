@@ -329,7 +329,7 @@ img {
     }
 
 /* User area */
-.user-area {
+.post-card-body {
       display: flex;
       gap: var(--space-lg);
       padding: var(--space-lg) var(--pad-6) 0 var(--pad-6);
