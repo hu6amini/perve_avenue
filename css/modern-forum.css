@@ -509,7 +509,7 @@ img {
       transform: translateY(-1px);
     }
 
-.reaction-count {
+.reaction-count, .like-count {
       background: rgba(5, 150, 105, 0.15);
       border-radius: 30px;
       padding: 0.1rem 0.5rem;
