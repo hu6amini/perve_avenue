@@ -3,19 +3,17 @@
 // Coordinates all modules and initializes the enhancement system
 (function() {
     'use strict';
-    
     // ============================================================================
     // CONFIGURATION
     // ============================================================================
     const ENHANCER_CONFIG = {
         name: 'Forum Enhancer',
-        version: '2.0.0',
+        version: '1.0.0',
         debug: false,
         autoInitialize: true,
         createWrapper: true,
         wrapperId: 'modern-forum-wrapper',
         hideOriginal: true,
-        preserveOriginalFunctionality: true,
         modules: {
             posts: true,
             navigation: false,
@@ -23,13 +21,11 @@
             footer: false
         }
     };
-    
     // ============================================================================
     // MODULE REGISTRY
     // ============================================================================
     const modules = [];
     const moduleStatus = new Map();
-    
     function log(message, type) {
         if (!ENHANCER_CONFIG.debug && type !== 'error') return;
        
@@ -42,7 +38,6 @@
             console.log(prefix, message);
         }
     }
-    
     function registerModule(name, module, dependencies) {
         modules.push({
             name: name,
@@ -56,7 +51,6 @@
             log('Registered module: ' + name);
         }
     }
-    
     // ============================================================================
     // DEPENDENCY CHECKING
     // ============================================================================
@@ -76,7 +70,6 @@
         }
         return true;
     }
-    
     function initializeModule(module) {
         if (module.initialized) return true;
         if (!module.enabled) {
@@ -92,12 +85,6 @@
                 moduleStatus.set(module.name, { status: 'initialized', timestamp: Date.now() });
                 log('✓ Initialized: ' + module.name);
                 return true;
-            } else if (module.module && typeof module.module === 'function') {
-                module.module();
-                module.initialized = true;
-                moduleStatus.set(module.name, { status: 'initialized', timestamp: Date.now() });
-                log('✓ Initialized (direct): ' + module.name);
-                return true;
             }
         } catch (error) {
             log('Failed to initialize ' + module.name + ': ' + error.message, 'error');
@@ -105,7 +92,6 @@
         }
         return false;
     }
-    
     function initializeAllModules() {
         log('Initializing all modules...');
        
@@ -137,7 +123,6 @@
        
         return modules.filter(function(m) { return m.initialized; }).length;
     }
-    
     // ============================================================================
     // DEPENDENCY CHECKING (Core)
     // ============================================================================
@@ -159,7 +144,6 @@
         log('All core dependencies available');
         return true;
     }
-    
     // ============================================================================
     // WAIT FOR DOM READY
     // ============================================================================
@@ -172,7 +156,6 @@
             }
         });
     }
-    
     // ============================================================================
     // WAIT FOR FORUM OBSERVER
     // ============================================================================
@@ -198,7 +181,6 @@
             }, 100);
         });
     }
-    
     // ============================================================================
     // WRAPPER CREATION
     // ============================================================================
@@ -212,15 +194,7 @@
         wrapper.id = ENHANCER_CONFIG.wrapperId;
         wrapper.className = 'modern-forum-wrapper';
        
-        // Find appropriate location to insert wrapper
-        var body = document.body;
-        var firstChild = body.firstChild;
-       
-        if (firstChild) {
-            body.insertBefore(wrapper, firstChild);
-        } else {
-            body.appendChild(wrapper);
-        }
+        document.body.insertBefore(wrapper, document.body.firstChild);
        
         var postsContainer = document.createElement('div');
         postsContainer.id = 'modern-posts-container';
@@ -230,34 +204,27 @@
         log('Created modern wrapper: ' + ENHANCER_CONFIG.wrapperId);
         return wrapper;
     }
-    
     function hideOriginalContent() {
-        // Add class to body for CSS hiding
         document.body.classList.add('forum-modernized');
        
-        // Store reference to original container for functionality
-        var originalPostsContainer = document.querySelector('.topic .List, .topic .mainbg, #brd-wrap');
+        var originalPostsContainer = document.querySelector('.topic .List, .topic .mainbg');
         if (originalPostsContainer) {
-            window._originalForumContent = originalPostsContainer;
-            log('Original content preserved for functionality');
+            window._originalPostsContainer = originalPostsContainer;
         }
        
         log('Original content hidden (CSS handles visibility)');
     }
-    
     // ============================================================================
     // REGISTER MODULES
     // ============================================================================
     function registerAllModules() {
         if (typeof ForumPostsModule !== 'undefined') {
             registerModule('posts', ForumPostsModule, []);
-            log('Posts module registered');
         } else {
             log('ForumPostsModule not found, posts enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.posts = false;
         }
     }
-    
     // ============================================================================
     // PUBLIC API
     // ============================================================================
@@ -276,10 +243,7 @@
                     initializeModule(module);
                 }
                 log('Enabled module: ' + moduleName);
-                return true;
             }
-            log('Module not found: ' + moduleName, 'warn');
-            return false;
         },
        
         disableModule: function(moduleName) {
@@ -290,9 +254,7 @@
                     module.enabled = false;
                 }
                 log('Disabled module: ' + moduleName);
-                return true;
             }
-            return false;
         },
        
         getModuleStatus: function() {
@@ -344,7 +306,7 @@
             modules.forEach(function(m) {
                 m.initialized = false;
             });
-            return initializeAllModules();
+            initializeAllModules();
         },
        
         getObserver: function() {
@@ -357,97 +319,64 @@
        
         getPostsContainer: function() {
             return document.getElementById('modern-posts-container');
-        },
-       
-        // Manual trigger for dynamic content
-        refresh: function() {
-            log('Manual refresh triggered');
-            var postsModule = modules.find(function(m) { return m.name === 'posts'; });
-            if (postsModule && postsModule.module && postsModule.module.refresh) {
-                postsModule.module.refresh();
-            } else if (postsModule && postsModule.module && postsModule.module.initialize) {
-                postsModule.module.initialize();
-            }
         }
     };
-    
     // ============================================================================
     // INITIALIZATION
     // ============================================================================
     async function initialize() {
-        try {
-            log('========================================');
-            log(ENHANCER_CONFIG.name + ' v' + ENHANCER_CONFIG.version);
-            log('========================================');
-           
-            if (!checkDependenciesAvailable()) {
-                log('Cannot start - missing dependencies', 'error');
-                return;
-            }
-           
-            await domReady();
-            log('DOM ready');
-           
-            if (ENHANCER_CONFIG.createWrapper) {
-                createModernWrapper();
-            }
-           
-            if (ENHANCER_CONFIG.hideOriginal) {
-                hideOriginalContent();
-            }
-           
-            var observer = await waitForForumObserver();
-            if (observer) {
-                log('ForumCoreObserver detected and ready');
-            } else {
-                log('Running without ForumCoreObserver (dynamic content may not auto-enhance)', 'warn');
-            }
-           
-            registerAllModules();
-           
-            var initializedCount = initializeAllModules();
-            log(initializedCount + ' of ' + modules.length + ' modules initialized');
-           
-            if (typeof ForumEventBus !== 'undefined') {
-                ForumEventBus.trigger('forum:enhancer:ready', {
-                    version: ENHANCER_CONFIG.version,
-                    modules: initializedCount,
-                    observer: !!observer,
-                    wrapper: document.getElementById(ENHANCER_CONFIG.wrapperId)
-                });
-            }
-           
-            // Dispatch custom event for other scripts
-            window.dispatchEvent(new CustomEvent('forum-enhancer-ready', {
-                detail: {
-                    version: ENHANCER_CONFIG.version,
-                    modules: initializedCount,
-                    timestamp: Date.now()
-                }
-            }));
-           
-            log('========================================');
-            log(ENHANCER_CONFIG.name + ' is ready!');
-            log('========================================');
-           
-        } catch (error) {
-            log('Fatal initialization error: ' + error.message, 'error');
-            console.error(error);
-            // Don't hide original content if enhancer fails
-            if (ENHANCER_CONFIG.hideOriginal) {
-                document.body.classList.remove('forum-modernized');
-            }
+        log('========================================');
+        log(ENHANCER_CONFIG.name + ' v' + ENHANCER_CONFIG.version);
+        log('========================================');
+       
+        if (!checkDependenciesAvailable()) {
+            log('Cannot start - missing dependencies', 'error');
+            return;
         }
+       
+        await domReady();
+        log('DOM ready');
+       
+        if (ENHANCER_CONFIG.createWrapper) {
+            createModernWrapper();
+        }
+       
+        if (ENHANCER_CONFIG.hideOriginal) {
+            hideOriginalContent();
+        }
+       
+        var observer = await waitForForumObserver();
+        if (observer) {
+            log('ForumCoreObserver detected and ready');
+        } else {
+            log('Running without ForumCoreObserver (dynamic content may not auto-enhance)', 'warn');
+        }
+       
+        registerAllModules();
+       
+        var initializedCount = initializeAllModules();
+        log(initializedCount + ' of ' + modules.length + ' modules initialized');
+       
+        if (typeof ForumEventBus !== 'undefined') {
+            ForumEventBus.trigger('forum:enhancer:ready', {
+                version: ENHANCER_CONFIG.version,
+                modules: initializedCount,
+                observer: !!observer,
+                wrapper: document.getElementById(ENHANCER_CONFIG.wrapperId)
+            });
+        }
+       
+        log('========================================');
+        log(ENHANCER_CONFIG.name + ' is ready!');
+        log('========================================');
     }
-    
     // ============================================================================
     // EXPOSE GLOBALLY
     // ============================================================================
     window.ForumEnhancer = ForumEnhancer;
    
     if (ENHANCER_CONFIG.autoInitialize) {
-        // Small delay to ensure all scripts are loaded
-        setTimeout(initialize, 100);
+        initialize();
     }
    
 })();
