@@ -283,7 +283,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // If no reactions have counters, just show the add reaction button (smiley face)
         if (!data.hasReactions || data.reactionCount === 0) {
             return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-                '<i class="fa-regular fa-face-smile"></i>' +
+                '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' +
                 '</button>';
         }
         
@@ -330,7 +330,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         // Like button HTML
         var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-thumbs-up"></i>';
+            '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>';
         if (data.likes > 0) {
             likeButton += '<span class="like-count">' + data.likes + '</span>';
         }
@@ -376,19 +376,19 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</div>' +
                 '<div class="post-actions">' +
                     '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-quote-left"></i>' +
+                        '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
                     '</button>' +
                     '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-pen-to-square"></i>' +
+                        '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>' +
                     '</button>' +
                     '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-share-nodes"></i>' +
+                        '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>' +
                     '</button>' +
                     '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-circle-exclamation"></i>' +
+                        '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
                     '</button>' +
                     '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-trash-can"></i>' +
+                        '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>' +
                     '</button>' +
                 '</div>' +
             '</div>' +
@@ -407,16 +407,16 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     '</div>' +
                     '<div class="user-stats">' +
                         '<div class="user-title">' +
-                            '<i class="' + data.rankIconClass + '"></i> ' + data.userTitle +
+                            '<i class="' + data.rankIconClass + '" aria-hidden="true"></i> ' + data.userTitle +
                         '</div>' +
                         '<div class="user-posts">' +
-                            '<i class="fa-regular fa-message"></i> ' + data.postCount + ' posts' +
+                            '<i class="fa-regular fa-message" aria-hidden="true"></i> ' + data.postCount + ' posts' +
                         '</div>' +
                         '<div class="user-reputation">' +
-                            '<i class="fa-regular fa-star"></i> ' + data.reputation + ' rep' +
+                            '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + data.reputation + ' rep' +
                         '</div>' +
                         '<div class="user-status" style="color: ' + statusColor + '">' +
-                            '<i class="fa-regular fa-circle"></i> ' + statusText +
+                            '<i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText +
                         '</div>' +
                     '</div>' +
                 '</div>' +
@@ -511,7 +511,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(function() {
             var originalHtml = buttonElement.innerHTML;
-            buttonElement.innerHTML = '<i class="fa-regular fa-check"></i>';
+            buttonElement.innerHTML = '<i class="fa-regular fa-check" aria-hidden="true"></i>';
             setTimeout(function() {
                 buttonElement.innerHTML = originalHtml;
             }, 1500);
