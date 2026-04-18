@@ -358,7 +358,7 @@ img {
       gap: 0.3rem;
     }
 
-.username {
+.user-name {
       font-weight: 700;
       font-size: 1.25rem;
       color: var(--text-primary);
