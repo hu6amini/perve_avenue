@@ -424,8 +424,9 @@ img {
 
 .post-message{
       font-size: 1rem;
-      line-height: 1.6;
+      line-height: 1.618;
       color: var(--text-primary);
+ text-align: left;
     }
 
 .post-message img {
