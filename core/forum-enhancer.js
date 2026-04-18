@@ -1,252 +1,453 @@
 // core/forum-enhancer.js
-// Main orchestrator for Forum Modernizer Suite - 10/10 version
+// Main orchestrator for Forum Modernizer Suite
+// Coordinates all modules and initializes the enhancement system
 (function() {
     'use strict';
-
+    
+    // ============================================================================
+    // CONFIGURATION
+    // ============================================================================
     const ENHANCER_CONFIG = {
         name: 'Forum Enhancer',
-        version: '1.1.0',
+        version: '2.0.0',
         debug: false,
         autoInitialize: true,
+        createWrapper: true,
         wrapperId: 'modern-forum-wrapper',
         hideOriginal: true,
-        modules: { posts: true }
+        preserveOriginalFunctionality: true,
+        modules: {
+            posts: true,
+            navigation: false,
+            sidebar: false,
+            footer: false
+        }
     };
-
+    
+    // ============================================================================
+    // MODULE REGISTRY
+    // ============================================================================
     const modules = [];
     const moduleStatus = new Map();
-
-    function log(message, type = 'info') {
+    
+    function log(message, type) {
         if (!ENHANCER_CONFIG.debug && type !== 'error') return;
+       
         const prefix = '[ForumEnhancer]';
-        if (type === 'error') console.error(prefix, message);
-        else if (type === 'warn') console.warn(prefix, message);
-        else console.log(prefix, message);
+        if (type === 'error') {
+            console.error(prefix, message);
+        } else if (type === 'warn') {
+            console.warn(prefix, message);
+        } else {
+            console.log(prefix, message);
+        }
     }
-
-    function registerModule(name, module, dependencies = []) {
-        modules.push({ name, module, dependencies, initialized: false, enabled: true });
-        if (ENHANCER_CONFIG.debug) log('Registered module: ' + name);
-    }
-
-    function checkDependencies(module) {
-        return module.dependencies.every(depName => {
-            const dep = modules.find(m => m.name === depName);
-            return dep && dep.initialized;
+    
+    function registerModule(name, module, dependencies) {
+        modules.push({
+            name: name,
+            module: module,
+            dependencies: dependencies || [],
+            initialized: false,
+            enabled: ENHANCER_CONFIG.modules[name] !== false
         });
+       
+        if (ENHANCER_CONFIG.debug) {
+            log('Registered module: ' + name);
+        }
     }
-
+    
+    // ============================================================================
+    // DEPENDENCY CHECKING
+    // ============================================================================
+    function checkDependencies(module) {
+        if (!module.dependencies || module.dependencies.length === 0) {
+            return true;
+        }
+       
+        for (var i = 0; i < module.dependencies.length; i++) {
+            var depName = module.dependencies[i];
+            var dep = modules.find(function(m) { return m.name === depName; });
+           
+            if (!dep || !dep.initialized) {
+                log('Module ' + module.name + ' waiting for dependency: ' + depName, 'warn');
+                return false;
+            }
+        }
+        return true;
+    }
+    
     function initializeModule(module) {
-        if (module.initialized || !module.enabled) return false;
+        if (module.initialized) return true;
+        if (!module.enabled) {
+            log('Module ' + module.name + ' is disabled, skipping', 'warn');
+            return false;
+        }
         if (!checkDependencies(module)) return false;
-
+       
         try {
-            if (typeof module.module.initialize === 'function') {
+            if (module.module && typeof module.module.initialize === 'function') {
                 module.module.initialize();
                 module.initialized = true;
                 moduleStatus.set(module.name, { status: 'initialized', timestamp: Date.now() });
                 log('✓ Initialized: ' + module.name);
                 return true;
+            } else if (module.module && typeof module.module === 'function') {
+                module.module();
+                module.initialized = true;
+                moduleStatus.set(module.name, { status: 'initialized', timestamp: Date.now() });
+                log('✓ Initialized (direct): ' + module.name);
+                return true;
             }
         } catch (error) {
             log('Failed to initialize ' + module.name + ': ' + error.message, 'error');
+            moduleStatus.set(module.name, { status: 'failed', error: error.message });
         }
         return false;
     }
-
+    
     function initializeAllModules() {
-        let initializedCount = 0;
-        let changed;
-        do {
-            changed = false;
-            for (const module of modules) {
-                if (module.enabled && !module.initialized && initializeModule(module)) {
-                    changed = true;
-                    initializedCount++;
+        log('Initializing all modules...');
+       
+        var maxAttempts = 10;
+        var attempt = 0;
+        var remainingModules = modules.filter(function(m) { return m.enabled && !m.initialized; });
+       
+        while (remainingModules.length > 0 && attempt < maxAttempts) {
+            var initializedAny = false;
+           
+            for (var i = 0; i < modules.length; i++) {
+                var module = modules[i];
+                if (module.enabled && !module.initialized) {
+                    if (initializeModule(module)) {
+                        initializedAny = true;
+                    }
                 }
             }
-        } while (changed);
-        return initializedCount;
-    }
-
-    function injectModernCSS() {
-        if (document.getElementById('modern-forum-css')) return;
-
-        const css = `
-            body.forum-modernized { background: #f4f6f9; }
-            body.forum-modernized.dark { background: #0f172a; }
-
-            #modern-forum-wrapper {
-                max-width: 1280px;
-                margin: 0 auto;
-                padding: 20px 15px;
-                display: block !important;
-            }
-
-            /* === HIDE LEGACY UI === */
-            body.forum-modernized .topic .List,
-            body.forum-modernized .topic .mainbg,
-            body.forum-modernized .post:not(.post-card),
-            body.forum-modernized .forum-table,
-            body.forum-modernized .big_list,
-            body.forum-modernized .board,
-            body.forum-modernized .footer,
-            body.forum-modernized .header,
-            body.forum-modernized .menuwrap,
-            body.forum-modernized .st-emoji-container:not(.modern-emoji) {
-                display: none !important;
-            }
-
-            .post-card {
-                background: #fff;
-                border-radius: 16px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-                margin-bottom: 24px;
-                overflow: hidden;
-                transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
-            }
-            body.dark .post-card { background: #1e2937; color: #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-
-            .post-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.12); }
-
-            .post-header-modern {
-                padding: 16px 20px;
-                background: #f8fafc;
-                border-bottom: 1px solid #e2e8f0;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            body.dark .post-header-modern { background: #334155; border-color: #475569; }
-
-            .post-body { padding: 24px; line-height: 1.75; font-size: 15.5px; }
-            .post-footer-modern {
-                padding: 14px 20px;
-                background: #f8fafc;
-                border-top: 1px solid #e2e8f0;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            body.dark .post-footer-modern { background: #334155; border-color: #475569; }
-
-            .avatar-modern img {
-                border-radius: 50%;
-                border: 3px solid #e2e8f0;
-                width: 70px;
-                height: 70px;
-                object-fit: cover;
-            }
-            body.dark .avatar-modern img { border-color: #475569; }
-
-            .reaction-btn {
-                background: none;
-                border: none;
-                cursor: pointer;
-                padding: 8px 14px;
-                border-radius: 9999px;
-                transition: background 0.2s;
-            }
-            .reaction-btn:hover { background: #e2e8f0; }
-            body.dark .reaction-btn:hover { background: #475569; }
-
-            @media (max-width: 768px) {
-                .post-card { margin-bottom: 16px; border-radius: 12px; }
-                #modern-forum-wrapper { padding: 12px 8px; }
-                .post-body { padding: 18px; }
-            }
-        `;
-
-        const style = document.createElement('style');
-        style.id = 'modern-forum-css';
-        style.textContent = css;
-        document.head.appendChild(style);
-        log('Modern CSS injected');
-    }
-
-    function createModernWrapper() {
-        let wrapper = document.getElementById(ENHANCER_CONFIG.wrapperId);
-        if (!wrapper) {
-            wrapper = document.createElement('div');
-            wrapper.id = ENHANCER_CONFIG.wrapperId;
-            document.body.insertBefore(wrapper, document.body.firstChild);
+           
+            if (!initializedAny) break;
+            remainingModules = modules.filter(function(m) { return m.enabled && !m.initialized; });
+            attempt++;
         }
-
-        if (!document.getElementById('modern-posts-container')) {
-            const container = document.createElement('div');
-            container.id = 'modern-posts-container';
-            wrapper.appendChild(container);
+       
+        var failedModules = modules.filter(function(m) { return m.enabled && !m.initialized; });
+        if (failedModules.length > 0) {
+            log('Warning: ' + failedModules.length + ' modules failed to initialize', 'warn');
         }
-        return wrapper;
+       
+        return modules.filter(function(m) { return m.initialized; }).length;
     }
-
-    function hideOriginalContent() {
-        document.documentElement.classList.add('forum-modernized');
-        if (document.documentElement.getAttribute('data-theme') === 'dark' ||
-            window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
+    
+    // ============================================================================
+    // DEPENDENCY CHECKING (Core)
+    // ============================================================================
+    function checkDependenciesAvailable() {
+        var required = ['ForumDOMUtils', 'ForumEventBus'];
+        var missing = [];
+       
+        for (var i = 0; i < required.length; i++) {
+            if (typeof window[required[i]] === 'undefined') {
+                missing.push(required[i]);
+            }
         }
-        log('Legacy UI hidden — modern wrapper active');
-    }
-
-    function registerAllModules() {
-        if (typeof ForumPostsModule !== 'undefined') {
-            registerModule('posts', ForumPostsModule);
-        } else {
-            log('ForumPostsModule not found', 'error');
+       
+        if (missing.length > 0) {
+            log('Missing required dependencies: ' + missing.join(', '), 'error');
+            return false;
         }
+       
+        log('All core dependencies available');
+        return true;
     }
-
-    async function waitForForumObserver() {
-        return new Promise(resolve => {
-            if (globalThis.forumObserver) return resolve(globalThis.forumObserver);
-
-            let attempts = 0;
-            const interval = setInterval(() => {
+    
+    // ============================================================================
+    // WAIT FOR DOM READY
+    // ============================================================================
+    function domReady() {
+        return new Promise(function(resolve) {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', resolve);
+            } else {
+                resolve();
+            }
+        });
+    }
+    
+    // ============================================================================
+    // WAIT FOR FORUM OBSERVER
+    // ============================================================================
+    function waitForForumObserver() {
+        return new Promise(function(resolve) {
+            if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
+                resolve(globalThis.forumObserver);
+                return;
+            }
+           
+            var attempts = 0;
+            var maxAttempts = 50;
+            var interval = setInterval(function() {
                 attempts++;
-                if (globalThis.forumObserver) {
+                if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
                     clearInterval(interval);
                     resolve(globalThis.forumObserver);
-                } else if (attempts >= 80) {
+                } else if (attempts >= maxAttempts) {
                     clearInterval(interval);
-                    log('ForumCoreObserver not detected', 'warn');
+                    log('ForumCoreObserver not detected after ' + maxAttempts + ' attempts', 'warn');
                     resolve(null);
                 }
             }, 100);
         });
     }
-
+    
+    // ============================================================================
+    // WRAPPER CREATION
+    // ============================================================================
+    function createModernWrapper() {
+        var existingWrapper = document.getElementById(ENHANCER_CONFIG.wrapperId);
+        if (existingWrapper) {
+            return existingWrapper;
+        }
+       
+        var wrapper = document.createElement('div');
+        wrapper.id = ENHANCER_CONFIG.wrapperId;
+        wrapper.className = 'modern-forum-wrapper';
+       
+        // Find appropriate location to insert wrapper
+        var body = document.body;
+        var firstChild = body.firstChild;
+       
+        if (firstChild) {
+            body.insertBefore(wrapper, firstChild);
+        } else {
+            body.appendChild(wrapper);
+        }
+       
+        var postsContainer = document.createElement('div');
+        postsContainer.id = 'modern-posts-container';
+        postsContainer.className = 'modern-posts-container';
+        wrapper.appendChild(postsContainer);
+       
+        log('Created modern wrapper: ' + ENHANCER_CONFIG.wrapperId);
+        return wrapper;
+    }
+    
+    function hideOriginalContent() {
+        // Add class to body for CSS hiding
+        document.body.classList.add('forum-modernized');
+       
+        // Store reference to original container for functionality
+        var originalPostsContainer = document.querySelector('.topic .List, .topic .mainbg, #brd-wrap');
+        if (originalPostsContainer) {
+            window._originalForumContent = originalPostsContainer;
+            log('Original content preserved for functionality');
+        }
+       
+        log('Original content hidden (CSS handles visibility)');
+    }
+    
+    // ============================================================================
+    // REGISTER MODULES
+    // ============================================================================
+    function registerAllModules() {
+        if (typeof ForumPostsModule !== 'undefined') {
+            registerModule('posts', ForumPostsModule, []);
+            log('Posts module registered');
+        } else {
+            log('ForumPostsModule not found, posts enhancement disabled', 'warn');
+            ENHANCER_CONFIG.modules.posts = false;
+        }
+    }
+    
+    // ============================================================================
+    // PUBLIC API
+    // ============================================================================
     const ForumEnhancer = {
         version: ENHANCER_CONFIG.version,
-        getWrapper: () => document.getElementById(ENHANCER_CONFIG.wrapperId),
-        getPostsContainer: () => document.getElementById('modern-posts-container'),
-        enableDebug: () => { ENHANCER_CONFIG.debug = true; log('Debug enabled'); },
-        reinitialize: () => { modules.forEach(m => m.initialized = false); initializeAllModules(); }
+        name: ENHANCER_CONFIG.name,
+       
+        registerModule: registerModule,
+       
+        enableModule: function(moduleName) {
+            if (ENHANCER_CONFIG.modules.hasOwnProperty(moduleName)) {
+                ENHANCER_CONFIG.modules[moduleName] = true;
+                var module = modules.find(function(m) { return m.name === moduleName; });
+                if (module) {
+                    module.enabled = true;
+                    initializeModule(module);
+                }
+                log('Enabled module: ' + moduleName);
+                return true;
+            }
+            log('Module not found: ' + moduleName, 'warn');
+            return false;
+        },
+       
+        disableModule: function(moduleName) {
+            if (ENHANCER_CONFIG.modules.hasOwnProperty(moduleName)) {
+                ENHANCER_CONFIG.modules[moduleName] = false;
+                var module = modules.find(function(m) { return m.name === moduleName; });
+                if (module) {
+                    module.enabled = false;
+                }
+                log('Disabled module: ' + moduleName);
+                return true;
+            }
+            return false;
+        },
+       
+        getModuleStatus: function() {
+            var status = {};
+            modules.forEach(function(m) {
+                status[m.name] = {
+                    enabled: m.enabled,
+                    initialized: m.initialized,
+                    dependencies: m.dependencies
+                };
+            });
+            return status;
+        },
+       
+        getStats: function() {
+            var initialized = modules.filter(function(m) { return m.initialized; }).length;
+            var enabled = modules.filter(function(m) { return m.enabled; }).length;
+           
+            return {
+                version: ENHANCER_CONFIG.version,
+                modules: {
+                    total: modules.length,
+                    enabled: enabled,
+                    initialized: initialized,
+                    failed: enabled - initialized
+                },
+                debug: ENHANCER_CONFIG.debug,
+                timestamp: Date.now()
+            };
+        },
+       
+        enableDebug: function() {
+            ENHANCER_CONFIG.debug = true;
+            log('Debug mode enabled');
+            if (typeof ForumEventBus !== 'undefined') {
+                ForumEventBus.enableDebug();
+            }
+        },
+       
+        disableDebug: function() {
+            ENHANCER_CONFIG.debug = false;
+            if (typeof ForumEventBus !== 'undefined') {
+                ForumEventBus.disableDebug();
+            }
+        },
+       
+        reinitialize: function() {
+            log('Reinitializing all modules...');
+            modules.forEach(function(m) {
+                m.initialized = false;
+            });
+            return initializeAllModules();
+        },
+       
+        getObserver: function() {
+            return globalThis.forumObserver || null;
+        },
+       
+        getWrapper: function() {
+            return document.getElementById(ENHANCER_CONFIG.wrapperId);
+        },
+       
+        getPostsContainer: function() {
+            return document.getElementById('modern-posts-container');
+        },
+       
+        // Manual trigger for dynamic content
+        refresh: function() {
+            log('Manual refresh triggered');
+            var postsModule = modules.find(function(m) { return m.name === 'posts'; });
+            if (postsModule && postsModule.module && postsModule.module.refresh) {
+                postsModule.module.refresh();
+            } else if (postsModule && postsModule.module && postsModule.module.initialize) {
+                postsModule.module.initialize();
+            }
+        }
     };
-
+    
+    // ============================================================================
+    // INITIALIZATION
+    // ============================================================================
     async function initialize() {
-        log('========================================');
-        log(`${ENHANCER_CONFIG.name} v${ENHANCER_CONFIG.version} — Starting`);
-        log('========================================');
-
-        await new Promise(r => document.readyState === 'loading' 
-            ? document.addEventListener('DOMContentLoaded', r) 
-            : r());
-
-        injectModernCSS();
-        if (ENHANCER_CONFIG.hideOriginal) hideOriginalContent();
-        createModernWrapper();
-
-        const observer = await waitForForumObserver();
-        if (observer) log('ForumCoreObserver ready');
-
-        registerAllModules();
-        const count = initializeAllModules();
-        log(`${count} module(s) initialized successfully`);
-
-        log('🚀 Forum Enhancer 10/10 is now active!');
+        try {
+            log('========================================');
+            log(ENHANCER_CONFIG.name + ' v' + ENHANCER_CONFIG.version);
+            log('========================================');
+           
+            if (!checkDependenciesAvailable()) {
+                log('Cannot start - missing dependencies', 'error');
+                return;
+            }
+           
+            await domReady();
+            log('DOM ready');
+           
+            if (ENHANCER_CONFIG.createWrapper) {
+                createModernWrapper();
+            }
+           
+            if (ENHANCER_CONFIG.hideOriginal) {
+                hideOriginalContent();
+            }
+           
+            var observer = await waitForForumObserver();
+            if (observer) {
+                log('ForumCoreObserver detected and ready');
+            } else {
+                log('Running without ForumCoreObserver (dynamic content may not auto-enhance)', 'warn');
+            }
+           
+            registerAllModules();
+           
+            var initializedCount = initializeAllModules();
+            log(initializedCount + ' of ' + modules.length + ' modules initialized');
+           
+            if (typeof ForumEventBus !== 'undefined') {
+                ForumEventBus.trigger('forum:enhancer:ready', {
+                    version: ENHANCER_CONFIG.version,
+                    modules: initializedCount,
+                    observer: !!observer,
+                    wrapper: document.getElementById(ENHANCER_CONFIG.wrapperId)
+                });
+            }
+           
+            // Dispatch custom event for other scripts
+            window.dispatchEvent(new CustomEvent('forum-enhancer-ready', {
+                detail: {
+                    version: ENHANCER_CONFIG.version,
+                    modules: initializedCount,
+                    timestamp: Date.now()
+                }
+            }));
+           
+            log('========================================');
+            log(ENHANCER_CONFIG.name + ' is ready!');
+            log('========================================');
+           
+        } catch (error) {
+            log('Fatal initialization error: ' + error.message, 'error');
+            console.error(error);
+            // Don't hide original content if enhancer fails
+            if (ENHANCER_CONFIG.hideOriginal) {
+                document.body.classList.remove('forum-modernized');
+            }
+        }
     }
-
+    
+    // ============================================================================
+    // EXPOSE GLOBALLY
+    // ============================================================================
     window.ForumEnhancer = ForumEnhancer;
-    if (ENHANCER_CONFIG.autoInitialize) initialize();
+   
+    if (ENHANCER_CONFIG.autoInitialize) {
+        // Small delay to ensure all scripts are loaded
+        setTimeout(initialize, 100);
+    }
+   
 })();
