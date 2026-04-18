@@ -1,4 +1,4 @@
-// modules/posts.js
+// modules/posts.js - Updated reaction handling
 // Forum Modernizer - Posts Module
 // Transforms .post elements into modern card layout and renders into wrapper container
 var ForumPostsModule = (function(Utils, EventBus) {
@@ -185,29 +185,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         reactions.push({
                             alt: alt,
                             src: src,
-                            name: alt.replace(/:/g, '')
+                            name: alt.replace(/:/g, ''),
+                            count: 1 // Each image represents one reaction type
                         });
-                    }
-                });
-            }
-            
-            // If no images found but there are counters, try to get from the counter elements
-            if (reactions.length === 0 && allCounters.length > 0) {
-                allCounters.forEach(function(counter) {
-                    // Try to find associated emoji image
-                    var parent = counter.parentElement;
-                    if (parent) {
-                        var emojiImg = parent.querySelector('img');
-                        if (emojiImg) {
-                            var src = emojiImg.getAttribute('src');
-                            if (src) {
-                                reactions.push({
-                                    alt: emojiImg.getAttribute('alt') || '',
-                                    src: src,
-                                    name: ''
-                                });
-                            }
-                        }
                     }
                 });
             }
@@ -286,30 +266,42 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // GENERATE REACTION BUTTONS HTML
     // ============================================================================
     function generateReactionButtons(data) {
+        // If no reactions at all, show simple smiley button
         if (!data.hasReactions || data.reactions.length === 0) {
-            // No reactions, show simple smiley button
             return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
                 '<i class="fa-regular fa-face-smile"></i>' +
                 '</button>';
         }
         
-        // Has reactions - show reaction images
+        // Has reactions - show reaction images with their counts combined
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
-        // Add reaction images (show all, but limit display with CSS if needed)
+        // Group reactions by image src to combine counts
+        var reactionMap = new Map();
         for (var i = 0; i < data.reactions.length; i++) {
             var reaction = data.reactions[i];
-            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
-                '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
-                '</button>';
+            var src = reaction.src;
+            if (reactionMap.has(src)) {
+                var existing = reactionMap.get(src);
+                existing.count += reaction.count;
+            } else {
+                reactionMap.set(src, {
+                    src: src,
+                    alt: reaction.alt,
+                    name: reaction.name,
+                    count: reaction.count
+                });
+            }
         }
         
-        // Add count if there are more reactions than images shown (or just show total count)
-        if (data.reactionCount > 0) {
-            reactionHtml += '<button class="reaction-btn reaction-count-btn" data-pid="' + data.postId + '">' +
-                '<span class="reaction-count">' + data.reactionCount + '</span>' +
+        // Create buttons for each unique reaction with its count
+        reactionMap.forEach(function(reaction) {
+            var countHtml = reaction.count > 0 ? '<span class="reaction-count">' + reaction.count + '</span>' : '';
+            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name) + '" data-pid="' + data.postId + '">' +
+                '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
+                countHtml +
                 '</button>';
-        }
+        });
         
         // Add the add reaction button
         reactionHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
@@ -800,7 +792,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             // Check for reaction containers
                             var emojiContainers = node.querySelectorAll ? node.querySelectorAll('.st-emoji-container') : [];
-                            if (node.classList && node.classList.contains('st-emoji-container')) {
+                            if (node.classList && node.classList.contains('.st-emoji-container')) {
                                 emojiContainers = [node];
                             }
                             
