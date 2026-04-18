@@ -16,6 +16,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
         REACTION_DELAY: 500
     };
 
+    // Guard against double initialization
+    var IS_INITIALIZED = false;
+
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
@@ -624,12 +627,18 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
 
     function initialize() {
+        // Prevent double initialization
+        if (IS_INITIALIZED) {
+            console.log('[PostsModule] Already initialized, skipping...');
+            return;
+        }
+
         console.log('[PostsModule] Initializing...');
 
         // Get or create the posts container
         var container = getPostsContainer();
         
-        // Clear container if needed (to avoid duplicates)
+        // Clear container before appending to prevent duplicates
         container.innerHTML = '';
         
         // Get all original posts
@@ -647,8 +656,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
         
-        // Hide original posts (CSS already does this)
-        // But keep them in DOM for functionality
+        // Mark as initialized
+        IS_INITIALIZED = true;
         
         // Attach event handlers
         attachEventHandlers();
