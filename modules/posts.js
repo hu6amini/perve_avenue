@@ -425,7 +425,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         '</span>' +
                     '</div>' +
                     '<div class="user-stats">' +
-                        '<div class="user-title">' +
+                        '<div class="user-rank">' +
                             '<i class="' + data.rankIconClass + '" aria-hidden="true"></i> ' + data.userTitle +
                         '</div>' +
                         '<div class="user-posts">' +
