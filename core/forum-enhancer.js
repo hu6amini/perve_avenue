@@ -31,6 +31,7 @@
 
     const modules = [];
     const moduleStatus = new Map();
+    let isInitializing = false;
 
     function log(message, type) {
         if (!ENHANCER_CONFIG.debug && type !== 'error') return;
@@ -46,6 +47,13 @@
     }
 
     function registerModule(name, module, dependencies) {
+        // Check if module already registered
+        var existing = modules.find(function(m) { return m.name === name; });
+        if (existing) {
+            log('Module ' + name + ' already registered, skipping', 'warn');
+            return;
+        }
+        
         modules.push({
             name: name,
             module: module,
@@ -104,6 +112,12 @@
     }
 
     function initializeAllModules() {
+        if (isInitializing) {
+            log('Already initializing modules, skipping', 'warn');
+            return modules.filter(function(m) { return m.initialized; }).length;
+        }
+        
+        isInitializing = true;
         log('Initializing all modules...');
         
         var maxAttempts = 10;
@@ -132,6 +146,7 @@
             log('Warning: ' + failedModules.length + ' modules failed to initialize', 'warn');
         }
         
+        isInitializing = false;
         return modules.filter(function(m) { return m.initialized; }).length;
     }
 
