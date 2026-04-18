@@ -277,27 +277,29 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
         return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
             '<div class="post-card-header">' +
-                '<div class="post-number">' +
-                    '#' + data.postNumber +
-                '</div>' +
-                '<div class="post-time">' +
-                    '<i class="fa-regular fa-clock"></i> ' + data.timeAgo +
+                '<div class="post-meta">' +
+                    '<div class="post-number">' +
+                        '#' + data.postNumber +
+                    '</div>' +
+                    '<div class="post-time">' +
+                        data.timeAgo +
+                    '</div>' +
                 '</div>' +
                 '<div class="post-actions">' +
                     '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
-                        '<i class="fa-solid fa-quote-left"></i>' +
+                        '<i class="fa-regular fa-quote-left"></i>' +
                     '</button>' +
                     '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
-                        '<i class="fa-solid fa-pen"></i>' +
+                        '<i class="fa-regular fa-pen-to-square"></i>' +
                     '</button>' +
                     '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
-                        '<i class="fa-solid fa-share"></i>' +
+                        '<i class="fa-regular fa-share-from-square"></i>' +
                     '</button>' +
                     '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
-                        '<i class="fa-solid fa-flag"></i>' +
+                        '<i class="fa-regular fa-flag"></i>' +
                     '</button>' +
                     '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
-                        '<i class="fa-solid fa-trash"></i>' +
+                        '<i class="fa-regular fa-trash-can"></i>' +
                     '</button>' +
                 '</div>' +
             '</div>' +
@@ -397,7 +399,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(function() {
             var originalHtml = buttonElement.innerHTML;
-            buttonElement.innerHTML = '<i class="fa-solid fa-check"></i>';
+            buttonElement.innerHTML = '<i class="fa-regular fa-check"></i>';
             setTimeout(function() {
                 buttonElement.innerHTML = originalHtml;
             }, 1500);
