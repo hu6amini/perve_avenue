@@ -327,7 +327,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                             '<i class="fa-regular fa-star"></i> ' + repSign + data.reputation + ' rep' +
                         '</div>' +
                         '<div class="user-status" style="color: ' + statusColor + '">' +
-                            '<i class="fa-solid fa-circle"></i> ' + statusText +
+                            '<i class="fa-regular fa-circle"></i> ' + statusText +
                         '</div>' +
                     '</div>' +
                 '</div>' +
