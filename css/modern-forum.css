@@ -428,7 +428,7 @@ img {
       padding: 0;
     }
 
-.user-title i, .user-posts i, .user-reputation i {
+.user-rank i, .user-posts i, .user-reputation i {
       color: var(--primary-light);
     }
 
