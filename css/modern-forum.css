@@ -266,15 +266,14 @@ img {
 }
 
 .post-number-badge {
-    background: var(--surface-light);
-    padding: var(--pad-2) var(--pad-3);
-    border-radius: var(--radius-full);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--text-secondary);
+    border-radius: 0;
+    padding: 0;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-tertiary);
     display: inline-flex;
     align-items: center;
-    gap: var(--space-xs);
+    gap: 6px;
 }
 
 .post-timestamp {
