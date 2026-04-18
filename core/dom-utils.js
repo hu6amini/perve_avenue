@@ -419,3 +419,8 @@ var ForumDOMUtils = (function() {
     };
    
 })();
+
+// Signal that dom-utils is ready
+if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('dom-utils-ready'));
+}
