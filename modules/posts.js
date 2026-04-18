@@ -228,126 +228,133 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // GENERATE MODERN CARD
     // ============================================================================
-    function generateModernPost(data) {
-        if (!data) return '';
-        var statusColor = data.isOnline ? '#10B981' : '#6B7280';
-        var statusText = data.isOnline ? 'Online' : 'Offline';
-        var repSign = parseInt(data.reputation) > 0 ? '+' : '';
-        // Like button HTML
-        var likeButton = '<button class="reaction-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-thumbs-up"></i>';
-        if (data.likes > 0) {
-            likeButton += '<span class="reaction-count">' + data.likes + '</span>';
-        }
-        likeButton += '</button>';
-        // React button HTML
-        var reactButton = '';
-        if (data.hasReactions) {
-            reactButton = '<button class="reaction-btn reaction-placeholder" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-                '<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji">';
-            if (data.reactionCount > 0) {
-                reactButton += '<span class="reaction-count">' + data.reactionCount + '</span>';
-            }
-            reactButton += '</button>';
-        } else {
-            reactButton = '<button class="reaction-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-                '<i class="fa-regular fa-face-smile"></i>' +
-                '</button>';
-        }
-        // Edit indicator HTML
-        var editHtml = '';
-        if (data.editInfo) {
-            editHtml = '<div class="post-edit-info">' +
-                ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
-                '</div>';
-        }
-        // Signature HTML
-        var signatureHtml = '';
-        if (data.signatureHtml) {
-            signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
-        }
-        // IP HTML
-        var ipHtml = '';
-        if (data.ipAddress) {
-            ipHtml = '<div class="post-ip">' +
-                ' IP: ' + data.ipAddress +
-                '</div>';
-        }
-        // Avatar URL
-        var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
-        return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
-            '<div class="post-card-header">' +
-                '<div class="post-meta">' +
-                    '<div class="post-number">' +
-                        '#' + data.postNumber +
-                    '</div>' +
-                    '<div class="post-time">' +
-                        data.timeAgo +
-                    '</div>' +
-                '</div>' +
-                '<div class="post-actions">' +
-                    '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-quote-left"></i>' +
-                    '</button>' +
-                    '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-pen-to-square"></i>' +
-                    '</button>' +
-                    '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-share-nodes"></i>' +
-                    '</button>' +
-                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-circle-exclamation"></i>' +
-                    '</button>' +
-                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-trash-can"></i>' +
-                    '</button>' +
-                '</div>' +
-            '</div>' +
-            '<div class="post-card-body">' +
-                '<div class="post-avatar">' +
-                    '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
-                '</div>' +
-                '<div class="post-user-info">' +
-                    '<div class="user-name">' +
-                        '<a href="/user/' + encodeURIComponent(data.username) + '">' + Utils.escapeHtml(data.username) + '</a>' +
-                    '</div>' +
-                    '<div class="user-group">' +
-                        '<span class="role-badge ' + data.roleBadgeClass + '">' +
-                            Utils.escapeHtml(data.groupText || 'Member') +
-                        '</span>' +
-                    '</div>' +
-                    '<div class="user-stats">' +
-                        '<div class="user-title">' +
-                            '<i class="' + data.rankIconClass + '"></i> ' + data.userTitle +
-                        '</div>' +
-                        '<div class="user-posts">' +
-                            '<i class="fa-regular fa-message"></i> ' + data.postCount + ' posts' +
-                        '</div>' +
-                        '<div class="user-reputation">' +
-                            '<i class="fa-regular fa-star"></i> ' + repSign + data.reputation + ' rep' +
-                        '</div>' +
-                        '<div class="user-status" style="color: ' + statusColor + '">' +
-                            '<i class="fa-regular fa-circle"></i> ' + statusText +
-                        '</div>' +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="post-content">' +
-                '<div class="post-message">' +
-                    data.contentHtml +
-                    editHtml +
-                '</div>' +
-                signatureHtml +
-            '</div>' +
-            '<div class="post-footer">' +
-                '<div class="post-reactions">' +
-                    likeButton +
-                    reactButton +
-                '</div>' +
-                ipHtml +
-            '</div>' +
-        '</div>';
+function generateModernPost(data) {
+    if (!data) return '';
+    var statusColor = data.isOnline ? '#10B981' : '#6B7280';
+    var statusText = data.isOnline ? 'Online' : 'Offline';
+    // repSign removed - no longer needed
+    
+    // Like button HTML
+    var likeButton = '<button class="reaction-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
+        '<i class="fa-regular fa-thumbs-up"></i>';
+    if (data.likes > 0) {
+        likeButton += '<span class="reaction-count">' + data.likes + '</span>';
     }
+    likeButton += '</button>';
+    
+    // React button HTML
+    var reactButton = '';
+    if (data.hasReactions) {
+        reactButton = '<button class="reaction-btn reaction-placeholder" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+            '<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji">';
+        if (data.reactionCount > 0) {
+            reactButton += '<span class="reaction-count">' + data.reactionCount + '</span>';
+        }
+        reactButton += '</button>';
+    } else {
+        reactButton = '<button class="reaction-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+            '<i class="fa-regular fa-face-smile"></i>' +
+            '</button>';
+    }
+    
+    // Edit indicator HTML
+    var editHtml = '';
+    if (data.editInfo) {
+        editHtml = '<div class="post-edit-info">' +
+            ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
+            '</div>';
+    }
+    
+    // Signature HTML
+    var signatureHtml = '';
+    if (data.signatureHtml) {
+        signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
+    }
+    
+    // IP HTML
+    var ipHtml = '';
+    if (data.ipAddress) {
+        ipHtml = '<div class="post-ip">' +
+            ' IP: ' + data.ipAddress +
+            '</div>';
+    }
+    
+    // Avatar URL
+    var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
+    
+    return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
+        '<div class="post-card-header">' +
+            '<div class="post-meta">' +
+                '<div class="post-number">' +
+                    '#' + data.postNumber +
+                '</div>' +
+                '<div class="post-time">' +
+                    data.timeAgo +
+                '</div>' +
+            '</div>' +
+            '<div class="post-actions">' +
+                '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-quote-left"></i>' +
+                '</button>' +
+                '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-pen-to-square"></i>' +
+                '</button>' +
+                '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-share-from-square"></i>' +
+                '</button>' +
+                '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-flag"></i>' +
+                '</button>' +
+                '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-trash-can"></i>' +
+                '</button>' +
+            '</div>' +
+        '</div>' +
+        '<div class="post-card-body">' +
+            '<div class="post-avatar">' +
+                '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
+            '</div>' +
+            '<div class="post-user-info">' +
+                '<div class="user-name">' +
+                    '<a href="/user/' + encodeURIComponent(data.username) + '">' + Utils.escapeHtml(data.username) + '</a>' +
+                '</div>' +
+                '<div class="user-group">' +
+                    '<span class="role-badge ' + data.roleBadgeClass + '">' +
+                        Utils.escapeHtml(data.groupText || 'Member') +
+                    '</span>' +
+                '</div>' +
+                '<div class="user-stats">' +
+                    '<div class="user-title">' +
+                        '<i class="' + data.rankIconClass + '"></i> ' + data.userTitle +
+                    '</div>' +
+                    '<div class="user-posts">' +
+                        '<i class="fa-regular fa-message"></i> ' + data.postCount + ' posts' +
+                    '</div>' +
+                    '<div class="user-reputation">' +
+                        '<i class="fa-regular fa-star"></i> ' + data.reputation + ' rep' +
+                    '</div>' +
+                    '<div class="user-status" style="color: ' + statusColor + '">' +
+                        '<i class="fa-regular fa-circle"></i> ' + statusText +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="post-content">' +
+            '<div class="post-message">' +
+                data.contentHtml +
+                editHtml +
+            '</div>' +
+            signatureHtml +
+        '</div>' +
+        '<div class="post-footer">' +
+            '<div class="post-reactions">' +
+                likeButton +
+                reactButton +
+            '</div>' +
+            ipHtml +
+        '</div>' +
+    '</div>';
+}
     // ============================================================================
     // REACTION DISPLAY REFRESH
     // ============================================================================
