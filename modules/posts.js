@@ -232,7 +232,6 @@ function generateModernPost(data) {
     if (!data) return '';
     var statusColor = data.isOnline ? '#10B981' : '#6B7280';
     var statusText = data.isOnline ? 'Online' : 'Offline';
-    // repSign removed - no longer needed
     
     // Like button HTML
     var likeButton = '<button class="reaction-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
@@ -286,7 +285,7 @@ function generateModernPost(data) {
         '<div class="post-card-header">' +
             '<div class="post-meta">' +
                 '<div class="post-number">' +
-                    '#' + data.postNumber +
+                    '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber +
                 '</div>' +
                 '<div class="post-time">' +
                     data.timeAgo +
