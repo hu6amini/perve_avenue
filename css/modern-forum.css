@@ -420,17 +420,17 @@ img {
     }
 
 /* Post body */
-.post-body {
+.post-content {
       padding: var(--space-lg) var(--pad-6);
     }
 
-.post-text-content {
+.post-message{
       font-size: 1rem;
       line-height: 1.6;
       color: var(--text-primary);
     }
 
-.post-text-content img {
+.post-message img {
       max-width: 100%;
       border-radius: var(--radius);
       display: block;
@@ -440,7 +440,7 @@ img {
     }
 
 /* Edit indicator */
-.edit-indicator {
+.post-edit-info {
       font-size: 0.7rem;
       color: var(--text-tertiary);
       margin-top: 0.5rem;
@@ -449,12 +449,12 @@ img {
       gap: 6px;
     }
 
-.edit-indicator i {
+.post-edit-info i {
     color: var(--primary-color);
 }
 
 /* Signature */
-.signature-modern {
+.post-signature {
       border-top: 1px solid var(--border-color);
       margin-top: 1.5rem;
       padding-top: 1rem;
