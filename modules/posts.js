@@ -397,8 +397,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
                 '</div>' +
                 '<div class="post-user-info">' +
-                    '<div class="user-name">' +
-                        '<a href="/user/' + encodeURIComponent(data.username) + '">' + Utils.escapeHtml(data.username) + '</a>' +
+                    '<div class="user-name" data-pid="' + data.postId + '">' +
+                        Utils.escapeHtml(data.username) +
                     '</div>' +
                     '<div class="user-group">' +
                         '<span class="role-badge ' + data.roleBadgeClass + '">' +
@@ -413,7 +413,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                             '<i class="fa-regular fa-message" aria-hidden="true"></i> ' + data.postCount + ' posts' +
                         '</div>' +
                         '<div class="user-reputation">' +
-                            '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + data.reputation + ' rep' +
+                            '<i class="fa-regular fa-star" aria-hidden="true"></i> ' + data.reputation + ' rep' +
                         '</div>' +
                         '<div class="user-status" style="color: ' + statusColor + '">' +
                             '<i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText +
@@ -484,6 +484,17 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
+    function handleUsernameClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        // Find the nickname link in the original post
+        var nickLink = originalPost.querySelector('.nick a');
+        if (nickLink) {
+            // Trigger a click on the original link
+            nickLink.click();
+        }
+    }
     function handleQuote(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -566,6 +577,16 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ATTACH EVENT LISTENERS
     // ============================================================================
     function attachEventHandlers() {
+        // Username click handler - trigger the original nickname link
+        document.addEventListener('click', function(e) {
+            var userNameDiv = e.target.closest('.user-name');
+            if (userNameDiv) {
+                e.preventDefault();
+                var pid = userNameDiv.getAttribute('data-pid');
+                if (pid) handleUsernameClick(pid);
+            }
+        });
+        
         // Quote buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="quote"], .action-icon[title="Quote"]');
@@ -575,6 +596,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleQuote(pid);
             }
         });
+        
         // Edit buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="edit"], .action-icon[title="Edit"]');
@@ -584,6 +606,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleEdit(pid);
             }
         });
+        
         // Delete buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="delete"], .action-icon[title="Delete"]');
@@ -593,6 +616,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleDelete(pid);
             }
         });
+        
         // Share buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="share"], .action-icon[title="Share"]');
@@ -602,6 +626,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleShare(pid, btn);
             }
         });
+        
         // Report buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="report"], .action-icon[title="Report"]');
@@ -611,6 +636,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleReport(pid);
             }
         });
+        
         // Like buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.like-btn');
@@ -620,6 +646,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleLike(pid);
             }
         });
+        
         // React buttons (any reaction button that's not a like button)
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
