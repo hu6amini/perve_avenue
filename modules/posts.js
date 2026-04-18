@@ -10,11 +10,14 @@ var ForumPostsModule = (function(Utils, EventBus) {
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
-        REACTION_DELAY: 500
+        REACTION_DELAY: 500,
+        REACTION_OBSERVER_DELAY: 1000 // Delay to wait for reaction plugin to load
     };
     // Track converted posts to prevent duplicates
     var convertedPostIds = new Set();
     var isInitialized = false;
+    // Store reaction data for each post
+    var postReactions = new Map();
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
@@ -158,16 +161,41 @@ var ForumPostsModule = (function(Utils, EventBus) {
     function getReactionData($post) {
         var hasReactions = false;
         var reactionCount = 0;
-        var counters = $post.querySelectorAll('.st-emoji-post .st-emoji-counter');
-        counters.forEach(function(counter) {
+        var reactions = [];
+        
+        // Look for the st-emoji-container
+        var emojiContainer = $post.querySelector('.st-emoji-container');
+        if (emojiContainer) {
             hasReactions = true;
-            var count = parseInt(counter.getAttribute('data-count') || counter.textContent || 1);
-            reactionCount += count;
-        });
-        if (!hasReactions && $post.querySelector('.st-emoji-container')) {
-            hasReactions = true;
+            
+            // Get counters
+            var counters = emojiContainer.querySelectorAll('.st-emoji-counter');
+            counters.forEach(function(counter) {
+                var count = parseInt(counter.getAttribute('data-count') || counter.textContent || 0);
+                reactionCount += count;
+            });
+            
+            // Get reaction images
+            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
+            if (previewDiv) {
+                var images = previewDiv.querySelectorAll('img');
+                images.forEach(function(img) {
+                    var alt = img.getAttribute('alt') || '';
+                    var src = img.getAttribute('src') || '';
+                    reactions.push({
+                        alt: alt,
+                        src: src,
+                        name: alt.replace(/:/g, '')
+                    });
+                });
+            }
         }
-        return { hasReactions: hasReactions, reactionCount: reactionCount };
+        
+        return { 
+            hasReactions: hasReactions, 
+            reactionCount: reactionCount,
+            reactions: reactions
+        };
     }
     function getMaskedIp($post) {
         var ipLink = $post.querySelector('.ip_address dd a');
@@ -203,6 +231,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var postId = getPostId($post);
         if (!postId) return null;
         var reactionData = getReactionData($post);
+        
+        // Store reaction data for later updates
+        if (reactionData.hasReactions) {
+            postReactions.set(postId, reactionData.reactions);
+        }
+        
         return {
             postId: postId,
             username: getUsername($post),
@@ -220,160 +254,255 @@ var ForumPostsModule = (function(Utils, EventBus) {
             likes: getLikes($post),
             hasReactions: reactionData.hasReactions,
             reactionCount: reactionData.reactionCount,
+            reactions: reactionData.reactions,
             ipAddress: getMaskedIp($post),
             postNumber: getPostNumber($post, index),
             timeAgo: getTimeAgo($post)
         };
     }
     // ============================================================================
-    // GENERATE MODERN CARD
+    // GENERATE REACTION BUTTONS HTML
     // ============================================================================
-function generateModernPost(data) {
-    if (!data) return '';
-    var statusColor = data.isOnline ? '#10B981' : '#6B7280';
-    var statusText = data.isOnline ? 'Online' : 'Offline';
-    
-    // Like button HTML
-    var likeButton = '<button class="reaction-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-        '<i class="fa-regular fa-thumbs-up"></i>';
-    if (data.likes > 0) {
-        likeButton += '<span class="reaction-count">' + data.likes + '</span>';
-    }
-    likeButton += '</button>';
-    
-    // React button HTML
-    var reactButton = '';
-    if (data.hasReactions) {
-        reactButton = '<button class="reaction-btn reaction-placeholder" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-            '<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji">';
-        if (data.reactionCount > 0) {
-            reactButton += '<span class="reaction-count">' + data.reactionCount + '</span>';
+    function generateReactionButtons(data) {
+        if (!data.hasReactions) {
+            // No reactions, show simple smiley button
+            return '<button class="reaction-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+                '<i class="fa-regular fa-face-smile"></i>' +
+                '</button>';
         }
-        reactButton += '</button>';
-    } else {
-        reactButton = '<button class="reaction-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+        
+        // Has reactions - show reaction images
+        var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
+        
+        // Add reaction images (limit to first 3 to avoid clutter)
+        var reactionsToShow = data.reactions.slice(0, 3);
+        for (var i = 0; i < reactionsToShow.length; i++) {
+            var reaction = reactionsToShow[i];
+            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name) + '" data-pid="' + data.postId + '">' +
+                '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt) + '" width="16" height="16" loading="lazy">' +
+                '</button>';
+        }
+        
+        // Add count if there are more reactions
+        if (data.reactionCount > 0) {
+            reactionHtml += '<button class="reaction-btn reaction-count-btn" data-pid="' + data.postId + '">' +
+                '<span class="reaction-count">' + data.reactionCount + '</span>' +
+                '</button>';
+        }
+        
+        // Add the add reaction button
+        reactionHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
             '<i class="fa-regular fa-face-smile"></i>' +
             '</button>';
+        
+        reactionHtml += '</div>';
+        return reactionHtml;
     }
-    
-    // Edit indicator HTML
-    var editHtml = '';
-    if (data.editInfo) {
-        editHtml = '<div class="post-edit-info">' +
-            ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
-            '</div>';
-    }
-    
-    // Signature HTML
-    var signatureHtml = '';
-    if (data.signatureHtml) {
-        signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
-    }
-    
-    // IP HTML
-    var ipHtml = '';
-    if (data.ipAddress) {
-        ipHtml = '<div class="post-ip">' +
-            ' IP: ' + data.ipAddress +
-            '</div>';
-    }
-    
-    // Avatar URL
-    var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
-    
-    return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
-        '<div class="post-card-header">' +
-            '<div class="post-meta">' +
-                '<div class="post-number">' +
-                    '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber +
-                '</div>' +
-                '<div class="post-time">' +
-                    data.timeAgo +
-                '</div>' +
-            '</div>' +
-            '<div class="post-actions">' +
-                '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-quote-left"></i>' +
-                '</button>' +
-                '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-pen-to-square"></i>' +
-                '</button>' +
-                '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-share-nodes"></i>' +
-                '</button>' +
-                '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-circle-exclamation"></i>' +
-                '</button>' +
-                '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-trash-can"></i>' +
-                '</button>' +
-            '</div>' +
-        '</div>' +
-        '<div class="post-card-body">' +
-            '<div class="post-avatar">' +
-                '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
-            '</div>' +
-            '<div class="post-user-info">' +
-                '<div class="user-name">' +
-                    '<a href="/user/' + encodeURIComponent(data.username) + '">' + Utils.escapeHtml(data.username) + '</a>' +
-                '</div>' +
-                '<div class="user-group">' +
-                    '<span class="role-badge ' + data.roleBadgeClass + '">' +
-                        Utils.escapeHtml(data.groupText || 'Member') +
-                    '</span>' +
-                '</div>' +
-                '<div class="user-stats">' +
-                    '<div class="user-title">' +
-                        '<i class="' + data.rankIconClass + '"></i> ' + data.userTitle +
-                    '</div>' +
-                    '<div class="user-posts">' +
-                        '<i class="fa-regular fa-message"></i> ' + data.postCount + ' posts' +
-                    '</div>' +
-                    '<div class="user-reputation">' +
-                        '<i class="fa-regular fa-star"></i> ' + data.reputation + ' rep' +
-                    '</div>' +
-                    '<div class="user-status" style="color: ' + statusColor + '">' +
-                        '<i class="fa-regular fa-circle"></i> ' + statusText +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-        '</div>' +
-        '<div class="post-content">' +
-            '<div class="post-message">' +
-                data.contentHtml +
-                editHtml +
-            '</div>' +
-            signatureHtml +
-        '</div>' +
-        '<div class="post-footer">' +
-            '<div class="post-reactions">' +
-                likeButton +
-                reactButton +
-            '</div>' +
-            ipHtml +
-        '</div>' +
-    '</div>';
-}
     // ============================================================================
-    // REACTION DISPLAY REFRESH
+    // GENERATE MODERN CARD
+    // ============================================================================
+    function generateModernPost(data) {
+        if (!data) return '';
+        var statusColor = data.isOnline ? '#10B981' : '#6B7280';
+        var statusText = data.isOnline ? 'Online' : 'Offline';
+        
+        // Like button HTML
+        var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
+            '<i class="fa-regular fa-thumbs-up"></i>';
+        if (data.likes > 0) {
+            likeButton += '<span class="like-count">' + data.likes + '</span>';
+        }
+        likeButton += '</button>';
+        
+        // Reactions HTML
+        var reactionsHtml = generateReactionButtons(data);
+        
+        // Edit indicator HTML
+        var editHtml = '';
+        if (data.editInfo) {
+            editHtml = '<div class="post-edit-info">' +
+                ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
+                '</div>';
+        }
+        
+        // Signature HTML
+        var signatureHtml = '';
+        if (data.signatureHtml) {
+            signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
+        }
+        
+        // IP HTML
+        var ipHtml = '';
+        if (data.ipAddress) {
+            ipHtml = '<div class="post-ip">' +
+                ' IP: ' + data.ipAddress +
+                '</div>';
+        }
+        
+        // Avatar URL
+        var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
+        
+        return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
+            '<div class="post-card-header">' +
+                '<div class="post-meta">' +
+                    '<div class="post-number">' +
+                        '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber +
+                    '</div>' +
+                    '<div class="post-time">' +
+                        data.timeAgo +
+                    '</div>' +
+                '</div>' +
+                '<div class="post-actions">' +
+                    '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
+                        '<i class="fa-regular fa-quote-left"></i>' +
+                    '</button>' +
+                    '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
+                        '<i class="fa-regular fa-pen-to-square"></i>' +
+                    '</button>' +
+                    '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
+                        '<i class="fa-regular fa-share-nodes"></i>' +
+                    '</button>' +
+                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
+                        '<i class="fa-regular fa-circle-exclamation"></i>' +
+                    '</button>' +
+                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
+                        '<i class="fa-regular fa-trash-can"></i>' +
+                    '</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="post-card-body">' +
+                '<div class="post-avatar">' +
+                    '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
+                '</div>' +
+                '<div class="post-user-info">' +
+                    '<div class="user-name">' +
+                        '<a href="/user/' + encodeURIComponent(data.username) + '">' + Utils.escapeHtml(data.username) + '</a>' +
+                    '</div>' +
+                    '<div class="user-group">' +
+                        '<span class="role-badge ' + data.roleBadgeClass + '">' +
+                            Utils.escapeHtml(data.groupText || 'Member') +
+                        '</span>' +
+                    '</div>' +
+                    '<div class="user-stats">' +
+                        '<div class="user-title">' +
+                            '<i class="' + data.rankIconClass + '"></i> ' + data.userTitle +
+                        '</div>' +
+                        '<div class="user-posts">' +
+                            '<i class="fa-regular fa-message"></i> ' + data.postCount + ' posts' +
+                        '</div>' +
+                        '<div class="user-reputation">' +
+                            '<i class="fa-regular fa-star"></i> ' + data.reputation + ' rep' +
+                        '</div>' +
+                        '<div class="user-status" style="color: ' + statusColor + '">' +
+                            '<i class="fa-regular fa-circle"></i> ' + statusText +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="post-content">' +
+                '<div class="post-message">' +
+                    data.contentHtml +
+                    editHtml +
+                '</div>' +
+                signatureHtml +
+            '</div>' +
+            '<div class="post-footer">' +
+                '<div class="post-reactions">' +
+                    likeButton +
+                    reactionsHtml +
+                '</div>' +
+                ipHtml +
+            '</div>' +
+        '</div>';
+    }
+    // ============================================================================
+    // REACTION DISPLAY REFRESH (with image support)
     // ============================================================================
     function refreshReactionDisplay(postId) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (!originalPost) return;
-        var countEl = originalPost.querySelector('.st-emoji-post .st-emoji-counter');
-        if (!countEl) return;
-        var count = countEl.getAttribute('data-count') || countEl.textContent;
+        
+        // Get updated reaction data
+        var reactionData = getReactionData(originalPost);
+        if (!reactionData.hasReactions && reactionData.reactionCount === 0) {
+            return;
+        }
+        
         var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
         if (!modernCard) return;
-        var modernReactBtn = modernCard.querySelector('.reaction-btn:last-child');
-        if (!modernReactBtn) return;
-        var span = modernReactBtn.querySelector('.reaction-count');
-        if (!span && count > 0) {
-            span = document.createElement('span');
-            span.className = 'reaction-count';
-            modernReactBtn.appendChild(span);
+        
+        var reactionsContainer = modernCard.querySelector('.reactions-container');
+        if (!reactionsContainer) return;
+        
+        // Store reactions for this post
+        if (reactionData.reactions.length > 0) {
+            postReactions.set(postId, reactionData.reactions);
         }
-        if (span) span.textContent = count;
+        
+        // Rebuild reactions HTML
+        var newReactionsHtml = '';
+        
+        // Add reaction images (limit to first 3)
+        var reactionsToShow = reactionData.reactions.slice(0, 3);
+        for (var i = 0; i < reactionsToShow.length; i++) {
+            var reaction = reactionsToShow[i];
+            newReactionsHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name) + '" data-pid="' + postId + '">' +
+                '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt) + '" width="16" height="16" loading="lazy">' +
+                '</button>';
+        }
+        
+        // Add count button
+        if (reactionData.reactionCount > 0) {
+            newReactionsHtml += '<button class="reaction-btn reaction-count-btn" data-pid="' + postId + '">' +
+                '<span class="reaction-count">' + reactionData.reactionCount + '</span>' +
+                '</button>';
+        }
+        
+        // Add add reaction button
+        newReactionsHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + postId + '">' +
+            '<i class="fa-regular fa-face-smile"></i>' +
+            '</button>';
+        
+        reactionsContainer.innerHTML = newReactionsHtml;
+    }
+    // ============================================================================
+    // SETUP REACTION OBSERVER (for delayed reaction plugin loading)
+    // ============================================================================
+    function setupReactionObserver() {
+        // Observe for reaction containers that load after delay
+        var reactionObserver = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList' && mutation.addedNodes.length) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Check if this is a reaction container
+                            var emojiContainer = node.querySelector && node.querySelector('.st-emoji-container');
+                            if (emojiContainer || (node.classList && node.classList.contains('st-emoji-container'))) {
+                                // Find parent post
+                                var postEl = node.closest ? node.closest('.post') : null;
+                                if (postEl && isValidPost(postEl)) {
+                                    var postId = getPostId(postEl);
+                                    if (postId) {
+                                        // Refresh reaction display after a short delay
+                                        setTimeout(function() {
+                                            refreshReactionDisplay(postId);
+                                        }, 100);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        });
+        
+        // Observe the entire document for reaction containers
+        reactionObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        return reactionObserver;
     }
     // ============================================================================
     // EVENT HANDLERS
@@ -441,12 +570,16 @@ function generateModernPost(data) {
     function handleReact(pid, buttonElement) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
+        
+        // Try to find and click the emoji container
         var emojiContainer = originalPost.querySelector('.st-emoji-container');
         if (emojiContainer) {
             emojiContainer.click();
         } else {
+            // Fallback to like if emoji container not found
             handleLike(pid);
         }
+        
         setTimeout(function() {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
@@ -502,17 +635,17 @@ function generateModernPost(data) {
         });
         // Like buttons
         document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.reaction-btn');
-            if (btn && btn.querySelector('.fa-thumbs-up')) {
+            var btn = e.target.closest('.like-btn');
+            if (btn) {
                 e.preventDefault();
                 var pid = btn.getAttribute('data-pid');
                 if (pid) handleLike(pid);
             }
         });
-        // React buttons
+        // React buttons (any reaction button that's not a like button)
         document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.reaction-btn');
-            if (btn && (btn.querySelector('.fa-face-smile') || btn.querySelector('img'))) {
+            var btn = e.target.closest('.reaction-btn:not(.like-btn)');
+            if (btn) {
                 e.preventDefault();
                 var pid = btn.getAttribute('data-pid');
                 if (pid) handleReact(pid, btn);
@@ -574,6 +707,7 @@ function generateModernPost(data) {
        
         // Reset converted posts tracking
         convertedPostIds.clear();
+        postReactions.clear();
        
         // Get all original posts
         var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
@@ -589,6 +723,9 @@ function generateModernPost(data) {
                 }
             }
         }
+       
+        // Setup reaction observer for delayed reaction plugin loading
+        var reactionObserver = setupReactionObserver();
        
         // Attach event handlers
         attachEventHandlers();
@@ -643,6 +780,7 @@ function generateModernPost(data) {
         }
        
         console.log('[PostsModule] Ready - ' + validPosts + ' posts converted');
+        console.log('[PostsModule] Reaction observer active - will detect delayed reaction plugin loading');
     }
     // ============================================================================
     // PUBLIC API
@@ -655,6 +793,7 @@ function generateModernPost(data) {
         isValidPost: isValidPost,
         reset: function() {
             convertedPostIds.clear();
+            postReactions.clear();
             isInitialized = false;
         },
         CONFIG: CONFIG
