@@ -1,53 +1,198 @@
-/* css/modern-forum.css */
+/*============================================
+ midnight emerald skin - forum modernized css
+ optimized & mathematically perfected with φ(1.618)
+ essential styles - modern posts edition
+============================================*/
 
-/* ========================================
-   BASE LAYOUT - Hide original, show wrapper
-   ======================================== */
-
-/* Hide original forum content immediately */
-body#topic .topic,
-body#topic .main_content,
-body#topic .footer,
-body#forum .board,
-.post {
-    display: none !important;
+/*============================================
+ css reset & base normalization
+============================================*/
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0
 }
 
-/* Show modern wrapper */
-#modern-forum-wrapper {
-    display: block !important;
+html {
+    font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.618;
+    scrollbar-color: var(--surface-color) transparent;
+    scrollbar-width: thin;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizelegibility
 }
 
-/* ========================================
-   MODERN WRAPPER STYLES
-   ======================================== */
-
-.modern-forum-wrapper {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 20px;
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: var(--text-base);
+    line-height: 1.618;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh
 }
 
-.modern-posts-container {
-    margin-top: 20px;
+/*============================================
+ css variables & themes
+============================================*/
+:root {
+    /* Golden ratio constants */
+    --phi: 1.618;
+    --phi-inverse: 0.618;
+    --phi-squared: 2.618;
+    --phi-cubed: 4.236;
+
+    /* Primary Colors - Emerald greens */
+    --primary-color: #059669;
+    --primary-dark: #047857;
+    --primary-light: #10B981;
+
+    /* Accent Colors */
+    --secondary-color: #7C3AED;
+    --accent-color: #0EA5E9;
+    --success-color: #10B981;
+    --warning-color: #F59E0B;
+    --danger-color: #DC2626;
+
+    /* Theme Colors - Dark Mode (Default) */
+    --bg-color: #111827;
+    --surface-color: #1F2937;
+    --surface-light: #374151;
+    --border-color: rgba(255, 255, 255, 0.1);
+
+    /* Text Colors */
+    --text-primary: #F9FAFB;
+    --text-secondary: #D1D5DB;
+    --text-tertiary: #6B7280;
+    --text-muted: #4B5563;
+
+    /* Interactive States */
+    --hover-color: rgba(255, 255, 255, 0.05);
+    --active-color: rgba(255, 255, 255, 0.1);
+    --focus-ring: rgba(5, 150, 105, 0.3);
+
+    /* Role colors */
+    --admin-color: #DC2626;
+    --global-mod-color: #06B6D4;
+    --mod-color: #8B5CF6;
+    --dev-color: #0EA5E9;
+    --member-color: #059669;
+    --guest-color: #6B7280;
+
+    /* Shadows - Golden ratio progression */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6);
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius: 8px;
+    --radius-lg: 13px;
+    --radius-xl: 21px;
+    --radius-full: 9999px;
+
+    /* Spacing scale */
+    --space-micro: 0.146rem;
+    --space-xs: 0.382rem;
+    --space-sm: 0.618rem;
+    --space-md: 1rem;
+    --space-lg: 1.618rem;
+    --space-xl: 2.618rem;
+    --space-xxl: 4.236rem;
+    --space-xxxl: 6.854rem;
+
+    /* Padding scale */
+    --pad-micro: 0.073rem;
+    --pad-1: 0.146rem;
+    --pad-2: 0.236rem;
+    --pad-3: 0.382rem;
+    --pad-4: 0.618rem;
+    --pad-5: 1rem;
+    --pad-6: 1.618rem;
+    --pad-7: 2.618rem;
+    --pad-8: 4.236rem;
+
+    /* Typography */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-md: 1.125rem;
+    --text-lg: 1.25rem;
+    --text-xl: 1.618rem;
+    --text-2xl: 2rem;
+    --text-3xl: 3.236rem;
+
+    /* Font families */
+    --font-primary: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-heading: 'Bree Serif', Georgia, 'Times New Roman', serif;
+    --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+
+    /* Button height */
+    --btn-height: 2rem;
 }
 
-/* ========================================
-   POST CARDS
-   ======================================== */
+/* Emerald Light theme */
+[data-theme="emerald-light"] {
+    --bg-color: #FDFDFD;
+    --surface-color: #FFFFFF;
+    --surface-light: #F3F4F6;
+    --border-color: rgba(0, 0, 0, 0.08);
+    --text-primary: #111827;
+    --text-secondary: #4B5563;
+    --text-tertiary: #6B7280;
+    --text-muted: #9CA3AF;
+    --hover-color: rgba(0, 0, 0, 0.05);
+    --active-color: rgba(0, 0, 0, 0.1);
+    --focus-ring: rgba(5, 150, 105, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
 
+/*============================================
+ base elements
+============================================*/
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+a:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    color: transparent;
+}
+
+/*============================================
+ modern post card styles
+============================================*/
 .post-card {
-    background: var(--card-bg, #ffffff);
-    border-radius: 12px;
-    margin-bottom: 25px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: var(--space-lg);
     overflow: hidden;
-    transition: box-shadow 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .post-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-md);
+    transform: translateY(calc(var(--phi-inverse) * -1px));
 }
 
 /* Post header */
@@ -55,133 +200,201 @@ body#forum .board,
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 20px;
-    background: var(--header-bg, #f9fafb);
-    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .post-meta-left {
     display: flex;
-    gap: 15px;
+    gap: var(--space-md);
     align-items: center;
 }
 
 .post-number-badge {
-    background: #e5e7eb;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
+    background: var(--surface-light);
+    padding: var(--pad-2) var(--pad-3);
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
     font-weight: 500;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
 }
 
 .post-timestamp {
-    font-size: 12px;
-    color: #6b7280;
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
 }
 
 /* Action buttons */
 .action-buttons-group {
     display: flex;
-    gap: 5px;
+    gap: var(--space-xs);
 }
 
 .action-icon {
     background: transparent;
     border: none;
-    padding: 6px 10px;
+    padding: var(--pad-2);
     cursor: pointer;
-    border-radius: 6px;
-    color: #6b7280;
-    transition: all 0.2s ease;
+    border-radius: var(--radius);
+    color: var(--text-tertiary);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--btn-height);
+    width: var(--btn-height);
 }
 
 .action-icon:hover {
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--hover-color);
+    color: var(--text-primary);
 }
 
 .delete-action:hover {
-    color: #dc3545;
+    color: var(--danger-color);
 }
 
 .report-action:hover {
-    color: #fd7e14;
+    color: var(--warning-color);
 }
 
 /* User area */
 .user-area {
     display: flex;
-    gap: 15px;
-    padding: 15px 20px;
+    gap: var(--space-lg);
+    padding: var(--space-lg);
+}
+
+.avatar-modern {
+    flex-shrink: 0;
 }
 
 .avatar-circle {
     border-radius: 50%;
     object-fit: cover;
+    border: 2px solid var(--primary-color);
+    background: var(--surface-light);
+}
+
+.user-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.username-row {
+    margin-bottom: var(--space-xs);
 }
 
 .username {
     font-weight: 600;
-    font-size: 1.125rem;
-    color: #1f2937;
+    font-size: var(--text-md);
+    color: var(--text-primary);
 }
 
-/* Role badges */
+/* Badge container */
+.badge-container {
+    margin-bottom: var(--space-sm);
+}
+
 .role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--pad-2) var(--pad-3);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
     font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 6px;
-    display: inline-block;
-    font-size: 12px;
 }
 
 .role-badge.admin {
-    background: #dc3545;
-    color: white;
+    background: rgba(220, 38, 38, 0.15);
+    color: var(--admin-color);
+    border: 1px solid rgba(220, 38, 38, 0.3);
 }
 
 .role-badge.member {
-    background: #6c757d;
-    color: white;
+    background: rgba(5, 150, 105, 0.15);
+    color: var(--member-color);
+    border: 1px solid rgba(5, 150, 105, 0.3);
 }
 
-/* User stats */
+.role-badge.moderator {
+    background: rgba(14, 165, 233, 0.15);
+    color: var(--accent-color);
+    border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.role-badge.developer {
+    background: rgba(5, 150, 105, 0.15);
+    color: var(--dev-color);
+    border: 1px solid rgba(5, 150, 105, 0.3);
+}
+
+/* User stats grid */
 .user-stats-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 8px;
+    gap: var(--space-md);
 }
 
 .stat-pill {
-    font-size: 12px;
-    color: #666;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--space-xs);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.stat-pill i {
+    color: var(--primary-color);
+    font-size: var(--text-xs);
 }
 
 /* Post body */
 .post-body {
-    padding: 0 20px 20px 20px;
+    padding: 0 var(--space-lg) var(--space-lg) var(--space-lg);
 }
 
 .post-text-content {
-    line-height: 1.6;
+    line-height: var(--phi);
+    color: var(--text-primary);
+    font-size: var(--text-base);
 }
 
+.post-text-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius);
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* Edit indicator */
 .edit-indicator {
-    margin-top: 12px;
-    font-size: 12px;
-    color: #999;
+    margin-top: var(--space-md);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
     font-style: italic;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
 }
 
+.edit-indicator i {
+    color: var(--primary-color);
+}
+
+/* Signature */
 .signature-modern {
-    margin-top: 15px;
-    padding-top: 12px;
-    border-top: 1px solid #e5e7eb;
-    font-size: 13px;
-    color: #666;
+    margin-top: var(--space-lg);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
 }
 
 /* Post footer */
@@ -189,49 +402,167 @@ body#forum .board,
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
-    background: #f9fafb;
-    border-top: 1px solid #e5e7eb;
+    padding: var(--space-md) var(--space-lg);
+    background: var(--bg-color);
+    border-top: 1px solid var(--border-color);
 }
 
+/* Reaction cluster */
 .reaction-cluster {
     display: flex;
-    gap: 8px;
+    gap: var(--space-sm);
 }
 
 .reaction-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    background: white;
-    border: 1px solid #e5e7eb;
-    padding: 5px 10px;
-    border-radius: 20px;
+    gap: var(--space-xs);
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    padding: var(--pad-2) var(--pad-3);
+    border-radius: var(--radius-full);
     cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s ease;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .reaction-btn:hover {
-    background: #f3f4f6;
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
     transform: scale(1.02);
 }
 
-.ip-info {
-    font-size: 11px;
-    color: #999;
-    font-family: monospace;
+.reaction-count {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-tertiary);
 }
 
-/* Loading state */
+.reaction-btn:hover .reaction-count {
+    color: var(--text-secondary);
+}
+
+/* IP info */
+.ip-info {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/*============================================
+ hide original posts
+============================================*/
+.post {
+    display: none !important;
+}
+
+/*============================================
+ modern wrapper container
+============================================*/
+#modern-forum-wrapper {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: var(--space-lg);
+}
+
+#modern-posts-container {
+    display: block;
+}
+
+/*============================================
+ loading shimmer
+============================================*/
 .modern-forum-wrapper:empty {
     min-height: 200px;
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background: linear-gradient(90deg, var(--surface-color) 25%, var(--surface-light) 50%, var(--surface-color) 75%);
     background-size: 200% 100%;
     animation: loading-shimmer 1.5s infinite;
+    border-radius: var(--radius);
 }
 
 @keyframes loading-shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
+}
+
+/*============================================
+ responsive styles
+============================================*/
+@media (max-width: 48em) {
+    .post-header-modern {
+        flex-direction: column;
+        gap: var(--space-sm);
+        align-items: stretch;
+    }
+    
+    .post-meta-left {
+        justify-content: space-between;
+    }
+    
+    .action-buttons-group {
+        justify-content: flex-end;
+    }
+    
+    .user-area {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .user-details {
+        text-align: center;
+    }
+    
+    .user-stats-grid {
+        justify-content: center;
+    }
+    
+    .post-footer-modern {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+    
+    .reaction-cluster {
+        justify-content: center;
+    }
+    
+    #modern-forum-wrapper {
+        padding: var(--space-md);
+    }
+}
+
+/*============================================
+ reduced motion preferences
+============================================*/
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .post-card:hover {
+        transform: none;
+    }
+}
+
+/*============================================
+ emoji styles
+============================================*/
+.twemoji {
+    height: 1.25em;
+    width: 1.25em;
+    vertical-align: -0.2em;
+    display: inline-block;
+}
+
+.reaction-emoji-img {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
 }
