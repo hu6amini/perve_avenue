@@ -349,6 +349,7 @@ img {
       border: 2px solid var(--primary-color);
       background: var(--surface-light);
       display: block;
+      cursor: pointer;
     }
 
 .post-user-info {
