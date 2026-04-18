@@ -159,6 +159,57 @@ body {
 }
 
 /*============================================
+ font face declarations - harmonized
+============================================*/
+@font-face {
+  font-family: 'Font Awesome 6 Pro';
+  src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760194773/forum/fonts/Font%20Awesome%206/fa-regular-400_lbdg1o.woff2) format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  size-adjust: 100%;
+  descent-override: 0%;
+  ascent-override: 100%;
+  line-gap-override: 0%;
+  unicode-range: u+f000-ffff;
+}
+@font-face {
+  font-family: 'Font Awesome 6 Pro';
+  src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760269930/forum/fonts/Font%20Awesome%206/fa-brands-400_zftgmi.woff2) format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  size-adjust: 100%;
+  descent-override: 0%;
+  ascent-override: 100%;
+  line-gap-override: 0%;
+  unicode-range: u+f000-ffff;
+}
+@font-face {
+  font-family: 'Font Awesome 6 Pro';
+  src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
+       url(https://res.cloudinary.com/dbdf6gwgo/raw/upload/v1760270628/forum/fonts/Font%20Awesome%206/fa-solid-900_ddwomm.woff2) format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  size-adjust: 100%;
+  descent-override: 0%;
+  ascent-override: 100%;
+  line-gap-override: 0%;
+  unicode-range: u+f000-ffff;
+}
+@font-face {
+  font-family: 'Bree Serif';
+  src: local('Bree Serif'), local('BreeSerif-Regular'),
+       url('https://fonts.gstatic.com/s/breeserif/v17/4UaHrEJCrhhnVA3DgluAx63j5pN1MwI.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*============================================
  base elements
 ============================================*/
 a {
