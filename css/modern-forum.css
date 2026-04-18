@@ -351,18 +351,11 @@ img {
       display: block;
     }
 
-.user-details {
+.post-user-info {
       flex: 1;
       display: flex;
       flex-direction: column;
       gap: 0.3rem;
-    }
-
-.username-row {
-      display: flex;
-      align-items: baseline;
-      flex-wrap: wrap;
-      gap: 0.5rem;
     }
 
 .username {
@@ -372,7 +365,7 @@ img {
     }
 
 /* Badge container */
-.badge-container {
+.user-group {
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
@@ -404,14 +397,14 @@ img {
     }
 
 /* User stats grid */
-.user-stats-grid {
+.user-stats {
       display: flex;
       flex-wrap: wrap;
       gap: 0.8rem;
       margin-top: 0.2rem;
     }
 
-.stat-pill {
+.user-stats div {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -420,7 +413,7 @@ img {
       padding: 0;
     }
 
-.stat-pill i {
+.user-stats div i {
       color: var(--primary-light);
       width: 14px;
       font-size: 0.7rem;
