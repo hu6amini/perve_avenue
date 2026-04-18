@@ -393,13 +393,15 @@ img {
 .role-badge.admin {
       background: linear-gradient(135deg, #DC2626, #B91C1C);
     }
-
-.role-badge.member {
+    .role-badge.moderator {
+      background: #8B5CF6;
+    }
+    .role-badge.developer {
       background: #0EA5E9;
     }
-
-.role-badge.moderator {
-      background: #8B5CF6;
+.role-badge.member  
+{
+      background: var(--primary-color)
     }
 
 /* User stats grid */
