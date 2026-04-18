@@ -261,7 +261,7 @@ img {
       flex-wrap: wrap;
     }
 
-.post-meta-left {
+.post-meta {
       display: flex;
       align-items: center;
       gap: var(--space-md);
@@ -279,7 +279,7 @@ img {
       gap: 6px;
     }
 
-.post-timestamp {
+.post-time {
       font-size: 0.75rem;
       color: var(--text-tertiary);
       display: flex;
@@ -288,7 +288,7 @@ img {
     }
 
 /* Action buttons */
-.action-buttons-group {
+.post-actions{
       display: flex;
       gap: var(--space-sm);
       align-items: center;
