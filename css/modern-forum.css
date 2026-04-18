@@ -413,10 +413,8 @@ img {
       padding: 0;
     }
 
-.user-stats div i {
+.user-title i, .user-posts i, .user-reputation i {
       color: var(--primary-light);
-      width: 14px;
-      font-size: 0.7rem;
     }
 
 /* Post body */
