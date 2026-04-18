@@ -124,29 +124,49 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var contentTable = $post.querySelector('.right.Item table.color');
         if (!contentTable) return '';
         var contentClone = contentTable.cloneNode(true);
+        
         // Remove signature and edit elements
         var signatures = contentClone.querySelectorAll('.signature, .edit');
         signatures.forEach(function(el) { if (el && el.remove) el.remove(); });
+        
         // Remove bottomborder
         var borders = contentClone.querySelectorAll('.bottomborder');
         borders.forEach(function(el) { if (el && el.remove) el.remove(); });
-        // Remove extra br tags around bottomborder
+        
+        // Remove extra br tags that are directly adjacent to bottomborder (cleanup)
         var breaks = contentClone.querySelectorAll('br');
         breaks.forEach(function(br) {
             if (!br) return;
             var prev = br.previousElementSibling;
             var next = br.nextElementSibling;
-            if ((prev && prev.tagName === 'BR') ||
-                (next && next.classList && next.classList.contains('bottomborder')) ||
+            // Only remove br tags that are adjacent to bottomborder elements
+            if ((next && next.classList && next.classList.contains('bottomborder')) ||
                 (prev && prev.classList && prev.classList.contains('bottomborder'))) {
                 if (br.remove) br.remove();
             }
         });
-        return contentClone.innerHTML || '';
+        
+        // Get the HTML content - preserve all formatting including line breaks
+        var html = contentClone.innerHTML || '';
+        
+        // Ensure paragraphs are properly formatted
+        // Replace multiple br tags with paragraph breaks
+        html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>');
+        html = html.replace(/<br\s*\/?>/gi, '<br>');
+        
+        // Wrap in paragraphs if not already wrapped
+        if (!html.trim().startsWith('<p')) {
+            html = '<p>' + html.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+        }
+        
+        return html;
     }
     function getSignatureHtml($post) {
         var signature = $post.querySelector('.signature');
-        return signature ? signature.innerHTML : '';
+        if (!signature) return '';
+        // Clone to avoid modifying original
+        var sigClone = signature.cloneNode(true);
+        return sigClone.innerHTML;
     }
     function getEditInfo($post) {
         var editSpan = $post.querySelector('.edit');
@@ -760,7 +780,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             // Check for reaction containers
                             var emojiContainers = node.querySelectorAll ? node.querySelectorAll('.st-emoji-container') : [];
-                            if (node.classList && node.classList.contains('.st-emoji-container')) {
+                            if (node.classList && node.classList.contains('st-emoji-container')) {
                                 emojiContainers = [node];
                             }
                             
