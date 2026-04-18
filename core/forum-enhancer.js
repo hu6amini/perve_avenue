@@ -145,6 +145,47 @@
         return true;
     }
     // ============================================================================
+    // WAIT FOR DEPENDENCIES
+    // ============================================================================
+    function waitForDependencies() {
+        return new Promise(function(resolve) {
+            var depsReady = {
+                ForumDOMUtils: false,
+                ForumEventBus: false
+            };
+            
+            function checkAllReady() {
+                if (depsReady.ForumDOMUtils && depsReady.ForumEventBus) {
+                    resolve();
+                }
+            }
+            
+            // Check if already loaded
+            if (typeof ForumDOMUtils !== 'undefined') {
+                depsReady.ForumDOMUtils = true;
+            } else {
+                window.addEventListener('dom-utils-ready', function() {
+                    depsReady.ForumDOMUtils = true;
+                    checkAllReady();
+                });
+            }
+            
+            if (typeof ForumEventBus !== 'undefined') {
+                depsReady.ForumEventBus = true;
+            } else {
+                window.addEventListener('event-bus-ready', function() {
+                    depsReady.ForumEventBus = true;
+                    checkAllReady();
+                });
+            }
+            
+            checkAllReady();
+            
+            // Timeout after 5 seconds
+            setTimeout(resolve, 5000);
+        });
+    }
+    // ============================================================================
     // WAIT FOR DOM READY
     // ============================================================================
     function domReady() {
@@ -205,6 +246,51 @@
         return wrapper;
     }
     function hideOriginalContent() {
+        // Add CSS to hide original content
+        var style = document.createElement('style');
+        style.textContent = `
+            /* Hide original forum content but keep it functional */
+            .topic .List, .topic .mainbg, .post:not(.modernized) {
+                display: none !important;
+            }
+            
+            /* Modern wrapper styles */
+            .modern-forum-wrapper {
+                display: block;
+                width: 100%;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            
+            .modern-posts-container {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            /* Post card styles */
+            .post-card {
+                background: #ffffff;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                overflow: hidden;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }
+            
+            .post-card:hover {
+                box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            }
+            
+            /* Dark mode support */
+            @media (prefers-color-scheme: dark) {
+                .post-card {
+                    background: #1a1a1a;
+                    color: #e0e0e0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
         document.body.classList.add('forum-modernized');
        
         var originalPostsContainer = document.querySelector('.topic .List, .topic .mainbg');
@@ -328,6 +414,9 @@
         log('========================================');
         log(ENHANCER_CONFIG.name + ' v' + ENHANCER_CONFIG.version);
         log('========================================');
+       
+        // Wait for core dependencies
+        await waitForDependencies();
        
         if (!checkDependenciesAvailable()) {
             log('Cannot start - missing dependencies', 'error');
