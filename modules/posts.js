@@ -21,16 +21,19 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // HELPER FUNCTIONS
     // ============================================================================
     function getPostsContainer() {
+        // First try to get the modern wrapper container
         var modernContainer = document.getElementById('modern-posts-container');
         if (modernContainer) {
             return modernContainer;
         }
        
+        // Fallback to original container
         var originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
         if (originalContainer) {
             return originalContainer;
         }
        
+        // Create container if neither exists
         var newContainer = document.createElement('div');
         newContainer.id = CONFIG.CONTAINER_ID;
         newContainer.className = 'modern-posts-container';
@@ -47,6 +50,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     function isValidPost(postEl) {
         if (!postEl) return false;
         var id = postEl.getAttribute('id');
+        // Must have an ID that starts with 'ee' and is not the body or other elements
         return id && id.startsWith(CONFIG.POST_ID_PREFIX) && postEl.tagName !== 'BODY';
     }
     function getPostId($post) {
@@ -129,27 +133,34 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var borders = contentClone.querySelectorAll('.bottomborder');
         borders.forEach(function(el) { if (el && el.remove) el.remove(); });
         
-        // Get the HTML content - preserve ALL formatting including <br> tags
+        // Remove extra br tags that are directly adjacent to bottomborder (cleanup)
+        var breaks = contentClone.querySelectorAll('br');
+        breaks.forEach(function(br) {
+            if (!br) return;
+            var prev = br.previousElementSibling;
+            var next = br.nextElementSibling;
+            // Only remove br tags that are adjacent to bottomborder elements
+            if ((next && next.classList && next.classList.contains('bottomborder')) ||
+                (prev && prev.classList && prev.classList.contains('bottomborder'))) {
+                if (br.remove) br.remove();
+            }
+        });
+        
+        // Get the HTML content as-is, preserving all formatting
         var html = contentClone.innerHTML || '';
         
-        // Clean up the HTML while preserving line breaks
-        // Remove excessive whitespace but keep <br> tags
-        html = html.replace(/&nbsp;/g, ' ');
-        html = html.replace(/\s+<br\s*\/?>/gi, '<br>');
-        html = html.replace(/<br\s*\/?>\s+/gi, '<br>');
+        // Clean up any empty paragraphs or extra whitespace
+        html = html.replace(/<p>\s*<\/p>/g, '');
+        html = html.trim();
         
-        // Ensure proper paragraph structure for better readability
-        // Convert consecutive <br> tags to paragraph breaks
-        html = html.replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>');
-        
-        // Wrap the entire content in a div with proper styling for line breaks
-        return '<div class="post-message-inner" style="white-space: pre-wrap; word-wrap: break-word;">' + html + '</div>';
+        return html;
     }
     function getSignatureHtml($post) {
         var signature = $post.querySelector('.signature');
         if (!signature) return '';
+        // Clone to avoid modifying original
         var sigClone = signature.cloneNode(true);
-        return '<div class="post-signature-inner">' + sigClone.innerHTML + '</div>';
+        return sigClone.innerHTML;
     }
     function getEditInfo($post) {
         var editSpan = $post.querySelector('.edit');
@@ -165,8 +176,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var reactionCount = 0;
         var reactions = [];
         
+        // Look for the st-emoji-container (the reaction plugin container)
         var emojiContainer = $post.querySelector('.st-emoji-container');
         if (emojiContainer) {
+            // Get counters
             var counters = emojiContainer.querySelectorAll('.st-emoji-counter');
             if (counters.length > 0) {
                 hasReactions = true;
@@ -175,6 +188,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     reactionCount += count;
                 });
                 
+                // Get reaction images from preview
                 var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
                 if (previewDiv) {
                     var images = previewDiv.querySelectorAll('img');
@@ -234,6 +248,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         if (!postId) return null;
         var reactionData = getReactionData($post);
         
+        // Store reaction data for later updates
         if (reactionData.hasReactions) {
             postReactions.set(postId, reactionData.reactions);
         }
@@ -265,14 +280,17 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // GENERATE REACTION BUTTONS HTML
     // ============================================================================
     function generateReactionButtons(data) {
+        // If no reactions have counters, just show the add reaction button (smiley face)
         if (!data.hasReactions || data.reactionCount === 0) {
             return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
                 '<i class="fa-regular fa-face-smile"></i>' +
                 '</button>';
         }
         
+        // Has reactions with counters - show only the reaction image buttons (no separate add button)
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
+        // Group reactions by image src to combine counts
         var reactionMap = new Map();
         
         for (var i = 0; i < data.reactions.length; i++) {
@@ -291,6 +309,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
         
+        // Create buttons for each unique reaction
         reactionMap.forEach(function(reaction) {
             reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
                 '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
@@ -309,6 +328,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var statusColor = data.isOnline ? '#10B981' : '#6B7280';
         var statusText = data.isOnline ? 'Online' : 'Offline';
         
+        // Like button HTML
         var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
             '<i class="fa-regular fa-thumbs-up"></i>';
         if (data.likes > 0) {
@@ -316,20 +336,24 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         likeButton += '</button>';
         
+        // Reactions HTML
         var reactionsHtml = generateReactionButtons(data);
         
+        // Edit indicator HTML
         var editHtml = '';
         if (data.editInfo) {
             editHtml = '<div class="post-edit-info">' +
-                '<small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
+                ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
                 '</div>';
         }
         
+        // Signature HTML
         var signatureHtml = '';
         if (data.signatureHtml) {
-            signatureHtml = data.signatureHtml;
+            signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
         }
         
+        // IP HTML
         var ipHtml = '';
         if (data.ipAddress) {
             ipHtml = '<div class="post-ip">' +
@@ -337,6 +361,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</div>';
         }
         
+        // Avatar URL
         var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
         
         return '<div class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
@@ -417,23 +442,31 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     function refreshReactionDisplay(postId) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-        if (!originalPost) return;
+        if (!originalPost) {
+            return;
+        }
         
+        // Get updated reaction data
         var reactionData = getReactionData(originalPost);
         
         var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
-        if (!modernCard) return;
+        if (!modernCard) {
+            return;
+        }
         
         var postReactionsDiv = modernCard.querySelector('.post-reactions');
         if (!postReactionsDiv) return;
         
+        // Store reactions for this post
         if (reactionData.reactions.length > 0) {
             postReactions.set(postId, reactionData.reactions);
         }
         
+        // Find the like button (keep it)
         var likeButton = postReactionsDiv.querySelector('.like-btn');
         var likeButtonHtml = likeButton ? likeButton.outerHTML : '';
         
+        // Generate new reactions HTML
         var newReactionsHtml = generateReactionButtons({
             postId: postId,
             hasReactions: reactionData.hasReactions,
@@ -441,6 +474,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reactions: reactionData.reactions
         });
         
+        // Update the reactions container
         if (likeButtonHtml) {
             postReactionsDiv.innerHTML = likeButtonHtml + newReactionsHtml;
         } else {
@@ -514,11 +548,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
+        // Find the emoji container
         var emojiContainer = originalPost.querySelector('.st-emoji-container');
         if (emojiContainer) {
             var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
             trigger.click();
         } else {
+            // Fallback to like
             handleLike(pid);
         }
         
@@ -530,6 +566,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ATTACH EVENT LISTENERS
     // ============================================================================
     function attachEventHandlers() {
+        // Quote buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="quote"], .action-icon[title="Quote"]');
             if (btn) {
@@ -538,7 +575,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleQuote(pid);
             }
         });
-        
+        // Edit buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="edit"], .action-icon[title="Edit"]');
             if (btn) {
@@ -547,7 +584,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleEdit(pid);
             }
         });
-        
+        // Delete buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="delete"], .action-icon[title="Delete"]');
             if (btn) {
@@ -556,7 +593,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleDelete(pid);
             }
         });
-        
+        // Share buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="share"], .action-icon[title="Share"]');
             if (btn) {
@@ -565,7 +602,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleShare(pid, btn);
             }
         });
-        
+        // Report buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="report"], .action-icon[title="Report"]');
             if (btn) {
@@ -574,7 +611,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleReport(pid);
             }
         });
-        
+        // Like buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.like-btn');
             if (btn) {
@@ -583,7 +620,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (pid) handleLike(pid);
             }
         });
-        
+        // React buttons (any reaction button that's not a like button)
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn) {
@@ -594,7 +631,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         });
     }
     // ============================================================================
-    // CONVERT TO MODERN CARD
+    // CONVERT TO MODERN CARD (returns card element)
     // ============================================================================
     function convertToModernCard(postEl, index) {
         if (!isValidPost(postEl)) return null;
@@ -602,6 +639,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var postId = getPostId(postEl);
         if (!postId) return null;
        
+        // Check if already converted
         if (convertedPostIds.has(postId)) {
             return null;
         }
@@ -614,7 +652,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
         tempDiv.innerHTML = modernHTML;
         var newCard = tempDiv.firstElementChild;
        
+        // Store reference to original post
         newCard.setAttribute('data-original-id', postEl.id);
+       
+        // Mark as converted
         convertedPostIds.add(postId);
        
         if (EventBus) {
@@ -627,24 +668,30 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // INITIALIZE
     // ============================================================================
     function initialize() {
+        // Prevent double initialization
         if (isInitialized) {
             console.log('[PostsModule] Already initialized, skipping');
             return;
         }
        
         console.log('[PostsModule] Initializing...');
+        // Get or create the posts container
         var container = getPostsContainer();
        
+        // Clear container if needed (to avoid duplicates)
         if (container) {
             container.innerHTML = '';
         }
        
+        // Reset converted posts tracking
         convertedPostIds.clear();
         postReactions.clear();
        
+        // Get all original posts
         var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
         var validPosts = 0;
        
+        // Convert each post and append to container
         for (var i = 0; i < posts.length; i++) {
             if (isValidPost(posts[i])) {
                 var modernCard = convertToModernCard(posts[i], validPosts);
@@ -655,9 +702,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
        
+        // Attach event handlers
         attachEventHandlers();
        
+        // Register with ForumCoreObserver for new posts AND reaction containers
         if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
+            // Register for new posts
             globalThis.forumObserver.register({
                 id: 'posts-module',
                 selector: CONFIG.POST_SELECTOR,
@@ -667,10 +717,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
                    
                     var postId = getPostId(node);
                    
+                    // Skip if already converted
                     if (convertedPostIds.has(postId)) {
                         return;
                     }
                    
+                    // Find the index for this post
                     var allPosts = Utils.getAllElements(CONFIG.POST_SELECTOR);
                     var validIndex = 0;
                     for (var i = 0; i < allPosts.length; i++) {
@@ -691,15 +743,18 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 }
             });
             
+            // Register for reaction containers (st-emoji-container)
             globalThis.forumObserver.register({
                 id: 'posts-module-reactions',
                 selector: '.st-emoji-container',
                 priority: 'medium',
                 callback: function(node) {
+                    // Find the parent post
                     var postEl = node.closest('.post');
                     if (postEl && isValidPost(postEl)) {
                         var postId = getPostId(postEl);
                         if (postId) {
+                            // Small delay to ensure the reaction plugin has fully loaded
                             setTimeout(function() {
                                 refreshReactionDisplay(postId);
                             }, 100);
@@ -711,11 +766,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
             console.log('[PostsModule] Registered with ForumCoreObserver');
         }
         
+        // Also set up a MutationObserver as fallback specifically for reactions
         var reactionFallbackObserver = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'childList' && mutation.addedNodes.length) {
                     mutation.addedNodes.forEach(function(node) {
                         if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Check for reaction containers
                             var emojiContainers = node.querySelectorAll ? node.querySelectorAll('.st-emoji-container') : [];
                             if (node.classList && node.classList.contains('st-emoji-container')) {
                                 emojiContainers = [node];
@@ -743,8 +800,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
             subtree: true
         });
        
+        // Mark as initialized
         isInitialized = true;
        
+        // Trigger ready event
         if (EventBus) {
             EventBus.trigger('posts:ready', { count: validPosts });
         }
@@ -770,6 +829,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
 })(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
    typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus);
 
+// Signal that posts module is ready
 if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('posts-module-ready'));
 }
