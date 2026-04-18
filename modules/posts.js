@@ -235,9 +235,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var repSign = data.reputation > 0 ? '+' : '';
         // Like button HTML
         var likeButton = '<button class="reaction-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-thumbs-up"></i>';
+            '';
         if (data.likes > 0) {
-            likeButton += '<span class="reaction-count">' + data.likes + '</span>';
+            likeButton += '' + data.likes + '';
         }
         likeButton += '</button>';
         // React button HTML
@@ -246,106 +246,107 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reactButton = '<button class="reaction-btn reaction-placeholder" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
                 '<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji">';
             if (data.reactionCount > 0) {
-                reactButton += '<span class="reaction-count">' + data.reactionCount + '</span>';
+                reactButton += '' + data.reactionCount + '';
             }
             reactButton += '</button>';
         } else {
             reactButton = '<button class="reaction-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-                '<i class="fa-regular fa-face-smile"></i>' +
+                '' +
                 '</button>';
         }
         // Edit indicator HTML
         var editHtml = '';
         if (data.editInfo) {
-            editHtml = '<div class="post-edit-info">' +
-                ' <i class="fa-regular fa-pen-to-square"></i> ' + Utils.escapeHtml(data.editInfo) +
-                '</div>';
+            editHtml = '' +
+                ' ' + Utils.escapeHtml(data.editInfo) +
+                '';
         }
         // Signature HTML
         var signatureHtml = '';
         if (data.signatureHtml) {
-            signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
+            signatureHtml = '' + data.signatureHtml + '';
         }
         // IP HTML
         var ipHtml = '';
         if (data.ipAddress) {
-            ipHtml = '<div class="post-ip">' +
-                ' <i class="fa-regular fa-laptop"></i> IP: ' + data.ipAddress +
-                '</div>';
+            ipHtml = '' +
+                ' IP: ' + data.ipAddress +
+                '';
         }
         // Avatar URL
         var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
-        return '<div class="post-card" data-post-id="' + data.postId + '">' +
-            '<div class="post-card-header">' +
-                '<div class="post-number">' +
-                    '<i class="fa-regular fa-hashtag"></i> ' + data.postNumber +
-                '</div>' +
-                '<div class="post-date">' +
-                    '<i class="fa-regular fa-calendar"></i> ' + data.timeAgo +
-                '</div>' +
-            '</div>' +
-            '<div class="post-card-actions">' +
-                '<button class="action-icon" title="Quote" aria-label="Quote this post" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-reply"></i>' +
-                '</button>' +
-                '<button class="action-icon" title="Edit" aria-label="Edit this post" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-pen-to-square"></i>' +
-                '</button>' +
-                '<button class="action-icon" title="Share" aria-label="Share this post" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-share-from-square"></i>' +
-                '</button>' +
-                '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-flag"></i>' +
-                '</button>' +
-                '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-pid="' + data.postId + '">' +
-                    '<i class="fa-regular fa-trash-can"></i>' +
-                '</button>' +
-            '</div>' +
-        '</div>' +
-        '<div class="post-card-main">' +
-            '<div class="post-card-avatar">' +
-                '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
-            '</div>' +
-            '<div class="post-card-info">' +
-                '<div class="post-username">' +
-                    '<a href="/user/' + encodeURIComponent(data.username) + '">' + Utils.escapeHtml(data.username) + '</a>' +
-                '</div>' +
-                '<div class="post-group">' +
-                    '<span class="role-badge ' + data.roleBadgeClass + '">' +
-                        Utils.escapeHtml(data.groupText || 'Member') +
-                    '</span>' +
-                '</div>' +
-                '<div class="post-stats">' +
-                    '<div class="stat-item">' +
-                        '<i class="' + data.rankIconClass + '"></i> ' + data.userTitle +
-                    '</div>' +
-                    '<div class="stat-item">' +
-                        '<i class="fa-regular fa-message"></i> ' + data.postCount + ' posts' +
-                    '</div>' +
-                    '<div class="stat-item">' +
-                        '<i class="fa-regular fa-star"></i> ' + repSign + data.reputation + ' rep' +
-                    '</div>' +
-                    '<div class="stat-item">' +
-                        '<i class="fa-regular fa-circle" style="color: ' + statusColor + '"></i> ' + statusText +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-        '</div>' +
-        '<div class="post-card-content">' +
-            '<div class="post-message">' +
-                data.contentHtml +
-                editHtml +
-            '</div>' +
-            signatureHtml +
-        '</div>' +
-        '<div class="post-card-footer">' +
-            '<div class="post-reactions">' +
-                likeButton +
-                reactButton +
-            '</div>' +
-            ipHtml +
-        '</div>' +
-        '</div>';
+        return '' +
+            '' +
+                '' +
+                    '' +
+                        ' ' + data.postNumber +
+                    '' +
+                    '' +
+                        '' + data.timeAgo + '' +
+                    '' +
+                '' +
+                '' +
+                    '<button class="action-icon" title="Quote" aria-label="Quote this post" data-pid="' + data.postId + '">' +
+                        '' +
+                    '</button>' +
+                    '<button class="action-icon" title="Edit" aria-label="Edit this post" data-pid="' + data.postId + '">' +
+                        '' +
+                    '</button>' +
+                    '<button class="action-icon" title="Share" aria-label="Share this post" data-pid="' + data.postId + '">' +
+                        '' +
+                    '</button>' +
+                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-pid="' + data.postId + '">' +
+                        '' +
+                    '</button>' +
+                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-pid="' + data.postId + '">' +
+                        '' +
+                    '</button>' +
+                '' +
+            '' +
+            '' +
+                '' +
+                    '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
+                '' +
+                '' +
+                    '' +
+                        '' + Utils.escapeHtml(data.username) + '' +
+                    '' +
+                    '' +
+                        '' +
+                            Utils.escapeHtml(data.groupText || 'Member') +
+                        '' +
+                    '' +
+                    '' +
+                        '' +
+                            ' ' + data.userTitle +
+                        '' +
+                        '' +
+                            ' ' + data.postCount + ' posts' +
+                        '' +
+                        '' +
+                            ' ' + repSign + data.reputation + ' rep' +
+                        '' +
+                        '' +
+                            ' ' + statusText +
+                        '' +
+                    '' +
+                '' +
+            '' +
+            '' +
+                '' +
+                    data.contentHtml +
+                    editHtml +
+                '' +
+                signatureHtml +
+            '' +
+            '' +
+                '' +
+                    likeButton +
+                    reactButton +
+                '' +
+                ipHtml +
+            '' +
+        '';
     }
     // ============================================================================
     // REACTION DISPLAY REFRESH
@@ -398,7 +399,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(function() {
             var originalHtml = buttonElement.innerHTML;
-            buttonElement.innerHTML = '<i class="fa-regular fa-check"></i>';
+            buttonElement.innerHTML = '';
             setTimeout(function() {
                 buttonElement.innerHTML = originalHtml;
             }, 1500);
