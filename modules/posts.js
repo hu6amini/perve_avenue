@@ -62,7 +62,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
     
     function isValidPost(postEl) {
-        if (!postEl || !postEl.nodeType === Node.ELEMENT_NODE) return false;
+        if (!postEl || postEl.nodeType !== Node.ELEMENT_NODE) return false;
         var id = postEl.getAttribute('id');
         // Must have an ID that starts with 'ee' and is not the body or other elements
         return id && id.startsWith(CONFIG.POST_ID_PREFIX) && postEl.tagName !== 'BODY';
@@ -140,14 +140,16 @@ var ForumPostsModule = (function(Utils, EventBus) {
     
     function getRankIconClass($post) {
         var uRank = $post.querySelector('.u_rank');
-        if (!uRank) return 'fas fa-medal';
+        if (!uRank) return 'fa-medal fa-regular';
         var icon = uRank.querySelector('i:last-child');
-        if (!icon) return 'fas fa-medal';
+        if (!icon) return 'fa-medal fa-regular';
         var classAttr = icon.getAttribute('class') || '';
-        if (classAttr.includes('fa-')) {
-            return classAttr;
+        var match = classAttr.match(/fa-(regular|solid|light|brands)?\s*fa-([a-z0-9-]+)/i);
+        if (match) {
+            var style = match[1] ? 'fa-' + match[1] : 'fa-regular';
+            return style + ' fa-' + match[2];
         }
-        return 'fas fa-medal';
+        return 'fa-medal fa-regular';
     }
     
     function getCleanContent($post) {
@@ -162,6 +164,18 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Remove bottomborder
         var borders = contentClone.querySelectorAll('.bottomborder, .post-footer');
         borders.forEach(function(el) { if(el) el.remove(); });
+        
+        // Remove extra br tags around bottomborder
+        var breaks = contentClone.querySelectorAll('br');
+        breaks.forEach(function(br) {
+            var prev = br.previousElementSibling;
+            var next = br.nextElementSibling;
+            if ((prev && prev.tagName === 'BR') ||
+                (next && next.classList && next.classList.contains('bottomborder')) ||
+                (prev && prev.classList && prev.classList.contains('bottomborder'))) {
+                br.remove();
+            }
+        });
         
         return contentClone.innerHTML || '';
     }
@@ -282,7 +296,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
     
     // ============================================================================
-    // GENERATE MODERN CARD
+    // GENERATE MODERN CARD (WITH ORIGINAL ICONS AND ATTRIBUTES)
     // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
@@ -291,7 +305,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var statusText = data.isOnline ? 'Online' : 'Offline';
         var repValue = parseInt(data.reputation) || 0;
         var repSign = repValue > 0 ? '+' : '';
-        var repClass = repValue > 0 ? 'positive' : (repValue < 0 ? 'negative' : '');
         
         // Avatar URL with fallback
         var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
@@ -301,81 +314,122 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var escapedGroupText = Utils.escapeHtml(data.groupText);
         var escapedUserTitle = Utils.escapeHtml(data.userTitle);
         
-        // Build the modern post HTML
+        // Like button HTML with original structure
+        var likeButton = '<button class="reaction-btn like-action" aria-label="Like this post" data-pid="' + data.postId + '" data-action="like">' +
+            '<i class="far fa-thumbs-up" aria-hidden="true"></i>';
+        if (data.likes > 0) {
+            likeButton += '<span class="reaction-count" aria-hidden="true">' + data.likes + '</span>';
+        }
+        likeButton += '</button>';
+        
+        // React button HTML with original structure
+        var reactButton = '';
+        if (data.hasReactions) {
+            reactButton = '<button class="reaction-btn react-action" aria-label="Add a reaction" data-pid="' + data.postId + '" data-action="react">' +
+                '<img src="https://twemoji.maxcdn.com/v/latest/svg/1f606.svg" width="16" height="16" alt="Laughing face emoji" aria-hidden="true">';
+            if (data.reactionCount > 0) {
+                reactButton += '<span class="reaction-count" aria-hidden="true">' + data.reactionCount + '</span>';
+            }
+            reactButton += '</button>';
+        } else {
+            reactButton = '<button class="reaction-btn react-action" aria-label="Add a reaction" data-pid="' + data.postId + '" data-action="react">' +
+                '<i class="far fa-face-smile" aria-hidden="true"></i>' +
+                '</button>';
+        }
+        
+        // Edit indicator HTML
+        var editHtml = '';
+        if (data.editInfo) {
+            editHtml = '<div class="edit-indicator" aria-label="Edit information">' +
+                '<i class="fas fa-edit" aria-hidden="true"></i> ' + Utils.escapeHtml(data.editInfo) +
+                '</div>';
+        }
+        
+        // Signature HTML
+        var signatureHtml = '';
+        if (data.signatureHtml) {
+            signatureHtml = '<div class="signature-modern" aria-label="Signature">' +
+                '<i class="fas fa-signature" aria-hidden="true"></i> ' + data.signatureHtml +
+                '</div>';
+        }
+        
+        // IP HTML
+        var ipHtml = '';
+        if (data.ipAddress) {
+            ipHtml = '<div class="ip-info" aria-label="IP Address">' +
+                '<i class="fas fa-shield-alt" aria-hidden="true"></i> IP: ' + Utils.escapeHtml(data.ipAddress) +
+                '</div>';
+        }
+        
+        // Build the modern post HTML with all original button attributes
         return '<div class="post-card" data-original-id="ee' + data.postId + '" data-post-id="' + data.postId + '">' +
             '<div class="post-header-modern">' +
                 '<div class="post-meta-left">' +
-                    '<div class="post-number-badge">' +
-                        '<i class="fas fa-hashtag"></i> #' + data.postNumber +
+                    '<div class="post-number-badge" aria-label="Post number">' +
+                        '<i class="fas fa-hashtag" aria-hidden="true"></i> #' + data.postNumber +
                     '</div>' +
-                    '<div class="post-timestamp">' +
-                        '<i class="far fa-clock"></i> ' + data.timeAgo +
+                    '<div class="post-timestamp" aria-label="Post time">' +
+                        '<i class="far fa-clock" aria-hidden="true"></i> ' + data.timeAgo +
                     '</div>' +
                 '</div>' +
-                '<div class="action-buttons-group">' +
-                    '<button class="action-icon quote-action" title="Quote" data-action="quote" data-pid="' + data.postId + '">' +
-                        '<i class="fas fa-quote-right"></i>' +
+                '<div class="action-buttons-group" role="group" aria-label="Post actions">' +
+                    '<button class="action-icon quote-action" title="Quote" aria-label="Quote this post" data-pid="' + data.postId + '" data-action="quote">' +
+                        '<i class="fas fa-quote-right" aria-hidden="true"></i>' +
                     '</button>' +
-                    '<button class="action-icon edit-action" title="Edit" data-action="edit" data-pid="' + data.postId + '">' +
-                        '<i class="fas fa-pencil-alt"></i>' +
+                    '<button class="action-icon edit-action" title="Edit" aria-label="Edit this post" data-pid="' + data.postId + '" data-action="edit">' +
+                        '<i class="fas fa-pencil-alt" aria-hidden="true"></i>' +
                     '</button>' +
-                    '<button class="action-icon share-action" title="Share" data-action="share" data-pid="' + data.postId + '">' +
-                        '<i class="fas fa-share-alt"></i>' +
+                    '<button class="action-icon share-action" title="Share" aria-label="Share this post" data-pid="' + data.postId + '" data-action="share">' +
+                        '<i class="fas fa-share-alt" aria-hidden="true"></i>' +
                     '</button>' +
-                    '<button class="action-icon report-action" title="Report" data-action="report" data-pid="' + data.postId + '">' +
-                        '<i class="fas fa-flag"></i>' +
+                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-pid="' + data.postId + '" data-action="report">' +
+                        '<i class="fas fa-flag" aria-hidden="true"></i>' +
                     '</button>' +
-                    '<button class="action-icon delete-action" title="Delete" data-action="delete" data-pid="' + data.postId + '">' +
-                        '<i class="fas fa-trash-alt"></i>' +
+                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-pid="' + data.postId + '" data-action="delete">' +
+                        '<i class="fas fa-trash-alt" aria-hidden="true"></i>' +
                     '</button>' +
                 '</div>' +
             '</div>' +
             '<div class="user-area">' +
-                '<div class="avatar-modern">' +
-                    '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + escapedUsername + '" width="60" height="60" loading="lazy" onerror="this.src=\'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username) + '\'">' +
+                '<div class="avatar-modern" aria-label="User avatar">' +
+                    '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + escapedUsername + '" width="60" height="60" loading="lazy" aria-hidden="true" onerror="this.src=\'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username) + '\'">' +
                 '</div>' +
                 '<div class="user-details">' +
                     '<div class="username-row">' +
-                        '<span class="username">' + escapedUsername + '</span>' +
+                        '<span class="username" aria-label="Username">' + escapedUsername + '</span>' +
                     '</div>' +
                     '<div class="badge-container">' +
-                        '<span class="role-badge ' + data.roleBadgeClass + '">' + escapedGroupText + '</span>' +
+                        '<span class="role-badge ' + data.roleBadgeClass + '" aria-label="User role">' + escapedGroupText + '</span>' +
                     '</div>' +
-                    '<div class="user-stats-grid">' +
-                        '<div class="stat-pill" title="User title">' +
-                            '<i class="' + data.rankIconClass + '"></i> ' + escapedUserTitle +
+                    '<div class="user-stats-grid" aria-label="User statistics">' +
+                        '<div class="stat-pill" title="User title" aria-label="User title">' +
+                            '<i class="' + data.rankIconClass + '" aria-hidden="true"></i> ' + escapedUserTitle +
                         '</div>' +
-                        '<div class="stat-pill" title="Posts">' +
-                            '<i class="fas fa-comments"></i> ' + data.postCount + ' posts' +
+                        '<div class="stat-pill" title="Posts" aria-label="Post count">' +
+                            '<i class="fas fa-comments" aria-hidden="true"></i> ' + data.postCount + ' posts' +
                         '</div>' +
-                        '<div class="stat-pill ' + repClass + '" title="Reputation">' +
-                            '<i class="fas fa-star"></i> ' + repSign + data.reputation + ' rep' +
+                        '<div class="stat-pill" title="Reputation" aria-label="Reputation points">' +
+                            '<i class="fas fa-star" aria-hidden="true"></i> ' + repSign + data.reputation + ' rep' +
                         '</div>' +
-                        '<div class="stat-pill" title="Status">' +
-                            '<i class="fas fa-circle" style="color: ' + statusColor + '; font-size: 0.6rem;"></i> ' + statusText +
+                        '<div class="stat-pill" title="Status" aria-label="Online status">' +
+                            '<i class="fas fa-circle" style="color: ' + statusColor + '; font-size: 0.6rem;" aria-hidden="true"></i> ' + statusText +
                         '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
             '<div class="post-body">' +
-                '<div class="post-text-content">' +
+                '<div class="post-text-content" aria-label="Post content">' +
                     data.contentHtml +
                 '</div>' +
-                (data.editInfo ? '<div class="edit-indicator"><i class="fas fa-edit"></i> ' + Utils.escapeHtml(data.editInfo) + '</div>' : '') +
-                (data.signatureHtml ? '<div class="signature-modern"><i class="fas fa-signature"></i> ' + data.signatureHtml + '</div>' : '') +
+                editHtml +
+                signatureHtml +
             '</div>' +
             '<div class="post-footer-modern">' +
-                '<div class="reaction-cluster">' +
-                    '<button class="reaction-btn like-action" data-action="like" data-pid="' + data.postId + '">' +
-                        '<i class="far fa-thumbs-up"></i>' +
-                        (data.likes > 0 ? '<span class="reaction-count">' + data.likes + '</span>' : '') +
-                    '</button>' +
-                    '<button class="reaction-btn react-action" data-action="react" data-pid="' + data.postId + '">' +
-                        '<i class="far fa-face-smile"></i>' +
-                        (data.reactionCount > 0 ? '<span class="reaction-count">' + data.reactionCount + '</span>' : '') +
-                    '</button>' +
+                '<div class="reaction-cluster" role="group" aria-label="Post reactions">' +
+                    likeButton +
+                    reactButton +
                 '</div>' +
-                (data.ipAddress ? '<div class="ip-info"><i class="fas fa-shield-alt"></i> IP: ' + Utils.escapeHtml(data.ipAddress) + '</div>' : '') +
+                ipHtml +
             '</div>' +
         '</div>';
     }
@@ -401,6 +455,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         if (!span && parseInt(count) > 0) {
             span = document.createElement('span');
             span.className = 'reaction-count';
+            span.setAttribute('aria-hidden', 'true');
             modernReactBtn.appendChild(span);
         }
         if (span && count) span.textContent = count;
@@ -415,6 +470,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 if (!likeSpan && parseInt(likeCount) > 0) {
                     likeSpan = document.createElement('span');
                     likeSpan.className = 'reaction-count';
+                    likeSpan.setAttribute('aria-hidden', 'true');
                     modernLikeBtn.appendChild(likeSpan);
                 }
                 if (likeSpan && likeCount) likeSpan.textContent = likeCount;
@@ -460,7 +516,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(function() {
             var originalHtml = buttonElement.innerHTML;
-            buttonElement.innerHTML = '<i class="fas fa-check"></i>';
+            buttonElement.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i>';
             setTimeout(function() {
                 buttonElement.innerHTML = originalHtml;
             }, 1500);
