@@ -139,50 +139,90 @@ var ForumPostsModule = (function(Utils, EventBus) {
     
 function convertToModernEmbed(originalContainer) {
     try {
-        // Extract the main link (the article URL) - look for any anchor with href that's not hidden
-        var mainLink = originalContainer.querySelector('a[href]:not(.ffb_embedlink_preview)');
-        if (!mainLink) return null;
-        
-        var url = mainLink.getAttribute('href');
-        var domain = extractDomain(url);
-        
-        // Extract title - find the anchor that contains the actual article title
-        // The title is in the second div, inside an anchor tag that's NOT the preview link
-        var allLinks = originalContainer.querySelectorAll('a:not(.ffb_embedlink_preview)');
+        // Extract the main link (the article URL)
+        // Look for any anchor with href that's not the preview link
+        var allLinks = originalContainer.querySelectorAll('a');
+        var mainLink = null;
         var titleLink = null;
-        var title = domain;
+        var description = '';
+        var imageUrl = null;
+        var faviconUrl = null;
         
-        // Find the link that contains substantial text (not just the domain)
+        // Find the main link (the one in the last div that's not "Leggi altro")
         for (var i = 0; i < allLinks.length; i++) {
             var link = allLinks[i];
             var text = link.textContent.trim();
-            // Skip if it's just a domain or very short
-            if (text && text !== domain && text.length > 5 && !text.includes('Leggi altro') && !text.includes('Read more')) {
+            var href = link.getAttribute('href');
+            
+            // Skip empty links
+            if (!href) continue;
+            
+            // This is the main URL for the article
+            if (!mainLink) {
+                mainLink = href;
+            }
+            
+            // Look for the title link - long text, not containing "Leggi altro" or "Read more"
+            if (text && text.length > 10 && 
+                !text.includes('Leggi altro') && 
+                !text.includes('Read more') &&
+                !text.includes('F24.MY') &&
+                text !== extractDomain(href)) {
                 titleLink = link;
-                title = text;
                 break;
             }
         }
         
-        // Extract description - look for the paragraph
-        var descElement = originalContainer.querySelector('div:not([style]) p');
-        var description = descElement ? descElement.textContent.trim() : '';
+        // If we didn't find a title link, try the last non-preview link
+        if (!titleLink) {
+            for (var i = allLinks.length - 1; i >= 0; i--) {
+                var link = allLinks[i];
+                var text = link.textContent.trim();
+                var href = link.getAttribute('href');
+                if (href && text && !text.includes('Leggi altro') && !text.includes('Read more')) {
+                    titleLink = link;
+                    break;
+                }
+            }
+        }
+        
+        var url = mainLink || (titleLink ? titleLink.getAttribute('href') : null);
+        if (!url) return null;
+        
+        var domain = extractDomain(url);
+        var title = titleLink ? titleLink.textContent.trim() : domain;
+        
+        // Extract description - look for the paragraph in the last div
+        var paragraphs = originalContainer.querySelectorAll('div:not([style]) p');
+        if (paragraphs.length > 0) {
+            description = paragraphs[0].textContent.trim();
+        }
         
         // Extract image - look for the preview image
         var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
-        var imageUrl = imgElement ? imgElement.getAttribute('src') : null;
+        if (imgElement && imgElement.getAttribute('src')) {
+            imageUrl = imgElement.getAttribute('src');
+        }
         
-        // Extract favicon - look for the hidden image
-        var faviconElement = originalContainer.querySelector('div[style="display:none"] img');
-        var faviconUrl = faviconElement ? faviconElement.getAttribute('src') : null;
+        // Extract favicon - look for the hidden image in the first div
+        var hiddenDiv = originalContainer.querySelector('div[style="display:none"]');
+        if (hiddenDiv) {
+            var faviconImg = hiddenDiv.querySelector('img');
+            if (faviconImg && faviconImg.getAttribute('src')) {
+                faviconUrl = faviconImg.getAttribute('src');
+            }
+        }
         
         // Build modern embedded link HTML
         var modernHtml = '<div class="modern-embedded-link">' +
             '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
         
         if (imageUrl) {
+            // Get dimensions from the image if available
+            var width = imgElement ? (imgElement.getAttribute('width') || '600') : '600';
+            var height = imgElement ? (imgElement.getAttribute('height') || '400') : '400';
             modernHtml += '<div class="embedded-link-image">' +
-                '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: 600 / 400;" width="600" height="400">' +
+                '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: ' + width + ' / ' + height + ';" width="600" height="400">' +
                 '</div>';
         }
         
