@@ -298,7 +298,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     function generateReactionButtons(data) {
         // If no reactions have counters, just show the add reaction button (smiley face)
         if (!data.hasReactions || data.reactionCount === 0) {
-            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '" data-reaction-action="add">' +
                 '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' +
                 '</button>';
         }
@@ -327,15 +327,15 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         // Create buttons for each unique reaction
         reactionMap.forEach(function(reaction) {
-            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
+            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '" data-reaction-action="image" data-reaction-src="' + Utils.escapeHtml(reaction.src) + '">' +
                 '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
                 '<span class="reaction-count">' + reaction.count + '</span>' +
                 '</button>';
         });
         
-        // Add the add reaction button (smiley face) - always show it
-        reactionHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' +
+        // Add the count button to show total reactions
+        reactionHtml += '<button class="reaction-btn reaction-count-btn" title="View all reactions" data-pid="' + data.postId + '" data-reaction-action="count">' +
+            '<span class="reaction-count">' + data.reactionCount + '</span>' +
             '</button>';
         
         reactionHtml += '</div>';
@@ -543,6 +543,93 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
     }
     // ============================================================================
+    // REACTION HANDLERS
+    // ============================================================================
+    function getReactionContainer(originalPost) {
+        return originalPost.querySelector('.st-emoji-container');
+    }
+    function getReactionCounter(originalPost) {
+        var container = getReactionContainer(originalPost);
+        if (!container) return null;
+        return container.querySelector('.st-emoji-counter');
+    }
+    function getReactionPreview(originalPost) {
+        var container = getReactionContainer(originalPost);
+        if (!container) return null;
+        return container.querySelector('.st-emoji-preview');
+    }
+    function handleReactionCountClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        var counter = getReactionCounter(originalPost);
+        if (counter) {
+            // Click the counter to show who reacted
+            counter.click();
+        }
+    }
+    function handleReactionImageClick(pid, reactionImgSrc) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        var preview = getReactionPreview(originalPost);
+        if (!preview) return;
+        
+        // Find the corresponding reaction image in the preview
+        var matchingImg = preview.querySelector('img[src="' + reactionImgSrc + '"]');
+        if (matchingImg) {
+            // Click on the matching emoji in the original post
+            matchingImg.click();
+        } else {
+            // If not found, try to find by alt text
+            var altText = reactionImgSrc.split('/').pop().split('.')[0];
+            matchingImg = preview.querySelector('img[alt*="' + altText + '"]');
+            if (matchingImg) {
+                matchingImg.click();
+            } else {
+                // Fallback: click the preview container
+                preview.click();
+            }
+        }
+    }
+    function handleAddReactionClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        var preview = getReactionPreview(originalPost);
+        if (preview) {
+            // Click the preview to open the emoji picker
+            preview.click();
+        } else {
+            // Fallback: try to click the container
+            var container = getReactionContainer(originalPost);
+            if (container) {
+                container.click();
+            }
+        }
+    }
+    function handleReact(pid, buttonElement, isCountClick, reactionSrc) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        // Determine what type of reaction button was clicked
+        if (isCountClick) {
+            // Clicked on the reaction count
+            handleReactionCountClick(pid);
+        } else if (reactionSrc) {
+            // Clicked on a reaction image
+            handleReactionImageClick(pid, reactionSrc);
+        } else {
+            // Clicked on the add reaction button (smiley face)
+            handleAddReactionClick(pid);
+        }
+        
+        // Refresh display after a short delay
+        setTimeout(function() {
+            refreshReactionDisplay(pid);
+        }, CONFIG.REACTION_DELAY);
+    }
+    // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
     function handleAvatarClick(pid) {
@@ -646,7 +733,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         $(overlayLink).trigger('click');
                         return;
                     } else {
-                        // Fallback: click the em element instead of the a
+                        // Fallback: click the points_pos element
                         pointsPos.click();
                         return;
                     }
@@ -719,75 +806,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             refreshLikeDisplay(pid);
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
-    }
-    function handleReact(pid, buttonElement, isImageClick, isCountClick) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        // Find the emoji container
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (!emojiContainer) {
-            // If no emoji container, fallback to like
-            handleLike(pid, false);
-            return;
-        }
-        
-        // Case 1: Clicking on the reaction count number (to see who reacted)
-        if (isCountClick) {
-            var counter = emojiContainer.querySelector('.st-emoji-counter');
-            if (counter) {
-                counter.click();
-            }
-            return;
-        }
-        
-        // Case 2: Clicking on an existing reaction image (to add/remove that specific reaction)
-        if (isImageClick) {
-            var reactionImg = buttonElement.querySelector('img');
-            if (reactionImg) {
-                var alt = reactionImg.getAttribute('alt');
-                var targetImg = emojiContainer.querySelector('.st-emoji-preview img[alt="' + alt + '"]');
-                if (targetImg) {
-                    var previewDiv = targetImg.closest('.st-emoji-preview');
-                    if (previewDiv) {
-                        previewDiv.click();
-                    } else {
-                        targetImg.click();
-                    }
-                    setTimeout(function() {
-                        refreshReactionDisplay(pid);
-                    }, CONFIG.REACTION_DELAY);
-                    return;
-                }
-            }
-            // Fallback
-            var fallbackCounter = emojiContainer.querySelector('.st-emoji-counter');
-            if (fallbackCounter) {
-                fallbackCounter.click();
-                setTimeout(function() {
-                    refreshReactionDisplay(pid);
-                }, CONFIG.REACTION_DELAY);
-            }
-            return;
-        }
-        
-        // Case 3: Clicking on the add reaction button (smiley face)
-        if (buttonElement.classList.contains('reaction-add-btn')) {
-            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
-            if (previewDiv) {
-                previewDiv.click();
-            }
-            return;
-        }
-        
-        // Default: click the counter
-        var defaultCounter = emojiContainer.querySelector('.st-emoji-counter');
-        if (defaultCounter) {
-            defaultCounter.click();
-            setTimeout(function() {
-                refreshReactionDisplay(pid);
-            }, CONFIG.REACTION_DELAY);
-        }
     }
     // ============================================================================
     // ATTACH EVENT LISTENERS
@@ -877,20 +895,18 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
-        // React buttons - handle different click types
+        // React buttons - handle different types of reaction clicks
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn) {
                 e.preventDefault();
                 var pid = btn.getAttribute('data-pid');
                 if (pid) {
-                    // Determine what type of click this is
-                    var isImageClick = btn.classList.contains('reaction-with-image');
-                    var isAddButton = btn.classList.contains('reaction-add-btn');
-                    // Check if clicking on the count span
-                    var isCountClick = e.target.classList && e.target.classList.contains('reaction-count');
+                    var action = btn.getAttribute('data-reaction-action');
+                    var reactionSrc = btn.getAttribute('data-reaction-src');
+                    var isCountClick = (action === 'count');
                     
-                    handleReact(pid, btn, isImageClick, isCountClick);
+                    handleReact(pid, btn, isCountClick, reactionSrc);
                 }
             }
         });
