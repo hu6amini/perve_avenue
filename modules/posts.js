@@ -606,92 +606,109 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reportBtn.click();
         }
     }
-    function handleLike(pid, isCountClick) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        var pointsContainer = originalPost.querySelector('.points');
-        if (!pointsContainer) return;
-        
-        // If clicking on the count (to view who liked)
-        if (isCountClick) {
-            // Find the link that shows who liked the post
-            var legendsLink = pointsContainer.querySelector('a[href*="act=legends&CODE=votes"]');
-            if (legendsLink) {
+function handleLike(pid, isCountClick) {
+    var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+    if (!originalPost) return;
+    
+    var pointsContainer = originalPost.querySelector('.points');
+    if (!pointsContainer) return;
+    
+    // If clicking on the count (to view who liked)
+    if (isCountClick) {
+        // Find the link that shows who liked the post
+        var legendsLink = pointsContainer.querySelector('a[href*="act=legends&CODE=votes"]');
+        if (legendsLink) {
+            // Prevent default navigation - we want the modal, not page navigation
+            var rel = legendsLink.getAttribute('rel');
+            var onmouseover = legendsLink.getAttribute('onmouseover');
+            var onclick = legendsLink.getAttribute('onclick');
+            
+            // Trigger the overlay/modal behavior
+            if (onmouseover && onmouseover.includes('overlay')) {
+                // Execute the onmouseover to set up the overlay
+                eval(onmouseover);
+                // Small delay to let overlay initialize
+                setTimeout(function() {
+                    // Trigger click to open the overlay
+                    var clickEvent = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    legendsLink.dispatchEvent(clickEvent);
+                }, 50);
+            } else if (rel === '#overlay') {
+                // Direct overlay link
                 legendsLink.click();
-                return;
-            }
-            // Fallback: try to find any link that might show likes
-            var anyLink = pointsContainer.querySelector('a[href*="votes"]');
-            if (anyLink) {
-                anyLink.click();
-                return;
+            } else if (onclick && onclick.includes('overlay')) {
+                eval(onclick);
+            } else {
+                // If no overlay behavior, still try to click (might open modal via other means)
+                legendsLink.click();
             }
             return;
         }
         
-        // Otherwise, handle like/unlike action
-        // Check if there's an undo button (meaning user already liked this post)
-        var undoButton = pointsContainer.querySelector('.bullet_delete');
-        
-        if (undoButton) {
-            // User already liked - this will unlike
-            if (undoButton.onclick) {
-                undoButton.click();
-            } else {
-                // Trigger click event
-                undoButton.click();
-            }
+        // Fallback: try to find any link that might show likes
+        var anyLink = pointsContainer.querySelector('a[href*="votes"]');
+        if (anyLink) {
+            anyLink.click();
+            return;
+        }
+        return;
+    }
+    
+    // Otherwise, handle like/unlike action
+    // Check if there's an undo button (meaning user already liked this post)
+    var undoButton = pointsContainer.querySelector('.bullet_delete');
+    
+    if (undoButton) {
+        // User already liked - this will unlike
+        var undoOnclick = undoButton.getAttribute('onclick');
+        if (undoOnclick) {
+            eval(undoOnclick);
         } else {
-            // Find the like button (points_up)
-            var likeBtn = pointsContainer.querySelector('.points_up');
-            
-            if (likeBtn) {
-                // Check if it's an <a> tag or a <span>
-                if (likeBtn.tagName === 'A') {
-                    likeBtn.click();
+            undoButton.click();
+        }
+    } else {
+        // Find the like button (points_up)
+        var likeBtn = pointsContainer.querySelector('.points_up');
+        
+        if (likeBtn) {
+            if (likeBtn.tagName === 'A') {
+                var likeOnclick = likeBtn.getAttribute('onclick');
+                if (likeOnclick) {
+                    eval(likeOnclick);
                 } else {
-                    // For span with onclick attribute
-                    var onclickAttr = likeBtn.getAttribute('onclick');
-                    if (onclickAttr) {
-                        eval(onclickAttr);
-                    } else {
-                        likeBtn.click();
-                    }
+                    likeBtn.click();
                 }
             } else {
-                // Fallback: find any points_up link
-                var pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
-                if (pointsUpLink) {
+                var onclickAttr = likeBtn.getAttribute('onclick');
+                if (onclickAttr) {
+                    eval(onclickAttr);
+                } else {
+                    likeBtn.click();
+                }
+            }
+        } else {
+            var pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
+            if (pointsUpLink) {
+                var upOnclick = pointsUpLink.getAttribute('onclick');
+                if (upOnclick) {
+                    eval(upOnclick);
+                } else {
                     pointsUpLink.click();
                 }
             }
         }
-        
-        // Refresh the like count after a short delay
-        setTimeout(function() {
-            refreshLikeDisplay(pid);
-            refreshReactionDisplay(pid);
-        }, CONFIG.REACTION_DELAY);
     }
-    function handleReact(pid, buttonElement) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        // Find the emoji container
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (emojiContainer) {
-            var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
-            trigger.click();
-        } else {
-            // Fallback to like
-            handleLike(pid, false);
-        }
-        
-        setTimeout(function() {
-            refreshReactionDisplay(pid);
-        }, CONFIG.REACTION_DELAY);
-    }
+    
+    // Refresh the like count after a short delay
+    setTimeout(function() {
+        refreshLikeDisplay(pid);
+        refreshReactionDisplay(pid);
+    }, CONFIG.REACTION_DELAY);
+}
     // ============================================================================
     // ATTACH EVENT LISTENERS
     // ============================================================================
