@@ -24,8 +24,6 @@ html {
     text-rendering: optimizelegibility
 }
 
-div, table {margin:unset} 
-
 body {
     background-color: var(--bg-color);
     color: var(--text-primary);
