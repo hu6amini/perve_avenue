@@ -137,75 +137,84 @@ var ForumPostsModule = (function(Utils, EventBus) {
         return tempDiv.innerHTML;
     }
     
-    function convertToModernEmbed(originalContainer) {
-        try {
-            // Extract the main link (the article URL)
-            var mainLink = originalContainer.querySelector('a[href]:not(.ffb_embedlink_preview)');
-            if (!mainLink) return null;
-            
-            var url = mainLink.getAttribute('href');
-            var domain = extractDomain(url);
-            
-            // Extract title - look for the second div's anchor text or the preview area
-            var titleElement = originalContainer.querySelector('div:not([style]) a:not(.ffb_embedlink_preview)');
-            var title = titleElement ? titleElement.textContent.trim() : domain;
-            
-            // Extract description - look for the paragraph
-            var descElement = originalContainer.querySelector('p');
-            var description = descElement ? descElement.textContent.trim() : '';
-            
-            // Extract image
-            var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
-            var imageUrl = imgElement ? imgElement.getAttribute('src') : null;
-            
-            // Extract favicon
-            var faviconElement = originalContainer.querySelector('img[data-src*="favicon"]');
-            var faviconUrl = faviconElement ? faviconElement.getAttribute('data-src') : null;
-            
-            // Clean up title (remove "Read more" or similar suffixes if present)
-            if (title && title.includes(' - ')) {
-                title = title.split(' - ')[0];
+function convertToModernEmbed(originalContainer) {
+    try {
+        // Extract the main link (the article URL) - look for any anchor with href that's not hidden
+        var mainLink = originalContainer.querySelector('a[href]:not(.ffb_embedlink_preview)');
+        if (!mainLink) return null;
+        
+        var url = mainLink.getAttribute('href');
+        var domain = extractDomain(url);
+        
+        // Extract title - find the anchor that contains the actual article title
+        // The title is in the second div, inside an anchor tag that's NOT the preview link
+        var allLinks = originalContainer.querySelectorAll('a:not(.ffb_embedlink_preview)');
+        var titleLink = null;
+        var title = domain;
+        
+        // Find the link that contains substantial text (not just the domain)
+        for (var i = 0; i < allLinks.length; i++) {
+            var link = allLinks[i];
+            var text = link.textContent.trim();
+            // Skip if it's just a domain or very short
+            if (text && text !== domain && text.length > 5 && !text.includes('Leggi altro') && !text.includes('Read more')) {
+                titleLink = link;
+                title = text;
+                break;
             }
-            
-            // Build modern embedded link HTML
-            var modernHtml = '<div class="modern-embedded-link">' +
-                '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
-            
-            if (imageUrl) {
-                modernHtml += '<div class="embedded-link-image">' +
-                    '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: 600 / 400;" width="600" height="400">' +
-                    '</div>';
-            }
-            
-            modernHtml += '<div class="embedded-link-content">';
-            
-            if (faviconUrl || domain) {
-                modernHtml += '<div class="embedded-link-domain">';
-                if (faviconUrl) {
-                    modernHtml += '<img src="' + faviconUrl + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16" style="width: 16px; height: 16px; object-fit: contain; display: inline-block; vertical-align: middle;">';
-                }
-                modernHtml += '<span>' + Utils.escapeHtml(domain) + '</span></div>';
-            }
-            
-            modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
-            
-            if (description) {
-                modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(description.substring(0, 200)) + (description.length > 200 ? '…' : '') + '</p>';
-            }
-            
-            modernHtml += '<div class="embedded-link-meta">' +
-                '<span class="embedded-link-read-more">Read more on ' + Utils.escapeHtml(domain) + ' ›</span>' +
-                '</div>' +
-                '</div>' +
-                '</a>' +
-                '</div>';
-            
-            return createElementFromHTML(modernHtml);
-        } catch (error) {
-            console.warn('[PostsModule] Failed to convert embedded link:', error);
-            return null;
         }
+        
+        // Extract description - look for the paragraph
+        var descElement = originalContainer.querySelector('div:not([style]) p');
+        var description = descElement ? descElement.textContent.trim() : '';
+        
+        // Extract image - look for the preview image
+        var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
+        var imageUrl = imgElement ? imgElement.getAttribute('src') : null;
+        
+        // Extract favicon - look for the hidden image
+        var faviconElement = originalContainer.querySelector('div[style="display:none"] img');
+        var faviconUrl = faviconElement ? faviconElement.getAttribute('src') : null;
+        
+        // Build modern embedded link HTML
+        var modernHtml = '<div class="modern-embedded-link">' +
+            '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
+        
+        if (imageUrl) {
+            modernHtml += '<div class="embedded-link-image">' +
+                '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: 600 / 400;" width="600" height="400">' +
+                '</div>';
+        }
+        
+        modernHtml += '<div class="embedded-link-content">';
+        
+        if (faviconUrl || domain) {
+            modernHtml += '<div class="embedded-link-domain">';
+            if (faviconUrl) {
+                modernHtml += '<img src="' + faviconUrl + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16" style="width: 16px; height: 16px; object-fit: contain; display: inline-block; vertical-align: middle;">';
+            }
+            modernHtml += '<span>' + Utils.escapeHtml(domain) + '</span></div>';
+        }
+        
+        modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
+        
+        if (description) {
+            modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(description.substring(0, 200)) + (description.length > 200 ? '…' : '') + '</p>';
+        }
+        
+        modernHtml += '<div class="embedded-link-meta">' +
+            '<span class="embedded-link-read-more">Read more on ' + Utils.escapeHtml(domain) + ' ›</span>' +
+            '</div>' +
+            '</div>' +
+            '</a>' +
+            '</div>';
+        
+        return createElementFromHTML(modernHtml);
+    } catch (error) {
+        console.warn('[PostsModule] Failed to convert embedded link:', error);
+        return null;
     }
+}
     
     function extractDomain(url) {
         try {
