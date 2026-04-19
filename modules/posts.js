@@ -339,170 +339,123 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // GENERATE MODERN CARD
     // ============================================================================
-    function generateModernPost(data) {
-        if (!data) return '';
-        var statusColor = data.isOnline ? '#10B981' : '#6B7280';
-        var statusText = data.isOnline ? 'Online' : 'Offline';
-        
-        // Like button HTML
-        var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>';
-        if (data.likes > 0) {
-            likeButton += '<span class="like-count">' + data.likes + '</span>';
-        }
-        likeButton += '</button>';
-        
-        // Reactions HTML
-        var reactionsHtml = generateReactionButtons(data);
-        
-        // Edit indicator HTML
-        var editHtml = '';
-        if (data.editInfo) {
-            editHtml = '<div class="post-edit-info">' +
-                ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
-                '</div>';
-        }
-        
-        // Signature HTML
-        var signatureHtml = '';
-        if (data.signatureHtml) {
-            signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
-        }
-        
-        // IP HTML
-        var ipHtml = '';
-        if (data.ipAddress) {
-            ipHtml = '<div class="post-ip">' +
-                ' IP: ' + data.ipAddress +
-                '</div>';
-        }
-        
-        // Avatar URL
-        var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
-        
-        // Avatar HTML - clickable div that triggers original avatar link
-        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">' +
-            '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
-        '</div>';
-        
-        return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
-            '<header class="post-card-header">' +
-                '<div class="post-meta">' +
-                    '<div class="post-number">' +
-                        '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber +
-                    '</div>' +
-                    '<div class="post-time">' +
-                        '<time datetime="' + new Date().toISOString() + '">' + data.timeAgo + '</time>' +
-                    '</div>' +
+function generateModernPost(data) {
+    if (!data) return '';
+    var statusColor = data.isOnline ? '#10B981' : '#6B7280';
+    var statusText = data.isOnline ? 'Online' : 'Offline';
+    
+    // Like button HTML
+    var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
+        '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>';
+    if (data.likes > 0) {
+        likeButton += '<span class="like-count">' + data.likes + '</span>';
+    }
+    likeButton += '</button>';
+    
+    // Reactions HTML
+    var reactionsHtml = generateReactionButtons(data);
+    
+    // Edit indicator HTML
+    var editHtml = '';
+    if (data.editInfo) {
+        editHtml = '<div class="post-edit-info">' +
+            ' <small>' + Utils.escapeHtml(data.editInfo) + '</small>' +
+            '</div>';
+    }
+    
+    // Signature HTML
+    var signatureHtml = '';
+    if (data.signatureHtml) {
+        signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
+    }
+    
+    // IP HTML
+    var ipHtml = '';
+    if (data.ipAddress) {
+        ipHtml = '<div class="post-ip">' +
+            ' IP: ' + data.ipAddress +
+            '</div>';
+    }
+    
+    // Avatar URL
+    var avatarUrl = data.avatarUrl || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(data.username);
+    
+    // Avatar HTML - clickable div that triggers original avatar link
+    var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">' +
+        '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
+    '</div>';
+    
+    return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        '<header class="post-card-header">' +
+            '<div class="post-meta">' +
+                '<div class="post-number">' +
+                    '<i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber +
                 '</div>' +
-                '<div class="post-actions">' +
-                    '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
-                    '</button>' +
-                    '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>' +
-                    '</button>' +
-                    '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>' +
-                    '</button>' +
-                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
-                    '</button>' +
-                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
-                        '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>' +
-                    '</button>' +
+                '<div class="post-time">' +
+                    '<time datetime="' + new Date().toISOString() + '">' + data.timeAgo + '</time>' +
                 '</div>' +
-            '</header>' +
-            '<div class="post-card-body">' +
-                avatarHtml +
-                '<div class="post-user-info">' +
-                    '<div class="user-name" data-pid="' + data.postId + '">' +
-                        Utils.escapeHtml(data.username) +
+            '</div>' +
+            '<div class="post-actions">' +
+                '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-quote-left" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-share-nodes" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '">' +
+                    '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>' +
+                '</button>' +
+            '</div>' +
+        '</header>' +
+        '<div class="post-card-body">' +
+            avatarHtml +
+            '<div class="post-user-info">' +
+                '<div class="user-name" data-pid="' + data.postId + '">' +
+                    Utils.escapeHtml(data.username) +
+                '</div>' +
+                '<div class="user-group">' +
+                    '<span class="role-badge ' + data.roleBadgeClass + '">' +
+                        Utils.escapeHtml(data.groupText || 'Member') +
+                    '</span>' +
+                '</div>' +
+                '<div class="user-stats">' +
+                    '<div class="user-rank">' +
+                        '<i class="' + data.rankIconClass + '" aria-hidden="true"></i> ' + data.userTitle +
                     '</div>' +
-                    '<div class="user-group">' +
-                        '<span class="role-badge ' + data.roleBadgeClass + '">' +
-                            Utils.escapeHtml(data.groupText || 'Member') +
-                        '</span>' +
+                    '<div class="user-posts">' +
+                        '<i class="fa-regular fa-message" aria-hidden="true"></i> ' + data.postCount + ' posts' +
                     '</div>' +
-                    '<div class="user-stats">' +
-                        '<div class="user-rank">' +
-                            '<i class="' + data.rankIconClass + '" aria-hidden="true"></i> ' + data.userTitle +
-                        '</div>' +
-                        '<div class="user-posts">' +
-                            '<i class="fa-regular fa-message" aria-hidden="true"></i> ' + data.postCount + ' posts' +
-                        '</div>' +
-                        '<div class="user-reputation">' +
-                            '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + data.reputation + ' rep' +
-                        '</div>' +
-                        '<div class="user-status" style="color: ' + statusColor + '">' +
-                            '<i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText +
-                        '</div>' +
+                    '<div class="user-reputation">' +
+                        '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + data.reputation + ' rep' +
+                    '</div>' +
+                    '<div class="user-status" style="color: ' + statusColor + '">' +
+                        '<i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText +
                     '</div>' +
                 '</div>' +
             '</div>' +
-            '<div class="post-content">' +
-                '<div class="post-message">' +
-                    data.contentHtml +
-                    editHtml +
-                '</div>' +
-                signatureHtml +
+        '</div>' +
+        '<div class="post-content">' +
+            '<div class="post-message">' +
+                data.contentHtml +
+                editHtml +
             '</div>' +
-            '<footer class="post-footer">' +
-                '<div class="post-reactions">' +
-                    likeButton +
-                    reactionsHtml +
-                '</div>' +
-                ipHtml +
-            '</footer>' +
-        '</article>';
-    }
-    // ============================================================================
-    // REFRESH LIKE COUNT
-    // ============================================================================
-    function refreshLikeCount(postId) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-        if (!originalPost) return;
-        
-        // Get updated like count
-        var pointsPos = originalPost.querySelector('.points .points_pos');
-        var newLikeCount = 0;
-        
-        if (pointsPos) {
-            newLikeCount = parseInt(pointsPos.textContent) || 0;
-        } else {
-            // Try alternative like display
-            var pointsUp = originalPost.querySelector('.points .points_up');
-            if (pointsUp && pointsUp.querySelector('span')) {
-                var likeText = pointsUp.querySelector('span').textContent;
-                if (likeText === 'Like') {
-                    newLikeCount = 0; // No counter, just "Like" text
-                }
-            }
-        }
-        
-        // Update the modern card's like count
-        var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
-        if (modernCard) {
-            var likeCountSpan = modernCard.querySelector('.like-count');
-            if (likeCountSpan) {
-                if (newLikeCount > 0) {
-                    likeCountSpan.textContent = newLikeCount;
-                } else {
-                    // Remove the count span if count is 0
-                    likeCountSpan.remove();
-                }
-            } else if (newLikeCount > 0) {
-                // Add count span if it doesn't exist and count > 0
-                var likeBtn = modernCard.querySelector('.like-btn');
-                if (likeBtn) {
-                    var newCountSpan = document.createElement('span');
-                    newCountSpan.className = 'like-count';
-                    newCountSpan.textContent = newLikeCount;
-                    likeBtn.appendChild(newCountSpan);
-                }
-            }
-        }
-    }
+            signatureHtml +
+        '</div>' +
+        '<footer class="post-footer">' +
+            '<div class="post-reactions">' +
+                likeButton +
+                reactionsHtml +
+            '</div>' +
+            ipHtml +
+        '</footer>' +
+    '</article>';
+}
     // ============================================================================
     // REACTION DISPLAY REFRESH
     // ============================================================================
@@ -546,9 +499,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         } else {
             postReactionsDiv.innerHTML = newReactionsHtml;
         }
-        
-        // Also refresh the like count
-        refreshLikeCount(postId);
     }
     // ============================================================================
     // EVENT HANDLERS
@@ -619,89 +569,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reportBtn.click();
         }
     }
-    function handleLike(pid, clickedElement) {
+    function handleLike(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
-        
-        // Check if we clicked on the like-count span or the icon
-        var isCountClick = clickedElement && clickedElement.classList && clickedElement.classList.contains('like-count');
-        
-        // Find the points container
-        var pointsContainer = originalPost.querySelector('.points');
-        if (!pointsContainer) return;
-        
-        // Case 1: Points system with points_pos link (has counter)
-        var pointsPosLink = pointsContainer.querySelector('.points_pos');
-        if (pointsPosLink && pointsPosLink.tagName === 'A') {
-            if (isCountClick) {
-                // Click on the counter - trigger the points_pos link
-                pointsPosLink.click();
+        var likeBtn = originalPost.querySelector('.points .points_up');
+        if (likeBtn) {
+            var onclickAttr = likeBtn.getAttribute('onclick');
+            if (onclickAttr) {
+                eval(onclickAttr);
             } else {
-                // Click on the icon - trigger the points_up element
-                var pointsUp = pointsContainer.querySelector('.points_up');
-                if (pointsUp) {
-                    // Check if it's an anchor or span with onclick
-                    if (pointsUp.tagName === 'A') {
-                        pointsUp.click();
-                    } else if (pointsUp.hasAttribute('onclick')) {
-                        var onclickAttr = pointsUp.getAttribute('onclick');
-                        if (onclickAttr) {
-                            eval(onclickAttr);
-                        }
-                    } else if (pointsUp.querySelector('img')) {
-                        // Find the actual clickable element (might be the image or its parent)
-                        var clickable = pointsUp.closest('a') || pointsUp;
-                        if (clickable && clickable.tagName === 'A') {
-                            clickable.click();
-                        } else if (clickable.hasAttribute('onclick')) {
-                            eval(clickable.getAttribute('onclick'));
-                        }
-                    }
-                }
+                likeBtn.click();
             }
-            
-            // Refresh after delay
-            setTimeout(function() {
-                refreshLikeCount(pid);
-                refreshReactionDisplay(pid);
-            }, CONFIG.REACTION_DELAY);
-            return;
         }
-        
-        // Case 2: Simple points system with a.points_up (no counter, just Like button)
-        var simplePointsUp = pointsContainer.querySelector('a.points_up');
-        if (simplePointsUp) {
-            if (!isCountClick) {
-                // Click on the icon - trigger the points_up link
-                simplePointsUp.click();
-            }
-            
-            // Refresh after delay
-            setTimeout(function() {
-                refreshLikeCount(pid);
-                refreshReactionDisplay(pid);
-            }, CONFIG.REACTION_DELAY);
-            return;
-        }
-        
-        // Case 3: Fallback - try to find any points_up element
-        var pointsUp = pointsContainer.querySelector('.points_up');
-        if (pointsUp) {
-            if (pointsUp.tagName === 'A') {
-                pointsUp.click();
-            } else if (pointsUp.hasAttribute('onclick')) {
-                var onclickAttr = pointsUp.getAttribute('onclick');
-                if (onclickAttr) {
-                    eval(onclickAttr);
-                }
-            }
-            
-            // Refresh after delay
-            setTimeout(function() {
-                refreshLikeCount(pid);
-                refreshReactionDisplay(pid);
-            }, CONFIG.REACTION_DELAY);
-        }
+        setTimeout(function() {
+            refreshReactionDisplay(pid);
+        }, CONFIG.REACTION_DELAY);
     }
     function handleReact(pid, buttonElement) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
@@ -714,7 +596,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             trigger.click();
         } else {
             // Fallback to like
-            handleLike(pid, buttonElement);
+            handleLike(pid);
         }
         
         setTimeout(function() {
@@ -795,15 +677,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
-        // Like buttons - pass the clicked element
+        // Like buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.like-btn');
             if (btn) {
                 e.preventDefault();
                 var pid = btn.getAttribute('data-pid');
-                // Find what was actually clicked (icon or count span)
-                var clickedElement = e.target;
-                if (pid) handleLike(pid, clickedElement);
+                if (pid) handleLike(pid);
             }
         });
         
