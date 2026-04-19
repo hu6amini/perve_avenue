@@ -303,7 +303,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</button>';
         }
         
-        // Has reactions with counters - show only the reaction image buttons (no separate add button)
+        // Has reactions with counters - show reaction image buttons
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
         // Group reactions by image src to combine counts
@@ -332,6 +332,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '<span class="reaction-count">' + reaction.count + '</span>' +
                 '</button>';
         });
+        
+        // Add a count button if there are multiple reaction types
+        if (reactionMap.size > 1 && data.reactionCount > 0) {
+            reactionHtml += '<button class="reaction-btn reaction-count-btn" data-pid="' + data.postId + '">' +
+                '<span class="reaction-count">' + data.reactionCount + '</span>' +
+                '</button>';
+        }
         
         reactionHtml += '</div>';
         return reactionHtml;
@@ -606,130 +613,192 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reportBtn.click();
         }
     }
-function handleLike(pid, isCountClick) {
-    var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-    if (!originalPost) return;
-    
-    var pointsContainer = originalPost.querySelector('.points');
-    if (!pointsContainer) return;
-    
-    // If clicking on the count (to view who liked)
-    if (isCountClick) {
-        // Find the points_pos element (the actual count)
-        var pointsPos = pointsContainer.querySelector('.points_pos');
-        if (pointsPos) {
-            // Find the parent overlay link
-            var overlayLink = pointsPos.closest('a[rel="#overlay"]');
-            if (overlayLink) {
-                var href = overlayLink.getAttribute('href');
-                
-                // Try to use jQuery if available (ForumFree uses jQuery)
-                if (typeof $ !== 'undefined' && $.fn.overlay) {
-                    // Initialize overlay on the link if not already done
-                    if (!overlayLink.hasAttribute('data-overlay-init')) {
-                        $(overlayLink).overlay({
-                            onBeforeLoad: function() {
-                                var wrap = this.getOverlay();
-                                var content = wrap.find('div');
-                                content.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif"></p>')
-                                    .load(href + '&popup=1');
-                            }
-                        });
-                        overlayLink.setAttribute('data-overlay-init', 'true');
-                    }
-                    // Trigger the overlay
-                    $(overlayLink).trigger('click');
-                    return;
-                } else {
-                    // Fallback: try to simulate the mouseover that initializes the overlay
-                    var mouseoverEvent = new MouseEvent('mouseover', {
-                        view: window,
-                        bubbles: true,
-                        cancelable: true
-                    });
-                    overlayLink.dispatchEvent(mouseoverEvent);
+    function handleLike(pid, isCountClick) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        var pointsContainer = originalPost.querySelector('.points');
+        if (!pointsContainer) return;
+        
+        // If clicking on the count (to view who liked)
+        if (isCountClick) {
+            // Find the points_pos element (the actual count)
+            var pointsPos = pointsContainer.querySelector('.points_pos');
+            if (pointsPos) {
+                // Find the parent overlay link
+                var overlayLink = pointsPos.closest('a[rel="#overlay"]');
+                if (overlayLink) {
+                    var href = overlayLink.getAttribute('href');
                     
-                    // Then click after a small delay
-                    setTimeout(function() {
-                        var clickEvent = new MouseEvent('click', {
-                            view: window,
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        overlayLink.dispatchEvent(clickEvent);
-                    }, 50);
-                    return;
+                    // Try to use jQuery if available (ForumFree uses jQuery)
+                    if (typeof $ !== 'undefined' && $.fn.overlay) {
+                        // Initialize overlay on the link if not already done
+                        if (!overlayLink.hasAttribute('data-overlay-init')) {
+                            $(overlayLink).overlay({
+                                onBeforeLoad: function() {
+                                    var wrap = this.getOverlay();
+                                    var content = wrap.find('div');
+                                    content.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif"></p>')
+                                        .load(href + '&popup=1');
+                                }
+                            });
+                            overlayLink.setAttribute('data-overlay-init', 'true');
+                        }
+                        // Trigger the overlay
+                        $(overlayLink).trigger('click');
+                        return;
+                    } else {
+                        // Fallback: click the points_pos element
+                        pointsPos.click();
+                        return;
+                    }
                 }
             }
-        }
-        
-        // Fallback: try to find and click the points_pos directly
-        var pointsPosDirect = pointsContainer.querySelector('.points_pos');
-        if (pointsPosDirect) {
-            pointsPosDirect.click();
+            
+            // Fallback: try to find and click the points_pos directly
+            var pointsPosDirect = pointsContainer.querySelector('.points_pos');
+            if (pointsPosDirect) {
+                pointsPosDirect.click();
+                return;
+            }
+            
+            // Last resort: find any votes link
+            var anyLink = pointsContainer.querySelector('a[href*="votes"]');
+            if (anyLink) {
+                anyLink.click();
+                return;
+            }
             return;
         }
         
-        // Last resort: find any votes link
-        var anyLink = pointsContainer.querySelector('a[href*="votes"]');
-        if (anyLink) {
-            anyLink.click();
-            return;
-        }
-        return;
-    }
-    
-    // Otherwise, handle like/unlike action
-    // Check if there's an undo button (meaning user already liked this post)
-    var undoButton = pointsContainer.querySelector('.bullet_delete');
-    
-    if (undoButton) {
-        // User already liked - this will unlike
-        var undoOnclick = undoButton.getAttribute('onclick');
-        if (undoOnclick) {
-            eval(undoOnclick);
+        // Otherwise, handle like/unlike action
+        // Check if there's an undo button (meaning user already liked this post)
+        var undoButton = pointsContainer.querySelector('.bullet_delete');
+        
+        if (undoButton) {
+            // User already liked - this will unlike
+            var undoOnclick = undoButton.getAttribute('onclick');
+            if (undoOnclick) {
+                eval(undoOnclick);
+            } else {
+                undoButton.click();
+            }
         } else {
-            undoButton.click();
-        }
-    } else {
-        // Find the like button (points_up)
-        var likeBtn = pointsContainer.querySelector('.points_up');
-        
-        if (likeBtn) {
-            if (likeBtn.tagName === 'A') {
-                var likeOnclick = likeBtn.getAttribute('onclick');
-                if (likeOnclick) {
-                    eval(likeOnclick);
+            // Find the like button (points_up)
+            var likeBtn = pointsContainer.querySelector('.points_up');
+            
+            if (likeBtn) {
+                if (likeBtn.tagName === 'A') {
+                    var likeOnclick = likeBtn.getAttribute('onclick');
+                    if (likeOnclick) {
+                        eval(likeOnclick);
+                    } else {
+                        likeBtn.click();
+                    }
                 } else {
-                    likeBtn.click();
+                    var onclickAttr = likeBtn.getAttribute('onclick');
+                    if (onclickAttr) {
+                        eval(onclickAttr);
+                    } else {
+                        likeBtn.click();
+                    }
                 }
             } else {
-                var onclickAttr = likeBtn.getAttribute('onclick');
-                if (onclickAttr) {
-                    eval(onclickAttr);
-                } else {
-                    likeBtn.click();
-                }
-            }
-        } else {
-            var pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
-            if (pointsUpLink) {
-                var upOnclick = pointsUpLink.getAttribute('onclick');
-                if (upOnclick) {
-                    eval(upOnclick);
-                } else {
-                    pointsUpLink.click();
+                var pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
+                if (pointsUpLink) {
+                    var upOnclick = pointsUpLink.getAttribute('onclick');
+                    if (upOnclick) {
+                        eval(upOnclick);
+                    } else {
+                        pointsUpLink.click();
+                    }
                 }
             }
         }
+        
+        // Refresh the like count after a short delay
+        setTimeout(function() {
+            refreshLikeDisplay(pid);
+            refreshReactionDisplay(pid);
+        }, CONFIG.REACTION_DELAY);
     }
-    
-    // Refresh the like count after a short delay
-    setTimeout(function() {
-        refreshLikeDisplay(pid);
-        refreshReactionDisplay(pid);
-    }, CONFIG.REACTION_DELAY);
-}
+    function handleReact(pid, buttonElement, isImageClick) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        // Find the reaction container in the original post
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return;
+        
+        // Handle different click types
+        if (isImageClick) {
+            // Clicking on an existing reaction image - should click the st-emoji-preview
+            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
+            if (previewDiv) {
+                // Trigger click on the preview div to show reactions or toggle
+                previewDiv.click();
+                
+                // Get the image alt text to find the matching reaction in the popup
+                var imgElement = buttonElement.querySelector('img');
+                if (imgElement) {
+                    var alt = imgElement.getAttribute('alt') || '';
+                    // Wait for popup to appear, then click the matching reaction
+                    setTimeout(function() {
+                        var activePopup = document.querySelector('.st-emoji-pop.cs-fui');
+                        if (activePopup && activePopup.style.visibility === 'visible') {
+                            // Find the reaction with matching alt
+                            var matchingReaction = activePopup.querySelector('.st-emoji-content img[alt="' + alt + '"]');
+                            if (matchingReaction) {
+                                var reactionDiv = matchingReaction.closest('.st-emoji-content');
+                                if (reactionDiv) {
+                                    reactionDiv.click();
+                                }
+                            }
+                        }
+                    }, 100);
+                }
+                return;
+            }
+        } else {
+            // Check if this is the add reaction button (smiley face)
+            var isAddButton = buttonElement.classList.contains('reaction-add-btn');
+            
+            if (isAddButton) {
+                // Find the emoji preview to open the reaction picker
+                var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
+                if (previewDiv) {
+                    previewDiv.click();
+                } else {
+                    // Fallback: click the container
+                    emojiContainer.click();
+                }
+                return;
+            }
+            
+            // Clicking on the reaction count button
+            var isCountButton = buttonElement.classList.contains('reaction-count-btn');
+            if (isCountButton) {
+                var counter = emojiContainer.querySelector('.st-emoji-counter');
+                if (counter) {
+                    // Click the counter to show who reacted
+                    counter.click();
+                    
+                    // Optional: Modernize the reaction popup similar to the likes popup
+                    setTimeout(function() {
+                        var reactionPopup = document.querySelector('.st-emoji-pop.cs-fui');
+                        if (reactionPopup && reactionPopup.style.visibility === 'visible') {
+                            // Here you could modernize the reaction popup
+                            console.log('[PostsModule] Reaction popup detected, could modernize:', reactionPopup);
+                        }
+                    }, 100);
+                    return;
+                }
+            }
+        }
+        
+        // Fallback: click the container
+        emojiContainer.click();
+    }
     // ============================================================================
     // ATTACH EVENT LISTENERS
     // ============================================================================
@@ -818,13 +887,39 @@ function handleLike(pid, isCountClick) {
             }
         });
         
-        // React buttons (any reaction button that's not a like button)
+        // Reaction buttons - handle different reaction click types
         document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.reaction-btn:not(.like-btn)');
-            if (btn) {
+            // Check for reaction-with-image (clicking on existing reaction)
+            var reactionImageBtn = e.target.closest('.reaction-with-image');
+            if (reactionImageBtn) {
                 e.preventDefault();
-                var pid = btn.getAttribute('data-pid');
-                if (pid) handleReact(pid, btn);
+                var pid = reactionImageBtn.getAttribute('data-pid');
+                if (pid) {
+                    handleReact(pid, reactionImageBtn, true);
+                }
+                return;
+            }
+            
+            // Check for reaction-add-btn (clicking on add reaction button)
+            var addReactionBtn = e.target.closest('.reaction-add-btn');
+            if (addReactionBtn) {
+                e.preventDefault();
+                var pid = addReactionBtn.getAttribute('data-pid');
+                if (pid) {
+                    handleReact(pid, addReactionBtn, false);
+                }
+                return;
+            }
+            
+            // Check for reaction-count-btn (clicking on reaction count)
+            var reactionCountBtn = e.target.closest('.reaction-count-btn');
+            if (reactionCountBtn) {
+                e.preventDefault();
+                var pid = reactionCountBtn.getAttribute('data-pid');
+                if (pid) {
+                    handleReact(pid, reactionCountBtn, false);
+                }
+                return;
             }
         });
     }
