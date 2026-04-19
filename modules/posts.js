@@ -298,12 +298,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
     function generateReactionButtons(data) {
         // If no reactions have counters, just show the add reaction button (smiley face)
         if (!data.hasReactions || data.reactionCount === 0) {
-            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '" data-reaction-action="add">' +
+            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
                 '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' +
                 '</button>';
         }
         
-        // Has reactions with counters - show reaction image buttons
+        // Has reactions with counters - show only the reaction image buttons (no separate add button)
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
         // Group reactions by image src to combine counts
@@ -327,16 +327,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         // Create buttons for each unique reaction
         reactionMap.forEach(function(reaction) {
-            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '" data-reaction-action="image" data-reaction-src="' + Utils.escapeHtml(reaction.src) + '">' +
+            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
                 '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
                 '<span class="reaction-count">' + reaction.count + '</span>' +
                 '</button>';
         });
-        
-        // Add the count button to show total reactions
-        reactionHtml += '<button class="reaction-btn reaction-count-btn" title="View all reactions" data-pid="' + data.postId + '" data-reaction-action="count">' +
-            '<span class="reaction-count">' + data.reactionCount + '</span>' +
-            '</button>';
         
         reactionHtml += '</div>';
         return reactionHtml;
@@ -543,93 +538,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
     }
     // ============================================================================
-    // REACTION HANDLERS
-    // ============================================================================
-    function getReactionContainer(originalPost) {
-        return originalPost.querySelector('.st-emoji-container');
-    }
-    function getReactionCounter(originalPost) {
-        var container = getReactionContainer(originalPost);
-        if (!container) return null;
-        return container.querySelector('.st-emoji-counter');
-    }
-    function getReactionPreview(originalPost) {
-        var container = getReactionContainer(originalPost);
-        if (!container) return null;
-        return container.querySelector('.st-emoji-preview');
-    }
-    function handleReactionCountClick(pid) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        var counter = getReactionCounter(originalPost);
-        if (counter) {
-            // Click the counter to show who reacted
-            counter.click();
-        }
-    }
-    function handleReactionImageClick(pid, reactionImgSrc) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        var preview = getReactionPreview(originalPost);
-        if (!preview) return;
-        
-        // Find the corresponding reaction image in the preview
-        var matchingImg = preview.querySelector('img[src="' + reactionImgSrc + '"]');
-        if (matchingImg) {
-            // Click on the matching emoji in the original post
-            matchingImg.click();
-        } else {
-            // If not found, try to find by alt text
-            var altText = reactionImgSrc.split('/').pop().split('.')[0];
-            matchingImg = preview.querySelector('img[alt*="' + altText + '"]');
-            if (matchingImg) {
-                matchingImg.click();
-            } else {
-                // Fallback: click the preview container
-                preview.click();
-            }
-        }
-    }
-    function handleAddReactionClick(pid) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        var preview = getReactionPreview(originalPost);
-        if (preview) {
-            // Click the preview to open the emoji picker
-            preview.click();
-        } else {
-            // Fallback: try to click the container
-            var container = getReactionContainer(originalPost);
-            if (container) {
-                container.click();
-            }
-        }
-    }
-    function handleReact(pid, buttonElement, isCountClick, reactionSrc) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        // Determine what type of reaction button was clicked
-        if (isCountClick) {
-            // Clicked on the reaction count
-            handleReactionCountClick(pid);
-        } else if (reactionSrc) {
-            // Clicked on a reaction image
-            handleReactionImageClick(pid, reactionSrc);
-        } else {
-            // Clicked on the add reaction button (smiley face)
-            handleAddReactionClick(pid);
-        }
-        
-        // Refresh display after a short delay
-        setTimeout(function() {
-            refreshReactionDisplay(pid);
-        }, CONFIG.REACTION_DELAY);
-    }
-    // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
     function handleAvatarClick(pid) {
@@ -733,8 +641,23 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         $(overlayLink).trigger('click');
                         return;
                     } else {
-                        // Fallback: click the points_pos element
-                        pointsPos.click();
+                        // Fallback: try to simulate the mouseover that initializes the overlay
+                        var mouseoverEvent = new MouseEvent('mouseover', {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        overlayLink.dispatchEvent(mouseoverEvent);
+                        
+                        // Then click after a small delay
+                        setTimeout(function() {
+                            var clickEvent = new MouseEvent('click', {
+                                view: window,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            overlayLink.dispatchEvent(clickEvent);
+                        }, 50);
                         return;
                     }
                 }
@@ -804,6 +727,73 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Refresh the like count after a short delay
         setTimeout(function() {
             refreshLikeDisplay(pid);
+            refreshReactionDisplay(pid);
+        }, CONFIG.REACTION_DELAY);
+    }
+    function handleReact(pid, buttonElement) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return;
+        
+        // Check what type of button was clicked
+        var isAddButton = buttonElement.classList.contains('reaction-add-btn');
+        var isReactionImage = buttonElement.classList.contains('reaction-with-image');
+        
+        if (isAddButton) {
+            // Click on the smiley add button - should open the emoji picker
+            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
+            if (previewDiv) {
+                previewDiv.click();
+            }
+        } else if (isReactionImage) {
+            // Click on an existing reaction image - should add/remove that specific reaction
+            var clickedImg = buttonElement.querySelector('img');
+            if (clickedImg) {
+                var clickedAlt = clickedImg.getAttribute('alt');
+                // Find the corresponding emoji in the original post's preview
+                var emojiPreview = emojiContainer.querySelector('.st-emoji-preview');
+                if (emojiPreview) {
+                    // Find the matching emoji in the preview
+                    var matchingEmoji = null;
+                    var previewImages = emojiPreview.querySelectorAll('img');
+                    for (var i = 0; i < previewImages.length; i++) {
+                        var img = previewImages[i];
+                        var imgAlt = img.getAttribute('alt');
+                        if (imgAlt === clickedAlt) {
+                            matchingEmoji = img;
+                            break;
+                        }
+                    }
+                    
+                    if (matchingEmoji) {
+                        // Click the matching emoji in the original post
+                        matchingEmoji.click();
+                    } else {
+                        // If not found in preview, try to find in the counter or trigger area
+                        var counter = emojiContainer.querySelector('.st-emoji-counter');
+                        if (counter) {
+                            counter.click();
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fallback: click the counter if it exists, otherwise click preview
+            var counter = emojiContainer.querySelector('.st-emoji-counter');
+            if (counter) {
+                counter.click();
+            } else {
+                var preview = emojiContainer.querySelector('.st-emoji-preview');
+                if (preview) {
+                    preview.click();
+                }
+            }
+        }
+        
+        // Refresh the reaction display after a short delay
+        setTimeout(function() {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
@@ -895,19 +885,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
-        // React buttons - handle different types of reaction clicks
+        // React buttons (any reaction button that's not a like button)
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn) {
                 e.preventDefault();
                 var pid = btn.getAttribute('data-pid');
-                if (pid) {
-                    var action = btn.getAttribute('data-reaction-action');
-                    var reactionSrc = btn.getAttribute('data-reaction-src');
-                    var isCountClick = (action === 'count');
-                    
-                    handleReact(pid, btn, isCountClick, reactionSrc);
-                }
+                if (pid) handleReact(pid, btn);
             }
         });
     }
