@@ -333,12 +333,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</button>';
         });
         
-        // Add a count button if there are multiple reaction types
-        if (reactionMap.size > 1 && data.reactionCount > 0) {
-            reactionHtml += '<button class="reaction-btn reaction-count-btn" data-pid="' + data.postId + '">' +
-                '<span class="reaction-count">' + data.reactionCount + '</span>' +
-                '</button>';
-        }
+        // Add the add reaction button (smiley face) - always show it
+        reactionHtml += '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+            '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' +
+            '</button>';
         
         reactionHtml += '</div>';
         return reactionHtml;
@@ -648,7 +646,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         $(overlayLink).trigger('click');
                         return;
                     } else {
-                        // Fallback: click the points_pos element
+                        // Fallback: click the em element instead of the a
                         pointsPos.click();
                         return;
                     }
@@ -722,82 +720,74 @@ var ForumPostsModule = (function(Utils, EventBus) {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
-    function handleReact(pid, buttonElement, isImageClick) {
+    function handleReact(pid, buttonElement, isImageClick, isCountClick) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
-        // Find the reaction container in the original post
+        // Find the emoji container
         var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (!emojiContainer) return;
+        if (!emojiContainer) {
+            // If no emoji container, fallback to like
+            handleLike(pid, false);
+            return;
+        }
         
-        // Handle different click types
+        // Case 1: Clicking on the reaction count number (to see who reacted)
+        if (isCountClick) {
+            var counter = emojiContainer.querySelector('.st-emoji-counter');
+            if (counter) {
+                counter.click();
+            }
+            return;
+        }
+        
+        // Case 2: Clicking on an existing reaction image (to add/remove that specific reaction)
         if (isImageClick) {
-            // Clicking on an existing reaction image - should click the st-emoji-preview
-            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
-            if (previewDiv) {
-                // Trigger click on the preview div to show reactions or toggle
-                previewDiv.click();
-                
-                // Get the image alt text to find the matching reaction in the popup
-                var imgElement = buttonElement.querySelector('img');
-                if (imgElement) {
-                    var alt = imgElement.getAttribute('alt') || '';
-                    // Wait for popup to appear, then click the matching reaction
+            var reactionImg = buttonElement.querySelector('img');
+            if (reactionImg) {
+                var alt = reactionImg.getAttribute('alt');
+                var targetImg = emojiContainer.querySelector('.st-emoji-preview img[alt="' + alt + '"]');
+                if (targetImg) {
+                    var previewDiv = targetImg.closest('.st-emoji-preview');
+                    if (previewDiv) {
+                        previewDiv.click();
+                    } else {
+                        targetImg.click();
+                    }
                     setTimeout(function() {
-                        var activePopup = document.querySelector('.st-emoji-pop.cs-fui');
-                        if (activePopup && activePopup.style.visibility === 'visible') {
-                            // Find the reaction with matching alt
-                            var matchingReaction = activePopup.querySelector('.st-emoji-content img[alt="' + alt + '"]');
-                            if (matchingReaction) {
-                                var reactionDiv = matchingReaction.closest('.st-emoji-content');
-                                if (reactionDiv) {
-                                    reactionDiv.click();
-                                }
-                            }
-                        }
-                    }, 100);
-                }
-                return;
-            }
-        } else {
-            // Check if this is the add reaction button (smiley face)
-            var isAddButton = buttonElement.classList.contains('reaction-add-btn');
-            
-            if (isAddButton) {
-                // Find the emoji preview to open the reaction picker
-                var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
-                if (previewDiv) {
-                    previewDiv.click();
-                } else {
-                    // Fallback: click the container
-                    emojiContainer.click();
-                }
-                return;
-            }
-            
-            // Clicking on the reaction count button
-            var isCountButton = buttonElement.classList.contains('reaction-count-btn');
-            if (isCountButton) {
-                var counter = emojiContainer.querySelector('.st-emoji-counter');
-                if (counter) {
-                    // Click the counter to show who reacted
-                    counter.click();
-                    
-                    // Optional: Modernize the reaction popup similar to the likes popup
-                    setTimeout(function() {
-                        var reactionPopup = document.querySelector('.st-emoji-pop.cs-fui');
-                        if (reactionPopup && reactionPopup.style.visibility === 'visible') {
-                            // Here you could modernize the reaction popup
-                            console.log('[PostsModule] Reaction popup detected, could modernize:', reactionPopup);
-                        }
-                    }, 100);
+                        refreshReactionDisplay(pid);
+                    }, CONFIG.REACTION_DELAY);
                     return;
                 }
             }
+            // Fallback
+            var fallbackCounter = emojiContainer.querySelector('.st-emoji-counter');
+            if (fallbackCounter) {
+                fallbackCounter.click();
+                setTimeout(function() {
+                    refreshReactionDisplay(pid);
+                }, CONFIG.REACTION_DELAY);
+            }
+            return;
         }
         
-        // Fallback: click the container
-        emojiContainer.click();
+        // Case 3: Clicking on the add reaction button (smiley face)
+        if (buttonElement.classList.contains('reaction-add-btn')) {
+            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
+            if (previewDiv) {
+                previewDiv.click();
+            }
+            return;
+        }
+        
+        // Default: click the counter
+        var defaultCounter = emojiContainer.querySelector('.st-emoji-counter');
+        if (defaultCounter) {
+            defaultCounter.click();
+            setTimeout(function() {
+                refreshReactionDisplay(pid);
+            }, CONFIG.REACTION_DELAY);
+        }
     }
     // ============================================================================
     // ATTACH EVENT LISTENERS
@@ -887,39 +877,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
-        // Reaction buttons - handle different reaction click types
+        // React buttons - handle different click types
         document.addEventListener('click', function(e) {
-            // Check for reaction-with-image (clicking on existing reaction)
-            var reactionImageBtn = e.target.closest('.reaction-with-image');
-            if (reactionImageBtn) {
+            var btn = e.target.closest('.reaction-btn:not(.like-btn)');
+            if (btn) {
                 e.preventDefault();
-                var pid = reactionImageBtn.getAttribute('data-pid');
+                var pid = btn.getAttribute('data-pid');
                 if (pid) {
-                    handleReact(pid, reactionImageBtn, true);
+                    // Determine what type of click this is
+                    var isImageClick = btn.classList.contains('reaction-with-image');
+                    var isAddButton = btn.classList.contains('reaction-add-btn');
+                    // Check if clicking on the count span
+                    var isCountClick = e.target.classList && e.target.classList.contains('reaction-count');
+                    
+                    handleReact(pid, btn, isImageClick, isCountClick);
                 }
-                return;
-            }
-            
-            // Check for reaction-add-btn (clicking on add reaction button)
-            var addReactionBtn = e.target.closest('.reaction-add-btn');
-            if (addReactionBtn) {
-                e.preventDefault();
-                var pid = addReactionBtn.getAttribute('data-pid');
-                if (pid) {
-                    handleReact(pid, addReactionBtn, false);
-                }
-                return;
-            }
-            
-            // Check for reaction-count-btn (clicking on reaction count)
-            var reactionCountBtn = e.target.closest('.reaction-count-btn');
-            if (reactionCountBtn) {
-                e.preventDefault();
-                var pid = reactionCountBtn.getAttribute('data-pid');
-                if (pid) {
-                    handleReact(pid, reactionCountBtn, false);
-                }
-                return;
             }
         });
     }
