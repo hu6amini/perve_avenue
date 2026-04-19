@@ -344,12 +344,13 @@ function generateModernPost(data) {
     var statusColor = data.isOnline ? '#10B981' : '#6B7280';
     var statusText = data.isOnline ? 'Online' : 'Offline';
     
-    // Like button HTML - cleaner structure with data attributes
-    var likeButton = '<button class="reaction-btn like-btn" data-pid="' + data.postId + '" data-action="like">' +
-        '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>' +
-        '<span class="like-count">' + (data.likes > 0 ? data.likes : '') + '</span>' +
-        '<span class="sr-only">Like this post</span>' +
-    '</button>';
+    // Like button HTML
+    var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
+        '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>';
+    if (data.likes > 0) {
+        likeButton += '<span class="like-count">' + data.likes + '</span>';
+    }
+    likeButton += '</button>';
     
     // Reactions HTML
     var reactionsHtml = generateReactionButtons(data);
@@ -384,7 +385,7 @@ function generateModernPost(data) {
         '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">' +
     '</div>';
     
-    return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
+    return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
         '<header class="post-card-header">' +
             '<div class="post-meta">' +
                 '<div class="post-number">' +
@@ -424,7 +425,7 @@ function generateModernPost(data) {
                     '</span>' +
                 '</div>' +
                 '<div class="user-stats">' +
-                    '<div class="user-title">' +
+                    '<div class="user-rank">' +
                         '<i class="' + data.rankIconClass + '" aria-hidden="true"></i> ' + data.userTitle +
                     '</div>' +
                     '<div class="user-posts">' +
