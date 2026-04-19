@@ -78,7 +78,7 @@ document.head.appendChild(instantPagePreload);
             // ============================================
             // 6. MAIN ENHANCER (MUST BE LAST)
             // ============================================
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f1f8ac2/core/forum-enhancer.js"
+            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4e09a28/core/forum-enhancer.js"
         ]);
         
         requestIdleCallback(() => {
