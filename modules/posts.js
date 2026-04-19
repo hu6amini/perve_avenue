@@ -10,7 +10,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
-        REACTION_DELAY: 500
+        REACTION_DELAY: 500,
+        AVATAR_WAIT_TIMEOUT: 10000 // Wait up to 10 seconds for avatars
     };
     // Track converted posts to prevent duplicates
     var convertedPostIds = new Set();
@@ -895,16 +896,50 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         return newCard;
     }
+    
     // ============================================================================
-    // INITIALIZE
+    // WAIT FOR AVATARS MODULE
     // ============================================================================
-    function initialize() {
-        // Prevent double initialization
-        if (isInitialized) {
-            console.log('[PostsModule] Already initialized, skipping');
+    function waitForAvatarsModule(callback) {
+        // Check if avatars module is already initialized
+        if (typeof window.ForumAvatars !== 'undefined' && window.ForumAvatars.isInitialized) {
+            console.log('[PostsModule] Avatars module already ready');
+            callback();
             return;
         }
-       
+        
+        // If avatars module exists but not initialized yet, wait for its event
+        if (typeof window.ForumAvatars !== 'undefined') {
+            console.log('[PostsModule] Waiting for avatars module to initialize...');
+            
+            var avatarReadyHandler = function() {
+                console.log('[PostsModule] Avatars module ready event received');
+                window.removeEventListener('forum-avatars-ready', avatarReadyHandler);
+                clearTimeout(timeout);
+                callback();
+            };
+            
+            window.addEventListener('forum-avatars-ready', avatarReadyHandler);
+            
+            // Timeout fallback
+            var timeout = setTimeout(function() {
+                console.warn('[PostsModule] Timeout waiting for avatars module, proceeding anyway');
+                window.removeEventListener('forum-avatars-ready', avatarReadyHandler);
+                callback();
+            }, CONFIG.AVATAR_WAIT_TIMEOUT);
+            
+            return;
+        }
+        
+        // No avatars module, just proceed
+        console.log('[PostsModule] No avatars module detected, proceeding');
+        callback();
+    }
+    
+    // ============================================================================
+    // DO INITIALIZE (actual initialization logic)
+    // ============================================================================
+    function doInitialize() {
         console.log('[PostsModule] Initializing...');
         // Get or create the posts container
         var container = getPostsContainer();
@@ -1025,6 +1060,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         console.log('[PostsModule] Ready - ' + validPosts + ' posts converted');
     }
+    
+    // ============================================================================
+    // INITIALIZE (with avatars wait)
+    // ============================================================================
+    function initialize() {
+        // Prevent double initialization
+        if (isInitialized) {
+            console.log('[PostsModule] Already initialized, skipping');
+            return;
+        }
+        
+        // Wait for avatars module before proceeding
+        waitForAvatarsModule(doInitialize);
+    }
+    
     // ============================================================================
     // PUBLIC API
     // ============================================================================
