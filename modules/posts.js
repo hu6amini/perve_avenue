@@ -114,6 +114,121 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
     
     // ============================================================================
+    // EMBEDDED LINK TRANSFORMATION
+    // ============================================================================
+    function transformEmbeddedLinks(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+        
+        // Create a temporary DOM element to parse the HTML
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        
+        // Find all ffb_embedlink containers
+        var embedContainers = tempDiv.querySelectorAll('.ffb_embedlink');
+        
+        for (var i = 0; i < embedContainers.length; i++) {
+            var container = embedContainers[i];
+            var modernEmbed = convertToModernEmbed(container);
+            if (modernEmbed) {
+                container.parentNode.replaceChild(modernEmbed, container);
+            }
+        }
+        
+        return tempDiv.innerHTML;
+    }
+    
+    function convertToModernEmbed(originalContainer) {
+        try {
+            // Extract the main link (the article URL)
+            var mainLink = originalContainer.querySelector('a[href]:not(.ffb_embedlink_preview)');
+            if (!mainLink) return null;
+            
+            var url = mainLink.getAttribute('href');
+            var domain = extractDomain(url);
+            
+            // Extract title - look for the second div's anchor text or the preview area
+            var titleElement = originalContainer.querySelector('div:not([style]) a:not(.ffb_embedlink_preview)');
+            var title = titleElement ? titleElement.textContent.trim() : domain;
+            
+            // Extract description - look for the paragraph
+            var descElement = originalContainer.querySelector('p');
+            var description = descElement ? descElement.textContent.trim() : '';
+            
+            // Extract image
+            var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
+            var imageUrl = imgElement ? imgElement.getAttribute('src') : null;
+            
+            // Extract favicon
+            var faviconElement = originalContainer.querySelector('img[data-src*="favicon"]');
+            var faviconUrl = faviconElement ? faviconElement.getAttribute('data-src') : null;
+            
+            // Clean up title (remove "Read more" or similar suffixes if present)
+            if (title && title.includes(' - ')) {
+                title = title.split(' - ')[0];
+            }
+            
+            // Build modern embedded link HTML
+            var modernHtml = '<div class="modern-embedded-link">' +
+                '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
+            
+            if (imageUrl) {
+                modernHtml += '<div class="embedded-link-image">' +
+                    '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: 600 / 400;" width="600" height="400">' +
+                    '</div>';
+            }
+            
+            modernHtml += '<div class="embedded-link-content">';
+            
+            if (faviconUrl || domain) {
+                modernHtml += '<div class="embedded-link-domain">';
+                if (faviconUrl) {
+                    modernHtml += '<img src="' + faviconUrl + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16" style="width: 16px; height: 16px; object-fit: contain; display: inline-block; vertical-align: middle;">';
+                }
+                modernHtml += '<span>' + Utils.escapeHtml(domain) + '</span></div>';
+            }
+            
+            modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
+            
+            if (description) {
+                modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(description.substring(0, 200)) + (description.length > 200 ? '…' : '') + '</p>';
+            }
+            
+            modernHtml += '<div class="embedded-link-meta">' +
+                '<span class="embedded-link-read-more">Read more on ' + Utils.escapeHtml(domain) + ' ›</span>' +
+                '</div>' +
+                '</div>' +
+                '</a>' +
+                '</div>';
+            
+            return createElementFromHTML(modernHtml);
+        } catch (error) {
+            console.warn('[PostsModule] Failed to convert embedded link:', error);
+            return null;
+        }
+    }
+    
+    function extractDomain(url) {
+        try {
+            var a = document.createElement('a');
+            a.href = url;
+            var hostname = a.hostname;
+            // Remove www. prefix
+            if (hostname.startsWith('www.')) {
+                hostname = hostname.substring(4);
+            }
+            return hostname;
+        } catch (e) {
+            return url.split('/')[2] || url;
+        }
+    }
+    
+    function createElementFromHTML(htmlString) {
+        var div = document.createElement('div');
+        div.innerHTML = htmlString.trim();
+        return div.firstChild;
+    }
+    
+    // ============================================================================
     // DATA EXTRACTION
     // ============================================================================
     function getUsername($post) {
@@ -228,6 +343,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Clean up any empty paragraphs or extra whitespace
         html = html.replace(/<p>\s*<\/p>/g, '');
         html = html.trim();
+        
+        // Transform embedded links in the content
+        html = transformEmbeddedLinks(html);
         
         return html;
     }
