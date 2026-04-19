@@ -12,11 +12,19 @@ var ForumPostsModule = (function(Utils, EventBus) {
         CONTAINER_ID: 'posts-container',
         REACTION_DELAY: 500
     };
+    
+    // Avatar color palette
+    var AVATAR_COLORS = [
+        '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
+        '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
+    ];
+    
     // Track converted posts to prevent duplicates
     var convertedPostIds = new Set();
     var isInitialized = false;
     // Store reaction data for each post
     var postReactions = new Map();
+    
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
@@ -47,18 +55,64 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         return newContainer;
     }
+    
     function isValidPost(postEl) {
         if (!postEl) return false;
         var id = postEl.getAttribute('id');
         // Must have an ID that starts with 'ee' and is not the body or other elements
         return id && id.startsWith(CONFIG.POST_ID_PREFIX) && postEl.tagName !== 'BODY';
     }
+    
     function getPostId($post) {
         var fullId = $post.getAttribute('id');
         if (!fullId) return null;
         if (!fullId.startsWith(CONFIG.POST_ID_PREFIX)) return null;
         return fullId.replace(CONFIG.POST_ID_PREFIX, '');
     }
+    
+    // ============================================================================
+    // AVATAR GENERATION
+    // ============================================================================
+    function generateLetterAvatar(username, userId) {
+        var displayName = username || 'User';
+        var firstLetter = displayName.charAt(0).toUpperCase();
+        
+        if (!firstLetter.match(/[A-Z0-9]/i)) {
+            firstLetter = '?';
+        }
+        
+        var colorIndex = 0;
+        if (firstLetter >= 'A' && firstLetter <= 'Z') {
+            colorIndex = (firstLetter.charCodeAt(0) - 65) % AVATAR_COLORS.length;
+        } else if (firstLetter >= '0' && firstLetter <= '9') {
+            colorIndex = (parseInt(firstLetter) + 26) % AVATAR_COLORS.length;
+        } else if (userId) {
+            // Use userId as fallback for consistent colors
+            colorIndex = parseInt(userId) % AVATAR_COLORS.length;
+        } else {
+            var hash = 0;
+            for (var i = 0; i < username.length; i++) {
+                hash = ((hash << 5) - hash) + username.charCodeAt(i);
+                hash = hash & hash;
+            }
+            colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
+        }
+        
+        var backgroundColor = AVATAR_COLORS[colorIndex];
+        if (backgroundColor.startsWith('#')) {
+            backgroundColor = backgroundColor.substring(1);
+        }
+        
+        var params = [
+            'seed=' + encodeURIComponent(firstLetter),
+            'backgroundColor=' + backgroundColor,
+            'radius=50',
+            'size=70'
+        ];
+        
+        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+    }
+    
     // ============================================================================
     // DATA EXTRACTION
     // ============================================================================
@@ -66,6 +120,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var nickLink = $post.querySelector('.nick a');
         return nickLink ? nickLink.textContent.trim() : 'Unknown';
     }
+    
     function getAvatarUrl($post) {
         var avatarImg = $post.querySelector('.avatar img');
         if (!avatarImg) return null;
@@ -76,25 +131,30 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         return src;
     }
+    
     function getGroupText($post) {
         var groupDd = $post.querySelector('.u_group dd');
         return groupDd ? groupDd.textContent.trim() : '';
     }
+    
     function getPostCount($post) {
         var postsLink = $post.querySelector('.u_posts dd a');
         return postsLink ? postsLink.textContent.trim() : '0';
     }
+    
     function getReputation($post) {
         var repLink = $post.querySelector('.u_reputation dd a');
         if (!repLink) return '0';
         return repLink.textContent.trim().replace('+', '');
     }
+    
     function getIsOnline($post) {
         var statusTitle = $post.querySelector('.u_status');
         if (!statusTitle) return false;
         var title = statusTitle.getAttribute('title') || '';
         return title.toLowerCase().includes('online');
     }
+    
     function getUserTitleAndIcon($post) {
         var uRankSpan = $post.querySelector('.u_rank');
         if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
@@ -135,6 +195,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         return { title: title || 'Member', iconClass: iconClass || 'fa-medal fa-regular' };
     }
+    
     function getCleanContent($post) {
         var contentTable = $post.querySelector('.right.Item table.color');
         if (!contentTable) return '';
@@ -170,6 +231,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         return html;
     }
+    
     function getSignatureHtml($post) {
         var signature = $post.querySelector('.signature');
         if (!signature) return '';
@@ -177,15 +239,18 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var sigClone = signature.cloneNode(true);
         return sigClone.innerHTML;
     }
+    
     function getEditInfo($post) {
         var editSpan = $post.querySelector('.edit');
         return editSpan ? editSpan.textContent.trim() : '';
     }
+    
     function getLikes($post) {
         var pointsPos = $post.querySelector('.points .points_pos');
         if (!pointsPos) return 0;
         return parseInt(pointsPos.textContent) || 0;
     }
+    
     function getReactionData($post) {
         var hasReactions = false;
         var reactionCount = 0;
@@ -228,6 +293,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reactions: reactions
         };
     }
+    
     function getMaskedIp($post) {
         var ipLink = $post.querySelector('.ip_address dd a');
         if (!ipLink) return '';
@@ -238,9 +304,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         return ip;
     }
+    
     function getPostNumber($post, index) {
         return index + 1;
     }
+    
     function getTimeAgo($post) {
         var whenSpan = $post.querySelector('.when');
         if (!whenSpan) return 'Recently';
@@ -258,6 +326,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         return 'Just now';
     }
+    
     function extractPostData($post, index) {
         var postId = getPostId($post);
         if (!postId) return null;
@@ -272,7 +341,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         return {
             postId: postId,
             username: getUsername($post),
-            avatarUrl: getAvatarUrl($post), // Original avatar URL or null
+            originalAvatarUrl: getAvatarUrl($post),
             groupText: getGroupText($post),
             roleBadgeClass: getGroupText($post) === 'Administrator' ? 'admin' : 'member',
             postCount: getPostCount($post),
@@ -292,6 +361,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             timeAgo: getTimeAgo($post)
         };
     }
+    
     // ============================================================================
     // GENERATE REACTION BUTTONS HTML
     // ============================================================================
@@ -336,6 +406,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         reactionHtml += '</div>';
         return reactionHtml;
     }
+    
     // ============================================================================
     // GENERATE MODERN CARD
     // ============================================================================
@@ -377,27 +448,20 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</div>';
         }
         
-        // Avatar HTML - Use original avatar URL if available, otherwise leave empty for avatars module to fill
-        // The avatars module will replace the default avatar with proper user avatars
-        var avatarUrl = data.avatarUrl || '';
-        
-        // Create avatar container with data attributes for the avatars module
-        // The avatars module looks for .summary li[class^="box_"] which our post-card will have
-        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '" data-user-id="' + data.postId + '" data-username="' + Utils.escapeHtml(data.username) + '">';
-        
-        if (avatarUrl) {
-            // If original avatar exists, use it (avatars module will enhance if needed)
-            avatarHtml += '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">';
+        // Generate avatar URL (use original if available, otherwise generate letter avatar)
+        var avatarUrl;
+        if (data.originalAvatarUrl && data.originalAvatarUrl.trim() !== '') {
+            avatarUrl = data.originalAvatarUrl;
         } else {
-            // Placeholder - avatars module will replace this with proper avatar
-            avatarHtml += '<div class="avatar-placeholder" style="width:70px;height:70px;border-radius:50%;background:#e0e0e0;display:flex;align-items:center;justify-content:center;">' +
-                '<i class="fa-regular fa-user" style="font-size:30px;color:#999;"></i>' +
-                '</div>';
+            avatarUrl = generateLetterAvatar(data.username, data.postId);
         }
         
-        avatarHtml += '</div>';
+        // Avatar HTML
+        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">' +
+            '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy" onerror="this.onerror=null; this.src=\'' + generateLetterAvatar(data.username, data.postId) + '\';">' +
+        '</div>';
         
-        return '<article class="post-card summary" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header">' +
                 '<div class="post-meta">' +
                     '<div class="post-number">' +
@@ -468,6 +532,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             '</footer>' +
         '</article>';
     }
+    
     // ============================================================================
     // LIKE DISPLAY REFRESH
     // ============================================================================
@@ -505,6 +570,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
     }
+    
     // ============================================================================
     // REACTION DISPLAY REFRESH
     // ============================================================================
@@ -549,6 +615,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             postReactionsDiv.innerHTML = newReactionsHtml;
         }
     }
+    
     // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
@@ -563,6 +630,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             avatarLink.click();
         }
     }
+    
     function handleUsernameClick(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -574,6 +642,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             nickLink.click();
         }
     }
+    
     function handleQuote(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -582,6 +651,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             window.location.href = quoteLink.getAttribute('href');
         }
     }
+    
     function handleEdit(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -590,6 +660,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             window.location.href = editLink.getAttribute('href');
         }
     }
+    
     function handleDelete(pid) {
         if (confirm('Are you sure you want to delete this post?')) {
             if (typeof window.delete_post === 'function') {
@@ -597,6 +668,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
     }
+    
     function handleShare(pid, buttonElement) {
         var url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(function() {
@@ -609,6 +681,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             console.error('Copy failed:', err);
         });
     }
+    
     function handleReport(pid) {
         var reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button');
         if (!reportBtn) {
@@ -618,6 +691,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reportBtn.click();
         }
     }
+    
     function handleLike(pid, isCountClick) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -742,6 +816,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
+    
     function handleReact(pid, buttonElement) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -760,6 +835,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
+    
     // ============================================================================
     // ATTACH EVENT LISTENERS
     // ============================================================================
@@ -858,6 +934,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
     }
+    
     // ============================================================================
     // CONVERT TO MODERN CARD (returns card element)
     // ============================================================================
@@ -882,9 +959,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         // Store reference to original post
         newCard.setAttribute('data-original-id', postEl.id);
-        
-        // Add box_m class for avatar module to detect
-        newCard.classList.add('box_m' + postId);
        
         // Mark as converted
         convertedPostIds.add(postId);
@@ -895,6 +969,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         return newCard;
     }
+    
     // ============================================================================
     // INITIALIZE
     // ============================================================================
@@ -1025,6 +1100,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         console.log('[PostsModule] Ready - ' + validPosts + ' posts converted');
     }
+    
     // ============================================================================
     // PUBLIC API
     // ============================================================================
