@@ -719,7 +719,6 @@ img {
 }
 .modern-embedded-link .embedded-link-title {
   font-size: var(--text-base);
-  font-weight: 400;
   line-height: var(--phi);
   margin: 0 0 var(--space-xs) 0;
   color: var(--text-primary);
