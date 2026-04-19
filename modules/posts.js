@@ -10,18 +10,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
-        REACTION_DELAY: 500,
-        AVATAR_WAIT_TIMEOUT: 5000,  // Wait up to 5 seconds for avatars
-        AVATAR_CHECK_INTERVAL: 100   // Check every 100ms
+        REACTION_DELAY: 500
     };
-    
     // Track converted posts to prevent duplicates
     var convertedPostIds = new Set();
     var isInitialized = false;
-    var isWaitingForAvatars = false;
     // Store reaction data for each post
     var postReactions = new Map();
-    
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
@@ -52,79 +47,54 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         return newContainer;
     }
-    
     function isValidPost(postEl) {
         if (!postEl) return false;
         var id = postEl.getAttribute('id');
         // Must have an ID that starts with 'ee' and is not the body or other elements
         return id && id.startsWith(CONFIG.POST_ID_PREFIX) && postEl.tagName !== 'BODY';
     }
-    
     function getPostId($post) {
         var fullId = $post.getAttribute('id');
         if (!fullId) return null;
         if (!fullId.startsWith(CONFIG.POST_ID_PREFIX)) return null;
         return fullId.replace(CONFIG.POST_ID_PREFIX, '');
     }
-    
     // ============================================================================
-    // DATA EXTRACTION - NOW READS ENHANCED AVATARS FROM AVATARS MODULE
+    // DATA EXTRACTION
     // ============================================================================
     function getUsername($post) {
         var nickLink = $post.querySelector('.nick a');
         return nickLink ? nickLink.textContent.trim() : 'Unknown';
     }
-    
     function getAvatarUrl($post) {
-        // First, check if avatars module has added an avatar image
-        var avatarContainer = $post.querySelector('.forum-avatar-container');
-        if (avatarContainer) {
-            var avatarImg = avatarContainer.querySelector('img');
-            if (avatarImg && avatarImg.src && !avatarImg.src.includes('dicebear.com')) {
-                return avatarImg.src;
-            }
+        var avatarImg = $post.querySelector('.avatar img');
+        if (!avatarImg) return null;
+        var src = avatarImg.getAttribute('src');
+        if (src && src.includes('weserv.nl')) {
+            var urlParams = new URLSearchParams(src.split('?')[1]);
+            return urlParams.get('url') || src;
         }
-        
-        // Fallback: try to get from original avatar link
-        var avatarLink = $post.querySelector('.avatar');
-        if (avatarLink) {
-            var img = avatarLink.querySelector('img');
-            if (img && img.src) {
-                var src = img.getAttribute('src');
-                if (src && src.includes('weserv.nl')) {
-                    var urlParams = new URLSearchParams(src.split('?')[1]);
-                    return urlParams.get('url') || src;
-                }
-                return src;
-            }
-        }
-        
-        return null;
+        return src;
     }
-    
     function getGroupText($post) {
         var groupDd = $post.querySelector('.u_group dd');
         return groupDd ? groupDd.textContent.trim() : '';
     }
-    
     function getPostCount($post) {
         var postsLink = $post.querySelector('.u_posts dd a');
         return postsLink ? postsLink.textContent.trim() : '0';
     }
-    
     function getReputation($post) {
         var repLink = $post.querySelector('.u_reputation dd a');
         if (!repLink) return '0';
         return repLink.textContent.trim().replace('+', '');
     }
-    
     function getIsOnline($post) {
         var statusTitle = $post.querySelector('.u_status');
         if (!statusTitle) return false;
         var title = statusTitle.getAttribute('title') || '';
         return title.toLowerCase().includes('online');
     }
-    
     function getUserTitleAndIcon($post) {
         var uRankSpan = $post.querySelector('.u_rank');
         if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
@@ -165,7 +135,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         return { title: title || 'Member', iconClass: iconClass || 'fa-medal fa-regular' };
     }
-    
     function getCleanContent($post) {
         var contentTable = $post.querySelector('.right.Item table.color');
         if (!contentTable) return '';
@@ -201,7 +170,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         return html;
     }
-    
     function getSignatureHtml($post) {
         var signature = $post.querySelector('.signature');
         if (!signature) return '';
@@ -209,18 +177,15 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var sigClone = signature.cloneNode(true);
         return sigClone.innerHTML;
     }
-    
     function getEditInfo($post) {
         var editSpan = $post.querySelector('.edit');
         return editSpan ? editSpan.textContent.trim() : '';
     }
-    
     function getLikes($post) {
         var pointsPos = $post.querySelector('.points .points_pos');
         if (!pointsPos) return 0;
         return parseInt(pointsPos.textContent) || 0;
     }
-    
     function getReactionData($post) {
         var hasReactions = false;
         var reactionCount = 0;
@@ -263,7 +228,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reactions: reactions
         };
     }
-    
     function getMaskedIp($post) {
         var ipLink = $post.querySelector('.ip_address dd a');
         if (!ipLink) return '';
@@ -274,11 +238,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         return ip;
     }
-    
     function getPostNumber($post, index) {
         return index + 1;
     }
-    
     function getTimeAgo($post) {
         var whenSpan = $post.querySelector('.when');
         if (!whenSpan) return 'Recently';
@@ -296,7 +258,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         return 'Just now';
     }
-    
     function extractPostData($post, index) {
         var postId = getPostId($post);
         if (!postId) return null;
@@ -311,7 +272,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         return {
             postId: postId,
             username: getUsername($post),
-            avatarUrl: getAvatarUrl($post), // Now gets enhanced avatar from avatars module
+            avatarUrl: getAvatarUrl($post), // Original avatar URL or null
             groupText: getGroupText($post),
             roleBadgeClass: getGroupText($post) === 'Administrator' ? 'admin' : 'member',
             postCount: getPostCount($post),
@@ -331,7 +292,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             timeAgo: getTimeAgo($post)
         };
     }
-    
     // ============================================================================
     // GENERATE REACTION BUTTONS HTML
     // ============================================================================
@@ -376,7 +336,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         reactionHtml += '</div>';
         return reactionHtml;
     }
-    
     // ============================================================================
     // GENERATE MODERN CARD
     // ============================================================================
@@ -418,16 +377,19 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 '</div>';
         }
         
-        // Use the avatar URL from the enhanced data (already processed by avatars module)
+        // Avatar HTML - Use original avatar URL if available, otherwise leave empty for avatars module to fill
+        // The avatars module will replace the default avatar with proper user avatars
         var avatarUrl = data.avatarUrl || '';
         
-        // Avatar HTML - use the enhanced avatar URL
-        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">';
+        // Create avatar container with data attributes for the avatars module
+        // The avatars module looks for .summary li[class^="box_"] which our post-card will have
+        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '" data-user-id="' + data.postId + '" data-username="' + Utils.escapeHtml(data.username) + '">';
         
         if (avatarUrl) {
+            // If original avatar exists, use it (avatars module will enhance if needed)
             avatarHtml += '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">';
         } else {
-            // Fallback placeholder (avatars module will replace if needed)
+            // Placeholder - avatars module will replace this with proper avatar
             avatarHtml += '<div class="avatar-placeholder" style="width:70px;height:70px;border-radius:50%;background:#e0e0e0;display:flex;align-items:center;justify-content:center;">' +
                 '<i class="fa-regular fa-user" style="font-size:30px;color:#999;"></i>' +
                 '</div>';
@@ -435,7 +397,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         avatarHtml += '</div>';
         
-        return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        return '<article class="post-card summary" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header">' +
                 '<div class="post-meta">' +
                     '<div class="post-number">' +
@@ -506,7 +468,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             '</footer>' +
         '</article>';
     }
-    
     // ============================================================================
     // LIKE DISPLAY REFRESH
     // ============================================================================
@@ -544,7 +505,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
     }
-    
     // ============================================================================
     // REACTION DISPLAY REFRESH
     // ============================================================================
@@ -589,7 +549,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             postReactionsDiv.innerHTML = newReactionsHtml;
         }
     }
-    
     // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
@@ -600,20 +559,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Find the avatar link in the original post
         var avatarLink = originalPost.querySelector('.avatar');
         if (avatarLink && avatarLink.tagName === 'A') {
+            // Trigger a click on the original avatar link
             avatarLink.click();
         }
     }
-    
     function handleUsernameClick(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
+        // Find the nickname link in the original post
         var nickLink = originalPost.querySelector('.nick a');
         if (nickLink) {
+            // Trigger a click on the original link
             nickLink.click();
         }
     }
-    
     function handleQuote(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -622,7 +582,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             window.location.href = quoteLink.getAttribute('href');
         }
     }
-    
     function handleEdit(pid) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -631,7 +590,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             window.location.href = editLink.getAttribute('href');
         }
     }
-    
     function handleDelete(pid) {
         if (confirm('Are you sure you want to delete this post?')) {
             if (typeof window.delete_post === 'function') {
@@ -639,7 +597,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
     }
-    
     function handleShare(pid, buttonElement) {
         var url = window.location.href.split('#')[0] + '#entry' + pid;
         navigator.clipboard.writeText(url).then(function() {
@@ -652,7 +609,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             console.error('Copy failed:', err);
         });
     }
-    
     function handleReport(pid) {
         var reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button');
         if (!reportBtn) {
@@ -662,7 +618,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             reportBtn.click();
         }
     }
-    
     function handleLike(pid, isCountClick) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
@@ -670,14 +625,19 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var pointsContainer = originalPost.querySelector('.points');
         if (!pointsContainer) return;
         
+        // If clicking on the count (to view who liked)
         if (isCountClick) {
+            // Find the points_pos element (the actual count)
             var pointsPos = pointsContainer.querySelector('.points_pos');
             if (pointsPos) {
+                // Find the parent overlay link
                 var overlayLink = pointsPos.closest('a[rel="#overlay"]');
                 if (overlayLink) {
                     var href = overlayLink.getAttribute('href');
                     
+                    // Try to use jQuery if available (ForumFree uses jQuery)
                     if (typeof $ !== 'undefined' && $.fn.overlay) {
+                        // Initialize overlay on the link if not already done
                         if (!overlayLink.hasAttribute('data-overlay-init')) {
                             $(overlayLink).overlay({
                                 onBeforeLoad: function() {
@@ -689,9 +649,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
                             });
                             overlayLink.setAttribute('data-overlay-init', 'true');
                         }
+                        // Trigger the overlay
                         $(overlayLink).trigger('click');
                         return;
                     } else {
+                        // Fallback: try to simulate the mouseover that initializes the overlay
                         var mouseoverEvent = new MouseEvent('mouseover', {
                             view: window,
                             bubbles: true,
@@ -699,6 +661,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         });
                         overlayLink.dispatchEvent(mouseoverEvent);
                         
+                        // Then click after a small delay
                         setTimeout(function() {
                             var clickEvent = new MouseEvent('click', {
                                 view: window,
@@ -712,12 +675,14 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 }
             }
             
+            // Fallback: try to find and click the points_pos directly
             var pointsPosDirect = pointsContainer.querySelector('.points_pos');
             if (pointsPosDirect) {
                 pointsPosDirect.click();
                 return;
             }
             
+            // Last resort: find any votes link
             var anyLink = pointsContainer.querySelector('a[href*="votes"]');
             if (anyLink) {
                 anyLink.click();
@@ -726,9 +691,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
             return;
         }
         
+        // Otherwise, handle like/unlike action
+        // Check if there's an undo button (meaning user already liked this post)
         var undoButton = pointsContainer.querySelector('.bullet_delete');
         
         if (undoButton) {
+            // User already liked - this will unlike
             var undoOnclick = undoButton.getAttribute('onclick');
             if (undoOnclick) {
                 eval(undoOnclick);
@@ -736,6 +704,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 undoButton.click();
             }
         } else {
+            // Find the like button (points_up)
             var likeBtn = pointsContainer.querySelector('.points_up');
             
             if (likeBtn) {
@@ -767,21 +736,23 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         }
         
+        // Refresh the like count after a short delay
         setTimeout(function() {
             refreshLikeDisplay(pid);
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
-    
     function handleReact(pid, buttonElement) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
+        // Find the emoji container
         var emojiContainer = originalPost.querySelector('.st-emoji-container');
         if (emojiContainer) {
             var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
             trigger.click();
         } else {
+            // Fallback to like
             handleLike(pid, false);
         }
         
@@ -789,11 +760,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
-    
     // ============================================================================
     // ATTACH EVENT LISTENERS
     // ============================================================================
     function attachEventHandlers() {
+        // Avatar click handler - trigger the original avatar link
         document.addEventListener('click', function(e) {
             var avatarDiv = e.target.closest('.post-avatar');
             if (avatarDiv) {
@@ -803,6 +774,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Username click handler - trigger the original nickname link
         document.addEventListener('click', function(e) {
             var userNameDiv = e.target.closest('.user-name');
             if (userNameDiv) {
@@ -812,6 +784,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Quote buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="quote"], .action-icon[title="Quote"]');
             if (btn) {
@@ -821,6 +794,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Edit buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="edit"], .action-icon[title="Edit"]');
             if (btn) {
@@ -830,6 +804,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Delete buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="delete"], .action-icon[title="Delete"]');
             if (btn) {
@@ -839,6 +814,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Share buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="share"], .action-icon[title="Share"]');
             if (btn) {
@@ -848,6 +824,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Report buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="report"], .action-icon[title="Report"]');
             if (btn) {
@@ -857,18 +834,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
         
+        // Like buttons - differentiate between icon click and count click
         document.addEventListener('click', function(e) {
             var likeBtn = e.target.closest('.like-btn');
             if (likeBtn) {
                 e.preventDefault();
                 var pid = likeBtn.getAttribute('data-pid');
                 if (pid) {
+                    // Check if the click target is the count span or the icon
                     var isCountClick = e.target.classList && e.target.classList.contains('like-count-display');
                     handleLike(pid, isCountClick);
                 }
             }
         });
         
+        // React buttons (any reaction button that's not a like button)
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn) {
@@ -878,57 +858,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             }
         });
     }
-    
-    // ============================================================================
-    // WAIT FOR AVATARS MODULE
-    // ============================================================================
-    function waitForAvatarsModule(callback) {
-        // Check if avatars module exists and is initialized
-        if (typeof ForumAvatars !== 'undefined' && ForumAvatars.isInitialized) {
-            console.log('[PostsModule] Avatars module already ready');
-            callback();
-            return;
-        }
-        
-        // If avatars module doesn't exist, proceed anyway
-        if (typeof ForumAvatars === 'undefined') {
-            console.log('[PostsModule] Avatars module not found, proceeding without waiting');
-            callback();
-            return;
-        }
-        
-        console.log('[PostsModule] Waiting for avatars module to initialize...');
-        isWaitingForAvatars = true;
-        
-        // Listen for avatars ready event
-        var avatarReadyHandler = function() {
-            console.log('[PostsModule] Avatars module ready event received');
-            window.removeEventListener('forum-avatars-ready', avatarReadyHandler);
-            isWaitingForAvatars = false;
-            callback();
-        };
-        
-        window.addEventListener('forum-avatars-ready', avatarReadyHandler);
-        
-        // Also check periodically (in case event was missed)
-        var startTime = Date.now();
-        var checkInterval = setInterval(function() {
-            if (typeof ForumAvatars !== 'undefined' && ForumAvatars.isInitialized) {
-                console.log('[PostsModule] Avatars module ready (detected by polling)');
-                window.removeEventListener('forum-avatars-ready', avatarReadyHandler);
-                clearInterval(checkInterval);
-                isWaitingForAvatars = false;
-                callback();
-            } else if (Date.now() - startTime > CONFIG.AVATAR_WAIT_TIMEOUT) {
-                console.warn('[PostsModule] Timeout waiting for avatars module, proceeding anyway');
-                window.removeEventListener('forum-avatars-ready', avatarReadyHandler);
-                clearInterval(checkInterval);
-                isWaitingForAvatars = false;
-                callback();
-            }
-        }, CONFIG.AVATAR_CHECK_INTERVAL);
-    }
-    
     // ============================================================================
     // CONVERT TO MODERN CARD (returns card element)
     // ============================================================================
@@ -953,6 +882,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         // Store reference to original post
         newCard.setAttribute('data-original-id', postEl.id);
+        
+        // Add box_m class for avatar module to detect
+        newCard.classList.add('box_m' + postId);
        
         // Mark as converted
         convertedPostIds.add(postId);
@@ -963,13 +895,17 @@ var ForumPostsModule = (function(Utils, EventBus) {
        
         return newCard;
     }
-    
     // ============================================================================
-    // DO INITIALIZE (actual post conversion)
+    // INITIALIZE
     // ============================================================================
-    function doInitialize() {
-        console.log('[PostsModule] Converting posts with enhanced avatars...');
-        
+    function initialize() {
+        // Prevent double initialization
+        if (isInitialized) {
+            console.log('[PostsModule] Already initialized, skipping');
+            return;
+        }
+       
+        console.log('[PostsModule] Initializing...');
         // Get or create the posts container
         var container = getPostsContainer();
        
@@ -1044,10 +980,12 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 selector: '.st-emoji-container',
                 priority: 'medium',
                 callback: function(node) {
+                    // Find the parent post
                     var postEl = node.closest('.post');
                     if (postEl && isValidPost(postEl)) {
                         var postId = getPostId(postEl);
                         if (postId) {
+                            // Small delay to ensure the reaction plugin has fully loaded
                             setTimeout(function() {
                                 refreshReactionDisplay(postId);
                             }, 100);
@@ -1085,32 +1023,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
             EventBus.trigger('posts:ready', { count: validPosts });
         }
        
-        console.log('[PostsModule] Ready - ' + validPosts + ' posts converted with enhanced avatars');
+        console.log('[PostsModule] Ready - ' + validPosts + ' posts converted');
     }
-    
-    // ============================================================================
-    // INITIALIZE - Wait for avatars module first
-    // ============================================================================
-    function initialize() {
-        // Prevent double initialization
-        if (isInitialized) {
-            console.log('[PostsModule] Already initialized, skipping');
-            return;
-        }
-        
-        if (isWaitingForAvatars) {
-            console.log('[PostsModule] Already waiting for avatars, skipping');
-            return;
-        }
-        
-        console.log('[PostsModule] Initializing... waiting for avatars module');
-        
-        // Wait for avatars module to finish processing
-        waitForAvatarsModule(function() {
-            doInitialize();
-        });
-    }
-    
     // ============================================================================
     // PUBLIC API
     // ============================================================================
@@ -1125,7 +1039,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             convertedPostIds.clear();
             postReactions.clear();
             isInitialized = false;
-            isWaitingForAvatars = false;
         },
         CONFIG: CONFIG
     };
