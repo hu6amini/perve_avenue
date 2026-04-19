@@ -378,16 +378,18 @@ var ForumPostsModule = (function(Utils, EventBus) {
         }
         
         // Avatar HTML - Use original avatar URL if available, otherwise leave empty for avatars module to fill
+        // The avatars module will replace the default avatar with proper user avatars
         var avatarUrl = data.avatarUrl || '';
         
-        // Create avatar container with data attributes
+        // Create avatar container with data attributes for the avatars module
+        // The avatars module looks for .summary li[class^="box_"] which our post-card will have
         var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '" data-user-id="' + data.postId + '" data-username="' + Utils.escapeHtml(data.username) + '">';
         
         if (avatarUrl) {
-            // If original avatar exists, use it
+            // If original avatar exists, use it (avatars module will enhance if needed)
             avatarHtml += '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy">';
         } else {
-            // Placeholder - avatars module will replace this
+            // Placeholder - avatars module will replace this with proper avatar
             avatarHtml += '<div class="avatar-placeholder" style="width:70px;height:70px;border-radius:50%;background:#e0e0e0;display:flex;align-items:center;justify-content:center;">' +
                 '<i class="fa-regular fa-user" style="font-size:30px;color:#999;"></i>' +
                 '</div>';
@@ -395,8 +397,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         
         avatarHtml += '</div>';
         
-        // REMOVED: 'summary' class from the article tag to prevent avatar module from processing it
-        return '<article class="post-card modern-post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        return '<article class="post-card summary" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header">' +
                 '<div class="post-meta">' +
                     '<div class="post-number">' +
@@ -882,8 +883,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         // Store reference to original post
         newCard.setAttribute('data-original-id', postEl.id);
         
-        // Add box_m class for avatar module to detect (if needed for other functionality)
-        // Note: This won't trigger avatar module because we removed the 'summary' class
+        // Add box_m class for avatar module to detect
         newCard.classList.add('box_m' + postId);
        
         // Mark as converted
