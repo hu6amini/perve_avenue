@@ -442,7 +442,7 @@ img {
  text-align: left;
     }
 
-.post-message img {
+.post-message img:not(.embedded-link-image img) {
       max-width: 100%;
       border-radius: var(--radius);
       display: block;
