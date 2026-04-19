@@ -35,51 +35,51 @@ document.head.appendChild(instantPagePreload);
 
 (() => {
     const e = () => {
-        const e = Object.freeze([
-            // ============================================
-            // 1. EXTERNAL LIBRARIES (Third-party)
-            // ============================================
-            "https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243/lightgallery@2.7.1/lightgallery.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482/lightgallery@2.7.1/lg-zoom.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98/lightgallery@2.7.1/lg-thumbnail.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8b2d601/lightgallery@2.7.1/lg-fullscreen.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@42de4d6/lightgallery@2.7.1/lg-share.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe/lightgallery@2.7.1/lg-autoplay.min.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180c/lightgallery@2.7.1/lg-hash.min.js",
-            "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js",
-            "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js",
-            "https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm",
-            "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.min.js",
-            "https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.0/moment-timezone-with-data.min.js",
-            
-            // ============================================
-            // 2. FORUM ENHANCER CORE UTILITIES
-            // ============================================
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c7477a9/core/dom-utils.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@be3f0b0/core/event-bus.js",
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1d5426d/core/media-dimensions.js",
-            
-            // ============================================
-            // 3. TWEMOJI MODULE (depends on twemoji library)
-            // ============================================
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2ee17a4/core/twemoji.js",
-            
-            // ============================================
-            // 4. MUTATION OBSERVER
-            // ============================================
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8909aa9/forum_core_observer.js",
-            
-            // ============================================
-            // 5. ENHANCEMENT MODULES
-            // ============================================
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a5af829/modules/posts.js",
-            
-            // ============================================
-            // 6. MAIN ENHANCER (MUST BE LAST)
-            // ============================================
-            "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4e09a28/core/forum-enhancer.js"
-        ]);
+       const e = Object.freeze([
+    // ============================================
+    // 1. EXTERNAL LIBRARIES (Third-party)
+    // ============================================
+    "https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243/lightgallery@2.7.1/lightgallery.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482/lightgallery@2.7.1/lg-zoom.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98/lightgallery@2.7.1/lg-thumbnail.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8b2d601/lightgallery@2.7.1/lg-fullscreen.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@42de4d6/lightgallery@2.7.1/lg-share.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe/lightgallery@2.7.1/lg-autoplay.min.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180c/lightgallery@2.7.1/lg-hash.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js",
+    "https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm",
+    "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.30.1/moment.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.0/moment-timezone-with-data.min.js",
+    
+    // ============================================
+    // 2. FORUM ENHANCER CORE UTILITIES
+    // ============================================
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c7477a9/core/dom-utils.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@be3f0b0/core/event-bus.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1d5426d/core/media-dimensions.js",
+    
+    // ============================================
+    // 3. MUTATION OBSERVER (MOVE THIS BEFORE twemoji.js)
+    // ============================================
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8909aa9/forum_core_observer.js",
+    
+    // ============================================
+    // 4. TWEMOJI MODULE (depends on twemoji library AND forum observer)
+    // ============================================
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2ee17a4/core/twemoji.js",
+    
+    // ============================================
+    // 5. ENHANCEMENT MODULES
+    // ============================================
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a5af829/modules/posts.js",
+    
+    // ============================================
+    // 6. MAIN ENHANCER (MUST BE LAST)
+    // ============================================
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4e09a28/core/forum-enhancer.js"
+]);
         
         requestIdleCallback(() => {
             // Load main scripts with defer (they need to execute in order)
