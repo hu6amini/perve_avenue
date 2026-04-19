@@ -615,41 +615,62 @@ function handleLike(pid, isCountClick) {
     
     // If clicking on the count (to view who liked)
     if (isCountClick) {
-        // Find the link that shows who liked the post
-        var legendsLink = pointsContainer.querySelector('a[href*="act=legends&CODE=votes"]');
-        if (legendsLink) {
-            // Prevent default navigation - we want the modal, not page navigation
-            var rel = legendsLink.getAttribute('rel');
-            var onmouseover = legendsLink.getAttribute('onmouseover');
-            var onclick = legendsLink.getAttribute('onclick');
-            
-            // Trigger the overlay/modal behavior
-            if (onmouseover && onmouseover.includes('overlay')) {
-                // Execute the onmouseover to set up the overlay
-                eval(onmouseover);
-                // Small delay to let overlay initialize
-                setTimeout(function() {
-                    // Trigger click to open the overlay
-                    var clickEvent = new MouseEvent('click', {
+        // Find the points_pos element (the actual count)
+        var pointsPos = pointsContainer.querySelector('.points_pos');
+        if (pointsPos) {
+            // Find the parent overlay link
+            var overlayLink = pointsPos.closest('a[rel="#overlay"]');
+            if (overlayLink) {
+                var href = overlayLink.getAttribute('href');
+                
+                // Try to use jQuery if available (ForumFree uses jQuery)
+                if (typeof $ !== 'undefined' && $.fn.overlay) {
+                    // Initialize overlay on the link if not already done
+                    if (!overlayLink.hasAttribute('data-overlay-init')) {
+                        $(overlayLink).overlay({
+                            onBeforeLoad: function() {
+                                var wrap = this.getOverlay();
+                                var content = wrap.find('div');
+                                content.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif"></p>')
+                                    .load(href + '&popup=1');
+                            }
+                        });
+                        overlayLink.setAttribute('data-overlay-init', 'true');
+                    }
+                    // Trigger the overlay
+                    $(overlayLink).trigger('click');
+                    return;
+                } else {
+                    // Fallback: try to simulate the mouseover that initializes the overlay
+                    var mouseoverEvent = new MouseEvent('mouseover', {
                         view: window,
                         bubbles: true,
                         cancelable: true
                     });
-                    legendsLink.dispatchEvent(clickEvent);
-                }, 50);
-            } else if (rel === '#overlay') {
-                // Direct overlay link
-                legendsLink.click();
-            } else if (onclick && onclick.includes('overlay')) {
-                eval(onclick);
-            } else {
-                // If no overlay behavior, still try to click (might open modal via other means)
-                legendsLink.click();
+                    overlayLink.dispatchEvent(mouseoverEvent);
+                    
+                    // Then click after a small delay
+                    setTimeout(function() {
+                        var clickEvent = new MouseEvent('click', {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        overlayLink.dispatchEvent(clickEvent);
+                    }, 50);
+                    return;
+                }
             }
+        }
+        
+        // Fallback: try to find and click the points_pos directly
+        var pointsPosDirect = pointsContainer.querySelector('.points_pos');
+        if (pointsPosDirect) {
+            pointsPosDirect.click();
             return;
         }
         
-        // Fallback: try to find any link that might show likes
+        // Last resort: find any votes link
         var anyLink = pointsContainer.querySelector('a[href*="votes"]');
         if (anyLink) {
             anyLink.click();
