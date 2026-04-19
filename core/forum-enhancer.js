@@ -15,17 +15,20 @@
         wrapperId: 'modern-forum-wrapper',
         hideOriginal: true,
         modules: {
-            posts: true,
+            avatars: true,    // Avatar module - loads first
+            posts: true,      // Posts module - depends on avatars
             navigation: false,
             sidebar: false,
             footer: false
         }
     };
+    
     // ============================================================================
     // MODULE REGISTRY
     // ============================================================================
     const modules = [];
     const moduleStatus = new Map();
+    
     function log(message, type) {
         if (!ENHANCER_CONFIG.debug && type !== 'error') return;
        
@@ -38,6 +41,7 @@
             console.log(prefix, message);
         }
     }
+    
     function registerModule(name, module, dependencies) {
         modules.push({
             name: name,
@@ -51,6 +55,7 @@
             log('Registered module: ' + name);
         }
     }
+    
     // ============================================================================
     // DEPENDENCY CHECKING
     // ============================================================================
@@ -70,6 +75,7 @@
         }
         return true;
     }
+    
     function initializeModule(module) {
         if (module.initialized) return true;
         if (!module.enabled) {
@@ -92,6 +98,7 @@
         }
         return false;
     }
+    
     function initializeAllModules() {
         log('Initializing all modules...');
        
@@ -123,6 +130,7 @@
        
         return modules.filter(function(m) { return m.initialized; }).length;
     }
+    
     // ============================================================================
     // DEPENDENCY CHECKING (Core)
     // ============================================================================
@@ -144,6 +152,7 @@
         log('All core dependencies available');
         return true;
     }
+    
     // ============================================================================
     // WAIT FOR DEPENDENCIES
     // ============================================================================
@@ -185,6 +194,7 @@
             setTimeout(resolve, 5000);
         });
     }
+    
     // ============================================================================
     // WAIT FOR DOM READY
     // ============================================================================
@@ -197,6 +207,7 @@
             }
         });
     }
+    
     // ============================================================================
     // WAIT FOR FORUM OBSERVER
     // ============================================================================
@@ -222,6 +233,7 @@
             }, 100);
         });
     }
+    
     // ============================================================================
     // WRAPPER CREATION
     // ============================================================================
@@ -245,6 +257,7 @@
         log('Created modern wrapper: ' + ENHANCER_CONFIG.wrapperId);
         return wrapper;
     }
+    
     function hideOriginalContent() {
         // Add CSS to hide original content
         var style = document.createElement('style');
@@ -300,17 +313,31 @@
        
         log('Original content hidden (CSS handles visibility)');
     }
+    
     // ============================================================================
     // REGISTER MODULES
     // ============================================================================
     function registerAllModules() {
+        // Register avatars module FIRST (highest priority)
+        if (typeof ForumAvatars !== 'undefined') {
+            registerModule('avatars', ForumAvatars, []);
+            log('✓ Registered avatars module');
+        } else {
+            log('ForumAvatars not found, avatar enhancement disabled', 'warn');
+            ENHANCER_CONFIG.modules.avatars = false;
+        }
+        
+        // Register posts module with dependency on avatars
         if (typeof ForumPostsModule !== 'undefined') {
-            registerModule('posts', ForumPostsModule, []);
+            var postsDeps = ENHANCER_CONFIG.modules.avatars !== false ? ['avatars'] : [];
+            registerModule('posts', ForumPostsModule, postsDeps);
+            log('✓ Registered posts module with dependencies: ' + postsDeps.join(', '));
         } else {
             log('ForumPostsModule not found, posts enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.posts = false;
         }
     }
+    
     // ============================================================================
     // PUBLIC API
     // ============================================================================
@@ -407,6 +434,7 @@
             return document.getElementById('modern-posts-container');
         }
     };
+    
     // ============================================================================
     // INITIALIZATION
     // ============================================================================
@@ -459,6 +487,7 @@
         log(ENHANCER_CONFIG.name + ' is ready!');
         log('========================================');
     }
+    
     // ============================================================================
     // EXPOSE GLOBALLY
     // ============================================================================
