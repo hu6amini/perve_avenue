@@ -734,65 +734,16 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
+        // Find the emoji container
         var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (!emojiContainer) return;
-        
-        // Check what type of button was clicked
-        var isAddButton = buttonElement.classList.contains('reaction-add-btn');
-        var isReactionImage = buttonElement.classList.contains('reaction-with-image');
-        
-        if (isAddButton) {
-            // Click on the smiley add button - should open the emoji picker
-            var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
-            if (previewDiv) {
-                previewDiv.click();
-            }
-        } else if (isReactionImage) {
-            // Click on an existing reaction image - should add/remove that specific reaction
-            var clickedImg = buttonElement.querySelector('img');
-            if (clickedImg) {
-                var clickedAlt = clickedImg.getAttribute('alt');
-                // Find the corresponding emoji in the original post's preview
-                var emojiPreview = emojiContainer.querySelector('.st-emoji-preview');
-                if (emojiPreview) {
-                    // Find the matching emoji in the preview
-                    var matchingEmoji = null;
-                    var previewImages = emojiPreview.querySelectorAll('img');
-                    for (var i = 0; i < previewImages.length; i++) {
-                        var img = previewImages[i];
-                        var imgAlt = img.getAttribute('alt');
-                        if (imgAlt === clickedAlt) {
-                            matchingEmoji = img;
-                            break;
-                        }
-                    }
-                    
-                    if (matchingEmoji) {
-                        // Click the matching emoji in the original post
-                        matchingEmoji.click();
-                    } else {
-                        // If not found in preview, try to find in the counter or trigger area
-                        var counter = emojiContainer.querySelector('.st-emoji-counter');
-                        if (counter) {
-                            counter.click();
-                        }
-                    }
-                }
-            }
+        if (emojiContainer) {
+            var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
+            trigger.click();
         } else {
-            // Fallback: click the counter if it exists, otherwise click preview
-            var counter = emojiContainer.querySelector('.st-emoji-counter');
-            if (counter) {
-                counter.click();
-            } else {
-                var preview = emojiContainer.querySelector('.st-emoji-preview');
-                if (preview) {
-                    preview.click();
-                }
-            }
+            // Fallback to like
+            handleLike(pid, false);
         }
         
-        // Refresh the reaction display after a short delay
         setTimeout(function() {
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
@@ -1028,42 +979,26 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 }
             });
             
-            console.log('[PostsModule] Registered with ForumCoreObserver');
-        }
-        
-        // Also set up a MutationObserver as fallback specifically for reactions
-        var reactionFallbackObserver = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                    mutation.addedNodes.forEach(function(node) {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            // Check for reaction containers
-                            var emojiContainers = node.querySelectorAll ? node.querySelectorAll('.st-emoji-container') : [];
-                            if (node.classList && node.classList.contains('st-emoji-container')) {
-                                emojiContainers = [node];
-                            }
-                            
-                            emojiContainers.forEach(function(container) {
-                                var postEl = container.closest('.post');
-                                if (postEl && isValidPost(postEl)) {
-                                    var postId = getPostId(postEl);
-                                    if (postId) {
-                                        setTimeout(function() {
-                                            refreshReactionDisplay(postId);
-                                        }, 100);
-                                    }
-                                }
-                            });
+            // Register for reaction preview images
+            globalThis.forumObserver.register({
+                id: 'posts-module-reaction-images',
+                selector: '.st-emoji-preview img',
+                priority: 'low',
+                callback: function(node) {
+                    var postEl = node.closest('.post');
+                    if (postEl && isValidPost(postEl)) {
+                        var postId = getPostId(postEl);
+                        if (postId) {
+                            refreshReactionDisplay(postId);
                         }
-                    });
+                    }
                 }
             });
-        });
-        
-        reactionFallbackObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+            
+            console.log('[PostsModule] Registered with ForumCoreObserver');
+        } else {
+            console.log('[PostsModule] ForumCoreObserver not available, dynamic content will not auto-convert');
+        }
        
         // Mark as initialized
         isInitialized = true;
