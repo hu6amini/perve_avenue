@@ -25,6 +25,9 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // Store reaction data for each post
     var postReactions = new Map();
     
+    // Store active popup reference
+    var activePopup = null;
+    
     // ============================================================================
     // HELPER FUNCTIONS
     // ============================================================================
@@ -87,7 +90,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
         } else if (firstLetter >= '0' && firstLetter <= '9') {
             colorIndex = (parseInt(firstLetter) + 26) % AVATAR_COLORS.length;
         } else if (userId) {
-            // Use userId as fallback for consistent colors
             colorIndex = parseInt(userId) % AVATAR_COLORS.length;
         } else {
             var hash = 0;
@@ -114,16 +116,178 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
     
     // ============================================================================
+    // CUSTOM REACTION POPUP
+    // ============================================================================
+    function getEmojiList() {
+        // This list can be expanded later
+        return [
+            { name: 'kekw', file: 'kekw.png', alt: ':kekw:', rid: '10' },
+            { name: 'rofl', file: 'rofl.png', alt: ':rofl:', rid: '1' },
+            { name: 'heart_eyes', file: 'heart_eyes.png', alt: ':heart_eyes:', rid: '2' },
+            { name: 'heart', file: 'red_heart.png', alt: ':heart:', rid: '5' },
+            { name: 'ok_hand', file: 'ok_hand.png', alt: ':ok_hand:', rid: '6' },
+            { name: 'thinking', file: 'thinking_face.png', alt: ':thinking:', rid: '12' },
+            { name: 'slight_frown', file: 'frowning_face.png', alt: ':slight_frown:', rid: '3' },
+            { name: 'rage', file: 'pouting_face.png', alt: ':rage:', rid: '4' },
+            { name: 'skull', file: 'skull.png', alt: ':skull:', rid: '7' },
+            { name: 'fire', file: 'fire.png', alt: ':fire:', rid: '8' },
+            { name: 'hot_pepper', file: 'red_pepper.png', alt: ':hot_pepper:', rid: '9' },
+            { name: 'banana', file: 'banana.png', alt: ':banana:', rid: '11' }
+        ];
+    }
+    
+    function createCustomReactionPopup(buttonElement, postId) {
+        // Remove existing popup
+        if (activePopup) {
+            activePopup.remove();
+            activePopup = null;
+        }
+        
+        var buttonRect = buttonElement.getBoundingClientRect();
+        var emojis = getEmojiList();
+        
+        // Create popup container
+        var popup = document.createElement('div');
+        popup.className = 'custom-reaction-popup';
+        popup.style.cssText = `
+            position: fixed;
+            z-index: 100000;
+            background: #1a1a1a;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            padding: 12px;
+            border: 1px solid #333;
+            left: ${buttonRect.left - 100}px;
+            top: ${buttonRect.bottom + 10}px;
+        `;
+        
+        // Create emoji grid
+        var emojiGrid = document.createElement('div');
+        emojiGrid.style.cssText = `
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        `;
+        
+        // Add emojis
+        emojis.forEach(function(emoji) {
+            var emojiItem = document.createElement('div');
+            emojiItem.className = 'custom-emoji-item';
+            emojiItem.style.cssText = `
+                cursor: pointer;
+                padding: 8px;
+                text-align: center;
+                border-radius: 8px;
+                transition: background 0.2s;
+            `;
+            
+            var img = document.createElement('img');
+            // Use weserv for better loading
+            img.src = 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + emoji.file + '&output=webp&maxage=1y&q=90&il&af&l=9';
+            img.alt = emoji.alt;
+            img.style.cssText = `
+                width: 32px;
+                height: 32px;
+                object-fit: contain;
+            `;
+            img.loading = 'lazy';
+            
+            emojiItem.appendChild(img);
+            
+            // Hover effects
+            emojiItem.addEventListener('mouseenter', function() {
+                this.style.backgroundColor = '#333';
+            });
+            emojiItem.addEventListener('mouseleave', function() {
+                this.style.backgroundColor = 'transparent';
+            });
+            
+            // Click handler - trigger original reaction
+            emojiItem.addEventListener('click', function() {
+                triggerOriginalReaction(postId, emoji);
+                popup.remove();
+                activePopup = null;
+            });
+            
+            emojiGrid.appendChild(emojiItem);
+        });
+        
+        popup.appendChild(emojiGrid);
+        
+        // Close popup when clicking outside
+        var closeHandler = function(e) {
+            if (!popup.contains(e.target) && !e.target.closest('.reaction-btn')) {
+                popup.remove();
+                activePopup = null;
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        
+        // Delay adding the listener to avoid immediate closure
+        setTimeout(function() {
+            document.addEventListener('click', closeHandler);
+        }, 100);
+        
+        document.body.appendChild(popup);
+        activePopup = popup;
+        
+        return popup;
+    }
+    
+    function triggerOriginalReaction(postId, emoji) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return;
+        
+        // Find the emoji container and trigger the reaction
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return;
+        
+        // First, trigger the preview click to ensure the popup system is initialized
+        var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+        if (previewTrigger) {
+            // Temporarily make it visible if needed
+            var originalDisplay = previewTrigger.style.display;
+            previewTrigger.style.display = 'block';
+            previewTrigger.click();
+            previewTrigger.style.display = originalDisplay;
+        }
+        
+        // Now find and click the original reaction element
+        // We need to look for the reaction with matching data-fui or alt text
+        setTimeout(function() {
+            var originalPopup = document.querySelector('.st-emoji-pop');
+            if (originalPopup) {
+                var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                for (var i = 0; i < reactionElements.length; i++) {
+                    var el = reactionElements[i];
+                    var dataFui = el.getAttribute('data-fui');
+                    var img = el.querySelector('img');
+                    var imgAlt = img ? img.getAttribute('alt') : '';
+                    
+                    if (dataFui === emoji.alt || imgAlt === emoji.alt) {
+                        console.log('[PostsModule] Triggering reaction:', emoji.alt);
+                        el.click();
+                        break;
+                    }
+                }
+            }
+            
+            // Refresh the reaction display after a delay
+            setTimeout(function() {
+                refreshReactionDisplay(postId);
+            }, CONFIG.REACTION_DELAY);
+        }, 100);
+    }
+    
+    // ============================================================================
     // EMBEDDED LINK TRANSFORMATION
     // ============================================================================
     function transformEmbeddedLinks(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
         
-        // Create a temporary DOM element to parse the HTML
         var tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlContent;
         
-        // Find all ffb_embedlink containers
         var embedContainers = tempDiv.querySelectorAll('.ffb_embedlink');
         
         for (var i = 0; i < embedContainers.length; i++) {
@@ -137,131 +301,118 @@ var ForumPostsModule = (function(Utils, EventBus) {
         return tempDiv.innerHTML;
     }
     
-function convertToModernEmbed(originalContainer) {
-    try {
-        // Extract the main link (the article URL)
-        // Look for any anchor with href that's not the preview link
-        var allLinks = originalContainer.querySelectorAll('a');
-        var mainLink = null;
-        var titleLink = null;
-        var description = '';
-        var imageUrl = null;
-        var faviconUrl = null;
-        
-        // Find the main link (the one in the last div that's not "Leggi altro")
-        for (var i = 0; i < allLinks.length; i++) {
-            var link = allLinks[i];
-            var text = link.textContent.trim();
-            var href = link.getAttribute('href');
+    function convertToModernEmbed(originalContainer) {
+        try {
+            var allLinks = originalContainer.querySelectorAll('a');
+            var mainLink = null;
+            var titleLink = null;
+            var description = '';
+            var imageUrl = null;
+            var faviconUrl = null;
             
-            // Skip empty links
-            if (!href) continue;
-            
-            // This is the main URL for the article
-            if (!mainLink) {
-                mainLink = href;
-            }
-            
-            // Look for the title link - long text, not containing "Leggi altro" or "Read more"
-            if (text && text.length > 10 && 
-                !text.includes('Leggi altro') && 
-                !text.includes('Read more') &&
-                !text.includes('F24.MY') &&
-                text !== extractDomain(href)) {
-                titleLink = link;
-                break;
-            }
-        }
-        
-        // If we didn't find a title link, try the last non-preview link
-        if (!titleLink) {
-            for (var i = allLinks.length - 1; i >= 0; i--) {
+            for (var i = 0; i < allLinks.length; i++) {
                 var link = allLinks[i];
                 var text = link.textContent.trim();
                 var href = link.getAttribute('href');
-                if (href && text && !text.includes('Leggi altro') && !text.includes('Read more')) {
+                
+                if (!href) continue;
+                
+                if (!mainLink) {
+                    mainLink = href;
+                }
+                
+                if (text && text.length > 10 && 
+                    !text.includes('Leggi altro') && 
+                    !text.includes('Read more') &&
+                    !text.includes('F24.MY') &&
+                    text !== extractDomain(href)) {
                     titleLink = link;
                     break;
                 }
             }
-        }
-        
-        var url = mainLink || (titleLink ? titleLink.getAttribute('href') : null);
-        if (!url) return null;
-        
-        var domain = extractDomain(url);
-        var title = titleLink ? titleLink.textContent.trim() : domain;
-        
-        // Extract description - look for the paragraph in the last div
-        var paragraphs = originalContainer.querySelectorAll('div:not([style]) p');
-        if (paragraphs.length > 0) {
-            description = paragraphs[0].textContent.trim();
-        }
-        
-        // Extract image - look for the preview image
-        var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
-        if (imgElement && imgElement.getAttribute('src')) {
-            imageUrl = imgElement.getAttribute('src');
-        }
-        
-        // Extract favicon - look for the hidden image in the first div
-        var hiddenDiv = originalContainer.querySelector('div[style="display:none"]');
-        if (hiddenDiv) {
-            var faviconImg = hiddenDiv.querySelector('img');
-            if (faviconImg && faviconImg.getAttribute('src')) {
-                faviconUrl = faviconImg.getAttribute('src');
+            
+            if (!titleLink) {
+                for (var i = allLinks.length - 1; i >= 0; i--) {
+                    var link = allLinks[i];
+                    var text = link.textContent.trim();
+                    var href = link.getAttribute('href');
+                    if (href && text && !text.includes('Leggi altro') && !text.includes('Read more')) {
+                        titleLink = link;
+                        break;
+                    }
+                }
             }
-        }
-        
-        // Build modern embedded link HTML
-        var modernHtml = '<div class="modern-embedded-link">' +
-            '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
-        
-        if (imageUrl) {
-            // Get dimensions from the image if available
-            var width = imgElement ? (imgElement.getAttribute('width') || '600') : '600';
-            var height = imgElement ? (imgElement.getAttribute('height') || '400') : '400';
-            modernHtml += '<div class="embedded-link-image">' +
-                '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: ' + width + ' / ' + height + ';" width="600" height="400">' +
+            
+            var url = mainLink || (titleLink ? titleLink.getAttribute('href') : null);
+            if (!url) return null;
+            
+            var domain = extractDomain(url);
+            var title = titleLink ? titleLink.textContent.trim() : domain;
+            
+            var paragraphs = originalContainer.querySelectorAll('div:not([style]) p');
+            if (paragraphs.length > 0) {
+                description = paragraphs[0].textContent.trim();
+            }
+            
+            var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
+            if (imgElement && imgElement.getAttribute('src')) {
+                imageUrl = imgElement.getAttribute('src');
+            }
+            
+            var hiddenDiv = originalContainer.querySelector('div[style="display:none"]');
+            if (hiddenDiv) {
+                var faviconImg = hiddenDiv.querySelector('img');
+                if (faviconImg && faviconImg.getAttribute('src')) {
+                    faviconUrl = faviconImg.getAttribute('src');
+                }
+            }
+            
+            var modernHtml = '<div class="modern-embedded-link">' +
+                '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
+            
+            if (imageUrl) {
+                var width = imgElement ? (imgElement.getAttribute('width') || '600') : '600';
+                var height = imgElement ? (imgElement.getAttribute('height') || '400') : '400';
+                modernHtml += '<div class="embedded-link-image">' +
+                    '<img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width: 100%; object-fit: cover; display: block; aspect-ratio: ' + width + ' / ' + height + ';" width="600" height="400">' +
+                    '</div>';
+            }
+            
+            modernHtml += '<div class="embedded-link-content">';
+            
+            if (faviconUrl || domain) {
+                modernHtml += '<div class="embedded-link-domain">';
+                if (faviconUrl) {
+                    modernHtml += '<img src="' + faviconUrl + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16" style="width: 16px; height: 16px; object-fit: contain; display: inline-block; vertical-align: middle;">';
+                }
+                modernHtml += '<span>' + Utils.escapeHtml(domain) + '</span></div>';
+            }
+            
+            modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
+            
+            if (description) {
+                modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(description.substring(0, 200)) + (description.length > 200 ? '…' : '') + '</p>';
+            }
+            
+            modernHtml += '<div class="embedded-link-meta">' +
+                '<span class="embedded-link-read-more">Read more on ' + Utils.escapeHtml(domain) + ' ›</span>' +
+                '</div>' +
+                '</div>' +
+                '</a>' +
                 '</div>';
+            
+            return createElementFromHTML(modernHtml);
+        } catch (error) {
+            console.warn('[PostsModule] Failed to convert embedded link:', error);
+            return null;
         }
-        
-        modernHtml += '<div class="embedded-link-content">';
-        
-        if (faviconUrl || domain) {
-            modernHtml += '<div class="embedded-link-domain">';
-            if (faviconUrl) {
-                modernHtml += '<img src="' + faviconUrl + '" alt="" class="embedded-link-favicon" loading="lazy" decoding="async" width="16" height="16" style="width: 16px; height: 16px; object-fit: contain; display: inline-block; vertical-align: middle;">';
-            }
-            modernHtml += '<span>' + Utils.escapeHtml(domain) + '</span></div>';
-        }
-        
-        modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
-        
-        if (description) {
-            modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(description.substring(0, 200)) + (description.length > 200 ? '…' : '') + '</p>';
-        }
-        
-        modernHtml += '<div class="embedded-link-meta">' +
-            '<span class="embedded-link-read-more">Read more on ' + Utils.escapeHtml(domain) + ' ›</span>' +
-            '</div>' +
-            '</div>' +
-            '</a>' +
-            '</div>';
-        
-        return createElementFromHTML(modernHtml);
-    } catch (error) {
-        console.warn('[PostsModule] Failed to convert embedded link:', error);
-        return null;
     }
-}
     
     function extractDomain(url) {
         try {
             var a = document.createElement('a');
             a.href = url;
             var hostname = a.hostname;
-            // Remove www. prefix
             if (hostname.startsWith('www.')) {
                 hostname = hostname.substring(4);
             }
@@ -323,13 +474,10 @@ function convertToModernEmbed(originalContainer) {
         var uRankSpan = $post.querySelector('.u_rank');
         if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
         
-        // Get the icon element
         var icon = uRankSpan.querySelector('i');
         var iconClass = '';
         if (icon) {
-            // Get the full icon class from the original
             var classAttr = icon.getAttribute('class') || '';
-            // Ensure it has fa-regular (or keep original style)
             if (classAttr.includes('fa-solid')) {
                 classAttr = classAttr.replace('fa-solid', 'fa-regular');
             }
@@ -338,18 +486,15 @@ function convertToModernEmbed(originalContainer) {
             iconClass = 'fa-medal fa-regular';
         }
         
-        // Get the rank text (the span content or direct text)
         var rankSpan = uRankSpan.querySelector('span');
         var title = '';
         if (rankSpan) {
             title = rankSpan.textContent.trim();
         } else {
-            // If no span, get the text content excluding the icon
             var textContent = uRankSpan.textContent || '';
             title = textContent.replace(icon ? icon.textContent : '', '').trim();
         }
         
-        // Map common titles if needed
         if (title === 'Member') {
             var stars = $post.querySelectorAll('.u_rank i.fa-star').length;
             if (stars === 3) title = 'Famous';
@@ -365,35 +510,26 @@ function convertToModernEmbed(originalContainer) {
         if (!contentTable) return '';
         var contentClone = contentTable.cloneNode(true);
         
-        // Remove signature and edit elements
         var signatures = contentClone.querySelectorAll('.signature, .edit');
         signatures.forEach(function(el) { if (el && el.remove) el.remove(); });
         
-        // Remove bottomborder
         var borders = contentClone.querySelectorAll('.bottomborder');
         borders.forEach(function(el) { if (el && el.remove) el.remove(); });
         
-        // Remove extra br tags that are directly adjacent to bottomborder (cleanup)
         var breaks = contentClone.querySelectorAll('br');
         breaks.forEach(function(br) {
             if (!br) return;
             var prev = br.previousElementSibling;
             var next = br.nextElementSibling;
-            // Only remove br tags that are adjacent to bottomborder elements
             if ((next && next.classList && next.classList.contains('bottomborder')) ||
                 (prev && prev.classList && prev.classList.contains('bottomborder'))) {
                 if (br.remove) br.remove();
             }
         });
         
-        // Get the HTML content as-is, preserving all formatting
         var html = contentClone.innerHTML || '';
-        
-        // Clean up any empty paragraphs or extra whitespace
         html = html.replace(/<p>\s*<\/p>/g, '');
         html = html.trim();
-        
-        // Transform embedded links in the content
         html = transformEmbeddedLinks(html);
         
         return html;
@@ -402,7 +538,6 @@ function convertToModernEmbed(originalContainer) {
     function getSignatureHtml($post) {
         var signature = $post.querySelector('.signature');
         if (!signature) return '';
-        // Clone to avoid modifying original
         var sigClone = signature.cloneNode(true);
         return sigClone.innerHTML;
     }
@@ -423,10 +558,8 @@ function convertToModernEmbed(originalContainer) {
         var reactionCount = 0;
         var reactions = [];
         
-        // Look for the st-emoji-container (the reaction plugin container)
         var emojiContainer = $post.querySelector('.st-emoji-container');
         if (emojiContainer) {
-            // Get counters
             var counters = emojiContainer.querySelectorAll('.st-emoji-counter');
             if (counters.length > 0) {
                 hasReactions = true;
@@ -435,7 +568,6 @@ function convertToModernEmbed(originalContainer) {
                     reactionCount += count;
                 });
                 
-                // Get reaction images from preview
                 var previewDiv = emojiContainer.querySelector('.st-emoji-preview');
                 if (previewDiv) {
                     var images = previewDiv.querySelectorAll('img');
@@ -500,7 +632,6 @@ function convertToModernEmbed(originalContainer) {
         var reactionData = getReactionData($post);
         var userTitleData = getUserTitleAndIcon($post);
         
-        // Store reaction data for later updates
         if (reactionData.hasReactions) {
             postReactions.set(postId, reactionData.reactions);
         }
@@ -533,17 +664,14 @@ function convertToModernEmbed(originalContainer) {
     // GENERATE REACTION BUTTONS HTML
     // ============================================================================
     function generateReactionButtons(data) {
-        // If no reactions have counters, just show the add reaction button (smiley face)
         if (!data.hasReactions || data.reactionCount === 0) {
             return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
                 '<i class="fa-regular fa-face-smile" aria-hidden="true"></i>' +
                 '</button>';
         }
         
-        // Has reactions with counters - show only the reaction image buttons (no separate add button)
         var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         
-        // Group reactions by image src to combine counts
         var reactionMap = new Map();
         
         for (var i = 0; i < data.reactions.length; i++) {
@@ -562,7 +690,6 @@ function convertToModernEmbed(originalContainer) {
             }
         }
         
-        // Create buttons for each unique reaction
         reactionMap.forEach(function(reaction) {
             reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
                 '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
@@ -582,7 +709,6 @@ function convertToModernEmbed(originalContainer) {
         var statusColor = data.isOnline ? '#10B981' : '#6B7280';
         var statusText = data.isOnline ? 'Online' : 'Offline';
         
-        // Like button HTML
         var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
             '<i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
         if (data.likes > 0) {
@@ -590,10 +716,8 @@ function convertToModernEmbed(originalContainer) {
         }
         likeButton += '</button>';
         
-        // Reactions HTML
         var reactionsHtml = generateReactionButtons(data);
         
-        // Edit indicator HTML
         var editHtml = '';
         if (data.editInfo) {
             editHtml = '<div class="post-edit-info">' +
@@ -601,13 +725,11 @@ function convertToModernEmbed(originalContainer) {
                 '</div>';
         }
         
-        // Signature HTML
         var signatureHtml = '';
         if (data.signatureHtml) {
             signatureHtml = '<div class="post-signature">' + data.signatureHtml + '</div>';
         }
         
-        // IP HTML
         var ipHtml = '';
         if (data.ipAddress) {
             ipHtml = '<div class="post-ip">' +
@@ -615,7 +737,6 @@ function convertToModernEmbed(originalContainer) {
                 '</div>';
         }
         
-        // Generate avatar URL (use original if available, otherwise generate letter avatar)
         var avatarUrl;
         if (data.originalAvatarUrl && data.originalAvatarUrl.trim() !== '') {
             avatarUrl = data.originalAvatarUrl;
@@ -623,7 +744,6 @@ function convertToModernEmbed(originalContainer) {
             avatarUrl = generateLetterAvatar(data.username, data.postId);
         }
         
-        // Avatar HTML
         var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">' +
             '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(data.username) + '" width="70" height="70" loading="lazy" onerror="this.onerror=null; this.src=\'' + generateLetterAvatar(data.username, data.postId) + '\';">' +
         '</div>';
@@ -707,7 +827,6 @@ function convertToModernEmbed(originalContainer) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (!originalPost) return;
         
-        // Get updated like count
         var pointsPos = originalPost.querySelector('.points .points_pos');
         var newLikeCount = 0;
         if (pointsPos) {
@@ -720,7 +839,6 @@ function convertToModernEmbed(originalContainer) {
         var likeBtn = modernCard.querySelector('.like-btn');
         if (!likeBtn) return;
         
-        // Update or create the like count span
         var likeCountSpan = likeBtn.querySelector('.like-count-display');
         if (newLikeCount > 0) {
             if (likeCountSpan) {
@@ -747,7 +865,6 @@ function convertToModernEmbed(originalContainer) {
             return;
         }
         
-        // Get updated reaction data
         var reactionData = getReactionData(originalPost);
         
         var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
@@ -758,16 +875,13 @@ function convertToModernEmbed(originalContainer) {
         var postReactionsDiv = modernCard.querySelector('.post-reactions');
         if (!postReactionsDiv) return;
         
-        // Store reactions for this post
         if (reactionData.reactions.length > 0) {
             postReactions.set(postId, reactionData.reactions);
         }
         
-        // Find the like button (keep it)
         var likeButton = postReactionsDiv.querySelector('.like-btn');
         var likeButtonHtml = likeButton ? likeButton.outerHTML : '';
         
-        // Generate new reactions HTML
         var newReactionsHtml = generateReactionButtons({
             postId: postId,
             hasReactions: reactionData.hasReactions,
@@ -775,7 +889,6 @@ function convertToModernEmbed(originalContainer) {
             reactions: reactionData.reactions
         });
         
-        // Update the reactions container
         if (likeButtonHtml) {
             postReactionsDiv.innerHTML = likeButtonHtml + newReactionsHtml;
         } else {
@@ -790,10 +903,8 @@ function convertToModernEmbed(originalContainer) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
-        // Find the avatar link in the original post
         var avatarLink = originalPost.querySelector('.avatar');
         if (avatarLink && avatarLink.tagName === 'A') {
-            // Trigger a click on the original avatar link
             avatarLink.click();
         }
     }
@@ -802,10 +913,8 @@ function convertToModernEmbed(originalContainer) {
         var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
         
-        // Find the nickname link in the original post
         var nickLink = originalPost.querySelector('.nick a');
         if (nickLink) {
-            // Trigger a click on the original link
             nickLink.click();
         }
     }
@@ -866,19 +975,14 @@ function convertToModernEmbed(originalContainer) {
         var pointsContainer = originalPost.querySelector('.points');
         if (!pointsContainer) return;
         
-        // If clicking on the count (to view who liked)
         if (isCountClick) {
-            // Find the points_pos element (the actual count)
             var pointsPos = pointsContainer.querySelector('.points_pos');
             if (pointsPos) {
-                // Find the parent overlay link
                 var overlayLink = pointsPos.closest('a[rel="#overlay"]');
                 if (overlayLink) {
                     var href = overlayLink.getAttribute('href');
                     
-                    // Try to use jQuery if available (ForumFree uses jQuery)
                     if (typeof $ !== 'undefined' && $.fn.overlay) {
-                        // Initialize overlay on the link if not already done
                         if (!overlayLink.hasAttribute('data-overlay-init')) {
                             $(overlayLink).overlay({
                                 onBeforeLoad: function() {
@@ -890,11 +994,9 @@ function convertToModernEmbed(originalContainer) {
                             });
                             overlayLink.setAttribute('data-overlay-init', 'true');
                         }
-                        // Trigger the overlay
                         $(overlayLink).trigger('click');
                         return;
                     } else {
-                        // Fallback: try to simulate the mouseover that initializes the overlay
                         var mouseoverEvent = new MouseEvent('mouseover', {
                             view: window,
                             bubbles: true,
@@ -902,7 +1004,6 @@ function convertToModernEmbed(originalContainer) {
                         });
                         overlayLink.dispatchEvent(mouseoverEvent);
                         
-                        // Then click after a small delay
                         setTimeout(function() {
                             var clickEvent = new MouseEvent('click', {
                                 view: window,
@@ -916,14 +1017,12 @@ function convertToModernEmbed(originalContainer) {
                 }
             }
             
-            // Fallback: try to find and click the points_pos directly
             var pointsPosDirect = pointsContainer.querySelector('.points_pos');
             if (pointsPosDirect) {
                 pointsPosDirect.click();
                 return;
             }
             
-            // Last resort: find any votes link
             var anyLink = pointsContainer.querySelector('a[href*="votes"]');
             if (anyLink) {
                 anyLink.click();
@@ -932,12 +1031,9 @@ function convertToModernEmbed(originalContainer) {
             return;
         }
         
-        // Otherwise, handle like/unlike action
-        // Check if there's an undo button (meaning user already liked this post)
         var undoButton = pointsContainer.querySelector('.bullet_delete');
         
         if (undoButton) {
-            // User already liked - this will unlike
             var undoOnclick = undoButton.getAttribute('onclick');
             if (undoOnclick) {
                 eval(undoOnclick);
@@ -945,7 +1041,6 @@ function convertToModernEmbed(originalContainer) {
                 undoButton.click();
             }
         } else {
-            // Find the like button (points_up)
             var likeBtn = pointsContainer.querySelector('.points_up');
             
             if (likeBtn) {
@@ -977,37 +1072,22 @@ function convertToModernEmbed(originalContainer) {
             }
         }
         
-        // Refresh the like count after a short delay
         setTimeout(function() {
             refreshLikeDisplay(pid);
             refreshReactionDisplay(pid);
         }, CONFIG.REACTION_DELAY);
     }
     
+    // NEW: Custom reaction handler
     function handleReact(pid, buttonElement) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
-        if (!originalPost) return;
-        
-        // Find the emoji container
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (emojiContainer) {
-            var trigger = emojiContainer.querySelector('.st-emoji-trigger') || emojiContainer;
-            trigger.click();
-        } else {
-            // Fallback to like
-            handleLike(pid, false);
-        }
-        
-        setTimeout(function() {
-            refreshReactionDisplay(pid);
-        }, CONFIG.REACTION_DELAY);
+        // Create custom popup instead of trying to trigger the original
+        createCustomReactionPopup(buttonElement, pid);
     }
     
     // ============================================================================
     // ATTACH EVENT LISTENERS
     // ============================================================================
     function attachEventHandlers() {
-        // Avatar click handler - trigger the original avatar link
         document.addEventListener('click', function(e) {
             var avatarDiv = e.target.closest('.post-avatar');
             if (avatarDiv) {
@@ -1017,7 +1097,6 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Username click handler - trigger the original nickname link
         document.addEventListener('click', function(e) {
             var userNameDiv = e.target.closest('.user-name');
             if (userNameDiv) {
@@ -1027,7 +1106,6 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Quote buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="quote"], .action-icon[title="Quote"]');
             if (btn) {
@@ -1037,7 +1115,6 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Edit buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="edit"], .action-icon[title="Edit"]');
             if (btn) {
@@ -1047,7 +1124,6 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Delete buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="delete"], .action-icon[title="Delete"]');
             if (btn) {
@@ -1057,7 +1133,6 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Share buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="share"], .action-icon[title="Share"]');
             if (btn) {
@@ -1067,7 +1142,6 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Report buttons
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.action-icon[data-action="report"], .action-icon[title="Report"]');
             if (btn) {
@@ -1077,27 +1151,34 @@ function convertToModernEmbed(originalContainer) {
             }
         });
         
-        // Like buttons - differentiate between icon click and count click
         document.addEventListener('click', function(e) {
             var likeBtn = e.target.closest('.like-btn');
             if (likeBtn) {
                 e.preventDefault();
                 var pid = likeBtn.getAttribute('data-pid');
                 if (pid) {
-                    // Check if the click target is the count span or the icon
                     var isCountClick = e.target.classList && e.target.classList.contains('like-count-display');
                     handleLike(pid, isCountClick);
                 }
             }
         });
         
-        // React buttons (any reaction button that's not a like button)
+        // Updated reaction button handler
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn) {
                 e.preventDefault();
+                e.stopPropagation();
                 var pid = btn.getAttribute('data-pid');
                 if (pid) handleReact(pid, btn);
+            }
+        });
+        
+        // Close popup when clicking escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && activePopup) {
+                activePopup.remove();
+                activePopup = null;
             }
         });
     }
@@ -1111,7 +1192,6 @@ function convertToModernEmbed(originalContainer) {
         var postId = getPostId(postEl);
         if (!postId) return null;
        
-        // Check if already converted
         if (convertedPostIds.has(postId)) {
             return null;
         }
@@ -1124,10 +1204,7 @@ function convertToModernEmbed(originalContainer) {
         tempDiv.innerHTML = modernHTML;
         var newCard = tempDiv.firstElementChild;
        
-        // Store reference to original post
         newCard.setAttribute('data-original-id', postEl.id);
-       
-        // Mark as converted
         convertedPostIds.add(postId);
        
         if (EventBus) {
@@ -1141,30 +1218,24 @@ function convertToModernEmbed(originalContainer) {
     // INITIALIZE
     // ============================================================================
     function initialize() {
-        // Prevent double initialization
         if (isInitialized) {
             console.log('[PostsModule] Already initialized, skipping');
             return;
         }
        
         console.log('[PostsModule] Initializing...');
-        // Get or create the posts container
         var container = getPostsContainer();
        
-        // Clear container if needed (to avoid duplicates)
         if (container) {
             container.innerHTML = '';
         }
        
-        // Reset converted posts tracking
         convertedPostIds.clear();
         postReactions.clear();
        
-        // Get all original posts
         var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
         var validPosts = 0;
        
-        // Convert each post and append to container
         for (var i = 0; i < posts.length; i++) {
             if (isValidPost(posts[i])) {
                 var modernCard = convertToModernCard(posts[i], validPosts);
@@ -1175,12 +1246,9 @@ function convertToModernEmbed(originalContainer) {
             }
         }
        
-        // Attach event handlers
         attachEventHandlers();
        
-        // Register with ForumCoreObserver for new posts AND reaction containers
         if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
-            // Register for new posts
             globalThis.forumObserver.register({
                 id: 'posts-module',
                 selector: CONFIG.POST_SELECTOR,
@@ -1190,12 +1258,10 @@ function convertToModernEmbed(originalContainer) {
                    
                     var postId = getPostId(node);
                    
-                    // Skip if already converted
                     if (convertedPostIds.has(postId)) {
                         return;
                     }
                    
-                    // Find the index for this post
                     var allPosts = Utils.getAllElements(CONFIG.POST_SELECTOR);
                     var validIndex = 0;
                     for (var i = 0; i < allPosts.length; i++) {
@@ -1216,18 +1282,15 @@ function convertToModernEmbed(originalContainer) {
                 }
             });
             
-            // Register for reaction containers (st-emoji-container)
             globalThis.forumObserver.register({
                 id: 'posts-module-reactions',
                 selector: '.st-emoji-container',
                 priority: 'medium',
                 callback: function(node) {
-                    // Find the parent post
                     var postEl = node.closest('.post');
                     if (postEl && isValidPost(postEl)) {
                         var postId = getPostId(postEl);
                         if (postId) {
-                            // Small delay to ensure the reaction plugin has fully loaded
                             setTimeout(function() {
                                 refreshReactionDisplay(postId);
                             }, 100);
@@ -1236,7 +1299,6 @@ function convertToModernEmbed(originalContainer) {
                 }
             });
             
-            // Register for reaction preview images
             globalThis.forumObserver.register({
                 id: 'posts-module-reaction-images',
                 selector: '.st-emoji-preview img',
@@ -1257,10 +1319,8 @@ function convertToModernEmbed(originalContainer) {
             console.log('[PostsModule] ForumCoreObserver not available, dynamic content will not auto-convert');
         }
        
-        // Mark as initialized
         isInitialized = true;
        
-        // Trigger ready event
         if (EventBus) {
             EventBus.trigger('posts:ready', { count: validPosts });
         }
@@ -1282,6 +1342,10 @@ function convertToModernEmbed(originalContainer) {
             convertedPostIds.clear();
             postReactions.clear();
             isInitialized = false;
+            if (activePopup) {
+                activePopup.remove();
+                activePopup = null;
+            }
         },
         CONFIG: CONFIG
     };
