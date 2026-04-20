@@ -381,7 +381,7 @@ img {
 
 .user-name {
       font-weight: 700;
-      font-size: 1.25rem;
+      font-size: var(--text-base);
       color: var(--text-primary);
       cursor:pointer; 
       display:flex;
