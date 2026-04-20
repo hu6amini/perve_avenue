@@ -327,71 +327,90 @@ var ForumPostsModule = (function(Utils, EventBus) {
         });
     }
     
-    function triggerOriginalReaction(postId, emoji) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-        if (!originalPost) return;
-        
-        // Find the emoji container
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (!emojiContainer) return;
-        
-        // Trigger the preview click to ensure the popup system is initialized
-        var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
-        if (previewTrigger) {
-            var originalDisplay = previewTrigger.style.display;
-            previewTrigger.style.display = 'block';
-            previewTrigger.click();
-            previewTrigger.style.display = originalDisplay;
-        }
-        
-        // Find and click the original reaction element
-        setTimeout(function() {
-            var originalPopup = document.querySelector('.st-emoji-pop');
-            if (originalPopup) {
-                var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-                var found = false;
+function triggerOriginalReaction(postId, emoji) {
+    var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+    if (!originalPost) return;
+    
+    // Find the emoji container
+    var emojiContainer = originalPost.querySelector('.st-emoji-container');
+    if (!emojiContainer) return;
+    
+    // Trigger the preview click to open the original popup
+    var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+    if (!previewTrigger) return;
+    
+    // Temporarily make the preview trigger visible and click it
+    var originalDisplay = previewTrigger.style.display;
+    previewTrigger.style.display = 'block';
+    previewTrigger.click();
+    previewTrigger.style.display = originalDisplay;
+    
+    // Find and click the original reaction element
+    setTimeout(function() {
+        var originalPopup = document.querySelector('.st-emoji-pop');
+        if (originalPopup) {
+            // Make sure the popup is visible
+            originalPopup.style.visibility = 'visible';
+            originalPopup.style.display = 'block';
+            
+            var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+            var found = false;
+            
+            for (var i = 0; i < reactionElements.length; i++) {
+                var el = reactionElements[i];
+                var dataFui = el.getAttribute('data-fui');
+                var img = el.querySelector('img');
+                var imgAlt = img ? img.getAttribute('alt') : '';
                 
-                for (var i = 0; i < reactionElements.length; i++) {
-                    var el = reactionElements[i];
-                    var dataFui = el.getAttribute('data-fui');
-                    var img = el.querySelector('img');
-                    var imgAlt = img ? img.getAttribute('alt') : '';
-                    
-                    // Match by data-fui, alt text, or name
-                    if (dataFui === emoji.alt || 
-                        imgAlt === emoji.alt || 
-                        dataFui === ':' + emoji.name + ':' ||
-                        (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
-                        console.log('[PostsModule] Triggering reaction:', emoji.alt || emoji.name);
-                        el.click();
-                        found = true;
-                        break;
-                    }
+                // Match by data-fui, alt text, or name
+                if (dataFui === emoji.alt || 
+                    imgAlt === emoji.alt || 
+                    dataFui === ':' + emoji.name + ':' ||
+                    (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
+                    console.log('[PostsModule] Triggering reaction:', emoji.alt || emoji.name);
+                    // Trigger both mousedown and click for better compatibility
+                    var clickEvent = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    el.dispatchEvent(clickEvent);
+                    found = true;
+                    break;
                 }
-                
-                if (!found) {
-                    console.warn('[PostsModule] Could not find reaction:', emoji);
-                    // Try clicking the first reaction as fallback
-                    if (reactionElements.length > 0) {
-                        console.log('[PostsModule] Falling back to first reaction');
-                        reactionElements[0].click();
-                    }
-                }
-                
-                // Small delay to let the reaction register, then close the original popup
-                setTimeout(function() {
-                    if (originalPopup && originalPopup.parentNode) {
-                        originalPopup.remove();
-                    }
-                }, 100);
             }
             
-            // Refresh the reaction display
+            if (!found) {
+                console.warn('[PostsModule] Could not find reaction:', emoji);
+                // Try clicking the first reaction as fallback
+                if (reactionElements.length > 0) {
+                    console.log('[PostsModule] Falling back to first reaction');
+                    var clickEvent = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    reactionElements[0].dispatchEvent(clickEvent);
+                }
+            }
+            
+            // Don't close the original popup immediately - let the reaction register
+            // The popup will close naturally after the reaction is applied
             setTimeout(function() {
-                refreshReactionDisplay(postId);
-            }, CONFIG.REACTION_DELAY);
-        }, 150);
-    }
+                // Check if popup still exists and close it
+                var stillOpen = document.querySelector('.st-emoji-pop');
+                if (stillOpen && stillOpen.parentNode) {
+                    stillOpen.remove();
+                }
+            }, 500);
+        }
+        
+        // Refresh the reaction display
+        setTimeout(function() {
+            refreshReactionDisplay(postId);
+        }, CONFIG.REACTION_DELAY);
+    }, 200);
+}
     
     // ============================================================================
     // EMBEDDED LINK TRANSFORMATION
