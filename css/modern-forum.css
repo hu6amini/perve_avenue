@@ -385,6 +385,7 @@ img {
       color: var(--text-primary);
       cursor:pointer; 
       display:flex;
+      text-align:left;
     }
 
 /* Badge container */
