@@ -367,7 +367,6 @@ img {
       border-radius: 50%;
       object-fit: cover;
       border: 2px solid var(--primary-color);
-      background: var(--surface-light);
       display: block;
       cursor: pointer;
     }
