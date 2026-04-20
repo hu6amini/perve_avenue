@@ -351,7 +351,7 @@ img {
 /* User area */
 .post-card-body {
       display: flex;
-      gap: var(--space-lg);
+      gap: var(--space-md);
       padding: var(--space-lg) var(--pad-6) 0 var(--pad-6);
       align-items: flex-start;
       flex-wrap: wrap;
