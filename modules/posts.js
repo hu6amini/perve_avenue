@@ -183,267 +183,309 @@ var ForumPostsModule = (function(Utils, EventBus) {
         ];
     }
     
-function createCustomReactionPopup(buttonElement, postId) {
-    // Remove existing custom popup
-    if (activePopup) {
-        activePopup.remove();
-        activePopup = null;
-    }
-    
-    var buttonRect = buttonElement.getBoundingClientRect();
-    
-    // First, trigger the original preview click to initialize the reaction system
-    var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-    if (originalPost) {
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
-        if (emojiContainer) {
-            var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
-            if (previewTrigger) {
-                // Temporarily make it visible if needed
-                var originalDisplay = previewTrigger.style.display;
-                previewTrigger.style.display = 'block';
-                previewTrigger.click();
-                previewTrigger.style.display = originalDisplay;
+    function createCustomReactionPopup(buttonElement, postId) {
+        // Remove existing custom popup
+        if (activePopup) {
+            activePopup.remove();
+            activePopup = null;
+        }
+        
+        var buttonRect = buttonElement.getBoundingClientRect();
+        
+        // First, trigger the original preview click to initialize the reaction system
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (originalPost) {
+            var emojiContainer = originalPost.querySelector('.st-emoji-container');
+            if (emojiContainer) {
+                var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+                if (previewTrigger) {
+                    // Temporarily make it visible if needed
+                    var originalDisplay = previewTrigger.style.display;
+                    previewTrigger.style.display = 'block';
+                    previewTrigger.click();
+                    previewTrigger.style.display = originalDisplay;
+                }
             }
         }
+        
+        // Show loading state while waiting for original popup to appear
+        var loadingPopup = document.createElement('div');
+        loadingPopup.className = 'custom-reaction-popup loading';
+        loadingPopup.style.cssText = `
+            position: fixed;
+            z-index: 100000;
+            background: #1a1a1a;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            padding: 20px;
+            border: 1px solid #333;
+            left: ${buttonRect.left - 50}px;
+            top: ${buttonRect.bottom + 10}px;
+            color: white;
+            font-size: 14px;
+        `;
+        loadingPopup.textContent = 'Loading reactions...';
+        document.body.appendChild(loadingPopup);
+        
+        // Wait for the original popup to appear, then extract emojis
+        setTimeout(function() {
+            var originalPopup = document.querySelector('.st-emoji-pop');
+            var emojis = [];
+            
+            if (originalPopup) {
+                var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                for (var i = 0; i < reactionElements.length; i++) {
+                    var el = reactionElements[i];
+                    var dataFui = el.getAttribute('data-fui');
+                    var img = el.querySelector('img');
+                    var imgSrc = img ? img.getAttribute('src') : '';
+                    var imgAlt = img ? img.getAttribute('alt') : '';
+                    
+                    var name = dataFui ? dataFui.replace(/:/g, '') : '';
+                    if (!name && imgAlt) {
+                        name = imgAlt.replace(/:/g, '');
+                    }
+                    
+                    emojis.push({
+                        name: name,
+                        alt: dataFui || imgAlt,
+                        src: imgSrc,
+                        rid: el.getAttribute('data-rid')
+                    });
+                }
+            }
+            
+            // Remove loading popup
+            loadingPopup.remove();
+            
+            if (emojis.length === 0) {
+                // Fallback to default emojis
+                emojis = [
+                    { name: 'kekw', alt: ':kekw:', src: '', rid: '10' },
+                    { name: 'rofl', alt: ':rofl:', src: '', rid: '1' }
+                ];
+            }
+            
+            // Create custom popup container
+            var popup = document.createElement('div');
+            popup.className = 'custom-reaction-popup';
+            popup.style.cssText = `
+                position: fixed;
+                z-index: 100001;
+                background: #1a1a1a;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                padding: 12px;
+                border: 1px solid #333;
+                left: ${buttonRect.left - 100}px;
+                top: ${buttonRect.bottom + 10}px;
+            `;
+            
+            // Create emoji grid
+            var emojiGrid = document.createElement('div');
+            emojiGrid.style.cssText = `
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+            `;
+            
+            // Add emojis
+            emojis.forEach(function(emoji) {
+                var emojiItem = document.createElement('div');
+                emojiItem.className = 'custom-emoji-item';
+                emojiItem.style.cssText = `
+                    cursor: pointer;
+                    padding: 8px;
+                    text-align: center;
+                    border-radius: 8px;
+                    transition: background 0.2s;
+                `;
+                
+                var img = document.createElement('img');
+                if (emoji.src) {
+                    img.src = emoji.src;
+                } else {
+                    img.src = 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
+                }
+                img.alt = emoji.alt || ':' + emoji.name + ':';
+                img.style.cssText = `
+                    width: 32px;
+                    height: 32px;
+                    object-fit: contain;
+                `;
+                img.loading = 'lazy';
+                
+                img.onerror = function() {
+                    if (!this.src.includes('twemoji')) {
+                        this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg';
+                    }
+                };
+                
+                emojiItem.appendChild(img);
+                
+                emojiItem.addEventListener('mouseenter', function() {
+                    this.style.backgroundColor = '#333';
+                });
+                emojiItem.addEventListener('mouseleave', function() {
+                    this.style.backgroundColor = 'transparent';
+                });
+                
+                // Click handler - find and click the original reaction
+                emojiItem.addEventListener('click', function() {
+                    console.log('[PostsModule] Selected reaction:', emoji.alt || emoji.name);
+                    
+                    // Find the original popup and click the matching reaction
+                    var originalPopup = document.querySelector('.st-emoji-pop');
+                    if (originalPopup) {
+                        var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                        var found = false;
+                        
+                        for (var i = 0; i < reactionElements.length; i++) {
+                            var el = reactionElements[i];
+                            var dataFui = el.getAttribute('data-fui');
+                            var img = el.querySelector('img');
+                            var imgAlt = img ? img.getAttribute('alt') : '';
+                            
+                            if (dataFui === emoji.alt || 
+                                imgAlt === emoji.alt || 
+                                dataFui === ':' + emoji.name + ':' ||
+                                (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
+                                console.log('[PostsModule] Clicking original reaction');
+                                el.click();
+                                found = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!found && reactionElements.length > 0) {
+                            console.log('[PostsModule] Falling back to first reaction');
+                            reactionElements[0].click();
+                        }
+                    }
+                    
+                    // Remove custom popup
+                    popup.remove();
+                    activePopup = null;
+                    
+                    // Refresh reaction display after delay
+                    setTimeout(function() {
+                        refreshReactionDisplay(postId);
+                    }, CONFIG.REACTION_DELAY);
+                });
+                
+                emojiGrid.appendChild(emojiItem);
+            });
+            
+            popup.appendChild(emojiGrid);
+            
+            // Close popup when clicking outside
+            var closeHandler = function(e) {
+                if (!popup.contains(e.target) && !e.target.closest('.reaction-btn')) {
+                    popup.remove();
+                    activePopup = null;
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            
+            setTimeout(function() {
+                document.addEventListener('click', closeHandler);
+            }, 100);
+            
+            document.body.appendChild(popup);
+            activePopup = popup;
+        }, 200); // Wait for original popup to appear
     }
     
-    // Show loading state while waiting for original popup to appear
-    var loadingPopup = document.createElement('div');
-    loadingPopup.className = 'custom-reaction-popup loading';
-    loadingPopup.style.cssText = `
-        position: fixed;
-        z-index: 100000;
-        background: #1a1a1a;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        padding: 20px;
-        border: 1px solid #333;
-        left: ${buttonRect.left - 50}px;
-        top: ${buttonRect.bottom + 10}px;
-        color: white;
-        font-size: 14px;
-    `;
-    loadingPopup.textContent = 'Loading reactions...';
-    document.body.appendChild(loadingPopup);
-    
-    // Wait for the original popup to appear, then extract emojis
-    setTimeout(function() {
-        var originalPopup = document.querySelector('.st-emoji-pop');
-        var emojis = [];
+    function triggerOriginalReaction(postId, emoji) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return;
         
+        // Find the original emoji container
+        var originalEmojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!originalEmojiContainer) return;
+        
+        // Find the matching reaction in the original popup (which should still be open)
+        var originalPopup = document.querySelector('.st-emoji-pop');
         if (originalPopup) {
             var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+            var found = false;
+            
             for (var i = 0; i < reactionElements.length; i++) {
                 var el = reactionElements[i];
                 var dataFui = el.getAttribute('data-fui');
                 var img = el.querySelector('img');
-                var imgSrc = img ? img.getAttribute('src') : '';
                 var imgAlt = img ? img.getAttribute('alt') : '';
                 
-                var name = dataFui ? dataFui.replace(/:/g, '') : '';
-                if (!name && imgAlt) {
-                    name = imgAlt.replace(/:/g, '');
+                // Match by data-fui, alt text, or name
+                if (dataFui === emoji.alt || 
+                    imgAlt === emoji.alt || 
+                    dataFui === ':' + emoji.name + ':' ||
+                    (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
+                    console.log('[PostsModule] Triggering reaction:', emoji.alt || emoji.name);
+                    el.click();
+                    found = true;
+                    break;
                 }
-                
-                emojis.push({
-                    name: name,
-                    alt: dataFui || imgAlt,
-                    src: imgSrc,
-                    rid: el.getAttribute('data-rid')
-                });
             }
-        }
-        
-        // Remove loading popup
-        loadingPopup.remove();
-        
-        if (emojis.length === 0) {
-            // Fallback to default emojis
-            emojis = [
-                { name: 'kekw', alt: ':kekw:', src: '', rid: '10' },
-                { name: 'rofl', alt: ':rofl:', src: '', rid: '1' }
-            ];
-        }
-        
-        // Create custom popup container
-        var popup = document.createElement('div');
-        popup.className = 'custom-reaction-popup';
-        popup.style.cssText = `
-            position: fixed;
-            z-index: 100001;
-            background: #1a1a1a;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            padding: 12px;
-            border: 1px solid #333;
-            left: ${buttonRect.left - 100}px;
-            top: ${buttonRect.bottom + 10}px;
-        `;
-        
-        // Create emoji grid
-        var emojiGrid = document.createElement('div');
-        emojiGrid.style.cssText = `
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-        `;
-        
-        // Add emojis
-        emojis.forEach(function(emoji) {
-            var emojiItem = document.createElement('div');
-            emojiItem.className = 'custom-emoji-item';
-            emojiItem.style.cssText = `
-                cursor: pointer;
-                padding: 8px;
-                text-align: center;
-                border-radius: 8px;
-                transition: background 0.2s;
-            `;
             
-            var img = document.createElement('img');
-            if (emoji.src) {
-                img.src = emoji.src;
-            } else {
-                img.src = 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
+            if (!found && reactionElements.length > 0) {
+                console.log('[PostsModule] Reaction not found, clicking first available');
+                reactionElements[0].click();
             }
-            img.alt = emoji.alt || ':' + emoji.name + ':';
-            img.style.cssText = `
-                width: 32px;
-                height: 32px;
-                object-fit: contain;
-            `;
-            img.loading = 'lazy';
             
-            img.onerror = function() {
-                if (!this.src.includes('twemoji')) {
-                    this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg';
-                }
-            };
+            // Don't close the original popup immediately - let it handle the reaction
+            // It will close itself after the reaction is processed
             
-            emojiItem.appendChild(img);
-            
-            emojiItem.addEventListener('mouseenter', function() {
-                this.style.backgroundColor = '#333';
-            });
-            emojiItem.addEventListener('mouseleave', function() {
-                this.style.backgroundColor = 'transparent';
-            });
-            
-            // Click handler - find and click the original reaction
-            emojiItem.addEventListener('click', function() {
-                console.log('[PostsModule] Selected reaction:', emoji.alt || emoji.name);
-                
-                // Find the original popup and click the matching reaction
-                var originalPopup = document.querySelector('.st-emoji-pop');
-                if (originalPopup) {
-                    var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-                    var found = false;
-                    
-                    for (var i = 0; i < reactionElements.length; i++) {
-                        var el = reactionElements[i];
-                        var dataFui = el.getAttribute('data-fui');
-                        var img = el.querySelector('img');
-                        var imgAlt = img ? img.getAttribute('alt') : '';
-                        
-                        if (dataFui === emoji.alt || 
-                            imgAlt === emoji.alt || 
-                            dataFui === ':' + emoji.name + ':' ||
-                            (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
-                            console.log('[PostsModule] Clicking original reaction');
-                            el.click();
-                            found = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!found && reactionElements.length > 0) {
-                        console.log('[PostsModule] Falling back to first reaction');
-                        reactionElements[0].click();
-                    }
-                }
-                
-                // Remove custom popup
-                popup.remove();
-                activePopup = null;
-                
-                // Refresh reaction display after delay
-                setTimeout(function() {
-                    refreshReactionDisplay(postId);
-                }, CONFIG.REACTION_DELAY);
-            });
-            
-            emojiGrid.appendChild(emojiItem);
-        });
-        
-        popup.appendChild(emojiGrid);
-        
-        // Close popup when clicking outside
-        var closeHandler = function(e) {
-            if (!popup.contains(e.target) && !e.target.closest('.reaction-btn')) {
-                popup.remove();
-                activePopup = null;
-                document.removeEventListener('click', closeHandler);
-            }
-        };
-        
-        setTimeout(function() {
-            document.addEventListener('click', closeHandler);
-        }, 100);
-        
-        document.body.appendChild(popup);
-        activePopup = popup;
-    }, 200); // Wait for original popup to appear
-}
-    
-function triggerOriginalReaction(postId, emoji) {
-    var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
-    if (!originalPost) return;
-    
-    // Find the original emoji container
-    var originalEmojiContainer = originalPost.querySelector('.st-emoji-container');
-    if (!originalEmojiContainer) return;
-    
-    // Find the matching reaction in the original popup (which should still be open)
-    var originalPopup = document.querySelector('.st-emoji-pop');
-    if (originalPopup) {
-        var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-        var found = false;
-        
-        for (var i = 0; i < reactionElements.length; i++) {
-            var el = reactionElements[i];
-            var dataFui = el.getAttribute('data-fui');
-            var img = el.querySelector('img');
-            var imgAlt = img ? img.getAttribute('alt') : '';
-            
-            // Match by data-fui, alt text, or name
-            if (dataFui === emoji.alt || 
-                imgAlt === emoji.alt || 
-                dataFui === ':' + emoji.name + ':' ||
-                (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
-                console.log('[PostsModule] Triggering reaction:', emoji.alt || emoji.name);
-                el.click();
-                found = true;
-                break;
-            }
+            // Refresh the reaction display after a delay
+            setTimeout(function() {
+                refreshReactionDisplay(postId);
+            }, CONFIG.REACTION_DELAY);
+        } else {
+            console.warn('[PostsModule] Original popup not found, cannot trigger reaction');
         }
-        
-        if (!found && reactionElements.length > 0) {
-            console.log('[PostsModule] Reaction not found, clicking first available');
-            reactionElements[0].click();
-        }
-        
-        // Don't close the original popup immediately - let it handle the reaction
-        // It will close itself after the reaction is processed
-        
-        // Refresh the reaction display after a delay
-        setTimeout(function() {
-            refreshReactionDisplay(postId);
-        }, CONFIG.REACTION_DELAY);
-    } else {
-        console.warn('[PostsModule] Original popup not found, cannot trigger reaction');
     }
-}
+    
+    // ============================================================================
+    // REACTION COUNT CLICK HANDLER
+    // ============================================================================
+    function handleReactionCountClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        
+        // Find the emoji container and the counter element
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return;
+        
+        // Find the counter element
+        var counter = emojiContainer.querySelector('.st-emoji-counter');
+        if (!counter) return;
+        
+        console.log('[PostsModule] Reaction count clicked for post:', pid);
+        
+        // Make the counter temporarily visible and clickable if needed
+        var originalVisibility = counter.style.visibility;
+        var originalOpacity = counter.style.opacity;
+        var originalPosition = counter.style.position;
+        
+        // Ensure the counter is clickable
+        counter.style.visibility = 'visible';
+        counter.style.opacity = '1';
+        counter.style.position = 'relative';
+        counter.style.zIndex = '9999';
+        
+        // Trigger the click
+        counter.click();
+        
+        // Restore styles after a short delay
+        setTimeout(function() {
+            counter.style.visibility = originalVisibility;
+            counter.style.opacity = originalOpacity;
+            counter.style.position = originalPosition;
+        }, 500);
+        
+        // The original click will open a popup showing who reacted
+        // We don't need to do anything else - the original plugin handles it
+    }
     
     // ============================================================================
     // EMBEDDED LINK TRANSFORMATION
@@ -1329,10 +1371,34 @@ function triggerOriginalReaction(postId, emoji) {
             }
         });
         
-        // Reaction button handler
+        // Reaction count click handler - shows who reacted
+        document.addEventListener('click', function(e) {
+            // Check if clicking on a reaction count span
+            var reactionCount = e.target.closest('.reaction-count');
+            if (reactionCount) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Find the parent reaction button to get the post ID
+                var reactionBtn = reactionCount.closest('.reaction-btn');
+                if (reactionBtn) {
+                    var pid = reactionBtn.getAttribute('data-pid');
+                    if (pid) {
+                        console.log('[PostsModule] Reaction count clicked for post:', pid);
+                        handleReactionCountClick(pid);
+                    }
+                }
+            }
+        });
+        
+        // Reaction button handler (add reaction)
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn) {
+                // Don't trigger if clicking on the reaction count
+                if (e.target.classList && e.target.classList.contains('reaction-count')) {
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 var pid = btn.getAttribute('data-pid');
