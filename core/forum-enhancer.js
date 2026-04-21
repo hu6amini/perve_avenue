@@ -13,7 +13,7 @@
         autoInitialize: true,
         createWrapper: true,
         wrapperId: 'modern-forum-wrapper',
-        hideOriginal: false,  // Changed to false since CSS handles hiding
+        hideOriginal: false,
         modules: {
             posts: true,
             navigation: false,
@@ -153,7 +153,7 @@
     }
     
     // ============================================================================
-    // WAIT FOR DEPENDENCIES
+    // WAIT FOR DEPENDENCIES WITH RETRY
     // ============================================================================
     function waitForDependencies() {
         return new Promise(function(resolve) {
@@ -168,29 +168,57 @@
                 }
             }
             
-            // Check if already loaded
-            if (typeof ForumDOMUtils !== 'undefined') {
-                depsReady.ForumDOMUtils = true;
-            } else {
-                window.addEventListener('dom-utils-ready', function() {
+            // Check if already loaded (with retry)
+            function checkAlreadyLoaded() {
+                if (typeof ForumDOMUtils !== 'undefined') {
                     depsReady.ForumDOMUtils = true;
-                    checkAllReady();
-                });
-            }
-            
-            if (typeof ForumEventBus !== 'undefined') {
-                depsReady.ForumEventBus = true;
-            } else {
-                window.addEventListener('event-bus-ready', function() {
+                }
+                if (typeof ForumEventBus !== 'undefined') {
                     depsReady.ForumEventBus = true;
-                    checkAllReady();
-                });
+                }
+                checkAllReady();
             }
             
-            checkAllReady();
+            // Check immediately
+            checkAlreadyLoaded();
             
-            // Timeout after 5 seconds
-            setTimeout(resolve, 5000);
+            // Set up event listeners (in case they haven't fired yet)
+            window.addEventListener('dom-utils-ready', function() {
+                depsReady.ForumDOMUtils = true;
+                checkAllReady();
+            });
+            
+            window.addEventListener('event-bus-ready', function() {
+                depsReady.ForumEventBus = true;
+                checkAllReady();
+            });
+            
+            // Also set up a polling mechanism as fallback
+            var pollInterval = setInterval(function() {
+                if (typeof ForumDOMUtils !== 'undefined') {
+                    depsReady.ForumDOMUtils = true;
+                }
+                if (typeof ForumEventBus !== 'undefined') {
+                    depsReady.ForumEventBus = true;
+                }
+                
+                if (depsReady.ForumDOMUtils && depsReady.ForumEventBus) {
+                    clearInterval(pollInterval);
+                    resolve();
+                }
+            }, 50);
+            
+            // Timeout after 10 seconds (longer timeout)
+            setTimeout(function() {
+                clearInterval(pollInterval);
+                // Log which dependencies are missing
+                var missing = [];
+                if (typeof ForumDOMUtils === 'undefined') missing.push('ForumDOMUtils');
+                if (typeof ForumEventBus === 'undefined') missing.push('ForumEventBus');
+                log('Dependencies still missing after timeout: ' + missing.join(', '), 'warn');
+                log('Proceeding anyway, but modules may fail', 'warn');
+                resolve();
+            }, 10000);
         });
     }
     
@@ -218,7 +246,7 @@
             }
            
             var attempts = 0;
-            var maxAttempts = 50;
+            var maxAttempts = 100; // Increased max attempts
             var interval = setInterval(function() {
                 attempts++;
                 if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
@@ -374,13 +402,26 @@
         log(ENHANCER_CONFIG.name + ' v' + ENHANCER_CONFIG.version);
         log('========================================');
        
-        // Wait for core dependencies
+        // Wait for core dependencies with improved retry logic
         await waitForDependencies();
        
-        if (!checkDependenciesAvailable()) {
-            log('Cannot start - missing dependencies', 'error');
+        // Double-check dependencies before proceeding
+        var retryCount = 0;
+        var maxRetries = 5;
+        while (retryCount < maxRetries && (!window.ForumDOMUtils || !window.ForumEventBus)) {
+            log('Waiting for dependencies... attempt ' + (retryCount + 1), 'warn');
+            await new Promise(r => setTimeout(r, 500));
+            retryCount++;
+        }
+       
+        if (!window.ForumDOMUtils || !window.ForumEventBus) {
+            log('Core dependencies still missing after retries!', 'error');
+            log('ForumDOMUtils: ' + (!!window.ForumDOMUtils), 'error');
+            log('ForumEventBus: ' + (!!window.ForumEventBus), 'error');
             return;
         }
+       
+        log('Core dependencies verified');
        
         await domReady();
         log('DOM ready');
