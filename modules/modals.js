@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.4
-// @description  Creates a modern modal alongside the original, without replacing it
+// @version      2.3
+// @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -15,122 +15,148 @@
     // Modern modal styles (injects into page)
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
+            /* Modal Overlay */\
             .modern-modal-overlay {\
                 position: fixed;\
                 top: 0;\
                 left: 0;\
                 right: 0;\
                 bottom: 0;\
-                background: rgba(0, 0, 0, 0.85);\
+                background: rgba(0, 0, 0, 0.8);\
                 backdrop-filter: blur(4px);\
-                z-index: 10001;\
+                z-index: 10000;\
                 display: flex;\
                 align-items: center;\
                 justify-content: center;\
                 animation: fadeIn 0.2s ease;\
             }\
+            \
+            /* Modal Container */\
             .modern-likes-modal {\
-                background: #1F2937;\
-                border-radius: 13px;\
+                background: var(--surface-color, #1F2937);\
+                border-radius: var(--radius-lg, 13px);\
                 max-width: 480px;\
                 width: 90%;\
                 max-height: 80vh;\
                 overflow: hidden;\
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);\
                 animation: slideUp 0.3s ease;\
-                border: 1px solid rgba(255, 255, 255, 0.1);\
+                border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
             }\
+            \
+            /* Modal Header */\
             .modern-modal-header {\
                 display: flex;\
                 justify-content: space-between;\
                 align-items: center;\
                 padding: 1rem 1.5rem;\
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);\
-                background: #1F2937;\
+                border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
+                background: var(--surface-color, #1F2937);\
             }\
+            \
             .modern-modal-title {\
                 display: flex;\
                 align-items: center;\
                 gap: 0.5rem;\
                 font-weight: 600;\
                 font-size: 1.1rem;\
-                color: #F9FAFB;\
+                color: var(--text-primary, #F9FAFB);\
                 font-family: "Quicksand", sans-serif;\
             }\
+            \
             .modern-modal-title i {\
-                color: #10B981;\
+                color: var(--primary-light, #10B981);\
             }\
+            \
             .modern-modal-close {\
                 background: transparent;\
                 border: none;\
-                color: #6B7280;\
+                color: var(--text-tertiary, #6B7280);\
                 cursor: pointer;\
                 font-size: 1.25rem;\
                 padding: 0.25rem;\
                 border-radius: 6px;\
                 transition: all 0.2s;\
             }\
+            \
             .modern-modal-close:hover {\
-                background: rgba(255, 255, 255, 0.05);\
-                color: #F9FAFB;\
+                background: var(--hover-color, rgba(255, 255, 255, 0.05));\
+                color: var(--text-primary, #F9FAFB);\
                 transform: rotate(90deg);\
             }\
+            \
+            /* Likes List */\
             .modern-likes-list {\
                 max-height: 60vh;\
                 overflow-y: auto;\
-                background: #1F2937;\
+                background: var(--surface-color, #1F2937);\
             }\
+            \
             .modern-likes-list::-webkit-scrollbar {\
                 width: 6px;\
             }\
+            \
             .modern-likes-list::-webkit-scrollbar-track {\
                 background: transparent;\
             }\
+            \
             .modern-likes-list::-webkit-scrollbar-thumb {\
-                background: #374151;\
+                background: var(--surface-light, #374151);\
                 border-radius: 20px;\
             }\
+            \
+            /* Like Item */\
             .modern-like-item {\
                 display: flex;\
                 align-items: center;\
                 gap: 1rem;\
                 padding: 0.875rem 1.5rem;\
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);\
+                border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));\
                 transition: background 0.2s;\
             }\
+            \
             .modern-like-item:hover {\
-                background: rgba(255, 255, 255, 0.05);\
+                background: var(--hover-color, rgba(255, 255, 255, 0.05));\
             }\
+            \
+            /* Avatar */\
             .modern-like-avatar {\
                 width: 48px;\
                 height: 48px;\
                 border-radius: 50%;\
                 object-fit: cover;\
-                border: 2px solid #059669;\
+                border: 2px solid var(--primary-color, #059669);\
                 flex-shrink: 0;\
-                background: #374151;\
+                background: var(--surface-light, #374151);\
             }\
+            \
+            /* User Info */\
             .modern-like-info {\
                 flex: 1;\
                 min-width: 0;\
             }\
+            \
             .modern-like-name-row {\
                 display: flex;\
                 align-items: center;\
                 flex-wrap: wrap;\
                 gap: 0.5rem;\
             }\
+            \
             .modern-like-name {\
                 font-weight: 600;\
-                color: #F9FAFB;\
+                color: var(--text-primary, #F9FAFB);\
                 text-decoration: none;\
                 font-size: 0.95rem;\
                 transition: color 0.2s;\
             }\
+            \
             .modern-like-name:hover {\
-                color: #10B981;\
+                color: var(--primary-light, #10B981);\
                 text-decoration: underline;\
             }\
+            \
+            /* Role Badges - Based on user group */\
             .modern-role-badge {\
                 display: inline-block;\
                 padding: 0.125rem 0.5rem;\
@@ -139,6 +165,8 @@
                 font-weight: 600;\
                 color: white;\
             }\
+            \
+            /* Group-based colors */\
             .role-founder { background: linear-gradient(135deg, #F59E0B, #D97706); }\
             .role-administrator { background: linear-gradient(135deg, #DC2626, #B91C1C); }\
             .role-global-mod { background: linear-gradient(135deg, #8B5CF6, #7C3AED); }\
@@ -148,35 +176,46 @@
             .role-vip { background: linear-gradient(135deg, #F97316, #EA580C); }\
             .role-member { background: linear-gradient(135deg, #059669, #047857); }\
             .role-banned { background: linear-gradient(135deg, #4B5563, #374151); }\
+            .role-guest { background: linear-gradient(135deg, #6B7280, #4B5563); }\
+            \
+            /* User Stats */\
             .modern-like-stats {\
                 display: flex;\
                 flex-wrap: wrap;\
                 gap: 1rem;\
                 margin-top: 0.25rem;\
                 font-size: 0.7rem;\
-                color: #6B7280;\
+                color: var(--text-tertiary, #6B7280);\
             }\
+            \
             .modern-like-stats i {\
                 margin-right: 0.25rem;\
                 width: 12px;\
-                color: #10B981;\
+                color: var(--primary-light, #10B981);\
             }\
+            \
+            /* Status indicator */\
             .status-online { color: #10B981; }\
             .status-offline { color: #6B7280; }\
+            \
+            /* Loading & Empty States */\
             .modern-loading, .modern-empty {\
                 text-align: center;\
                 padding: 3rem;\
-                color: #6B7280;\
+                color: var(--text-tertiary, #6B7280);\
             }\
+            \
             .modern-loading i, .modern-empty i {\
                 font-size: 2rem;\
                 margin-bottom: 0.5rem;\
                 display: block;\
             }\
+            \
             @keyframes fadeIn {\
                 from { opacity: 0; }\
                 to { opacity: 1; }\
             }\
+            \
             @keyframes slideUp {\
                 from {\
                     opacity: 0;\
@@ -187,27 +226,29 @@
                     transform: translateY(0);\
                 }\
             }\
+            \
+            /* Don\'t hide original modal completely - just prevent it from showing */\
+            #overlay.pop_points[style*="display: block"],\
+            .popup.pop_points[style*="display: block"] {\
+                display: none !important;\
+            }\
         </style>\
     ';
+    
+    // Store original modal reference to restore if needed
+    var originalModalElement = null;
+    var originalModalDisplay = null;
     
     // Helper: Extract user IDs from the legacy modal
     function extractUserIdsFromLegacyModal(legacyModal) {
         var userIds = [];
-        
-        // Try multiple selectors to find user links
-        var userLinks = legacyModal.querySelectorAll('.users a, .points_pos, a[href*="MID="]');
-        
-        console.log('[Modern Likes] Found', userLinks.length, 'user links in modal');
+        var userLinks = legacyModal.querySelectorAll('.users a[href*="MID="], .points_pos');
         
         for (var i = 0; i < userLinks.length; i++) {
             var link = userLinks[i];
-            var href = link.getAttribute('href');
-            if (href) {
-                var match = href.match(/MID=(\d+)/);
-                if (match && userIds.indexOf(match[1]) === -1) {
-                    userIds.push(match[1]);
-                    console.log('[Modern Likes] Found user ID:', match[1]);
-                }
+            var match = link.href ? link.href.match(/MID=(\d+)/) : null;
+            if (match && userIds.indexOf(match[1]) === -1) {
+                userIds.push(match[1]);
             }
         }
         
@@ -219,7 +260,6 @@
         if (!userIds || userIds.length === 0) return [];
         
         try {
-            console.log('[Modern Likes] Fetching users from API:', userIds);
             var response = await fetch('/api.php?mid=' + userIds.join(','));
             var data = await response.json();
             
@@ -229,7 +269,6 @@
                     users.push(data[key]);
                 }
             }
-            console.log('[Modern Likes] Fetched', users.length, 'users from API');
             return users;
         } catch (error) {
             console.error('[Modern Likes] API Error:', error);
@@ -239,38 +278,54 @@
     
     // Helper: Determine role badge class and text from group object
     function getUserRoleInfo(user) {
+        // Check if user is banned
         if (user.banned === 1) {
             return { class: 'role-banned', text: 'Banned' };
         }
         
+        // Check group object first (most reliable)
         if (user.group) {
             var groupName = (user.group.name || '').toLowerCase();
             var groupClass = (user.group.class || '').toLowerCase();
             var groupId = user.group.id;
             
+            // Founder (highest priority)
             if (groupClass.indexOf('founder') !== -1 || groupName === 'founder') {
                 return { class: 'role-founder', text: 'Founder' };
             }
+            
+            // Administrator
             if (groupName === 'administrator' || groupClass.indexOf('admin') !== -1 || groupId === 1) {
                 return { class: 'role-administrator', text: 'Administrator' };
             }
+            
+            // Global Moderator
             if (groupName === 'global moderator' || groupClass.indexOf('global_mod') !== -1 || groupName === 'global mod') {
                 return { class: 'role-global-mod', text: 'Global Mod' };
             }
+            
+            // Moderator
             if (groupName === 'moderator' || groupClass.indexOf('mod') !== -1 || groupName === 'mod') {
                 return { class: 'role-moderator', text: 'Moderator' };
             }
+            
+            // Developer
             if (groupName === 'developer' || groupClass.indexOf('developer') !== -1 || groupClass.indexOf('dev') !== -1) {
                 return { class: 'role-developer', text: 'Developer' };
             }
+            
+            // Premium Member
             if (groupName === 'premium' || groupClass.indexOf('premium') !== -1) {
                 return { class: 'role-premium', text: 'Premium' };
             }
+            
+            // VIP
             if (groupName === 'vip' || groupClass.indexOf('vip') !== -1) {
                 return { class: 'role-vip', text: 'VIP' };
             }
         }
         
+        // Check permission object as fallback
         if (user.permission) {
             if (user.permission.founder === 1) {
                 return { class: 'role-founder', text: 'Founder' };
@@ -286,10 +341,12 @@
             }
         }
         
+        // Check if user has custom group name
         if (user.group && user.group.name && user.group.name !== 'Members' && user.group.name !== 'member') {
             return { class: 'role-member', text: user.group.name };
         }
         
+        // Default member
         return { class: 'role-member', text: 'Member' };
     }
     
@@ -310,36 +367,8 @@
         });
     }
     
-    // Helper: Trigger click on original close button
-    function triggerOriginalClose(legacyModal) {
-        var closeButton = legacyModal.querySelector('a.close');
-        if (closeButton) {
-            console.log('[Modern Likes] Triggering original close button');
-            // Simulate a click on the original close button
-            var clickEvent = document.createEvent('MouseEvents');
-            clickEvent.initEvent('click', true, true);
-            closeButton.dispatchEvent(clickEvent);
-        } else {
-            console.log('[Modern Likes] Close button not found, hiding modal');
-            // Fallback: hide the modal
-            legacyModal.style.display = 'none';
-        }
-    }
-    
     // Create and show modern modal
-    async function showModernModal(legacyModal) {
-        console.log('[Modern Likes] showModernModal called');
-        
-        // Extract user IDs from the legacy modal
-        var userIds = extractUserIdsFromLegacyModal(legacyModal);
-        
-        if (userIds.length === 0) {
-            console.log('[Modern Likes] No users found in modal');
-            return;
-        }
-        
-        console.log('[Modern Likes] Creating modern modal for', userIds.length, 'users');
-        
+    async function showModernModal(userIds, originalModal) {
         // Create overlay
         var overlay = document.createElement('div');
         overlay.className = 'modern-modal-overlay';
@@ -370,35 +399,19 @@
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
         
-        console.log('[Modern Likes] Modern modal added to DOM');
-        
-        // Close button functionality - triggers original close
+        // Close button functionality - restore original modal visibility when closed
         var closeBtn = modal.querySelector('.modern-modal-close');
-        var closeModal = function() {
-            console.log('[Modern Likes] Closing modern modal');
+        var closeModal = function() { 
             overlay.remove();
-            // Trigger the original modal's close button
-            triggerOriginalClose(legacyModal);
+            // Restore original modal so it can be triggered again
+            if (originalModal) {
+                originalModal.style.display = '';
+            }
         };
         closeBtn.addEventListener('click', closeModal);
-        
-        // Close when clicking outside
         overlay.addEventListener('click', function(e) {
-            if (e.target === overlay) {
-                console.log('[Modern Likes] Clicked outside, closing');
-                closeModal();
-            }
+            if (e.target === overlay) closeModal();
         });
-        
-        // Escape key to close
-        var escHandler = function(e) {
-            if (e.key === 'Escape') {
-                console.log('[Modern Likes] Escape key pressed, closing');
-                closeModal();
-                document.removeEventListener('keydown', escHandler);
-            }
-        };
-        document.addEventListener('keydown', escHandler);
         
         // Fetch and render users
         var likesList = modal.querySelector('.modern-likes-list');
@@ -432,7 +445,6 @@
                 var avatarUrl = user.avatar || 'https://img.forumfree.net/style_images/avatar_nn.png';
                 var statusIcon = 'fa-circle';
                 var statusText = user.status || 'offline';
-                var statusClass = (user.status === 'online') ? 'status-online' : 'status-offline';
                 
                 itemsHtml += 
                     '<div class="modern-like-item">' +
@@ -450,7 +462,7 @@
                             '<div class="modern-like-stats">' +
                                 '<span><i class="fa-regular fa-message"></i> ' + formatNumber(user.messages) + ' posts</span>' +
                                 '<span><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(user.reputation) + ' rep</span>' +
-                                '<span class="' + statusClass + '">' +
+                                '<span class="status-' + user.status + '">' +
                                     '<i class="fa-regular ' + statusIcon + '"></i> ' + statusText +
                                 '</span>' +
                             '</div>' +
@@ -459,7 +471,6 @@
             }
             
             likesList.innerHTML = itemsHtml;
-            console.log('[Modern Likes] Rendering complete');
             
         } catch (error) {
             console.error('[Modern Likes] Error rendering:', error);
@@ -471,34 +482,11 @@
         }
     }
     
-    // Function to manually check for modal (as fallback)
-    function checkForModalManually() {
-        var modal = document.getElementById('overlay');
-        if (modal && modal.classList.contains('pop_points') && 
-            modal.style.display === 'block' &&
-            !modal.hasAttribute('data-modern-processed')) {
-            
-            console.log('[Modern Likes] Manual check found modal');
-            modal.setAttribute('data-modern-processed', 'true');
-            showModernModal(modal);
-            
-            // Reset when modal closes
-            var closeObserver = new MutationObserver(function() {
-                if (modal.style.display !== 'block') {
-                    modal.removeAttribute('data-modern-processed');
-                    closeObserver.disconnect();
-                }
-            });
-            closeObserver.observe(modal, { attributes: true, attributeFilter: ['style'] });
-        }
-    }
-    
     // Main observer to detect legacy modal
     function initModalObserver() {
         // Inject styles if not already present
         if (!document.querySelector('#modern-likes-modal-styles')) {
             document.head.insertAdjacentHTML('beforeend', modalStyles);
-            console.log('[Modern Likes] Styles injected');
         }
         
         // Also inject Font Awesome if not present
@@ -507,99 +495,66 @@
             faLink.rel = 'stylesheet';
             faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css';
             document.head.appendChild(faLink);
-            console.log('[Modern Likes] Font Awesome injected');
         }
         
-        // Also listen for clicks on like buttons (more reliable)
-        document.body.addEventListener('click', function(e) {
-            // Check if clicked on a like button or something that would open the modal
-            var target = e.target;
-            var likeButton = target.closest('.points_up, .like-btn, [onclick*="points"]');
-            
-            if (likeButton) {
-                console.log('[Modern Likes] Like button clicked, waiting for modal...');
-                // Wait a bit for the modal to appear
-                setTimeout(function() {
-                    checkForModalManually();
-                }, 100);
-                setTimeout(function() {
-                    checkForModalManually();
-                }, 300);
-                setTimeout(function() {
-                    checkForModalManually();
-                }, 500);
-            }
-        });
-        
-        // Create observer to watch for the legacy modal appearing
-        var observer = new MutationObserver(function(mutations) {
-            for (var i = 0; i < mutations.length; i++) {
-                var mutation = mutations[i];
-                
-                // Check for style attribute changes
-                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                    var modal = mutation.target;
-                    if (modal.id === 'overlay' && 
-                        modal.classList.contains('pop_points') &&
-                        modal.style.display === 'block' &&
-                        !modal.hasAttribute('data-modern-processed')) {
-                        
-                        console.log('[Modern Likes] Detected modal via style change');
-                        modal.setAttribute('data-modern-processed', 'true');
-                        showModernModal(modal);
-                        
-                        // Reset when modal closes
-                        var closeObserver = new MutationObserver(function() {
-                            if (modal.style.display !== 'block') {
-                                modal.removeAttribute('data-modern-processed');
-                                closeObserver.disconnect();
-                            }
-                        });
-                        closeObserver.observe(modal, { attributes: true, attributeFilter: ['style'] });
+        // Intercept clicks on like buttons to handle them directly
+        function handleLikeButtonClick(event) {
+            // Give the forum's script time to create the modal
+            setTimeout(function() {
+                var legacyModal = document.querySelector('#overlay.pop_points');
+                if (legacyModal && legacyModal.style.display === 'block') {
+                    var userIds = extractUserIdsFromLegacyModal(legacyModal);
+                    if (userIds.length > 0) {
+                        console.log('[Modern Likes] Like button clicked, showing modern modal for', userIds.length, 'users');
+                        // Hide the original immediately
+                        legacyModal.style.display = 'none';
+                        // Show modern modal
+                        showModernModal(userIds, legacyModal);
                     }
                 }
-                
-                // Check for newly added modals
-                if (mutation.type === 'childList') {
-                    for (var j = 0; j < mutation.addedNodes.length; j++) {
-                        var node = mutation.addedNodes[j];
-                        if (node.nodeType === 1 && node.id === 'overlay' && 
-                            node.classList && node.classList.contains('pop_points') &&
-                            node.style.display === 'block' &&
-                            !node.hasAttribute('data-modern-processed')) {
-                            
-                            console.log('[Modern Likes] Detected modal via DOM addition');
-                            node.setAttribute('data-modern-processed', 'true');
-                            showModernModal(node);
-                            
-                            // Reset when modal closes
-                            var closeObserver = new MutationObserver(function() {
-                                if (node.style.display !== 'block') {
-                                    node.removeAttribute('data-modern-processed');
-                                    closeObserver.disconnect();
-                                }
-                            });
-                            closeObserver.observe(node, { attributes: true, attributeFilter: ['style'] });
-                        }
-                    }
+            }, 10);
+        }
+        
+        // Add click listeners to like buttons
+        function attachLikeButtonListeners() {
+            var likeButtons = document.querySelectorAll('.points_up, [class*="points_up"], .like-btn');
+            for (var i = 0; i < likeButtons.length; i++) {
+                var btn = likeButtons[i];
+                if (!btn.hasAttribute('data-modern-likes-attached')) {
+                    btn.setAttribute('data-modern-likes-attached', 'true');
+                    btn.addEventListener('click', handleLikeButtonClick);
+                }
+            }
+        }
+        
+        // Also observe for dynamically added like buttons
+        var observer = new MutationObserver(function(mutations) {
+            attachLikeButtonListeners();
+            
+            // Also check for any modal that might have appeared
+            var legacyModal = document.querySelector('#overlay.pop_points');
+            if (legacyModal && legacyModal.style.display === 'block') {
+                var userIds = extractUserIdsFromLegacyModal(legacyModal);
+                if (userIds.length > 0) {
+                    console.log('[Modern Likes] Modal detected via observer with', userIds.length, 'users');
+                    legacyModal.style.display = 'none';
+                    showModernModal(userIds, legacyModal);
                 }
             }
         });
         
         // Start observing
         observer.observe(document.body, {
-            attributes: true,
-            attributeFilter: ['style'],
             childList: true,
-            subtree: true
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style']
         });
         
-        // Also run a periodic check as fallback
-        setInterval(function() {
-            checkForModalManually();
-        }, 500);
+        // Initial attachment
+        attachLikeButtonListeners();
         
-        console.log('[Modern Likes] Observer active - waiting for likes modal to appear');
+        console.log('[Modern Likes] Observer active - monitoring like buttons');
     }
     
     // Wait for page to load
