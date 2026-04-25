@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.1
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -42,7 +42,6 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
-                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -75,12 +74,25 @@
                 display: flex;\
                 align-items: center;\
                 gap: 0.5rem;\
-                font-weight: 600;\
-                font-size: 1.1rem;\
-                color: var(--text-primary, #F9FAFB);\
                 font-family: "Quicksand", sans-serif;\
             }\
             .modern-modal-title i {\
+                color: var(--primary-light, #10B981);\
+                font-size: 1.1rem;\
+            }\
+            .modern-modal-title h3 {\
+                font-size: 1rem;\
+                font-weight: 600;\
+                color: var(--text-primary, #F9FAFB);\
+                margin: 0;\
+                font-family: "Quicksand", sans-serif;\
+            }\
+            .modern-modal-title .like-count {\
+                background: rgba(5, 150, 105, 0.15);\
+                border-radius: 30px;\
+                padding: 0.125rem 0.5rem;\
+                font-size: 0.75rem;\
+                font-weight: 600;\
                 color: var(--primary-light, #10B981);\
             }\
             .modern-modal-close {\
@@ -485,7 +497,8 @@
             '<div class="modern-modal-header">' +
                 '<div class="modern-modal-title">' +
                     '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>' +
-                    '<span>Liked by <span class="like-count-display">' + userIds.length + '</span></span>' +
+                    '<h3>Liked by</h3>' +
+                    '<span class="like-count">' + userIds.length + '</span>' +
                 '</div>' +
                 '<button class="modern-modal-close" aria-label="Close">' +
                     '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
@@ -498,7 +511,7 @@
                 '</div>' +
             '</div>' +
             '<div class="modern-modal-footer">' +
-                '<i class="fa-regular fa-clock" aria-hidden="true"></i> ' + currentTime + ' · post feedback' +
+                '<i class="fa-regular fa-clock" aria-hidden="true"></i> ' + currentTime + ' \u00b7 post feedback' +
             '</div>';
         
         modal.innerHTML = headerHtml;
