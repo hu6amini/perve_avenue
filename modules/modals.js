@@ -42,7 +42,6 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
-                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -128,7 +127,6 @@
                 object-fit: cover;\
                 border: 2px solid var(--primary-color, #059669);\
                 flex-shrink: 0;\
-                background: var(--surface-light, #374151);\
             }\
             .modern-like-info {\
                 flex: 1;\
