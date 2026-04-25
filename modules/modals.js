@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.5
+// @version      3.7
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -42,30 +42,50 @@
     // Store original profile links for each user
     var userProfileLinks = new Map();
     
-    // Helper: Optimize image URL using Weserv
+    // Helper: Optimize image URL using Weserv (with GIF animation support)
     function optimizeImageUrl(url) {
-        if (!url) return url;
+        if (!url) return { url: url, quality: null, format: null, isGif: false };
         
         // Skip already optimized URLs or DiceBear avatars
         var lowerUrl = url.toLowerCase();
         if (lowerUrl.indexOf('weserv.nl') !== -1 || 
             lowerUrl.indexOf('dicebear.com') !== -1 ||
             lowerUrl.indexOf('api.dicebear.com') !== -1) {
-            return url;
+            return { url: url, quality: null, format: null, isGif: false };
         }
         
         // Skip data URLs
-        if (url.indexOf('data:') === 0) return url;
+        if (url.indexOf('data:') === 0) return { url: url, quality: null, format: null, isGif: false };
+        
+        // Detect if it's a GIF
+        var isGif = lowerUrl.indexOf('.gif') !== -1 || 
+                    lowerUrl.indexOf('.gif?') !== -1 ||
+                    lowerUrl.indexOf('.gif#') !== -1 ||
+                    /\.gif($|\?|#)/i.test(lowerUrl);
+        
+        var outputFormat = 'webp';
+        var quality = WESERV_CONFIG.quality;
         
         // Build Weserv URL
         var encodedUrl = encodeURIComponent(url);
         var optimizedUrl = WESERV_CONFIG.cdn + '?url=' + encodedUrl + 
-                          '&output=webp' + 
+                          '&output=' + outputFormat + 
                           '&maxage=' + WESERV_CONFIG.cache + 
-                          '&q=' + WESERV_CONFIG.quality +
+                          '&q=' + quality +
                           '&il';
         
-        return optimizedUrl;
+        // For GIFs, add parameters to preserve animation
+        if (isGif) {
+            optimizedUrl += '&n=-1';
+            optimizedUrl += '&lossless=true';
+        }
+        
+        return {
+            url: optimizedUrl,
+            quality: quality,
+            format: outputFormat,
+            isGif: isGif
+        };
     }
     
     // Modern modal styles
@@ -78,6 +98,7 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
+                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -339,12 +360,18 @@
         return true;
     }
     
-    // Helper: Get best avatar URL for user with optimization
+    // Helper: Get best avatar URL for user with optimization (preserves GIF animation)
     function getUserAvatarSync(user) {
         var avatarUrl = user.avatar;
         
         if (!isValidAvatar(avatarUrl)) {
-            return generateDiceBearAvatar(user.nickname, user.id);
+            var dicebearUrl = generateDiceBearAvatar(user.nickname, user.id);
+            return {
+                url: dicebearUrl,
+                quality: null,
+                format: 'svg',
+                isGif: false
+            };
         }
         
         if (avatarUrl.startsWith('//')) {
@@ -355,7 +382,6 @@
             avatarUrl = avatarUrl.replace('http://', 'https://');
         }
         
-        // Optimize the URL through Weserv (converts to WebP)
         return optimizeImageUrl(avatarUrl);
     }
     
@@ -540,7 +566,6 @@
         
         processingModal = true;
         
-        // Store original profile links from legacy modal
         storeProfileLinks(legacyModal);
         
         if (currentCustomModal) {
@@ -631,14 +656,22 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-                var avatarUrl = getUserAvatarSync(user);
+                var avatarData = getUserAvatarSync(user);
+                var avatarUrl = avatarData.url;
+                var avatarQuality = avatarData.quality;
+                var avatarFormat = avatarData.format;
+                var isGif = avatarData.isGif;
+                
                 var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
+                var optimizedFallback = optimizeImageUrl(dicebearFallback);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
                 var escapedNickname = escapeHtml(user.nickname);
                 
-                // Optimize the fallback URL as well (though DiceBear is already optimized)
-                var optimizedFallback = optimizeImageUrl(dicebearFallback);
+                var qualityAttr = avatarQuality ? 'data-quality="' + avatarQuality + '" ' : '';
+                var formatAttr = avatarFormat ? 'data-format="' + avatarFormat + '" ' : '';
+                var optimizedAttr = avatarQuality ? 'data-optimized="true" ' : '';
+                var gifAttr = isGif ? 'data-original-format="gif" ' : '';
                 
                 itemsHtml += 
                     '<div class="modern-like-item" data-user-id="' + user.id + '">' +
@@ -648,9 +681,11 @@
                              'loading="lazy" ' +
                              'decoding="async" ' +
                              'data-user-id="' + user.id + '" ' +
-                             'data-optimized="true" ' +
-                             'data-format="webp" ' +
-                             'onerror="this.onerror=null; this.src=\'' + optimizedFallback + '\';">' +
+                             qualityAttr +
+                             formatAttr +
+                             optimizedAttr +
+                             gifAttr +
+                             'onerror="this.onerror=null; this.src=\'' + optimizedFallback.url + '\';">' +
                         '<div class="modern-like-info" data-user-id="' + user.id + '">' +
                             '<div class="modern-like-name-row">' +
                                 '<span class="modern-like-name" data-user-id="' + user.id + '">' +
@@ -671,7 +706,6 @@
             
             likesList.innerHTML = itemsHtml;
             
-            // Add click event listeners to all clickable elements
             var clickableElements = likesList.querySelectorAll('.modern-like-item, .modern-like-avatar, .modern-like-info, .modern-like-name');
             for (var i = 0; i < clickableElements.length; i++) {
                 var element = clickableElements[i];
