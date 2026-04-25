@@ -21,142 +21,286 @@
     var cooldownTimer = null;
     var processingModal = false;
     
-    // ============================================================================
-    // EMERALD THEME HARMONIZED COLOR PALETTE
-    // Based on midnight emerald theme from the modern post cards
-    // ============================================================================
+    // Harmony color palette based on Midnight Emerald theme
+    // All colors are carefully selected to complement the emerald green (#059669, #10B981) theme
     var AVATAR_COLORS = [
-        // Emerald greens (primary theme colors)
-        '#059669', // primary emerald
-        '#10B981', // light emerald
-        '#047857', // dark emerald
-        '#34D399', // soft emerald
-        '#6EE7B7', // pale emerald
-        
-        // Accent colors that complement emerald
-        '#7C3AED', // purple accent (from theme)
-        '#0EA5E9', // blue accent (from theme)
-        '#F59E0B', // warm amber accent
-        '#DC2626', // red accent (admin color)
-        '#8B5CF6', // violet (mod color)
-        
-        // Harmonious teals and mints
-        '#14B8A6', // teal
-        '#2DD4BF', // light teal
-        '#0D9488', // dark teal
-        '#00A896', // mint teal
-        
-        // Warm accents that don't clash
-        '#F97316', // orange
-        '#FBBF24', // golden
-        '#EF4444', // sunset red
-        '#EC4899', // pink accent
-        
-        // Cool accents that work with emerald
-        '#3B82F6', // blue
-        '#6366F1', // indigo
-        '#8B5CF6', // purple
-        '#A855F7', // bright purple
-        
-        // Soft neutral tones
-        '#78716C', // warm gray
-        '#64748B', // slate
-        '#6B7280', // cool gray
-        '#9CA3AF', // light gray
-        '#A8A29E'  // taupe
+        // Emerald family (primary)
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        // Teal family (complementary)
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        // Blue family (analogous)
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        // Indigo family (accent)
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        // Purple family (secondary accent)
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        // Amber/Gold (warm accent)
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        // Slate/Gray (neutral)
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
     ];
     
-    // Fallback simple colors in case of any issues
-    var FALLBACK_COLORS = ['#059669', '#10B981', '#7C3AED', '#0EA5E9', '#F59E0B', '#DC2626', '#8B5CF6'];
+    // Modern modal styles
+    var modalStyles = '\
+        <style id="modern-likes-modal-styles">\
+            .modern-modal-overlay {\
+                position: fixed;\
+                top: 0;\
+                left: 0;\
+                right: 0;\
+                bottom: 0;\
+                background: rgba(0, 0, 0, 0.8);\
+                backdrop-filter: blur(4px);\
+                z-index: 10000;\
+                display: flex;\
+                align-items: center;\
+                justify-content: center;\
+                animation: fadeIn 0.2s ease;\
+            }\
+            .modern-likes-modal {\
+                background: var(--surface-color, #1F2937);\
+                border-radius: var(--radius-lg, 13px);\
+                max-width: 480px;\
+                width: 90%;\
+                max-height: 80vh;\
+                overflow: hidden;\
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);\
+                animation: slideUp 0.3s ease;\
+                border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
+            }\
+            .modern-modal-header {\
+                display: flex;\
+                justify-content: space-between;\
+                align-items: center;\
+                padding: 1rem 1.5rem;\
+                border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
+                background: var(--surface-color, #1F2937);\
+            }\
+            .modern-modal-title {\
+                display: flex;\
+                align-items: center;\
+                gap: 0.5rem;\
+                font-weight: 600;\
+                font-size: 1.1rem;\
+                color: var(--text-primary, #F9FAFB);\
+                font-family: "Quicksand", sans-serif;\
+            }\
+            .modern-modal-title i {\
+                color: var(--primary-light, #10B981);\
+            }\
+            .modern-modal-close {\
+                background: transparent;\
+                border: none;\
+                color: var(--text-tertiary, #6B7280);\
+                cursor: pointer;\
+                font-size: 1.25rem;\
+                padding: 0.25rem;\
+                border-radius: 6px;\
+                transition: all 0.2s;\
+            }\
+            .modern-modal-close:hover {\
+                background: var(--hover-color, rgba(255, 255, 255, 0.05));\
+                color: var(--text-primary, #F9FAFB);\
+                transform: rotate(90deg);\
+            }\
+            .modern-likes-list {\
+                max-height: 60vh;\
+                overflow-y: auto;\
+                background: var(--surface-color, #1F2937);\
+            }\
+            .modern-likes-list::-webkit-scrollbar {\
+                width: 6px;\
+            }\
+            .modern-likes-list::-webkit-scrollbar-track {\
+                background: transparent;\
+            }\
+            .modern-likes-list::-webkit-scrollbar-thumb {\
+                background: var(--surface-light, #374151);\
+                border-radius: 20px;\
+            }\
+            .modern-like-item {\
+                display: flex;\
+                align-items: center;\
+                gap: 1rem;\
+                padding: 0.875rem 1.5rem;\
+                border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));\
+                transition: background 0.2s;\
+            }\
+            .modern-like-item:hover {\
+                background: var(--hover-color, rgba(255, 255, 255, 0.05));\
+            }\
+            .modern-like-avatar {\
+                width: 48px;\
+                height: 48px;\
+                border-radius: 50%;\
+                object-fit: cover;\
+                border: 2px solid var(--primary-color, #059669);\
+                flex-shrink: 0;\
+                background: var(--surface-light, #374151);\
+            }\
+            .modern-like-info {\
+                flex: 1;\
+                min-width: 0;\
+            }\
+            .modern-like-name-row {\
+                display: flex;\
+                align-items: center;\
+                flex-wrap: wrap;\
+                gap: 0.5rem;\
+            }\
+            .modern-like-name {\
+                font-weight: 600;\
+                color: var(--text-primary, #F9FAFB);\
+                text-decoration: none;\
+                font-size: 0.95rem;\
+                transition: color 0.2s;\
+            }\
+            .modern-like-name:hover {\
+                color: var(--primary-light, #10B981);\
+                text-decoration: underline;\
+            }\
+            .modern-role-badge {\
+                display: inline-block;\
+                padding: 0.125rem 0.5rem;\
+                border-radius: 9999px;\
+                font-size: 0.625rem;\
+                font-weight: 600;\
+                color: white;\
+            }\
+            .role-founder { background: linear-gradient(135deg, #F59E0B, #D97706); }\
+            .role-administrator { background: linear-gradient(135deg, #DC2626, #B91C1C); }\
+            .role-global-mod { background: linear-gradient(135deg, #8B5CF6, #7C3AED); }\
+            .role-moderator { background: linear-gradient(135deg, #8B5CF6, #7C3AED); }\
+            .role-developer { background: linear-gradient(135deg, #0EA5E9, #0284C7); }\
+            .role-premium { background: linear-gradient(135deg, #D946EF, #C026D3); }\
+            .role-vip { background: linear-gradient(135deg, #F97316, #EA580C); }\
+            .role-member { background: linear-gradient(135deg, #059669, #047857); }\
+            .role-banned { background: linear-gradient(135deg, #4B5563, #374151); }\
+            .modern-like-stats {\
+                display: flex;\
+                flex-wrap: wrap;\
+                gap: 1rem;\
+                margin-top: 0.25rem;\
+                font-size: 0.7rem;\
+                color: var(--text-tertiary, #6B7280);\
+            }\
+            .modern-like-stats i {\
+                margin-right: 0.25rem;\
+                width: 12px;\
+                color: var(--primary-light, #10B981);\
+            }\
+            .status-online { color: #10B981; }\
+            .status-offline { color: #6B7280; }\
+            .modern-loading, .modern-empty {\
+                text-align: center;\
+                padding: 3rem;\
+                color: var(--text-tertiary, #6B7280);\
+            }\
+            .modern-loading i, .modern-empty i {\
+                font-size: 2rem;\
+                margin-bottom: 0.5rem;\
+                display: block;\
+            }\
+            @keyframes fadeIn {\
+                from { opacity: 0; }\
+                to { opacity: 1; }\
+            }\
+            @keyframes slideUp {\
+                from {\
+                    opacity: 0;\
+                    transform: translateY(20px);\
+                }\
+                to {\
+                    opacity: 1;\
+                    transform: translateY(0);\
+                }\
+            }\
+        </style>\
+    ';
     
-    // ============================================================================
-    // AVATAR GENERATION WITH THEME-HARMONIZED COLORS
-    // ============================================================================
-    
-    // Generate a consistent hash from a string (username or user ID)
-    function getStringHash(str) {
+    // Helper: Generate deterministic color from nickname
+    function getColorFromNickname(nickname, userId) {
         var hash = 0;
-        if (!str) return hash;
+        var str = nickname || userId || 'user';
+        
+        // Create a hash from the nickname string
         for (var i = 0; i < str.length; i++) {
-            var char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
             hash = hash & hash; // Convert to 32-bit integer
         }
-        return Math.abs(hash);
-    }
-    
-    // Get a consistent color for a user based on their nickname
-    function getAvatarColorForUser(nickname, userId) {
-        // Use nickname if available, otherwise use userId
-        var identifier = nickname || userId || 'unknown';
-        var hash = getStringHash(identifier);
-        var colorIndex = hash % AVATAR_COLORS.length;
+        
+        // Use absolute value and ensure it's positive
+        var absHash = Math.abs(hash);
+        
+        // Select color from the palette based on hash
+        var colorIndex = absHash % AVATAR_COLORS.length;
+        
         return AVATAR_COLORS[colorIndex];
     }
     
-    // Generate DiceBear avatar with emerald-theme harmonized colors
+    // Helper: Generate DiceBear avatar from username with harmonious colors
     function generateDiceBearAvatar(username, userId) {
         var displayName = username || 'User';
-        
-        // Get the first letter, handle special cases
         var firstLetter = displayName.charAt(0).toUpperCase();
+        
         if (!firstLetter.match(/[A-Z0-9]/i)) {
             firstLetter = '?';
         }
         
-        // Get consistent color for this user
-        var backgroundColor = getAvatarColorForUser(username, userId);
-        // Remove the '#' if present for the URL
-        var bgColorHex = backgroundColor.replace('#', '');
+        // Get harmonious color based on nickname
+        var backgroundColor = getColorFromNickname(username, userId);
         
-        // Use DiceBear initials API with the harmonized color
+        // Use DiceBear initials API
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
-            'backgroundColor=' + bgColorHex,
+            'backgroundColor=' + backgroundColor,
             'radius=50',
             'size=70',
             'fontSize=32',
             'fontWeight=600',
             'bold=true',
-            'fontColor=FFFFFF'  // White text for contrast on all colors
+            'fontFamily=Quicksand,sans-serif'
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
     }
     
-    // Check if avatar URL is valid (not the broken "http" from API)
+    // Helper: Check if avatar URL is valid
     function isValidAvatar(avatarUrl) {
         if (!avatarUrl) return false;
-        // Catch broken URL patterns from the API
-        if (avatarUrl === 'http' || avatarUrl === 'http:' || avatarUrl === 'https' || avatarUrl === 'https:') {
-            return false;
-        }
-        // Check if it's an empty string
-        if (avatarUrl === '' || avatarUrl.trim() === '') {
+        // Check for incomplete URLs like "http" or empty strings
+        if (avatarUrl === 'http' || avatarUrl === 'http:' || avatarUrl === '' || avatarUrl === 'https' || avatarUrl === 'https:') {
             return false;
         }
         // Check if it's a valid URL format
         if (!avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://') && !avatarUrl.startsWith('//')) {
             return false;
         }
+        // Additional check for common broken patterns
+        if (avatarUrl.indexOf('undefined') !== -1 || avatarUrl.indexOf('null') !== -1) {
+            return false;
+        }
         return true;
     }
     
-    // Get best avatar URL for user (forum avatar or DiceBear fallback)
+    // Helper: Get best avatar URL for user
     function getUserAvatar(user) {
         var avatarUrl = user.avatar;
         
-        // Fix protocol-relative URLs
-        if (avatarUrl && avatarUrl.startsWith('//')) {
-            avatarUrl = 'https:' + avatarUrl;
-        }
-        
         // Check if avatar exists and is valid
         if (isValidAvatar(avatarUrl)) {
+            // Fix protocol-relative URLs
+            if (avatarUrl.startsWith('//')) {
+                avatarUrl = 'https:' + avatarUrl;
+            }
+            // Also handle http:// when site is https
+            if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
+                avatarUrl = avatarUrl.replace('http://', 'https://');
+            }
             return avatarUrl;
         }
         
-        // Fallback to DiceBear avatar with harmonized color
+        // Fallback to DiceBear avatar with harmonious colors
         return generateDiceBearAvatar(user.nickname, user.id);
     }
     
@@ -394,10 +538,10 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
+                // Use the improved avatar function with DiceBear fallback
                 var avatarUrl = getUserAvatar(user);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
-                var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 
                 itemsHtml += 
                     '<div class="modern-like-item">' +
@@ -405,7 +549,7 @@
                              'src="' + avatarUrl + '" ' +
                              'alt="Avatar of ' + escapeHtml(user.nickname) + '" ' +
                              'loading="lazy" ' +
-                             'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
+                             'onerror="this.onerror=null; this.src=\'' + generateDiceBearAvatar(user.nickname, user.id) + '\';">' +
                         '<div class="modern-like-info">' +
                             '<div class="modern-like-name-row">' +
                                 '<a href="/?act=Profile&amp;MID=' + user.id + '" class="modern-like-name" target="_blank">' +
