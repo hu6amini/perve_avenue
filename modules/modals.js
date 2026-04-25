@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -237,15 +237,14 @@
         
         var backgroundColor = getColorFromNickname(username, userId);
         
+        // Only use parameters that DiceBear API accepts
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
             'radius=50',
             'size=70',
             'fontSize=32',
-            'fontWeight=600',
-            'bold=true',
-            'fontFamily=Quicksand,sans-serif'
+            'fontWeight=600'
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
@@ -274,16 +273,6 @@
         }
         
         return true;
-    }
-    
-    // Helper: Test if an image URL actually loads (async)
-    function testImageUrl(url) {
-        return new Promise(function(resolve) {
-            var img = new Image();
-            img.onload = function() { resolve(true); };
-            img.onerror = function() { resolve(false); };
-            img.src = url;
-        });
     }
     
     // Helper: Get best avatar URL for user (synchronous, returns DiceBear immediately for invalid URLs)
