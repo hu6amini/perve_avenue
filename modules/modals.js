@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.3
+// @version      3.4
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -610,6 +610,7 @@
                              'src="' + avatarUrl + '" ' +
                              'alt="Avatar of ' + escapedNickname + '" ' +
                              'loading="lazy" ' +
+                             'decoding="async" ' +
                              'data-user-id="' + user.id + '" ' +
                              'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
                         '<div class="modern-like-info" data-user-id="' + user.id + '">' +
