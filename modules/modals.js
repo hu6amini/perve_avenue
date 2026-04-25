@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.2
+// @version      3.3
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -32,6 +32,9 @@
         '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
     ];
     
+    // Store original profile links for each user
+    var userProfileLinks = new Map();
+    
     // Modern modal styles
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
@@ -42,6 +45,7 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
+                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -132,6 +136,7 @@
                 padding: 0.875rem 1.5rem;\
                 border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));\
                 transition: background 0.2s;\
+                cursor: pointer;\
             }\
             .modern-like-item:hover {\
                 background: var(--hover-color, rgba(255, 255, 255, 0.05));\
@@ -144,10 +149,12 @@
                 border: 2px solid var(--primary-color, #059669);\
                 flex-shrink: 0;\
                 background: var(--surface-light, #374151);\
+                cursor: pointer;\
             }\
             .modern-like-info {\
                 flex: 1;\
                 min-width: 0;\
+                cursor: pointer;\
             }\
             .modern-like-name-row {\
                 display: flex;\
@@ -158,9 +165,9 @@
             .modern-like-name {\
                 font-weight: 600;\
                 color: var(--text-primary, #F9FAFB);\
-                text-decoration: none;\
                 font-size: 0.95rem;\
                 transition: color 0.2s;\
+                cursor: pointer;\
             }\
             .modern-like-name:hover {\
                 color: var(--primary-light, #10B981);\
@@ -173,6 +180,7 @@
                 font-size: 0.625rem;\
                 font-weight: 600;\
                 color: white;\
+                cursor: default;\
             }\
             .role-founder { background: linear-gradient(135deg, #F59E0B, #D97706); }\
             .role-administrator { background: linear-gradient(135deg, #DC2626, #B91C1C); }\
@@ -316,6 +324,27 @@
         }
         
         return avatarUrl;
+    }
+    
+    // Helper: Store original profile links from legacy modal
+    function storeProfileLinks(legacyModal) {
+        var userLinks = legacyModal.querySelectorAll('.users li a');
+        for (var i = 0; i < userLinks.length; i++) {
+            var link = userLinks[i];
+            var match = link.href.match(/MID=(\d+)/);
+            if (match) {
+                var userId = match[1];
+                userProfileLinks.set(userId, link.href);
+            }
+        }
+    }
+    
+    // Helper: Navigate to original profile
+    function navigateToProfile(userId) {
+        var profileUrl = userProfileLinks.get(userId);
+        if (profileUrl) {
+            window.location.href = profileUrl;
+        }
     }
     
     // Helper: Find the close button in the legacy modal and click it
@@ -478,6 +507,9 @@
         
         processingModal = true;
         
+        // Store original profile links from legacy modal
+        storeProfileLinks(legacyModal);
+        
         if (currentCustomModal) {
             currentCustomModal.remove();
             currentCustomModal = null;
@@ -573,17 +605,18 @@
                 var escapedNickname = escapeHtml(user.nickname);
                 
                 itemsHtml += 
-                    '<div class="modern-like-item">' +
+                    '<div class="modern-like-item" data-user-id="' + user.id + '">' +
                         '<img class="modern-like-avatar" ' +
                              'src="' + avatarUrl + '" ' +
                              'alt="Avatar of ' + escapedNickname + '" ' +
                              'loading="lazy" ' +
+                             'data-user-id="' + user.id + '" ' +
                              'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
-                        '<div class="modern-like-info">' +
+                        '<div class="modern-like-info" data-user-id="' + user.id + '">' +
                             '<div class="modern-like-name-row">' +
-                                '<a href="/?act=Profile&amp;MID=' + user.id + '" class="modern-like-name" target="_blank">' +
+                                '<span class="modern-like-name" data-user-id="' + user.id + '">' +
                                     escapedNickname +
-                                '</a>' +
+                                '</span>' +
                                 '<span class="modern-role-badge ' + roleInfo.class + '">' + escapeHtml(roleInfo.text) + '</span>' +
                             '</div>' +
                             '<div class="modern-like-stats">' +
@@ -598,6 +631,22 @@
             }
             
             likesList.innerHTML = itemsHtml;
+            
+            // Add click event listeners to all clickable elements
+            var clickableElements = likesList.querySelectorAll('.modern-like-item, .modern-like-avatar, .modern-like-info, .modern-like-name');
+            for (var i = 0; i < clickableElements.length; i++) {
+                var element = clickableElements[i];
+                var userId = element.getAttribute('data-user-id');
+                if (userId) {
+                    element.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        var uid = this.getAttribute('data-user-id');
+                        if (uid) {
+                            navigateToProfile(uid);
+                        }
+                    });
+                }
+            }
             
         } catch (error) {
             console.error('[Modern Likes] Error rendering:', error);
