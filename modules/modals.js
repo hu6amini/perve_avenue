@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.9
+// @version      3.0
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -59,6 +59,8 @@
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);\
                 animation: slideUp 0.3s ease;\
                 border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
+                display: flex;\
+                flex-direction: column;\
             }\
             .modern-modal-header {\
                 display: flex;\
@@ -67,6 +69,7 @@
                 padding: 1rem 1.5rem;\
                 border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
                 background: var(--surface-color, #1F2937);\
+                flex-shrink: 0;\
             }\
             .modern-modal-title {\
                 display: flex;\
@@ -96,7 +99,7 @@
                 transform: rotate(90deg);\
             }\
             .modern-likes-list {\
-                max-height: 60vh;\
+                flex: 1;\
                 overflow-y: auto;\
                 background: var(--surface-color, #1F2937);\
             }\
@@ -192,6 +195,19 @@
                 font-size: 2rem;\
                 margin-bottom: 0.5rem;\
                 display: block;\
+            }\
+            .modern-modal-footer {\
+                padding: 0.75rem 1.5rem;\
+                border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
+                background: var(--bg-color, #111827);\
+                font-size: 0.7rem;\
+                color: var(--text-tertiary, #6B7280);\
+                text-align: center;\
+                flex-shrink: 0;\
+            }\
+            .modern-modal-footer i {\
+                margin-right: 0.25rem;\
+                font-size: 0.65rem;\
             }\
             @keyframes fadeIn {\
                 from { opacity: 0; }\
@@ -411,6 +427,14 @@
         });
     }
     
+    // Get current time for footer
+    function getCurrentTime() {
+        var now = new Date();
+        var hours = now.getHours().toString().padStart(2, '0');
+        var minutes = now.getMinutes().toString().padStart(2, '0');
+        return hours + ':' + minutes;
+    }
+    
     // Close custom modal
     function closeCustomModal(legacyModal, skipOriginalClose) {
         if (currentCustomModal) {
@@ -455,6 +479,8 @@
         var modal = document.createElement('div');
         modal.className = 'modern-likes-modal';
         
+        var currentTime = getCurrentTime();
+        
         var headerHtml = 
             '<div class="modern-modal-header">' +
                 '<div class="modern-modal-title">' +
@@ -470,6 +496,9 @@
                     '<i class="fa-regular fa-spinner fa-pulse" aria-hidden="true"></i>' +
                     '<p>Loading user data...</p>' +
                 '</div>' +
+            '</div>' +
+            '<div class="modern-modal-footer">' +
+                '<i class="fa-regular fa-clock" aria-hidden="true"></i> ' + currentTime + ' · post feedback' +
             '</div>';
         
         modal.innerHTML = headerHtml;
