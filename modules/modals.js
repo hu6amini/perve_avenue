@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.4
+// @version      3.5
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -21,6 +21,13 @@
     var cooldownTimer = null;
     var processingModal = false;
     
+    // Weserv image optimization configuration
+    var WESERV_CONFIG = {
+        cdn: 'https://images.weserv.nl/',
+        cache: '1y',
+        quality: 90
+    };
+    
     // Harmony color palette based on Midnight Emerald theme
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
@@ -35,6 +42,32 @@
     // Store original profile links for each user
     var userProfileLinks = new Map();
     
+    // Helper: Optimize image URL using Weserv
+    function optimizeImageUrl(url) {
+        if (!url) return url;
+        
+        // Skip already optimized URLs or DiceBear avatars
+        var lowerUrl = url.toLowerCase();
+        if (lowerUrl.indexOf('weserv.nl') !== -1 || 
+            lowerUrl.indexOf('dicebear.com') !== -1 ||
+            lowerUrl.indexOf('api.dicebear.com') !== -1) {
+            return url;
+        }
+        
+        // Skip data URLs
+        if (url.indexOf('data:') === 0) return url;
+        
+        // Build Weserv URL
+        var encodedUrl = encodeURIComponent(url);
+        var optimizedUrl = WESERV_CONFIG.cdn + '?url=' + encodedUrl + 
+                          '&output=webp' + 
+                          '&maxage=' + WESERV_CONFIG.cache + 
+                          '&q=' + WESERV_CONFIG.quality +
+                          '&il';
+        
+        return optimizedUrl;
+    }
+    
     // Modern modal styles
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
@@ -45,6 +78,7 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
+                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -306,7 +340,7 @@
         return true;
     }
     
-    // Helper: Get best avatar URL for user
+    // Helper: Get best avatar URL for user with optimization
     function getUserAvatarSync(user) {
         var avatarUrl = user.avatar;
         
@@ -322,7 +356,8 @@
             avatarUrl = avatarUrl.replace('http://', 'https://');
         }
         
-        return avatarUrl;
+        // Optimize the URL through Weserv (converts to WebP)
+        return optimizeImageUrl(avatarUrl);
     }
     
     // Helper: Store original profile links from legacy modal
@@ -603,6 +638,9 @@
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
                 var escapedNickname = escapeHtml(user.nickname);
                 
+                // Optimize the fallback URL as well (though DiceBear is already optimized)
+                var optimizedFallback = optimizeImageUrl(dicebearFallback);
+                
                 itemsHtml += 
                     '<div class="modern-like-item" data-user-id="' + user.id + '">' +
                         '<img class="modern-like-avatar" ' +
@@ -611,7 +649,9 @@
                              'loading="lazy" ' +
                              'decoding="async" ' +
                              'data-user-id="' + user.id + '" ' +
-                             'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
+                             'data-optimized="true" ' +
+                             'data-format="webp" ' +
+                             'onerror="this.onerror=null; this.src=\'' + optimizedFallback + '\';">' +
                         '<div class="modern-like-info" data-user-id="' + user.id + '">' +
                             '<div class="modern-like-name-row">' +
                                 '<span class="modern-like-name" data-user-id="' + user.id + '">' +
