@@ -983,7 +983,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // INITIALIZE
+    // INITIALIZE (fixed – added missing reaction observer registrations)
     // ============================================================================
     function initialize() {
         if (isInitialized) { console.log('[PostsModule] Already initialized'); return; }
@@ -1000,6 +1000,38 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     var postId = getPostId(node);
                     if (!postId || convertedPostIds.has(postId)) return;
                     convertAllPosts();
+                }
+            });
+            // This registration is crucial for displaying reactions
+            globalThis.forumObserver.register({
+                id: 'posts-module-reactions',
+                selector: '.st-emoji-container',
+                priority: 'medium',
+                callback: function(node) {
+                    var postEl = node.closest('.post');
+                    if (postEl && isValidPost(postEl)) {
+                        var postId = getPostId(postEl);
+                        if (postId) {
+                            setTimeout(function() {
+                                refreshReactionDisplay(postId);
+                            }, 100);
+                        }
+                    }
+                }
+            });
+            // Also refresh when reaction images load
+            globalThis.forumObserver.register({
+                id: 'posts-module-reaction-images',
+                selector: '.st-emoji-preview img',
+                priority: 'low',
+                callback: function(node) {
+                    var postEl = node.closest('.post');
+                    if (postEl && isValidPost(postEl)) {
+                        var postId = getPostId(postEl);
+                        if (postId) {
+                            refreshReactionDisplay(postId);
+                        }
+                    }
                 }
             });
             console.log('[PostsModule] Registered with ForumCoreObserver');
