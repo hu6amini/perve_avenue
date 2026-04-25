@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -21,6 +21,13 @@
     var cooldownTimer = null;
     var processingModal = false;
     
+    // Avatar color palette for DiceBear
+    var AVATAR_COLORS = [
+        'FF6B6B', '4ECDC4', 'FFD166', '06D6A0', '118AB2',
+        'EF476F', 'FFD166', '06D6A0', '073B4C', '7209B7',
+        'F72585', '4895EF', '4CC9F0', '52B788', 'FFB703'
+    ];
+    
     // Modern modal styles
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
@@ -31,6 +38,7 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
+                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -198,6 +206,79 @@
         </style>\
     ';
     
+    // Helper: Generate DiceBear avatar from username
+    function generateDiceBearAvatar(username, userId) {
+        var displayName = username || 'User';
+        var firstLetter = displayName.charAt(0).toUpperCase();
+        
+        if (!firstLetter.match(/[A-Z0-9]/i)) {
+            firstLetter = '?';
+        }
+        
+        // Select color based on username or user ID
+        var colorIndex = 0;
+        if (firstLetter >= 'A' && firstLetter <= 'Z') {
+            colorIndex = (firstLetter.charCodeAt(0) - 65) % AVATAR_COLORS.length;
+        } else if (firstLetter >= '0' && firstLetter <= '9') {
+            colorIndex = (parseInt(firstLetter) + 26) % AVATAR_COLORS.length;
+        } else if (userId) {
+            colorIndex = parseInt(userId) % AVATAR_COLORS.length;
+        } else {
+            var hash = 0;
+            for (var i = 0; i < username.length; i++) {
+                hash = ((hash << 5) - hash) + username.charCodeAt(i);
+                hash = hash & hash;
+            }
+            colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
+        }
+        
+        var backgroundColor = AVATAR_COLORS[colorIndex];
+        
+        // Use DiceBear initials API
+        var params = [
+            'seed=' + encodeURIComponent(firstLetter),
+            'backgroundColor=' + backgroundColor,
+            'radius=50',
+            'size=70',
+            'fontSize=32',
+            'fontWeight=600',
+            'bold=true'
+        ];
+        
+        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+    }
+    
+    // Helper: Check if avatar URL is valid
+    function isValidAvatar(avatarUrl) {
+        if (!avatarUrl) return false;
+        // Check for incomplete URLs like "http" or empty strings
+        if (avatarUrl === 'http' || avatarUrl === 'http:' || avatarUrl === '' || avatarUrl === 'https') {
+            return false;
+        }
+        // Check if it's a valid URL format
+        if (!avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://') && !avatarUrl.startsWith('//')) {
+            return false;
+        }
+        return true;
+    }
+    
+    // Helper: Get best avatar URL for user
+    function getUserAvatar(user) {
+        var avatarUrl = user.avatar;
+        
+        // Check if avatar exists and is valid
+        if (isValidAvatar(avatarUrl)) {
+            // Fix protocol-relative URLs
+            if (avatarUrl.startsWith('//')) {
+                avatarUrl = 'https:' + avatarUrl;
+            }
+            return avatarUrl;
+        }
+        
+        // Fallback to DiceBear avatar
+        return generateDiceBearAvatar(user.nickname, user.id);
+    }
+    
     // Helper: Find the close button in the legacy modal and click it
     function clickOriginalCloseButton(legacyModal) {
         if (!legacyModal) return;
@@ -326,12 +407,9 @@
             currentCustomModal = null;
         }
         
-        // Only click original close button if we're not skipping it
-        // and we're not in cooldown mode
         if (legacyModal && !skipOriginalClose && !closeCooldown) {
             clickOriginalCloseButton(legacyModal);
             
-            // Set cooldown to prevent re-opening
             closeCooldown = true;
             if (cooldownTimer) clearTimeout(cooldownTimer);
             cooldownTimer = setTimeout(function() {
@@ -346,7 +424,6 @@
     
     // Create and show modern modal
     async function showModernModal(userIds, legacyModal) {
-        // Don't show if we're in cooldown or already processing
         if (closeCooldown || processingModal) {
             console.log('[Modern Likes] Skipping - cooldown or already processing');
             return;
@@ -354,7 +431,6 @@
         
         processingModal = true;
         
-        // Remove any existing custom modal
         if (currentCustomModal) {
             currentCustomModal.remove();
             currentCustomModal = null;
@@ -391,20 +467,17 @@
         
         currentCustomModal = overlay;
         
-        // Close button handler
         var closeBtn = modal.querySelector('.modern-modal-close');
         closeBtn.addEventListener('click', function() {
             closeCustomModal(legacyModal, false);
         });
         
-        // Click outside to close
         overlay.addEventListener('click', function(e) {
             if (e.target === overlay) {
                 closeCustomModal(legacyModal, false);
             }
         });
         
-        // Escape key handler
         var escHandler = function(e) {
             if (e.key === 'Escape') {
                 closeCustomModal(legacyModal, false);
@@ -440,15 +513,18 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-                var avatarUrl = user.avatar || 'https://img.forumfree.net/style_images/avatar_nn.png';
+                // Use the improved avatar function with DiceBear fallback
+                var avatarUrl = getUserAvatar(user);
                 var statusText = user.status || 'offline';
+                var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
                 
                 itemsHtml += 
                     '<div class="modern-like-item">' +
                         '<img class="modern-like-avatar" ' +
                              'src="' + avatarUrl + '" ' +
-                             'alt="' + escapeHtml(user.nickname) + '" ' +
-                             'onerror="this.src=\'https://img.forumfree.net/style_images/avatar_nn.png\'">' +
+                             'alt="Avatar of ' + escapeHtml(user.nickname) + '" ' +
+                             'loading="lazy" ' +
+                             'onerror="this.onerror=null; this.src=\'' + generateDiceBearAvatar(user.nickname, user.id) + '\';">' +
                         '<div class="modern-like-info">' +
                             '<div class="modern-like-name-row">' +
                                 '<a href="/?act=Profile&amp;MID=' + user.id + '" class="modern-like-name" target="_blank">' +
@@ -459,7 +535,7 @@
                             '<div class="modern-like-stats">' +
                                 '<span><i class="fa-regular fa-message"></i> ' + formatNumber(user.messages) + ' posts</span>' +
                                 '<span><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(user.reputation) + ' rep</span>' +
-                                '<span class="status-' + user.status + '">' +
+                                '<span class="' + statusClass + '">' +
                                     '<i class="fa-regular fa-circle"></i> ' + statusText +
                                 '</span>' +
                             '</div>' +
@@ -494,10 +570,7 @@
             document.head.appendChild(faLink);
         }
         
-        var processedModals = new Set();
-        
         var observer = new MutationObserver(function(mutations) {
-            // Skip if in cooldown
             if (closeCooldown) return;
             
             for (var i = 0; i < mutations.length; i++) {
