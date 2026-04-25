@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -21,238 +21,118 @@
     var cooldownTimer = null;
     var processingModal = false;
     
-    // Avatar color palette for DiceBear
+    // ============================================================================
+    // EMERALD THEME HARMONIZED COLOR PALETTE
+    // Based on midnight emerald theme from the modern post cards
+    // ============================================================================
     var AVATAR_COLORS = [
-        'FF6B6B', '4ECDC4', 'FFD166', '06D6A0', '118AB2',
-        'EF476F', 'FFD166', '06D6A0', '073B4C', '7209B7',
-        'F72585', '4895EF', '4CC9F0', '52B788', 'FFB703'
+        // Emerald greens (primary theme colors)
+        '#059669', // primary emerald
+        '#10B981', // light emerald
+        '#047857', // dark emerald
+        '#34D399', // soft emerald
+        '#6EE7B7', // pale emerald
+        
+        // Accent colors that complement emerald
+        '#7C3AED', // purple accent (from theme)
+        '#0EA5E9', // blue accent (from theme)
+        '#F59E0B', // warm amber accent
+        '#DC2626', // red accent (admin color)
+        '#8B5CF6', // violet (mod color)
+        
+        // Harmonious teals and mints
+        '#14B8A6', // teal
+        '#2DD4BF', // light teal
+        '#0D9488', // dark teal
+        '#00A896', // mint teal
+        
+        // Warm accents that don't clash
+        '#F97316', // orange
+        '#FBBF24', // golden
+        '#EF4444', // sunset red
+        '#EC4899', // pink accent
+        
+        // Cool accents that work with emerald
+        '#3B82F6', // blue
+        '#6366F1', // indigo
+        '#8B5CF6', // purple
+        '#A855F7', // bright purple
+        
+        // Soft neutral tones
+        '#78716C', // warm gray
+        '#64748B', // slate
+        '#6B7280', // cool gray
+        '#9CA3AF', // light gray
+        '#A8A29E'  // taupe
     ];
     
-    // Modern modal styles
-    var modalStyles = '\
-        <style id="modern-likes-modal-styles">\
-            .modern-modal-overlay {\
-                position: fixed;\
-                top: 0;\
-                left: 0;\
-                right: 0;\
-                bottom: 0;\
-                background: rgba(0, 0, 0, 0.8);\
-                backdrop-filter: blur(4px);\
-                z-index: 10000;\
-                display: flex;\
-                align-items: center;\
-                justify-content: center;\
-                animation: fadeIn 0.2s ease;\
-            }\
-            .modern-likes-modal {\
-                background: var(--surface-color, #1F2937);\
-                border-radius: var(--radius-lg, 13px);\
-                max-width: 480px;\
-                width: 90%;\
-                max-height: 80vh;\
-                overflow: hidden;\
-                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);\
-                animation: slideUp 0.3s ease;\
-                border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
-            }\
-            .modern-modal-header {\
-                display: flex;\
-                justify-content: space-between;\
-                align-items: center;\
-                padding: 1rem 1.5rem;\
-                border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
-                background: var(--surface-color, #1F2937);\
-            }\
-            .modern-modal-title {\
-                display: flex;\
-                align-items: center;\
-                gap: 0.5rem;\
-                font-weight: 600;\
-                font-size: 1.1rem;\
-                color: var(--text-primary, #F9FAFB);\
-                font-family: "Quicksand", sans-serif;\
-            }\
-            .modern-modal-title i {\
-                color: var(--primary-light, #10B981);\
-            }\
-            .modern-modal-close {\
-                background: transparent;\
-                border: none;\
-                color: var(--text-tertiary, #6B7280);\
-                cursor: pointer;\
-                font-size: 1.25rem;\
-                padding: 0.25rem;\
-                border-radius: 6px;\
-                transition: all 0.2s;\
-            }\
-            .modern-modal-close:hover {\
-                background: var(--hover-color, rgba(255, 255, 255, 0.05));\
-                color: var(--text-primary, #F9FAFB);\
-                transform: rotate(90deg);\
-            }\
-            .modern-likes-list {\
-                max-height: 60vh;\
-                overflow-y: auto;\
-                background: var(--surface-color, #1F2937);\
-            }\
-            .modern-likes-list::-webkit-scrollbar {\
-                width: 6px;\
-            }\
-            .modern-likes-list::-webkit-scrollbar-track {\
-                background: transparent;\
-            }\
-            .modern-likes-list::-webkit-scrollbar-thumb {\
-                background: var(--surface-light, #374151);\
-                border-radius: 20px;\
-            }\
-            .modern-like-item {\
-                display: flex;\
-                align-items: center;\
-                gap: 1rem;\
-                padding: 0.875rem 1.5rem;\
-                border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));\
-                transition: background 0.2s;\
-            }\
-            .modern-like-item:hover {\
-                background: var(--hover-color, rgba(255, 255, 255, 0.05));\
-            }\
-            .modern-like-avatar {\
-                width: 48px;\
-                height: 48px;\
-                border-radius: 50%;\
-                object-fit: cover;\
-                border: 2px solid var(--primary-color, #059669);\
-                flex-shrink: 0;\
-                background: var(--surface-light, #374151);\
-            }\
-            .modern-like-info {\
-                flex: 1;\
-                min-width: 0;\
-            }\
-            .modern-like-name-row {\
-                display: flex;\
-                align-items: center;\
-                flex-wrap: wrap;\
-                gap: 0.5rem;\
-            }\
-            .modern-like-name {\
-                font-weight: 600;\
-                color: var(--text-primary, #F9FAFB);\
-                text-decoration: none;\
-                font-size: 0.95rem;\
-                transition: color 0.2s;\
-            }\
-            .modern-like-name:hover {\
-                color: var(--primary-light, #10B981);\
-                text-decoration: underline;\
-            }\
-            .modern-role-badge {\
-                display: inline-block;\
-                padding: 0.125rem 0.5rem;\
-                border-radius: 9999px;\
-                font-size: 0.625rem;\
-                font-weight: 600;\
-                color: white;\
-            }\
-            .role-founder { background: linear-gradient(135deg, #F59E0B, #D97706); }\
-            .role-administrator { background: linear-gradient(135deg, #DC2626, #B91C1C); }\
-            .role-global-mod { background: linear-gradient(135deg, #8B5CF6, #7C3AED); }\
-            .role-moderator { background: linear-gradient(135deg, #8B5CF6, #7C3AED); }\
-            .role-developer { background: linear-gradient(135deg, #0EA5E9, #0284C7); }\
-            .role-premium { background: linear-gradient(135deg, #D946EF, #C026D3); }\
-            .role-vip { background: linear-gradient(135deg, #F97316, #EA580C); }\
-            .role-member { background: linear-gradient(135deg, #059669, #047857); }\
-            .role-banned { background: linear-gradient(135deg, #4B5563, #374151); }\
-            .modern-like-stats {\
-                display: flex;\
-                flex-wrap: wrap;\
-                gap: 1rem;\
-                margin-top: 0.25rem;\
-                font-size: 0.7rem;\
-                color: var(--text-tertiary, #6B7280);\
-            }\
-            .modern-like-stats i {\
-                margin-right: 0.25rem;\
-                width: 12px;\
-                color: var(--primary-light, #10B981);\
-            }\
-            .status-online { color: #10B981; }\
-            .status-offline { color: #6B7280; }\
-            .modern-loading, .modern-empty {\
-                text-align: center;\
-                padding: 3rem;\
-                color: var(--text-tertiary, #6B7280);\
-            }\
-            .modern-loading i, .modern-empty i {\
-                font-size: 2rem;\
-                margin-bottom: 0.5rem;\
-                display: block;\
-            }\
-            @keyframes fadeIn {\
-                from { opacity: 0; }\
-                to { opacity: 1; }\
-            }\
-            @keyframes slideUp {\
-                from {\
-                    opacity: 0;\
-                    transform: translateY(20px);\
-                }\
-                to {\
-                    opacity: 1;\
-                    transform: translateY(0);\
-                }\
-            }\
-        </style>\
-    ';
+    // Fallback simple colors in case of any issues
+    var FALLBACK_COLORS = ['#059669', '#10B981', '#7C3AED', '#0EA5E9', '#F59E0B', '#DC2626', '#8B5CF6'];
     
-    // Helper: Generate DiceBear avatar from username
+    // ============================================================================
+    // AVATAR GENERATION WITH THEME-HARMONIZED COLORS
+    // ============================================================================
+    
+    // Generate a consistent hash from a string (username or user ID)
+    function getStringHash(str) {
+        var hash = 0;
+        if (!str) return hash;
+        for (var i = 0; i < str.length; i++) {
+            var char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        return Math.abs(hash);
+    }
+    
+    // Get a consistent color for a user based on their nickname
+    function getAvatarColorForUser(nickname, userId) {
+        // Use nickname if available, otherwise use userId
+        var identifier = nickname || userId || 'unknown';
+        var hash = getStringHash(identifier);
+        var colorIndex = hash % AVATAR_COLORS.length;
+        return AVATAR_COLORS[colorIndex];
+    }
+    
+    // Generate DiceBear avatar with emerald-theme harmonized colors
     function generateDiceBearAvatar(username, userId) {
         var displayName = username || 'User';
-        var firstLetter = displayName.charAt(0).toUpperCase();
         
+        // Get the first letter, handle special cases
+        var firstLetter = displayName.charAt(0).toUpperCase();
         if (!firstLetter.match(/[A-Z0-9]/i)) {
             firstLetter = '?';
         }
         
-        // Select color based on username or user ID
-        var colorIndex = 0;
-        if (firstLetter >= 'A' && firstLetter <= 'Z') {
-            colorIndex = (firstLetter.charCodeAt(0) - 65) % AVATAR_COLORS.length;
-        } else if (firstLetter >= '0' && firstLetter <= '9') {
-            colorIndex = (parseInt(firstLetter) + 26) % AVATAR_COLORS.length;
-        } else if (userId) {
-            colorIndex = parseInt(userId) % AVATAR_COLORS.length;
-        } else {
-            var hash = 0;
-            for (var i = 0; i < username.length; i++) {
-                hash = ((hash << 5) - hash) + username.charCodeAt(i);
-                hash = hash & hash;
-            }
-            colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
-        }
+        // Get consistent color for this user
+        var backgroundColor = getAvatarColorForUser(username, userId);
+        // Remove the '#' if present for the URL
+        var bgColorHex = backgroundColor.replace('#', '');
         
-        var backgroundColor = AVATAR_COLORS[colorIndex];
-        
-        // Use DiceBear initials API
+        // Use DiceBear initials API with the harmonized color
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
-            'backgroundColor=' + backgroundColor,
+            'backgroundColor=' + bgColorHex,
             'radius=50',
             'size=70',
             'fontSize=32',
             'fontWeight=600',
-            'bold=true'
+            'bold=true',
+            'fontColor=FFFFFF'  // White text for contrast on all colors
         ];
         
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
     }
     
-    // Helper: Check if avatar URL is valid
+    // Check if avatar URL is valid (not the broken "http" from API)
     function isValidAvatar(avatarUrl) {
         if (!avatarUrl) return false;
-        // Check for incomplete URLs like "http" or empty strings
-        if (avatarUrl === 'http' || avatarUrl === 'http:' || avatarUrl === '' || avatarUrl === 'https') {
+        // Catch broken URL patterns from the API
+        if (avatarUrl === 'http' || avatarUrl === 'http:' || avatarUrl === 'https' || avatarUrl === 'https:') {
+            return false;
+        }
+        // Check if it's an empty string
+        if (avatarUrl === '' || avatarUrl.trim() === '') {
             return false;
         }
         // Check if it's a valid URL format
@@ -262,20 +142,21 @@
         return true;
     }
     
-    // Helper: Get best avatar URL for user
+    // Get best avatar URL for user (forum avatar or DiceBear fallback)
     function getUserAvatar(user) {
         var avatarUrl = user.avatar;
         
+        // Fix protocol-relative URLs
+        if (avatarUrl && avatarUrl.startsWith('//')) {
+            avatarUrl = 'https:' + avatarUrl;
+        }
+        
         // Check if avatar exists and is valid
         if (isValidAvatar(avatarUrl)) {
-            // Fix protocol-relative URLs
-            if (avatarUrl.startsWith('//')) {
-                avatarUrl = 'https:' + avatarUrl;
-            }
             return avatarUrl;
         }
         
-        // Fallback to DiceBear avatar
+        // Fallback to DiceBear avatar with harmonized color
         return generateDiceBearAvatar(user.nickname, user.id);
     }
     
@@ -513,10 +394,10 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-                // Use the improved avatar function with DiceBear fallback
                 var avatarUrl = getUserAvatar(user);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
+                var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 
                 itemsHtml += 
                     '<div class="modern-like-item">' +
@@ -524,7 +405,7 @@
                              'src="' + avatarUrl + '" ' +
                              'alt="Avatar of ' + escapeHtml(user.nickname) + '" ' +
                              'loading="lazy" ' +
-                             'onerror="this.onerror=null; this.src=\'' + generateDiceBearAvatar(user.nickname, user.id) + '\';">' +
+                             'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
                         '<div class="modern-like-info">' +
                             '<div class="modern-like-name-row">' +
                                 '<a href="/?act=Profile&amp;MID=' + user.id + '" class="modern-like-name" target="_blank">' +
