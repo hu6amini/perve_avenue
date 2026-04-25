@@ -12,6 +12,10 @@
 (function() {
     'use strict';
     
+    // Track currently open custom modal to prevent duplicates
+    var currentCustomModal = null;
+    var currentLegacyModal = null;
+    
     // Modern modal styles (injects into page)
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
@@ -229,8 +233,26 @@
         </style>\
     ';
     
-    // Store reference to current original modal
-    var currentOriginalModal = null;
+    // Helper: Find the close button in the legacy modal and click it
+    function clickOriginalCloseButton(legacyModal) {
+        if (!legacyModal) return;
+        
+        // Find the close button (a.close) inside the legacy modal
+        var closeButton = legacyModal.querySelector('a.close');
+        if (closeButton) {
+            console.log('[Modern Likes] Clicking original close button');
+            // Trigger the click event on the original close button
+            var clickEvent = document.createEvent('MouseEvents');
+            clickEvent.initEvent('click', true, true);
+            closeButton.dispatchEvent(clickEvent);
+        } else {
+            // Fallback: try to find any close mechanism
+            console.log('[Modern Likes] Close button not found, trying to hide via jQuery');
+            if (typeof $ !== 'undefined' && $('#overlay').hide) {
+                $('#overlay').hide();
+            }
+        }
+    }
     
     // Helper: Extract user IDs from the legacy modal
     function extractUserIdsFromLegacyModal(legacyModal) {
@@ -267,27 +289,6 @@
             console.error('[Modern Likes] API Error:', error);
             return [];
         }
-    }
-    
-    // Helper: Find and click the close button in the original modal
-    function closeOriginalModal(originalModal) {
-        if (!originalModal) return;
-        
-        // Find the close button (<a class="close"></a>)
-        var closeButton = originalModal.querySelector('a.close');
-        if (closeButton) {
-            // Trigger the click event on the original close button
-            var clickEvent = document.createEvent('MouseEvents');
-            clickEvent.initEvent('click', true, true);
-            closeButton.dispatchEvent(clickEvent);
-        }
-        
-        // Also try to trigger any jQuery events if needed
-        if (typeof $ !== 'undefined') {
-            $(closeButton).trigger('click');
-        }
-        
-        currentOriginalModal = null;
     }
     
     // Helper: Determine role badge class and text from group object
@@ -381,10 +382,31 @@
         });
     }
     
+    // Close custom modal
+    function closeCustomModal(legacyModal) {
+        if (currentCustomModal) {
+            currentCustomModal.remove();
+            currentCustomModal = null;
+        }
+        
+        // Click the original close button when our modal closes
+        if (legacyModal) {
+            clickOriginalCloseButton(legacyModal);
+        }
+        
+        currentLegacyModal = null;
+    }
+    
     // Create and show modern modal
-    async function showModernModal(userIds, originalModal) {
-        // Store reference to original modal so we can close it later
-        currentOriginalModal = originalModal;
+    async function showModernModal(userIds, legacyModal) {
+        // Remove any existing custom modal first
+        if (currentCustomModal) {
+            currentCustomModal.remove();
+            currentCustomModal = null;
+        }
+        
+        // Store reference to legacy modal
+        currentLegacyModal = legacyModal;
         
         // Create overlay
         var overlay = document.createElement('div');
@@ -416,26 +438,29 @@
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
         
-        // Close button functionality - now closes the original modal
+        currentCustomModal = overlay;
+        
+        // Close button functionality - clicks the original close button
         var closeBtn = modal.querySelector('.modern-modal-close');
-        var closeModal = function() { 
-            overlay.remove();
-            // Trigger the original modal's close button
-            closeOriginalModal(originalModal);
-        };
-        closeBtn.addEventListener('click', closeModal);
-        overlay.addEventListener('click', function(e) {
-            if (e.target === overlay) closeModal();
+        closeBtn.addEventListener('click', function() {
+            closeCustomModal(legacyModal);
         });
         
-        // Also handle Escape key
-        var escapeHandler = function(e) {
+        // Click outside to close
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                closeCustomModal(legacyModal);
+            }
+        });
+        
+        // Escape key to close
+        var escHandler = function(e) {
             if (e.key === 'Escape') {
-                closeModal();
-                document.removeEventListener('keydown', escapeHandler);
+                closeCustomModal(legacyModal);
+                document.removeEventListener('keydown', escHandler);
             }
         };
-        document.addEventListener('keydown', escapeHandler);
+        document.addEventListener('keydown', escHandler);
         
         // Fetch and render users
         var likesList = modal.querySelector('.modern-likes-list');
@@ -521,6 +546,9 @@
             document.head.appendChild(faLink);
         }
         
+        // Track if we've already processed the current modal
+        var processedModals = new Set();
+        
         // Create observer to watch for the legacy modal appearing
         var observer = new MutationObserver(function(mutations) {
             for (var i = 0; i < mutations.length; i++) {
@@ -533,13 +561,20 @@
                         modal.classList.contains('pop_points') &&
                         modal.style.display === 'block') {
                         
-                        // Extract user IDs from the legacy modal
-                        var userIds = extractUserIdsFromLegacyModal(modal);
-                        
-                        if (userIds.length > 0) {
-                            console.log('[Modern Likes] Found likes modal with', userIds.length, 'users');
-                            // Show modern modal (don't hide the original, CSS handles visibility)
-                            showModernModal(userIds, modal);
+                        // Check if we've already processed this modal instance
+                        // Use a timestamp or unique identifier
+                        var modalKey = modal.id + '_' + Date.now();
+                        if (!processedModals.has(modalKey) && !currentCustomModal) {
+                            processedModals.add(modalKey);
+                            
+                            // Extract user IDs from the legacy modal
+                            var userIds = extractUserIdsFromLegacyModal(modal);
+                            
+                            if (userIds.length > 0) {
+                                console.log('[Modern Likes] Found likes modal with', userIds.length, 'users');
+                                // Show modern modal (this will close any existing one)
+                                showModernModal(userIds, modal);
+                            }
                         }
                     }
                 }
@@ -552,10 +587,16 @@
                             node.classList && node.classList.contains('pop_points') &&
                             node.style.display === 'block') {
                             
-                            var userIds = extractUserIdsFromLegacyModal(node);
-                            if (userIds.length > 0) {
-                                console.log('[Modern Likes] New modal detected with', userIds.length, 'users');
-                                showModernModal(userIds, node);
+                            // Check if we've already processed this modal instance
+                            var modalKey = node.id + '_' + Date.now();
+                            if (!processedModals.has(modalKey) && !currentCustomModal) {
+                                processedModals.add(modalKey);
+                                
+                                var userIds = extractUserIdsFromLegacyModal(node);
+                                if (userIds.length > 0) {
+                                    console.log('[Modern Likes] New modal detected with', userIds.length, 'users');
+                                    showModernModal(userIds, node);
+                                }
                             }
                         }
                     }
