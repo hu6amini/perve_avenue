@@ -18,7 +18,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         QUALITY: 90
     };
 
-    // Avatar color palette (for dicebear fallback)
+    // Avatar colour palette (for dicebear fallback)
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -64,7 +64,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // AVATAR OPTIMIZATION (weserv, 60x60)
+    // AVATAR OPTIMISATION (weserv, 60×60)
     // ============================================================================
     function optimizeImageUrl(url, width, height) {
         if (!url) return null;
@@ -75,13 +75,11 @@ var ForumPostsModule = (function(Utils, EventBus) {
             url.indexOf('data:') === 0) {
             return url;
         }
-
         var targetWidth = width || CONFIG.AVATAR_SIZE;
         var targetHeight = height || CONFIG.AVATAR_SIZE;
         var isGif = (lowerUrl.indexOf('.gif') !== -1 || /\.gif($|\?|#)/i.test(lowerUrl));
         var outputFormat = 'webp';
         var quality = CONFIG.QUALITY;
-
         var encodedUrl = encodeURIComponent(url);
         var optimizedUrl = CONFIG.WESERV_CDN + '?url=' + encodedUrl +
             '&output=' + outputFormat +
@@ -132,7 +130,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // HELPER FUNCTIONS (original, unchanged)
+    // HELPER FUNCTIONS (unchanged from original)
     // ============================================================================
     function getPostsContainer() {
         var modernContainer = document.getElementById('modern-posts-container');
@@ -176,7 +174,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // DATA EXTRACTION FROM ORIGINAL POST (sync parts, unchanged)
+    // DATA EXTRACTION (original, unchanged)
     // ============================================================================
     function getUsername($post) {
         var nickLink = $post.querySelector('.nick a');
@@ -197,6 +195,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
         var repLink = $post.querySelector('.u_reputation dd a');
         if (!repLink) return '0';
         return repLink.textContent.trim().replace('+', '');
+    }
+
+    function getIsOnline($post) {
+        var statusTitle = $post.querySelector('.u_status');
+        if (!statusTitle) return false;
+        var title = statusTitle.getAttribute('title') || '';
+        return title.toLowerCase().includes('online');
     }
 
     function getUserTitleAndIcon($post) {
@@ -315,7 +320,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // EMBEDDED LINK TRANSFORMATION (unchanged from original)
+    // EMBEDDED LINK TRANSFORMATION (original)
     // ============================================================================
     function transformEmbeddedLinks(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -406,15 +411,165 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // CUSTOM REACTION POPUP (original, unchanged)
     // ============================================================================
-    function getAvailableReactions(postId) { /* original implementation - omitted for brevity, but must be kept exactly as in original script */ }
-    function getDefaultEmojis() { /* original */ }
-    function createCustomReactionPopup(buttonElement, postId) { /* original */ }
-    function triggerOriginalReaction(postId, emoji) { /* original */ }
-    function handleReactionCountClick(pid) { /* original */ }
+    function getAvailableReactions(postId) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return Promise.resolve([]);
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return Promise.resolve([]);
+        var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+        if (!previewTrigger) return Promise.resolve([]);
+        var originalDisplay = previewTrigger.style.display;
+        previewTrigger.style.display = 'block';
+        previewTrigger.click();
+        previewTrigger.style.display = originalDisplay;
+        return new Promise(function(resolve) {
+            setTimeout(function() {
+                var originalPopup = document.querySelector('.st-emoji-pop');
+                var emojis = [];
+                if (originalPopup) {
+                    var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                    for (var i = 0; i < reactionElements.length; i++) {
+                        var el = reactionElements[i];
+                        var dataFui = el.getAttribute('data-fui');
+                        var img = el.querySelector('img');
+                        var imgSrc = img ? img.getAttribute('src') : '';
+                        var imgAlt = img ? img.getAttribute('alt') : '';
+                        var name = dataFui ? dataFui.replace(/:/g, '') : '';
+                        if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
+                        emojis.push({
+                            name: name,
+                            alt: dataFui || imgAlt,
+                            src: imgSrc,
+                            rid: el.getAttribute('data-rid')
+                        });
+                    }
+                }
+                if (originalPopup) originalPopup.remove();
+                resolve(emojis);
+            }, 150);
+        });
+    }
 
-    // For the sake of completeness, these functions are assumed to be present.
-    // In the final delivered code, they will be copied verbatim from the original script.
-    // (I will include them fully in the final answer, but here I reference them.)
+    function getDefaultEmojis() {
+        return [
+            { name: 'kekw', alt: ':kekw:', src: '', rid: '10' },
+            { name: 'rofl', alt: ':rofl:', src: '', rid: '1' }
+        ];
+    }
+
+    function createCustomReactionPopup(buttonElement, postId) {
+        if (activePopup) { activePopup.remove(); activePopup = null; }
+        var buttonRect = buttonElement.getBoundingClientRect();
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (originalPost) {
+            var emojiContainer = originalPost.querySelector('.st-emoji-container');
+            if (emojiContainer) {
+                var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+                if (previewTrigger) {
+                    var originalDisplay = previewTrigger.style.display;
+                    previewTrigger.style.display = 'block';
+                    previewTrigger.click();
+                    previewTrigger.style.display = originalDisplay;
+                }
+            }
+        }
+        var loadingPopup = document.createElement('div');
+        loadingPopup.className = 'custom-reaction-popup loading';
+        loadingPopup.style.cssText = 'position:fixed;z-index:100000;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:20px;border:1px solid #333;left:' + (buttonRect.left - 50) + 'px;top:' + (buttonRect.bottom + 10) + 'px;color:white;font-size:14px;';
+        loadingPopup.textContent = 'Loading reactions...';
+        document.body.appendChild(loadingPopup);
+        setTimeout(function() {
+            var originalPopup = document.querySelector('.st-emoji-pop');
+            var emojis = [];
+            if (originalPopup) {
+                var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                for (var i = 0; i < reactionElements.length; i++) {
+                    var el = reactionElements[i];
+                    var dataFui = el.getAttribute('data-fui');
+                    var img = el.querySelector('img');
+                    var imgSrc = img ? img.getAttribute('src') : '';
+                    var imgAlt = img ? img.getAttribute('alt') : '';
+                    var name = dataFui ? dataFui.replace(/:/g, '') : '';
+                    if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
+                    emojis.push({ name: name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
+                }
+            }
+            loadingPopup.remove();
+            if (emojis.length === 0) emojis = getDefaultEmojis();
+            var popup = document.createElement('div');
+            popup.className = 'custom-reaction-popup';
+            popup.style.cssText = 'position:fixed;z-index:100001;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:12px;border:1px solid #333;left:' + (buttonRect.left - 100) + 'px;top:' + (buttonRect.bottom + 10) + 'px;';
+            var emojiGrid = document.createElement('div');
+            emojiGrid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
+            emojis.forEach(function(emoji) {
+                var emojiItem = document.createElement('div');
+                emojiItem.className = 'custom-emoji-item';
+                emojiItem.style.cssText = 'cursor:pointer;padding:8px;text-align:center;border-radius:8px;transition:background 0.2s;';
+                var img = document.createElement('img');
+                if (emoji.src) img.src = emoji.src;
+                else img.src = 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
+                img.alt = emoji.alt || ':' + emoji.name + ':';
+                img.style.cssText = 'width:32px;height:32px;object-fit:contain;';
+                img.loading = 'lazy';
+                img.onerror = function() { if (!this.src.includes('twemoji')) this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg'; };
+                emojiItem.appendChild(img);
+                emojiItem.addEventListener('mouseenter', function() { this.style.backgroundColor = '#333'; });
+                emojiItem.addEventListener('mouseleave', function() { this.style.backgroundColor = 'transparent'; });
+                emojiItem.addEventListener('click', function() {
+                    var originalPopup = document.querySelector('.st-emoji-pop');
+                    if (originalPopup) {
+                        var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                        var found = false;
+                        for (var i = 0; i < reactionElements.length; i++) {
+                            var el = reactionElements[i];
+                            var dataFui = el.getAttribute('data-fui');
+                            var img = el.querySelector('img');
+                            var imgAlt = img ? img.getAttribute('alt') : '';
+                            if (dataFui === emoji.alt || imgAlt === emoji.alt || dataFui === ':' + emoji.name + ':' || (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
+                                el.click();
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found && reactionElements.length > 0) reactionElements[0].click();
+                    }
+                    popup.remove();
+                    activePopup = null;
+                    setTimeout(function() { refreshReactionDisplay(postId); }, CONFIG.REACTION_DELAY);
+                });
+                emojiGrid.appendChild(emojiItem);
+            });
+            popup.appendChild(emojiGrid);
+            var closeHandler = function(e) { if (!popup.contains(e.target) && !e.target.closest('.reaction-btn')) { popup.remove(); activePopup = null; document.removeEventListener('click', closeHandler); } };
+            setTimeout(function() { document.addEventListener('click', closeHandler); }, 100);
+            document.body.appendChild(popup);
+            activePopup = popup;
+        }, 200);
+    }
+
+    function triggerOriginalReaction(postId, emoji) { /* not used directly */ }
+
+    function handleReactionCountClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return;
+        var counter = emojiContainer.querySelector('.st-emoji-counter');
+        if (!counter) return;
+        var originalVisibility = counter.style.visibility;
+        var originalOpacity = counter.style.opacity;
+        var originalPosition = counter.style.position;
+        counter.style.visibility = 'visible';
+        counter.style.opacity = '1';
+        counter.style.position = 'relative';
+        counter.style.zIndex = '9999';
+        counter.click();
+        setTimeout(function() {
+            counter.style.visibility = originalVisibility;
+            counter.style.opacity = originalOpacity;
+            counter.style.position = originalPosition;
+        }, 500);
+    }
 
     // ============================================================================
     // GENERATE REACTION BUTTONS HTML (original)
@@ -442,35 +597,34 @@ var ForumPostsModule = (function(Utils, EventBus) {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (updated: avatar wrapper + status dot, join date, no user-status text)
+    // GENERATE MODERN CARD (updated: avatar wrapper + status dot, join date)
     // ============================================================================
+    function formatNumber(num) {
+        if (!num && num !== 0) return '0';
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     function generateModernPost(data) {
         if (!data) return '';
-        // Use API user data if available, otherwise fallback to extracted DOM data
         var user = data.apiUser;
         var username = data.username;
         var userId = data.mid;
         var isOnline = (user && user.status === 'online') || data.isOnline || false;
         var statusClass = isOnline ? 'online' : 'offline';
         var statusText = isOnline ? 'Online' : 'Offline';
-
         var avatarUrl = getUserAvatarUrl(user, username, userId);
         var avatarHtml = '<div class="post-avatar-wrapper">' +
             '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy" onerror="this.onerror=null; this.src=\'' + generateDiceBearAvatar(username, userId) + '\';">' +
             '<span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
             '</div>';
-
         var groupName = (user && user.group && user.group.name) ? user.group.name : (data.groupText || 'Member');
         var roleClass = 'role-badge';
         if (groupName.toLowerCase() === 'administrator') roleClass += ' admin';
         else if (groupName.toLowerCase() === 'moderator') roleClass += ' moderator';
         else if (groupName.toLowerCase() === 'developer') roleClass += ' developer';
         else roleClass += ' member';
-
-        // Use API counts if available
         var postCount = (user && typeof user.messages !== 'undefined') ? user.messages : data.postCount;
         var reputation = (user && typeof user.reputation !== 'undefined') ? user.reputation : data.reputation;
-
         var joinDateFormatted = '';
         if (user && user.registration) {
             var date = new Date(user.registration);
@@ -478,23 +632,19 @@ var ForumPostsModule = (function(Utils, EventBus) {
         } else {
             joinDateFormatted = 'Unknown join date';
         }
-
         var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
             '<i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
         if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
         likeButton += '</button>';
-
         var reactionsHtml = generateReactionButtons({
             postId: data.postId,
             hasReactions: data.hasReactions,
             reactionCount: data.reactionCount,
             reactions: data.reactions
         });
-
         var editHtml = data.editInfo ? '<div class="post-edit-info"><small>' + Utils.escapeHtml(data.editInfo) + '</small></div>' : '';
         var signatureHtml = data.signatureHtml ? '<div class="post-signature">' + data.signatureHtml + '</div>' : '';
         var ipHtml = data.ipAddress ? '<div class="post-ip">IP: ' + data.ipAddress + '</div>' : '';
-
         return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header">' +
                 '<div class="post-meta">' +
@@ -533,32 +683,230 @@ var ForumPostsModule = (function(Utils, EventBus) {
         '</article>';
     }
 
-    function formatNumber(num) {
-        if (!num && num !== 0) return '0';
-        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    }
-
     // ============================================================================
     // REFRESH FUNCTIONS (original, unchanged)
     // ============================================================================
-    function refreshLikeDisplay(postId) { /* original */ }
-    function refreshReactionDisplay(postId) { /* original */ }
+    function refreshLikeDisplay(postId) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return;
+        var pointsPos = originalPost.querySelector('.points .points_pos');
+        var newLikeCount = pointsPos ? parseInt(pointsPos.textContent) || 0 : 0;
+        var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
+        if (!modernCard) return;
+        var likeBtn = modernCard.querySelector('.like-btn');
+        if (!likeBtn) return;
+        var likeCountSpan = likeBtn.querySelector('.like-count-display');
+        if (newLikeCount > 0) {
+            if (likeCountSpan) likeCountSpan.textContent = newLikeCount;
+            else {
+                var newSpan = document.createElement('span');
+                newSpan.className = 'like-count like-count-display';
+                newSpan.textContent = newLikeCount;
+                likeBtn.appendChild(newSpan);
+            }
+        } else {
+            if (likeCountSpan) likeCountSpan.remove();
+        }
+    }
+
+    function refreshReactionDisplay(postId) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return;
+        var reactionData = getReactionData(originalPost);
+        var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
+        if (!modernCard) return;
+        var postReactionsDiv = modernCard.querySelector('.post-reactions');
+        if (!postReactionsDiv) return;
+        if (reactionData.reactions.length > 0) postReactions.set(postId, reactionData.reactions);
+        var likeButton = postReactionsDiv.querySelector('.like-btn');
+        var likeButtonHtml = likeButton ? likeButton.outerHTML : '';
+        var newReactionsHtml = generateReactionButtons({
+            postId: postId,
+            hasReactions: reactionData.hasReactions,
+            reactionCount: reactionData.reactionCount,
+            reactions: reactionData.reactions
+        });
+        if (likeButtonHtml) postReactionsDiv.innerHTML = likeButtonHtml + newReactionsHtml;
+        else postReactionsDiv.innerHTML = newReactionsHtml;
+    }
 
     // ============================================================================
     // EVENT HANDLERS (original, unchanged)
     // ============================================================================
-    function handleAvatarClick(pid) { /* original */ }
-    function handleUsernameClick(pid) { /* original */ }
-    function handleQuote(pid) { /* original */ }
-    function handleEdit(pid) { /* original */ }
-    function handleDelete(pid) { /* original */ }
-    function handleShare(pid, buttonElement) { /* original */ }
-    function handleReport(pid) { /* original */ }
-    function handleLike(pid, isCountClick) { /* original */ }
-    function handleReact(pid, buttonElement) { /* original */ }
+    function handleAvatarClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        var avatarLink = originalPost.querySelector('.avatar');
+        if (avatarLink && avatarLink.tagName === 'A') avatarLink.click();
+    }
+
+    function handleUsernameClick(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        var nickLink = originalPost.querySelector('.nick a');
+        if (nickLink) nickLink.click();
+    }
+
+    function handleQuote(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        var quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
+        if (quoteLink) window.location.href = quoteLink.getAttribute('href');
+    }
+
+    function handleEdit(pid) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        var editLink = originalPost.querySelector('a[href*="CODE=08"]');
+        if (editLink) window.location.href = editLink.getAttribute('href');
+    }
+
+    function handleDelete(pid) {
+        if (confirm('Are you sure you want to delete this post?')) {
+            if (typeof window.delete_post === 'function') window.delete_post(pid);
+        }
+    }
+
+    function handleShare(pid, buttonElement) {
+        var url = window.location.href.split('#')[0] + '#entry' + pid;
+        navigator.clipboard.writeText(url).then(function() {
+            var originalHtml = buttonElement.innerHTML;
+            buttonElement.innerHTML = '<i class="fa-regular fa-check" aria-hidden="true"></i>';
+            setTimeout(function() { buttonElement.innerHTML = originalHtml; }, 1500);
+        }).catch(function(err) { console.error('Copy failed:', err); });
+    }
+
+    function handleReport(pid) {
+        var reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button');
+        if (!reportBtn) reportBtn = document.querySelector('.report_button[data-pid="' + pid + '"]');
+        if (reportBtn) reportBtn.click();
+    }
+
+    function handleLike(pid, isCountClick) {
+        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        var pointsContainer = originalPost.querySelector('.points');
+        if (!pointsContainer) return;
+        if (isCountClick) {
+            var pointsPos = pointsContainer.querySelector('.points_pos');
+            if (pointsPos) {
+                var overlayLink = pointsPos.closest('a[rel="#overlay"]');
+                if (overlayLink) {
+                    if (typeof $ !== 'undefined' && $.fn.overlay) {
+                        if (!overlayLink.hasAttribute('data-overlay-init')) {
+                            $(overlayLink).overlay({
+                                onBeforeLoad: function() {
+                                    var wrap = this.getOverlay();
+                                    var content = wrap.find('div');
+                                    content.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif"></p>').load(overlayLink.getAttribute('href') + '&popup=1');
+                                }
+                            });
+                            overlayLink.setAttribute('data-overlay-init', 'true');
+                        }
+                        $(overlayLink).trigger('click');
+                        return;
+                    } else {
+                        var mouseoverEvent = new MouseEvent('mouseover', { view: window, bubbles: true, cancelable: true });
+                        overlayLink.dispatchEvent(mouseoverEvent);
+                        setTimeout(function() {
+                            var clickEvent = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
+                            overlayLink.dispatchEvent(clickEvent);
+                        }, 50);
+                        return;
+                    }
+                }
+            }
+            var pointsPosDirect = pointsContainer.querySelector('.points_pos');
+            if (pointsPosDirect) { pointsPosDirect.click(); return; }
+            var anyLink = pointsContainer.querySelector('a[href*="votes"]');
+            if (anyLink) { anyLink.click(); return; }
+            return;
+        }
+        var undoButton = pointsContainer.querySelector('.bullet_delete');
+        if (undoButton) {
+            var undoOnclick = undoButton.getAttribute('onclick');
+            if (undoOnclick) eval(undoOnclick);
+            else undoButton.click();
+        } else {
+            var likeBtn = pointsContainer.querySelector('.points_up');
+            if (likeBtn) {
+                if (likeBtn.tagName === 'A') {
+                    var likeOnclick = likeBtn.getAttribute('onclick');
+                    if (likeOnclick) eval(likeOnclick);
+                    else likeBtn.click();
+                } else {
+                    var onclickAttr = likeBtn.getAttribute('onclick');
+                    if (onclickAttr) eval(onclickAttr);
+                    else likeBtn.click();
+                }
+            } else {
+                var pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
+                if (pointsUpLink) {
+                    var upOnclick = pointsUpLink.getAttribute('onclick');
+                    if (upOnclick) eval(upOnclick);
+                    else pointsUpLink.click();
+                }
+            }
+        }
+        setTimeout(function() { refreshLikeDisplay(pid); refreshReactionDisplay(pid); }, CONFIG.REACTION_DELAY);
+    }
+
+    function handleReact(pid, buttonElement) {
+        createCustomReactionPopup(buttonElement, pid);
+    }
 
     function attachEventHandlers() {
-        // Same as original (not repeated here for brevity, but fully present in final code)
+        document.addEventListener('click', function(e) {
+            var avatarDiv = e.target.closest('.avatar-modern');
+            if (avatarDiv) { e.preventDefault(); var pid = avatarDiv.getAttribute('data-pid'); if (pid) handleAvatarClick(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var userNameDiv = e.target.closest('.user-name');
+            if (userNameDiv) { e.preventDefault(); var pid = userNameDiv.getAttribute('data-pid'); if (pid) handleUsernameClick(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.action-icon[data-action="quote"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleQuote(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.action-icon[data-action="edit"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleEdit(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.action-icon[data-action="delete"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleDelete(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.action-icon[data-action="share"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleShare(pid, btn); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.action-icon[data-action="report"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleReport(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var likeBtn = e.target.closest('.like-btn');
+            if (likeBtn) { e.preventDefault(); var pid = likeBtn.getAttribute('data-pid'); if (pid) handleLike(pid, e.target.classList && e.target.classList.contains('like-count-display')); }
+        });
+        document.addEventListener('click', function(e) {
+            var reactionCount = e.target.closest('.reaction-count');
+            if (reactionCount) {
+                e.preventDefault(); e.stopPropagation();
+                var reactionBtn = reactionCount.closest('.reaction-btn');
+                if (reactionBtn) { var pid = reactionBtn.getAttribute('data-pid'); if (pid) handleReactionCountClick(pid); }
+            }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.reaction-btn:not(.like-btn)');
+            if (btn && !e.target.classList.contains('reaction-count')) {
+                e.preventDefault(); e.stopPropagation();
+                var pid = btn.getAttribute('data-pid');
+                if (pid) handleReact(pid, btn);
+            }
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && activePopup) { activePopup.remove(); activePopup = null; }
+        });
     }
 
     // ============================================================================
@@ -576,7 +924,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             if (isValidPost(posts[i])) validPosts.push(posts[i]);
         }
 
-        // Collect MIDs and basic post data
         var mids = [];
         var postsData = [];
         for (var i = 0; i < validPosts.length; i++) {
@@ -588,7 +935,6 @@ var ForumPostsModule = (function(Utils, EventBus) {
             var reactionData = getReactionData($post);
             var userTitleData = getUserTitleAndIcon($post);
             if (reactionData.hasReactions) postReactions.set(postId, reactionData.reactions);
-
             postsData.push({
                 postId: postId,
                 mid: mid,
@@ -598,7 +944,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                 groupText: getGroupText($post),
                 postCount: getPostCount($post),
                 reputation: getReputation($post),
-                isOnline: (function() { var status = $post.querySelector('.u_status'); return status && status.getAttribute('title') && status.getAttribute('title').toLowerCase().includes('online'); })(),
+                isOnline: getIsOnline($post),
                 userTitle: userTitleData.title,
                 rankIconClass: userTitleData.iconClass,
                 contentHtml: getCleanContent($post),
@@ -614,16 +960,14 @@ var ForumPostsModule = (function(Utils, EventBus) {
             convertedPostIds.add(postId);
         }
 
-        // Fetch API user data
         await fetchMultipleUsers(mids);
 
-        // Generate cards
         for (var i = 0; i < postsData.length; i++) {
             var data = postsData[i];
             var apiUser = data.mid ? userDataCache.get(data.mid) : null;
             var completeData = Object.assign({}, data, {
                 apiUser: apiUser,
-                postNumber: i+1
+                postNumber: i + 1
             });
             var cardHtml = generateModernPost(completeData);
             var temp = document.createElement('div');
@@ -642,14 +986,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // INITIALIZE
     // ============================================================================
     function initialize() {
-        if (isInitialized) {
-            console.log('[PostsModule] Already initialized');
-            return;
-        }
+        if (isInitialized) { console.log('[PostsModule] Already initialized'); return; }
         console.log('[PostsModule] Initializing API-enhanced version...');
         convertAllPosts().catch(err => console.error('[PostsModule] Init error', err));
         isInitialized = true;
-
         if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
             globalThis.forumObserver.register({
                 id: 'posts-module',
@@ -659,7 +999,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     if (!isValidPost(node)) return;
                     var postId = getPostId(node);
                     if (!postId || convertedPostIds.has(postId)) return;
-                    convertAllPosts(); // simple full refresh for dynamic content
+                    convertAllPosts();
                 }
             });
             console.log('[PostsModule] Registered with ForumCoreObserver');
@@ -674,6 +1014,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         refreshReactionDisplay: refreshReactionDisplay,
         refreshLikeDisplay: refreshLikeDisplay,
         getPostsContainer: getPostsContainer,
+        isValidPost: isValidPost,
         reset: function() {
             convertedPostIds.clear();
             postReactions.clear();
@@ -687,7 +1028,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
 })(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
    typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus);
 
-// Signal ready
+// Signal that posts module is ready
 if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('posts-module-ready'));
 }
