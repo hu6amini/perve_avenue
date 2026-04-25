@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.8
-// @description  Replaces the old likes popup with a modern modal using real API data
+// @version      4.0
+// @description  Replaces the old likes popup with a modern modal using real API data (PageSpeed optimized)
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -25,7 +25,7 @@
     var WESERV_CONFIG = {
         cdn: 'https://images.weserv.nl/',
         cache: '1y',
-        quality: 90,
+        quality: 85,  // Reduced to 85 for better PageSpeed score (still looks great)
         avatarWidth: 48,
         avatarHeight: 48
     };
@@ -80,14 +80,14 @@
                           '&q=' + quality +
                           '&w=' + targetWidth +
                           '&h=' + targetHeight +
-                          '&fit=cover' +           // Cover mode ensures the image fills the dimensions
-                          '&a=attention' +         // Smart cropping - focuses on the important part of the image
-                          '&il';                   // Interlacing for progressive rendering
+                          '&fit=cover' +
+                          '&a=attention' +
+                          '&il';
         
         // For GIFs, add parameters to preserve animation
         if (isGif) {
-            optimizedUrl += '&n=-1';               // Keep all frames for animation
-            optimizedUrl += '&lossless=true';      // Preserve quality for GIFs
+            optimizedUrl += '&n=-1';
+            optimizedUrl += '&lossless=true';
         }
         
         return {
@@ -100,9 +100,10 @@
         };
     }
     
-    // Modern modal styles
+    // Modern modal styles with PageSpeed optimizations
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
+            /* PageSpeed optimizations */\
             .modern-modal-overlay {\
                 position: fixed;\
                 top: 0;\
@@ -116,6 +117,8 @@
                 align-items: center;\
                 justify-content: center;\
                 animation: fadeIn 0.2s ease;\
+                will-change: opacity;\
+                contain: strict;\
             }\
             .modern-likes-modal {\
                 background: var(--surface-color, #1F2937);\
@@ -125,10 +128,13 @@
                 max-height: 80vh;\
                 overflow: hidden;\
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);\
-                animation: slideUp 0.3s ease;\
+                animation: slideUp 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);\
                 border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
                 display: flex;\
                 flex-direction: column;\
+                will-change: transform, opacity;\
+                contain: content;\
+                aspect-ratio: auto; /* Prevent layout shift */\
             }\
             .modern-modal-header {\
                 display: flex;\
@@ -138,6 +144,7 @@
                 border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));\
                 background: var(--surface-color, #1F2937);\
                 flex-shrink: 0;\
+                min-height: 64px; /* Prevent CLS */\
             }\
             .modern-modal-title {\
                 display: flex;\
@@ -148,6 +155,7 @@
             .modern-modal-title i {\
                 color: var(--primary-light, #10B981);\
                 font-size: 1.1rem;\
+                width: 1.1rem; /* Prevent icon layout shift */\
             }\
             .modern-modal-title h3 {\
                 font-size: 1rem;\
@@ -155,6 +163,7 @@
                 color: var(--text-primary, #F9FAFB);\
                 margin: 0;\
                 font-family: "Quicksand", sans-serif;\
+                line-height: 1.4;\
             }\
             .modal-like-count {\
                 background: rgba(5, 150, 105, 0.15);\
@@ -163,6 +172,8 @@
                 font-size: 0.75rem;\
                 font-weight: 600;\
                 color: var(--primary-light, #10B981);\
+                min-width: 26px; /* Prevent CLS */\
+                text-align: center;\
             }\
             .modern-modal-close {\
                 background: transparent;\
@@ -173,16 +184,28 @@
                 padding: 0.25rem;\
                 border-radius: 6px;\
                 transition: all 0.2s;\
+                width: 32px;\
+                height: 32px;\
+                display: inline-flex;\
+                align-items: center;\
+                justify-content: center;\
+                touch-action: manipulation; /* Better touch response */\
             }\
             .modern-modal-close:hover {\
                 background: var(--hover-color, rgba(255, 255, 255, 0.05));\
                 color: var(--text-primary, #F9FAFB);\
                 transform: rotate(90deg);\
             }\
+            .modern-modal-close:active {\
+                transform: rotate(90deg) scale(0.95);\
+            }\
             .modern-likes-list {\
                 flex: 1;\
                 overflow-y: auto;\
                 background: var(--surface-color, #1F2937);\
+                contain: strict;\
+                content-visibility: auto; /* Improve rendering performance */\
+                contain-intrinsic-size: 300px; /* Reserve space */\
             }\
             .modern-likes-list::-webkit-scrollbar {\
                 width: 6px;\
@@ -202,6 +225,8 @@
                 border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));\
                 transition: background 0.2s;\
                 cursor: pointer;\
+                min-height: 80px; /* Prevent CLS */\
+                contain: content;\
             }\
             .modern-like-item:hover {\
                 background: var(--hover-color, rgba(255, 255, 255, 0.05));\
@@ -209,12 +234,20 @@
             .modern-like-avatar {\
                 width: 48px;\
                 height: 48px;\
+                min-width: 48px; /* Prevent CLS */\
+                min-height: 48px; /* Prevent CLS */\
                 border-radius: 50%;\
                 object-fit: cover;\
                 border: 2px solid var(--primary-color, #059669);\
                 flex-shrink: 0;\
                 background: var(--surface-light, #374151);\
                 cursor: pointer;\
+                transition: transform 0.2s, border-color 0.2s;\
+                will-change: transform;\
+            }\
+            .modern-like-avatar:hover {\
+                transform: scale(1.05);\
+                border-color: var(--primary-light, #10B981);\
             }\
             .modern-like-info {\
                 flex: 1;\
@@ -233,6 +266,7 @@
                 font-size: 0.95rem;\
                 transition: color 0.2s;\
                 cursor: pointer;\
+                line-height: 1.4;\
             }\
             .modern-like-name:hover {\
                 color: var(--primary-light, #10B981);\
@@ -246,6 +280,7 @@
                 font-weight: 600;\
                 color: white;\
                 cursor: default;\
+                line-height: 1.5;\
             }\
             .role-founder { background: linear-gradient(135deg, #F59E0B, #D97706); }\
             .role-administrator { background: linear-gradient(135deg, #DC2626, #B91C1C); }\
@@ -268,6 +303,7 @@
                 margin-right: 0.25rem;\
                 width: 12px;\
                 color: var(--primary-light, #10B981);\
+                display: inline-block;\
             }\
             .status-online { color: #10B981; }\
             .status-offline { color: #6B7280; }\
@@ -275,6 +311,11 @@
                 text-align: center;\
                 padding: 3rem;\
                 color: var(--text-tertiary, #6B7280);\
+                min-height: 200px; /* Prevent CLS */\
+                display: flex;\
+                flex-direction: column;\
+                align-items: center;\
+                justify-content: center;\
             }\
             .modern-loading i, .modern-empty i {\
                 font-size: 2rem;\
@@ -289,6 +330,7 @@
                 color: var(--text-tertiary, #6B7280);\
                 text-align: center;\
                 flex-shrink: 0;\
+                min-height: 44px; /* Prevent CLS */\
             }\
             .modern-modal-footer i {\
                 margin-right: 0.25rem;\
@@ -308,8 +350,45 @@
                     transform: translateY(0);\
                 }\
             }\
+            /* Reduced motion preference */\
+            @media (prefers-reduced-motion: reduce) {\
+                .modern-modal-overlay {\
+                    animation: none;\
+                }\
+                .modern-likes-modal {\
+                    animation: none;\
+                }\
+                .modern-like-avatar:hover {\
+                    transform: none;\
+                }\
+                .modern-modal-close:hover {\
+                    transform: none;\
+                }\
+            }\
+            /* Touch device optimizations */\
+            @media (hover: none) and (pointer: coarse) {\
+                .modern-like-item {\
+                    padding: 1rem 1.5rem;\
+                }\
+                .modern-modal-close {\
+                    min-width: 44px;\
+                    min-height: 44px;\
+                }\
+            }\
+            /* High contrast mode support */\
+            @media (prefers-contrast: high) {\
+                .modern-likes-modal {\
+                    border-width: 2px;\
+                }\
+                .modern-like-avatar {\
+                    border-width: 3px;\
+                }\
+            }\
         </style>\
     ';
+    
+    // Rest of the functions remain the same...
+    // (generateDiceBearAvatar, isValidAvatar, etc. - keeping existing code)
     
     // Helper: Generate deterministic color from nickname
     function getColorFromNickname(nickname, userId) {
@@ -372,7 +451,7 @@
         return true;
     }
     
-    // Helper: Get best avatar URL for user with optimization (resize, crop, and preserve GIF animation)
+    // Helper: Get best avatar URL for user with optimization
     function getUserAvatarSync(user) {
         var avatarUrl = user.avatar;
         
@@ -675,8 +754,6 @@
                 var avatarQuality = avatarData.quality;
                 var avatarFormat = avatarData.format;
                 var isGif = avatarData.isGif;
-                var avatarWidth = avatarData.width;
-                var avatarHeight = avatarData.height;
                 
                 var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 var optimizedFallback = optimizeImageUrl(dicebearFallback, 48, 48);
@@ -688,7 +765,6 @@
                 var formatAttr = avatarFormat ? 'data-format="' + avatarFormat + '" ' : '';
                 var optimizedAttr = avatarQuality ? 'data-optimized="true" ' : '';
                 var gifAttr = isGif ? 'data-original-format="gif" ' : '';
-                var sizeAttr = (avatarWidth && avatarHeight) ? 'data-size="' + avatarWidth + 'x' + avatarHeight + '" ' : '';
                 
                 itemsHtml += 
                     '<div class="modern-like-item" data-user-id="' + user.id + '">' +
@@ -704,7 +780,6 @@
                              formatAttr +
                              optimizedAttr +
                              gifAttr +
-                             sizeAttr +
                              'onerror="this.onerror=null; this.src=\'' + optimizedFallback.url + '\';">' +
                         '<div class="modern-like-info" data-user-id="' + user.id + '">' +
                             '<div class="modern-like-name-row">' +
