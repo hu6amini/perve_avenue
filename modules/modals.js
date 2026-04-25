@@ -110,8 +110,7 @@
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
-            'radius=50',
-            'size=70',
+            'size=48',
             'fontSize=32',
             'fontWeight=600'
         ];
