@@ -996,6 +996,67 @@ body.modal-open {
     cursor: pointer;
 }
 
+/* Avatar wrapper for status indicator */
+.modern-like-avatar-wrapper {
+    position: relative;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+}
+
+.modern-like-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary-color, #059669);
+    display: block;
+    background: var(--surface-light, #374151);
+}
+
+/* Status indicator dot */
+.modern-status-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--surface-color, #1F2937);
+    transition: background 0.2s;
+}
+.modern-status-dot.online {
+    background: #10B981; /* Emerald green */
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+.modern-status-dot.offline {
+    background: #6B7280;
+}
+.modern-status-dot.idle {
+    background: #F59E0B;
+}
+.modern-status-dot.dnd {
+    background: #DC2626;
+}
+
+/* Optional: tooltip on hover */
+.modern-status-dot:hover::after {
+    content: attr(data-status);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-light);
+    color: var(--text-primary);
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    margin-bottom: 4px;
+    z-index: 1;
+}
+
 .modern-like-info {
     flex: 1;
     min-width: 0;
