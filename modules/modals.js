@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree (Accessible)
 // @namespace    http://tampermonkey.net/
-// @version      5.1
-// @description  Replaces the old likes popup with a modern, fully accessible modal using real API data
+// @version      5.2
+// @description  Replaces the old likes popup with a modern, fully accessible modal – avatar status indicator added
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -461,12 +461,15 @@
                 var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 var optimizedFallback = optimizeImageUrl(dicebearFallback, 48, 48);
                 var statusText = user.status || 'offline';
-                var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
+                var statusClass = user.status === 'online' ? 'online' : (user.status === 'idle' ? 'idle' : (user.status === 'dnd' ? 'dnd' : 'offline'));
                 var escapedNickname = escapeHtml(user.nickname);
 
                 itemsHtml += 
                     '<div class="modern-like-item" data-user-id="' + user.id + '" tabindex="0" role="button" aria-label="View profile of ' + escapedNickname + '">' +
-                        '<img class="modern-like-avatar" src="' + avatarUrl + '" alt="Avatar of ' + escapedNickname + '" loading="lazy" decoding="async" width="48" height="48" data-user-id="' + user.id + '" onerror="this.onerror=null; this.src=\'' + optimizedFallback.url + '\';">' +
+                        '<div class="modern-like-avatar-wrapper">' +
+                            '<img class="modern-like-avatar" src="' + avatarUrl + '" alt="Avatar of ' + escapedNickname + '" loading="lazy" decoding="async" width="48" height="48" data-user-id="' + user.id + '" onerror="this.onerror=null; this.src=\'' + optimizedFallback.url + '\';">' +
+                            '<span class="modern-status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
+                        '</div>' +
                         '<div class="modern-like-info" data-user-id="' + user.id + '">' +
                             '<div class="modern-like-name-row">' +
                                 '<span class="modern-like-name" data-user-id="' + user.id + '">' + escapedNickname + '</span>' +
@@ -475,7 +478,6 @@
                             '<div class="modern-like-stats">' +
                                 '<span><i class="fa-regular fa-message" aria-hidden="true"></i> ' + formatNumber(user.messages) + ' posts</span>' +
                                 '<span><i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + formatNumber(user.reputation) + ' rep</span>' +
-                                '<span class="' + statusClass + '"><i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText + '</span>' +
                             '</div>' +
                         '</div>' +
                     '</div>';
