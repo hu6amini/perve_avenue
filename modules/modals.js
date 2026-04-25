@@ -251,54 +251,62 @@
         return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
     }
     
-    // Helper: Check if avatar URL is valid
+    // Helper: Check if avatar URL is valid and not broken
     function isValidAvatar(avatarUrl) {
         if (!avatarUrl) return false;
+        if (typeof avatarUrl !== 'string') return false;
         
-        // Convert to string for checking
-        var url = String(avatarUrl).toLowerCase().trim();
+        var lowerUrl = avatarUrl.toLowerCase();
         
-        // Check for invalid values
-        if (url === 'http' || url === 'http:' || url === 'https' || url === 'https:' || url === '' || url === 'null' || url === 'undefined') {
+        // Check for incomplete URLs
+        if (lowerUrl === 'http' || lowerUrl === 'http:' || lowerUrl === 'https' || lowerUrl === 'https:') {
             return false;
         }
         
-        // Check if it's a valid URL format (must start with http://, https://, or //)
-        if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('//')) {
+        // Check for empty or invalid values
+        if (lowerUrl === '' || lowerUrl === 'null' || lowerUrl === 'undefined') {
             return false;
         }
         
-        // Check for common broken patterns
-        if (url.indexOf('undefined') !== -1 || url.indexOf('null') !== -1) {
+        // Check if it's a valid URL format
+        if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://') && !lowerUrl.startsWith('//')) {
             return false;
         }
-        
-        // Check if URL looks like a real image (has extension or typical image path)
-        // But don't be too strict - some avatars might not have extensions
         
         return true;
     }
     
-    // Helper: Get best avatar URL for user
-    function getUserAvatar(user) {
+    // Helper: Test if an image URL actually loads (async)
+    function testImageUrl(url) {
+        return new Promise(function(resolve) {
+            var img = new Image();
+            img.onload = function() { resolve(true); };
+            img.onerror = function() { resolve(false); };
+            img.src = url;
+        });
+    }
+    
+    // Helper: Get best avatar URL for user (synchronous, returns DiceBear immediately for invalid URLs)
+    function getUserAvatarSync(user) {
         var avatarUrl = user.avatar;
         
-        // Check if avatar exists and is valid
-        if (isValidAvatar(avatarUrl)) {
-            // Fix protocol-relative URLs
-            if (avatarUrl.startsWith('//')) {
-                avatarUrl = 'https:' + avatarUrl;
-            }
-            // Also handle http:// when site is https
-            if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
-                avatarUrl = avatarUrl.replace('http://', 'https://');
-            }
-            return avatarUrl;
+        // If avatar is invalid, immediately return DiceBear
+        if (!isValidAvatar(avatarUrl)) {
+            return generateDiceBearAvatar(user.nickname, user.id);
         }
         
-        // For invalid avatars (like "http"), immediately return DiceBear
-        // Don't even try to load the broken URL
-        return generateDiceBearAvatar(user.nickname, user.id);
+        // Fix protocol-relative URLs
+        if (avatarUrl.startsWith('//')) {
+            avatarUrl = 'https:' + avatarUrl;
+        }
+        
+        // Fix http to https if needed
+        if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
+            avatarUrl = avatarUrl.replace('http://', 'https://');
+        }
+        
+        // For valid-looking URLs, we'll use them and let onerror handle fallback
+        return avatarUrl;
     }
     
     // Helper: Find the close button in the legacy modal and click it
@@ -535,26 +543,24 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-                // Get avatar URL (will return DiceBear immediately for invalid ones like "http")
-                var avatarUrl = getUserAvatar(user);
+                // Get avatar URL - returns DiceBear immediately for invalid URLs
+                var avatarUrl = getUserAvatarSync(user);
+                var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
-                
-                // For users with valid-looking avatar URLs, we still need an onerror fallback
-                // in case the image is actually a 404
-                var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
+                var escapedNickname = escapeHtml(user.nickname);
                 
                 itemsHtml += 
                     '<div class="modern-like-item">' +
                         '<img class="modern-like-avatar" ' +
                              'src="' + avatarUrl + '" ' +
-                             'alt="Avatar of ' + escapeHtml(user.nickname) + '" ' +
+                             'alt="Avatar of ' + escapedNickname + '" ' +
                              'loading="lazy" ' +
                              'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
                         '<div class="modern-like-info">' +
                             '<div class="modern-like-name-row">' +
                                 '<a href="/?act=Profile&amp;MID=' + user.id + '" class="modern-like-name" target="_blank">' +
-                                    escapeHtml(user.nickname) +
+                                    escapedNickname +
                                 '</a>' +
                                 '<span class="modern-role-badge ' + roleInfo.class + '">' + escapeHtml(roleInfo.text) + '</span>' +
                             '</div>' +
