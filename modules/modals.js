@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.7
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -22,21 +22,13 @@
     var processingModal = false;
     
     // Harmony color palette based on Midnight Emerald theme
-    // All colors are carefully selected to complement the emerald green (#059669, #10B981) theme
     var AVATAR_COLORS = [
-        // Emerald family (primary)
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
-        // Teal family (complementary)
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
-        // Blue family (analogous)
         '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
-        // Indigo family (accent)
         '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
-        // Purple family (secondary accent)
         '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
-        // Amber/Gold (warm accent)
         'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
-        // Slate/Gray (neutral)
         '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
     ];
     
@@ -223,22 +215,18 @@
         var hash = 0;
         var str = nickname || userId || 'user';
         
-        // Create a hash from the nickname string
         for (var i = 0; i < str.length; i++) {
             hash = ((hash << 5) - hash) + str.charCodeAt(i);
-            hash = hash & hash; // Convert to 32-bit integer
+            hash = hash & hash;
         }
         
-        // Use absolute value and ensure it's positive
         var absHash = Math.abs(hash);
-        
-        // Select color from the palette based on hash
         var colorIndex = absHash % AVATAR_COLORS.length;
         
         return AVATAR_COLORS[colorIndex];
     }
     
-    // Helper: Generate DiceBear avatar from username with harmonious colors
+    // Helper: Generate DiceBear avatar from username
     function generateDiceBearAvatar(username, userId) {
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
@@ -247,10 +235,8 @@
             firstLetter = '?';
         }
         
-        // Get harmonious color based on nickname
         var backgroundColor = getColorFromNickname(username, userId);
         
-        // Use DiceBear initials API
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
@@ -268,18 +254,28 @@
     // Helper: Check if avatar URL is valid
     function isValidAvatar(avatarUrl) {
         if (!avatarUrl) return false;
-        // Check for incomplete URLs like "http" or empty strings
-        if (avatarUrl === 'http' || avatarUrl === 'http:' || avatarUrl === '' || avatarUrl === 'https' || avatarUrl === 'https:') {
+        
+        // Convert to string for checking
+        var url = String(avatarUrl).toLowerCase().trim();
+        
+        // Check for invalid values
+        if (url === 'http' || url === 'http:' || url === 'https' || url === 'https:' || url === '' || url === 'null' || url === 'undefined') {
             return false;
         }
-        // Check if it's a valid URL format
-        if (!avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://') && !avatarUrl.startsWith('//')) {
+        
+        // Check if it's a valid URL format (must start with http://, https://, or //)
+        if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('//')) {
             return false;
         }
-        // Additional check for common broken patterns
-        if (avatarUrl.indexOf('undefined') !== -1 || avatarUrl.indexOf('null') !== -1) {
+        
+        // Check for common broken patterns
+        if (url.indexOf('undefined') !== -1 || url.indexOf('null') !== -1) {
             return false;
         }
+        
+        // Check if URL looks like a real image (has extension or typical image path)
+        // But don't be too strict - some avatars might not have extensions
+        
         return true;
     }
     
@@ -300,7 +296,8 @@
             return avatarUrl;
         }
         
-        // Fallback to DiceBear avatar with harmonious colors
+        // For invalid avatars (like "http"), immediately return DiceBear
+        // Don't even try to load the broken URL
         return generateDiceBearAvatar(user.nickname, user.id);
     }
     
@@ -538,10 +535,14 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-                // Use the improved avatar function with DiceBear fallback
+                // Get avatar URL (will return DiceBear immediately for invalid ones like "http")
                 var avatarUrl = getUserAvatar(user);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
+                
+                // For users with valid-looking avatar URLs, we still need an onerror fallback
+                // in case the image is actually a 404
+                var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 
                 itemsHtml += 
                     '<div class="modern-like-item">' +
@@ -549,7 +550,7 @@
                              'src="' + avatarUrl + '" ' +
                              'alt="Avatar of ' + escapeHtml(user.nickname) + '" ' +
                              'loading="lazy" ' +
-                             'onerror="this.onerror=null; this.src=\'' + generateDiceBearAvatar(user.nickname, user.id) + '\';">' +
+                             'onerror="this.onerror=null; this.src=\'' + dicebearFallback + '\';">' +
                         '<div class="modern-like-info">' +
                             '<div class="modern-like-name-row">' +
                                 '<a href="/?act=Profile&amp;MID=' + user.id + '" class="modern-like-name" target="_blank">' +
