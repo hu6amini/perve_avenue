@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.0
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -75,27 +75,13 @@
                 display: flex;\
                 align-items: center;\
                 gap: 0.5rem;\
-            }\
-            .modern-modal-title i {\
-                color: var(--primary-light, #10B981);\
-                font-size: 1.1rem;\
-            }\
-            .modern-modal-title h3 {\
                 font-weight: 600;\
-                font-size: 1rem;\
-                margin: 0;\
+                font-size: 1.1rem;\
                 color: var(--text-primary, #F9FAFB);\
                 font-family: "Quicksand", sans-serif;\
             }\
-            .like-count-display {\
-                background: var(--primary-color, #059669);\
-                border-radius: 9999px;\
-                padding: 0.125rem 0.5rem;\
-                font-size: 0.75rem;\
-                font-weight: 600;\
-                color: white;\
-                min-width: 24px;\
-                text-align: center;\
+            .modern-modal-title i {\
+                color: var(--primary-light, #10B981);\
             }\
             .modern-modal-close {\
                 background: transparent;\
@@ -106,9 +92,6 @@
                 padding: 0.25rem;\
                 border-radius: 6px;\
                 transition: all 0.2s;\
-                display: flex;\
-                align-items: center;\
-                justify-content: center;\
             }\
             .modern-modal-close:hover {\
                 background: var(--hover-color, rgba(255, 255, 255, 0.05));\
@@ -502,8 +485,7 @@
             '<div class="modern-modal-header">' +
                 '<div class="modern-modal-title">' +
                     '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>' +
-                    '<h3>Liked by</h3>' +
-                    '<span class="like-count-display">' + userIds.length + '</span>' +
+                    '<span>Liked by <span class="like-count-display">' + userIds.length + '</span></span>' +
                 '</div>' +
                 '<button class="modern-modal-close" aria-label="Close">' +
                     '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
