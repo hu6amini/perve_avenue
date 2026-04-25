@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      5.2
+// @version      5.3
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -534,7 +534,7 @@
             if (node && node.style && node.style.display === 'block' && !state.currentModal) {
                 var userIds = api.extractUserIds(node);
                 if (userIds.length > 0) {
-                    modalManager.create(userids, node);
+                    modalManager.create(userIds, node);  // FIXED: was 'userids' now 'userIds'
                 }
             }
         };
