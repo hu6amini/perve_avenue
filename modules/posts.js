@@ -668,7 +668,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                         '<div class="user-rank"><i class="' + (data.rankIconClass || 'fa-medal fa-regular') + '" aria-hidden="true"></i> ' + (data.userTitle || 'Member') + '</div>' +
                         '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
                         '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' +
-                        '<div class="user-joined"><i class="fa-regular fa-arrow-right-to-bracket"></i> ' + joinDateFormatted + '</div>' +
+                        '<div class="user-joined"><i class="fa-regular fa-calendar"></i> ' + joinDateFormatted + '</div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
