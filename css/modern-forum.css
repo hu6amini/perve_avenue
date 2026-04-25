@@ -2,7 +2,7 @@
  midnight emerald skin - forum modernized css
  optimized & mathematically perfected with φ(1.618)
  essential styles - modern posts edition
- ACCESSIBILITY ENHANCED (v2.0)
+ ACCESSIBILITY ENHANCED (v2.0) + post status dot
 ============================================*/
 
 /*============================================
@@ -394,8 +394,12 @@ img {
     flex-wrap: wrap;
 }
 
-.avatar-modern {
+/* Avatar wrapper with status dot */
+.post-avatar-wrapper {
+    position: relative;
     flex-shrink: 0;
+    width: 60px;
+    height: 60px;
 }
 
 .avatar-circle {
@@ -406,6 +410,46 @@ img {
     border: 2px solid var(--primary-color);
     display: block;
     cursor: pointer;
+}
+
+.user-status-dot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--surface-color);
+    transition: background 0.2s;
+}
+.user-status-dot.online {
+    background: #10B981;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+}
+.user-status-dot.offline {
+    background: #6B7280;
+}
+.user-status-dot.idle {
+    background: #F59E0B;
+}
+.user-status-dot.dnd {
+    background: #DC2626;
+}
+.user-status-dot:hover::after {
+    content: attr(data-status);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-light);
+    color: var(--text-primary);
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    margin-bottom: 4px;
+    z-index: 1;
 }
 
 .post-user-info {
@@ -470,7 +514,7 @@ img {
     padding: 0;
 }
 
-.user-rank i, .user-posts i, .user-reputation i {
+.user-rank i, .user-posts i, .user-reputation i, .user-joined i {
     color: var(--primary-light);
 }
 
@@ -1026,7 +1070,7 @@ body.modal-open {
     transition: background 0.2s;
 }
 .modern-status-dot.online {
-    background: #10B981; /* Emerald green */
+    background: #10B981;
     box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
 }
 .modern-status-dot.offline {
