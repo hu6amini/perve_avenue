@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      3.7
+// @version      3.8
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -25,7 +25,9 @@
     var WESERV_CONFIG = {
         cdn: 'https://images.weserv.nl/',
         cache: '1y',
-        quality: 90
+        quality: 90,
+        avatarWidth: 48,
+        avatarHeight: 48
     };
     
     // Harmony color palette based on Midnight Emerald theme
@@ -42,8 +44,8 @@
     // Store original profile links for each user
     var userProfileLinks = new Map();
     
-    // Helper: Optimize image URL using Weserv (with GIF animation support)
-    function optimizeImageUrl(url) {
+    // Helper: Optimize image URL using Weserv (with GIF animation support, resize, and crop)
+    function optimizeImageUrl(url, width, height) {
         if (!url) return { url: url, quality: null, format: null, isGif: false };
         
         // Skip already optimized URLs or DiceBear avatars
@@ -57,6 +59,10 @@
         // Skip data URLs
         if (url.indexOf('data:') === 0) return { url: url, quality: null, format: null, isGif: false };
         
+        // Set default dimensions if not provided
+        var targetWidth = width || WESERV_CONFIG.avatarWidth;
+        var targetHeight = height || WESERV_CONFIG.avatarHeight;
+        
         // Detect if it's a GIF
         var isGif = lowerUrl.indexOf('.gif') !== -1 || 
                     lowerUrl.indexOf('.gif?') !== -1 ||
@@ -66,25 +72,31 @@
         var outputFormat = 'webp';
         var quality = WESERV_CONFIG.quality;
         
-        // Build Weserv URL
+        // Build Weserv URL with resize parameters
         var encodedUrl = encodeURIComponent(url);
         var optimizedUrl = WESERV_CONFIG.cdn + '?url=' + encodedUrl + 
                           '&output=' + outputFormat + 
                           '&maxage=' + WESERV_CONFIG.cache + 
                           '&q=' + quality +
-                          '&il';
+                          '&w=' + targetWidth +
+                          '&h=' + targetHeight +
+                          '&fit=cover' +           // Cover mode ensures the image fills the dimensions
+                          '&a=attention' +         // Smart cropping - focuses on the important part of the image
+                          '&il';                   // Interlacing for progressive rendering
         
         // For GIFs, add parameters to preserve animation
         if (isGif) {
-            optimizedUrl += '&n=-1';
-            optimizedUrl += '&lossless=true';
+            optimizedUrl += '&n=-1';               // Keep all frames for animation
+            optimizedUrl += '&lossless=true';      // Preserve quality for GIFs
         }
         
         return {
             url: optimizedUrl,
             quality: quality,
             format: outputFormat,
-            isGif: isGif
+            isGif: isGif,
+            width: targetWidth,
+            height: targetHeight
         };
     }
     
@@ -360,7 +372,7 @@
         return true;
     }
     
-    // Helper: Get best avatar URL for user with optimization (preserves GIF animation)
+    // Helper: Get best avatar URL for user with optimization (resize, crop, and preserve GIF animation)
     function getUserAvatarSync(user) {
         var avatarUrl = user.avatar;
         
@@ -370,7 +382,9 @@
                 url: dicebearUrl,
                 quality: null,
                 format: 'svg',
-                isGif: false
+                isGif: false,
+                width: 48,
+                height: 48
             };
         }
         
@@ -382,7 +396,7 @@
             avatarUrl = avatarUrl.replace('http://', 'https://');
         }
         
-        return optimizeImageUrl(avatarUrl);
+        return optimizeImageUrl(avatarUrl, 48, 48);
     }
     
     // Helper: Store original profile links from legacy modal
@@ -661,9 +675,11 @@
                 var avatarQuality = avatarData.quality;
                 var avatarFormat = avatarData.format;
                 var isGif = avatarData.isGif;
+                var avatarWidth = avatarData.width;
+                var avatarHeight = avatarData.height;
                 
                 var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
-                var optimizedFallback = optimizeImageUrl(dicebearFallback);
+                var optimizedFallback = optimizeImageUrl(dicebearFallback, 48, 48);
                 var statusText = user.status || 'offline';
                 var statusClass = user.status === 'online' ? 'status-online' : 'status-offline';
                 var escapedNickname = escapeHtml(user.nickname);
@@ -672,6 +688,7 @@
                 var formatAttr = avatarFormat ? 'data-format="' + avatarFormat + '" ' : '';
                 var optimizedAttr = avatarQuality ? 'data-optimized="true" ' : '';
                 var gifAttr = isGif ? 'data-original-format="gif" ' : '';
+                var sizeAttr = (avatarWidth && avatarHeight) ? 'data-size="' + avatarWidth + 'x' + avatarHeight + '" ' : '';
                 
                 itemsHtml += 
                     '<div class="modern-like-item" data-user-id="' + user.id + '">' +
@@ -680,11 +697,14 @@
                              'alt="Avatar of ' + escapedNickname + '" ' +
                              'loading="lazy" ' +
                              'decoding="async" ' +
+                             'width="48" ' +
+                             'height="48" ' +
                              'data-user-id="' + user.id + '" ' +
                              qualityAttr +
                              formatAttr +
                              optimizedAttr +
                              gifAttr +
+                             sizeAttr +
                              'onerror="this.onerror=null; this.src=\'' + optimizedFallback.url + '\';">' +
                         '<div class="modern-like-info" data-user-id="' + user.id + '">' +
                             '<div class="modern-like-name-row">' +
