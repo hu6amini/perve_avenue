@@ -2,6 +2,7 @@
  midnight emerald skin - forum modernized css
  optimized & mathematically perfected with φ(1.618)
  essential styles - modern posts edition
+ ACCESSIBILITY ENHANCED (v2.0)
 ============================================*/
 
 /*============================================
@@ -825,8 +826,24 @@ img {
 }
 
 /*============================================
- 9. MODERN LIKES MODAL
+ 9. MODERN LIKES MODAL - ACCESSIBILITY ENHANCED
 ============================================*/
+
+/* Scroll lock utility (applied via JS) */
+.modal-scrollbar-measure {
+    position: absolute;
+    top: -9999px;
+    width: 50px;
+    height: 50px;
+    overflow: scroll;
+}
+
+body.modal-open {
+    overflow: hidden !important;
+    padding-right: var(--scrollbar-width, 0px);
+}
+
+/* Modal overlay */
 .modern-modal-overlay {
     position: fixed;
     top: 0;
@@ -834,6 +851,7 @@ img {
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(2px);
     z-index: 10000;
     display: flex;
     align-items: center;
@@ -841,6 +859,7 @@ img {
     animation: modalFadeIn 0.2s ease;
 }
 
+/* Modal container - fully ARIA compliant */
 .modern-likes-modal {
     background: var(--surface-color, #1F2937);
     border-radius: var(--radius-lg, 13px);
@@ -853,6 +872,11 @@ img {
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
     display: flex;
     flex-direction: column;
+    outline: none;
+}
+.modern-likes-modal:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
 }
 
 /* Modal header */
@@ -872,12 +896,10 @@ img {
     gap: 0.5rem;
     font-family: "Quicksand", sans-serif;
 }
-
 .modern-modal-title i {
     color: var(--primary-light, #10B981);
     font-size: 1.1rem;
 }
-
 .modern-modal-title h3 {
     font-size: 1rem;
     font-weight: 600;
@@ -905,34 +927,47 @@ img {
     border-radius: 6px;
     transition: all 0.2s;
 }
-
 .modern-modal-close:hover {
     background: var(--hover-color, rgba(255, 255, 255, 0.05));
     color: var(--text-primary, #F9FAFB);
     transform: rotate(90deg);
 }
+.modern-modal-close:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
 
-/* Likes list */
+/* Likes list with live region support */
 .modern-likes-list {
     flex: 1;
     overflow-y: auto;
     background: var(--surface-color, #1F2937);
 }
-
 .modern-likes-list::-webkit-scrollbar {
     width: 6px;
 }
-
 .modern-likes-list::-webkit-scrollbar-track {
     background: transparent;
 }
-
 .modern-likes-list::-webkit-scrollbar-thumb {
     background: var(--surface-light, #374151);
     border-radius: 20px;
 }
 
-/* Like item */
+/* Live region for screen reader announcements (visually hidden) */
+.modal-live-region {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Like item - keyboard accessible */
 .modern-like-item {
     display: flex;
     align-items: center;
@@ -942,9 +977,13 @@ img {
     transition: background 0.2s;
     cursor: pointer;
 }
-
 .modern-like-item:hover {
     background: var(--hover-color, rgba(255, 255, 255, 0.05));
+}
+.modern-like-item:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+    background: var(--hover-color);
 }
 
 .modern-like-avatar {
@@ -978,7 +1017,6 @@ img {
     transition: color 0.2s;
     cursor: pointer;
 }
-
 .modern-like-name:hover {
     color: var(--primary-light, #10B981);
     text-decoration: underline;
@@ -1014,13 +1052,11 @@ img {
     font-size: 0.7rem;
     color: var(--text-tertiary, #6B7280);
 }
-
 .modern-like-stats i {
     margin-right: 0.25rem;
     width: 12px;
     color: var(--primary-light, #10B981);
 }
-
 .status-online { color: #10B981; }
 .status-offline { color: #6B7280; }
 
@@ -1030,7 +1066,6 @@ img {
     padding: 3rem;
     color: var(--text-tertiary, #6B7280);
 }
-
 .modern-loading i, .modern-empty i {
     font-size: 2rem;
     margin-bottom: 0.5rem;
@@ -1047,7 +1082,6 @@ img {
     text-align: center;
     flex-shrink: 0;
 }
-
 .modern-modal-footer i {
     margin-right: 0.25rem;
     font-size: 0.65rem;
