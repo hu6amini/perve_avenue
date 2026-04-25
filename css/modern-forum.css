@@ -2,7 +2,7 @@
  midnight emerald skin - forum modernized css
  optimized & mathematically perfected with φ(1.618)
  essential styles - modern posts edition
- ACCESSIBILITY ENHANCED (v2.0) + post status dot
+ ACCESSIBILITY ENHANCED (v2.0)
 ============================================*/
 
 /*============================================
@@ -394,12 +394,16 @@ img {
     flex-wrap: wrap;
 }
 
-/* Avatar wrapper with status dot */
+.avatar-modern {
+    flex-shrink: 0;
+}
+
+/* Avatar wrapper with status dot for posts */
 .post-avatar-wrapper {
     position: relative;
-    flex-shrink: 0;
     width: 60px;
     height: 60px;
+    flex-shrink: 0;
 }
 
 .avatar-circle {
@@ -412,7 +416,7 @@ img {
     cursor: pointer;
 }
 
-.user-status-dot {
+.status-dot {
     position: absolute;
     bottom: 2px;
     right: 2px;
@@ -420,22 +424,25 @@ img {
     height: 14px;
     border-radius: 50%;
     border: 2px solid var(--surface-color);
+    background: #6B7280;
     transition: background 0.2s;
 }
-.user-status-dot.online {
+.status-dot.online {
     background: #10B981;
-    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 0 0 1px rgba(16,185,129,0.3);
 }
-.user-status-dot.offline {
+.status-dot.offline {
     background: #6B7280;
 }
-.user-status-dot.idle {
+.status-dot.idle {
     background: #F59E0B;
 }
-.user-status-dot.dnd {
+.status-dot.dnd {
     background: #DC2626;
 }
-.user-status-dot:hover::after {
+
+/* Optional hover tooltip for status dot */
+.status-dot:hover::after {
     content: attr(data-status);
     position: absolute;
     bottom: 100%;
@@ -895,6 +902,7 @@ body.modal-open {
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(2px);
     z-index: 10000;
     display: flex;
     align-items: center;
@@ -1029,18 +1037,7 @@ body.modal-open {
     background: var(--hover-color);
 }
 
-.modern-like-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--primary-color, #059669);
-    flex-shrink: 0;
-    background: var(--surface-light, #374151);
-    cursor: pointer;
-}
-
-/* Avatar wrapper for status indicator */
+/* Avatar wrapper and status dot for modal (already present) */
 .modern-like-avatar-wrapper {
     position: relative;
     flex-shrink: 0;
@@ -1058,7 +1055,6 @@ body.modal-open {
     background: var(--surface-light, #374151);
 }
 
-/* Status indicator dot */
 .modern-status-dot {
     position: absolute;
     bottom: 2px;
@@ -1083,7 +1079,6 @@ body.modal-open {
     background: #DC2626;
 }
 
-/* Optional: tooltip on hover */
 .modern-status-dot:hover::after {
     content: attr(data-status);
     position: absolute;
@@ -1161,8 +1156,6 @@ body.modal-open {
     width: 12px;
     color: var(--primary-light, #10B981);
 }
-.status-online { color: #10B981; }
-.status-offline { color: #6B7280; }
 
 /* Loading & empty states */
 .modern-loading, .modern-empty {
