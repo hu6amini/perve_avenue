@@ -1,5 +1,6 @@
 // modules/posts.js
-// Forum Modernizer - Posts Module (API‑enhanced, batch fetch, same HTML structure)
+// Forum Modernizer - Posts Module (API‑powered version)
+// Transforms .post elements into modern card layout using forum API for user data
 var ForumPostsModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -10,30 +11,46 @@ var ForumPostsModule = (function(Utils, EventBus) {
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
-        REACTION_DELAY: 500
+        REACTION_DELAY: 500,
+        AVATAR_SIZE: 60,            // px
+        WESERV_CDN: 'https://images.weserv.nl/',
+        CACHE: '1y',
+        QUALITY: 90
     };
 
-    // Avatar color palette (for fallback)
+    // Avatar colour palette (fallback for dicebear)
     var AVATAR_COLORS = [
-        '#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2',
-        '#EF476F', '#FFD166', '#06D6A0', '#073B4C', '#7209B7'
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
     ];
 
-    // State
+    // Track converted posts
     var convertedPostIds = new Set();
     var isInitialized = false;
-    var postReactions = new Map();
-    var activePopup = null;
-    var userCache = new Map();      // userId -> user object from API
+    var postReactions = new Map();      // store reaction data per post
+    var activePopup = null;             // custom reaction popup reference
+
+    // Cache for user API data (MID -> user object)
+    var userDataCache = new Map();
+
+    // Store original DOM posts for delayed data updates
+    var pendingUserFetch = new Map();    // postId -> { originalPost, index, resolve }
 
     // ============================================================================
-    // HELPERS (same as old, plus API fetch)
+    // HELPER FUNCTIONS (unchanged)
     // ============================================================================
     function getPostsContainer() {
         var modernContainer = document.getElementById('modern-posts-container');
         if (modernContainer) return modernContainer;
+
         var originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
         if (originalContainer) return originalContainer;
+
         var newContainer = document.createElement('div');
         newContainer.id = CONFIG.CONTAINER_ID;
         newContainer.className = 'modern-posts-container';
@@ -56,177 +73,147 @@ var ForumPostsModule = (function(Utils, EventBus) {
         return fullId.replace(CONFIG.POST_ID_PREFIX, '');
     }
 
-    // Extract user ID from post (same as modal does from popup)
-    function getUserIdFromPost($post) {
+    // Extract MID from user profile link
+    function getMidFromPost($post) {
         var nickLink = $post.querySelector('.nick a');
-        if (nickLink) {
-            var match = nickLink.href.match(/MID=(\d+)/);
-            if (match) return match[1];
-        }
+        if (!nickLink) return null;
+        var match = nickLink.href.match(/MID=(\d+)/);
+        if (match && match[1]) return match[1];
+        // also try from avatar link
         var avatarLink = $post.querySelector('.avatar a');
         if (avatarLink) {
-            var match = avatarLink.href.match(/MID=(\d+)/);
-            if (match) return match[1];
+            match = avatarLink.href.match(/MID=(\d+)/);
+            if (match && match[1]) return match[1];
         }
         return null;
     }
 
-    // Batch fetch users from API (identical to modal)
-    async function fetchUsersBatch(userIds) {
-        if (!userIds || userIds.length === 0) return new Map();
-        var uniqueIds = [...new Set(userIds)];
-        var resultMap = new Map();
-
-        // Split into chunks of 50 to avoid URL length limits
-        var chunkSize = 50;
-        for (var i = 0; i < uniqueIds.length; i += chunkSize) {
-            var chunk = uniqueIds.slice(i, i + chunkSize);
-            var url = '/api.php?mid=' + chunk.join(',');
-            try {
-                var response = await fetch(url);
-                var data = await response.json();
-                // Data structure: { idForum: ..., m12345: {...}, m67890: {...} }
-                for (var j = 0; j < chunk.length; j++) {
-                    var uid = chunk[j];
-                    var userObj = data['m' + uid] || data.info;
-                    if (userObj && userObj.id) {
-                        resultMap.set(uid, userObj);
-                        userCache.set(uid, userObj);
-                    }
-                }
-            } catch (e) {
-                console.warn('[PostsModule] Batch fetch failed for', chunk, e);
+    // ============================================================================
+    // API USER DATA FETCHING (cached)
+    // ============================================================================
+    async function fetchUserData(mid) {
+        if (userDataCache.has(mid)) return userDataCache.get(mid);
+        try {
+            var response = await fetch('/api.php?mid=' + mid);
+            var data = await response.json();
+            // the API returns { idForum, mXXXXXX: {...} } or { idForum, info: {...} } for 'me'
+            var user = data['m' + mid] || data.info;
+            if (user && user.id) {
+                userDataCache.set(mid, user);
+                return user;
             }
+            return null;
+        } catch (e) {
+            console.error('[PostsModule] API error for MID', mid, e);
+            return null;
         }
-        return resultMap;
     }
 
-    // Format join date (e.g., "Mar 21, 2020")
-    function formatJoinDate(isoString) {
-        if (!isoString) return null;
-        var date = new Date(isoString);
-        if (isNaN(date.getTime())) return null;
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    // Batch fetch for multiple MIDs
+    async function fetchMultipleUsers(midList) {
+        var uniqueMids = [...new Set(midList.filter(Boolean))];
+        var promises = uniqueMids.map(mid => fetchUserData(mid));
+        await Promise.all(promises);
     }
 
     // ============================================================================
-    // AVATAR GENERATION (unchanged, uses AVATAR_COLORS)
+    // AVATAR OPTIMIZATION (identical to modal script)
     // ============================================================================
-    function generateLetterAvatar(username, userId) {
+    function optimizeImageUrl(url, width, height) {
+        if (!url) return null;
+        var lowerUrl = url.toLowerCase();
+        if (lowerUrl.indexOf('weserv.nl') !== -1 ||
+            lowerUrl.indexOf('dicebear.com') !== -1 ||
+            lowerUrl.indexOf('api.dicebear.com') !== -1 ||
+            url.indexOf('data:') === 0) {
+            return url;
+        }
+
+        var targetWidth = width || CONFIG.AVATAR_SIZE;
+        var targetHeight = height || CONFIG.AVATAR_SIZE;
+        var isGif = (lowerUrl.indexOf('.gif') !== -1 || /\.gif($|\?|#)/i.test(lowerUrl));
+        var outputFormat = 'webp';
+        var quality = CONFIG.QUALITY;
+
+        var encodedUrl = encodeURIComponent(url);
+        var optimizedUrl = CONFIG.WESERV_CDN + '?url=' + encodedUrl +
+            '&output=' + outputFormat +
+            '&maxage=' + CONFIG.CACHE +
+            '&q=' + quality +
+            '&w=' + targetWidth +
+            '&h=' + targetHeight +
+            '&fit=cover' +
+            '&a=attention' +
+            '&il';
+        if (isGif) optimizedUrl += '&n=-1&lossless=true';
+        return optimizedUrl;
+    }
+
+    function getColorFromNickname(nickname, userId) {
+        var hash = 0;
+        var str = nickname || userId || 'user';
+        for (var i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        var colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
+        return AVATAR_COLORS[colorIndex];
+    }
+
+    function generateDiceBearAvatar(username, userId) {
         var displayName = username || 'User';
         var firstLetter = displayName.charAt(0).toUpperCase();
         if (!firstLetter.match(/[A-Z0-9]/i)) firstLetter = '?';
+        var backgroundColor = getColorFromNickname(username, userId);
+        return 'https://api.dicebear.com/7.x/initials/svg?' +
+            'seed=' + encodeURIComponent(firstLetter) +
+            '&backgroundColor=' + backgroundColor +
+            '&size=' + CONFIG.AVATAR_SIZE +
+            '&fontSize=32&fontWeight=600&radius=50';
+    }
 
-        var colorIndex = 0;
-        if (firstLetter >= 'A' && firstLetter <= 'Z') {
-            colorIndex = (firstLetter.charCodeAt(0) - 65) % AVATAR_COLORS.length;
-        } else if (firstLetter >= '0' && firstLetter <= '9') {
-            colorIndex = (parseInt(firstLetter) + 26) % AVATAR_COLORS.length;
-        } else if (userId) {
-            colorIndex = parseInt(userId) % AVATAR_COLORS.length;
-        } else {
-            var hash = 0;
-            for (var i = 0; i < username.length; i++) {
-                hash = ((hash << 5) - hash) + username.charCodeAt(i);
-                hash = hash & hash;
-            }
-            colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
+    function getUserAvatarUrl(user, username, userId) {
+        if (user && user.avatar && user.avatar.trim()) {
+            var avatarUrl = user.avatar;
+            if (avatarUrl.startsWith('//')) avatarUrl = 'https:' + avatarUrl;
+            if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:')
+                avatarUrl = avatarUrl.replace('http://', 'https://');
+            var optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE, CONFIG.AVATAR_SIZE);
+            if (optimized) return optimized;
         }
-
-        var backgroundColor = AVATAR_COLORS[colorIndex];
-        if (backgroundColor.startsWith('#')) backgroundColor = backgroundColor.substring(1);
-
-        var params = [
-            'seed=' + encodeURIComponent(firstLetter),
-            'backgroundColor=' + backgroundColor,
-            'radius=50',
-            'size=70'
-        ];
-        return 'https://api.dicebear.com/7.x/initials/svg?' + params.join('&');
+        return generateDiceBearAvatar(username, userId);
     }
 
     // ============================================================================
-    // DATA EXTRACTION FROM ORIGINAL POST (same as old, but we keep DOM fallbacks)
+    // DATA EXTRACTION FROM ORIGINAL POST (sync parts)
     // ============================================================================
-    function getUsername($post) {
-        var nickLink = $post.querySelector('.nick a');
-        return nickLink ? nickLink.textContent.trim() : 'Unknown';
-    }
+    function getPostNumber($post, index) { return index + 1; }
 
-    function getAvatarUrl($post) {
-        var avatarImg = $post.querySelector('.avatar img');
-        if (!avatarImg) return null;
-        var src = avatarImg.getAttribute('src');
-        if (src && src.includes('weserv.nl')) {
-            var urlParams = new URLSearchParams(src.split('?')[1]);
-            return urlParams.get('url') || src;
-        }
-        return src;
-    }
-
-    function getGroupText($post) {
-        var groupDd = $post.querySelector('.u_group dd');
-        return groupDd ? groupDd.textContent.trim() : '';
-    }
-
-    function getPostCount($post) {
-        var postsLink = $post.querySelector('.u_posts dd a');
-        return postsLink ? postsLink.textContent.trim() : '0';
-    }
-
-    function getReputation($post) {
-        var repLink = $post.querySelector('.u_reputation dd a');
-        if (!repLink) return '0';
-        return repLink.textContent.trim().replace('+', '');
-    }
-
-    function getIsOnline($post) {
-        var statusTitle = $post.querySelector('.u_status');
-        if (!statusTitle) return false;
-        var title = statusTitle.getAttribute('title') || '';
-        return title.toLowerCase().includes('online');
-    }
-
-    function getUserTitleAndIcon($post) {
-        var uRankSpan = $post.querySelector('.u_rank');
-        if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
-        var icon = uRankSpan.querySelector('i');
-        var iconClass = '';
-        if (icon) {
-            var classAttr = icon.getAttribute('class') || '';
-            if (classAttr.includes('fa-solid')) classAttr = classAttr.replace('fa-solid', 'fa-regular');
-            iconClass = classAttr;
-        } else {
-            iconClass = 'fa-medal fa-regular';
-        }
-        var rankSpan = uRankSpan.querySelector('span');
-        var title = '';
-        if (rankSpan) {
-            title = rankSpan.textContent.trim();
-        } else {
-            var textContent = uRankSpan.textContent || '';
-            title = textContent.replace(icon ? icon.textContent : '', '').trim();
-        }
-        if (title === 'Member') {
-            var stars = $post.querySelectorAll('.u_rank i.fa-star').length;
-            if (stars === 3) title = 'Famous';
-            else if (stars === 2) title = 'Senior';
-            else if (stars === 1) title = 'Junior';
-        }
-        return { title: title || 'Member', iconClass: iconClass || 'fa-medal fa-regular' };
+    function getTimeAgo($post) {
+        var whenSpan = $post.querySelector('.when');
+        if (!whenSpan) return 'Recently';
+        var whenTitle = whenSpan.getAttribute('title');
+        if (!whenTitle) return 'Recently';
+        var postDate = new Date(whenTitle);
+        var now = new Date();
+        var diffDays = Math.floor((now - postDate) / 86400000);
+        if (diffDays >= 1) return diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
+        var diffHours = Math.floor((now - postDate) / 3600000);
+        if (diffHours >= 1) return diffHours + ' hour' + (diffHours > 1 ? 's' : '') + ' ago';
+        return 'Just now';
     }
 
     function getCleanContent($post) {
         var contentTable = $post.querySelector('.right.Item table.color');
         if (!contentTable) return '';
         var contentClone = contentTable.cloneNode(true);
+        // remove signature and edit footers
         var signatures = contentClone.querySelectorAll('.signature, .edit');
         signatures.forEach(function(el) { if (el && el.remove) el.remove(); });
         var borders = contentClone.querySelectorAll('.bottomborder');
         borders.forEach(function(el) { if (el && el.remove) el.remove(); });
         var breaks = contentClone.querySelectorAll('br');
         breaks.forEach(function(br) {
-            if (!br) return;
             var prev = br.previousElementSibling;
             var next = br.nextElementSibling;
             if ((next && next.classList && next.classList.contains('bottomborder')) ||
@@ -278,9 +265,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     images.forEach(function(img) {
                         var alt = img.getAttribute('alt') || '';
                         var src = img.getAttribute('src') || '';
-                        if (src) {
-                            reactions.push({ alt: alt, src: src, name: alt.replace(/:/g, '') });
-                        }
+                        if (src) reactions.push({ alt: alt, src: src, name: alt.replace(/:/g, '') });
                     });
                 }
             }
@@ -297,114 +282,205 @@ var ForumPostsModule = (function(Utils, EventBus) {
         return ip;
     }
 
-    function getPostNumber($post, index) { return index + 1; }
-
-    function getTimeAgo($post) {
-        var whenSpan = $post.querySelector('.when');
-        if (!whenSpan) return 'Recently';
-        var whenTitle = whenSpan.getAttribute('title');
-        if (!whenTitle) return 'Recently';
-        var postDate = new Date(whenTitle);
-        var now = new Date();
-        var diffDays = Math.floor((now - postDate) / 86400000);
-        if (diffDays >= 1) return diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
-        var diffHours = Math.floor((now - postDate) / 3600000);
-        if (diffHours >= 1) return diffHours + ' hour' + (diffHours > 1 ? 's' : '') + ' ago';
-        return 'Just now';
+    function getUserTitleAndIcon($post) {
+        var uRankSpan = $post.querySelector('.u_rank');
+        if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
+        var icon = uRankSpan.querySelector('i');
+        var iconClass = '';
+        if (icon) {
+            var classAttr = icon.getAttribute('class') || '';
+            if (classAttr.includes('fa-solid')) classAttr = classAttr.replace('fa-solid', 'fa-regular');
+            iconClass = classAttr;
+        } else iconClass = 'fa-medal fa-regular';
+        var rankSpan = uRankSpan.querySelector('span');
+        var title = rankSpan ? rankSpan.textContent.trim() : uRankSpan.textContent.trim();
+        if (title === 'Member') {
+            var stars = uRankSpan.querySelectorAll('i.fa-star').length;
+            if (stars === 3) title = 'Famous';
+            else if (stars === 2) title = 'Senior';
+            else if (stars === 1) title = 'Junior';
+        }
+        return { title: title || 'Member', iconClass: iconClass };
     }
 
     // ============================================================================
-    // EMBEDDED LINK TRANSFORMATION (same as old)
+    // EMBEDDED LINK TRANSFORMATION (unchanged)
     // ============================================================================
-    function transformEmbeddedLinks(htmlContent) { /* same as your original, kept for brevity – unchanged */ }
-    function convertToModernEmbed(originalContainer) { /* same */ }
-    function extractDomain(url) { /* same */ }
-    function createElementFromHTML(htmlString) { /* same */ }
+    function transformEmbeddedLinks(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+        var tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        var embedContainers = tempDiv.querySelectorAll('.ffb_embedlink');
+        for (var i = 0; i < embedContainers.length; i++) {
+            var container = embedContainers[i];
+            var modernEmbed = convertToModernEmbed(container);
+            if (modernEmbed) container.parentNode.replaceChild(modernEmbed, container);
+        }
+        return tempDiv.innerHTML;
+    }
+
+    function convertToModernEmbed(originalContainer) {
+        try {
+            var allLinks = originalContainer.querySelectorAll('a');
+            var mainLink = null, titleLink = null, description = '', imageUrl = null, faviconUrl = null;
+            for (var i = 0; i < allLinks.length; i++) {
+                var link = allLinks[i];
+                var text = link.textContent.trim();
+                var href = link.getAttribute('href');
+                if (!href) continue;
+                if (!mainLink) mainLink = href;
+                if (text && text.length > 10 && !text.includes('Leggi altro') && !text.includes('Read more') && text !== extractDomain(href)) {
+                    titleLink = link;
+                    break;
+                }
+            }
+            if (!titleLink) {
+                for (var i = allLinks.length-1; i >=0; i--) {
+                    var link = allLinks[i];
+                    var text = link.textContent.trim();
+                    var href = link.getAttribute('href');
+                    if (href && text && !text.includes('Leggi altro') && !text.includes('Read more')) {
+                        titleLink = link;
+                        break;
+                    }
+                }
+            }
+            var url = mainLink || (titleLink ? titleLink.getAttribute('href') : null);
+            if (!url) return null;
+            var domain = extractDomain(url);
+            var title = titleLink ? titleLink.textContent.trim() : domain;
+            var paragraphs = originalContainer.querySelectorAll('div:not([style]) p');
+            if (paragraphs.length > 0) description = paragraphs[0].textContent.trim();
+            var imgElement = originalContainer.querySelector('.ffb_embedlink_preview img');
+            if (imgElement && imgElement.getAttribute('src')) imageUrl = imgElement.getAttribute('src');
+            var hiddenDiv = originalContainer.querySelector('div[style="display:none"]');
+            if (hiddenDiv) {
+                var faviconImg = hiddenDiv.querySelector('img');
+                if (faviconImg && faviconImg.getAttribute('src')) faviconUrl = faviconImg.getAttribute('src');
+            }
+            var modernHtml = '<div class="modern-embedded-link">' +
+                '<a href="' + Utils.escapeHtml(url) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
+            if (imageUrl) {
+                modernHtml += '<div class="embedded-link-image"><img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width:100%;object-fit:cover;display:block;"></div>';
+            }
+            modernHtml += '<div class="embedded-link-content">';
+            if (faviconUrl || domain) {
+                modernHtml += '<div class="embedded-link-domain">';
+                if (faviconUrl) modernHtml += '<img src="' + faviconUrl + '" alt="" class="embedded-link-favicon" loading="lazy" width="16" height="16">';
+                modernHtml += '<span>' + Utils.escapeHtml(domain) + '</span></div>';
+            }
+            modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
+            if (description) modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(description.substring(0,200)) + (description.length>200?'…':'') + '</p>';
+            modernHtml += '<div class="embedded-link-meta"><span class="embedded-link-read-more">Read more on ' + Utils.escapeHtml(domain) + ' ›</span></div></div></a></div>';
+            return createElementFromHTML(modernHtml);
+        } catch(e) { return null; }
+    }
+
+    function extractDomain(url) {
+        try {
+            var a = document.createElement('a');
+            a.href = url;
+            var hostname = a.hostname;
+            if (hostname.startsWith('www.')) hostname = hostname.substring(4);
+            return hostname;
+        } catch(e) { return url.split('/')[2] || url; }
+    }
+
+    function createElementFromHTML(htmlString) {
+        var div = document.createElement('div');
+        div.innerHTML = htmlString.trim();
+        return div.firstChild;
+    }
 
     // ============================================================================
-    // REACTION POPUP & HANDLERS (identical to old – copy from your working script)
+    // REACTION POPUP (unchanged from your working version)
     // ============================================================================
-    function getAvailableReactions(postId) { /* unchanged, keep your version */ }
-    function getDefaultEmojis() { /* unchanged */ }
-    function createCustomReactionPopup(buttonElement, postId) { /* unchanged */ }
-    function triggerOriginalReaction(postId, emoji) { /* unchanged */ }
-    function handleReactionCountClick(pid) { /* unchanged */ }
-    function refreshLikeDisplay(postId) { /* unchanged */ }
-    function refreshReactionDisplay(postId) { /* unchanged */ }
+    function getAvailableReactions(postId) { /* keep original */ }
+    function getDefaultEmojis() { /* keep original */ }
+    function createCustomReactionPopup(buttonElement, postId) { /* keep original */ }
+    function triggerOriginalReaction(postId, emoji) { /* keep original */ }
+    function handleReactionCountClick(pid) { /* keep original */ }
 
     // ============================================================================
-    // GENERATE REACTION BUTTONS HTML (same as old)
+    // GENERATE REACTION BUTTONS HTML (unchanged)
     // ============================================================================
     function generateReactionButtons(data) {
         if (!data.hasReactions || data.reactionCount === 0) {
-            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '"><i class="fa-regular fa-face-smile" aria-hidden="true"></i></button>';
+            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
+                '<i class="fa-regular fa-face-smile" aria-hidden="true"></i></button>';
         }
-        var reactionHtml = '<div class="reactions-container" data-pid="' + data.postId + '">';
         var reactionMap = new Map();
         for (var i = 0; i < data.reactions.length; i++) {
-            var reaction = data.reactions[i];
-            var src = reaction.src;
+            var r = data.reactions[i];
+            var src = r.src;
             if (reactionMap.has(src)) reactionMap.get(src).count++;
-            else reactionMap.set(src, { src: src, alt: reaction.alt, name: reaction.name, count: 1 });
+            else reactionMap.set(src, { src: src, alt: r.alt, name: r.name, count: 1 });
         }
-        reactionMap.forEach(function(reaction) {
-            reactionHtml += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(reaction.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
-                '<img src="' + reaction.src + '" alt="' + Utils.escapeHtml(reaction.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
-                '<span class="reaction-count">' + reaction.count + '</span>' + '</button>';
+        var html = '<div class="reactions-container" data-pid="' + data.postId + '">';
+        reactionMap.forEach(function(r) {
+            html += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(r.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
+                '<img src="' + r.src + '" alt="' + Utils.escapeHtml(r.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
+                '<span class="reaction-count">' + r.count + '</span></button>';
         });
-        reactionHtml += '</div>';
-        return reactionHtml;
+        html += '</div>';
+        return html;
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (same HTML as old script, plus join date & optional status dot)
+    // GENERATE MODERN CARD (uses API user data)
     // ============================================================================
-    function generateModernPost(data, apiUser) {
+    function generateModernPost(data) {
         if (!data) return '';
-
-        // Use API data if available, otherwise fall back to DOM-extracted values
-        var username = (apiUser && apiUser.nickname) ? apiUser.nickname : data.username;
-        var groupText = (apiUser && apiUser.group && apiUser.group.name) ? apiUser.group.name : data.groupText;
-        var roleBadgeClass = (groupText === 'Administrator' || (apiUser && apiUser.permission && apiUser.permission.admin)) ? 'admin' : 'member';
-        var postCount = (apiUser && apiUser.messages !== undefined) ? apiUser.messages : data.postCount;
-        var reputation = (apiUser && apiUser.reputation !== undefined) ? apiUser.reputation : data.reputation;
-        var isOnline = (apiUser && apiUser.status === 'online') ? true : data.isOnline;
-        var joinDateFormatted = (apiUser && apiUser.registration) ? formatJoinDate(apiUser.registration) : null;
-        var userTitle = data.userTitle;  // title from DOM (rank)
-        var rankIconClass = data.rankIconClass;
-
-        var statusColor = isOnline ? '#10B981' : '#6B7280';
+        // data.user contains API user object (or null)
+        var user = data.user;
+        var username = data.username;
+        var userId = data.mid;
+        var isOnline = (user && user.status === 'online') || false;
+        var statusClass = isOnline ? 'online' : 'offline';
         var statusText = isOnline ? 'Online' : 'Offline';
 
-        // Like button
+        // Avatar with online dot
+        var avatarUrl = getUserAvatarUrl(user, username, userId);
+        var avatarHtml = '<div class="post-avatar-wrapper">' +
+            '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy" onerror="this.onerror=null; this.src=\'' + generateDiceBearAvatar(username, userId) + '\';">' +
+            '<span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
+            '</div>';
+
+        // Group / role badge
+        var groupName = (user && user.group && user.group.name) ? user.group.name : (data.groupText || 'Member');
+        var roleClass = 'role-badge';
+        if (groupName.toLowerCase() === 'administrator') roleClass += ' admin';
+        else if (groupName.toLowerCase() === 'moderator') roleClass += ' moderator';
+        else if (groupName.toLowerCase() === 'developer') roleClass += ' developer';
+        else roleClass += ' member';
+
+        // Post count & reputation from API (if available)
+        var postCount = (user && typeof user.messages !== 'undefined') ? user.messages : data.postCount;
+        var reputation = (user && typeof user.reputation !== 'undefined') ? user.reputation : data.reputation;
+
+        // Join date from API
+        var joinDateFormatted = '';
+        if (user && user.registration) {
+            var date = new Date(user.registration);
+            joinDateFormatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } else {
+            joinDateFormatted = 'Unknown join date';
+        }
+
+        // User rank title & icon (still from DOM)
+        var rank = data.userTitle || 'Member';
+        var rankIcon = data.rankIconClass || 'fa-medal fa-regular';
+
         var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
             '<i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
         if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
         likeButton += '</button>';
 
         var reactionsHtml = generateReactionButtons(data);
+
         var editHtml = data.editInfo ? '<div class="post-edit-info"><small>' + Utils.escapeHtml(data.editInfo) + '</small></div>' : '';
         var signatureHtml = data.signatureHtml ? '<div class="post-signature">' + data.signatureHtml + '</div>' : '';
         var ipHtml = data.ipAddress ? '<div class="post-ip">IP: ' + data.ipAddress + '</div>' : '';
-
-        // Avatar (with optional status dot – requires CSS for .post-avatar-wrapper and .user-status-dot)
-        var avatarUrl = (data.originalAvatarUrl && data.originalAvatarUrl.trim() !== '') ? data.originalAvatarUrl : generateLetterAvatar(username, data.postId);
-        var avatarHtml = '<div class="post-avatar" data-pid="' + data.postId + '">' +
-            '<img class="avatar-circle" src="' + avatarUrl + '" alt="Avatar of ' + Utils.escapeHtml(username) + '" width="70" height="70" loading="lazy" onerror="this.onerror=null; this.src=\'' + generateLetterAvatar(username, data.postId) + '\';">' +
-            // Optional status dot – will only appear if CSS defines .user-status-dot
-            '<span class="user-status-dot ' + (isOnline ? 'online' : 'offline') + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '" style="position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: ' + (isOnline ? '#10B981' : '#6B7280') + '; border: 2px solid var(--surface-color);"></span>' +
-        '</div>';
-
-        // Stats HTML (including join date if available)
-        var statsHtml = '<div class="user-stats">' +
-            '<div class="user-rank"><i class="' + rankIconClass + '" aria-hidden="true"></i> ' + userTitle + '</div>' +
-            '<div class="user-posts"><i class="fa-regular fa-message" aria-hidden="true"></i> ' + Utils.escapeHtml(String(postCount)) + ' posts</div>' +
-            '<div class="user-reputation"><i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + Utils.escapeHtml(String(reputation)) + ' rep</div>' +
-            '<div class="user-status" style="color: ' + statusColor + '"><i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText + '</div>';
-        if (joinDateFormatted) {
-            statsHtml += '<div class="user-joined"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Joined ' + joinDateFormatted + '</div>';
-        }
-        statsHtml += '</div>';
 
         return '<article class="post-card" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header">' +
@@ -413,19 +489,24 @@ var ForumPostsModule = (function(Utils, EventBus) {
                     '<div class="post-time"><time datetime="' + new Date().toISOString() + '">' + data.timeAgo + '</time></div>' +
                 '</div>' +
                 '<div class="post-actions">' +
-                    '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></button>' +
-                    '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i></button>' +
-                    '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes" aria-hidden="true"></i></button>' +
-                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i></button>' +
-                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>' +
+                    '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left"></i></button>' +
+                    '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>' +
+                    '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>' +
+                    '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>' +
+                    '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>' +
                 '</div>' +
             '</header>' +
             '<div class="post-card-body">' +
-                avatarHtml +
+                '<div class="avatar-modern" data-pid="' + data.postId + '">' + avatarHtml + '</div>' +
                 '<div class="post-user-info">' +
                     '<div class="user-name" data-pid="' + data.postId + '">' + Utils.escapeHtml(username) + '</div>' +
-                    '<div class="user-group"><span class="role-badge ' + roleBadgeClass + '">' + Utils.escapeHtml(groupText || 'Member') + '</span></div>' +
-                    statsHtml +
+                    '<div class="user-group"><span class="' + roleClass + '">' + Utils.escapeHtml(groupName) + '</span></div>' +
+                    '<div class="user-stats">' +
+                        '<div class="user-rank"><i class="' + rankIcon + '" aria-hidden="true"></i> ' + rank + '</div>' +
+                        '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
+                        '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' +
+                        '<div class="user-joined"><i class="fa-regular fa-calendar"></i> Joined ' + joinDateFormatted + '</div>' +
+                    '</div>' +
                 '</div>' +
             '</div>' +
             '<div class="post-content">' +
@@ -439,13 +520,93 @@ var ForumPostsModule = (function(Utils, EventBus) {
         '</article>';
     }
 
+    function formatNumber(num) {
+        if (!num && num !== 0) return '0';
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
     // ============================================================================
-    // CONVERT ALL POSTS (batch API, then build cards)
+    // REFRESH FUNCTIONS (reactions & likes - mostly unchanged)
     // ============================================================================
-    async function buildAllCards() {
+    function refreshLikeDisplay(postId) { /* keep original version */ }
+    function refreshReactionDisplay(postId) { /* keep original version */ }
+
+    // ============================================================================
+    // EVENT HANDLERS (unchanged)
+    // ============================================================================
+    function handleAvatarClick(pid) { /* original */ }
+    function handleUsernameClick(pid) { /* original */ }
+    function handleQuote(pid) { /* original */ }
+    function handleEdit(pid) { /* original */ }
+    function handleDelete(pid) { /* original */ }
+    function handleShare(pid, buttonElement) { /* original */ }
+    function handleReport(pid) { /* original */ }
+    function handleLike(pid, isCountClick) { /* original */ }
+    function handleReact(pid, buttonElement) { /* original */ }
+
+    function attachEventHandlers() {
+        document.addEventListener('click', function(e) {
+            var avatarDiv = e.target.closest('.avatar-modern');
+            if (avatarDiv) { e.preventDefault(); var pid = avatarDiv.getAttribute('data-pid'); if (pid) handleAvatarClick(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var nameDiv = e.target.closest('.user-name');
+            if (nameDiv) { e.preventDefault(); var pid = nameDiv.getAttribute('data-pid'); if (pid) handleUsernameClick(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action="quote"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleQuote(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action="edit"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleEdit(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action="delete"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleDelete(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action="share"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleShare(pid, btn); }
+        });
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('[data-action="report"]');
+            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleReport(pid); }
+        });
+        document.addEventListener('click', function(e) {
+            var likeBtn = e.target.closest('.like-btn');
+            if (likeBtn) { e.preventDefault(); var pid = likeBtn.getAttribute('data-pid'); if (pid) handleLike(pid, e.target.classList && e.target.classList.contains('like-count-display')); }
+        });
+        document.addEventListener('click', function(e) {
+            var countSpan = e.target.closest('.reaction-count');
+            if (countSpan) {
+                e.preventDefault(); e.stopPropagation();
+                var btn = countSpan.closest('.reaction-btn');
+                if (btn) { var pid = btn.getAttribute('data-pid'); if (pid) handleReactionCountClick(pid); }
+            }
+        });
+        document.addEventListener('click', function(e) {
+            var reactBtn = e.target.closest('.reaction-btn:not(.like-btn)');
+            if (reactBtn && !e.target.classList.contains('reaction-count')) {
+                e.preventDefault(); e.stopPropagation();
+                var pid = reactBtn.getAttribute('data-pid');
+                if (pid) handleReact(pid, reactBtn);
+            }
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && activePopup) { activePopup.remove(); activePopup = null; }
+        });
+    }
+
+    // ============================================================================
+    // MAIN CONVERSION PIPELINE (API‑driven)
+    // ============================================================================
+    async function convertAllPosts() {
         var container = getPostsContainer();
-        if (!container) return;
-        container.innerHTML = '';
+        if (container) container.innerHTML = '';
+
+        convertedPostIds.clear();
+        postReactions.clear();
 
         var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
         var validPosts = [];
@@ -453,70 +614,107 @@ var ForumPostsModule = (function(Utils, EventBus) {
             if (isValidPost(posts[i])) validPosts.push(posts[i]);
         }
 
-        // Collect user IDs and extract basic post data
-        var userIds = [];
-        var postsData = [];
+        // Collect MIDs
+        var mids = [];
+        var postDataSync = [];
         for (var i = 0; i < validPosts.length; i++) {
-            var post = validPosts[i];
-            var postId = getPostId(post);
+            var $post = validPosts[i];
+            var postId = getPostId($post);
             if (!postId || convertedPostIds.has(postId)) continue;
-
-            var uid = getUserIdFromPost(post);
-            if (uid) userIds.push(uid);
-
-            var data = extractPostData(post, i);
-            if (data) postsData.push({ post: post, data: data, uid: uid });
+            var mid = getMidFromPost($post);
+            mids.push(mid);
+            // Extract sync data (content, etc.)
+            var syncData = {
+                postId: postId,
+                mid: mid,
+                originalPost: $post,
+                index: i,
+                username: $post.querySelector('.nick a') ? $post.querySelector('.nick a').textContent.trim() : 'Unknown',
+                groupText: (function() { var g = $post.querySelector('.u_group dd'); return g ? g.textContent.trim() : ''; })(),
+                postCount: (function() { var pc = $post.querySelector('.u_posts dd a'); return pc ? pc.textContent.trim() : '0'; })(),
+                reputation: (function() { var r = $post.querySelector('.u_reputation dd a'); return r ? r.textContent.trim().replace('+','') : '0'; })(),
+                likes: getLikes($post),
+                contentHtml: getCleanContent($post),
+                signatureHtml: getSignatureHtml($post),
+                editInfo: getEditInfo($post),
+                ipAddress: getMaskedIp($post),
+                timeAgo: getTimeAgo($post),
+                userTitle: getUserTitleAndIcon($post).title,
+                rankIconClass: getUserTitleAndIcon($post).iconClass,
+                reactionsData: getReactionData($post)
+            };
+            postDataSync.push(syncData);
+            convertedPostIds.add(postId);
         }
 
-        // Fetch all user data in batch
-        var userMap = await fetchUsersBatch(userIds);
+        // Fetch all users in batch
+        await fetchMultipleUsers(mids);
 
-        // Build cards
-        for (var i = 0; i < postsData.length; i++) {
-            var item = postsData[i];
-            var apiUser = item.uid ? userMap.get(item.uid) : null;
-            var modernCard = generateModernPost(item.data, apiUser);
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = modernCard;
-            var card = tempDiv.firstElementChild;
-            if (card) {
-                card.setAttribute('data-original-id', item.post.id);
-                container.appendChild(card);
-                convertedPostIds.add(item.data.postId);
-            }
+        // Build HTML for each post
+        for (var i = 0; i < postDataSync.length; i++) {
+            var data = postDataSync[i];
+            var user = data.mid ? userDataCache.get(data.mid) : null;
+            var postData = {
+                postId: data.postId,
+                mid: data.mid,
+                username: data.username,
+                groupText: data.groupText,
+                postCount: data.postCount,
+                reputation: data.reputation,
+                likes: data.likes,
+                contentHtml: data.contentHtml,
+                signatureHtml: data.signatureHtml,
+                editInfo: data.editInfo,
+                ipAddress: data.ipAddress,
+                postNumber: i+1,
+                timeAgo: data.timeAgo,
+                userTitle: data.userTitle,
+                rankIconClass: data.rankIconClass,
+                hasReactions: data.reactionsData.hasReactions,
+                reactionCount: data.reactionsData.reactionCount,
+                reactions: data.reactionsData.reactions,
+                user: user
+            };
+            var cardHtml = generateModernPost(postData);
+            var temp = document.createElement('div');
+            temp.innerHTML = cardHtml;
+            var card = temp.firstElementChild;
+            container.appendChild(card);
         }
 
         attachEventHandlers();
 
-        if (EventBus) EventBus.trigger('posts:ready', { count: postsData.length });
-        console.log('[PostsModule] Ready – ' + postsData.length + ' posts converted (API enhanced)');
+        if (EventBus) EventBus.trigger('posts:ready', { count: postDataSync.length });
+        console.log('[PostsModule] Ready - ' + postDataSync.length + ' posts converted (API powered)');
     }
-
-    // ============================================================================
-    // EVENT HANDLERS (same as your old script, unchanged)
-    // ============================================================================
-    function handleAvatarClick(pid) { /* unchanged – copy from old */ }
-    function handleUsernameClick(pid) { /* unchanged */ }
-    function handleQuote(pid) { /* unchanged */ }
-    function handleEdit(pid) { /* unchanged */ }
-    function handleDelete(pid) { /* unchanged */ }
-    function handleShare(pid, buttonElement) { /* unchanged */ }
-    function handleReport(pid) { /* unchanged */ }
-    function handleLike(pid, isCountClick) { /* unchanged */ }
-    function handleReact(pid, buttonElement) { /* unchanged */ }
-    function attachEventHandlers() { /* unchanged – copy from your old script */ }
 
     // ============================================================================
     // INITIALIZE
     // ============================================================================
     function initialize() {
-        if (isInitialized) return;
-        console.log('[PostsModule] Initializing (batch API mode)...');
-        buildAllCards().then(function() {
-            isInitialized = true;
-        }).catch(function(e) {
-            console.error('[PostsModule] Initialization failed', e);
-        });
+        if (isInitialized) {
+            console.log('[PostsModule] Already initialized');
+            return;
+        }
+        console.log('[PostsModule] Initializing API‑powered version...');
+        convertAllPosts().catch(err => console.error('[PostsModule] Initialization error', err));
+        isInitialized = true;
+        // Register observer for dynamic content (if ForumCoreObserver exists)
+        if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
+            globalThis.forumObserver.register({
+                id: 'posts-module',
+                selector: CONFIG.POST_SELECTOR,
+                priority: 'high',
+                callback: function(node) {
+                    if (!isValidPost(node)) return;
+                    var postId = getPostId(node);
+                    if (!postId || convertedPostIds.has(postId)) return;
+                    // For simplicity, re-run full conversion (or implement incremental)
+                    convertAllPosts();
+                }
+            });
+            console.log('[PostsModule] Registered with ForumCoreObserver');
+        }
     }
 
     // ============================================================================
@@ -524,15 +722,13 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     return {
         initialize: initialize,
-        convertToModernCard: function(postEl, index) { /* kept for compatibility; not used in batch mode */ },
         refreshReactionDisplay: refreshReactionDisplay,
         refreshLikeDisplay: refreshLikeDisplay,
         getPostsContainer: getPostsContainer,
-        isValidPost: isValidPost,
         reset: function() {
             convertedPostIds.clear();
             postReactions.clear();
-            userCache.clear();
+            userDataCache.clear();
             isInitialized = false;
             if (activePopup) activePopup.remove();
             activePopup = null;
@@ -542,6 +738,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
 })(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
    typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus);
 
+// Signal ready
 if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('posts-module-ready'));
 }
