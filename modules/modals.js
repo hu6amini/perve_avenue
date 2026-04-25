@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Likes Modal for ForumFree
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  Replaces the old likes popup with a modern modal using real API data
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -42,6 +42,7 @@
                 right: 0;\
                 bottom: 0;\
                 background: rgba(0, 0, 0, 0.8);\
+                backdrop-filter: blur(4px);\
                 z-index: 10000;\
                 display: flex;\
                 align-items: center;\
@@ -127,6 +128,7 @@
                 object-fit: cover;\
                 border: 2px solid var(--primary-color, #059669);\
                 flex-shrink: 0;\
+                background: var(--surface-light, #374151);\
             }\
             .modern-like-info {\
                 flex: 1;\
@@ -235,7 +237,6 @@
         
         var backgroundColor = getColorFromNickname(username, userId);
         
-        // Only use parameters that DiceBear API accepts
         var params = [
             'seed=' + encodeURIComponent(firstLetter),
             'backgroundColor=' + backgroundColor,
@@ -255,17 +256,14 @@
         
         var lowerUrl = avatarUrl.toLowerCase();
         
-        // Check for incomplete URLs
         if (lowerUrl === 'http' || lowerUrl === 'http:' || lowerUrl === 'https' || lowerUrl === 'https:') {
             return false;
         }
         
-        // Check for empty or invalid values
         if (lowerUrl === '' || lowerUrl === 'null' || lowerUrl === 'undefined') {
             return false;
         }
         
-        // Check if it's a valid URL format
         if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://') && !lowerUrl.startsWith('//')) {
             return false;
         }
@@ -273,26 +271,22 @@
         return true;
     }
     
-    // Helper: Get best avatar URL for user (synchronous, returns DiceBear immediately for invalid URLs)
+    // Helper: Get best avatar URL for user
     function getUserAvatarSync(user) {
         var avatarUrl = user.avatar;
         
-        // If avatar is invalid, immediately return DiceBear
         if (!isValidAvatar(avatarUrl)) {
             return generateDiceBearAvatar(user.nickname, user.id);
         }
         
-        // Fix protocol-relative URLs
         if (avatarUrl.startsWith('//')) {
             avatarUrl = 'https:' + avatarUrl;
         }
         
-        // Fix http to https if needed
         if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
             avatarUrl = avatarUrl.replace('http://', 'https://');
         }
         
-        // For valid-looking URLs, we'll use them and let onerror handle fallback
         return avatarUrl;
     }
     
@@ -464,16 +458,16 @@
         var headerHtml = 
             '<div class="modern-modal-header">' +
                 '<div class="modern-modal-title">' +
-                    '<i class="fa-regular fa-heart"></i>' +
+                    '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>' +
                     '<span>Liked by <span class="like-count-display">' + userIds.length + '</span></span>' +
                 '</div>' +
                 '<button class="modern-modal-close" aria-label="Close">' +
-                    '<i class="fa-regular fa-xmark"></i>' +
+                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
                 '</button>' +
             '</div>' +
             '<div class="modern-likes-list">' +
                 '<div class="modern-loading">' +
-                    '<i class="fa-regular fa-spinner fa-pulse"></i>' +
+                    '<i class="fa-regular fa-spinner fa-pulse" aria-hidden="true"></i>' +
                     '<p>Loading user data...</p>' +
                 '</div>' +
             '</div>';
@@ -511,7 +505,7 @@
             if (!users || users.length === 0) {
                 likesList.innerHTML = 
                     '<div class="modern-empty">' +
-                        '<i class="fa-regular fa-thumbs-up"></i>' +
+                        '<i class="fa-regular fa-thumbs-up" aria-hidden="true"></i>' +
                         '<p>No user data available</p>' +
                     '</div>';
                 processingModal = false;
@@ -530,7 +524,6 @@
             for (var i = 0; i < sortedUsers.length; i++) {
                 var user = sortedUsers[i];
                 var roleInfo = getUserRoleInfo(user);
-                // Get avatar URL - returns DiceBear immediately for invalid URLs
                 var avatarUrl = getUserAvatarSync(user);
                 var dicebearFallback = generateDiceBearAvatar(user.nickname, user.id);
                 var statusText = user.status || 'offline';
@@ -552,10 +545,10 @@
                                 '<span class="modern-role-badge ' + roleInfo.class + '">' + escapeHtml(roleInfo.text) + '</span>' +
                             '</div>' +
                             '<div class="modern-like-stats">' +
-                                '<span><i class="fa-regular fa-message"></i> ' + formatNumber(user.messages) + ' posts</span>' +
-                                '<span><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(user.reputation) + ' rep</span>' +
+                                '<span><i class="fa-regular fa-message" aria-hidden="true"></i> ' + formatNumber(user.messages) + ' posts</span>' +
+                                '<span><i class="fa-regular fa-thumbs-up" aria-hidden="true"></i> ' + formatNumber(user.reputation) + ' rep</span>' +
                                 '<span class="' + statusClass + '">' +
-                                    '<i class="fa-regular fa-circle"></i> ' + statusText +
+                                    '<i class="fa-regular fa-circle" aria-hidden="true"></i> ' + statusText +
                                 '</span>' +
                             '</div>' +
                         '</div>' +
@@ -568,7 +561,7 @@
             console.error('[Modern Likes] Error rendering:', error);
             likesList.innerHTML = 
                 '<div class="modern-empty">' +
-                    '<i class="fa-regular fa-circle-exclamation"></i>' +
+                    '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
                     '<p>Error loading user data. Please try again.</p>' +
                 '</div>';
         }
