@@ -12,9 +12,6 @@
 (function() {
     'use strict';
     
-    // Track active modern modal to prevent duplicates
-    var activeModal = null;
-    
     // Modern modal styles (injects into page)
     var modalStyles = '\
         <style id="modern-likes-modal-styles">\
@@ -232,6 +229,9 @@
         </style>\
     ';
     
+    // Store reference to current original modal
+    var currentOriginalModal = null;
+    
     // Helper: Extract user IDs from the legacy modal
     function extractUserIdsFromLegacyModal(legacyModal) {
         var userIds = [];
@@ -267,6 +267,27 @@
             console.error('[Modern Likes] API Error:', error);
             return [];
         }
+    }
+    
+    // Helper: Find and click the close button in the original modal
+    function closeOriginalModal(originalModal) {
+        if (!originalModal) return;
+        
+        // Find the close button (<a class="close"></a>)
+        var closeButton = originalModal.querySelector('a.close');
+        if (closeButton) {
+            // Trigger the click event on the original close button
+            var clickEvent = document.createEvent('MouseEvents');
+            clickEvent.initEvent('click', true, true);
+            closeButton.dispatchEvent(clickEvent);
+        }
+        
+        // Also try to trigger any jQuery events if needed
+        if (typeof $ !== 'undefined') {
+            $(closeButton).trigger('click');
+        }
+        
+        currentOriginalModal = null;
     }
     
     // Helper: Determine role badge class and text from group object
@@ -360,18 +381,10 @@
         });
     }
     
-    // Close active modal if open
-    function closeActiveModal() {
-        if (activeModal) {
-            activeModal.remove();
-            activeModal = null;
-        }
-    }
-    
     // Create and show modern modal
     async function showModernModal(userIds, originalModal) {
-        // Close any existing modal first
-        closeActiveModal();
+        // Store reference to original modal so we can close it later
+        currentOriginalModal = originalModal;
         
         // Create overlay
         var overlay = document.createElement('div');
@@ -403,18 +416,26 @@
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
         
-        // Store reference to active modal
-        activeModal = overlay;
-        
-        // Close button functionality
+        // Close button functionality - now closes the original modal
         var closeBtn = modal.querySelector('.modern-modal-close');
         var closeModal = function() { 
-            closeActiveModal();
+            overlay.remove();
+            // Trigger the original modal's close button
+            closeOriginalModal(originalModal);
         };
         closeBtn.addEventListener('click', closeModal);
         overlay.addEventListener('click', function(e) {
             if (e.target === overlay) closeModal();
         });
+        
+        // Also handle Escape key
+        var escapeHandler = function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
         
         // Fetch and render users
         var likesList = modal.querySelector('.modern-likes-list');
@@ -485,9 +506,6 @@
         }
     }
     
-    // Track which modals we've already processed (to avoid duplicate processing)
-    var processedModals = new Set();
-    
     // Main observer to detect legacy modal
     function initModalObserver() {
         // Inject styles if not already present
@@ -508,39 +526,25 @@
             for (var i = 0; i < mutations.length; i++) {
                 var mutation = mutations[i];
                 
-                // Check for style attribute changes (modal becoming visible)
                 if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                     var modal = mutation.target;
-                    // Check if this is the legacy modal with display block (becoming visible)
+                    // Check if this is the legacy modal with display block
                     if (modal.id === 'overlay' && 
                         modal.classList.contains('pop_points') &&
                         modal.style.display === 'block') {
                         
-                        // Generate a unique ID for this modal instance
-                        var modalId = 'modal_' + Date.now() + '_' + Math.random();
+                        // Extract user IDs from the legacy modal
+                        var userIds = extractUserIdsFromLegacyModal(modal);
                         
-                        // Only process if not already processed (prevents duplicate modals)
-                        if (!processedModals.has(modalId)) {
-                            processedModals.add(modalId);
-                            
-                            // Extract user IDs from the legacy modal
-                            var userIds = extractUserIdsFromLegacyModal(modal);
-                            
-                            if (userIds.length > 0) {
-                                console.log('[Modern Likes] Opening modal with', userIds.length, 'users');
-                                // Show modern modal
-                                showModernModal(userIds, modal);
-                                
-                                // Clean up the processedModals set after a delay (to allow reopening the same modal later)
-                                setTimeout(function() {
-                                    processedModals.delete(modalId);
-                                }, 1000);
-                            }
+                        if (userIds.length > 0) {
+                            console.log('[Modern Likes] Found likes modal with', userIds.length, 'users');
+                            // Show modern modal (don't hide the original, CSS handles visibility)
+                            showModernModal(userIds, modal);
                         }
                     }
                 }
                 
-                // Also check for newly added modals (in case the modal is created dynamically)
+                // Also check for newly added modals
                 if (mutation.type === 'childList') {
                     for (var j = 0; j < mutation.addedNodes.length; j++) {
                         var node = mutation.addedNodes[j];
@@ -548,23 +552,10 @@
                             node.classList && node.classList.contains('pop_points') &&
                             node.style.display === 'block') {
                             
-                            // Generate a unique ID for this modal instance
-                            var modalId = 'modal_' + Date.now() + '_' + Math.random();
-                            
-                            // Only process if not already processed
-                            if (!processedModals.has(modalId)) {
-                                processedModals.add(modalId);
-                                
-                                var userIds = extractUserIdsFromLegacyModal(node);
-                                if (userIds.length > 0) {
-                                    console.log('[Modern Likes] New modal detected with', userIds.length, 'users');
-                                    showModernModal(userIds, node);
-                                    
-                                    // Clean up after delay
-                                    setTimeout(function() {
-                                        processedModals.delete(modalId);
-                                    }, 1000);
-                                }
+                            var userIds = extractUserIdsFromLegacyModal(node);
+                            if (userIds.length > 0) {
+                                console.log('[Modern Likes] New modal detected with', userIds.length, 'users');
+                                showModernModal(userIds, node);
                             }
                         }
                     }
