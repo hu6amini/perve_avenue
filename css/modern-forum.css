@@ -930,7 +930,7 @@ body.modal-open {
 }
 
 /* Modal header */
-.modern-modal-header {
+.modern-modal-header, .report-modal-header, .notify-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
