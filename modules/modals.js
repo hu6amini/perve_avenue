@@ -626,7 +626,7 @@
                 '</div>' +
                 '<div class="action-buttons">' +
                     '<button class="btn-primary-filled" id="reportSendBtn">' +
-                        '<i class="fa-regular fa-paper-plane" aria-hidden="true"></i> Send Report' +
+                        '<i class="fa-regular fa-reply" aria-hidden="true"></i> Send Report' +
                     '</button>' +
                 '</div>' +
             '</div>' +
