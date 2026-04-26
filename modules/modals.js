@@ -861,7 +861,7 @@
             '<div class="notify-modal-header">' +
                 '<div class="notify-modal-title">' +
                     '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
-                    '<h3 id="notifyModalTitle">Reporting System</h3>' +
+                    '<h3 id="notifyModalTitle">Reporting system</h3>' +
                 '</div>' +
                 '<button class="notify-modal-close" aria-label="Close modal">' +
                     '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
