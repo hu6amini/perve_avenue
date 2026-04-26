@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      6.0
-// @description  Replaces old likes popup and report modal with modern, fully accessible modals – consistent Midnight Emerald style
+// @version      6.1
+// @description  Replaces old likes popup and report modal with modern, accessible modals – consistent Midnight Emerald style (CSS must be provided by theme)
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -26,11 +26,10 @@
     var isDialogPolyfilled = false;
 
     // ========== STATE (Report) ==========
-    var currentReportModal = null;          // modern report modal overlay
-    var currentLegacyReportModal = null;    // original report modal being replaced
+    var currentReportModal = null;
+    var currentLegacyReportModal = null;
     var reportProcessing = false;
     var reportTriggerElement = null;
-    var reportPreviousActive = null;
     var reportFocusable = [];
     var reportFirstFocusable = null;
     var reportLastFocusable = null;
@@ -45,7 +44,6 @@
         avatarHeight: 48
     };
 
-    // Midnight Emerald harmonious color palette
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -58,7 +56,7 @@
 
     var userProfileLinks = new Map();
 
-    // ========== HELPER FUNCTIONS (Likes & Report) ==========
+    // ========== HELPER FUNCTIONS ==========
     function optimizeImageUrl(url, width, height) {
         if (!url) return { url: url, quality: null, format: null, isGif: false };
         var lowerUrl = url.toLowerCase();
@@ -198,7 +196,7 @@
             }
             return users;
         } catch (error) {
-            console.error('[Modern Likes] API Error:', error);
+            console.error('[Modern Modals] API Error:', error);
             return [];
         }
     }
@@ -251,7 +249,7 @@
         return hours + ':' + minutes;
     }
 
-    // ========== SCROLLBAR WIDTH UTILITY ==========
+    // ========== SCROLLBAR UTILITIES ==========
     function getScrollbarWidth() {
         var scrollDiv = document.createElement('div');
         scrollDiv.className = 'modal-scrollbar-measure';
@@ -261,7 +259,6 @@
         return scrollbarWidth;
     }
 
-    // ========== BODY SCROLL LOCK ==========
     var scrollbarWidth = 0;
     function lockBodyScroll() {
         scrollbarWidth = getScrollbarWidth();
@@ -275,7 +272,7 @@
         document.body.classList.remove('modal-open');
     }
 
-    // ========== FOCUS TRAP (generic, can be reused) ==========
+    // ========== FOCUS TRAP GENERIC ==========
     function getFocusableElements(modalElement) {
         var selectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
         var elements = modalElement.querySelectorAll(selectors);
@@ -303,7 +300,7 @@
         }
     }
 
-    // ========== LIKES MODAL SPECIFIC ==========
+    // ========== LIKES MODAL ==========
     function setLikesFocusTrap(modalElement) {
         focusableElements = getFocusableElements(modalElement);
         if (focusableElements.length) {
@@ -317,11 +314,6 @@
         document.addEventListener('keydown', function(e) { trapFocus(e, focusableElements, firstFocusable, lastFocusable); });
     }
 
-    function removeLikesFocusTrap() {
-        // no-op, handled by event listener removal in close; we'll keep a named function
-    }
-
-    // ========== LIVE REGION ANNOUNCEMENT ==========
     function announceToScreenReader(message) {
         var liveRegion = document.querySelector('.modal-live-region');
         if (!liveRegion) {
@@ -335,11 +327,9 @@
         setTimeout(function() { if (liveRegion.textContent === message) liveRegion.textContent = ''; }, 3000);
     }
 
-    // ========== CLOSE LIKES MODAL ==========
     function closeCustomModal(legacyModal, skipOriginalClose) {
         if (currentModal) {
             unlockBodyScroll();
-            // remove focus trap event
             document.removeEventListener('keydown', trapFocus);
             var dialog = currentModal.querySelector('.modern-likes-modal');
             if (dialog && dialog.close && typeof dialog.close === 'function' && !isDialogPolyfilled) {
@@ -360,7 +350,6 @@
         triggerElement = null;
     }
 
-    // ========== CREATE LIKES MODAL DOM ==========
     function createModalStructure(userIds, legacyModal) {
         var overlay = document.createElement('div');
         overlay.className = 'modern-modal-overlay';
@@ -399,7 +388,6 @@
         return { overlay: overlay, modal: modal };
     }
 
-    // ========== SHOW LIKES MODAL ==========
     async function showModernModal(userIds, legacyModal, triggerEl) {
         if (closeCooldown || processingModal) return;
         processingModal = true;
@@ -426,7 +414,7 @@
         var closeBtn = modal.querySelector('.modern-modal-close');
         closeBtn.addEventListener('click', function() { closeCustomModal(legacyModal, false); });
         overlay.addEventListener('click', function(e) { if (e.target === overlay) closeCustomModal(legacyModal, false); });
-        var escHandler = function(e) { if (e.key === 'Escape') closeCustomModal(legacyModal, false); document.removeEventListener('keydown', escHandler); };
+        var escHandler = function(e) { if (e.key === 'Escape') { closeCustomModal(legacyModal, false); document.removeEventListener('keydown', escHandler); } };
         document.addEventListener('keydown', escHandler);
 
         var likesList = modal.querySelector('.modern-likes-list');
@@ -505,101 +493,17 @@
                     });
                 }
             }
-            removeLikesFocusTrap();
+            document.removeEventListener('keydown', trapFocus);
             setLikesFocusTrap(modal);
         } catch (error) {
-            console.error('[Modern Likes] Error:', error);
+            console.error('[Modern Modals] Error:', error);
             likesList.innerHTML = '<div class="modern-empty"><i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i><p>Error loading user data.</p></div>';
             announceToScreenReader('Error loading user data');
         }
         processingModal = false;
     }
 
-    // ========== REPORT MODAL SPECIFIC HELPERS ==========
-    function injectReportModalCSS() {
-        if (document.getElementById('modern-report-modal-styles')) return;
-        var style = document.createElement('style');
-        style.id = 'modern-report-modal-styles';
-        style.textContent = 
-            '.modern-report-overlay {' +
-                'position: fixed; top: 0; left: 0; right: 0; bottom: 0;' +
-                'background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(2px);' +
-                'z-index: 10001; display: flex; align-items: center; justify-content: center;' +
-                'animation: modalFadeIn 0.2s ease;' +
-            '}' +
-            '.modern-report-container {' +
-                'background: var(--surface-color, #1F2937); border-radius: var(--radius-lg, 13px);' +
-                'max-width: 500px; width: 90%; max-height: 85vh; overflow: hidden;' +
-                'box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid var(--border-color, rgba(255,255,255,0.1));' +
-                'display: flex; flex-direction: column; animation: modalSlideUp 0.28s ease; outline: none;' +
-            '}' +
-            '.modern-report-container:focus-visible { outline: 2px solid var(--primary-color, #059669); outline-offset: 2px; }' +
-            '.report-modal-header {' +
-                'display: flex; justify-content: space-between; align-items: center;' +
-                'padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.1));' +
-                'background: var(--surface-color, #1F2937); flex-shrink: 0;' +
-            '}' +
-            '.report-modal-title {' +
-                'display: flex; align-items: center; gap: 0.65rem;' +
-            '}' +
-            '.report-modal-title i { color: var(--primary-light, #10B981); font-size: 1.25rem; }' +
-            '.report-modal-title h3 { font-size: 1.1rem; font-weight: 600; color: var(--text-primary, #F9FAFB); margin: 0; }' +
-            '.report-modal-close {' +
-                'background: transparent; border: none; color: var(--text-tertiary, #6B7280);' +
-                'cursor: pointer; font-size: 1.35rem; padding: 0.3rem; border-radius: 40px;' +
-                'transition: all 0.2s; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;' +
-            '}' +
-            '.report-modal-close:hover { background: var(--hover-color, rgba(255,255,255,0.05)); color: var(--text-primary, #F9FAFB); transform: rotate(90deg); }' +
-            '.report-modal-content {' +
-                'flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;' +
-            '}' +
-            '.report-context {' +
-                'background: var(--bg-color, #111827); padding: 0.9rem 1rem; border-radius: var(--radius, 8px);' +
-                'border-left: 4px solid var(--primary-color, #059669); font-size: 0.9rem;' +
-            '}' +
-            '.reported-nickname {' +
-                'font-weight: 700; color: var(--primary-light, #10B981); background: rgba(5,150,105,0.15);' +
-                'padding: 0.15rem 0.5rem; border-radius: 40px; font-size: 0.85rem; display: inline-block;' +
-            '}' +
-            '.report-field { display: flex; flex-direction: column; gap: 0.5rem; }' +
-            '.report-field label { font-weight: 500; font-size: 0.85rem; color: var(--text-secondary, #D1D5DB); display: flex; justify-content: space-between; }' +
-            '.report-textarea {' +
-                'width: 100%; background: var(--bg-color, #111827); border: 1px solid var(--border-color, rgba(255,255,255,0.1));' +
-                'border-radius: var(--radius, 8px); padding: 0.85rem; font-family: var(--font-primary, "Quicksand", sans-serif);' +
-                'font-size: 0.9rem; color: var(--text-primary, #F9FAFB); resize: vertical; transition: all 0.2s;' +
-                'line-height: 1.5; overflow: hidden;' +
-            '}' +
-            '.report-textarea:focus { outline: none; border-color: var(--primary-color, #059669); box-shadow: 0 0 0 3px var(--focus-ring, rgba(5,150,105,0.4)); }' +
-            '.counter-value { font-size: 0.7rem; color: var(--text-tertiary, #6B7280); }' +
-            '.counter-value.warning { color: #F59E0B; }' +
-            '.counter-value.exceed { color: #DC2626; font-weight: 600; }' +
-            '.report-modal-footer {' +
-                'border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); padding: 1rem 1.5rem;' +
-                'background: var(--bg-color, #111827); display: flex; flex-wrap: wrap; align-items: center;' +
-                'justify-content: space-between; gap: 0.8rem; flex-shrink: 0;' +
-            '}' +
-            '.footer-note { font-size: 0.7rem; color: var(--text-tertiary, #6B7280); display: flex; align-items: center; gap: 0.4rem; }' +
-            '.action-buttons { display: flex; gap: 0.8rem; align-items: center; }' +
-            '.btn-outline {' +
-                'background: transparent; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); border-radius: 60px;' +
-                'padding: 0.45rem 1.2rem; font-family: var(--font-primary, "Quicksand"); font-weight: 500; font-size: 0.8rem;' +
-                'color: var(--text-secondary, #D1D5DB); cursor: pointer; transition: all 0.2s;' +
-            '}' +
-            '.btn-outline:hover { background: var(--hover-color, rgba(255,255,255,0.05)); border-color: var(--primary-light, #10B981); color: var(--text-primary, #F9FAFB); }' +
-            '.btn-primary-filled {' +
-                'background: linear-gradient(115deg, var(--primary-color, #059669), #0B815A); border: none; border-radius: 60px;' +
-                'padding: 0.45rem 1.5rem; font-family: var(--font-primary, "Quicksand"); font-weight: 600; font-size: 0.85rem;' +
-                'color: white; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem;' +
-            '}' +
-            '.btn-primary-filled:hover { background: linear-gradient(115deg, var(--primary-light, #10B981), var(--primary-color, #059669)); transform: translateY(-1px); }' +
-            '.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }' +
-            '@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }' +
-            '@keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }' +
-            '@media (prefers-reduced-motion: reduce) { .modern-report-overlay, .modern-report-container { animation: none; } }' +
-            '.report-textarea.autogrow { overflow-y: hidden; }';
-        document.head.appendChild(style);
-    }
-
+    // ========== REPORT MODAL ==========
     function autoGrowTextarea(textarea) {
         if (!textarea) return;
         textarea.style.height = 'auto';
@@ -797,7 +701,6 @@
                 announceToScreenReader('Reason cannot exceed 300 characters');
                 return;
             }
-            // sync value to legacy textarea and click original send button
             var legacyTextarea = legacyModal.querySelector('textarea.textinput.report_textarea');
             if (legacyTextarea) legacyTextarea.value = reason;
             var legacySend = legacyModal.querySelector('input.report_send_button, .report_send_button');
@@ -811,21 +714,17 @@
         });
     }
 
-    // ========== INITIALIZATION (Likes + Report) ==========
+    // ========== INITIALIZATION ==========
     function init() {
-        // Ensure FontAwesome is loaded
         if (!document.querySelector('link[href*="font-awesome"], link[href*="fa.css"]')) {
             var faLink = document.createElement('link');
             faLink.rel = 'stylesheet';
             faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css';
             document.head.appendChild(faLink);
         }
-        // Inject report modal CSS
-        injectReportModalCSS();
 
         function getTriggerElement() { return document.activeElement; }
 
-        // Likes modal observer (existing)
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
             globalThis.forumObserver.register({
                 id: 'modern-likes-modal',
@@ -858,13 +757,11 @@
                     var mutation = mutations[i];
                     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                         var modal = mutation.target;
-                        // Likes modal
                         if (modal.id === 'overlay' && modal.classList && modal.classList.contains('pop_points') &&
                             modal.style.display === 'block' && !processingModal && !currentModal) {
                             var userIds = extractUserIdsFromLegacyModal(modal);
                             if (userIds.length > 0) showModernModal(userIds, modal, getTriggerElement());
                         }
-                        // Report modal
                         if (modal.classList && modal.classList.contains('report-modal') && 
                             (modal.style.display === 'inline-block' || modal.style.display === 'block') && 
                             !reportProcessing && !currentReportModal) {
