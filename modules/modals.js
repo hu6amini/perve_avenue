@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      6.2
-// @description  Replaces old likes popup and report modal with modern, accessible modals – consistent Midnight Emerald style (CSS must be provided by theme)
+// @version      6.3
+// @description  Replaces old likes popup, report modal, and admin report-notify modal with modern, accessible modals – consistent Midnight Emerald style (CSS must be provided by theme)
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -25,7 +25,7 @@
     var lastFocusable = null;
     var isDialogPolyfilled = false;
 
-    // ========== STATE (Report) ==========
+    // ========== STATE (Report - user) ==========
     var currentReportModal = null;
     var currentLegacyReportModal = null;
     var reportProcessing = false;
@@ -34,6 +34,16 @@
     var reportFirstFocusable = null;
     var reportLastFocusable = null;
     var reportCloseCooldown = false;
+
+    // ========== STATE (Report Notify - admin) ==========
+    var currentReportNotifyModal = null;
+    var currentLegacyReportNotifyModal = null;
+    var reportNotifyProcessing = false;
+    var reportNotifyTriggerElement = null;
+    var reportNotifyFocusable = [];
+    var reportNotifyFirstFocusable = null;
+    var reportNotifyLastFocusable = null;
+    var reportNotifyCloseCooldown = false;
 
     // ========== CONFIGURATION ==========
     var WESERV_CONFIG = {
@@ -503,7 +513,7 @@
         processingModal = false;
     }
 
-    // ========== REPORT MODAL ==========
+    // ========== USER REPORT MODAL (single report) ==========
     function autoGrowTextarea(textarea) {
         if (!textarea) return;
         textarea.style.height = 'auto';
@@ -709,6 +719,298 @@
         });
     }
 
+    // ========== ADMIN REPORT NOTIFY MODAL ==========
+    function closeModernReportNotifyModal(legacyModal, skipOriginalClose) {
+        if (currentReportNotifyModal) {
+            unlockBodyScroll();
+            document.removeEventListener('keydown', reportNotifyTrapHandler);
+            currentReportNotifyModal.remove();
+            currentReportNotifyModal = null;
+        }
+        if (legacyModal && !skipOriginalClose && !reportNotifyCloseCooldown) {
+            var closeLink = legacyModal.querySelector('a.close-modal, a.close');
+            if (closeLink) {
+                var clickEv = document.createEvent('MouseEvents');
+                clickEv.initEvent('click', true, true);
+                closeLink.dispatchEvent(clickEv);
+            }
+            reportNotifyCloseCooldown = true;
+            setTimeout(function() { reportNotifyCloseCooldown = false; }, 500);
+        }
+        currentLegacyReportNotifyModal = null;
+        reportNotifyProcessing = false;
+        if (reportNotifyTriggerElement && reportNotifyTriggerElement.focus) reportNotifyTriggerElement.focus();
+        reportNotifyTriggerElement = null;
+    }
+
+    var reportNotifyTrapHandler = function(e) {
+        if (e.key !== 'Tab') return;
+        if (!reportNotifyFocusable.length) {
+            e.preventDefault();
+            return;
+        }
+        if (e.shiftKey) {
+            if (document.activeElement === reportNotifyFirstFocusable) {
+                e.preventDefault();
+                reportNotifyLastFocusable.focus();
+            }
+        } else {
+            if (document.activeElement === reportNotifyLastFocusable) {
+                e.preventDefault();
+                reportNotifyFirstFocusable.focus();
+            }
+        }
+    };
+
+    function setReportNotifyFocusTrap(container) {
+        reportNotifyFocusable = getFocusableElements(container);
+        if (reportNotifyFocusable.length) {
+            reportNotifyFirstFocusable = reportNotifyFocusable[0];
+            reportNotifyLastFocusable = reportNotifyFocusable[reportNotifyFocusable.length - 1];
+            reportNotifyFirstFocusable.focus();
+        } else {
+            container.setAttribute('tabindex', '-1');
+            container.focus();
+        }
+        document.addEventListener('keydown', reportNotifyTrapHandler);
+    }
+
+    // Helper: extract report items from legacy notify modal
+    function extractNotifyReports(legacyModal) {
+        var reportRows = legacyModal.querySelectorAll('.report_row');
+        var reports = [];
+        for (var i = 0; i < reportRows.length; i++) {
+            var row = reportRows[i];
+            var avatarImg = row.querySelector('.avatar img');
+            var avatarUrl = avatarImg ? avatarImg.src : '';
+            var usernameElem = row.querySelector('b');
+            var username = usernameElem ? usernameElem.textContent.trim() : 'Unknown';
+            var reasonDiv = row.querySelector('.report');
+            var reason = reasonDiv ? reasonDiv.textContent.trim() : '';
+            var timeSmall = row.querySelector('.time small');
+            var time = timeSmall ? timeSmall.textContent.trim() : '';
+            var reportId = row.getAttribute('data-id') || '';
+            var postLink = row.querySelector('a') ? row.querySelector('a').getAttribute('href') : '#';
+            reports.push({
+                avatarUrl: avatarUrl,
+                username: username,
+                reason: reason,
+                time: time,
+                reportId: reportId,
+                postLink: postLink
+            });
+        }
+        return reports;
+    }
+
+    // Helper: get selected group values from legacy modal
+    function getLegacySelectedGroups(legacyModal) {
+        var select = legacyModal.querySelector('.select_reporting_group');
+        if (!select) return [];
+        var selected = [];
+        for (var i = 0; i < select.options.length; i++) {
+            if (select.options[i].selected) {
+                selected.push(select.options[i].value);
+            }
+        }
+        return selected;
+    }
+
+    function createReportNotifyModalStructure(legacyModal) {
+        var reports = extractNotifyReports(legacyModal);
+        var groupsSelectHtml = '';
+        var legacySelect = legacyModal.querySelector('.select_reporting_group');
+        if (legacySelect) {
+            var optionsHtml = '';
+            for (var i = 0; i < legacySelect.options.length; i++) {
+                var opt = legacySelect.options[i];
+                var selectedAttr = opt.selected ? ' selected' : '';
+                optionsHtml += '<option value="' + escapeHtml(opt.value) + '"' + selectedAttr + '>' + escapeHtml(opt.text) + '</option>';
+            }
+            groupsSelectHtml = '<select multiple class="multi-select" size="4">' + optionsHtml + '</select>';
+        }
+
+        var reportsHtml = '';
+        for (var i = 0; i < reports.length; i++) {
+            var r = reports[i];
+            var optimizedAvatar = optimizeAvatarForNotify(r.avatarUrl, r.username);
+            var dicebearFallback = generateDiceBearAvatar(r.username, 'notify_' + r.reportId);
+            reportsHtml += 
+                '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '">' +
+                    '<div class="report-avatar">' +
+                        '<img src="' + escapeHtml(optimizedAvatar) + '" alt="Avatar" width="48" height="48" data-fallback="' + escapeHtml(dicebearFallback) + '" onerror="this.onerror=null; this.src=this.getAttribute(\'data-fallback\');">' +
+                    '</div>' +
+                    '<div class="report-details">' +
+                        '<div class="report-header">' +
+                            '<span class="report-username">' + escapeHtml(r.username) + '</span>' +
+                            '<span class="report-badge"><i class="fa-regular fa-flag" aria-hidden="true"></i> reported a post</span>' +
+                        '</div>' +
+                        '<div class="report-reason">' + escapeHtml(r.reason) + '</div>' +
+                        '<div class="report-time"><i class="fa-regular fa-clock" aria-hidden="true"></i> ' + escapeHtml(r.time) + '</div>' +
+                    '</div>' +
+                    '<div class="report-actions">' +
+                        '<button class="delete-report" data-report-id="' + escapeHtml(r.reportId) + '"><i class="fa-regular fa-trash-can" aria-hidden="true"></i> Delete</button>' +
+                    '</div>' +
+                '</div>';
+        }
+
+        var overlay = document.createElement('div');
+        overlay.className = 'modern-report-notify-overlay';
+        var container = document.createElement('div');
+        container.className = 'modern-report-notify-container';
+        container.setAttribute('role', 'dialog');
+        container.setAttribute('aria-modal', 'true');
+        container.setAttribute('aria-labelledby', 'notifyModalTitle');
+        container.setAttribute('aria-describedby', 'notifyModalDesc');
+
+        container.innerHTML = 
+            '<div class="notify-modal-header">' +
+                '<div class="notify-modal-title">' +
+                    '<i class="fa-regular fa-flag" aria-hidden="true"></i>' +
+                    '<h3 id="notifyModalTitle">Reporting System</h3>' +
+                '</div>' +
+                '<button class="notify-modal-close" aria-label="Close modal">' +
+                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div class="notify-tabs">' +
+                '<button class="tab-btn active" data-tab="reports" id="notifyTabReports"><i class="fa-regular fa-list" aria-hidden="true"></i> Reports</button>' +
+                '<button class="tab-btn" data-tab="group" id="notifyTabGroup"><i class="fa-regular fa-users" aria-hidden="true"></i> Group Management</button>' +
+            '</div>' +
+            '<div class="notify-modal-content">' +
+                '<div id="notifyReportsPanel" class="report-list">' + reportsHtml + '</div>' +
+                '<div id="notifyGroupPanel" class="group-management-panel">' +
+                    '<div class="group-selector">' +
+                        '<label><i class="fa-regular fa-layer-group" aria-hidden="true"></i> Groups enabled to view reports</label>' +
+                        '<small>Choose the groups to be enabled to view the reports (CTRL to select individual groups)</small>' +
+                        groupsSelectHtml +
+                        '<button class="save-groups-btn"><i class="fa-regular fa-floppy-disk" aria-hidden="true"></i> Save settings</button>' +
+                    '</div>' +
+                    '<div class="footer-note" style="font-size:0.7rem; padding:0.5rem 0;">' +
+                        '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Remember: if you move a group in administration, update these settings.' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="notify-modal-footer">' +
+                '<i class="fa-regular fa-shield" aria-hidden="true"></i> Reported posts are visible to staff only' +
+            '</div>' +
+            '<div id="notifyModalDesc" class="sr-only">Admin panel for managing user reports and group permissions.</div>';
+
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
+        return { overlay: overlay, container: container, reports: reports };
+    }
+
+    function optimizeAvatarForNotify(avatarUrl, username) {
+        if (!avatarUrl || avatarUrl === '') return generateDiceBearAvatar(username, 'notify_fallback');
+        var lower = avatarUrl.toLowerCase();
+        if (lower.indexOf('default_avatar.png') !== -1) return generateDiceBearAvatar(username, 'notify_fallback');
+        if (lower.indexOf('weserv.nl') !== -1 || lower.indexOf('dicebear.com') !== -1) return avatarUrl;
+        var fixed = avatarUrl;
+        if (fixed.startsWith('//')) fixed = 'https:' + fixed;
+        if (fixed.startsWith('http://')) fixed = fixed.replace('http://', 'https://');
+        return 'https://images.weserv.nl/?url=' + encodeURIComponent(fixed) + '&output=webp&maxage=1y&q=90&w=48&h=48&fit=cover&a=attention&il';
+    }
+
+    function showModernReportNotifyModal(legacyModal, triggerEl) {
+        if (reportNotifyCloseCooldown || reportNotifyProcessing) return;
+        reportNotifyProcessing = true;
+        reportNotifyTriggerElement = triggerEl || document.activeElement;
+
+        if (currentReportNotifyModal) closeModernReportNotifyModal(legacyModal, true);
+        currentLegacyReportNotifyModal = legacyModal;
+
+        var struct = createReportNotifyModalStructure(legacyModal);
+        var overlay = struct.overlay;
+        var container = struct.container;
+        currentReportNotifyModal = overlay;
+
+        lockBodyScroll();
+        setReportNotifyFocusTrap(container);
+
+        var closeBtn = container.querySelector('.notify-modal-close');
+        var tabReports = container.querySelector('#notifyTabReports');
+        var tabGroup = container.querySelector('#notifyTabGroup');
+        var reportsPanel = container.querySelector('#notifyReportsPanel');
+        var groupPanel = container.querySelector('#notifyGroupPanel');
+        var saveGroupsBtn = container.querySelector('.save-groups-btn');
+        var multiSelect = container.querySelector('.multi-select');
+
+        // Tab switching
+        function setActiveTab(active) {
+            if (active === 'reports') {
+                reportsPanel.style.display = 'flex';
+                groupPanel.classList.remove('active');
+                groupPanel.style.display = 'none';
+                tabReports.classList.add('active');
+                tabGroup.classList.remove('active');
+            } else {
+                reportsPanel.style.display = 'none';
+                groupPanel.classList.add('active');
+                groupPanel.style.display = 'flex';
+                tabReports.classList.remove('active');
+                tabGroup.classList.add('active');
+            }
+        }
+        reportsPanel.style.display = 'flex';
+        groupPanel.style.display = 'none';
+        tabReports.classList.add('active');
+        tabGroup.classList.remove('active');
+        tabReports.addEventListener('click', function(e) { e.preventDefault(); setActiveTab('reports'); });
+        tabGroup.addEventListener('click', function(e) { e.preventDefault(); setActiveTab('group'); });
+
+        // Delete report buttons
+        var deleteBtns = container.querySelectorAll('.delete-report');
+        for (var i = 0; i < deleteBtns.length; i++) {
+            deleteBtns[i].addEventListener('click', function(e) {
+                e.preventDefault();
+                var reportId = this.getAttribute('data-report-id');
+                var legacyDeleteBtn = legacyModal.querySelector('.report_row[data-id="' + reportId + '"] .delete');
+                if (legacyDeleteBtn) {
+                    var clickEv = document.createEvent('MouseEvents');
+                    clickEv.initEvent('click', true, true);
+                    legacyDeleteBtn.dispatchEvent(clickEv);
+                }
+                // Remove from UI
+                var reportItem = this.closest('.report-item');
+                if (reportItem) reportItem.remove();
+                announceToScreenReader('Report deleted');
+            });
+        }
+
+        // Save groups
+        if (saveGroupsBtn) {
+            saveGroupsBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var selectedValues = [];
+                if (multiSelect) {
+                    for (var i = 0; i < multiSelect.options.length; i++) {
+                        if (multiSelect.options[i].selected) {
+                            selectedValues.push(multiSelect.options[i].value);
+                        }
+                    }
+                }
+                var legacySelect = legacyModal.querySelector('.select_reporting_group');
+                if (legacySelect) {
+                    for (var i = 0; i < legacySelect.options.length; i++) {
+                        legacySelect.options[i].selected = (selectedValues.indexOf(legacySelect.options[i].value) !== -1);
+                    }
+                    // Trigger change event if needed
+                    var changeEvent = document.createEvent('HTMLEvents');
+                    changeEvent.initEvent('change', true, true);
+                    legacySelect.dispatchEvent(changeEvent);
+                }
+                announceToScreenReader('Group settings saved');
+            });
+        }
+
+        var closeHandler = function() { closeModernReportNotifyModal(legacyModal, false); };
+        closeBtn.addEventListener('click', closeHandler);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) closeHandler(); });
+        var escHandler = function(e) { if (e.key === 'Escape') { closeHandler(); document.removeEventListener('keydown', escHandler); } };
+        document.addEventListener('keydown', escHandler);
+    }
+
     // ========== INITIALIZATION ==========
     function init() {
         if (!document.querySelector('link[href*="font-awesome"], link[href*="fa.css"]')) {
@@ -744,6 +1046,16 @@
                     }
                 }
             });
+            globalThis.forumObserver.register({
+                id: 'modern-report-notify-modal',
+                selector: '.ff-modal.modal.report-modal-notify, .report-modal-notify',
+                priority: 'high',
+                callback: function(node) {
+                    if (node && (node.style.display === 'inline-block' || node.style.display === 'block') && !currentReportNotifyModal) {
+                        showModernReportNotifyModal(node, getTriggerElement());
+                    }
+                }
+            });
             console.log('[Modern Modals] Registered with ForumCoreObserver');
         } else {
             var fallbackObserver = new MutationObserver(function(mutations) {
@@ -752,15 +1064,23 @@
                     var mutation = mutations[i];
                     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                         var modal = mutation.target;
+                        // Likes modal
                         if (modal.id === 'overlay' && modal.classList && modal.classList.contains('pop_points') &&
                             modal.style.display === 'block' && !processingModal && !currentModal) {
                             var userIds = extractUserIdsFromLegacyModal(modal);
                             if (userIds.length > 0) showModernModal(userIds, modal, getTriggerElement());
                         }
+                        // User report modal
                         if (modal.classList && modal.classList.contains('report-modal') && 
                             (modal.style.display === 'inline-block' || modal.style.display === 'block') && 
                             !reportProcessing && !currentReportModal) {
                             showModernReportModal(modal, getTriggerElement());
+                        }
+                        // Admin report-notify modal
+                        if (modal.classList && modal.classList.contains('report-modal-notify') && 
+                            (modal.style.display === 'inline-block' || modal.style.display === 'block') && 
+                            !reportNotifyProcessing && !currentReportNotifyModal) {
+                            showModernReportNotifyModal(modal, getTriggerElement());
                         }
                     }
                     if (mutation.type === 'childList') {
@@ -776,6 +1096,11 @@
                                     (node.style.display === 'inline-block' || node.style.display === 'block') &&
                                     !reportProcessing && !currentReportModal) {
                                     showModernReportModal(node, getTriggerElement());
+                                }
+                                if (node.classList && node.classList.contains('report-modal-notify') &&
+                                    (node.style.display === 'inline-block' || node.style.display === 'block') &&
+                                    !reportNotifyProcessing && !currentReportNotifyModal) {
+                                    showModernReportNotifyModal(node, getTriggerElement());
                                 }
                             }
                         }
