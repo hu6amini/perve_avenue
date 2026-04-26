@@ -913,7 +913,8 @@ body.modal-open {
 .modern-likes-modal {
     background: var(--surface-color, #1F2937);
     border-radius: var(--radius-lg, 13px);
-    max-width: 480px;
+    backdrop-filter: blur(0px);
+ max-width: 480px;
     width: 90%;
     max-height: 80vh;
     overflow: hidden;
