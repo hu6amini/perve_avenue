@@ -1166,7 +1166,7 @@ body.modal-open {
 }
 
 /* Modal footer */
-.modern-modal-footer {
+.modern-modal-footer, .report-modal-footer, .notify-modal-footer {
     padding: 0.75rem 1.5rem;
     border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
     background: var(--bg-color, #111827);
