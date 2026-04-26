@@ -647,16 +647,16 @@
 
         var struct = createReportModalStructure(legacyModal);
         var overlay = struct.overlay;
-        var modalContainer = struct.container;  // renamed to avoid conflict
+        var container = struct.container;
         currentReportModal = overlay;
 
         lockBodyScroll();
-        setReportFocusTrap(modalContainer);
+        setReportFocusTrap(container);
 
-        var closeBtn = modalContainer.querySelector('.report-modal-close');
-        var sendBtn = modalContainer.querySelector('#reportSendBtn');
-        var textarea = modalContainer.querySelector('#reportReasonTextarea');
-        var counterSpan = modalContainer.querySelector('#reportCharCounter');
+        var closeBtn = container.querySelector('.report-modal-close');
+        var sendBtn = container.querySelector('#reportSendBtn');
+        var textarea = container.querySelector('#reportReasonTextarea');
+        var counterSpan = container.querySelector('#reportCharCounter');
 
         function updateCounter() {
             var len = textarea.value.length;
@@ -775,6 +775,7 @@
         document.addEventListener('keydown', reportNotifyTrapHandler);
     }
 
+    // Extract report items including post URL
     function extractNotifyReports(legacyModal) {
         var reportRows = legacyModal.querySelectorAll('.report_row');
         var reports = [];
@@ -789,48 +790,62 @@
             var timeSmall = row.querySelector('.time small');
             var time = timeSmall ? timeSmall.textContent.trim() : '';
             var reportId = row.getAttribute('data-id') || '';
+            // Find post URL: there is an <a> inside .content_row with href containing "p="
+            var postLinkElem = row.querySelector('.content_row a[href*="p="]');
+            var postUrl = postLinkElem ? postLinkElem.getAttribute('href') : '#';
+            if (postUrl && postUrl !== '#') {
+                // Ensure full URL if relative
+                if (postUrl.startsWith('/')) {
+                    postUrl = window.location.origin + postUrl;
+                }
+            }
             reports.push({
                 avatarUrl: avatarUrl,
                 username: username,
                 reason: reason,
                 time: time,
-                reportId: reportId
+                reportId: reportId,
+                postUrl: postUrl
             });
         }
         return reports;
     }
 
-    function optimizeAvatarForNotify(avatarUrl, username) {
-        if (!avatarUrl || avatarUrl === '') return generateDiceBearAvatar(username, 'notify_fallback');
-        var lower = avatarUrl.toLowerCase();
-        if (lower.indexOf('default_avatar.png') !== -1) return generateDiceBearAvatar(username, 'notify_fallback');
-        if (lower.indexOf('weserv.nl') !== -1 || lower.indexOf('dicebear.com') !== -1) return avatarUrl;
-        var fixed = avatarUrl;
-        if (fixed.startsWith('//')) fixed = 'https:' + fixed;
-        if (fixed.startsWith('http://')) fixed = fixed.replace('http://', 'https://');
-        return 'https://images.weserv.nl/?url=' + encodeURIComponent(fixed) + '&output=webp&maxage=1y&q=90&w=48&h=48&fit=cover&a=attention&il';
+    function getLegacySelectedGroups(legacyModal) {
+        var select = legacyModal.querySelector('.select_reporting_group');
+        if (!select) return [];
+        var selected = [];
+        for (var i = 0; i < select.options.length; i++) {
+            if (select.options[i].selected) {
+                selected.push(select.options[i].value);
+            }
+        }
+        return selected;
     }
 
     function createReportNotifyModalStructure(legacyModal) {
         var reports = extractNotifyReports(legacyModal);
+        var groupsSelectHtml = '';
         var legacySelect = legacyModal.querySelector('.select_reporting_group');
-        var optionsHtml = '';
         if (legacySelect) {
+            var optionsHtml = '';
             for (var i = 0; i < legacySelect.options.length; i++) {
                 var opt = legacySelect.options[i];
                 var selectedAttr = opt.selected ? ' selected' : '';
                 optionsHtml += '<option value="' + escapeHtml(opt.value) + '"' + selectedAttr + '>' + escapeHtml(opt.text) + '</option>';
             }
+            groupsSelectHtml = '<select multiple class="multi-select" size="4">' + optionsHtml + '</select>';
         }
-        var groupsSelectHtml = '<select multiple class="multi-select" size="4">' + optionsHtml + '</select>';
 
         var reportsHtml = '';
         for (var i = 0; i < reports.length; i++) {
             var r = reports[i];
             var optimizedAvatar = optimizeAvatarForNotify(r.avatarUrl, r.username);
             var dicebearFallback = generateDiceBearAvatar(r.username, 'notify_' + r.reportId);
+            // postUrl may be relative; we'll use it in a click handler later
+            var postUrlAttr = escapeHtml(r.postUrl);
             reportsHtml += 
-                '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '">' +
+                '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '" data-post-url="' + postUrlAttr + '">' +
                     '<div class="report-avatar">' +
                         '<img src="' + escapeHtml(optimizedAvatar) + '" alt="Avatar" width="48" height="48" data-fallback="' + escapeHtml(dicebearFallback) + '" onerror="this.onerror=null; this.src=this.getAttribute(\'data-fallback\');">' +
                     '</div>' +
@@ -860,8 +875,8 @@
         container.innerHTML = 
             '<div class="notify-modal-header">' +
                 '<div class="notify-modal-title">' +
-                    '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
-                    '<h3 id="notifyModalTitle">Reporting system</h3>' +
+                    '<i class="fa-regular fa-flag" aria-hidden="true"></i>' +
+                    '<h3 id="notifyModalTitle">Reporting System</h3>' +
                 '</div>' +
                 '<button class="notify-modal-close" aria-label="Close modal">' +
                     '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
@@ -895,6 +910,17 @@
         return { overlay: overlay, container: container, reports: reports };
     }
 
+    function optimizeAvatarForNotify(avatarUrl, username) {
+        if (!avatarUrl || avatarUrl === '') return generateDiceBearAvatar(username, 'notify_fallback');
+        var lower = avatarUrl.toLowerCase();
+        if (lower.indexOf('default_avatar.png') !== -1) return generateDiceBearAvatar(username, 'notify_fallback');
+        if (lower.indexOf('weserv.nl') !== -1 || lower.indexOf('dicebear.com') !== -1) return avatarUrl;
+        var fixed = avatarUrl;
+        if (fixed.startsWith('//')) fixed = 'https:' + fixed;
+        if (fixed.startsWith('http://')) fixed = fixed.replace('http://', 'https://');
+        return 'https://images.weserv.nl/?url=' + encodeURIComponent(fixed) + '&output=webp&maxage=1y&q=90&w=48&h=48&fit=cover&a=attention&il';
+    }
+
     function showModernReportNotifyModal(legacyModal, triggerEl) {
         if (reportNotifyCloseCooldown || reportNotifyProcessing) return;
         reportNotifyProcessing = true;
@@ -919,6 +945,7 @@
         var saveGroupsBtn = container.querySelector('.save-groups-btn');
         var multiSelect = container.querySelector('.multi-select');
 
+        // Tab switching
         function setActiveTab(active) {
             if (active === 'reports') {
                 reportsPanel.style.display = 'flex';
@@ -941,10 +968,55 @@
         tabReports.addEventListener('click', function(e) { e.preventDefault(); setActiveTab('reports'); });
         tabGroup.addEventListener('click', function(e) { e.preventDefault(); setActiveTab('group'); });
 
+        // Make report items clickable (avatar + details) to navigate to post
+        var reportItems = container.querySelectorAll('.report-item');
+        for (var i = 0; i < reportItems.length; i++) {
+            var item = reportItems[i];
+            var postUrl = item.getAttribute('data-post-url');
+            if (postUrl && postUrl !== '#') {
+                // Make avatar and details clickable, but not the delete button
+                var avatarDiv = item.querySelector('.report-avatar');
+                var detailsDiv = item.querySelector('.report-details');
+                var clickableArea = document.createElement('div');
+                // Instead of wrapping, we attach click handlers to both elements
+                function goToPost(e) {
+                    // Prevent if click originated from delete button or its children
+                    if (e.target.closest('.delete-report')) return;
+                    e.preventDefault();
+                    window.location.href = postUrl;
+                }
+                avatarDiv.style.cursor = 'pointer';
+                detailsDiv.style.cursor = 'pointer';
+                avatarDiv.addEventListener('click', goToPost);
+                detailsDiv.addEventListener('click', goToPost);
+                // Also make them keyboard accessible
+                avatarDiv.setAttribute('tabindex', '0');
+                detailsDiv.setAttribute('tabindex', '0');
+                avatarDiv.setAttribute('role', 'link');
+                detailsDiv.setAttribute('role', 'link');
+                avatarDiv.setAttribute('aria-label', 'Go to reported post');
+                detailsDiv.setAttribute('aria-label', 'Go to reported post');
+                avatarDiv.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        window.location.href = postUrl;
+                    }
+                });
+                detailsDiv.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        window.location.href = postUrl;
+                    }
+                });
+            }
+        }
+
+        // Delete report buttons
         var deleteBtns = container.querySelectorAll('.delete-report');
         for (var i = 0; i < deleteBtns.length; i++) {
             deleteBtns[i].addEventListener('click', function(e) {
                 e.preventDefault();
+                e.stopPropagation(); // prevent navigation to post
                 var reportId = this.getAttribute('data-report-id');
                 var legacyDeleteBtn = legacyModal.querySelector('.report_row[data-id="' + reportId + '"] .delete');
                 if (legacyDeleteBtn) {
@@ -952,12 +1024,14 @@
                     clickEv.initEvent('click', true, true);
                     legacyDeleteBtn.dispatchEvent(clickEv);
                 }
+                // Remove from UI
                 var reportItem = this.closest('.report-item');
                 if (reportItem) reportItem.remove();
                 announceToScreenReader('Report deleted');
             });
         }
 
+        // Save groups
         if (saveGroupsBtn) {
             saveGroupsBtn.addEventListener('click', function(e) {
                 e.preventDefault();
