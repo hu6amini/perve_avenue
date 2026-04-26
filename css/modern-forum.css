@@ -902,7 +902,7 @@ body.modal-open {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(17, 24, 39, 0.618);
     z-index: 10000;
     display: flex;
     align-items: center;
@@ -948,10 +948,9 @@ body.modal-open {
 }
 .modern-modal-title i, .report-modal-title i, .notify-modal-title i {
     color: var(--primary-light, #10B981);
-    font-size: 1.1rem;
+    font-size: 1rem;
 }
 .modern-modal-title h3, .report-modal-title h3, .notify-modal-title h3 {
-    font-size: 1rem;
     color: var(--text-primary, #F9FAFB);
     margin: 0;
 }
