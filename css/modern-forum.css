@@ -940,16 +940,16 @@ body.modal-open {
     flex-shrink: 0;
 }
 
-.modern-modal-title {
+.modern-modal-title, .report-modal-title, .notify-modal-title  {
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
-.modern-modal-title i {
+.modern-modal-title i, .report-modal-title i, .notify-modal-title i {
     color: var(--primary-light, #10B981);
     font-size: 1.1rem;
 }
-.modern-modal-title h3 {
+.modern-modal-title h3, .report-modal-title h3, .notify-modal-title h3 {
     font-size: 1rem;
     color: var(--text-primary, #F9FAFB);
     margin: 0;
@@ -964,7 +964,7 @@ body.modal-open {
     color: var(--primary-light, #10B981);
 }
 
-.modern-modal-close {
+.modern-modal-close, .report-modal-close, .notify-modal-close {
     background: transparent;
     border: none;
     color: var(--text-tertiary, #6B7280);
@@ -974,12 +974,12 @@ body.modal-open {
     border-radius: 6px;
     transition: all 0.2s;
 }
-.modern-modal-close:hover {
+.modern-modal-close:hover, .report-modal-close:hover, .notify-modal-close:hover {
     background: var(--hover-color, rgba(255, 255, 255, 0.05));
     color: var(--text-primary, #F9FAFB);
     transform: rotate(90deg);
 }
-.modern-modal-close:focus-visible {
+.modern-modal-close:focus-visible, .report-modal-close:focus-visible, .notify-modal-close:focus-visible {
     outline: 2px solid var(--primary-color);
     outline-offset: 2px;
 }
