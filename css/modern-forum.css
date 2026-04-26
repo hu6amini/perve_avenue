@@ -20,6 +20,7 @@ html {
     line-height: 1.618;
     scrollbar-color: var(--surface-color) transparent;
     scrollbar-width: thin;
+    outline:none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizelegibility
