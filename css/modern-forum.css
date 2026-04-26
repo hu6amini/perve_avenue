@@ -979,10 +979,6 @@ body.modal-open {
     color: var(--text-primary, #F9FAFB);
     transform: rotate(90deg);
 }
-.modern-modal-close:focus-visible, .report-modal-close:focus-visible, .notify-modal-close:focus-visible {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
-}
 
 /* Likes list with live region support */
 .modern-likes-list {
