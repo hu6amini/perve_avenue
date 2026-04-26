@@ -11,7 +11,8 @@
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
-    padding: 0
+    padding: 0;
+    outline:none;
 }
 
 html {
@@ -20,7 +21,6 @@ html {
     line-height: 1.618;
     scrollbar-color: var(--surface-color) transparent;
     scrollbar-width: thin;
-    outline:none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizelegibility
