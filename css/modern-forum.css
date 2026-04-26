@@ -895,7 +895,7 @@ body.modal-open {
 }
 
 /* Modal overlay */
-.modern-modal-overlay {
+.modern-modal-overlay, .modern-report-overlay, .modern-report-notify-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -910,7 +910,7 @@ body.modal-open {
 }
 
 /* Modal container - fully ARIA compliant */
-.modern-likes-modal {
+.modern-likes-modal, .modern-report-container, .modern-report-notify-container {
     background: var(--surface-color, #1F2937);
     border-radius: var(--radius-lg, 13px);
     max-width: 480px;
