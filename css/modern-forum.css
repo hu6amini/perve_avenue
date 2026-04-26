@@ -944,7 +944,6 @@ body.modal-open {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-family: "Quicksand", sans-serif;
 }
 .modern-modal-title i {
     color: var(--primary-light, #10B981);
@@ -952,10 +951,8 @@ body.modal-open {
 }
 .modern-modal-title h3 {
     font-size: 1rem;
-    font-weight: 600;
     color: var(--text-primary, #F9FAFB);
     margin: 0;
-    font-family: "Quicksand", sans-serif;
 }
 
 .modal-like-count {
