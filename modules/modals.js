@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Modern Likes Modal for ForumFree (Accessible)
+// @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      5.2
-// @description  Replaces the old likes popup with a modern, fully accessible modal – avatar status indicator added
+// @version      6.0
+// @description  Replaces old likes popup and report modal with modern, fully accessible modals – consistent Midnight Emerald style
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    // ========== STATE ==========
+    // ========== STATE (Likes) ==========
     var currentModal = null;
     var currentLegacyModal = null;
     var closeCooldown = false;
@@ -24,6 +24,17 @@
     var firstFocusable = null;
     var lastFocusable = null;
     var isDialogPolyfilled = false;
+
+    // ========== STATE (Report) ==========
+    var currentReportModal = null;          // modern report modal overlay
+    var currentLegacyReportModal = null;    // original report modal being replaced
+    var reportProcessing = false;
+    var reportTriggerElement = null;
+    var reportPreviousActive = null;
+    var reportFocusable = [];
+    var reportFirstFocusable = null;
+    var reportLastFocusable = null;
+    var reportCloseCooldown = false;
 
     // ========== CONFIGURATION ==========
     var WESERV_CONFIG = {
@@ -47,7 +58,7 @@
 
     var userProfileLinks = new Map();
 
-    // ========== HELPER FUNCTIONS (fully implemented) ==========
+    // ========== HELPER FUNCTIONS (Likes & Report) ==========
     function optimizeImageUrl(url, width, height) {
         if (!url) return { url: url, quality: null, format: null, isGif: false };
         var lowerUrl = url.toLowerCase();
@@ -264,7 +275,7 @@
         document.body.classList.remove('modal-open');
     }
 
-    // ========== FOCUS TRAP ==========
+    // ========== FOCUS TRAP (generic, can be reused) ==========
     function getFocusableElements(modalElement) {
         var selectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
         var elements = modalElement.querySelectorAll(selectors);
@@ -273,26 +284,27 @@
         });
     }
 
-    function trapFocus(e) {
+    function trapFocus(e, focusableList, first, last) {
         if (e.key !== 'Tab') return;
-        if (!focusableElements.length) {
+        if (!focusableList.length) {
             e.preventDefault();
             return;
         }
         if (e.shiftKey) {
-            if (document.activeElement === firstFocusable) {
+            if (document.activeElement === first) {
                 e.preventDefault();
-                lastFocusable.focus();
+                last.focus();
             }
         } else {
-            if (document.activeElement === lastFocusable) {
+            if (document.activeElement === last) {
                 e.preventDefault();
-                firstFocusable.focus();
+                first.focus();
             }
         }
     }
 
-    function setFocusTrap(modalElement) {
+    // ========== LIKES MODAL SPECIFIC ==========
+    function setLikesFocusTrap(modalElement) {
         focusableElements = getFocusableElements(modalElement);
         if (focusableElements.length) {
             firstFocusable = focusableElements[0];
@@ -302,25 +314,11 @@
             modalElement.setAttribute('tabindex', '-1');
             modalElement.focus();
         }
-        document.addEventListener('keydown', trapFocus);
+        document.addEventListener('keydown', function(e) { trapFocus(e, focusableElements, firstFocusable, lastFocusable); });
     }
 
-    function removeFocusTrap() {
-        document.removeEventListener('keydown', trapFocus);
-        focusableElements = [];
-        firstFocusable = null;
-        lastFocusable = null;
-    }
-
-    // ========== RESTORE FOCUS ==========
-    function restoreFocus() {
-        if (triggerElement && triggerElement.focus) {
-            triggerElement.focus();
-            triggerElement = null;
-        } else if (previousActiveElement && previousActiveElement.focus) {
-            previousActiveElement.focus();
-            previousActiveElement = null;
-        }
+    function removeLikesFocusTrap() {
+        // no-op, handled by event listener removal in close; we'll keep a named function
     }
 
     // ========== LIVE REGION ANNOUNCEMENT ==========
@@ -337,11 +335,12 @@
         setTimeout(function() { if (liveRegion.textContent === message) liveRegion.textContent = ''; }, 3000);
     }
 
-    // ========== CLOSE MODAL ==========
+    // ========== CLOSE LIKES MODAL ==========
     function closeCustomModal(legacyModal, skipOriginalClose) {
         if (currentModal) {
             unlockBodyScroll();
-            removeFocusTrap();
+            // remove focus trap event
+            document.removeEventListener('keydown', trapFocus);
             var dialog = currentModal.querySelector('.modern-likes-modal');
             if (dialog && dialog.close && typeof dialog.close === 'function' && !isDialogPolyfilled) {
                 dialog.close();
@@ -357,10 +356,11 @@
         }
         currentLegacyModal = null;
         processingModal = false;
-        restoreFocus();
+        if (triggerElement && triggerElement.focus) triggerElement.focus();
+        triggerElement = null;
     }
 
-    // ========== CREATE MODAL DOM ==========
+    // ========== CREATE LIKES MODAL DOM ==========
     function createModalStructure(userIds, legacyModal) {
         var overlay = document.createElement('div');
         overlay.className = 'modern-modal-overlay';
@@ -399,7 +399,7 @@
         return { overlay: overlay, modal: modal };
     }
 
-    // ========== SHOW MODAL ==========
+    // ========== SHOW LIKES MODAL ==========
     async function showModernModal(userIds, legacyModal, triggerEl) {
         if (closeCooldown || processingModal) return;
         processingModal = true;
@@ -421,7 +421,7 @@
         currentModal = overlay;
 
         lockBodyScroll();
-        setFocusTrap(modal);
+        setLikesFocusTrap(modal);
 
         var closeBtn = modal.querySelector('.modern-modal-close');
         closeBtn.addEventListener('click', function() { closeCustomModal(legacyModal, false); });
@@ -505,8 +505,8 @@
                     });
                 }
             }
-            removeFocusTrap();
-            setFocusTrap(modal);
+            removeLikesFocusTrap();
+            setLikesFocusTrap(modal);
         } catch (error) {
             console.error('[Modern Likes] Error:', error);
             likesList.innerHTML = '<div class="modern-empty"><i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i><p>Error loading user data.</p></div>';
@@ -515,19 +515,317 @@
         processingModal = false;
     }
 
-    // ========== INITIALIZATION ==========
+    // ========== REPORT MODAL SPECIFIC HELPERS ==========
+    function injectReportModalCSS() {
+        if (document.getElementById('modern-report-modal-styles')) return;
+        var style = document.createElement('style');
+        style.id = 'modern-report-modal-styles';
+        style.textContent = 
+            '.modern-report-overlay {' +
+                'position: fixed; top: 0; left: 0; right: 0; bottom: 0;' +
+                'background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(2px);' +
+                'z-index: 10001; display: flex; align-items: center; justify-content: center;' +
+                'animation: modalFadeIn 0.2s ease;' +
+            '}' +
+            '.modern-report-container {' +
+                'background: var(--surface-color, #1F2937); border-radius: var(--radius-lg, 13px);' +
+                'max-width: 500px; width: 90%; max-height: 85vh; overflow: hidden;' +
+                'box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid var(--border-color, rgba(255,255,255,0.1));' +
+                'display: flex; flex-direction: column; animation: modalSlideUp 0.28s ease; outline: none;' +
+            '}' +
+            '.modern-report-container:focus-visible { outline: 2px solid var(--primary-color, #059669); outline-offset: 2px; }' +
+            '.report-modal-header {' +
+                'display: flex; justify-content: space-between; align-items: center;' +
+                'padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.1));' +
+                'background: var(--surface-color, #1F2937); flex-shrink: 0;' +
+            '}' +
+            '.report-modal-title {' +
+                'display: flex; align-items: center; gap: 0.65rem;' +
+            '}' +
+            '.report-modal-title i { color: var(--primary-light, #10B981); font-size: 1.25rem; }' +
+            '.report-modal-title h3 { font-size: 1.1rem; font-weight: 600; color: var(--text-primary, #F9FAFB); margin: 0; }' +
+            '.report-modal-close {' +
+                'background: transparent; border: none; color: var(--text-tertiary, #6B7280);' +
+                'cursor: pointer; font-size: 1.35rem; padding: 0.3rem; border-radius: 40px;' +
+                'transition: all 0.2s; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;' +
+            '}' +
+            '.report-modal-close:hover { background: var(--hover-color, rgba(255,255,255,0.05)); color: var(--text-primary, #F9FAFB); transform: rotate(90deg); }' +
+            '.report-modal-content {' +
+                'flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;' +
+            '}' +
+            '.report-context {' +
+                'background: var(--bg-color, #111827); padding: 0.9rem 1rem; border-radius: var(--radius, 8px);' +
+                'border-left: 4px solid var(--primary-color, #059669); font-size: 0.9rem;' +
+            '}' +
+            '.reported-nickname {' +
+                'font-weight: 700; color: var(--primary-light, #10B981); background: rgba(5,150,105,0.15);' +
+                'padding: 0.15rem 0.5rem; border-radius: 40px; font-size: 0.85rem; display: inline-block;' +
+            '}' +
+            '.report-field { display: flex; flex-direction: column; gap: 0.5rem; }' +
+            '.report-field label { font-weight: 500; font-size: 0.85rem; color: var(--text-secondary, #D1D5DB); display: flex; justify-content: space-between; }' +
+            '.report-textarea {' +
+                'width: 100%; background: var(--bg-color, #111827); border: 1px solid var(--border-color, rgba(255,255,255,0.1));' +
+                'border-radius: var(--radius, 8px); padding: 0.85rem; font-family: var(--font-primary, "Quicksand", sans-serif);' +
+                'font-size: 0.9rem; color: var(--text-primary, #F9FAFB); resize: vertical; transition: all 0.2s;' +
+                'line-height: 1.5; overflow: hidden;' +
+            '}' +
+            '.report-textarea:focus { outline: none; border-color: var(--primary-color, #059669); box-shadow: 0 0 0 3px var(--focus-ring, rgba(5,150,105,0.4)); }' +
+            '.counter-value { font-size: 0.7rem; color: var(--text-tertiary, #6B7280); }' +
+            '.counter-value.warning { color: #F59E0B; }' +
+            '.counter-value.exceed { color: #DC2626; font-weight: 600; }' +
+            '.report-modal-footer {' +
+                'border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); padding: 1rem 1.5rem;' +
+                'background: var(--bg-color, #111827); display: flex; flex-wrap: wrap; align-items: center;' +
+                'justify-content: space-between; gap: 0.8rem; flex-shrink: 0;' +
+            '}' +
+            '.footer-note { font-size: 0.7rem; color: var(--text-tertiary, #6B7280); display: flex; align-items: center; gap: 0.4rem; }' +
+            '.action-buttons { display: flex; gap: 0.8rem; align-items: center; }' +
+            '.btn-outline {' +
+                'background: transparent; border: 1px solid var(--border-color, rgba(255,255,255,0.1)); border-radius: 60px;' +
+                'padding: 0.45rem 1.2rem; font-family: var(--font-primary, "Quicksand"); font-weight: 500; font-size: 0.8rem;' +
+                'color: var(--text-secondary, #D1D5DB); cursor: pointer; transition: all 0.2s;' +
+            '}' +
+            '.btn-outline:hover { background: var(--hover-color, rgba(255,255,255,0.05)); border-color: var(--primary-light, #10B981); color: var(--text-primary, #F9FAFB); }' +
+            '.btn-primary-filled {' +
+                'background: linear-gradient(115deg, var(--primary-color, #059669), #0B815A); border: none; border-radius: 60px;' +
+                'padding: 0.45rem 1.5rem; font-family: var(--font-primary, "Quicksand"); font-weight: 600; font-size: 0.85rem;' +
+                'color: white; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem;' +
+            '}' +
+            '.btn-primary-filled:hover { background: linear-gradient(115deg, var(--primary-light, #10B981), var(--primary-color, #059669)); transform: translateY(-1px); }' +
+            '.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }' +
+            '@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }' +
+            '@keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }' +
+            '@media (prefers-reduced-motion: reduce) { .modern-report-overlay, .modern-report-container { animation: none; } }' +
+            '.report-textarea.autogrow { overflow-y: hidden; }';
+        document.head.appendChild(style);
+    }
+
+    function autoGrowTextarea(textarea) {
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
+
+    function closeModernReportModal(legacyModal, skipOriginalClose) {
+        if (currentReportModal) {
+            unlockBodyScroll();
+            document.removeEventListener('keydown', reportTrapHandler);
+            currentReportModal.remove();
+            currentReportModal = null;
+        }
+        if (legacyModal && !skipOriginalClose && !reportCloseCooldown) {
+            var closeLink = legacyModal.querySelector('a.close-modal, a.close');
+            if (closeLink) {
+                var clickEv = document.createEvent('MouseEvents');
+                clickEv.initEvent('click', true, true);
+                closeLink.dispatchEvent(clickEv);
+            }
+            reportCloseCooldown = true;
+            setTimeout(function() { reportCloseCooldown = false; }, 500);
+        }
+        currentLegacyReportModal = null;
+        reportProcessing = false;
+        if (reportTriggerElement && reportTriggerElement.focus) reportTriggerElement.focus();
+        reportTriggerElement = null;
+    }
+
+    var reportTrapHandler = function(e) {
+        if (e.key !== 'Tab') return;
+        if (!reportFocusable.length) {
+            e.preventDefault();
+            return;
+        }
+        if (e.shiftKey) {
+            if (document.activeElement === reportFirstFocusable) {
+                e.preventDefault();
+                reportLastFocusable.focus();
+            }
+        } else {
+            if (document.activeElement === reportLastFocusable) {
+                e.preventDefault();
+                reportFirstFocusable.focus();
+            }
+        }
+    };
+
+    function setReportFocusTrap(container) {
+        reportFocusable = getFocusableElements(container);
+        if (reportFocusable.length) {
+            reportFirstFocusable = reportFocusable[0];
+            reportLastFocusable = reportFocusable[reportFocusable.length - 1];
+            reportFirstFocusable.focus();
+        } else {
+            container.setAttribute('tabindex', '-1');
+            container.focus();
+        }
+        document.addEventListener('keydown', reportTrapHandler);
+    }
+
+    function createReportModalStructure(legacyModal) {
+        var postLink = legacyModal.querySelector('.modal-title a');
+        var postHref = postLink ? postLink.getAttribute('href') : '#';
+        var postNumberMatch = postHref.match(/p=(\d+)/);
+        var postId = postNumberMatch ? postNumberMatch[1] : 'unknown';
+        var nicknameSpan = legacyModal.querySelector('.nickname');
+        var nickname = nicknameSpan ? nicknameSpan.textContent.trim() : 'Unknown user';
+
+        var overlay = document.createElement('div');
+        overlay.className = 'modern-report-overlay';
+        var container = document.createElement('div');
+        container.className = 'modern-report-container';
+        container.setAttribute('role', 'dialog');
+        container.setAttribute('aria-modal', 'true');
+        container.setAttribute('aria-labelledby', 'reportModalTitle');
+        container.setAttribute('aria-describedby', 'reportModalDesc');
+
+        container.innerHTML = 
+            '<div class="report-modal-header">' +
+                '<div class="report-modal-title">' +
+                    '<i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i>' +
+                    '<h3 id="reportModalTitle">Report post</h3>' +
+                '</div>' +
+                '<button class="report-modal-close" aria-label="Close modal">' +
+                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div class="report-modal-content">' +
+                '<div class="report-context">' +
+                    '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of: ' +
+                    '<span class="reported-nickname">' + escapeHtml(nickname) + '</span>' +
+                    '<div class="post-ref-link" style="margin-top:0.3rem;font-size:0.8rem;">' +
+                        '<i class="fa-regular fa-link" aria-hidden="true"></i> ' +
+                        '<a href="' + escapeHtml(postHref) + '" target="_blank" rel="noopener noreferrer">post #' + escapeHtml(postId) + '</a>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="report-field">' +
+                    '<label for="reportReasonTextarea">' +
+                        '<span><i class="fa-regular fa-message" aria-hidden="true"></i> Reason for report</span>' +
+                        '<span class="counter-value" id="reportCharCounter">0/300</span>' +
+                    '</label>' +
+                    '<textarea id="reportReasonTextarea" class="report-textarea" rows="3" maxlength="300" placeholder="Write your report here… (minimum 5 characters)" aria-describedby="charHint"></textarea>' +
+                    '<span id="charHint" class="sr-only">Maximum 300 characters, minimum 5 characters required.</span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="report-modal-footer">' +
+                '<div class="footer-note">' +
+                    '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Once the report has been sent, it cannot be canceled.' +
+                '</div>' +
+                '<div class="action-buttons">' +
+                    '<button class="btn-outline" id="reportCancelBtn">' +
+                        '<i class="fa-regular fa-times" aria-hidden="true"></i> Close' +
+                    '</button>' +
+                    '<button class="btn-primary-filled" id="reportSendBtn">' +
+                        '<i class="fa-regular fa-paper-plane" aria-hidden="true"></i> Send Report' +
+                    '</button>' +
+                '</div>' +
+            '</div>' +
+            '<div id="reportModalDesc" class="sr-only">Dialog to report an inappropriate post. Fill in the reason and confirm sending. The action cannot be undone.</div>';
+
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
+        return { overlay: overlay, container: container, postId: postId, nickname: nickname };
+    }
+
+    function showModernReportModal(legacyModal, triggerEl) {
+        if (reportCloseCooldown || reportProcessing) return;
+        reportProcessing = true;
+        reportTriggerElement = triggerEl || document.activeElement;
+
+        if (currentReportModal) closeModernReportModal(legacyModal, true);
+        currentLegacyReportModal = legacyModal;
+
+        var struct = createReportModalStructure(legacyModal);
+        var overlay = struct.overlay;
+        var container = struct.container;
+        currentReportModal = overlay;
+
+        lockBodyScroll();
+        setReportFocusTrap(container);
+
+        var closeBtn = container.querySelector('.report-modal-close');
+        var cancelBtn = container.querySelector('#reportCancelBtn');
+        var sendBtn = container.querySelector('#reportSendBtn');
+        var textarea = container.querySelector('#reportReasonTextarea');
+        var counterSpan = container.querySelector('#reportCharCounter');
+
+        function updateCounter() {
+            var len = textarea.value.length;
+            var max = 300;
+            counterSpan.textContent = len + '/' + max;
+            counterSpan.classList.remove('warning', 'exceed');
+            if (len > max) {
+                counterSpan.classList.add('exceed');
+                sendBtn.disabled = true;
+            } else if (len > 240) {
+                counterSpan.classList.add('warning');
+                sendBtn.disabled = (len < 5);
+            } else {
+                sendBtn.disabled = (len < 5);
+            }
+            if (len > max) sendBtn.disabled = true;
+            autoGrowTextarea(textarea);
+        }
+
+        if (textarea) {
+            textarea.addEventListener('input', updateCounter);
+            updateCounter();
+            setTimeout(function() { textarea.focus(); }, 50);
+        }
+
+        var closeHandler = function() { closeModernReportModal(legacyModal, false); };
+        closeBtn.addEventListener('click', closeHandler);
+        cancelBtn.addEventListener('click', closeHandler);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) closeHandler(); });
+
+        var escHandler = function(e) { if (e.key === 'Escape') { closeHandler(); document.removeEventListener('keydown', escHandler); } };
+        document.addEventListener('keydown', escHandler);
+
+        sendBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            var reason = textarea ? textarea.value.trim() : '';
+            if (reason.length < 5) {
+                if (counterSpan) counterSpan.style.color = '#DC2626';
+                textarea.style.borderColor = '#DC2626';
+                setTimeout(function() {
+                    if (textarea) textarea.style.borderColor = '';
+                    if (counterSpan) counterSpan.style.color = '';
+                }, 1200);
+                announceToScreenReader('Report reason must be at least 5 characters');
+                return;
+            }
+            if (reason.length > 300) {
+                announceToScreenReader('Reason cannot exceed 300 characters');
+                return;
+            }
+            // sync value to legacy textarea and click original send button
+            var legacyTextarea = legacyModal.querySelector('textarea.textinput.report_textarea');
+            if (legacyTextarea) legacyTextarea.value = reason;
+            var legacySend = legacyModal.querySelector('input.report_send_button, .report_send_button');
+            if (legacySend) {
+                var clickEvent = document.createEvent('MouseEvents');
+                clickEvent.initEvent('click', true, true);
+                legacySend.dispatchEvent(clickEvent);
+            }
+            announceToScreenReader('Report sent. Thank you.');
+            closeModernReportModal(legacyModal, false);
+        });
+    }
+
+    // ========== INITIALIZATION (Likes + Report) ==========
     function init() {
+        // Ensure FontAwesome is loaded
         if (!document.querySelector('link[href*="font-awesome"], link[href*="fa.css"]')) {
             var faLink = document.createElement('link');
             faLink.rel = 'stylesheet';
             faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css';
             document.head.appendChild(faLink);
         }
+        // Inject report modal CSS
+        injectReportModalCSS();
 
-        function getTriggerElement() {
-            return document.activeElement;
-        }
+        function getTriggerElement() { return document.activeElement; }
 
+        // Likes modal observer (existing)
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
             globalThis.forumObserver.register({
                 id: 'modern-likes-modal',
@@ -543,19 +841,16 @@
                 }
             });
             globalThis.forumObserver.register({
-                id: 'modern-likes-modal-style',
-                selector: '#overlay.pop_points',
+                id: 'modern-report-modal',
+                selector: '.ff-modal.modal.report-modal, .report-modal',
                 priority: 'high',
                 callback: function(node) {
-                    if (node && node.style && node.style.display === 'block' && !currentModal) {
-                        var userIds = extractUserIdsFromLegacyModal(node);
-                        if (userIds.length > 0) {
-                            showModernModal(userIds, node, getTriggerElement());
-                        }
+                    if (node && (node.style.display === 'inline-block' || node.style.display === 'block') && !currentReportModal) {
+                        showModernReportModal(node, getTriggerElement());
                     }
                 }
             });
-            console.log('[Modern Likes] Registered with ForumCoreObserver');
+            console.log('[Modern Modals] Registered with ForumCoreObserver');
         } else {
             var fallbackObserver = new MutationObserver(function(mutations) {
                 if (closeCooldown) return;
@@ -563,27 +858,40 @@
                     var mutation = mutations[i];
                     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                         var modal = mutation.target;
+                        // Likes modal
                         if (modal.id === 'overlay' && modal.classList && modal.classList.contains('pop_points') &&
                             modal.style.display === 'block' && !processingModal && !currentModal) {
                             var userIds = extractUserIdsFromLegacyModal(modal);
                             if (userIds.length > 0) showModernModal(userIds, modal, getTriggerElement());
                         }
+                        // Report modal
+                        if (modal.classList && modal.classList.contains('report-modal') && 
+                            (modal.style.display === 'inline-block' || modal.style.display === 'block') && 
+                            !reportProcessing && !currentReportModal) {
+                            showModernReportModal(modal, getTriggerElement());
+                        }
                     }
                     if (mutation.type === 'childList') {
                         for (var j = 0; j < mutation.addedNodes.length; j++) {
                             var node = mutation.addedNodes[j];
-                            if (node.nodeType === 1 && node.id === 'overlay' && node.classList &&
-                                node.classList.contains('pop_points') && node.style.display === 'block' &&
-                                !processingModal && !currentModal) {
-                                var userIds = extractUserIdsFromLegacyModal(node);
-                                if (userIds.length > 0) showModernModal(userIds, node, getTriggerElement());
+                            if (node.nodeType === 1) {
+                                if (node.id === 'overlay' && node.classList && node.classList.contains('pop_points') &&
+                                    node.style.display === 'block' && !processingModal && !currentModal) {
+                                    var userIds = extractUserIdsFromLegacyModal(node);
+                                    if (userIds.length > 0) showModernModal(userIds, node, getTriggerElement());
+                                }
+                                if (node.classList && node.classList.contains('report-modal') &&
+                                    (node.style.display === 'inline-block' || node.style.display === 'block') &&
+                                    !reportProcessing && !currentReportModal) {
+                                    showModernReportModal(node, getTriggerElement());
+                                }
                             }
                         }
                     }
                 }
             });
             fallbackObserver.observe(document.body, { attributes: true, attributeFilter: ['style'], childList: true, subtree: true });
-            console.log('[Modern Likes] Using fallback MutationObserver');
+            console.log('[Modern Modals] Using fallback MutationObserver');
         }
     }
 
