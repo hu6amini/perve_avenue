@@ -592,7 +592,7 @@
         container.setAttribute('aria-labelledby', 'reportModalTitle');
         container.setAttribute('aria-describedby', 'reportModalDesc');
 
-        // Updated HTML: separate div for the user line, and clickable div for the post link (no <a> tag)
+        // Structure updated: message inside a div, post-ref-link as clickable div (no <a>)
         container.innerHTML = 
             '<div class="report-modal-header">' +
                 '<div class="report-modal-title">' +
@@ -605,11 +605,11 @@
             '</div>' +
             '<div class="report-modal-content">' +
                 '<div class="report-context">' +
-                    '<div class="report-user-line">' +
-                        '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of: ' +
-                        '<span class="reported-nickname">' + escapeHtml(nickname) + '</span>' +
+                    '<div class="report-message">' +
+                        '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of:' +
                     '</div>' +
-                    '<div class="post-ref-link" data-post-href="' + escapeHtml(postHref) + '" role="link" tabindex="0">' +
+                    '<span class="reported-nickname">' + escapeHtml(nickname) + '</span>' +
+                    '<div class="post-ref-link" style="margin-top:0.5rem;font-size:0.8rem; cursor:pointer;" data-href="' + escapeHtml(postHref) + '">' +
                         '<i class="fa-regular fa-link" aria-hidden="true"></i> post #' + escapeHtml(postId) +
                     '</div>' +
                 '</div>' +
@@ -635,7 +635,6 @@
             '<div id="reportModalDesc" class="sr-only">Dialog to report an inappropriate post. Fill in the reason and confirm sending. The action cannot be undone.</div>';
 
         overlay.appendChild(container);
-        document.body.appendChild(overlay);
         return { overlay: overlay, container: container, postId: postId, nickname: nickname, postHref: postHref };
     }
 
@@ -662,26 +661,29 @@
         var counterSpan = container.querySelector('#reportCharCounter');
         var postRefDiv = container.querySelector('.post-ref-link');
 
-        // Make the post-ref-link div clickable and keyboard accessible
+        // Make post-ref-link clickable and keyboard accessible, forwarding to original modal link
         if (postRefDiv && postHref && postHref !== '#') {
-            function goToPost(e) {
+            var navigateToPost = function(e) {
                 e.preventDefault();
-                // Find the original post link in the legacy modal and click it
-                var originalPostLink = legacyModal.querySelector('.modal-title a');
-                if (originalPostLink) {
+                // Click the original post link in the legacy modal to ensure exact same behavior
+                var legacyPostLink = legacyModal.querySelector('.modal-title a');
+                if (legacyPostLink) {
                     var clickEvent = document.createEvent('MouseEvents');
                     clickEvent.initEvent('click', true, true);
-                    originalPostLink.dispatchEvent(clickEvent);
+                    legacyPostLink.dispatchEvent(clickEvent);
                 } else {
-                    // Fallback: direct navigation
+                    // fallback: direct navigation
                     window.location.href = postHref;
                 }
-            }
-            postRefDiv.addEventListener('click', goToPost);
+            };
+            postRefDiv.addEventListener('click', navigateToPost);
+            postRefDiv.setAttribute('tabindex', '0');
+            postRefDiv.setAttribute('role', 'link');
+            postRefDiv.setAttribute('aria-label', 'Go to reported post');
             postRefDiv.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    goToPost(e);
+                    navigateToPost(e);
                 }
             });
         }
@@ -803,7 +805,6 @@
         document.addEventListener('keydown', reportNotifyTrapHandler);
     }
 
-    // Extract report items including post URL
     function extractNotifyReports(legacyModal) {
         var reportRows = legacyModal.querySelectorAll('.report_row');
         var reports = [];
@@ -931,7 +932,6 @@
             '<div id="notifyModalDesc" class="sr-only">Admin panel for managing user reports and group permissions.</div>';
 
         overlay.appendChild(container);
-        document.body.appendChild(overlay);
         return { overlay: overlay, container: container, reports: reports };
     }
 
@@ -970,7 +970,6 @@
         var saveGroupsBtn = container.querySelector('.save-groups-btn');
         var multiSelect = container.querySelector('.multi-select');
 
-        // Tab switching
         function setActiveTab(active) {
             if (active === 'reports') {
                 reportsPanel.style.display = 'flex';
@@ -1031,7 +1030,6 @@
             }
         }
 
-        // Delete report buttons
         var deleteBtns = container.querySelectorAll('.delete-report');
         for (var i = 0; i < deleteBtns.length; i++) {
             deleteBtns[i].addEventListener('click', function(e) {
@@ -1050,7 +1048,6 @@
             });
         }
 
-        // Save groups
         if (saveGroupsBtn) {
             saveGroupsBtn.addEventListener('click', function(e) {
                 e.preventDefault();
