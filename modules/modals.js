@@ -837,7 +837,7 @@
                     '<div class="report-details">' +
                         '<div class="report-header">' +
                             '<span class="report-username">' + escapeHtml(r.username) + '</span>' +
-                            '<span class="report-badge"><i class="fa-regular fa-flag" aria-hidden="true"></i> reported a post</span>' +
+                            '<span class="report-badge"><i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i> reported a post</span>' +
                         '</div>' +
                         '<div class="report-reason">' + escapeHtml(r.reason) + '</div>' +
                         '<div class="report-time"><i class="fa-regular fa-clock" aria-hidden="true"></i> ' + escapeHtml(r.time) + '</div>' +
