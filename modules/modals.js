@@ -592,7 +592,7 @@
         container.setAttribute('aria-labelledby', 'reportModalTitle');
         container.setAttribute('aria-describedby', 'reportModalDesc');
 
-        // Structure updated: message inside a div, post-ref-link as clickable div (no <a>)
+        // UPDATED HTML: separate div for intro, nickname separate, post-ref-link as clickable div (no <a>)
         container.innerHTML = 
             '<div class="report-modal-header">' +
                 '<div class="report-modal-title">' +
@@ -605,11 +605,11 @@
             '</div>' +
             '<div class="report-modal-content">' +
                 '<div class="report-context">' +
-                    '<div class="report-message">' +
+                    '<div class="report-intro">' +
                         '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of:' +
                     '</div>' +
-                    '<span class="reported-nickname">' + escapeHtml(nickname) + '</span>' +
-                    '<div class="post-ref-link" style="margin-top:0.5rem;font-size:0.8rem; cursor:pointer;" data-href="' + escapeHtml(postHref) + '">' +
+                    '<div class="reported-nickname">' + escapeHtml(nickname) + '</div>' +
+                    '<div class="post-ref-link clickable-post" data-post-url="' + escapeHtml(postHref) + '" role="link" tabindex="0">' +
                         '<i class="fa-regular fa-link" aria-hidden="true"></i> post #' + escapeHtml(postId) +
                     '</div>' +
                 '</div>' +
@@ -635,6 +635,7 @@
             '<div id="reportModalDesc" class="sr-only">Dialog to report an inappropriate post. Fill in the reason and confirm sending. The action cannot be undone.</div>';
 
         overlay.appendChild(container);
+        document.body.appendChild(overlay);
         return { overlay: overlay, container: container, postId: postId, nickname: nickname, postHref: postHref };
     }
 
@@ -659,31 +660,24 @@
         var sendBtn = container.querySelector('#reportSendBtn');
         var textarea = container.querySelector('#reportReasonTextarea');
         var counterSpan = container.querySelector('#reportCharCounter');
-        var postRefDiv = container.querySelector('.post-ref-link');
+        var clickablePostDiv = container.querySelector('.clickable-post');
 
-        // Make post-ref-link clickable and keyboard accessible, forwarding to original modal link
-        if (postRefDiv && postHref && postHref !== '#') {
-            var navigateToPost = function(e) {
+        // Add click handler for the clickable div that triggers the original post link
+        if (clickablePostDiv && postHref && postHref !== '#') {
+            function goToPost(e) {
                 e.preventDefault();
-                // Click the original post link in the legacy modal to ensure exact same behavior
-                var legacyPostLink = legacyModal.querySelector('.modal-title a');
-                if (legacyPostLink) {
-                    var clickEvent = document.createEvent('MouseEvents');
-                    clickEvent.initEvent('click', true, true);
-                    legacyPostLink.dispatchEvent(clickEvent);
-                } else {
-                    // fallback: direct navigation
-                    window.location.href = postHref;
+                // Navigate to the original post URL (relative or absolute)
+                var targetUrl = postHref;
+                if (targetUrl.startsWith('/')) {
+                    targetUrl = window.location.origin + targetUrl;
                 }
-            };
-            postRefDiv.addEventListener('click', navigateToPost);
-            postRefDiv.setAttribute('tabindex', '0');
-            postRefDiv.setAttribute('role', 'link');
-            postRefDiv.setAttribute('aria-label', 'Go to reported post');
-            postRefDiv.addEventListener('keydown', function(e) {
+                window.location.href = targetUrl;
+            }
+            clickablePostDiv.addEventListener('click', goToPost);
+            clickablePostDiv.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    navigateToPost(e);
+                    goToPost(e);
                 }
             });
         }
@@ -869,9 +863,8 @@
             var r = reports[i];
             var optimizedAvatar = optimizeAvatarForNotify(r.avatarUrl, r.username);
             var dicebearFallback = generateDiceBearAvatar(r.username, 'notify_' + r.reportId);
-            var postUrlAttr = escapeHtml(r.postUrl);
             reportsHtml += 
-                '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '" data-post-url="' + postUrlAttr + '">' +
+                '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '" data-post-url="' + escapeHtml(r.postUrl) + '">' +
                     '<div class="report-avatar">' +
                         '<img src="' + escapeHtml(optimizedAvatar) + '" alt="Avatar" width="48" height="48" data-fallback="' + escapeHtml(dicebearFallback) + '" onerror="this.onerror=null; this.src=this.getAttribute(\'data-fallback\');">' +
                     '</div>' +
@@ -932,6 +925,7 @@
             '<div id="notifyModalDesc" class="sr-only">Admin panel for managing user reports and group permissions.</div>';
 
         overlay.appendChild(container);
+        document.body.appendChild(overlay);
         return { overlay: overlay, container: container, reports: reports };
     }
 
