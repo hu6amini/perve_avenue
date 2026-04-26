@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      6.1
+// @version      6.2
 // @description  Replaces old likes popup and report modal with modern, accessible modals – consistent Midnight Emerald style (CSS must be provided by theme)
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -615,9 +615,6 @@
                     '<i class="fa-regular fa-circle-info" aria-hidden="true"></i> Once the report has been sent, it cannot be canceled.' +
                 '</div>' +
                 '<div class="action-buttons">' +
-                    '<button class="btn-outline" id="reportCancelBtn">' +
-                        '<i class="fa-regular fa-times" aria-hidden="true"></i> Close' +
-                    '</button>' +
                     '<button class="btn-primary-filled" id="reportSendBtn">' +
                         '<i class="fa-regular fa-paper-plane" aria-hidden="true"></i> Send Report' +
                     '</button>' +
@@ -647,7 +644,6 @@
         setReportFocusTrap(container);
 
         var closeBtn = container.querySelector('.report-modal-close');
-        var cancelBtn = container.querySelector('#reportCancelBtn');
         var sendBtn = container.querySelector('#reportSendBtn');
         var textarea = container.querySelector('#reportReasonTextarea');
         var counterSpan = container.querySelector('#reportCharCounter');
@@ -678,7 +674,6 @@
 
         var closeHandler = function() { closeModernReportModal(legacyModal, false); };
         closeBtn.addEventListener('click', closeHandler);
-        cancelBtn.addEventListener('click', closeHandler);
         overlay.addEventListener('click', function(e) { if (e.target === overlay) closeHandler(); });
 
         var escHandler = function(e) { if (e.key === 'Escape') { closeHandler(); document.removeEventListener('keydown', escHandler); } };
