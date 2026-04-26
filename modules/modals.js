@@ -606,7 +606,7 @@
             '<div class="report-modal-content">' +
                 '<div class="report-context">' +
                     '<div class="report-intro">' +
-                        '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of:' +
+                        '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the post of:' +
                     '</div>' +
                     '<div class="reported-nickname">' + escapeHtml(nickname) + '</div>' +
                     '<div class="post-ref-link clickable-post" data-post-url="' + escapeHtml(postHref) + '" role="link" tabindex="0">' +
