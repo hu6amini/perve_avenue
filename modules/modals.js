@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Modern Likes Modal for ForumFree (Accessible)
+// @name         Modern Modals for ForumFree (Likes + Report) – Accessible
 // @namespace    http://tampermonkey.net/
-// @version      5.2
-// @description  Replaces the old likes popup with a modern, fully accessible modal – avatar status indicator added
+// @version      6.0
+// @description  Replaces old likes popup and report modal with modern, accessible modals (Midnight Emerald theme)
 // @author       You
 // @match        *://*.forumfree.it/*
 // @match        *://*.forumcommunity.net/*
@@ -13,7 +13,7 @@
     'use strict';
 
     // ========== STATE ==========
-    var currentModal = null;
+    var currentModal = null;          // overlay element of current active modal (likes or report)
     var currentLegacyModal = null;
     var closeCooldown = false;
     var cooldownTimer = null;
@@ -47,7 +47,7 @@
 
     var userProfileLinks = new Map();
 
-    // ========== HELPER FUNCTIONS (fully implemented) ==========
+    // ========== HELPER FUNCTIONS (existing from your script) ==========
     function optimizeImageUrl(url, width, height) {
         if (!url) return { url: url, quality: null, format: null, isGif: false };
         var lowerUrl = url.toLowerCase();
@@ -187,7 +187,7 @@
             }
             return users;
         } catch (error) {
-            console.error('[Modern Likes] API Error:', error);
+            console.error('[Modern Modals] API Error:', error);
             return [];
         }
     }
@@ -337,12 +337,12 @@
         setTimeout(function() { if (liveRegion.textContent === message) liveRegion.textContent = ''; }, 3000);
     }
 
-    // ========== CLOSE MODAL ==========
+    // ========== CLOSE ANY MODAL (unified) ==========
     function closeCustomModal(legacyModal, skipOriginalClose) {
         if (currentModal) {
             unlockBodyScroll();
             removeFocusTrap();
-            var dialog = currentModal.querySelector('.modern-likes-modal');
+            var dialog = currentModal.querySelector('.modern-likes-modal, .modern-report-modal');
             if (dialog && dialog.close && typeof dialog.close === 'function' && !isDialogPolyfilled) {
                 dialog.close();
             }
@@ -350,7 +350,13 @@
             currentModal = null;
         }
         if (legacyModal && !skipOriginalClose && !closeCooldown) {
-            clickOriginalCloseButton(legacyModal);
+            // For report modal, close button might be different
+            var closeBtn = legacyModal.querySelector('a.close-modal, a.close');
+            if (closeBtn) {
+                var clickEvent = document.createEvent('MouseEvents');
+                clickEvent.initEvent('click', true, true);
+                closeBtn.dispatchEvent(clickEvent);
+            }
             closeCooldown = true;
             if (cooldownTimer) clearTimeout(cooldownTimer);
             cooldownTimer = setTimeout(function() { closeCooldown = false; }, 500);
@@ -360,7 +366,13 @@
         restoreFocus();
     }
 
-    // ========== CREATE MODAL DOM ==========
+    // ========== LIKES MODAL (existing, unchanged logic) ==========
+    // ... (keep existing showModernModal and createModalStructure functions) ...
+    // We'll insert them here for completeness, but they are identical to your original.
+
+    // ----------------------------------------------------------------------
+    // LIKES MODAL (copied from your original script, unchanged except for naming)
+    // ----------------------------------------------------------------------
     function createModalStructure(userIds, legacyModal) {
         var overlay = document.createElement('div');
         overlay.className = 'modern-modal-overlay';
@@ -399,7 +411,6 @@
         return { overlay: overlay, modal: modal };
     }
 
-    // ========== SHOW MODAL ==========
     async function showModernModal(userIds, legacyModal, triggerEl) {
         if (closeCooldown || processingModal) return;
         processingModal = true;
@@ -508,14 +519,160 @@
             removeFocusTrap();
             setFocusTrap(modal);
         } catch (error) {
-            console.error('[Modern Likes] Error:', error);
+            console.error('[Modern Modals] Likes error:', error);
             likesList.innerHTML = '<div class="modern-empty"><i class="fa-regular fa-circle-exclamation" aria-hidden="true"></i><p>Error loading user data.</p></div>';
             announceToScreenReader('Error loading user data');
         }
         processingModal = false;
     }
 
-    // ========== INITIALIZATION ==========
+    // ========== REPORT MODAL (new implementation) ==========
+    function extractReportInfo(legacyModal) {
+        // legacyModal is the .ff-modal.modal.report-modal or its parent .Blocker
+        var modalContent = legacyModal.querySelector('.ff-modal.modal.report-modal') || legacyModal;
+        var postLinkElem = modalContent.querySelector('.modal-title a');
+        var postUrl = postLinkElem ? postLinkElem.href : '';
+        var nicknameElem = modalContent.querySelector('.nickname');
+        var nickname = nicknameElem ? nicknameElem.textContent : 'Unknown user';
+        var pid = modalContent.getAttribute('data-pid') || '';
+        return { postUrl: postUrl, nickname: nickname, pid: pid };
+    }
+
+    function createReportModalStructure(reportInfo, legacyModal) {
+        var overlay = document.createElement('div');
+        overlay.className = 'modern-modal-overlay';
+        var modal = document.createElement('div');
+        modal.className = 'modern-report-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'report-modal-title');
+        modal.setAttribute('aria-describedby', 'report-modal-desc');
+
+        var currentTime = getCurrentTime();
+        modal.innerHTML = 
+            '<div class="modern-modal-header">' +
+                '<div class="modern-modal-title">' +
+                    '<i class="fa-regular fa-flag" aria-hidden="true"></i>' +
+                    '<h3 id="report-modal-title">Report post</h3>' +
+                '</div>' +
+                '<button class="modern-modal-close" aria-label="Close report modal">' +
+                    '<i class="fa-regular fa-xmark" aria-hidden="true"></i>' +
+                '</button>' +
+            '</div>' +
+            '<div id="report-modal-desc" class="screen-reader-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0">Report the post by ' + escapeHtml(reportInfo.nickname) + '</div>' +
+            '<div class="modern-report-body">' +
+                '<p class="report-post-info">You are reporting the post of <strong>' + escapeHtml(reportInfo.nickname) + '</strong></p>' +
+                '<div class="report-reason-container">' +
+                    '<label for="report-reason-textarea" class="report-label">Reason (max 300 characters)</label>' +
+                    '<div class="counter-wrapper">' +
+                        '<textarea id="report-reason-textarea" class="report-textarea" rows="4" maxlength="300" placeholder="Write here the reason why you want to report the post"></textarea>' +
+                        '<div class="counter"><span>0</span>/300</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="modern-modal-footer">' +
+                '<div class="report-actions">' +
+                    '<button class="report-send-button" type="button">Send Report</button>' +
+                    '<span class="report-cancel-note">Once the report has been sent, it cannot be canceled.</span>' +
+                '</div>' +
+                '<div class="modal-timestamp"><i class="fa-regular fa-clock" aria-hidden="true"></i> ' + currentTime + '</div>' +
+            '</div>';
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        return { overlay: overlay, modal: modal };
+    }
+
+    function showModernReportModal(legacyModal, triggerEl) {
+        if (closeCooldown || processingModal) return;
+        processingModal = true;
+
+        triggerElement = triggerEl || document.activeElement;
+        previousActiveElement = document.activeElement;
+
+        // Hide the original report modal so only our modern one is visible
+        legacyModal.style.display = 'none';
+
+        var reportInfo = extractReportInfo(legacyModal);
+        var structures = createReportModalStructure(reportInfo, legacyModal);
+        var overlay = structures.overlay;
+        var modal = structures.modal;
+        currentModal = overlay;
+        currentLegacyModal = legacyModal;
+
+        lockBodyScroll();
+        setFocusTrap(modal);
+
+        // Get references to modern elements
+        var closeBtn = modal.querySelector('.modern-modal-close');
+        var sendBtn = modal.querySelector('.report-send-button');
+        var textarea = modal.querySelector('#report-reason-textarea');
+        var counterSpan = modal.querySelector('.counter span');
+
+        // Update counter on input
+        function updateCounter() {
+            var len = textarea.value.length;
+            counterSpan.textContent = len;
+            if (len === 300) {
+                announceToScreenReader('Maximum 300 characters reached');
+            }
+        }
+        textarea.addEventListener('input', updateCounter);
+        updateCounter();
+
+        // Close modal when clicking close button, backdrop, or Escape
+        function closeReportModal() {
+            // Click original close button to properly close the legacy modal
+            var origClose = legacyModal.querySelector('a.close-modal, a.close');
+            if (origClose) {
+                var clickEvt = document.createEvent('MouseEvents');
+                clickEvt.initEvent('click', true, true);
+                origClose.dispatchEvent(clickEvt);
+            }
+            // Restore legacy modal visibility (it will be removed from DOM after close)
+            legacyModal.style.display = '';
+            closeCustomModal(legacyModal, true); // skip original close because we already clicked it
+        }
+
+        closeBtn.addEventListener('click', closeReportModal);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) closeReportModal(); });
+        var escHandler = function(e) { if (e.key === 'Escape') closeReportModal(); document.removeEventListener('keydown', escHandler); };
+        document.addEventListener('keydown', escHandler);
+
+        // Send report: copy reason to legacy textarea, click legacy send button
+        sendBtn.addEventListener('click', function() {
+            var reason = textarea.value.trim();
+            if (reason === "") {
+                announceToScreenReader('Please enter a reason for reporting this post.');
+                textarea.focus();
+                return;
+            }
+            // Find legacy textarea and send button
+            var legacyTextarea = legacyModal.querySelector('.report_textarea');
+            var legacySend = legacyModal.querySelector('.report_send_button');
+            if (legacyTextarea && legacySend) {
+                // Copy the reason
+                legacyTextarea.value = reason;
+                // Trigger input event to ensure any internal validation runs
+                var inputEvent = new Event('input', { bubbles: true });
+                legacyTextarea.dispatchEvent(inputEvent);
+                // Click the send button
+                legacySend.click();
+                announceToScreenReader('Report sent. Thank you.');
+                // Close modern modal after a short delay (allow original modal to process)
+                setTimeout(function() {
+                    closeReportModal();
+                }, 300);
+            } else {
+                console.error('[Modern Report] Could not find legacy report elements');
+                announceToScreenReader('Error: Could not submit report. Please try again.');
+            }
+        });
+
+        processingModal = false;
+    }
+
+    // ========== INITIALIZATION (enhanced to catch report modal) ==========
     function init() {
         if (!document.querySelector('link[href*="font-awesome"], link[href*="fa.css"]')) {
             var faLink = document.createElement('link');
@@ -528,7 +685,20 @@
             return document.activeElement;
         }
 
+        // Helper to detect report modal (visible Blocker with report-modal)
+        function isReportModalVisible(node) {
+            if (!node || node.nodeType !== 1) return false;
+            // The report modal is typically inside a .forumfree-modal.Blocker.current block
+            var blocker = node.classList && node.classList.contains('Blocker') && node.classList.contains('current') ? node : node.closest('.Blocker.current');
+            if (blocker && blocker.querySelector('.report-modal')) {
+                var style = window.getComputedStyle(blocker);
+                return style.display !== 'none' && style.visibility !== 'hidden' && blocker.style.opacity !== '0';
+            }
+            return false;
+        }
+
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+            // Register for likes modal (existing)
             globalThis.forumObserver.register({
                 id: 'modern-likes-modal',
                 selector: '.popup.pop_points, #overlay.pop_points',
@@ -555,35 +725,65 @@
                     }
                 }
             });
-            console.log('[Modern Likes] Registered with ForumCoreObserver');
-        } else {
-            var fallbackObserver = new MutationObserver(function(mutations) {
-                if (closeCooldown) return;
-                for (var i = 0; i < mutations.length; i++) {
-                    var mutation = mutations[i];
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                        var modal = mutation.target;
-                        if (modal.id === 'overlay' && modal.classList && modal.classList.contains('pop_points') &&
-                            modal.style.display === 'block' && !processingModal && !currentModal) {
-                            var userIds = extractUserIdsFromLegacyModal(modal);
-                            if (userIds.length > 0) showModernModal(userIds, modal, getTriggerElement());
+            // Register for report modal
+            globalThis.forumObserver.register({
+                id: 'modern-report-modal',
+                selector: '.forumfree-modal.Blocker.current, .ff-modal.modal.report-modal',
+                priority: 'high',
+                callback: function(node) {
+                    if (isReportModalVisible(node) && !currentModal && !processingModal) {
+                        // Find the actual legacy modal container (the .Blocker)
+                        var blocker = node.classList && node.classList.contains('Blocker') ? node : node.closest('.Blocker.current');
+                        if (blocker) {
+                            showModernReportModal(blocker, getTriggerElement());
                         }
                     }
+                }
+            });
+            console.log('[Modern Modals] Registered with ForumCoreObserver (likes + report)');
+        } else {
+            // Fallback MutationObserver
+            var fallbackObserver = new MutationObserver(function(mutations) {
+                if (closeCooldown || processingModal) return;
+                for (var i = 0; i < mutations.length; i++) {
+                    var mutation = mutations[i];
+                    // Check for style changes on existing modals
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                        var target = mutation.target;
+                        if (target.id === 'overlay' && target.classList && target.classList.contains('pop_points') &&
+                            target.style.display === 'block' && !currentModal) {
+                            var userIds = extractUserIdsFromLegacyModal(target);
+                            if (userIds.length > 0) showModernModal(userIds, target, getTriggerElement());
+                        }
+                        // Report modal became visible
+                        if (target.classList && target.classList.contains('Blocker') && target.classList.contains('current') &&
+                            target.style.display !== 'none' && target.style.visibility !== 'hidden' && !currentModal) {
+                            if (target.querySelector('.report-modal')) {
+                                showModernReportModal(target, getTriggerElement());
+                            }
+                        }
+                    }
+                    // Check for added nodes (modal just appended)
                     if (mutation.type === 'childList') {
                         for (var j = 0; j < mutation.addedNodes.length; j++) {
                             var node = mutation.addedNodes[j];
-                            if (node.nodeType === 1 && node.id === 'overlay' && node.classList &&
-                                node.classList.contains('pop_points') && node.style.display === 'block' &&
-                                !processingModal && !currentModal) {
-                                var userIds = extractUserIdsFromLegacyModal(node);
-                                if (userIds.length > 0) showModernModal(userIds, node, getTriggerElement());
+                            if (node.nodeType === 1) {
+                                if (node.id === 'overlay' && node.classList && node.classList.contains('pop_points') &&
+                                    node.style.display === 'block' && !currentModal) {
+                                    var userIds = extractUserIdsFromLegacyModal(node);
+                                    if (userIds.length > 0) showModernModal(userIds, node, getTriggerElement());
+                                }
+                                if (isReportModalVisible(node) && !currentModal) {
+                                    var blocker = node.classList && node.classList.contains('Blocker') ? node : node.closest('.Blocker.current');
+                                    if (blocker) showModernReportModal(blocker, getTriggerElement());
+                                }
                             }
                         }
                     }
                 }
             });
             fallbackObserver.observe(document.body, { attributes: true, attributeFilter: ['style'], childList: true, subtree: true });
-            console.log('[Modern Likes] Using fallback MutationObserver');
+            console.log('[Modern Modals] Using fallback MutationObserver (likes + report)');
         }
     }
 
