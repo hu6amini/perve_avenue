@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Modern Modals for ForumFree (Likes + Report)
 // @namespace    http://tampermonkey.net/
-// @version      6.4
+// @version      6.5
 // @description  Replaces old likes popup, report modal, and admin report-notify modal with modern, accessible modals – consistent Midnight Emerald style (CSS must be provided by theme)
 // @author       You
 // @match        *://*.forumfree.it/*
@@ -592,6 +592,7 @@
         container.setAttribute('aria-labelledby', 'reportModalTitle');
         container.setAttribute('aria-describedby', 'reportModalDesc');
 
+        // Updated HTML: separate div for the user line, and clickable div for the post link (no <a> tag)
         container.innerHTML = 
             '<div class="report-modal-header">' +
                 '<div class="report-modal-title">' +
@@ -604,11 +605,12 @@
             '</div>' +
             '<div class="report-modal-content">' +
                 '<div class="report-context">' +
-                    '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of: ' +
-                    '<span class="reported-nickname">' + escapeHtml(nickname) + '</span>' +
-                    '<div class="post-ref-link" style="margin-top:0.3rem;font-size:0.8rem;">' +
-                        '<i class="fa-regular fa-link" aria-hidden="true"></i> ' +
-                        '<a href="' + escapeHtml(postHref) + '" target="_blank" rel="noopener noreferrer">post #' + escapeHtml(postId) + '</a>' +
+                    '<div class="report-user-line">' +
+                        '<i class="fa-regular fa-user-pen" aria-hidden="true"></i> You are reporting the <strong>post</strong> of: ' +
+                        '<span class="reported-nickname">' + escapeHtml(nickname) + '</span>' +
+                    '</div>' +
+                    '<div class="post-ref-link" data-post-href="' + escapeHtml(postHref) + '" role="link" tabindex="0">' +
+                        '<i class="fa-regular fa-link" aria-hidden="true"></i> post #' + escapeHtml(postId) +
                     '</div>' +
                 '</div>' +
                 '<div class="report-field">' +
@@ -626,7 +628,7 @@
                 '</div>' +
                 '<div class="action-buttons">' +
                     '<button class="btn-primary-filled" id="reportSendBtn">' +
-                        '<i class="fa-regular fa-reply" aria-hidden="true"></i> Send Report' +
+                        '<i class="fa-regular fa-paper-plane" aria-hidden="true"></i> Send Report' +
                     '</button>' +
                 '</div>' +
             '</div>' +
@@ -634,7 +636,7 @@
 
         overlay.appendChild(container);
         document.body.appendChild(overlay);
-        return { overlay: overlay, container: container, postId: postId, nickname: nickname };
+        return { overlay: overlay, container: container, postId: postId, nickname: nickname, postHref: postHref };
     }
 
     function showModernReportModal(legacyModal, triggerEl) {
@@ -648,6 +650,7 @@
         var struct = createReportModalStructure(legacyModal);
         var overlay = struct.overlay;
         var container = struct.container;
+        var postHref = struct.postHref;
         currentReportModal = overlay;
 
         lockBodyScroll();
@@ -657,6 +660,31 @@
         var sendBtn = container.querySelector('#reportSendBtn');
         var textarea = container.querySelector('#reportReasonTextarea');
         var counterSpan = container.querySelector('#reportCharCounter');
+        var postRefDiv = container.querySelector('.post-ref-link');
+
+        // Make the post-ref-link div clickable and keyboard accessible
+        if (postRefDiv && postHref && postHref !== '#') {
+            function goToPost(e) {
+                e.preventDefault();
+                // Find the original post link in the legacy modal and click it
+                var originalPostLink = legacyModal.querySelector('.modal-title a');
+                if (originalPostLink) {
+                    var clickEvent = document.createEvent('MouseEvents');
+                    clickEvent.initEvent('click', true, true);
+                    originalPostLink.dispatchEvent(clickEvent);
+                } else {
+                    // Fallback: direct navigation
+                    window.location.href = postHref;
+                }
+            }
+            postRefDiv.addEventListener('click', goToPost);
+            postRefDiv.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    goToPost(e);
+                }
+            });
+        }
 
         function updateCounter() {
             var len = textarea.value.length;
@@ -790,11 +818,9 @@
             var timeSmall = row.querySelector('.time small');
             var time = timeSmall ? timeSmall.textContent.trim() : '';
             var reportId = row.getAttribute('data-id') || '';
-            // Find post URL: there is an <a> inside .content_row with href containing "p="
             var postLinkElem = row.querySelector('.content_row a[href*="p="]');
             var postUrl = postLinkElem ? postLinkElem.getAttribute('href') : '#';
             if (postUrl && postUrl !== '#') {
-                // Ensure full URL if relative
                 if (postUrl.startsWith('/')) {
                     postUrl = window.location.origin + postUrl;
                 }
@@ -842,7 +868,6 @@
             var r = reports[i];
             var optimizedAvatar = optimizeAvatarForNotify(r.avatarUrl, r.username);
             var dicebearFallback = generateDiceBearAvatar(r.username, 'notify_' + r.reportId);
-            // postUrl may be relative; we'll use it in a click handler later
             var postUrlAttr = escapeHtml(r.postUrl);
             reportsHtml += 
                 '<div class="report-item" data-report-id="' + escapeHtml(r.reportId) + '" data-post-url="' + postUrlAttr + '">' +
@@ -974,13 +999,9 @@
             var item = reportItems[i];
             var postUrl = item.getAttribute('data-post-url');
             if (postUrl && postUrl !== '#') {
-                // Make avatar and details clickable, but not the delete button
                 var avatarDiv = item.querySelector('.report-avatar');
                 var detailsDiv = item.querySelector('.report-details');
-                var clickableArea = document.createElement('div');
-                // Instead of wrapping, we attach click handlers to both elements
                 function goToPost(e) {
-                    // Prevent if click originated from delete button or its children
                     if (e.target.closest('.delete-report')) return;
                     e.preventDefault();
                     window.location.href = postUrl;
@@ -989,7 +1010,6 @@
                 detailsDiv.style.cursor = 'pointer';
                 avatarDiv.addEventListener('click', goToPost);
                 detailsDiv.addEventListener('click', goToPost);
-                // Also make them keyboard accessible
                 avatarDiv.setAttribute('tabindex', '0');
                 detailsDiv.setAttribute('tabindex', '0');
                 avatarDiv.setAttribute('role', 'link');
@@ -1016,7 +1036,7 @@
         for (var i = 0; i < deleteBtns.length; i++) {
             deleteBtns[i].addEventListener('click', function(e) {
                 e.preventDefault();
-                e.stopPropagation(); // prevent navigation to post
+                e.stopPropagation();
                 var reportId = this.getAttribute('data-report-id');
                 var legacyDeleteBtn = legacyModal.querySelector('.report_row[data-id="' + reportId + '"] .delete');
                 if (legacyDeleteBtn) {
@@ -1024,7 +1044,6 @@
                     clickEv.initEvent('click', true, true);
                     legacyDeleteBtn.dispatchEvent(clickEv);
                 }
-                // Remove from UI
                 var reportItem = this.closest('.report-item');
                 if (reportItem) reportItem.remove();
                 announceToScreenReader('Report deleted');
