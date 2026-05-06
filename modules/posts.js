@@ -212,12 +212,26 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
 function getPostsContainer() {
     var modernContainer = document.getElementById('modern-posts-container');
-    if (modernContainer) {
-        // Ensure it stays after the carousel if one exists
-        var carousel = document.querySelector('.slick_carousel');
-        if (carousel && carousel.nextSibling !== modernContainer) {
-            carousel.parentNode.insertBefore(modernContainer, carousel.nextSibling);
+
+    // 1. Ensure wrapper is positioned correctly **after** the carousel
+    var wrapper = document.getElementById('modern-forum-wrapper');
+    var carousel = document.querySelector('.slick_carousel');
+
+    if (wrapper && carousel) {
+        // If the wrapper is currently before the carousel, move it right after
+        if (wrapper.compareDocumentPosition(carousel) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
         }
+    } else if (!wrapper && carousel) {
+        // Wrapper doesn't exist but carousel does – create wrapper and insert after carousel
+        wrapper = document.createElement('div');
+        wrapper.id = 'modern-forum-wrapper';
+        wrapper.className = 'modern-forum-wrapper';
+        carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
+    }
+
+    // 2. Return or create the posts container inside the wrapper
+    if (modernContainer) {
         return modernContainer;
     }
 
@@ -228,16 +242,13 @@ function getPostsContainer() {
     newContainer.id = CONFIG.CONTAINER_ID;
     newContainer.className = 'modern-posts-container';
 
-    var carousel = document.querySelector('.slick_carousel');
-    if (carousel) {
-        // Insert exactly after the carousel
-        carousel.parentNode.insertBefore(newContainer, carousel.nextSibling);
+    // Always append to the (correctly positioned) wrapper
+    if (wrapper) {
+        wrapper.appendChild(newContainer);
     } else {
-        // Fallback: inside the wrapper or at the end of body
-        var wrapper = document.getElementById('modern-forum-wrapper');
-        if (wrapper) wrapper.appendChild(newContainer);
-        else document.body.appendChild(newContainer);
+        document.body.appendChild(newContainer);
     }
+
     return newContainer;
 }
 
