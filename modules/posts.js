@@ -210,19 +210,36 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // HELPERS
     // ============================================================================
-    function getPostsContainer() {
-        var modernContainer = document.getElementById('modern-posts-container');
-        if (modernContainer) return modernContainer;
-        var originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
-        if (originalContainer) return originalContainer;
-        var newContainer = document.createElement('div');
-        newContainer.id = CONFIG.CONTAINER_ID;
-        newContainer.className = 'modern-posts-container';
+function getPostsContainer() {
+    var modernContainer = document.getElementById('modern-posts-container');
+    if (modernContainer) {
+        // Ensure it stays after the carousel if one exists
+        var carousel = document.querySelector('.slick_carousel');
+        if (carousel && carousel.nextSibling !== modernContainer) {
+            carousel.parentNode.insertBefore(modernContainer, carousel.nextSibling);
+        }
+        return modernContainer;
+    }
+
+    var originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
+    if (originalContainer) return originalContainer;
+
+    var newContainer = document.createElement('div');
+    newContainer.id = CONFIG.CONTAINER_ID;
+    newContainer.className = 'modern-posts-container';
+
+    var carousel = document.querySelector('.slick_carousel');
+    if (carousel) {
+        // Insert exactly after the carousel
+        carousel.parentNode.insertBefore(newContainer, carousel.nextSibling);
+    } else {
+        // Fallback: inside the wrapper or at the end of body
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (wrapper) wrapper.appendChild(newContainer);
         else document.body.appendChild(newContainer);
-        return newContainer;
     }
+    return newContainer;
+}
 
     function isValidPost(postEl) {
         if (!postEl) return false;
