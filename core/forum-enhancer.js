@@ -19,6 +19,7 @@
             twemoji: true,
             posts: true,
             modals: true,
+            'slick-carousel': true,       // NEW – hero carousel module
             navigation: false,
             sidebar: false,
             footer: false
@@ -265,7 +266,14 @@
             registerModule('modals', ModalsModule, ['forumObserver']);
         } else {
             log('ModalsModule not found, modern modals disabled', 'warn');
-            ENHANCER_CONFIG.modules.modals = false;
+            ENHANCER_CONFIG.modals.modals = false;
+        }
+
+        // NEW: Slick Carousel module registration
+        if (typeof SlickCarouselModule !== 'undefined') {
+            registerModule('slick-carousel', SlickCarouselModule, ['forumObserver']);
+        } else {
+            log('SlickCarouselModule not found, carousels will not be active', 'warn');
         }
     }
     
