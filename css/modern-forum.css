@@ -875,6 +875,7 @@ img {
     line-height: 1.2;
     margin: 0 0 var(--space-sm) 0;
     color: var(--text-primary);
+    display:flex;
 }
 
 .blog-title a {
