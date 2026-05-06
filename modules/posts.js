@@ -213,21 +213,21 @@ var ForumPostsModule = (function(Utils, EventBus) {
 function getPostsContainer() {
     var modernContainer = document.getElementById('modern-posts-container');
 
-    // 1. Ensure wrapper is positioned correctly **after** the carousel
+    // 1. Ensure the wrapper is positioned after .carousel-wrapper
     var wrapper = document.getElementById('modern-forum-wrapper');
-    var carousel = document.querySelector('.slick_carousel');
+    var carouselWrapper = document.querySelector('.carousel-wrapper');
 
-    if (wrapper && carousel) {
-        // If the wrapper is currently before the carousel, move it right after
-        if (wrapper.compareDocumentPosition(carousel) & Node.DOCUMENT_POSITION_FOLLOWING) {
-            carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
+    if (wrapper && carouselWrapper) {
+        // If wrapper is currently before the carousel wrapper, move it after
+        if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
         }
-    } else if (!wrapper && carousel) {
-        // Wrapper doesn't exist but carousel does – create wrapper and insert after carousel
+    } else if (!wrapper && carouselWrapper) {
+        // Wrapper doesn't exist yet – create it and insert after the carousel wrapper
         wrapper = document.createElement('div');
         wrapper.id = 'modern-forum-wrapper';
         wrapper.className = 'modern-forum-wrapper';
-        carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
+        carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
     }
 
     // 2. Return or create the posts container inside the wrapper
@@ -242,11 +242,16 @@ function getPostsContainer() {
     newContainer.id = CONFIG.CONTAINER_ID;
     newContainer.className = 'modern-posts-container';
 
-    // Always append to the (correctly positioned) wrapper
     if (wrapper) {
         wrapper.appendChild(newContainer);
     } else {
-        document.body.appendChild(newContainer);
+        // Fallback – no carousel, no wrapper yet – let the enhancer handle it
+        var enhancerWrapper = document.getElementById('modern-forum-wrapper');
+        if (enhancerWrapper) {
+            enhancerWrapper.appendChild(newContainer);
+        } else {
+            document.body.appendChild(newContainer);
+        }
     }
 
     return newContainer;
