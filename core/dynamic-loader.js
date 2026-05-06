@@ -89,7 +89,7 @@ const SCRIPT_URLS = [
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@951ae91/modules/modals.js",
     
     // Main enhancer (last)
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7f0ee7b/core/forum-enhancer.js"
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@2d813e7/core/forum-enhancer.js"
 ];
 
 async function loadAllScripts() {
