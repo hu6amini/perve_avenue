@@ -16,7 +16,6 @@ var SlickCarouselModule = (function(Utils, EventBus) {
         cssEase: 'ease-in-out',
         dots: true,
         infinite: true,
-        lazyLoad: 'progressive',
         pauseOnFocus: false,
         pauseOnHover: false,
         waitForAnimate: false,
