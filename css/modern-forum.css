@@ -368,7 +368,7 @@ img {
     padding: 0 var(--space-md);
 }
 
-#modern-posts-container,
+#posts-container,
 #modern-summary-container {
     display: block;
     padding: 0 var(--space-md);
