@@ -1535,144 +1535,165 @@ function convertToModernEmbed(originalContainer) {
     // ============================================================================
     // MAIN CONVERSION PIPELINE (blog article + regular posts)
     // ============================================================================
-    async function convertAllPosts() {
-        var container = getPostsContainer();
-        if (container) container.innerHTML = '';
-        convertedPostIds.clear();
-        postReactions.clear();
+async function convertAllPosts() {
+    var container = getPostsContainer();
+    if (container) container.innerHTML = '';
+    convertedPostIds.clear();
+    postReactions.clear();
 
-        // Check for blog article first (only in #topic, possibly in #blog)
-        var blogArticle = document.querySelector('.blog .article');
-        if (blogArticle) {
-            var blogData = getBlogArticleData(blogArticle);
-            if (blogData.mid) await fetchUserData(blogData.mid);
-            var apiUser = blogData.mid ? userDataCache.get(blogData.mid) : null;
+    // Convert ALL blog articles (there may be more than one)
+    var blogArticles = document.querySelectorAll('.blog .article');
+    var blogCount = 0;
+    var allMids = [];  // collect mids from blog articles for API fetch
+
+    if (blogArticles.length > 0) {
+        for (var a = 0; a < blogArticles.length; a++) {
+            var articleLi = blogArticles[a];
+            var blogData = getBlogArticleData(articleLi);
+            // Safety: skip if already converted (shouldn't happen on fresh run)
+            if (blogData.postId && convertedPostIds.has(blogData.postId)) continue;
+
+            if (blogData.mid) allMids.push(blogData.mid);
+            var apiUser = null; // will be fetched below in batch
+            // We'll fetch user data later in batch, but we can also do here if needed
+            // Actually we fetch after collecting all mids to avoid multiple fetches
+            // We'll store blogData temporarily and process after fetching users
+            // For simplicity we can fetch user data here, but batch is better.
+            // Since we need to await user data per article, we'll fetch synchronously? 
+            // The original code fetched per article. We'll keep that for now.
+            if (blogData.mid) {
+                await fetchUserData(blogData.mid);
+                apiUser = userDataCache.get(blogData.mid); // get from cache
+            }
+
             var blogCardHtml = generateBlogPost(blogData, apiUser);
             var temp = document.createElement('div');
             temp.innerHTML = blogCardHtml;
             var blogCard = temp.firstElementChild;
             container.appendChild(blogCard);
             applyFaviconsToMessageLinks(blogCard);
-            // Mark blog article as converted to avoid processing as normal post
+
             if (blogData.postId) convertedPostIds.add(blogData.postId);
+            blogCount++;
         }
-
-        // Collect regular posts (comments)
-        var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
-        var validPosts = [];
-        for (var i = 0; i < posts.length; i++) {
-            if (isValidPost(posts[i])) validPosts.push(posts[i]);
-        }
-
-        var globalMid = null;
-        var globalUsername = null;
-        var isMemberPostsPage = false;
-        var memberPostsHeader = document.querySelector('.topic.member_posts .mtitle b');
-        if (memberPostsHeader) {
-            isMemberPostsPage = true;
-            var classNames = memberPostsHeader.className;
-            var match = classNames.match(/user(\d+)/);
-            if (match) {
-                globalMid = match[1];
-            } else {
-                var onclickAttr = memberPostsHeader.getAttribute('onclick');
-                if (onclickAttr) {
-                    var midMatch = onclickAttr.match(/MID=(\d+)/);
-                    if (midMatch) globalMid = midMatch[1];
-                }
-            }
-            globalUsername = memberPostsHeader.textContent.trim();
-        }
-
-        var mids = [];
-        var postsData = [];
-        for (var i = 0; i < validPosts.length; i++) {
-            var $post = validPosts[i];
-            var postId = getPostId($post);
-            if (!postId || convertedPostIds.has(postId)) continue;
-            var mid = getMidFromPost($post);
-            if (!mid && globalMid) mid = globalMid;
-            mids.push(mid);
-            var reactionData = getReactionData($post);
-            var userTitleData = getUserTitleAndIcon($post);
-            if (reactionData.hasReactions) postReactions.set(postId, reactionData.reactions);
-            var whenSpan = $post.querySelector('.when');
-            var postPermalink = null;
-            var postDate = null;
-            if (whenSpan) {
-                var anchor = whenSpan.closest('a');
-                if (anchor && anchor.getAttribute('href')) postPermalink = anchor.getAttribute('href');
-                var title = whenSpan.getAttribute('title');
-                if (title) postDate = parseDateFromTitle(title);
-                else {
-                    var text = whenSpan.textContent.trim();
-                    text = text.replace(/^Posted:\s*/i, '');
-                    if (text) postDate = parseDateFromTitle(text);
-                }
-            }
-            var relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
-            var editInfo = getEditInfo($post);
-            var availableActions = getAvailableActions($post, postId);
-            if (isMemberPostsPage) {
-                availableActions.quote = false;
-                availableActions.edit = false;
-                availableActions.delete = false;
-                availableActions.report = false;
-                availableActions.share = false;
-            }
-            var memberLinks = isMemberPostsPage ? getMemberPostLinks($post) : { topicLink: null, topicTitle: null, forumLink: null, forumName: null };
-            var username = getUsername($post);
-            if (username === 'Unknown' && globalUsername) username = globalUsername;
-            postsData.push({
-                postId: postId,
-                mid: mid,
-                originalPost: $post,
-                index: i,
-                username: username,
-                groupText: getGroupText($post),
-                postCount: getPostCount($post),
-                reputation: getReputation($post),
-                isOnline: getIsOnline($post),
-                userTitle: userTitleData.title,
-                rankIconClass: userTitleData.iconClass,
-                contentHtml: getCleanContent($post),
-                signatureHtml: getSignatureHtml($post),
-                editInfo: editInfo,
-                likes: getLikes($post),
-                hasReactions: reactionData.hasReactions,
-                reactionCount: reactionData.reactionCount,
-                reactions: reactionData.reactions,
-                ipAddress: getMaskedIp($post),
-                relativeTime: relativeTime,
-                postDate: postDate,
-                postPermalink: postPermalink,
-                availableActions: availableActions,
-                isMemberPostsPage: isMemberPostsPage,
-                topicLink: memberLinks.topicLink,
-                topicTitle: memberLinks.topicTitle,
-                forumLink: memberLinks.forumLink,
-                forumName: memberLinks.forumName,
-                hideActions: false,
-                hideFooter: false
-            });
-            convertedPostIds.add(postId);
-        }
-        await fetchMultipleUsers(mids);
-        for (var i = 0; i < postsData.length; i++) {
-            var data = postsData[i];
-            var apiUser = data.mid ? userDataCache.get(data.mid) : null;
-            var completeData = Object.assign({}, data, { apiUser: apiUser, postNumber: i + 1 + (blogArticle ? 1 : 0) });
-            var cardHtml = generateModernPost(completeData);
-            var temp = document.createElement('div');
-            temp.innerHTML = cardHtml;
-            var card = temp.firstElementChild;
-            container.appendChild(card);
-            applyFaviconsToMessageLinks(card);
-        }
-        attachEventHandlers();
-        if (EventBus) EventBus.trigger('posts:ready', { count: postsData.length + (blogArticle ? 1 : 0) });
-        console.log('[PostsModule] Ready - ' + (postsData.length + (blogArticle ? 1 : 0)) + ' posts converted');
     }
+
+    // Collect regular posts (comments)
+    var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
+    var validPosts = [];
+    for (var i = 0; i < posts.length; i++) {
+        if (isValidPost(posts[i])) validPosts.push(posts[i]);
+    }
+
+    var globalMid = null;
+    var globalUsername = null;
+    var isMemberPostsPage = false;
+    var memberPostsHeader = document.querySelector('.topic.member_posts .mtitle b');
+    if (memberPostsHeader) {
+        isMemberPostsPage = true;
+        var classNames = memberPostsHeader.className;
+        var match = classNames.match(/user(\d+)/);
+        if (match) {
+            globalMid = match[1];
+        } else {
+            var onclickAttr = memberPostsHeader.getAttribute('onclick');
+            if (onclickAttr) {
+                var midMatch = onclickAttr.match(/MID=(\d+)/);
+                if (midMatch) globalMid = midMatch[1];
+            }
+        }
+        globalUsername = memberPostsHeader.textContent.trim();
+    }
+
+    var mids = [];
+    var postsData = [];
+    for (var i = 0; i < validPosts.length; i++) {
+        var $post = validPosts[i];
+        var postId = getPostId($post);
+        if (!postId || convertedPostIds.has(postId)) continue;
+        var mid = getMidFromPost($post);
+        if (!mid && globalMid) mid = globalMid;
+        mids.push(mid);
+        var reactionData = getReactionData($post);
+        var userTitleData = getUserTitleAndIcon($post);
+        if (reactionData.hasReactions) postReactions.set(postId, reactionData.reactions);
+        var whenSpan = $post.querySelector('.when');
+        var postPermalink = null;
+        var postDate = null;
+        if (whenSpan) {
+            var anchor = whenSpan.closest('a');
+            if (anchor && anchor.getAttribute('href')) postPermalink = anchor.getAttribute('href');
+            var title = whenSpan.getAttribute('title');
+            if (title) postDate = parseDateFromTitle(title);
+            else {
+                var text = whenSpan.textContent.trim();
+                text = text.replace(/^Posted:\s*/i, '');
+                if (text) postDate = parseDateFromTitle(text);
+            }
+        }
+        var relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+        var editInfo = getEditInfo($post);
+        var availableActions = getAvailableActions($post, postId);
+        if (isMemberPostsPage) {
+            availableActions.quote = false;
+            availableActions.edit = false;
+            availableActions.delete = false;
+            availableActions.report = false;
+            availableActions.share = false;
+        }
+        var memberLinks = isMemberPostsPage ? getMemberPostLinks($post) : { topicLink: null, topicTitle: null, forumLink: null, forumName: null };
+        var username = getUsername($post);
+        if (username === 'Unknown' && globalUsername) username = globalUsername;
+        postsData.push({
+            postId: postId,
+            mid: mid,
+            originalPost: $post,
+            index: i,
+            username: username,
+            groupText: getGroupText($post),
+            postCount: getPostCount($post),
+            reputation: getReputation($post),
+            isOnline: getIsOnline($post),
+            userTitle: userTitleData.title,
+            rankIconClass: userTitleData.iconClass,
+            contentHtml: getCleanContent($post),
+            signatureHtml: getSignatureHtml($post),
+            editInfo: editInfo,
+            likes: getLikes($post),
+            hasReactions: reactionData.hasReactions,
+            reactionCount: reactionData.reactionCount,
+            reactions: reactionData.reactions,
+            ipAddress: getMaskedIp($post),
+            relativeTime: relativeTime,
+            postDate: postDate,
+            postPermalink: postPermalink,
+            availableActions: availableActions,
+            isMemberPostsPage: isMemberPostsPage,
+            topicLink: memberLinks.topicLink,
+            topicTitle: memberLinks.topicTitle,
+            forumLink: memberLinks.forumLink,
+            forumName: memberLinks.forumName,
+            hideActions: false,
+            hideFooter: false
+        });
+        convertedPostIds.add(postId);
+    }
+    await fetchMultipleUsers(mids);
+    for (var i = 0; i < postsData.length; i++) {
+        var data = postsData[i];
+        var apiUser = data.mid ? userDataCache.get(data.mid) : null;
+        var completeData = Object.assign({}, data, { apiUser: apiUser, postNumber: i + 1 + blogCount });
+        var cardHtml = generateModernPost(completeData);
+        var temp = document.createElement('div');
+        temp.innerHTML = cardHtml;
+        var card = temp.firstElementChild;
+        container.appendChild(card);
+        applyFaviconsToMessageLinks(card);
+    }
+    attachEventHandlers();
+    if (EventBus) EventBus.trigger('posts:ready', { count: postsData.length + blogCount });
+    console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
+}
 
     // ============================================================================
     // SUMMARY CONVERSION (unchanged)
