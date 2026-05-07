@@ -213,17 +213,22 @@ var ForumPostsModule = (function(Utils, EventBus) {
 function getPostsContainer() {
     var modernContainer = document.getElementById('modern-posts-container');
 
-    // 1. Ensure the wrapper is positioned after .carousel-wrapper
+    // 1. Ensure the wrapper is positioned after .carousel-wrapper (only if the
+    //    carousel is NOT already inside the wrapper – i.e., they are siblings)
     var wrapper = document.getElementById('modern-forum-wrapper');
     var carouselWrapper = document.querySelector('.carousel-wrapper');
 
     if (wrapper && carouselWrapper) {
-        // If wrapper is currently before the carousel wrapper, move it after
-        if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
-            carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
+        // If the carousel is already a descendant of the wrapper, do nothing
+        if (!wrapper.contains(carouselWrapper)) {
+            // Carousel is outside the wrapper (sibling situation)
+            if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
+            }
         }
+        // else: carousel is inside wrapper – perfect, no repositioning needed
     } else if (!wrapper && carouselWrapper) {
-        // Wrapper doesn't exist yet – create it and insert after the carousel wrapper
+        // Wrapper doesn't exist yet – create it and insert after the carousel
         wrapper = document.createElement('div');
         wrapper.id = 'modern-forum-wrapper';
         wrapper.className = 'modern-forum-wrapper';
@@ -245,7 +250,7 @@ function getPostsContainer() {
     if (wrapper) {
         wrapper.appendChild(newContainer);
     } else {
-        // Fallback – no carousel, no wrapper yet – let the enhancer handle it
+        // Fallback – no carousel, no wrapper yet
         var enhancerWrapper = document.getElementById('modern-forum-wrapper');
         if (enhancerWrapper) {
             enhancerWrapper.appendChild(newContainer);
