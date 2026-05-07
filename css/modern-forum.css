@@ -371,6 +371,7 @@ img {
 #modern-posts-container,
 #modern-summary-container {
     display: block;
+    padding: 0 var(--space-md);
 }
 
 /*--------------------------------------------
