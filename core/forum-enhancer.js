@@ -247,13 +247,14 @@
     // ============================================================================
     // REGISTER MODULES (all modules now exposed globally)
     // ============================================================================
-    function registerAllModules() {
-        if (typeof MediaDimensionsModule !== 'undefined') {
-            registerModule('media-dimensions', MediaDimensionsModule, ['forumObserver']);
-        } else {
-            log('MediaDimensionsModule not found, media dimensions disabled', 'warn');
-            ENHANCER_CONFIG.modules['media-dimensions'] = false;
-        }
+if (typeof MediaDimensionsModule !== 'undefined') {
+    registerModule('media-dimensions', MediaDimensionsModule, ['forumObserver']);
+} else {
+    log('MediaDimensionsModule not found, media dimensions disabled', 'warn');
+    if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
+        ENHANCER_CONFIG.modules['media-dimensions'] = false;
+    }
+}
         
         if (typeof TwemojiModule !== 'undefined') {
             registerModule('twemoji', TwemojiModule, ['twemojiLib', 'forumObserver']);
