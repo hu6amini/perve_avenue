@@ -1,7 +1,14 @@
 // core/event-bus.js
 // Central event communication between modules
+
 var ForumEventBus = (function() {
     'use strict';
+
+    // ===== USER TIMING: mark start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('event-bus-start');
+    }
+    // ====================================
    
     var events = {};
     var debug = false;
@@ -82,5 +89,16 @@ var ForumEventBus = (function() {
 
 // Signal that event-bus is ready
 if (typeof window !== 'undefined') {
+    // ===== USER TIMING: mark end & measure =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('event-bus-end');
+        try {
+            performance.measure('event-bus-load-time', 'event-bus-start', 'event-bus-end');
+        } catch (e) {
+            // Ignore if marks are missing
+        }
+    }
+    // ===========================================
+
     window.dispatchEvent(new CustomEvent('event-bus-ready'));
 }
