@@ -12,6 +12,12 @@
 var ModalsModule = (function() {
     'use strict';
 
+    // ===== USER TIMING: mark start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('modals-start');
+    }
+    // ====================================
+
     // ========== STATE (Likes) ==========
     var currentModal = null;
     var currentLegacyModal = null;
@@ -530,9 +536,8 @@ var ModalsModule = (function() {
                 
                 // Compute group class from the roleInfo (or directly from user.group)
                 var groupRaw = (user.group && user.group.name) ? user.group.name : roleInfo.text;
-// Use roleInfo.groupNameForClass if available (e.g., 'founder' instead of 'administrator')
-var groupNameForClass = roleInfo.groupNameForClass;
-var groupClass = 'group-' + sanitizeGroupName(groupNameForClass || groupRaw);
+                var groupNameForClass = roleInfo.groupNameForClass;
+                var groupClass = 'group-' + sanitizeGroupName(groupNameForClass || groupRaw);
 
                 if (avatarData.type === 'img') {
                     itemsHtml += 
@@ -1230,6 +1235,17 @@ var groupClass = 'group-' + sanitizeGroupName(groupNameForClass || groupRaw);
         if (initialized) return;
         await init();
         initialized = true;
+
+        // ===== USER TIMING: mark ready and measure =====
+        if (typeof performance !== 'undefined' && performance.mark) {
+            performance.mark('modals-ready');
+            try {
+                performance.measure('modals-load-time', 'modals-start', 'modals-ready');
+            } catch (e) {
+                // Ignore if marks missing
+            }
+        }
+        // ================================================
     }
 
     return {
