@@ -5,6 +5,12 @@
 
 'use strict';
 
+// ===== USER TIMING: mark script start =====
+if (typeof performance !== 'undefined' && performance.mark) {
+    performance.mark('media-dimensions-start');
+}
+// ==========================================
+
 class MediaDimensionExtractor {
     #observerId = null;
     #processedMedia = new WeakSet();
@@ -108,6 +114,17 @@ class MediaDimensionExtractor {
                 detail: { timestamp: Date.now() }
             }));
             console.log('📐 Dimension extractor ready');
+
+            // ===== USER TIMING: ready and measure =====
+            if (typeof performance !== 'undefined' && performance.mark) {
+                performance.mark('media-dimensions-ready');
+                try {
+                    performance.measure('media-dimensions-load-time', 'media-dimensions-start', 'media-dimensions-ready');
+                } catch (e) {
+                    // Ignore if marks missing
+                }
+            }
+            // ==========================================
         });
     }
 
