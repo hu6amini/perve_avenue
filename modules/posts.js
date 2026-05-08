@@ -1823,20 +1823,59 @@ async function convertAllPosts() {
     // ============================================================================
     // INITIALIZE
     // ============================================================================
-    function initialize() {
-        if (isInitialized) { return; }
+function initialize() {
+    if (isInitialized) { return; }
+
+    // ---- Wait for dependencies if they aren't loaded yet ----
+    var depsReady = new Promise(function(resolve) {
+        var ready = { Utils: false, EventBus: false };
+        function check() {
+            if (ready.Utils && ready.EventBus) {
+                resolve();
+            }
+        }
+        if (typeof ForumDOMUtils !== 'undefined') {
+            ready.Utils = true;
+        } else {
+            window.addEventListener('dom-utils-ready', function() {
+                ready.Utils = true;
+                check();
+            });
+        }
+        if (typeof ForumEventBus !== 'undefined') {
+            ready.EventBus = true;
+        } else {
+            window.addEventListener('event-bus-ready', function() {
+                ready.EventBus = true;
+                check();
+            });
+        }
+        check();
+        setTimeout(resolve, 5000); // safety timeout
+    });
+
+    depsReady.then(function() {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        // Refresh references in case they were set after the module defined
+        Utils = typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils;
+        EventBus = typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus;
+
         if (!isValidPage()) {
             if (document.body.id === 'send' && document.querySelector('.summary')) {
                 convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
             }
             return;
         }
+
         if (document.body.id === 'send' && document.querySelector('.summary')) {
             convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
         } else {
             convertAllPosts().catch(err => console.error('[PostsModule] Init error', err));
         }
-        isInitialized = true;
+
+        // Register observer callbacks
         if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
             globalThis.forumObserver.register({
                 id: 'posts-module',
@@ -1849,30 +1888,28 @@ async function convertAllPosts() {
                     convertAllPosts();
                 }
             });
-globalThis.forumObserver.register({
-    id: 'posts-module-reactions',
-    selector: '.st-emoji-container',
-    priority: 'medium',
-    callback: function(node) {
-        // Regular post
-        var postEl = node.closest('.post');
-        if (postEl && isValidPost(postEl)) {
-            var postId = getPostId(postEl);
-            if (postId) {
-                setTimeout(function() { refreshReactionDisplay(postId); }, 100);
-            }
-            return;
-        }
-        // Blog article
-        var articleEl = node.closest('.article');
-        if (articleEl) {
-            var pid = getPostId(articleEl);
-            if (pid) {
-                setTimeout(function() { refreshReactionDisplay(pid); }, 100);
-            }
-        }
-    }
-});
+            globalThis.forumObserver.register({
+                id: 'posts-module-reactions',
+                selector: '.st-emoji-container',
+                priority: 'medium',
+                callback: function(node) {
+                    var postEl = node.closest('.post');
+                    if (postEl && isValidPost(postEl)) {
+                        var postId = getPostId(postEl);
+                        if (postId) {
+                            setTimeout(function() { refreshReactionDisplay(postId); }, 100);
+                        }
+                        return;
+                    }
+                    var articleEl = node.closest('.article');
+                    if (articleEl) {
+                        var pid = getPostId(articleEl);
+                        if (pid) {
+                            setTimeout(function() { refreshReactionDisplay(pid); }, 100);
+                        }
+                    }
+                }
+            });
             globalThis.forumObserver.register({
                 id: 'posts-module-reaction-images',
                 selector: '.st-emoji-preview img',
@@ -1886,7 +1923,10 @@ globalThis.forumObserver.register({
                 }
             });
         }
-    }
+    }).catch(function(err) {
+        console.error('[PostsModule] Dependency wait failed:', err);
+    });
+}
 
     // ============================================================================
     // PUBLIC API
