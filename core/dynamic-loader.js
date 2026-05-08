@@ -86,7 +86,7 @@ const SCRIPT_URLS = [
     
     // Modules (each will wait for forum-observer-ready internally)
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5974f8e/modules/twemoji.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0ff8b76/modules/posts.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js",
     // NEW Slick carousel module
