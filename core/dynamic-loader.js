@@ -100,20 +100,22 @@ async function loadAllScripts() {
     performance.mark('loader-start');
     // --------------------------------------------------------------------------
 
-    // 1. Load all critical scripts (including Twemoji, observer, modules, etc.)
-    for (var i = 0; i < SCRIPT_URLS.length; i++) {
-        var url = SCRIPT_URLS[i];
-        try {
-            await loadScript(url, 3, 1000);
+    // 1. Load all critical scripts in PARALLEL (download simultaneously, execute in order)
+    const scriptPromises = SCRIPT_URLS.map(url =>
+        loadScript(url, 3, 1000).then(() => {
             console.log('Loaded: ' + url);
-        } catch (err) {
-            console.error('Aborting further loads because critical script failed:', url, err);
-            var banner = document.createElement('div');
-            banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c00;color:#fff;padding:8px;text-align:center;z-index:99999;';
-            banner.textContent = 'Forum Enhancer: Failed to load ' + url + '. Please refresh the page.';
-            document.body.appendChild(banner);
-            return;  // Stop loading
-        }
+        })
+    );
+
+    try {
+        await Promise.all(scriptPromises);
+    } catch (err) {
+        console.error('Aborting further loads because critical script failed:', err);
+        var banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c00;color:#fff;padding:8px;text-align:center;z-index:99999;';
+        banner.textContent = 'Forum Enhancer: Failed to load ' + (err.message || 'a critical script') + '. Please refresh the page.';
+        document.body.appendChild(banner);
+        return;  // Stop loading
     }
 
     // ----- CRITICAL SCRIPTS LOADED --------------------------------------------
