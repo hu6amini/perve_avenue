@@ -270,11 +270,14 @@
         }
         
         if (typeof ModalsModule !== 'undefined') {
-            registerModule('modals', ModalsModule, ['forumObserver']);
-        } else {
-            log('ModalsModule not found, modern modals disabled', 'warn');
-            ENHANCER_CONFIG.modals.modals = false;
-        }
+    registerModule('modals', ModalsModule, ['forumObserver']);
+} else {
+    log('ModalsModule not found, modern modals disabled', 'warn');
+    // Defensive check – avoid crash if ENHANCER_CONFIG.modules is missing
+    if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
+        ENHANCER_CONFIG.modules.modals = false;
+    }
+}
 
         // NEW: Slick Carousel module registration
         if (typeof SlickCarouselModule !== 'undefined') {
