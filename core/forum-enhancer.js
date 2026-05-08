@@ -3,6 +3,13 @@
 // Coordinates all modules and initializes the enhancement system
 (function() {
     'use strict';
+
+    // ===== USER TIMING: mark start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('enhancer-start');
+    }
+    // ====================================
+
     // ============================================================================
     // CONFIGURATION
     // ============================================================================
@@ -409,6 +416,17 @@
         log('========================================');
         log(ENHANCER_CONFIG.name + ' is ready!');
         log('========================================');
+
+        // ===== USER TIMING: enhancer fully initialized =====
+        if (typeof performance !== 'undefined' && performance.mark) {
+            performance.mark('enhancer-ready');
+            try {
+                performance.measure('enhancer-init-time', 'enhancer-start', 'enhancer-ready');
+            } catch (e) {
+                // Ignore if marks are missing
+            }
+        }
+        // ===================================================
     }
     
     // ============================================================================
