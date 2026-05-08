@@ -247,38 +247,38 @@
     // ============================================================================
     // REGISTER MODULES (all modules now exposed globally)
     // ============================================================================
-if (typeof MediaDimensionsModule !== 'undefined') {
-    registerModule('media-dimensions', MediaDimensionsModule, ['forumObserver']);
-} else {
-    log('MediaDimensionsModule not found, media dimensions disabled', 'warn');
-    if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
-        ENHANCER_CONFIG.modules['media-dimensions'] = false;
-    }
-}
-        
+    function registerAllModules() {
+        if (typeof MediaDimensionsModule !== 'undefined') {
+            registerModule('media-dimensions', MediaDimensionsModule, ['forumObserver']);
+        } else {
+            log('MediaDimensionsModule not found, media dimensions disabled', 'warn');
+            if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
+                ENHANCER_CONFIG.modules['media-dimensions'] = false;
+            }
+        }
+
         if (typeof TwemojiModule !== 'undefined') {
             registerModule('twemoji', TwemojiModule, ['twemojiLib', 'forumObserver']);
         } else {
             log('TwemojiModule not found, emoji replacement disabled', 'warn');
             ENHANCER_CONFIG.modules.twemoji = false;
         }
-        
+
         if (typeof ForumPostsModule !== 'undefined') {
             registerModule('posts', ForumPostsModule, ['domUtils', 'eventBus']);
         } else {
             log('ForumPostsModule not found, posts enhancement disabled', 'warn');
             ENHANCER_CONFIG.modules.posts = false;
         }
-        
+
         if (typeof ModalsModule !== 'undefined') {
-    registerModule('modals', ModalsModule, ['forumObserver']);
-} else {
-    log('ModalsModule not found, modern modals disabled', 'warn');
-    // Defensive check – avoid crash if ENHANCER_CONFIG.modules is missing
-    if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
-        ENHANCER_CONFIG.modules.modals = false;
-    }
-}
+            registerModule('modals', ModalsModule, ['forumObserver']);
+        } else {
+            log('ModalsModule not found, modern modals disabled', 'warn');
+            if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
+                ENHANCER_CONFIG.modules.modals = false;
+            }
+        }
 
         // NEW: Slick Carousel module registration
         if (typeof SlickCarouselModule !== 'undefined') {
