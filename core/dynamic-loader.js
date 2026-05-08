@@ -85,7 +85,7 @@ const SCRIPT_URLS = [
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a4ac76d/forum_core_observer.js",
     
     // Modules (each will wait for forum-observer-ready internally)
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f29c780/modules/media-dimensions.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5974f8e/modules/twemoji.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0ff8b76/modules/posts.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@951ae91/modules/modals.js",
