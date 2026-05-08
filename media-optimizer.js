@@ -1,6 +1,12 @@
 (function() {
     'use strict';
     
+    // ===== USER TIMING: mark script start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('weserv-start');
+    }
+    // =========================================
+
     // ===== CONSTANTS & CONFIGURATION =====
     var CONFIG = {
         cdn: 'https://images.weserv.nl/',
@@ -623,6 +629,17 @@
                 }
             }));
             
+            // ===== USER TIMING: mark ready and measure =====
+            if (typeof performance !== 'undefined' && performance.mark) {
+                performance.mark('weserv-ready-dispatched');
+                try {
+                    performance.measure('weserv-load-time', 'weserv-start', 'weserv-ready-dispatched');
+                } catch (e) {
+                    // Ignore if marks missing
+                }
+            }
+            // =============================================
+
             // Non-critical: logging can happen when browser is idle
             if ('requestIdleCallback' in window) {
                 requestIdleCallback(function() {
