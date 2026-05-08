@@ -5,6 +5,12 @@
 var TwemojiModule = (function() {
     'use strict';
 
+    // ===== USER TIMING: mark start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('twemoji-start');
+    }
+    // ====================================
+
     const EMOJI_MAP = new Map([ 
         ['https://img.forumfree.net/html/emoticons/new/heart.svg', '2764.svg'], 
         ['https://img.forumfree.net/html/emoticons/new/flame.svg', '1f525.svg'], 
@@ -89,7 +95,6 @@ var TwemojiModule = (function() {
         ];
     }
 
-    // Modified to accept sync parameter
     function replaceCustomEmojis(container, sync) {
         if (shouldSkipContainer(container)) return;
         if (!container || !container.querySelectorAll) return;
@@ -243,10 +248,21 @@ var TwemojiModule = (function() {
         console.log('TwemojiModule initializing...');
         await waitForTwemoji();
         await waitForForumObserver();
-        initEmojiReplacement(); // this now does synchronous initial replacement
+        initEmojiReplacement();
         initialized = true;
         console.log('TwemojiModule ready');
-        
+
+        // ===== USER TIMING: mark ready and measure =====
+        if (typeof performance !== 'undefined' && performance.mark) {
+            performance.mark('twemoji-ready');
+            try {
+                performance.measure('twemoji-load-time', 'twemoji-start', 'twemoji-ready');
+            } catch (e) {
+                // Ignore if marks missing
+            }
+        }
+        // ================================================
+
         // Expose helper on window for external use
         window.emojiReplacer = {
             replace: function(container) { replaceCustomEmojis(container, false); },
