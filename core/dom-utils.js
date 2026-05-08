@@ -1,7 +1,15 @@
 // core/dom-utils.js
 // DOM manipulation utilities for Forum Enhancer
+
 var ForumDOMUtils = (function() {
     'use strict';
+
+    // ===== USER TIMING: mark start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('dom-utils-start');
+    }
+    // ====================================
+
     // ============================================================================
     // ELEMENT SELECTION
     // ============================================================================
@@ -422,5 +430,16 @@ var ForumDOMUtils = (function() {
 
 // Signal that dom-utils is ready
 if (typeof window !== 'undefined') {
+    // ===== USER TIMING: mark end & measure =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('dom-utils-end');
+        try {
+            performance.measure('dom-utils-load-time', 'dom-utils-start', 'dom-utils-end');
+        } catch (e) {
+            // Ignore if marks are missing
+        }
+    }
+    // ===========================================
+
     window.dispatchEvent(new CustomEvent('dom-utils-ready'));
 }
