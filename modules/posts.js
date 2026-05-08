@@ -16,6 +16,12 @@
 var ForumPostsModule = (function(Utils, EventBus) {
     'use strict';
 
+    // ===== USER TIMING: mark script start =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('posts-module-start');
+    }
+    // ==========================================
+
     // ============================================================================
     // CONFIGURATION
     // ============================================================================
@@ -1544,26 +1550,19 @@ async function convertAllPosts() {
     // Convert ALL blog articles (there may be more than one)
     var blogArticles = document.querySelectorAll('.blog .article');
     var blogCount = 0;
-    var allMids = [];  // collect mids from blog articles for API fetch
+    var allMids = [];
 
     if (blogArticles.length > 0) {
         for (var a = 0; a < blogArticles.length; a++) {
             var articleLi = blogArticles[a];
             var blogData = getBlogArticleData(articleLi);
-            // Safety: skip if already converted (shouldn't happen on fresh run)
             if (blogData.postId && convertedPostIds.has(blogData.postId)) continue;
 
             if (blogData.mid) allMids.push(blogData.mid);
-            var apiUser = null; // will be fetched below in batch
-            // We'll fetch user data later in batch, but we can also do here if needed
-            // Actually we fetch after collecting all mids to avoid multiple fetches
-            // We'll store blogData temporarily and process after fetching users
-            // For simplicity we can fetch user data here, but batch is better.
-            // Since we need to await user data per article, we'll fetch synchronously? 
-            // The original code fetched per article. We'll keep that for now.
+            var apiUser = null;
             if (blogData.mid) {
                 await fetchUserData(blogData.mid);
-                apiUser = userDataCache.get(blogData.mid); // get from cache
+                apiUser = userDataCache.get(blogData.mid);
             }
 
             var blogCardHtml = generateBlogPost(blogData, apiUser);
@@ -1895,4 +1894,15 @@ globalThis.forumObserver.register({
 
 if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('posts-module-ready'));
+
+    // ===== USER TIMING: mark ready and measure =====
+    if (typeof performance !== 'undefined' && performance.mark) {
+        performance.mark('posts-module-ready');
+        try {
+            performance.measure('posts-module-load-time', 'posts-module-start', 'posts-module-ready');
+        } catch (e) {
+            // Ignore if marks missing
+        }
+    }
+    // ================================================
 }
