@@ -1824,7 +1824,7 @@ async function convertAllPosts() {
     // INITIALIZE
     // ============================================================================
 function initialize() {
-    if (isInitialized) { return; }
+    if (isInitialized) { return Promise.resolve(); }  // already done
 
     // ---- Wait for dependencies if they aren't loaded yet ----
     var depsReady = new Promise(function(resolve) {
@@ -1854,7 +1854,8 @@ function initialize() {
         setTimeout(resolve, 5000); // safety timeout
     });
 
-    depsReady.then(function() {
+    // RETURN THE PROMISE – this is the crucial fix
+    return depsReady.then(function() {
         if (isInitialized) return;
         isInitialized = true;
 
