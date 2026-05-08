@@ -73,7 +73,6 @@
         }
         for (var i = 0; i < module.dependencies.length; i++) {
             var depName = module.dependencies[i];
-            // Handle special dependencies that are not modules but global objects/events
             if (depName === 'forumObserver') {
                 if (!globalThis.forumObserver) return false;
                 continue;
@@ -108,7 +107,7 @@
        
         try {
             if (module.module && typeof module.module.initialize === 'function') {
-                await module.module.initialize();   // async init
+                await module.module.initialize();
                 module.initialized = true;
                 moduleStatus.set(module.name, { status: 'initialized', timestamp: Date.now() });
                 log('✓ Initialized: ' + module.name);
@@ -405,31 +404,47 @@
             createModernWrapper();
         }
        
-registerAllModules();
-var initializedCount = await initializeAllModules();
-log(initializedCount + ' of ' + modules.length + ' modules initialized');
+        registerAllModules();
+        var initializedCount = await initializeAllModules();
+        log(initializedCount + ' of ' + modules.length + ' modules initialized');
 
-// ---- FALLBACK: ensure ForumPostsModule runs ----
-if (typeof ForumPostsModule !== 'undefined' && ForumPostsModule.initialize) {
-    var postsMod = modules.find(function(m) { return m.name === 'posts'; });
-    if (!postsMod || !postsMod.initialized) {
-        log('Posts module not initialized – forcing start', 'warn');
-        try {
-            await ForumPostsModule.initialize();
-        } catch (e) {
-            log('Force‑start of posts module failed: ' + e.message, 'error');
+        // ---- FALLBACK: ensure ForumPostsModule runs ----
+        if (typeof ForumPostsModule !== 'undefined' && ForumPostsModule.initialize) {
+            var postsMod = modules.find(function(m) { return m.name === 'posts'; });
+            if (!postsMod || !postsMod.initialized) {
+                log('Posts module not initialized – forcing start', 'warn');
+                try {
+                    await ForumPostsModule.initialize();
+                } catch (e) {
+                    log('Force‑start of posts module failed: ' + e.message, 'error');
+                }
+            }
         }
-    }
-}
-// -----------------------------------------------
+        // -----------------------------------------------
 
-if (typeof ForumEventBus !== 'undefined') {
-    ForumEventBus.trigger('forum:enhancer:ready', {
-        version: ENHANCER_CONFIG.version,
-        modules: initializedCount,
-        wrapper: document.getElementById(ENHANCER_CONFIG.wrapperId)
-    });
-}
+        if (typeof ForumEventBus !== 'undefined') {
+            ForumEventBus.trigger('forum:enhancer:ready', {
+                version: ENHANCER_CONFIG.version,
+                modules: initializedCount,
+                wrapper: document.getElementById(ENHANCER_CONFIG.wrapperId)
+            });
+        }
+       
+        log('========================================');
+        log(ENHANCER_CONFIG.name + ' is ready!');
+        log('========================================');
+
+        // ===== USER TIMING: enhancer fully initialized =====
+        if (typeof performance !== 'undefined' && performance.mark) {
+            performance.mark('enhancer-ready');
+            try {
+                performance.measure('enhancer-init-time', 'enhancer-start', 'enhancer-ready');
+            } catch (e) {
+                // Ignore if marks are missing
+            }
+        }
+        // ===================================================
+    }
     
     // ============================================================================
     // EXPOSE GLOBALLY
