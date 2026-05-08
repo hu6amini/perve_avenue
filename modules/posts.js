@@ -52,6 +52,8 @@ var ForumPostsModule = (function(Utils, EventBus) {
     var isInitialized = false;
     var postReactions = new Map();
     var activePopup = null;
+    var conversionInProgress = false;
+    var conversionPending = false;
 
     // Cache for user API data (MID -> user object)
     var userDataCache = new Map();
