@@ -92,7 +92,7 @@ const SCRIPT_URLS = [
     // NEW Slick carousel module
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a06c920/modules/slick-carousel.js",    
     // Main enhancer (last)
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7466ffe/core/forum-enhancer.js"
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c0096ce/core/forum-enhancer.js"
 ];
 
 async function loadAllScripts() {
