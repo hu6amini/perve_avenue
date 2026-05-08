@@ -78,7 +78,7 @@ const SCRIPT_URLS = [
     "https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm",
     
     // Core utilities (no dependencies)
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c7477a9/core/dom-utils.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@be3f0b0/core/event-bus.js",
     
     // Forum Core Observer (must be before modules that use it)
