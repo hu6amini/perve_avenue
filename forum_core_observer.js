@@ -31,7 +31,7 @@ class ForumCoreObserver {
     
     #callbacks = new Map();
     #debouncedCallbacks = new Map();
-    #styleReprocessCallbacks = new Set(); // NEW: stores ids of callbacks that need style-reprocessing
+    #styleReprocessCallbacks = new Set();
     #pageState = this.#detectPageState();
     
     #scriptsReady = {
@@ -81,6 +81,12 @@ class ForumCoreObserver {
     };
     
     constructor(debug = false) {
+        // ===== USER TIMING: start of constructor =====
+        if (performance && performance.mark) {
+            performance.mark('observer-ctor-start');
+        }
+        // =============================================
+
         this.#debug = debug;
         this.#iframeObservers = new WeakMap();
         this.#shadowObservers = new WeakMap();
@@ -94,9 +100,30 @@ class ForumCoreObserver {
         this.#setupErrorHandling();
         this.#setupPerformanceMonitoring();
         
+        // ===== USER TIMING: after all synchronous init (scan done) =====
+        if (performance && performance.mark) {
+            performance.mark('observer-init-end');
+        }
+        // ==============================================================
+
         // Dispatch ready event after everything is initialised
         queueMicrotask(() => {
             window.dispatchEvent(new CustomEvent('forum-observer-ready', { detail: { timestamp: Date.now() } }));
+            
+            // ===== USER TIMING: ready event dispatched =====
+            if (performance && performance.mark) {
+                performance.mark('observer-ready-dispatched');
+                
+                // Create measures (only once)
+                try {
+                    performance.measure('observer-init-time', 'observer-ctor-start', 'observer-init-end');
+                    performance.measure('observer-total-time', 'observer-ctor-start', 'observer-ready-dispatched');
+                } catch (e) {
+                    // Ignore if marks already cleared
+                }
+            }
+            // ================================================
+
             if (this.#debug) console.log('[ForumObserver] Ready event dispatched');
         });
     }
@@ -902,7 +929,7 @@ class ForumCoreObserver {
     
     async #processMutationBatch(mutations, priority) {
         const affectedNodes = new Set();
-        const styleChangeNodes = new Set(); // Nodes that became visible via style change
+        const styleChangeNodes = new Set();
         
         for (let i = 0; i < mutations.length; i++) {
             const mutation = mutations[i];
@@ -937,11 +964,9 @@ class ForumCoreObserver {
                     
                 case 'attributes':
                     if (mutation.target && !this.#isInEditor(mutation.target)) {
-                        // Special handling for style attribute changes that reveal an element
                         if (mutation.attributeName === 'style') {
                             const oldDisplay = this.#getDisplayFromStyle(mutation.oldValue);
                             const newDisplay = this.#getDisplayFromStyle(mutation.target.getAttribute('style') || '');
-                            // Check if the element transitioned from hidden to visible (block or inline-block)
                             if ((oldDisplay === 'none' || oldDisplay === null) && 
                                 (newDisplay === 'block' || newDisplay === 'inline-block')) {
                                 styleChangeNodes.add(mutation.target);
@@ -981,14 +1006,12 @@ class ForumCoreObserver {
             }
         }
         
-        // Process normal added/affected nodes (skip if already processed)
         for (const node of affectedNodes) {
             if (node && !this.#processedNodes.has(node)) {
                 await this.#processNode(node);
             }
         }
         
-        // Process style change nodes (force re-process even if already processed)
         for (const node of styleChangeNodes) {
             if (node && this.#styleReprocessCallbacks.size > 0) {
                 await this.#processNode(node, { styleChange: true });
@@ -996,7 +1019,6 @@ class ForumCoreObserver {
         }
     }
     
-    // Helper to extract display value from style string
     #getDisplayFromStyle(styleString) {
         if (!styleString) return null;
         const match = styleString.match(/display\s*:\s*([^;]+)/);
@@ -1086,7 +1108,6 @@ class ForumCoreObserver {
     async #processNode(node, options = {}) {
         if (!node) return;
         
-        // For regular processing, skip if already processed
         if (!options.styleChange && this.#processedNodes.has(node)) return;
         
         if (this.#isInEditor(node)) return;
@@ -1105,7 +1126,6 @@ class ForumCoreObserver {
             const callback = matchingCallbacks[i];
             if (!callback) continue;
             
-            // If this is a styleChange-triggered reprocess, only include callbacks that have reprocessOnStyle = true
             if (options.styleChange && !callback.reprocessOnStyle) continue;
             
             let priority = callback.priority || 'normal';
@@ -1130,7 +1150,6 @@ class ForumCoreObserver {
             }
         }
         
-        // Mark node as processed only if we are not in styleChange mode (i.e., normal processing)
         if (!options.styleChange) {
             this.#processedNodes.add(node);
             this.#nodeTimestamps.set(node, Date.now());
@@ -1467,7 +1486,7 @@ class ForumCoreObserver {
             selector: settings.selector,
             pageTypes: settings.pageTypes,
             dependencies: settings.dependencies,
-            reprocessOnStyle: settings.reprocessOnStyle || false, // NEW
+            reprocessOnStyle: settings.reprocessOnStyle || false,
             retryCount: 0,
             maxRetries: settings.maxRetries || ForumCoreObserver.#CONFIG.memory.maxCallbackRetries,
             createdAt: performance.now(),
