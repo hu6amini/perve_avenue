@@ -1,3 +1,5 @@
+"use strict";
+
 document.documentElement.lang = "en";
 
 // ============================================================================
@@ -94,6 +96,10 @@ const SCRIPT_URLS = [
 ];
 
 async function loadAllScripts() {
+    // ----- START TIMING -------------------------------------------------------
+    performance.mark('loader-start');
+    // --------------------------------------------------------------------------
+
     // 1. Load all critical scripts (including Twemoji, observer, modules, etc.)
     for (var i = 0; i < SCRIPT_URLS.length; i++) {
         var url = SCRIPT_URLS[i];
@@ -109,6 +115,10 @@ async function loadAllScripts() {
             return;  // Stop loading
         }
     }
+
+    // ----- CRITICAL SCRIPTS LOADED --------------------------------------------
+    performance.mark('critical-scripts-loaded');
+    // --------------------------------------------------------------------------
 
     // 2. Load platform social media widgets (Twitter, Instagram) – self-contained, async
     var platformScripts = [
@@ -134,6 +144,21 @@ async function loadAllScripts() {
     });
     document.body.appendChild(instantPageScript);
     console.log('Loaded instant.page');
+
+    // ----- ALL SCRIPTS QUEUED ------------------------------------------------
+    performance.mark('all-scripts-queued');
+    // --------------------------------------------------------------------------
+
+    // Create useful measures
+    performance.measure('critical-load-time', 'loader-start', 'critical-scripts-loaded');
+    performance.measure('total-queue-time', 'loader-start', 'all-scripts-queued');
+    performance.measure('non-critical-overhead', 'critical-scripts-loaded', 'all-scripts-queued');
+
+    // Log the results to console
+    console.log('⏱️ Critical scripts load time:',
+        performance.getEntriesByName('critical-load-time')[0].duration.toFixed(1), 'ms');
+    console.log('⏱️ Total queue time:',
+        performance.getEntriesByName('total-queue-time')[0].duration.toFixed(1), 'ms');
 }
 
 // Preload instant.page (so it's cached early)
