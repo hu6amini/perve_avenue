@@ -5,12 +5,10 @@
     // 1. THE "SAFE LIST": These scripts will NOT be trapped.
     // We include core jQuery and forum-specific plugins here.
     const safeList = [
-"jq.js",           // Core jQuery
+        "jq.js",           // Core jQuery
         "jqt.js",          // Forum toolkit
-        "ffa.js",          // <--- ADD THIS: Fixes "shy is not defined" and "sites" errors
-        "plugin_v3.js",    // <--- ADD THIS: Fixes the Notification logic gaps
-        "dynamic-loader",  // Your loader
-        "media-optimizer"
+        "dynamic-loader",  // Your custom loader
+        "media-optimizer", // Your optimizer
     ];
 
     const processScript = (el) => {
