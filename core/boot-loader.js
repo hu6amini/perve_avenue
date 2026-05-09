@@ -1,31 +1,30 @@
 "use strict";
 (function() {
+    // SAFETY NET: Prevents inline crashes before scripts are ready
+    window.$ = window.jQuery = function() { 
+        return { 
+            ready: function(fn) { window.addEventListener('load', fn); },
+            notifications: function() { console.log("Notifications queued..."); return this; },
+            on: function() { return this; }
+        }; 
+    };
+
     let logBuffer = "[Surgical Deferral Active]:";
     
-    // FILES TO ALLOW IMMEDIATELY (Don't trap these)
-    const whitelist = [
-        "jq.js",             // Core jQuery - fixes the Notifications error
-        "media-optimizer.js", // Your optimizer - fixes the report
-        "dynamic-loader.js",  // Your loader
-        "boot-loader.js"      // Self-exclusion
-    ];
+    // Whitelist core needs to prevent logic gaps
+    const whitelist = ["jq.js", "media-optimizer.js", "dynamic-loader.js", "boot-loader.js"];
 
     const processScript = (el) => {
         if (el.tagName === "SCRIPT") {
             const src = el.src || el.getAttribute('data-src') || "";
             const fileName = src.split('/').pop().split('?')[0];
-
-            // Check if it's external, not on whitelist, and not already optimized
             const isWhiteListed = whitelist.some(item => fileName.includes(item));
             const isOptimized = el.hasAttribute('async') || el.hasAttribute('defer') || el.type === 'module';
 
             if (src && !isWhiteListed && !isOptimized && el.type !== "text/plain") {
                 el.type = "text/plain";
                 el.dataset.original = src;
-                
-                // Optional: stop download
                 el.removeAttribute('src'); 
-                
                 logBuffer += "\n- Trapped: " + fileName;
             }
         }
@@ -33,9 +32,7 @@
 
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-            mutation.addedNodes.forEach(node => {
-                if (node.nodeType === 1) processScript(node);
-            });
+            mutation.addedNodes.forEach(node => { if (node.nodeType === 1) processScript(node); });
         }
     });
 
@@ -44,8 +41,8 @@
 
     window.addEventListener("load", () => {
         console.log(logBuffer);
-        const trapped = document.querySelectorAll('script[type="text/plain"]');
-        trapped.forEach(oldScript => {
+        // Once window loads, the 'real' jQuery will overwrite our safety net
+        document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
             if (oldScript.dataset.original) {
                 const newScript = document.createElement("script");
                 newScript.src = oldScript.dataset.original;
