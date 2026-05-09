@@ -97,7 +97,7 @@ const SCRIPT_URLS = [
     // 5. Modules
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@634f110/modules/posts.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9fa853c/modules/slick-carousel.js",    
     
