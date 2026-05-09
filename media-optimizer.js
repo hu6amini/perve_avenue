@@ -16,7 +16,7 @@
         quality: {
             jpg: '90',
             jpeg: '90',     
-            webp: '90',
+            webp: '80',
             avif: '85',      // Kept for reference but no longer used
             png: '100',
             gif: '100',
