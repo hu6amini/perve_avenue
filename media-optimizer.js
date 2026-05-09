@@ -427,73 +427,45 @@
         };
     }
     
-function optimizeImage(img) {
-    if (!img.src || img.src.indexOf('data:') === 0) return;
-
-    applyLazyAttributes(img);
-
-    if (state.processed.has(img)) return;
-
-    var skip = shouldSkip(img.src, img);
-    if (skip) {
-        state.processed.add(img);
-        state.stats.skipped++;
-        img.setAttribute('data-optimized', 'skipped');
-        return;
-    }
-
-    state.processed.add(img);
-    state.stats.total++;
-
-    var originalSrc = img.src;
-    img.setAttribute('data-original', originalSrc);
-
-    // --- build the optimized source (unchanged) ---
-    var optimization = buildWeservUrl(img);
-
-    // --- NEW: srcset for all images except tiny ones ---
-    var explicitWidth = parseInt(img.getAttribute('width'), 10);
-    var explicitHeight = parseInt(img.getAttribute('height'), 10);
-    var isSmallExplicit = (explicitWidth > 0 && explicitWidth <= 200) ||
-                          (explicitHeight > 0 && explicitHeight <= 200);
-
-    // Only add srcset if the image isn't already tiny or an emoji
-    if (!isSmallExplicit && !isLikelyEmoji(img)) {
-        // Predefined widths (adjust if you prefer different breakpoints)
-        var widths = [320, 640, 960, 1280];
-        var srcsetParts = [];
-        var encodedUrl = encodeURIComponent(originalSrc);
-        for (var w = 0; w < widths.length; w++) {
-            var widthDesc = widths[w];
-            // Build a wsrv URL with the given width, keeping other params
-            var params = 'output=webp&maxage=' + CONFIG.cache +
-                         '&q=' + optimization.quality + '&w=' + widthDesc + '&il';
-            var srcsetUrl = CONFIG.cdn + '?url=' + encodedUrl + '&' + params;
-            srcsetParts.push(srcsetUrl + ' ' + widthDesc + 'w');
+    function optimizeImage(img) {
+        if (!img.src || img.src.indexOf('data:') === 0) return;
+        
+        applyLazyAttributes(img);
+        
+        if (state.processed.has(img)) return;
+        
+        var skip = shouldSkip(img.src, img);
+        if (skip) {
+            state.processed.add(img);
+            state.stats.skipped++;
+            img.setAttribute('data-optimized', 'skipped');
+            return;
         }
-        img.setAttribute('srcset', srcsetParts.join(', '));
-
-        // Sensible sizes – you can customise this to match your layout
-        img.setAttribute('sizes', '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw');
+        
+        state.processed.add(img);
+        state.stats.total++;
+        
+        var originalSrc = img.src;
+        img.setAttribute('data-original', originalSrc);
+        
+        var optimization = buildWeservUrl(img);
+        
+        state.stats.optimized++;
+        state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
+        state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
+        
+        img.onerror = function() {
+            state.stats.failed++;
+            img.setAttribute('data-optimized', 'failed');
+            img.src = originalSrc;
+            img.onerror = null;
+        };
+        
+        img.src = optimization.url;
+        img.setAttribute('data-optimized', 'true');
+        img.setAttribute('data-format', optimization.format);
+        img.setAttribute('data-quality', optimization.quality);
     }
-
-    // --- error handling and fallback src (unchanged) ---
-    state.stats.optimized++;
-    state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
-    state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
-
-    img.onerror = function() {
-        state.stats.failed++;
-        img.setAttribute('data-optimized', 'failed');
-        img.src = originalSrc;
-        img.onerror = null;
-    };
-
-    img.src = optimization.url;
-    img.setAttribute('data-optimized', 'true');
-    img.setAttribute('data-format', optimization.format);
-    img.setAttribute('data-quality', optimization.quality);
-}
     
     // ===== MUTATION OBSERVER =====
     var mutationObserver = new MutationObserver(function(mutations) {
@@ -751,4 +723,4 @@ function optimizeImage(img) {
     }
     
     init();
-})();
+})(); 
