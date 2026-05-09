@@ -11,6 +11,7 @@
         "plugin_v3.js",    // <--- ADD THIS: Fixes the Notification logic gaps
         "dynamic-loader",  // Your loader
         "media-optimizer"
+        "boot-loader"
     ];
 
     const processScript = (el) => {
