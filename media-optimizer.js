@@ -427,61 +427,45 @@
         };
     }
     
-function optimizeImage(img) {
-    if (!img.src || img.src.indexOf('data:') === 0) return;
-
-    applyLazyAttributes(img);
-
-    if (state.processed.has(img)) return;
-
-    var skip = shouldSkip(img.src, img);
-    if (skip) {
-        state.processed.add(img);
-        state.stats.skipped++;
-        img.setAttribute('data-optimized', 'skipped');
-        return;
-    }
-
-    state.processed.add(img);
-    state.stats.total++;
-
-    var originalSrc = img.src;
-    img.setAttribute('data-original', originalSrc);
-
-    // ---- NEW: build a srcset with predefined widths (only for suitable images) ----
-    var maxWidth = parseInt(img.getAttribute('width') || 0, 10);
-    if (maxWidth > 600) {
-        var widths = [400, 800, 1200];
-        var srcsetUrls = [];
-        var baseOptimization = buildWeservUrl(img); // base URL without forced width
-        for (var w = 0; w < widths.length; w++) {
-            var width = widths[w];
-            var urlWithWidth = baseOptimization.url + '&w=' + width;
-            srcsetUrls.push(urlWithWidth + ' ' + width + 'w');
+    function optimizeImage(img) {
+        if (!img.src || img.src.indexOf('data:') === 0) return;
+        
+        applyLazyAttributes(img);
+        
+        if (state.processed.has(img)) return;
+        
+        var skip = shouldSkip(img.src, img);
+        if (skip) {
+            state.processed.add(img);
+            state.stats.skipped++;
+            img.setAttribute('data-optimized', 'skipped');
+            return;
         }
-        img.setAttribute('srcset', srcsetUrls.join(', '));
-        img.setAttribute('sizes', '(max-width: 600px) 100vw, (max-width: 1100px) 50vw, 33vw');
+        
+        state.processed.add(img);
+        state.stats.total++;
+        
+        var originalSrc = img.src;
+        img.setAttribute('data-original', originalSrc);
+        
+        var optimization = buildWeservUrl(img);
+        
+        state.stats.optimized++;
+        state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
+        state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
+        
+        img.onerror = function() {
+            state.stats.failed++;
+            img.setAttribute('data-optimized', 'failed');
+            img.src = originalSrc;
+            img.onerror = null;
+        };
+        
+        img.src = optimization.url;
+        img.setAttribute('data-optimized', 'true');
+        img.setAttribute('data-format', optimization.format);
+        img.setAttribute('data-quality', optimization.quality);
     }
-    // ----------------------------------------------------------------------------
-
-    var optimization = buildWeservUrl(img);
-
-    state.stats.optimized++;
-    state.stats.byFormat[optimization.format] = (state.stats.byFormat[optimization.format] || 0) + 1;
-    state.stats.byQuality[optimization.quality] = (state.stats.byQuality[optimization.quality] || 0) + 1;
-
-    img.onerror = function() {
-        state.stats.failed++;
-        img.setAttribute('data-optimized', 'failed');
-        img.src = originalSrc;
-        img.onerror = null;
-    };
-
-    img.src = optimization.url;
-    img.setAttribute('data-optimized', 'true');
-    img.setAttribute('data-format', optimization.format);
-    img.setAttribute('data-quality', optimization.quality);
-}
     
     // ===== MUTATION OBSERVER =====
     var mutationObserver = new MutationObserver(function(mutations) {
