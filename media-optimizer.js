@@ -368,43 +368,47 @@
         return el;
     }
     
-    // ===== WESERV OPTIMIZATION =====
+// ===== WESERV OPTIMIZATION WITH DYNAMIC SIZING =====
     function buildWeservUrl(img) {
         var originalSrc = img.src;
         var originalFormat = detectFormat(originalSrc);
         var isGif = originalFormat === 'gif';
         
-        // AVIF REMOVED - Always use WebP for non-GIF images
-        var outputFormat = isGif ? 'webp' : 'webp';
-        
+        var outputFormat = 'webp'; // Force WebP for better compression
         var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
         
         var params = [
             'maxage=' + CONFIG.cache,
             'q=' + quality
         ];
+
+        // --- NEW: DYNAMIC SIZING LOGIC ---
+        // 1. Get the width of the screen
+        var screenWidth = window.innerWidth;
+        // 2. Forums usually have a max post width (e.g., 800px-1000px). 
+        // We cap the image at the screen width to prevent massive 4000px uploads.
+        var targetWidth = screenWidth;
+
+        // 3. Handle High-DPI (Retina) displays. 
+        // A 400px space on an iPhone actually needs an 800px image to look sharp.
+        var dpr = window.devicePixelRatio || 1;
+        var finalWidth = Math.round(targetWidth * dpr);
+
+        // 4. Set a "Safety Ceiling" (Don't request anything wider than 1920px)
+        if (finalWidth > 1920) finalWidth = 1920;
+        
+        params.push('w=' + finalWidth);
+        params.push('we'); // 'we' (without enlargement) prevents small icons from becoming blurry
+        // ---------------------------------
         
         switch (outputFormat) {
-            case 'png':
-                params.push('af');
-                params.push('l=9');
-                params.push('lossless=true');
-                break;
             case 'webp':
-                params.push('il');
-                break;
-            case 'jpeg':
-            case 'jpg':
-                params.push('il');
+                params.push('il'); // Interlace for progressive loading
                 break;
         }
         
         if (isGif) {
-            params.push('n=-1');
-            params.push('lossless=true');
-        } else if (originalFormat === 'png') {
-            params.push('af');
-            params.push('l=9');
+            params.push('n=-1'); // Ensure all frames are processed
         }
         
         var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
