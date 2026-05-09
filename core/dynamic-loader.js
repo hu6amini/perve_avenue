@@ -99,7 +99,7 @@ const SCRIPT_URLS = [
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@634f110/modules/posts.js",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a06c920/modules/slick-carousel.js",    
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9fa853c/modules/slick-carousel.js",    
     
     // 6. Main enhancer (last)
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js"
