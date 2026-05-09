@@ -1,387 +1,104 @@
-/*============================================
-   midnight emerald skin - forum modernized css
-   optimized & mathematically perfected with φ(1.618)
-   essential styles - modern posts edition
-   ACCESSIBILITY ENHANCED (v2.0)
-   ADDED: Group-specific avatar borders & badges (posts + modal)
-   ADDED: Modern blog card styles (body#topic articles)
-============================================*/
-
 /*--------------------------------------------
-   1. CSS RESET & BASE NORMALIZATION
+   5b. slick carousel – emerald theme overrides
 --------------------------------------------*/
-*,
-*::before,
-*::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    outline: none;
+.carousel-wrapper {
+    padding: 0 var(--space-md);
+    margin: var(--space-xl) auto var(--space-xl);
 }
 
-html {
-    font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 16px;
-    line-height: 1.618;
-    scrollbar-color: var(--surface-color) transparent;
-    scrollbar-width: thin;
-    scrollbar-gutter: stable;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizelegibility;
+/* Prevent FOUC – only the first slide is visible before Slick initialises */
+.slick_carousel {
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
 }
 
-body {
-    background-color: var(--bg-color);
-    color: var(--text-primary);
-    font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: var(--text-base);
-    line-height: 1.618;
-    margin: 0;
-    padding: 0;
-    min-height: 100vh;
-}
-
-/*--------------------------------------------
-   2. CSS VARIABLES & THEMES
---------------------------------------------*/
-:root {
-    /* Golden ratio constants */
-    --phi: 1.618;
-    --phi-inverse: 0.618;
-    --phi-squared: 2.618;
-    --phi-cubed: 4.236;
-
-    /* Primary Colors - Emerald greens */
-    --primary-color: #059669;
-    --primary-dark: #047857;
-    --primary-light: #10b981;
-
-    /* Accent Colors */
-    --secondary-color: #7c3aed;
-    --accent-color: #0ea5e9;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #dc2626;
-
-    /* Theme Colors - Dark Mode (Default) */
-    --bg-color: #111827;
-    --surface-color: #1f2937;
-    --surface-light: #374151;
-    --border-color: rgba(255, 255, 255, 0.1);
-
-    /* Text Colors */
-    --text-primary: #f9fafb;
-    --text-secondary: #d1d5db;
-    --text-tertiary: #6b7280;
-    --text-muted: #4b5563;
-
-    /* Interactive States */
-    --hover-color: rgba(255, 255, 255, 0.05);
-    --active-color: rgba(255, 255, 255, 0.1);
-    --focus-ring: rgba(5, 150, 105, 0.3);
-
-    /* Role colors */
-    --admin-color: #dc2626;
-    --global-mod-color: #06b6d4;
-    --mod-color: #8b5cf6;
-    --dev-color: #0ea5e9;
-    --member-color: #059669;
-    --guest-color: #6b7280;
-    --founder-color: #f59e0b;
-    --game-dev-color: #3b82f6;
-    --fan-color: #ec4899;
-
-    /* Shadows - Golden ratio progression */
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
-    --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
-    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6);
-
-    /* Border Radius */
-    --radius-sm: 4px;
-    --radius: 8px;
-    --radius-lg: 13px;
-    --radius-xl: 21px;
-    --radius-full: 9999px;
-
-    /* Spacing scale */
-    --space-micro: 0.146rem;
-    --space-xs: 0.382rem;
-    --space-sm: 0.618rem;
-    --space-md: 1rem;
-    --space-lg: 1.618rem;
-    --space-xl: 2.618rem;
-    --space-xxl: 4.236rem;
-    --space-xxxl: 6.854rem;
-
-    /* Padding scale */
-    --pad-micro: 0.073rem;
-    --pad-1: 0.146rem;
-    --pad-2: 0.236rem;
-    --pad-3: 0.382rem;
-    --pad-4: 0.618rem;
-    --pad-5: 1rem;
-    --pad-6: 1.618rem;
-    --pad-7: 2.618rem;
-    --pad-8: 4.236rem;
-
-    /* Typography */
-    --text-xs: 0.75rem;
-    --text-sm: 0.875rem;
-    --text-base: 1rem;
-    --text-md: 1.125rem;
-    --text-lg: 1.25rem;
-    --text-xl: 1.618rem;
-    --text-2xl: 2rem;
-    --text-3xl: 3.236rem;
-
-    /* Font families */
-    --font-primary: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --font-heading: 'Bree Serif', Georgia, 'Times New Roman', serif;
-    --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-
-    /* Button height */
-    --btn-height: 2rem;
-}
-
-/* Emerald Light theme */
-[data-theme="emerald-light"] {
-    --bg-color: #fdfdfd;
-    --surface-color: #ffffff;
-    --surface-light: #f3f4f6;
-    --border-color: rgba(0, 0, 0, 0.08);
-    --text-primary: #111827;
-    --text-secondary: #4b5563;
-    --text-tertiary: #6b7280;
-    --text-muted: #9ca3af;
-    --hover-color: rgba(0, 0, 0, 0.05);
-    --active-color: rgba(0, 0, 0, 0.1);
-    --focus-ring: rgba(5, 150, 105, 0.2);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
-    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
-    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.18);
-}
-
-/*--------------------------------------------
-   3. FONT FACE DECLARATIONS
---------------------------------------------*/
-@font-face {
-    font-family: 'Font Awesome 6 Pro';
-    src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
-        url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4080e10/fonts/fa-regular-400.woff2')
-        format('woff2');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-    size-adjust: 100%;
-    descent-override: 0%;
-    ascent-override: 100%;
-    line-gap-override: 0%;
-    unicode-range: u+f000-ffff;
-}
-
-/* Font Awesome 6 Pro – Solid (900) */
-@font-face {
-    font-family: 'Font Awesome 6 Pro';
-    src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
-         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4080e10/fonts/fa-solid-900.woff2') format('woff2');
-    font-weight: 900;
-    font-style: normal;
-    font-display: swap;
-    size-adjust: 100%;
-    descent-override: 0%;
-    ascent-override: 100%;
-    line-gap-override: 0%;
-    unicode-range: u+f000-ffff;
-}
-
-/* Font Awesome 6 Pro – Brands (400) */
-@font-face {
-    font-family: 'Font Awesome 6 Pro Brands';
-    src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
-         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4080e10/fonts/fa-brands-400.woff2') format('woff2');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-    size-adjust: 100%;
-    descent-override: 0%;
-    ascent-override: 100%;
-    line-gap-override: 0%;
-    unicode-range: u+f000-ffff;
-}
-
-/* Quicksand Variable (300-700) */
-@font-face {
-    font-family: 'Quicksand';
-    src: local('Quicksand'),
-         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@141d63e/fonts/quicksand-variable.woff2') format('woff2-variations'),
-         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@141d63e/fonts/quicksand-variable.woff2') format('woff2');
-    font-weight: 300 700;
-    font-display: swap;
-}
-
-/* Bree Serif Regular */
-@font-face {
-    font-family: 'Bree Serif';
-    src: local('Bree Serif'), local('BreeSerif-Regular'),
-         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@141d63e/fonts/bree-serif.woff2') format('woff2');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
-/*--------------------------------------------
-   4. BASE ELEMENTS (Headings, Emojis, Links)
---------------------------------------------*/
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-    font-family: var(--font-heading);
-    font-weight: 400;
-}
-
-/* Refined heading sizes & spacing */
-h1 {
-    font-size: clamp(1.5rem, 4vw, calc(var(--text-xl) * 1.1))!important;
-    margin-top: var(--space-lg)!important;
-    margin-bottom: var(--space-lg)!important;
-    letter-spacing: -0.015em;
-}
-
-h2 {
-    font-size: clamp(1.25rem, 3vw, var(--text-lg))!important;
-    margin-top: var(--space-lg)!important;
-    margin-bottom: var(--space-md)!important;
-}
-
-h3 {
-    font-size: clamp(1rem, 2.5vw, var(--text-base))!important;
-    margin-top: var(--space-md)!important;
-    margin-bottom: var(--space-sm)!important;
-}
-
-h4 {
-    font-size: clamp(0.875rem, 2vw, var(--text-sm))!important;
-    margin-top: var(--space-md)!important;
-}
-
-h5 {
-    font-size: clamp(0.75rem, 1.5vw, var(--text-xs))!important;
-    margin-top: var(--space-sm)!important;
-}
-
-h6 {
-    font-size: clamp(0.6875rem, 1vw, 0.6875rem)!important;
-    margin-top: var(--space-sm)!important;
-}
-h1 .twemoji {
-    height: 1.1em;
-    width: 1.1em;
-    vertical-align: -0.18em;
-    margin: 0 0.08em;
-}
-
-h2 .twemoji {
-    height: 1.15em;
-    width: 1.15em;
-    vertical-align: -0.2em;
-    margin: 0 0.06em;
-}
-
-h3 .twemoji {
-    height: 1.2em;
-    width: 1.2em;
-    vertical-align: -0.22em;
-    margin: 0 0.04em;
-}
-
-h4 .twemoji {
-    height: 1.25em;
-    width: 1.25em;
-    vertical-align: -0.25em;
-    margin: 0 0.02em;
-}
-
-h5 .twemoji {
-    height: 1.3em;
-    width: 1.3em;
-    vertical-align: -0.28em;
-    margin: 0;
-}
-
-h6 .twemoji {
-    height: 1.35em;
-    width: 1.35em;
-    vertical-align: -0.3em;
-}
-
-.twemoji {
-    height: 1.25em;
-    width: 1.25em;
-    vertical-align: -0.2em;
-    display: inline-block;
-}
-
-.reaction-emoji-img {
-    width: 16px;
-    height: 16px;
-    vertical-align: middle;
-}
-
-a {
-    color: var(--primary-color);
-    text-decoration: none;
-    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-a:hover {
-    color: var(--primary-light);
-    text-decoration: underline;
-}
-
-img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-    color: transparent;
-}
-
-.default-avatar {
-    width: 60px;
-    height: 60px;
-    min-width: 60px;
-    min-height: 60px;
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    display: flex;
+/* ----- Arrows ----- */
+.slick-prev,
+.slick-next {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 9;
+    width: 2.618rem; /* golden‑ratio size */
+    height: 2.618rem;
+    display: flex !important; /* force override if inline style missing */
     align-items: center;
     justify-content: center;
-    color: white;
-    font-size: 1.5rem;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    opacity: 0.8;
+    transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+}
+
+.slick-prev:hover,
+.slick-next:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #FFF;
+    opacity: 1;
+}
+
+.slick-prev { left: var(--space-md); }
+.slick-next { right: var(--space-md); }
+
+/* Arrow inner icons inherit color */
+.slick-prev i,
+.slick-next i {
+    font-size: 1rem;
+}
+
+/* ----- Dots ----- */
+.slick-dots {
+    position: absolute;
+    bottom: var(--space-sm);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex !important;
+    gap: var(--space-xs);
     margin: 0;
-    border-radius: 50% !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+    list-style: none;
+    z-index: 9;
 }
 
-/*--------------------------------------------
-   5. LAYOUT CONTAINERS
---------------------------------------------*/
-#modern-forum-wrapper {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 var(--space-md);
+.slick-dots li { margin: 0; }
+
+.slick-dots li button {
+    width: 0.618rem;
+    height: 0.618rem;
+    padding: 0;
+    border: 1px solid var(--text-secondary);
+    border-radius: var(--radius-full);
+    background: transparent;
+    font-size: 0;
+    line-height: 0;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
 }
 
-#posts-container,
-#modern-summary-container {
+.slick-dots li button:hover {
+    border-color: var(--primary-light);
+    background: rgba(16, 185, 129, 0.2);
+}
+
+.slick-dots li.slick-active button {
+    background: var(--primary-light);
+    border-color: var(--primary-light);
+}
+
+/* ----- Slide images ----- */
+.slick-slide img {
+    border-radius: 0; /* container already has border-radius */
     display: block;
-    padding: 0 var(--space-md);
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1200 / 300;
+    object-fit: cover;
 }
 
 /*--------------------------------------------
@@ -933,28 +650,6 @@ img {
 
 /* Blog avatar area uses same post-card-body, no extra rules */
 /* Blog content uses same post-content, post-message */
-
-/* Responsive refinements for blog card */
-@media (max-width: 680px) {
-    .blog-card-header {
-        padding: var(--pad-4) var(--pad-4) var(--pad-3);
-    }
-
-    .blog-title {
-        font-size: var(--text-xl);
-    }
-
-    .blog-meta {
-        gap: var(--space-sm);
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .blog-actions.top-actions {
-        margin-left: 0;
-        align-self: flex-end;
-    }
-}
 
 /*--------------------------------------------
    7. EMBEDDED LINK STYLES (with responsive)
@@ -1742,6 +1437,37 @@ img,
    
     .post-signature {
         display: none;
+    }
+
+    /* blog card responsive */
+    .blog-card-header {
+        padding: var(--pad-4) var(--pad-4) var(--pad-3);
+    }
+
+    .blog-title {
+        font-size: var(--text-xl);
+    }
+
+    .blog-meta {
+        gap: var(--space-sm);
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .blog-actions.top-actions {
+        margin-left: 0;
+        align-self: flex-end;
+    }
+
+    /* slick carousel responsive */
+    .slick-prev { left: var(--space-sm); }
+    .slick-next { right: var(--space-sm); }
+
+    .slick-dots { bottom: var(--space-xs); }
+
+    .slick-dots li button {
+        width: 0.5rem;
+        height: 0.5rem;
     }
 }
 
