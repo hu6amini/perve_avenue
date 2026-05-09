@@ -10,7 +10,8 @@
         "ffa.js",          // <--- ADD THIS: Fixes "shy is not defined" and "sites" errors
         "plugin_v3.js",    // <--- ADD THIS: Fixes the Notification logic gaps
         "dynamic-loader",  // Your loader
-        "media-optimizer"
+        "media-optimizer",
+        "boot-loader"
     ];
 
     const processScript = (el) => {
