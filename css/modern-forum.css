@@ -184,6 +184,36 @@ body {
     unicode-range: u+f000-ffff;
 }
 
+/* Font Awesome 6 Pro – Solid (900) */
+@font-face {
+    font-family: 'Font Awesome 6 Pro';
+    src: local('Font Awesome 6 Pro Solid'), local('FontAwesome6Pro-Solid'),
+         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4080e10/fonts/fa-solid-900.woff2') format('woff2');
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+    size-adjust: 100%;
+    descent-override: 0%;
+    ascent-override: 100%;
+    line-gap-override: 0%;
+    unicode-range: u+f000-ffff;
+}
+
+/* Font Awesome 6 Pro – Brands (400) */
+@font-face {
+    font-family: 'Font Awesome 6 Pro Brands';
+    src: local('Font Awesome 6 Pro Brands'), local('FontAwesome6Pro-Brands'),
+         url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4080e10/fonts/fa-brands-400.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    size-adjust: 100%;
+    descent-override: 0%;
+    ascent-override: 100%;
+    line-gap-override: 0%;
+    unicode-range: u+f000-ffff;
+}
+
 /* Quicksand Variable (300-700) */
 @font-face {
     font-family: 'Quicksand';
