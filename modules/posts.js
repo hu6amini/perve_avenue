@@ -32,7 +32,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
         AVATAR_SIZE: 60,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
-        QUALITY: 90
+        QUALITY: 80
     };
 
     // Avatar colour palette (for initial fallback)
