@@ -1,1 +1,38 @@
-"use strict";!function(){let e="[Universal Deferral Active]:";const t=t=>{if("SCRIPT"===t.tagName&&t.src){const n=t.hasAttribute("async"),o=t.hasAttribute("defer"),r="module"===t.type,i="text/plain"===t.type;if(!n&&!o&&!r&&!i)t.type="text/plain",t.dataset.original=t.src,t.textContent="",e+="\n- Trapped: "+t.src.split("/").pop().split("?")[0]}};new MutationObserver(e=>{for(const n of e)n.addedNodes.forEach(e=>{1===e.nodeType&&t(e)})}).observe(document.documentElement,{childList:!0,subtree:!0}),document.querySelectorAll("script").forEach(t),window.addEventListener("load",()=>{console.log(e),document.querySelectorAll('script[type="text/plain"]').forEach(e=>{if(e.dataset.original){const t=document.createElement("script");t.src=e.dataset.original,t.defer=!0,e.parentNode.replaceChild(t,e)}})})}().
+"use strict";
+(function() {
+    const log = [];
+    const process = (el) => {
+        if (el.tagName === "SCRIPT" && el.src && !el.type.includes("module")) {
+            // If it's not already deferred/async/trapped, trap it
+            if (!el.hasAttribute('async') && !el.hasAttribute('defer') && el.type !== "text/plain") {
+                el.type = "text/plain";
+                el.dataset.original = el.src;
+                el.textContent = ""; 
+                log.push(el.src.split('/').pop().split('?')[0]);
+            }
+        }
+    };
+
+    // Start observing immediately
+    const observer = new MutationObserver((m) => {
+        m.forEach(mutation => mutation.addedNodes.forEach(n => {
+            if (n.nodeType === 1) process(n);
+        }));
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+
+    // Initial check
+    document.querySelectorAll("script").forEach(process);
+
+    window.addEventListener("load", () => {
+        console.log("[Universal Deferral Active]:", log);
+        document.querySelectorAll('script[type="text/plain"]').forEach(old => {
+            if (old.dataset.original) {
+                const s = document.createElement("script");
+                s.src = old.dataset.original;
+                s.defer = true; 
+                old.parentNode.replaceChild(s, old);
+            }
+        });
+    });
+})();
