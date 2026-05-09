@@ -1,32 +1,32 @@
 "use strict";
 (function() {
-    let logBuffer = "[Universal Deferral Active]:";
+    let logBuffer = "[Surgical Deferral Active]:";
+    
+    // FILES TO ALLOW IMMEDIATELY (Don't trap these)
+    const whitelist = [
+        "jq.js",             // Core jQuery - fixes the Notifications error
+        "media-optimizer.js", // Your optimizer - fixes the report
+        "dynamic-loader.js",  // Your loader
+        "boot-loader.js"      // Self-exclusion
+    ];
 
     const processScript = (el) => {
         if (el.tagName === "SCRIPT") {
-            const dataSrc = el.getAttribute('data-src');
-            const rawSrc = el.src;
+            const src = el.src || el.getAttribute('data-src') || "";
+            const fileName = src.split('/').pop().split('?')[0];
 
-            // Only trap if it's an external script and isn't already deferred/async
-            if (dataSrc || (rawSrc && !el.hasAttribute('async') && !el.hasAttribute('defer') && el.type !== 'module')) {
+            // Check if it's external, not on whitelist, and not already optimized
+            const isWhiteListed = whitelist.some(item => fileName.includes(item));
+            const isOptimized = el.hasAttribute('async') || el.hasAttribute('defer') || el.type === 'module';
+
+            if (src && !isWhiteListed && !isOptimized && el.type !== "text/plain") {
+                el.type = "text/plain";
+                el.dataset.original = src;
                 
-                // CRITICAL: If the script is jQuery core (jq.js), we might need to let it pass 
-                // if the forum has inline code that demands it immediately.
-                // However, for maximum speed, we trap it and fix the inline calls.
+                // Optional: stop download
+                el.removeAttribute('src'); 
                 
-                if (el.type !== "text/plain") {
-                    el.type = "text/plain";
-                    el.dataset.original = rawSrc;
-                    // el.textContent = ""; // REMOVE THIS LINE - it might be clearing code the forum needs
-                    el.removeAttribute('src'); 
-                } else if (dataSrc) {
-                    el.dataset.original = dataSrc;
-                }
-                
-                const fileName = (dataSrc || rawSrc).split('/').pop().split('?')[0];
-                if (!logBuffer.includes(fileName)) {
-                    logBuffer += "\n- Trapped: " + fileName;
-                }
+                logBuffer += "\n- Trapped: " + fileName;
             }
         }
     };
@@ -43,32 +43,15 @@
     document.querySelectorAll("script").forEach(processScript);
 
     window.addEventListener("load", () => {
+        console.log(logBuffer);
         const trapped = document.querySelectorAll('script[type="text/plain"]');
-        console.log(logBuffer + "\n- Re-injecting " + trapped.length + " scripts...");
-        
-        let index = 0;
-        const injectNext = () => {
-            if (index >= trapped.length) {
-                // ALL SCRIPTS LOADED - Trigger a custom event in case other scripts are listening
-                window.dispatchEvent(new Event('scripts-ready'));
-                return;
-            }
-
-            const oldScript = trapped[index];
+        trapped.forEach(oldScript => {
             if (oldScript.dataset.original) {
                 const newScript = document.createElement("script");
                 newScript.src = oldScript.dataset.original;
-                newScript.onload = () => {
-                    index++;
-                    injectNext(); // Load next script only after this one finishes
-                };
+                newScript.defer = true;
                 oldScript.parentNode.replaceChild(newScript, oldScript);
-            } else {
-                index++;
-                injectNext();
             }
-        };
-
-        injectNext();
+        });
     });
 })();
