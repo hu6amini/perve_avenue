@@ -1,18 +1,23 @@
 "use strict";
 (function() {
-    // SAFETY NET: Prevents inline crashes before scripts are ready
-    window.$ = window.jQuery = function() { 
-        return { 
-            ready: function(fn) { window.addEventListener('load', fn); },
-            notifications: function() { console.log("Notifications queued..."); return this; },
-            on: function() { return this; }
-        }; 
-    };
-
     let logBuffer = "[Surgical Deferral Active]:";
     
-    // Whitelist core needs to prevent logic gaps
-    const whitelist = ["jq.js", "media-optimizer.js", "dynamic-loader.js", "boot-loader.js"];
+    // 1. NON-DESTRUCTIVE SAFETY NET
+    // This only adds the 'notifications' function if jQuery exists but the plugin hasn't loaded yet.
+    const patchjQuery = () => {
+        if (window.jQuery && !window.jQuery.fn.notifications) {
+            window.jQuery.fn.notifications = function() {
+                console.log("Notifications queued (Plugin not yet loaded)...");
+                return this;
+            };
+        }
+    };
+
+    // Run patch immediately and every 50ms until the page is fully loaded
+    const patchInterval = setInterval(patchjQuery, 50);
+
+    // 2. WHITELIST
+    const whitelist = ["jq.js", "media-optimizer.js", "dynamic-loader.js", "boot-loader.js", "slick.min.js"];
 
     const processScript = (el) => {
         if (el.tagName === "SCRIPT") {
@@ -40,9 +45,11 @@
     document.querySelectorAll("script").forEach(processScript);
 
     window.addEventListener("load", () => {
+        clearInterval(patchInterval); // Stop patching once everything is loaded
         console.log(logBuffer);
-        // Once window loads, the 'real' jQuery will overwrite our safety net
-        document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
+        
+        const trapped = document.querySelectorAll('script[type="text/plain"]');
+        trapped.forEach(oldScript => {
             if (oldScript.dataset.original) {
                 const newScript = document.createElement("script");
                 newScript.src = oldScript.dataset.original;
