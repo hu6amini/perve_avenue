@@ -7,11 +7,8 @@
     const safeList = [
         "jq.js",           // Core jQuery
         "jqt.js",          // Forum toolkit
-        "modal.js",        // Forum modals
         "dynamic-loader",  // Your custom loader
         "media-optimizer", // Your optimizer
-        "plugin_v3.js",    // Usually the notification handler
-        "ffa.js"           // Forum core logic
     ];
 
     const processScript = (el) => {
