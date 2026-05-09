@@ -72,7 +72,7 @@ function loadScript(src, retries, delayMs) {
 // ============================================================================
 const SCRIPT_URLS = [
     // 1. MEDIA OPTIMIZER: Must be #1 to hijack Image prototype early
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4a8545e/media-optimizer.js",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ea730f2/media-optimizer.js",
 
     // 2. External libraries (required by modules)
     "https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js",
