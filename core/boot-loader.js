@@ -4,8 +4,8 @@
     
     const safeList = [
         "jq.js", "jqt.js", "ffa.js", "plugin_v3.js",
-        "modern-ui.css", 
-        "custom-theme"
+        "modern-forum.css", 
+        "all.min.css"
     ];
 
     const processElement = (el) => {
