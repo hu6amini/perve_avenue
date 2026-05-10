@@ -1,62 +1,68 @@
 "use strict";
 (function() {
-    let logBuffer = "[Bypass Deferral Active]:";
+    let logBuffer = "[Bypass Active]:";
     
-    // 1. THE "SAFE LIST": These scripts will NOT be trapped.
-    // We include core jQuery and forum-specific plugins here.
     const safeList = [
-"jq.js",           // Core jQuery
-        "jqt.js",          // Forum toolkit
-        "ffa.js",          // <--- ADD THIS: Fixes "shy is not defined" and "sites" errors
-        "plugin_v3.js",    // <--- ADD THIS: Fixes the Notification logic gaps
-        "dynamic-loader",  // Your loader
-        "media-optimizer",
-        "boot-loader"
+        "jq.js", "jqt.js", "ffa.js", "plugin_v3.js",
+        "modern-ui.css", 
+        "custom-theme"
     ];
 
-    const processScript = (el) => {
-        if (el.tagName === "SCRIPT") {
-            const src = el.src || el.getAttribute('data-src') || "";
-            if (!src) return;
+    const processElement = (el) => {
+        const isScript = el.tagName === "SCRIPT";
+        const isLink = el.tagName === "LINK" && el.rel === "stylesheet";
 
-            const fileName = src.split('/').pop().split('?')[0];
-            
-            // Check if the file is in our safe list
-            const isSafe = safeList.some(item => fileName.includes(item));
-            // Check if it already has speed attributes
-            const isOptimized = el.hasAttribute('async') || el.hasAttribute('defer') || el.type === 'module';
+        if (!isScript && !isLink) return;
 
-            // TRAP: Only if it's NOT safe and NOT already optimized
-            if (!isSafe && !isOptimized && el.type !== "text/plain") {
+        const src = isScript ? (el.src || el.getAttribute('data-src')) : el.href;
+        if (!src) return;
+
+        const fileName = src.split('/').pop().split('?')[0];
+        const isSafe = safeList.some(item => fileName.includes(item));
+
+        if (!isSafe) {
+            // HANDLE JAVASCRIPT (The Trap)
+            if (isScript && !el.hasAttribute('async') && !el.hasAttribute('defer')) {
                 el.type = "text/plain";
                 el.dataset.original = src;
                 el.removeAttribute('src'); 
-                logBuffer += "\n- Trapped: " + fileName;
+                logBuffer += "\n- Trapped JS: " + fileName;
+            } 
+            // HANDLE CSS (The Media Swap)
+            else if (isLink) {
+                // We apply the attributes that the forum filter usually deletes
+                el.media = "print"; 
+                el.onload = function() { this.media = "all"; };
+                logBuffer += "\n- Downgraded CSS: " + fileName;
             }
         }
     };
 
+    // --- MutationObserver Logic ---
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             mutation.addedNodes.forEach(node => { 
-                if (node.nodeType === 1) processScript(node); 
+                if (node.nodeType === 1) {
+                    processElement(node);
+                    node.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
+                }
             });
         }
     });
 
     observer.observe(document.documentElement, { childList: true, subtree: true });
-    document.querySelectorAll("script").forEach(processScript);
+    document.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
 
+    // --- Final Execution ---
     window.addEventListener("load", () => {
         console.log(logBuffer);
-        const trapped = document.querySelectorAll('script[type="text/plain"]');
-        trapped.forEach(oldScript => {
-            if (oldScript.dataset.original) {
-                const newScript = document.createElement("script");
-                newScript.src = oldScript.dataset.original;
-                newScript.defer = true;
-                oldScript.parentNode.replaceChild(newScript, oldScript);
-            }
+        
+        // Only JS needs manual release now
+        document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
+            const newScript = document.createElement("script");
+            newScript.src = oldScript.dataset.original;
+            newScript.defer = true;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
         });
     });
 })();
