@@ -7,8 +7,9 @@
         "jq.js",                   
         "ffa.js",          
         "plugin_v3.js",    
+        "boot-loader.js", 
         "modern-forum.css",
-        "all.min.css"      
+        "all.min.css"
     ];
 
     const processElement = (el) => {
