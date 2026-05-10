@@ -3,7 +3,7 @@
 document.documentElement.lang = "en";
 
 // ============================================================================
-// STYLESHEETS (preload + async load)
+// 1. STYLESHEETS (Non-blocking Load)
 // ============================================================================
 const STYLESHEETS = Object.freeze([
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@888654e/lightgallery@2.7.1/lightgallery.min.css",
@@ -16,155 +16,99 @@ const STYLESHEETS = Object.freeze([
     "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.min.css"
 ]);
 
-STYLESHEETS.forEach(function(e) {
-    var n = document.createElement("link");
-    n.rel = "preload";
-    n.as = "style";
-    n.href = e;
-    var t = document.createElement("link");
-    t.rel = "stylesheet";
-    t.href = e;
-    t.media = "print";
-    t.onload = function() { t.media = "all"; };
+STYLESHEETS.forEach(url => {
+    const n = document.createElement("link");
+    Object.assign(n, { rel: "preload", as: "style", href: url });
+    const t = document.createElement("link");
+    Object.assign(t, { rel: "stylesheet", href: url, media: "print" });
+    t.onload = () => { t.media = "all"; };
     document.head.append(n, t);
 });
 
 // ============================================================================
-// SCRIPT LOADER WITH RETRIES
+// 2. SCRIPT LOADER ENGINE
 // ============================================================================
-function loadScript(src, retries, delayMs) {
-    retries = retries || 3;
-    delayMs = delayMs || 1000;
-    return new Promise(function(resolve, reject) {
-        var attempt = 0;
-        function tryLoad() {
-            var script = document.createElement('script');
-            script.src = src;
-            
-            // SPECIAL HANDLING: Load Media Optimizer as a Module to bypass forum blocking
-            if (src.includes('media-optimizer.js')) {
-                script.type = 'module';
-            } else {
-                script.defer = true;
-            }
-
-            script.crossOrigin = "anonymous";
-            script.referrerPolicy = "no-referrer";
-            script.onload = function() { resolve(); };
-            script.onerror = function() {
-                attempt++;
-                if (attempt < retries) {
-                    console.warn('Failed to load ' + src + ', retrying (' + attempt + '/' + retries + ')...');
-                    setTimeout(tryLoad, delayMs * attempt);
-                } else {
-                    console.error('Failed to load ' + src + ' after ' + retries + ' attempts');
-                    reject(new Error('Script load failed: ' + src));
-                }
-            };
-            document.head.appendChild(script);
+function loadScript(src, isModule = false) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        if (isModule || src.includes('media-optimizer.js')) {
+            script.type = 'module';
+        } else {
+            script.defer = true;
         }
-        tryLoad();
+        script.crossOrigin = "anonymous";
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Failed: ${src}`));
+        document.head.appendChild(script);
     });
 }
 
 // ============================================================================
-// SCRIPT ORDER (Critical Optimizer FIRST)
+// 3. PHASED EXECUTION LOGIC
 // ============================================================================
-const SCRIPT_URLS = [
-    // 1. MEDIA OPTIMIZER: Must be #1 to hijack Image prototype early
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js",
-
-    // 2. External libraries (required by modules)
-    "https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243/lightgallery@2.7.1/lightgallery.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482/lightgallery@2.7.1/lg-zoom.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98/lightgallery@2.7.1/lg-thumbnail.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8b2d601/lightgallery@2.7.1/lg-fullscreen.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@42de4d6/lightgallery@2.7.1/lg-share.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe/lightgallery@2.7.1/lg-autoplay.min.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180c/lightgallery@2.7.1/lg-hash.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js",
-    "https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm",
-    
-    // 3. Core utilities
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e93285/core/event-bus.js",
-    
-    // 4. Forum Core Observer
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a4ac76d/forum_core_observer.js",
-    
-    // 5. Modules
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.js",    
-    
-    // 6. Main enhancer (last)
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js"
-];
-
-async function loadAllScripts() {
-    performance.mark('loader-start');
-
-    // 1. Load critical scripts in PARALLEL
-    const scriptPromises = SCRIPT_URLS.map(url =>
-        loadScript(url, 3, 1000).then(() => {
-            console.log('Loaded: ' + url);
-        })
-    );
+async function bootSystem() {
+    performance.mark('boot-start');
 
     try {
-        await Promise.all(scriptPromises);
+        // PHASE A: THE HIJACKER (Critical for LCP & Optimization)
+        // Must finish before ANY other script starts to ensure Image prototype is caught.
+        await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js");
+        console.log('[Boot] Phase A: Media Hijack Active');
+
+        // PHASE B: VISUAL CORE (LCP Acceleration)
+        // Load only what is needed to render the UI and Carousel immediately.
+        await Promise.all([
+            loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a4ac76d/forum_core_observer.js")
+        ]);
+        console.log('[Boot] Phase B: Visual Core Ready');
+
+        // PHASE C: FUNCTIONAL MODULES
+        // These run in parallel while the user is looking at the LCP image.
+        await Promise.all([
+            loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243/lightgallery@2.7.1/lightgallery.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482/lightgallery@2.7.1/lg-zoom.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98/lightgallery@2.7.1/lg-thumbnail.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8b2d601/lightgallery@2.7.1/lg-fullscreen.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@42de4d6/lightgallery@2.7.1/lg-share.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe/lightgallery@2.7.1/lg-autoplay.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180c/lightgallery@2.7.1/lg-hash.min.js"),
+            loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
+            loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
+        ]);
+        console.log('[Boot] Phase C: Libraries Loaded');
+
+        // PHASE D: DOM ENHANCERS
+        // Finally, activate your custom logic once libraries are ready.
+        await Promise.all([
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js")
+        ]);
+        console.log('[Boot] Phase D: Enhancement Complete');
+
+        // PHASE E: THIRD PARTY (Non-critical)
+        ["https://platform.twitter.com/widgets.js", "https://platform.instagram.com/en_US/embeds.js"].forEach(src => {
+            const s = document.createElement("script");
+            s.src = src; s.async = true;
+            document.head.appendChild(s);
+        });
+
+        // Instant.page
+        const ip = document.createElement("script");
+        Object.assign(ip, { src: "https://cdn.jsdelivr.net/npm/instant.page@5.2.0/instantpage.min.js", type: "module" });
+        document.body.appendChild(ip);
+
     } catch (err) {
-        console.error('Critical script failed:', err);
-        var banner = document.createElement('div');
-        banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c00;color:#fff;padding:8px;text-align:center;z-index:99999;';
-        banner.textContent = 'Forum Enhancer Error. Please refresh.';
-        document.body.appendChild(banner);
-        return;
+        console.error('[Boot] Critical failure:', err);
     }
-
-    performance.mark('critical-scripts-loaded');
-
-    // 2. Platform social widgets
-    var platformScripts = [
-        "https://platform.twitter.com/widgets.js",
-        "https://platform.instagram.com/en_US/embeds.js"
-    ];
-    platformScripts.forEach(src => {
-        var s = document.createElement("script");
-        s.src = src;
-        s.async = true;
-        document.head.appendChild(s);
-    });
-
-    // 3. Instant.page (Module)
-    var instantPageScript = document.createElement("script");
-    Object.assign(instantPageScript, {
-        src: "https://cdn.jsdelivr.net/npm/instant.page@5.2.0/instantpage.min.js",
-        type: "module",
-        crossOrigin: "anonymous"
-    });
-    document.body.appendChild(instantPageScript);
 }
 
-// Preload Instant Page
-var instantPagePreload = document.createElement("link");
-Object.assign(instantPagePreload, {
-    rel: "preload",
-    as: "script",
-    href: "https://cdn.jsdelivr.net/npm/instant.page@5.2.0/instantpage.min.js",
-    crossOrigin: "anonymous"
-});
-document.head.appendChild(instantPagePreload);
-
-// EXECUTION: Start immediately to catch early images
-if (document.readyState === "complete") {
-    loadAllScripts();
-} else {
-    // We don't wait for DOMContentLoaded because we want to catch 
-    // Image prototypes before the body is fully parsed.
-    loadAllScripts();
-}
+// Fire immediately
+bootSystem();
