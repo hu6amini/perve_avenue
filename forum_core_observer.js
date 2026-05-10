@@ -773,53 +773,57 @@ class ForumCoreObserver {
         return basePriority === 1 ? 'high' : basePriority === 2 ? 'medium' : 'low';
     }
     
-    #shouldProcessMutation(mutation) {
-        const target = mutation.target;
+#shouldProcessMutation(mutation) {
+    const target = mutation.target;
+    if (!target) return false;
+
+    // Skip elements marked by our own scripts
+    if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
+        return false;
+    }
+
+    // Only check visibility when the mutation CAN change it
+    if (mutation.type === 'attributes' && 
+        (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
         
-        if (!target) return false;
-        
-        if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
-            return false;
-        }
-        
-        if (target.nodeType === Node.ELEMENT_NODE) {
-            try {
-                const style = window.getComputedStyle(target);
-                if (style.display === 'none' || style.visibility === 'hidden') {
-                    if (mutation.type === 'attributes' && 
-                        (mutation.attributeName === 'class' || mutation.attributeName === 'style')) {
-                        return true;
-                    }
-                    return false;
-                }
-            } catch (e) {
+        try {
+            const style = window.getComputedStyle(target);
+            const hidden = style.display === 'none' || style.visibility === 'hidden';
+            
+            if (hidden) {
+                // Even hidden, process if style/class changed (could become visible)
                 return true;
             }
+        } catch (e) {
+            // If style computation fails, assume visible and process
         }
-        
-        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-            return true;
-        }
-        
-        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-            const now = Date.now();
-            if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
-                return false;
-            }
-            this.#lastStyleMutation = now;
-            
-            const oldValue = mutation.oldValue || '';
-            const newValue = target.getAttribute ? target.getAttribute('style') || '' : '';
-            return this.#styleChangeAffectsDOM(oldValue, newValue);
-        }
-        
-        if (mutation.type === 'characterData') {
-            const parent = target.parentElement;
-            return parent ? this.#shouldObserveTextChanges(parent) : false;
-        }
-        
+    } else if (mutation.type === 'childList') {
+        // Newly added nodes – process them without a costly layout query
+        return true;
+    } else if (mutation.type === 'characterData') {
+        const parent = target.parentElement;
+        return parent ? this.#shouldObserveTextChanges(parent) : false;
+    }
+
+    // For other mutations (e.g. data-* attributes), always process
+    if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
         return true;
     }
+
+    // Throttle style-only mutations that don't affect layout
+    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+        const now = Date.now();
+        if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
+            return false;
+        }
+        this.#lastStyleMutation = now;
+        const oldValue = mutation.oldValue || '';
+        const newValue = target.getAttribute ? target.getAttribute('style') || '' : '';
+        return this.#styleChangeAffectsDOM(oldValue, newValue);
+    }
+
+    return true;
+}
     
     #shouldObserveTextChanges(element) {
         if (!element || !element.tagName) return false;
