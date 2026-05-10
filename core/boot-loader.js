@@ -2,7 +2,7 @@
 (function() {
     let logBuffer = "[Bypass Active]:";
     
-    // 1. THE SAFE LIST
+    // 1. THE SAFE LIST (Foundational assets only)
     const safeList = [
         "jq.js",                           
         "plugin_v3.js",    
@@ -40,8 +40,11 @@
                 el.removeAttribute('src'); 
                 logBuffer += "\n- Trapped JS: " + fileName;
             } 
-            // --- HANDLE CSS (With Security Fix) ---
-            else if (isLink && el.media !== "all") {
+            // --- HANDLE CSS (With Modern Conflict Protection) ---
+            else if (isLink) {
+                // If it's already set to print (by Boot-loader) or already activated, skip it
+                if (el.dataset.activated || el.media === "print") return;
+
                 el.media = "print"; 
                 const activate = function() { 
                     this.media = "all"; 
@@ -55,7 +58,7 @@
                         activate.call(el); 
                     }
                 } catch (e) {
-                    // Browser blocked reading rules; onload will handle it instead
+                    // CORS restricted; onload handles the swap
                 }
                 
                 logBuffer += "\n- Downgraded CSS: " + fileName;
