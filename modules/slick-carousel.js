@@ -1,6 +1,7 @@
 // modules/slick-carousel.js
 // Forum Modernizer – Slick Carousel Module
 // Initialises hero carousels with modern settings
+// ADDED: inert management to fix ARIA "aria-hidden focusable descendants" warning
 
 var SlickCarouselModule = (function(Utils, EventBus) {
     'use strict';
@@ -38,6 +39,22 @@ var SlickCarouselModule = (function(Utils, EventBus) {
     var carousels = [];
 
     /**
+     * Apply inert to non-active slides for accessibility
+     * @param {jQuery} $el - The carousel container element
+     */
+    function manageInert($el) {
+        $el.find('.slick-slide').each(function() {
+            var $slide = jQuery(this);
+            // Only the active slide should be interactive
+            if ($slide.hasClass('slick-active')) {
+                $slide.removeAttr('inert');
+            } else {
+                $slide.attr('inert', '');
+            }
+        });
+    }
+
+    /**
      * Initialise all carousels currently in the DOM
      */
     function initialise() {
@@ -63,6 +80,20 @@ var SlickCarouselModule = (function(Utils, EventBus) {
 
             $el.slick(DEFAULT_SETTINGS);
             carousels.push($el);
+
+            // ── ARIA fix: apply inert to hidden slides ──
+            // init event: after first render
+            $el.on('init', function() {
+                setTimeout(function() { manageInert($el); }, 0);
+            });
+            // afterChange event: when a new slide becomes active
+            $el.on('afterChange', function() {
+                setTimeout(function() { manageInert($el); }, 0);
+            });
+            // reInit event: responsive breakpoint changes
+            $el.on('reInit', function() {
+                setTimeout(function() { manageInert($el); }, 50);
+            });
         });
 
         isInitialised = true;
