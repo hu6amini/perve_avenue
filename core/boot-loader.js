@@ -1,8 +1,8 @@
-
 "use strict";
 (function() {
     let logBuffer = "[Bypass Active]:";
     
+    // 1. THE SAFE LIST
     const safeList = [
         "jq.js",                   
         "ffa.js",          
@@ -24,14 +24,24 @@
         const isSafe = safeList.some(item => fileName.includes(item));
 
         if (!isSafe) {
-            // --- HANDLE JAVASCRIPT (The Trap) ---
+            // --- NEW: FORCED TRAP FOR SCRIPT LOADERS ---
+            // This catches the orange ads loader even if it bypasses normal detection
+            if (isScript && src.includes('script-loader')) {
+                el.type = "text/plain";
+                el.dataset.original = src;
+                el.removeAttribute('src'); 
+                logBuffer += "\n- Forced Trap (Loader): " + fileName;
+                return; 
+            }
+
+            // --- HANDLE OTHER JAVASCRIPT ---
             if (isScript && !el.hasAttribute('async') && !el.hasAttribute('defer') && el.type !== "text/plain") {
                 el.type = "text/plain";
                 el.dataset.original = src;
                 el.removeAttribute('src'); 
                 logBuffer += "\n- Trapped JS: " + fileName;
             } 
-            // --- HANDLE CSS (The Media Swap) ---
+            // --- HANDLE CSS ---
             else if (isLink && el.media !== "all") {
                 el.media = "print"; 
                 const activate = function() { 
@@ -59,22 +69,19 @@
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
 
-    // --- RELEASE LOGIC USING IDLE CALLBACK ---
     window.addEventListener("load", () => {
         const releaseAssets = () => {
             console.log(logBuffer);
             
-            // 1. Release JS (Matches any trapped script, regardless of dynamic URL params)
             document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
                 if (oldScript.dataset.original) {
                     const newScript = document.createElement("script");
-                    newScript.src = oldScript.dataset.original; // Keeps dynamic numbers intact
+                    newScript.src = oldScript.dataset.original; 
                     newScript.defer = true;
                     oldScript.parentNode.replaceChild(newScript, oldScript);
                 }
             });
 
-            // 2. Final CSS Check
             document.querySelectorAll('link[media="print"]').forEach(link => {
                 if (!link.dataset.activated) {
                     link.media = "all";
@@ -84,7 +91,6 @@
             console.log("[Bypass]: Legacy assets released during idle time.");
         };
 
-        // Use requestIdleCallback with a 2-second timeout (force run after 2s if never idle)
         if ('requestIdleCallback' in window) {
             requestIdleCallback(releaseAssets, { timeout: 2000 });
         } else {
