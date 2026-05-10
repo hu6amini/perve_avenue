@@ -91,7 +91,7 @@ async function bootSystem() {
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@390146f/forum_core_observer.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f547323/forum_core_observer.js")
         ]);
 
         // PHASE C: LIBRARIES
