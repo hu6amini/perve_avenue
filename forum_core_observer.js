@@ -921,97 +921,96 @@ class ForumCoreObserver {
         }
     }
     
-    async #processMutationBatch(mutations, priority) {
-        const affectedNodes = new Set();
-        const styleChangeNodes = new Set();
+async #processMutationBatch(mutations, priority) {
+    const affectedNodes = new Set();
+    const styleChangeNodes = new Set();
+    
+    for (let i = 0; i < mutations.length; i++) {
+        const mutation = mutations[i];
         
-        for (let i = 0; i < mutations.length; i++) {
-            const mutation = mutations[i];
-            
-            if (!mutation || !mutation.target) continue;
-            
-            switch (mutation.type) {
-                case 'childList':
-                    if (mutation.addedNodes) {
-                        for (let j = 0; j < mutation.addedNodes.length; j++) {
-                            const node = mutation.addedNodes[j];
-                            if (node && node.nodeType === Node.ELEMENT_NODE && !this.#isInEditor(node)) {
-                                this.#collectAllElements(node, affectedNodes);
-                                
-                                if (node.shadowRoot) {
-                                    this.#collectAllElements(node.shadowRoot, affectedNodes);
-                                    this.#observeShadowRoot(node.shadowRoot, node);
-                                }
+        if (!mutation || !mutation.target) continue;
+        
+        switch (mutation.type) {
+            case 'childList':
+                if (mutation.addedNodes) {
+                    for (let j = 0; j < mutation.addedNodes.length; j++) {
+                        const node = mutation.addedNodes[j];
+                        if (node && node.nodeType === Node.ELEMENT_NODE && !this.#isInEditor(node)) {
+                            this.#collectAllElements(node, affectedNodes);
+                            
+                            if (node.shadowRoot) {
+                                this.#collectAllElements(node.shadowRoot, affectedNodes);
+                                this.#observeShadowRoot(node.shadowRoot, node);
                             }
+                        }
+                    }
+                }
+                
+                if (mutation.removedNodes) {
+                    for (let j = 0; j < mutation.removedNodes.length; j++) {
+                        const node = mutation.removedNodes[j];
+                        if (node && node.nodeType === Node.ELEMENT_NODE) {
+                            this.#cleanupRemovedNode(node);
+                        }
+                    }
+                }
+                break;
+                
+            case 'attributes':
+                if (mutation.target && !this.#isInEditor(mutation.target)) {
+                    // Handle style‑change visibility (used for style‑reprocess callbacks)
+                    if (mutation.attributeName === 'style') {
+                        const oldDisplay = this.#getDisplayFromStyle(mutation.oldValue);
+                        const newDisplay = this.#getDisplayFromStyle(mutation.target.getAttribute('style') || '');
+                        if ((oldDisplay === 'none' || oldDisplay === null) && 
+                            (newDisplay === 'block' || newDisplay === 'inline-block')) {
+                            styleChangeNodes.add(mutation.target);
                         }
                     }
                     
-                    if (mutation.removedNodes) {
-                        for (let j = 0; j < mutation.removedNodes.length; j++) {
-                            const node = mutation.removedNodes[j];
-                            if (node && node.nodeType === Node.ELEMENT_NODE) {
-                                this.#cleanupRemovedNode(node);
-                            }
-                        }
-                    }
-                    break;
+                    // Always consider the attribute mutation as affecting the node
+                    affectedNodes.add(mutation.target);
                     
-                case 'attributes':
-                    if (mutation.target && !this.#isInEditor(mutation.target)) {
-                        if (mutation.attributeName === 'style') {
-                            const oldDisplay = this.#getDisplayFromStyle(mutation.oldValue);
-                            const newDisplay = this.#getDisplayFromStyle(mutation.target.getAttribute('style') || '');
-                            if ((oldDisplay === 'none' || oldDisplay === null) && 
-                                (newDisplay === 'block' || newDisplay === 'inline-block')) {
-                                styleChangeNodes.add(mutation.target);
-                            }
-                        }
-                        affectedNodes.add(mutation.target);
-                        
-                        if (mutation.attributeName === 'data-theme') {
-                            this.#pageState = this.#detectPageState();
-                            const theme = mutation.target.getAttribute ? mutation.target.getAttribute('data-theme') : null;
-                            if (theme) {
-                                this.#notifyThemeDependentCallbacks(theme);
-                            }
-                        }
-                        
-                        if (mutation.attributeName === 'class' || mutation.attributeName === 'style') {
-                            try {
-                                const style = window.getComputedStyle(mutation.target);
-                                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                                    affectedNodes.add(mutation.target);
-                                }
-                            } catch (e) {
-                                // Ignore style computation errors
-                            }
+                    // Theme changes
+                    if (mutation.attributeName === 'data-theme') {
+                        this.#pageState = this.#detectPageState();
+                        const theme = mutation.target.getAttribute ? mutation.target.getAttribute('data-theme') : null;
+                        if (theme) {
+                            this.#notifyThemeDependentCallbacks(theme);
                         }
                     }
-                    break;
                     
-                case 'characterData':
-                    if (mutation.target) {
-                        const parent = mutation.target.parentElement;
-                        if (parent && !this.#isInEditor(parent)) {
-                            affectedNodes.add(parent);
-                        }
+                    // REMOVED: the forced‑reflow getComputedStyle check for class/style.
+                    // The node is already in affectedNodes; any visibility filtering
+                    // can be done asynchronously inside the callbacks / #processNode.
+                }
+                break;
+                
+            case 'characterData':
+                if (mutation.target) {
+                    const parent = mutation.target.parentElement;
+                    if (parent && !this.#isInEditor(parent)) {
+                        affectedNodes.add(parent);
                     }
-                    break;
-            }
-        }
-        
-        for (const node of affectedNodes) {
-            if (node && !this.#processedNodes.has(node)) {
-                await this.#processNode(node);
-            }
-        }
-        
-        for (const node of styleChangeNodes) {
-            if (node && this.#styleReprocessCallbacks.size > 0) {
-                await this.#processNode(node, { styleChange: true });
-            }
+                }
+                break;
         }
     }
+    
+    // Process all affected nodes (without any synchronous style reads)
+    for (const node of affectedNodes) {
+        if (node && !this.#processedNodes.has(node)) {
+            await this.#processNode(node);
+        }
+    }
+    
+    // Process style‑change nodes (those that became visible)
+    for (const node of styleChangeNodes) {
+        if (node && this.#styleReprocessCallbacks.size > 0) {
+            await this.#processNode(node, { styleChange: true });
+        }
+    }
+}
     
     #getDisplayFromStyle(styleString) {
         if (!styleString) return null;
