@@ -4,12 +4,11 @@
     
     // 1. THE SAFE LIST
     const safeList = [
-        "jq.js",                   
-        "ffa.js",          
+        "jq.js",                           
         "plugin_v3.js",    
         "boot-loader.js", 
         "modern-forum.css",
-        "all.min.css"
+        "all.min.css"      
     ];
 
     const processElement = (el) => {
@@ -25,8 +24,7 @@
         const isSafe = safeList.some(item => fileName.includes(item));
 
         if (!isSafe) {
-            // --- NEW: FORCED TRAP FOR SCRIPT LOADERS ---
-            // This catches the orange ads loader even if it bypasses normal detection
+            // --- FORCED TRAP FOR SCRIPT LOADERS ---
             if (isScript && src.includes('script-loader')) {
                 el.type = "text/plain";
                 el.dataset.original = src;
@@ -42,7 +40,7 @@
                 el.removeAttribute('src'); 
                 logBuffer += "\n- Trapped JS: " + fileName;
             } 
-            // --- HANDLE CSS ---
+            // --- HANDLE CSS (With Security Fix) ---
             else if (isLink && el.media !== "all") {
                 el.media = "print"; 
                 const activate = function() { 
@@ -50,7 +48,16 @@
                     this.dataset.activated = "true";
                 };
                 el.onload = activate;
-                if (el.sheet && el.sheet.cssRules) { activate.call(el); }
+
+                // Security Fail-safe for CORS/Cross-Origin CSS
+                try {
+                    if (el.sheet && el.sheet.cssRules) { 
+                        activate.call(el); 
+                    }
+                } catch (e) {
+                    // Browser blocked reading rules; onload will handle it instead
+                }
+                
                 logBuffer += "\n- Downgraded CSS: " + fileName;
             }
         }
