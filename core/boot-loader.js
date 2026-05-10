@@ -4,7 +4,7 @@
     
     // 1. THE SAFE LIST (Foundational assets only)
     const safeList = [
-        "plugin_v3.js",    
+        "jq.js",
         "boot-loader.js", 
         "modern-forum.css",
         "all.min.css"      
