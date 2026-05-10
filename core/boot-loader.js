@@ -4,8 +4,7 @@
     let logBuffer = "[Bypass Active]:";
     
     const safeList = [
-        "jq.js",           
-        "jqt.js",          
+        "jq.js",                   
         "ffa.js",          
         "plugin_v3.js",    
         "modern-forum.css",
