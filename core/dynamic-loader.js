@@ -35,7 +35,6 @@ function loadScript(src, isModule = false) {
         if (isModule || src.includes('media-optimizer.js')) {
             script.type = 'module';
         } else {
-            // EventBus and Core utilities should NOT defer if they are dependencies
             script.defer = !src.includes('event-bus.js'); 
         }
         script.crossOrigin = "anonymous";
@@ -46,16 +45,47 @@ function loadScript(src, isModule = false) {
 }
 
 // ============================================================================
-// 3. PHASED EXECUTION LOGIC
+// 3. LCP HELPERS
+// ============================================================================
+function injectCriticalCSS() {
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Ensure first carousel slide is visible before Slick initialises */
+        .slick_carousel .slick-slide:first-child,
+        .slick_carousel .slick-slide[data-slick-index="0"] {
+            opacity: 1 !important;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function preloadLCPImage() {
+    // Grab the first slide's image – the one that will be LCP
+    const heroImg = document.querySelector('.slick_carousel .slick-slide:first-child img');
+    if (heroImg && heroImg.src) {
+        const link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'image';
+        link.href = heroImg.src;
+        link.fetchPriority = 'high';
+        document.head.appendChild(link);
+    }
+}
+
+// ============================================================================
+// 4. PHASED EXECUTION LOGIC
 // ============================================================================
 async function bootSystem() {
     try {
         // PHASE A: THE FOUNDATION
-        // We load the Optimizer AND the EventBus immediately so dependencies exist.
         await Promise.all([
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e93285/core/event-bus.js")
         ]);
+
+        // ––– LCP: inject critical CSS & preload the hero image as early as possible –––
+        injectCriticalCSS();
+        preloadLCPImage();
 
         // PHASE B: VISUAL CORE (LCP)
         await Promise.all([
@@ -87,9 +117,20 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.js")
         ]);
 
-        // PHASE E: THE ENHANCER (The Final Piece)
-        // We give the browser a tiny 50ms break to ensure all previous scripts 
-        // have registered their objects on the 'window'.
+        // ––– LCP: delay Slick initialisation so the first slide paints without JS –––
+        const initSlick = () => {
+            if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
+                window.SlickCarouselModule.initialize();
+            }
+        };
+
+        if (window.requestIdleCallback) {
+            requestIdleCallback(initSlick, { timeout: 2000 });
+        } else {
+            setTimeout(initSlick, 100);
+        }
+
+        // PHASE E: THE ENHANCER
         setTimeout(async () => {
             await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js");
             console.log('[Boot] System Fully Enhanced');
