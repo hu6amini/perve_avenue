@@ -3,7 +3,7 @@
 document.documentElement.lang = "en";
 
 // ============================================================================
-// 1. STYLESHEETS (Non-blocking Load)
+// 1. STYLESHEETS
 // ============================================================================
 const STYLESHEETS = Object.freeze([
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@888654e/lightgallery@2.7.1/lightgallery.min.css",
@@ -35,7 +35,8 @@ function loadScript(src, isModule = false) {
         if (isModule || src.includes('media-optimizer.js')) {
             script.type = 'module';
         } else {
-            script.defer = true;
+            // EventBus and Core utilities should NOT defer if they are dependencies
+            script.defer = !src.includes('event-bus.js'); 
         }
         script.crossOrigin = "anonymous";
         script.onload = () => resolve();
@@ -48,25 +49,22 @@ function loadScript(src, isModule = false) {
 // 3. PHASED EXECUTION LOGIC
 // ============================================================================
 async function bootSystem() {
-    performance.mark('boot-start');
-
     try {
-        // PHASE A: THE HIJACKER (Critical for LCP & Optimization)
-        // Must finish before ANY other script starts to ensure Image prototype is caught.
-        await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js");
-        console.log('[Boot] Phase A: Media Hijack Active');
+        // PHASE A: THE FOUNDATION
+        // We load the Optimizer AND the EventBus immediately so dependencies exist.
+        await Promise.all([
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e93285/core/event-bus.js")
+        ]);
 
-        // PHASE B: VISUAL CORE (LCP Acceleration)
-        // Load only what is needed to render the UI and Carousel immediately.
+        // PHASE B: VISUAL CORE (LCP)
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a4ac76d/forum_core_observer.js")
         ]);
-        console.log('[Boot] Phase B: Visual Core Ready');
 
-        // PHASE C: FUNCTIONAL MODULES
-        // These run in parallel while the user is looking at the LCP image.
+        // PHASE C: LIBRARIES
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243/lightgallery@2.7.1/lightgallery.min.js"),
@@ -79,36 +77,34 @@ async function bootSystem() {
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
             loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
         ]);
-        console.log('[Boot] Phase C: Libraries Loaded');
 
-        // PHASE D: DOM ENHANCERS
-        // Finally, activate your custom logic once libraries are ready.
+        // PHASE D: MODULES
         await Promise.all([
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.js")
         ]);
-        console.log('[Boot] Phase D: Enhancement Complete');
 
-        // PHASE E: THIRD PARTY (Non-critical)
+        // PHASE E: THE ENHANCER (The Final Piece)
+        // We give the browser a tiny 50ms break to ensure all previous scripts 
+        // have registered their objects on the 'window'.
+        setTimeout(async () => {
+            await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js");
+            console.log('[Boot] System Fully Enhanced');
+        }, 50);
+
+        // Third Party
         ["https://platform.twitter.com/widgets.js", "https://platform.instagram.com/en_US/embeds.js"].forEach(src => {
             const s = document.createElement("script");
             s.src = src; s.async = true;
             document.head.appendChild(s);
         });
 
-        // Instant.page
-        const ip = document.createElement("script");
-        Object.assign(ip, { src: "https://cdn.jsdelivr.net/npm/instant.page@5.2.0/instantpage.min.js", type: "module" });
-        document.body.appendChild(ip);
-
     } catch (err) {
         console.error('[Boot] Critical failure:', err);
     }
 }
 
-// Fire immediately
 bootSystem();
