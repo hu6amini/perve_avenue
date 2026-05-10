@@ -85,14 +85,20 @@
         const releaseAssets = () => {
             console.log(logBuffer);
             
-            document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
-                if (oldScript.dataset.original) {
-                    const newScript = document.createElement("script");
-                    newScript.src = oldScript.dataset.original; 
-                    newScript.defer = true;
-                    oldScript.parentNode.replaceChild(newScript, oldScript);
-                }
-            });
+document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
+    const src = oldScript.dataset.original;
+    if (!src) return;
+
+    // Skip scripts that we load ourselves via the dynamic loader
+    if (src.includes('lite-vimeo-embed') || src.includes('+esm')) {
+        return; // do nothing – the dynamic loader handles this
+    }
+
+    const newScript = document.createElement("script");
+    newScript.src = src; 
+    newScript.defer = true;
+    oldScript.parentNode.replaceChild(newScript, oldScript);
+});
 
             document.querySelectorAll('link[media="print"]').forEach(link => {
                 if (!link.dataset.activated) {
