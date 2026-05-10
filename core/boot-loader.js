@@ -7,6 +7,7 @@
         "jq.js",
         "plugin_v3.js",
         "boot-loader.js", 
+        "dynamic-loader.js",
         "modern-forum.css",
         "all.min.css"      
     ];
