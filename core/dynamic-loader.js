@@ -1,4 +1,4 @@
-"use strict";
+use strict";
 
 document.documentElement.lang = "en";
 
@@ -77,32 +77,7 @@ function preloadLCPImage() {
 // ============================================================================
 async function bootSystem() {
     try {
-        // ============================================================
-        // PHASE 0: Release critical scripts trapped by the boot‑loader.
-        //          jQuery must be available before any inline scripts
-        //          that use it (like notifications), but we don't want
-        //          it to block the initial render. We release it now,
-        //          synchronously, so it executes without `defer`.
-        // ============================================================
-        const releaseTrappedScript = (filenameFragment) => {
-            const trapped = document.querySelector(
-                `script[type="text/plain"][data-original*="${filenameFragment}"]`
-            );
-            if (trapped) {
-                const newScript = document.createElement('script');
-                newScript.src = trapped.dataset.original;
-                // No defer / async → runs immediately, preserving order
-                trapped.parentNode.replaceChild(newScript, trapped);
-            }
-        };
-
-        releaseTrappedScript('jq.js');
-        // If you later remove plugin_v3.js from the safe list, add:
-        // releaseTrappedScript('plugin_v3.js');
-
-        // ============================================================
         // PHASE A: THE FOUNDATION
-        // ============================================================
         await Promise.all([
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e93285/core/event-bus.js")
@@ -112,18 +87,14 @@ async function bootSystem() {
         injectCriticalCSS();
         preloadLCPImage();
 
-        // ============================================================
         // PHASE B: VISUAL CORE (LCP)
-        // ============================================================
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a4ac76d/forum_core_observer.js")
         ]);
 
-        // ============================================================
         // PHASE C: LIBRARIES
-        // ============================================================
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243/lightgallery@2.7.1/lightgallery.min.js"),
@@ -137,9 +108,7 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
         ]);
 
-        // ============================================================
         // PHASE D: MODULES
-        // ============================================================
         await Promise.all([
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js"),
@@ -161,18 +130,13 @@ async function bootSystem() {
             setTimeout(initSlick, 100);
         }
 
-        // ============================================================
         // PHASE E: THE ENHANCER
-        // ============================================================
         setTimeout(async () => {
             await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js");
             console.log('[Boot] System Fully Enhanced');
         }, 50);
 
-        // ============================================================
-        // THIRD‑PARTY & EXTRA LAZY LOADING
-        // ============================================================
-        // Social widgets (already async, okay to load here)
+        // Third Party
         ["https://platform.twitter.com/widgets.js", "https://platform.instagram.com/en_US/embeds.js"].forEach(src => {
             const s = document.createElement("script");
             s.src = src; s.async = true;
