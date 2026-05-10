@@ -777,41 +777,31 @@ class ForumCoreObserver {
     const target = mutation.target;
     if (!target) return false;
 
-    // Skip elements marked by our own scripts
     if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
         return false;
     }
 
-    // Only check visibility when the mutation CAN change it
+    // Always process style/class changes – we'll check visibility later asynchronously
     if (mutation.type === 'attributes' && 
         (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
-        
-        try {
-            const style = window.getComputedStyle(target);
-            const hidden = style.display === 'none' || style.visibility === 'hidden';
-            
-            if (hidden) {
-                // Even hidden, process if style/class changed (could become visible)
-                return true;
-            }
-        } catch (e) {
-            // If style computation fails, assume visible and process
-        }
-    } else if (mutation.type === 'childList') {
-        // Newly added nodes – process them without a costly layout query
         return true;
-    } else if (mutation.type === 'characterData') {
+    }
+
+    if (mutation.type === 'childList') {
+        return true;
+    }
+
+    if (mutation.type === 'characterData') {
         const parent = target.parentElement;
         return parent ? this.#shouldObserveTextChanges(parent) : false;
     }
 
-    // For other mutations (e.g. data-* attributes), always process
     if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
         return true;
     }
 
-    // Throttle style-only mutations that don't affect layout
     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+        // Throttle style-only mutations that don’t affect layout
         const now = Date.now();
         if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
             return false;
