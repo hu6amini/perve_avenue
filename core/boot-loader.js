@@ -90,7 +90,8 @@ document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
     if (!src) return;
 
     // Skip scripts that we load ourselves via the dynamic loader
-    if (src.includes('lite-vimeo-embed') || src.includes('+esm')) {
+    if (src.includes('lite-vimeo-embed') || src.includes('+esm') ||
+        src.includes('media-optimizer') || src.includes('event-bus')) {
         return; // do nothing – the dynamic loader handles this
     }
 
