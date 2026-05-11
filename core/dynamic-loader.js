@@ -32,11 +32,18 @@ function loadScript(src, isModule = false) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = src;
-        if (isModule || src.includes('media-optimizer.js')) {
+
+        // Extract clean filename for conditional checks (handles .min as well)
+        const fileName = src.split('/').pop()
+                           .replace(/\.min\.(js|css)$/, '.$1')
+                           .replace(/\.(js|css)$/, '');
+
+        if (isModule || fileName === 'media-optimizer') {
             script.type = 'module';
         } else {
-            script.defer = !src.includes('event-bus.js'); 
+            script.defer = fileName !== 'event-bus';
         }
+
         script.crossOrigin = "anonymous";
         script.onload = () => resolve();
         script.onerror = () => reject(new Error(`Failed: ${src}`));
@@ -79,8 +86,8 @@ async function bootSystem() {
     try {
         // PHASE A: THE FOUNDATION
         await Promise.all([
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e93285/core/event-bus.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@954d203/media-optimizer.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8e93285/core/event-bus.min.js")
         ]);
 
         // ––– LCP: inject critical CSS & preload the hero image as early as possible –––
@@ -90,8 +97,8 @@ async function bootSystem() {
         // PHASE B: VISUAL CORE (LCP)
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f547323/forum_core_observer.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@7a5f70f/core/dom-utils.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f547323/forum_core_observer.min.js")
         ]);
 
         // PHASE C: LIBRARIES
@@ -110,11 +117,11 @@ async function bootSystem() {
 
         // PHASE D: MODULES
         await Promise.all([
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.min.js")
         ]);
 
         // ––– LCP: delay Slick initialisation so the first slide paints without JS –––
