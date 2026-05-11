@@ -6,9 +6,9 @@
     const safeList = [
         "jq.js",
         "plugin_v3.js",
-        "boot-loader.js", 
-        "dynamic-loader.js",
-        "modern-forum.css",
+        "boot-loader.min.js", 
+        "dynamic-loader.min.js",
+        "modern-forum.min.css",
         "all.min.css"      
     ];
 
