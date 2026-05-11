@@ -14220,7 +14220,7 @@ readers do not read off random characters that represent icons */
   font-family: 'Font Awesome 6 Pro';
   font-style: normal;
   font-weight: 400;
-  font-display: block;
+  font-display: swap;
   src: url("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4080e10/fonts/fa-regular-400.woff2") format("woff2"); }
 
 .far,
