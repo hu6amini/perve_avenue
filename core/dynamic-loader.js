@@ -139,7 +139,7 @@ async function bootSystem() {
 
         // PHASE E: THE ENHANCER
         setTimeout(async () => {
-            await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.js");
+            await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6ccecbb/core/forum-enhancer.min.js");
             console.log('[Boot] System Fully Enhanced');
         }, 50);
 
