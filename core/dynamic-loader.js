@@ -119,7 +119,7 @@ async function bootSystem() {
         await Promise.all([
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8fc6f50/modules/media-dimensions.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d63a175/modules/twemoji.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e59079c/modules/posts.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@157d222/modules/posts.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@98563c3/modules/modals.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469e/modules/slick-carousel.min.js")
         ]);
