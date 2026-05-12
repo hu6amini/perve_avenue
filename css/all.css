@@ -14221,7 +14221,7 @@ readers do not read off random characters that represent icons */
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1358d69/fonts/fa-regular-400-subset.woff2") format("woff2"); }
+  src: url("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/fonts/fa-regular-400-subset.woff2") format("woff2"); }
 
 .far,
 .fa-regular {
