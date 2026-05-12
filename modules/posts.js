@@ -1,16 +1,4 @@
 // Forum Modernizer - Posts Module (API-enhanced, all original functionality preserved)
-// Transforms .post elements into modern card layout with API user data (avatar, join date, online dot)
-// ADDED: Relative timestamps for post time and edit info
-// ADDED: Group-specific CSS class on post card (e.g., group-fan, group-admin, group-moderator)
-// ADDED: Intelligent action buttons – only show quote/edit/delete if available in original post
-// ADDED: Support for "member_posts" page – extract global user info, hide reputation, disable reactions, add topic/forum buttons inside container
-// ADDED: Page restrictions – only runs on #topic, #send, #blog, and #search (with .topic.member_posts)
-// FIXED: Timestamp parsing on member_posts when title attribute is missing
-// CHANGED: Fallback avatars use real DOM initial letter (Quicksand font) instead of SVG data-URI
-// NEW: Summary conversion on body#send – transforms .summary into modern post cards (no actions, no footer) with a modern header
-// IMPROVED: Semantic HTML – username and avatar are anchor tags for better accessibility & SEO
-// NEW: Favicons added to text-only links inside .post-message
-// NEW: Blog article conversion – body#topic articles (.blog .article) become modern blog cards with absolute date
 
 var ForumPostsModule = (function(Utils, EventBus) {
     'use strict';
