@@ -6,12 +6,12 @@ document.documentElement.lang = "en";
 // 1. STYLESHEETS
 // ============================================================================
 const STYLESHEETS = Object.freeze([
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/lightgallery@888654e/lightgallery.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/lightgallery@e44a482/lg-zoom.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/lightgallery@c5a5f52/lg-thumbnail.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/lightgallery@b6a816a/lg-fullscreen.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/lightgallery@d4e08c6/lg-share.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@v1.6.3/lightgallery@c64ef50/lg-autoplay.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@888654e/lightgallery@2.7.1/lightgallery.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482/lightgallery@2.7.1/lg-zoom.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c5a5f52/lightgallery@2.7.1/lg-thumbnail.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b6a816a/lightgallery@2.7.1/lg-fullscreen.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d4e08c6/lightgallery@2.7.1/lg-share.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c64ef50/lightgallery@2.7.1/lg-autoplay.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.min.css"
 ]);
