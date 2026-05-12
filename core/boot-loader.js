@@ -1,3 +1,4 @@
+/*New Version*/
 "use strict";
 (function() {
     let logBuffer = "[Bypass Active]:";
