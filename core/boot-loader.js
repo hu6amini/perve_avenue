@@ -5,15 +5,15 @@
     
     // 1. THE SAFE LIST (Foundational assets only)
     const safeList = [
-    "jq.js",
-    "plugin_v3.js",
-    "boot-loader.min.js",
-    "dynamic-loader.min.js",
-    "media-optimizer.min.js",
-    "event-bus.min.js",
-    "forum-enhancer.min.js",
-    "modern-forum.min.css",
-    "all.min.css"
+        "jq.js",
+        "plugin_v3.js",
+        "boot-loader.min.js",
+        "dynamic-loader.min.js",
+        "media-optimizer.min.js",
+        "event-bus.min.js",
+        "forum-enhancer.min.js",
+        "modern-forum.min.css",
+        "all.min.css"
     ];
 
     const processElement = (el) => {
@@ -47,7 +47,6 @@
             } 
             // --- HANDLE CSS (With Modern Conflict Protection) ---
             else if (isLink) {
-                // If it's already set to print (by Boot-loader) or already activated, skip it
                 if (el.dataset.activated || el.media === "print") return;
 
                 el.media = "print"; 
@@ -57,7 +56,6 @@
                 };
                 el.onload = activate;
 
-                // Security Fail-safe for CORS/Cross-Origin CSS
                 try {
                     if (el.sheet && el.sheet.cssRules) { 
                         activate.call(el); 
@@ -85,6 +83,24 @@
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
 
+    // ============================================================
+    // LAZY LOAD TURNSTILE ON FIRST FORM INTERACTION
+    // ============================================================
+    let turnstileLoaded = false;
+    function loadTurnstile() {
+        if (turnstileLoaded) return;
+        turnstileLoaded = true;
+        const script = document.createElement('script');
+        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+        script.async = true;
+        document.head.appendChild(script);
+    }
+    document.addEventListener('focusin', (e) => {
+        if (e.target.closest('form')) {
+            loadTurnstile();
+        }
+    }, { once: true, passive: true });
+
     window.addEventListener("load", () => {
         const releaseAssets = () => {
             console.log(logBuffer);
@@ -98,7 +114,7 @@ document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
         const minSrc = src.replace(/media-optimizer\.js$/, 'media-optimizer.min.js');
         const newScript = document.createElement("script");
         newScript.src = minSrc;
-        newScript.type = 'module';               // required for media-optimizer
+        newScript.type = 'module';
         oldScript.parentNode.replaceChild(newScript, oldScript);
         return;
     }
@@ -106,13 +122,14 @@ document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
         const minSrc = src.replace(/event-bus\.js$/, 'event-bus.min.js');
         const newScript = document.createElement("script");
         newScript.src = minSrc;
-        newScript.defer = false;                 // event-bus should not be deferred
+        newScript.defer = false;
         oldScript.parentNode.replaceChild(newScript, oldScript);
         return;
     }
 
-    // Skip lite‑vimeo, +esm – dynamic loader handles them
-    if (src.includes('lite-vimeo-embed') || src.includes('+esm')) return;
+    // Skip lite‑vimeo, +esm, and Turnstile – we handle them separately
+    if (src.includes('lite-vimeo-embed') || src.includes('+esm') || 
+        src.includes('challenges.cloudflare.com') || src.includes('turnstile')) return;
 
     const newScript = document.createElement("script");
     newScript.src = src;
