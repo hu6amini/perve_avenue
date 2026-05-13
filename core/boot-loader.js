@@ -102,37 +102,115 @@
     }, { once: true, passive: true });
 
     // ============================================================
-    // LAZY LOAD EMOJI PICKER CSS (capture ALL related styles)
+    // LAZY LOAD EMOJI PICKER CSS (observer version)
     // ============================================================
     (function() {
-        const capturedCSS = [];
+        let emojiCSS = null;
         let emojiCSSLoaded = false;
 
-        function injectAllEmojiCSS() {
-            if (emojiCSSLoaded || capturedCSS.length === 0) return;
+        function injectEmojiCSS() {
+            if (!emojiCSS || emojiCSSLoaded) return;
             emojiCSSLoaded = true;
             const style = document.createElement('style');
-            style.textContent = capturedCSS.join('\n');
+            style.id = 'emoji-picker-css';
+            style.textContent = emojiCSS;
             document.head.appendChild(style);
         }
 
+        // Click listener: inject CSS when emoji button is clicked
         document.addEventListener('click', function(e) {
             if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
-                injectAllEmojiCSS();
+                injectEmojiCSS();
             }
         }, { passive: true });
 
+        // MutationObserver to catch the style element when it's added
         const emojiObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
-                    if (node.nodeType === 1 && node.tagName === 'STYLE' && node.textContent.includes('.emoji-picker')) {
-                        capturedCSS.push(node.textContent);
+                    if (node.nodeType === 1 && node.id === 'emoji-picker-css') {
+                        emojiCSS = node.textContent;
                         node.remove();
+                        emojiObserver.disconnect();
+                        return;
                     }
                 }
             }
         });
         emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
+    })();
+
+    // ============================================================
+    // LAZY LOAD OTHER UNUSED INLINE STYLES
+    // ============================================================
+    (function() {
+        const capturedCSS = {}; // key: identifier, value: CSS text
+        const injected = {};
+
+        // Function to inject a stored style
+        function injectCSS(key) {
+            if (!capturedCSS[key] || injected[key]) return;
+            injected[key] = true;
+            const style = document.createElement('style');
+            style.textContent = capturedCSS[key];
+            document.head.appendChild(style);
+        }
+
+        // Observer that catches the style elements as they are added
+        const styleObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== 1 || node.tagName !== 'STYLE') continue;
+                    const text = node.textContent || '';
+                    if (text.includes('.ffb_embedlink') && !capturedCSS['ffb_embedlink']) {
+                        capturedCSS['ffb_embedlink'] = text;
+                        node.remove();
+                    } else if (text.includes('.el-modal') && !capturedCSS['el-modal']) {
+                        capturedCSS['el-modal'] = text;
+                        node.remove();
+                    }
+                    // Once we have both, we can stop observing
+                    if (capturedCSS['ffb_embedlink'] && capturedCSS['el-modal']) {
+                        styleObserver.disconnect();
+                        return;
+                    }
+                }
+            }
+        });
+        styleObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
+
+        // Observer that watches for the actual elements that need these styles
+        const domObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    // Check if the added node itself or any descendant has the target class
+                    if (node.querySelectorAll) {
+                        if (node.querySelector('.ffb_embedlink') && capturedCSS['ffb_embedlink']) {
+                            injectCSS('ffb_embedlink');
+                        }
+                        if (node.querySelector('.el-modal') && capturedCSS['el-modal']) {
+                            injectCSS('el-modal');
+                        }
+                    }
+                    // Also check the node itself
+                    if (node.classList) {
+                        if (node.classList.contains('ffb_embedlink') && capturedCSS['ffb_embedlink']) {
+                            injectCSS('ffb_embedlink');
+                        }
+                        if (node.classList.contains('el-modal') && capturedCSS['el-modal']) {
+                            injectCSS('el-modal');
+                        }
+                    }
+                    // If both are already injected, we can stop the observer
+                    if (injected['ffb_embedlink'] && injected['el-modal']) {
+                        domObserver.disconnect();
+                        return;
+                    }
+                }
+            }
+        });
+        domObserver.observe(document.documentElement, { childList: true, subtree: true });
     })();
 
     window.addEventListener("load", () => {
