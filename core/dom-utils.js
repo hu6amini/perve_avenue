@@ -1,5 +1,4 @@
 // core/dom-utils.js
-// DOM manipulation utilities for Forum Enhancer
 
 var ForumDOMUtils = (function() {
     'use strict';
