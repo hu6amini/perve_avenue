@@ -102,37 +102,32 @@
     }, { once: true, passive: true });
 
     // ============================================================
-    // LAZY LOAD EMOJI PICKER CSS (observer version)
+    // LAZY LOAD EMOJI PICKER CSS (capture ALL related styles)
     // ============================================================
     (function() {
-        let emojiCSS = null;
+        const capturedCSS = [];
         let emojiCSSLoaded = false;
 
-        function injectEmojiCSS() {
-            if (!emojiCSS || emojiCSSLoaded) return;
+        function injectAllEmojiCSS() {
+            if (emojiCSSLoaded || capturedCSS.length === 0) return;
             emojiCSSLoaded = true;
             const style = document.createElement('style');
-            style.id = 'emoji-picker-css';
-            style.textContent = emojiCSS;
+            style.textContent = capturedCSS.join('\n');
             document.head.appendChild(style);
         }
 
-        // Click listener: inject CSS when emoji button is clicked
         document.addEventListener('click', function(e) {
             if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
-                injectEmojiCSS();
+                injectAllEmojiCSS();
             }
         }, { passive: true });
 
-        // MutationObserver to catch the style element when it's added
         const emojiObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
-                    if (node.nodeType === 1 && node.id === 'emoji-picker-css') {
-                        emojiCSS = node.textContent;
+                    if (node.nodeType === 1 && node.tagName === 'STYLE' && node.textContent.includes('.emoji-picker')) {
+                        capturedCSS.push(node.textContent);
                         node.remove();
-                        emojiObserver.disconnect();
-                        return;
                     }
                 }
             }
