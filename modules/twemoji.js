@@ -1,5 +1,5 @@
 // Twemoji Module - replaces custom emojis with Twemoji
-// Waits for twemoji library and forum observer
+
 'use strict';
 
 var TwemojiModule = (function() {
