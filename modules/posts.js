@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module (API-enhanced, all original functionality preserved)
+// Forum Modernizer - Posts Module
 
 var ForumPostsModule = (function(Utils, EventBus) {
     'use strict';
