@@ -101,6 +101,33 @@
         }
     }, { once: true, passive: true });
 
+    // ============================================================
+    // LAZY LOAD EMOJI PICKER CSS
+    // ============================================================
+    (function() {
+        const emojiStyle = document.getElementById('emoji-picker-css');
+        if (!emojiStyle) return;
+
+        const emojiCSS = emojiStyle.textContent;
+        emojiStyle.remove();
+
+        let emojiCSSLoaded = false;
+        function injectEmojiCSS() {
+            if (emojiCSSLoaded) return;
+            emojiCSSLoaded = true;
+            const style = document.createElement('style');
+            style.id = 'emoji-picker-css';
+            style.textContent = emojiCSS;
+            document.head.appendChild(style);
+        }
+
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
+                injectEmojiCSS();
+            }
+        }, { passive: true });
+    })();
+
     window.addEventListener("load", () => {
         const releaseAssets = () => {
             console.log(logBuffer);
