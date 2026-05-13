@@ -20,8 +20,8 @@ var SlickCarouselModule = (function(Utils, EventBus) {
         pauseOnFocus: false,
         pauseOnHover: false,
         waitForAnimate: false,
-        prevArrow: '<button class="slick-prev" aria-label="Previous slide"><i class="fa-regular fa-chevron-left" aria-hidden="true"></i></button>',
-        nextArrow: '<button class="slick-next" aria-label="Next slide"><i class="fa-regular fa-chevron-right" aria-hidden="true"></i></button>',
+        prevArrow: '<button class="slick-prev" aria-label="Previous slide"><i class="fa-regular fa-angle-left" aria-hidden="true"></i></button>',
+        nextArrow: '<button class="slick-next" aria-label="Next slide"><i class="fa-regular fa-angle-right" aria-hidden="true"></i></button>',
         responsive: [
             {
                 breakpoint: 768,
