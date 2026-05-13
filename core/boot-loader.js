@@ -101,45 +101,52 @@
         }
     }, { once: true, passive: true });
 
-    // ============================================================
-    // LAZY LOAD EMOJI PICKER CSS (observer version)
-    // ============================================================
-    (function() {
-        let emojiCSS = null;
-        let emojiCSSLoaded = false;
+// ============================================================
+// LAZY LOAD EMOJI PICKER CSS (catches all matching <style> blocks)
+// ============================================================
+(function() {
+    const emojiCSSParts = [];   // array of CSS strings from each block
+    let emojiCSSLoaded = false;
 
-        function injectEmojiCSS() {
-            if (!emojiCSS || emojiCSSLoaded) return;
-            emojiCSSLoaded = true;
-            const style = document.createElement('style');
-            style.id = 'emoji-picker-css';
-            style.textContent = emojiCSS;
-            document.head.appendChild(style);
+    function injectEmojiCSS() {
+        if (emojiCSSParts.length === 0 || emojiCSSLoaded) return;
+        emojiCSSLoaded = true;
+        const style = document.createElement('style');
+        style.id = 'emoji-picker-css';
+        style.textContent = emojiCSSParts.join('\n');
+        document.head.appendChild(style);
+        // Optionally disconnect the observer if we don't need to catch more
+    }
+
+    // Click listener: inject all CSS when emoji button is clicked
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
+            injectEmojiCSS();
         }
+    }, { passive: true });
 
-        // Click listener: inject CSS when emoji button is clicked
-        document.addEventListener('click', function(e) {
-            if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
-                injectEmojiCSS();
-            }
-        }, { passive: true });
-
-        // MutationObserver to catch the style element when it's added
-        const emojiObserver = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType === 1 && node.id === 'emoji-picker-css') {
-                        emojiCSS = node.textContent;
+    // MutationObserver to catch ANY <style> containing .emoji-picker
+    const emojiObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType === 1 && node.tagName === 'STYLE') {
+                    const text = node.textContent || '';
+                    if (text.includes('.emoji-picker')) {
+                        emojiCSSParts.push(text);
                         node.remove();
-                        emojiObserver.disconnect();
-                        return;
+                        // We keep observing because there may be multiple blocks
+                        // but we could disconnect after a timeout if no more appear
                     }
                 }
             }
-        });
-        emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
-    })();
+        }
+    });
+    emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
 
+    // Safety: stop observing after 5 seconds (most styles injected by then)
+    setTimeout(() => emojiObserver.disconnect(), 5000);
+})();
+    
     // ============================================================
     // LAZY LOAD OTHER UNUSED INLINE STYLES
     // ============================================================
