@@ -1,3 +1,4 @@
+/*media attributes*/
 (function() {
     'use strict';
     
