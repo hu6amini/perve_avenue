@@ -1,4 +1,3 @@
-// core/forum-enhancer.js
 // Main orchestrator for Forum Modernizer Suite
 // Coordinates all modules and initializes the enhancement system
 (function() {
