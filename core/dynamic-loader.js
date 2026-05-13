@@ -121,7 +121,7 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@373aa7b49ab74b6f35c9ef229b2b34d70165bb4a/modules/twemoji.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9efe8fc7eba649566cd98b945f0311dcb40c3abe/modules/posts.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f8b469eb5776b3ad978e549b9921b0929a371c41/modules/slick-carousel.min.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js")
         ]);
 
         // ––– LCP: delay Slick initialisation so the first slide paints without JS –––
