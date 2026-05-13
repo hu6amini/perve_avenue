@@ -101,60 +101,60 @@
         }
     }, { once: true, passive: true });
 
-// ============================================================
-// LAZY LOAD EMOJI PICKER CSS (catches all matching <style> blocks)
-// ============================================================
-(function() {
-    const emojiCSSParts = [];   // array of CSS strings from each block
-    let emojiCSSLoaded = false;
+    // ============================================================
+    // LAZY LOAD EMOJI PICKER CSS (always catch, inject only on editor pages)
+    // ============================================================
+    (function() {
+        const emojiCSSParts = [];
+        let emojiCSSLoaded = false;
+        let emojiObserver;
 
-    function injectEmojiCSS() {
-        if (emojiCSSParts.length === 0 || emojiCSSLoaded) return;
-        emojiCSSLoaded = true;
-        const style = document.createElement('style');
-        style.id = 'emoji-picker-css';
-        style.textContent = emojiCSSParts.join('\n');
-        document.head.appendChild(style);
-        // Optionally disconnect the observer if we don't need to catch more
-    }
-
-    // Click listener: inject all CSS when emoji button is clicked
-    document.addEventListener('click', function(e) {
-        if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
-            injectEmojiCSS();
+        function injectEmojiCSS() {
+            if (emojiCSSParts.length === 0 || emojiCSSLoaded) return;
+            emojiCSSLoaded = true;
+            const style = document.createElement('style');
+            style.id = 'emoji-picker-css';
+            style.textContent = emojiCSSParts.join('\n');
+            document.head.appendChild(style);
+            // On editor pages: stop removing further emoji styles (they are needed now)
+            if (emojiObserver) emojiObserver.disconnect();
         }
-    }, { passive: true });
 
-    // MutationObserver to catch ANY <style> containing .emoji-picker
-    const emojiObserver = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-                if (node.nodeType === 1 && node.tagName === 'STYLE') {
-                    const text = node.textContent || '';
-                    if (text.includes('.emoji-picker')) {
-                        emojiCSSParts.push(text);
-                        node.remove();
-                        // We keep observing because there may be multiple blocks
-                        // but we could disconnect after a timeout if no more appear
+        // Click listener: inject CSS only on editor pages
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons');
+            if (!btn) return;
+            // Inject only if the page is an editor page
+            if (document.body && (document.body.id === 'topic' || document.body.id === 'send' || document.body.id === 'blog')) {
+                injectEmojiCSS();
+            }
+        }, { passive: true });
+
+        // MutationObserver to catch ANY <style> containing .emoji-picker
+        emojiObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === 1 && node.tagName === 'STYLE') {
+                        const text = node.textContent || '';
+                        if (text.includes('.emoji-picker')) {
+                            emojiCSSParts.push(text);
+                            node.remove();
+                            // Keep observing; multiple blocks may appear
+                        }
                     }
                 }
             }
-        }
-    });
-    emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
+        });
+        emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
+    })();
 
-    // Safety: stop observing after 5 seconds (most styles injected by then)
-    setTimeout(() => emojiObserver.disconnect(), 5000);
-})();
-    
     // ============================================================
-    // LAZY LOAD OTHER UNUSED INLINE STYLES
+    // LAZY LOAD OTHER UNUSED INLINE STYLES (ffb_embedlink, el-modal)
     // ============================================================
     (function() {
-        const capturedCSS = {}; // key: identifier, value: CSS text
+        const capturedCSS = {};
         const injected = {};
 
-        // Function to inject a stored style
         function injectCSS(key) {
             if (!capturedCSS[key] || injected[key]) return;
             injected[key] = true;
@@ -163,7 +163,6 @@
             document.head.appendChild(style);
         }
 
-        // Observer that catches the style elements as they are added
         const styleObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
@@ -176,7 +175,6 @@
                         capturedCSS['el-modal'] = text;
                         node.remove();
                     }
-                    // Once we have both, we can stop observing
                     if (capturedCSS['ffb_embedlink'] && capturedCSS['el-modal']) {
                         styleObserver.disconnect();
                         return;
@@ -186,12 +184,10 @@
         });
         styleObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
 
-        // Observer that watches for the actual elements that need these styles
         const domObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType !== 1) continue;
-                    // Check if the added node itself or any descendant has the target class
                     if (node.querySelectorAll) {
                         if (node.querySelector('.ffb_embedlink') && capturedCSS['ffb_embedlink']) {
                             injectCSS('ffb_embedlink');
@@ -200,7 +196,6 @@
                             injectCSS('el-modal');
                         }
                     }
-                    // Also check the node itself
                     if (node.classList) {
                         if (node.classList.contains('ffb_embedlink') && capturedCSS['ffb_embedlink']) {
                             injectCSS('ffb_embedlink');
@@ -209,7 +204,6 @@
                             injectCSS('el-modal');
                         }
                     }
-                    // If both are already injected, we can stop the observer
                     if (injected['ffb_embedlink'] && injected['el-modal']) {
                         domObserver.disconnect();
                         return;
