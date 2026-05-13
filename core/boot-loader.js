@@ -5,15 +5,15 @@
     
     // 1. THE SAFE LIST (Foundational assets only)
     const safeList = [
-        "jq.js",
-        "plugin_v3.js",
-        "boot-loader.min.js", 
-        "dynamic-loader.min.js",
-        "media-optimizer.min.js",
-        "forum-enhancer.min.js",
-        "event-bus.min.js",
-        "modern-forum.min.css",
-        "all.min.css"      
+    "jq.js",
+    "plugin_v3.js",
+    "boot-loader.min.js",
+    "dynamic-loader.min.js",
+    "media-optimizer.min.js",
+    "event-bus.min.js",
+    "forum-enhancer.min.js",
+    "modern-forum.min.css",
+    "all.min.css"
     ];
 
     const processElement = (el) => {
