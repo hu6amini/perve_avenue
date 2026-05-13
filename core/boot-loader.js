@@ -102,7 +102,7 @@
     }, { once: true, passive: true });
 
     // ============================================================
-    // LAZY LOAD EMOJI PICKER CSS (always catch, inject only on editor pages)
+    // LAZY LOAD EMOJI PICKER CSS (captures #emoji-picker-css AND .emoji-picker blocks)
     // ============================================================
     (function() {
         const emojiCSSParts = [];
@@ -116,30 +116,25 @@
             style.id = 'emoji-picker-css';
             style.textContent = emojiCSSParts.join('\n');
             document.head.appendChild(style);
-            // On editor pages: stop removing further emoji styles (they are needed now)
             if (emojiObserver) emojiObserver.disconnect();
         }
 
-        // Click listener: inject CSS only on editor pages
         document.addEventListener('click', function(e) {
             const btn = e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons');
             if (!btn) return;
-            // Inject only if the page is an editor page
             if (document.body && (document.body.id === 'topic' || document.body.id === 'send' || document.body.id === 'blog')) {
                 injectEmojiCSS();
             }
         }, { passive: true });
 
-        // MutationObserver to catch ANY <style> containing .emoji-picker
         emojiObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType === 1 && node.tagName === 'STYLE') {
                         const text = node.textContent || '';
-                        if (text.includes('.emoji-picker')) {
+                        if (node.id === 'emoji-picker-css' || text.includes('.emoji-picker')) {
                             emojiCSSParts.push(text);
                             node.remove();
-                            // Keep observing; multiple blocks may appear
                         }
                     }
                 }
