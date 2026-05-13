@@ -6,7 +6,7 @@ document.documentElement.lang = "en";
 // 1. STYLESHEETS
 // ============================================================================
 const STYLESHEETS = Object.freeze([
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@888654e8830dde67a25d1865183f071ab8699930/lightgallery@2.7.1/lightgallery.min.css",
+    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ff5ef31931e77dd3d3b48d6d2795e039bb402603/lightgallery@2.7.1/lightgallery.min.css",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.css",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c5a5f520f3985fb7ef4d90892360aba8bf55a2c0/lightgallery@2.7.1/lg-thumbnail.min.css",
     "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b6a816af149a4736f9ee02135f35997b7c03eb4d/lightgallery@2.7.1/lg-fullscreen.min.css",
