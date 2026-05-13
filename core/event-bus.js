@@ -1,5 +1,4 @@
 // core/event-bus.js
-// Central event communication between modules
 
 var ForumEventBus = (function() {
     'use strict';
