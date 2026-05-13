@@ -10,6 +10,7 @@
         "boot-loader.min.js", 
         "dynamic-loader.min.js",
         "media-optimizer.min.js",
+        "forum-enhancer.min.js",
         "event-bus.min.js",
         "modern-forum.min.css",
         "all.min.css"      
