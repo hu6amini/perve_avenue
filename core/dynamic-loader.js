@@ -3,15 +3,9 @@
 document.documentElement.lang = "en";
 
 // ============================================================================
-// 1. STYLESHEETS
+// 1. STYLESHEETS (global – no lightgallery)
 // ============================================================================
 const STYLESHEETS = Object.freeze([
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ff5ef31931e77dd3d3b48d6d2795e039bb402603/lightgallery@2.7.1/lightgallery.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c5a5f520f3985fb7ef4d90892360aba8bf55a2c0/lightgallery@2.7.1/lg-thumbnail.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b6a816af149a4736f9ee02135f35997b7c03eb4d/lightgallery@2.7.1/lg-fullscreen.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d4e08c60945a1d195666f212ada2df73eced5447/lightgallery@2.7.1/lg-share.min.css",
-    "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c64ef501230b0ff4e87c4be912ba83686da2a8e6/lightgallery@2.7.1/lg-autoplay.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.min.css"
 ]);
@@ -33,7 +27,6 @@ function loadScript(src, isModule = false) {
         const script = document.createElement('script');
         script.src = src;
 
-        // Extract clean filename for conditional checks (handles .min as well)
         const fileName = src.split('/').pop()
                            .replace(/\.min\.(js|css)$/, '.$1')
                            .replace(/\.(js|css)$/, '');
@@ -67,7 +60,6 @@ function injectCriticalCSS() {
 }
 
 function preloadLCPImage() {
-    // Grab the first slide's image – the one that will be LCP
     const heroImg = document.querySelector('.slick_carousel .slick-slide:first-child img');
     if (heroImg && heroImg.src) {
         const link = document.createElement('link');
@@ -80,7 +72,44 @@ function preloadLCPImage() {
 }
 
 // ============================================================================
-// 4. PHASED EXECUTION LOGIC
+// 4. CONDITIONAL LIGHTGALLERY LOADING (only on content pages)
+// ============================================================================
+function injectStylesheet(url) {
+    const preload = document.createElement("link");
+    Object.assign(preload, { rel: "preload", as: "style", href: url });
+    const link = document.createElement("link");
+    Object.assign(link, { rel: "stylesheet", href: url, media: "print" });
+    link.onload = () => { link.media = "all"; };
+    document.head.append(preload, link);
+}
+
+async function loadLightGallery() {
+    const LIGHTGALLERY_CSS = [
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@ff5ef31931e77dd3d3b48d6d2795e039bb402603/lightgallery@2.7.1/lightgallery.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c5a5f520f3985fb7ef4d90892360aba8bf55a2c0/lightgallery@2.7.1/lg-thumbnail.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b6a816af149a4736f9ee02135f35997b7c03eb4d/lightgallery@2.7.1/lg-fullscreen.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d4e08c60945a1d195666f212ada2df73eced5447/lightgallery@2.7.1/lg-share.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c64ef501230b0ff4e87c4be912ba83686da2a8e6/lightgallery@2.7.1/lg-autoplay.min.css"
+    ];
+
+    // Inject CSS
+    LIGHTGALLERY_CSS.forEach(url => injectStylesheet(url));
+
+    // Load JS modules
+    await Promise.all([
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243547e38cee67f93610cf59391795e8380c/lightgallery@2.7.1/lightgallery.min.js"),
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.js"),
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98bff31d5d7d4cf359f779edc7a09ac2086/lightgallery@2.7.1/lg-thumbnail.min.js"),
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8b2d601281752a66afad3bd04a7a084365b9d2a4/lightgallery@2.7.1/lg-fullscreen.min.js"),
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@42de4d63b84c47559296db9d026f39970d8f77c7/lightgallery@2.7.1/lg-share.min.js"),
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe5755e6520972b53e8f0563d0b88771e5a/lightgallery@2.7.1/lg-autoplay.min.js"),
+        loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180cb5d0223215fbcce99520b806470836e40/lightgallery@2.7.1/lg-hash.min.js")
+    ]);
+}
+
+// ============================================================================
+// 5. PHASED EXECUTION LOGIC
 // ============================================================================
 async function bootSystem() {
     try {
@@ -90,7 +119,6 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
         ]);
 
-        // ––– LCP: inject critical CSS & preload the hero image as early as possible –––
         injectCriticalCSS();
         preloadLCPImage();
 
@@ -101,16 +129,10 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@656799812d69040e171f0dbdf75e04c84e0a770b/forum_core_observer.min.js")
         ]);
 
-        // PHASE C: LIBRARIES
+        // PHASE C: LIBRARIES (excluding lightgallery, which is loaded conditionally later)
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243547e38cee67f93610cf59391795e8380c/lightgallery@2.7.1/lightgallery.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98bff31d5d7d4cf359f779edc7a09ac2086/lightgallery@2.7.1/lg-thumbnail.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8b2d601281752a66afad3bd04a7a084365b9d2a4/lightgallery@2.7.1/lg-fullscreen.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@42de4d63b84c47559296db9d026f39970d8f77c7/lightgallery@2.7.1/lg-share.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe5755e6520972b53e8f0563d0b88771e5a/lightgallery@2.7.1/lg-autoplay.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180cb5d0223215fbcce99520b806470836e40/lightgallery@2.7.1/lg-hash.min.js"),
+            // lightgallery scripts removed from here
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
             loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
         ]);
@@ -124,7 +146,6 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js")
         ]);
 
-        // ––– LCP: delay Slick initialisation so the first slide paints without JS –––
         const initSlick = () => {
             if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
                 window.SlickCarouselModule.initialize();
@@ -149,6 +170,22 @@ async function bootSystem() {
             s.src = src; s.async = true;
             document.head.appendChild(s);
         });
+
+        // --- Load lightgallery only on specific pages ---
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                const id = document.body?.id;
+                if (id === 'topic' || id === 'send' || id === 'search' || id === 'blog') {
+                    loadLightGallery();
+                }
+            });
+        } else {
+            // DOM already loaded (unlikely), check immediately
+            const id = document.body?.id;
+            if (id === 'topic' || id === 'send' || id === 'search' || id === 'blog') {
+                loadLightGallery();
+            }
+        }
 
     } catch (err) {
         console.error('[Boot] Critical failure:', err);
