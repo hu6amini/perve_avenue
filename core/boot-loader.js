@@ -105,37 +105,49 @@
         const releaseAssets = () => {
             console.log(logBuffer);
             
-document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
-    const src = oldScript.dataset.original;
-    if (!src) return;
+            document.querySelectorAll('script[type="text/plain"]').forEach(oldScript => {
+                const src = oldScript.dataset.original;
+                if (!src) return;
 
-    // Replace originals with minified versions to avoid duplication
-    if (src.includes('media-optimizer.js') && !src.includes('.min.js')) {
-        const minSrc = src.replace(/media-optimizer\.js$/, 'media-optimizer.min.js');
-        const newScript = document.createElement("script");
-        newScript.src = minSrc;
-        newScript.type = 'module';
-        oldScript.parentNode.replaceChild(newScript, oldScript);
-        return;
-    }
-    if (src.includes('event-bus.js') && !src.includes('.min.js')) {
-        const minSrc = src.replace(/event-bus\.js$/, 'event-bus.min.js');
-        const newScript = document.createElement("script");
-        newScript.src = minSrc;
-        newScript.defer = false;
-        oldScript.parentNode.replaceChild(newScript, oldScript);
-        return;
-    }
+                // Replace originals with minified versions to avoid duplication
+                if (src.includes('media-optimizer.js') && !src.includes('.min.js')) {
+                    const minSrc = src.replace(/media-optimizer\.js$/, 'media-optimizer.min.js');
+                    const newScript = document.createElement("script");
+                    newScript.src = minSrc;
+                    newScript.type = 'module';
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                    return;
+                }
+                if (src.includes('event-bus.js') && !src.includes('.min.js')) {
+                    const minSrc = src.replace(/event-bus\.js$/, 'event-bus.min.js');
+                    const newScript = document.createElement("script");
+                    newScript.src = minSrc;
+                    newScript.defer = false;
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                    return;
+                }
 
-    // Skip lite‑vimeo, +esm, and Turnstile – we handle them separately
-    if (src.includes('lite-vimeo-embed') || src.includes('+esm') || 
-        src.includes('challenges.cloudflare.com') || src.includes('turnstile')) return;
+                // Skip lite‑vimeo, +esm, and Turnstile – we handle them separately
+                if (src.includes('lite-vimeo-embed') || src.includes('+esm') || 
+                    src.includes('challenges.cloudflare.com') || src.includes('turnstile')) return;
 
-    const newScript = document.createElement("script");
-    newScript.src = src;
-    newScript.defer = true;
-    oldScript.parentNode.replaceChild(newScript, oldScript);
-});
+                // --- Popper.js guard for tippy ---
+                if (src.includes('tippy.js') && !window.Popper) {
+                    // Popper not yet loaded, delay tippy slightly
+                    setTimeout(() => {
+                        const newScript = document.createElement("script");
+                        newScript.src = src;
+                        newScript.defer = true;
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    }, 50);
+                    return;
+                }
+
+                const newScript = document.createElement("script");
+                newScript.src = src;
+                newScript.defer = true;
+                oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
 
             document.querySelectorAll('link[media="print"]').forEach(link => {
                 if (!link.dataset.activated) {
