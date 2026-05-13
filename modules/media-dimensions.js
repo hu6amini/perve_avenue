@@ -1,6 +1,5 @@
 // =============================================
 // MEDIA DIMENSION EXTRACTOR - Module version
-// Waits for Weserv optimizer and forum observer
 // =============================================
 
 'use strict';
