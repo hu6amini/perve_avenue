@@ -1,4 +1,3 @@
-/*Core Observer*/
 'use strict';
 
 class ForumCoreObserver {
