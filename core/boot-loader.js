@@ -102,18 +102,14 @@
     }, { once: true, passive: true });
 
     // ============================================================
-    // LAZY LOAD EMOJI PICKER CSS
+    // LAZY LOAD EMOJI PICKER CSS (observer version)
     // ============================================================
     (function() {
-        const emojiStyle = document.getElementById('emoji-picker-css');
-        if (!emojiStyle) return;
-
-        const emojiCSS = emojiStyle.textContent;
-        emojiStyle.remove();
-
+        let emojiCSS = null;
         let emojiCSSLoaded = false;
+
         function injectEmojiCSS() {
-            if (emojiCSSLoaded) return;
+            if (!emojiCSS || emojiCSSLoaded) return;
             emojiCSSLoaded = true;
             const style = document.createElement('style');
             style.id = 'emoji-picker-css';
@@ -121,11 +117,27 @@
             document.head.appendChild(style);
         }
 
+        // Click listener: inject CSS when emoji button is clicked
         document.addEventListener('click', function(e) {
             if (e.target.closest('.ve-btn-emoji') || e.target.closest('#emoticons')) {
                 injectEmojiCSS();
             }
         }, { passive: true });
+
+        // MutationObserver to catch the style element when it's added
+        const emojiObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === 1 && node.id === 'emoji-picker-css') {
+                        emojiCSS = node.textContent;
+                        node.remove();
+                        emojiObserver.disconnect();
+                        return;
+                    }
+                }
+            }
+        });
+        emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
     })();
 
     window.addEventListener("load", () => {
