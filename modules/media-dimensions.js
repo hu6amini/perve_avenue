@@ -23,8 +23,11 @@ class MediaDimensionExtractor {
     #MAX_CACHE_SIZE = 500;
     #pendingImages = new Set();
     #weservReady = false;
-    #initStarted = false;
     #observerReady = false;
+
+    // Configuration timeouts for dependency waiting
+    static #DEPENDENCY_WAIT_TIMEOUT = 5000;  // ms: Wait for forum observer
+    static #WESERV_WAIT_TIMEOUT = 3000;       // ms: Wait for Weserv image optimizer
 
     static #IFRAME_SIZES = new Map([
         ['youtube', ['560', '315']],
@@ -43,15 +46,16 @@ class MediaDimensionExtractor {
 
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
-    static #EMOJI_SIZE_NORMAL = 20;
-    static #EMOJI_SIZE_SMALL = 18;
-    static #EMOJI_SIZE_H1 = 35;
-    static #EMOJI_SIZE_H2 = 29;
-    static #EMOJI_SIZE_H3 = 24;
-    static #EMOJI_SIZE_H4 = 20;
-    static #EMOJI_SIZE_H5 = 18;
-    static #EMOJI_SIZE_H6 = 16;
-    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
+    // Emoji sizes for different contexts
+    static #EMOJI_SIZE_NORMAL = 20;        // Normal text emoji size
+    static #EMOJI_SIZE_SMALL = 18;         // Emoji in small contexts (quotes, spoilers, signatures)
+    static #EMOJI_SIZE_H1 = 35;            // Heading 1 emoji size
+    static #EMOJI_SIZE_H2 = 29;            // Heading 2 emoji size
+    static #EMOJI_SIZE_H3 = 24;            // Heading 3 emoji size
+    static #EMOJI_SIZE_H4 = 20;            // Heading 4 emoji size
+    static #EMOJI_SIZE_H5 = 18;            // Heading 5 emoji size
+    static #EMOJI_SIZE_H6 = 16;            // Heading 6 emoji size
+    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };  // Fallback for broken images
     static #BATCH_SIZE = 50;
 
     constructor() {
@@ -68,7 +72,7 @@ class MediaDimensionExtractor {
                     resolve();
                 };
                 window.addEventListener('forum-observer-ready', handler);
-                setTimeout(resolve, 5000);
+                setTimeout(resolve, MediaDimensionExtractor.#DEPENDENCY_WAIT_TIMEOUT);
             });
         }
         this.#observerReady = true;
@@ -86,7 +90,7 @@ class MediaDimensionExtractor {
                 resolve();
             };
             window.addEventListener('weserv-ready', handler);
-            setTimeout(resolve, 3000);
+            setTimeout(resolve, MediaDimensionExtractor.#WESERV_WAIT_TIMEOUT);
         });
         this.#weservReady = true;
     }
@@ -149,10 +153,11 @@ class MediaDimensionExtractor {
     }
 
     #processAllMediaBatched() {
+        // Take snapshots to prevent issues with DOM mutations during iteration
         const batches = [
-            document.images,
-            document.getElementsByTagName('iframe'),
-            document.getElementsByTagName('video')
+            Array.from(document.images),
+            Array.from(document.getElementsByTagName('iframe')),
+            Array.from(document.getElementsByTagName('video'))
         ];
         
         requestAnimationFrame(() => {
@@ -163,7 +168,6 @@ class MediaDimensionExtractor {
     #processBatch(batches, batchIndex, elementIndex) {
         const BATCH_SIZE = MediaDimensionExtractor.#BATCH_SIZE;
         let processedCount = 0;
-        const startTime = performance.now();
         
         while (batchIndex < batches.length && processedCount < BATCH_SIZE) {
             const batch = batches[batchIndex];
@@ -315,6 +319,7 @@ class MediaDimensionExtractor {
             this.#dimensionCache.delete(cacheKey);
             this.#lruMap.delete(cacheKey);
             this.#cacheDimension(img.src, size, size);
+            this.#processedMedia.add(img);
             return;
         }
 
@@ -332,6 +337,7 @@ class MediaDimensionExtractor {
                 img.setAttribute('height', cached.height);
                 img.style.aspectRatio = cached.width + ' / ' + cached.height;
             }
+            this.#processedMedia.add(img);
             return;
         }
         this.#cacheMisses++;
@@ -352,6 +358,7 @@ class MediaDimensionExtractor {
                     }
                 }
                 img.style.aspectRatio = width + ' / ' + height;
+                this.#processedMedia.add(img);
                 return;
             }
         }
@@ -364,6 +371,7 @@ class MediaDimensionExtractor {
             img.setAttribute('height', size);
             img.style.aspectRatio = size + ' / ' + size;
             this.#cacheDimension(img.src, size, size);
+            this.#processedMedia.add(img);
             return;
         }
         
@@ -375,9 +383,9 @@ class MediaDimensionExtractor {
     }
 
     #getCacheKey(src) {
+        // All twemoji use same cache entry for better hit rate
         if (src.includes('twemoji')) {
-            const match = src.match(/(\d+)x\1/);
-            return match ? 'emoji:' + match[1] : 'emoji:default';
+            return 'emoji:twemoji';
         }
         if (src.length > 100) {
             return 'h' + this.#hashString(src);
@@ -460,6 +468,7 @@ class MediaDimensionExtractor {
         img.style.aspectRatio = width + '/' + height;
         img.style.removeProperty('height');
         this.#cacheDimension(img.src, width, height);
+        this.#processedMedia.add(img);
     }
     
     #cacheDimension(src, width, height) {
@@ -558,10 +567,14 @@ class MediaDimensionExtractor {
     forceReprocessElement(element) {
         if (!element) return;
         this.#processedMedia.delete(element);
-        const cacheKey = this.#getCacheKey(element.src);
-        if (this.#dimensionCache.has(cacheKey)) {
-            this.#dimensionCache.delete(cacheKey);
-            this.#lruMap.delete(cacheKey);
+        
+        // Only clear cache for images which have src attribute
+        if (element.tagName === 'IMG' && element.src) {
+            const cacheKey = this.#getCacheKey(element.src);
+            if (this.#dimensionCache.has(cacheKey)) {
+                this.#dimensionCache.delete(cacheKey);
+                this.#lruMap.delete(cacheKey);
+            }
         }
         this.#processSingleMedia(element);
     }
