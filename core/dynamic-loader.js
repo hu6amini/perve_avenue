@@ -141,7 +141,7 @@ async function bootSystem() {
         // PHASE A: THE FOUNDATION
         const phaseAStart = performance.now();
         const resultsA = await Promise.allSettled([
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c2f6bf75146811d9629a075544bb166602989f44/media-optimizer.min.js"),
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@8f6a9f7f137c8f7a9e36bce00a1c5dc937269906/media-optimizer.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
         ]);
         const failedA = resultsA.filter(r => r.status === 'rejected');
