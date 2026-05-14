@@ -1,22 +1,65 @@
-/* Optimised Boot Loader – v5 */
+/* Optimised Boot Loader – v6 */
 "use strict";
 (function () {
   let logBuffer = "[Bypass Active]:";
 
-  // 1. Safe list – scripts/CSS that must not be trapped
-  const safeList = [
-    "jq.js",
-    "plugin_v3.js",
-    "boot-loader.min.js",
-    "dynamic-loader.min.js",
-    "media-optimizer.min.js",
-    "event-bus.min.js",
-    "forum-enhancer.min.js",
-    "modern-forum.min.css",
-    "all.min.css"
-  ];
+  // Configuration
+  const config = {
+    safeList: [
+      "jq.js",
+      "plugin_v3.js",
+      "boot-loader.min.js",
+      "dynamic-loader.min.js",
+      "media-optimizer.min.js",
+      "event-bus.min.js",
+      "forum-enhancer.min.js",
+      "modern-forum.min.css",
+      "all.min.css"
+    ],
+    skipRelease: [
+      "lite-vimeo-embed",
+      "+esm",
+      "challenges.cloudflare.com",
+      "turnstile",
+      "script-loader",
+      "recaptcha"
+    ],
+    emojiEditorPages: ["topic", "send", "blog"],
+    capturedStyleKeys: {
+      emoji: "emoji-picker",
+      ffbEmbed: "ffb_embedlink",
+      elModal: "el-modal"
+    }
+  };
 
-  // 2. Core processing of <script> and <link rel="stylesheet">
+  // State management
+  const state = {
+    turnstileLoaded: false,
+    recaptchaSrc: null,
+    recaptchaLoaded: false,
+    emojiCSSParts: [],
+    emojiCSSLoaded: false,
+    capturedCSS: {},
+    injected: {},
+    observerDisconnected: false
+  };
+
+  // Utility: Check if filename is in safe list
+  const isSafeAsset = (fileName) => {
+    return config.safeList.some((item) => fileName.includes(item));
+  };
+
+  // Utility: Extract filename from URL
+  const getFileName = (url) => {
+    return url.split("/").pop().split("?")[0];
+  };
+
+  // Utility: Check if should skip release
+  const shouldSkipRelease = (src) => {
+    return config.skipRelease.some((item) => src.includes(item));
+  };
+
+  // 1. Core processing of <script> and <link rel="stylesheet">
   const processElement = (el) => {
     const isScript = el.tagName === "SCRIPT";
     const isLink = el.tagName === "LINK" && el.rel === "stylesheet";
@@ -25,11 +68,11 @@
     const src = isScript ? (el.src || el.getAttribute("data-src")) : el.href;
     if (!src) return;
 
-    const fileName = src.split("/").pop().split("?")[0];
-    const isSafe = safeList.some((item) => fileName.includes(item));
+    const fileName = getFileName(src);
+    const isSafe = isSafeAsset(fileName);
 
     if (!isSafe) {
-      // Force-trap the heavy script‑loader
+      // Force-trap the heavy script-loader
       if (isScript && src.includes("script-loader")) {
         el.type = "text/plain";
         el.dataset.original = src;
@@ -38,8 +81,9 @@
         return;
       }
 
-      // Force-trap reCAPTCHA (may have async, but we want to lazy‑load it)
+      // Force-trap reCAPTCHA (may have async, but we want to lazy-load it)
       if (isScript && src.includes("recaptcha/api.js")) {
+        state.recaptchaSrc = src;
         el.type = "text/plain";
         el.dataset.original = src;
         el.removeAttribute("src");
@@ -56,7 +100,7 @@
         return;
       }
 
-      // Downgrade render‑blocking CSS to print (then activate on load)
+      // Downgrade render-blocking CSS to print (then activate on load)
       if (isLink) {
         if (el.dataset.activated || el.media === "print") return;
         el.media = "print";
@@ -75,183 +119,175 @@
     }
   };
 
-  // 3. Observe the whole document for added scripts/styles
+  // 2. Capture and manage CSS styles (emoji, ffb_embedlink, el-modal)
+  const processCSSStyle = (styleEl) => {
+    const text = styleEl.textContent || "";
+
+    // Capture emoji-picker CSS (both the ID-based and class-based blocks)
+    if ((styleEl.id === 'emoji-picker-css' || text.includes(".emoji-picker")) && !state.injected[config.capturedStyleKeys.emoji]) {
+      if (!state.emojiCSSParts) state.emojiCSSParts = [];
+      state.emojiCSSParts.push(text);
+      styleEl.remove();
+      return true;
+    }
+
+    // Capture ffb_embedlink CSS
+    if (text.includes(".ffb_embedlink") && !state.capturedCSS[config.capturedStyleKeys.ffbEmbed]) {
+      state.capturedCSS[config.capturedStyleKeys.ffbEmbed] = text;
+      styleEl.remove();
+      return true;
+    }
+
+    // Capture el-modal CSS
+    if (text.includes(".el-modal") && !state.capturedCSS[config.capturedStyleKeys.elModal]) {
+      state.capturedCSS[config.capturedStyleKeys.elModal] = text;
+      styleEl.remove();
+      return true;
+    }
+
+    return false;
+  };
+
+  // 3. Inject captured CSS (generic)
+  const injectCapturedCSS = (key, styleId = null) => {
+    if (!state.capturedCSS[key] || state.injected[key]) return;
+    state.injected[key] = true;
+    const style = document.createElement("style");
+    if (styleId) style.id = styleId;
+    style.textContent = state.capturedCSS[key];
+    document.head.appendChild(style);
+  };
+
+  // 4. Inject emoji CSS (handles multiple blocks)
+  const injectEmojiCSS = () => {
+    if (!state.emojiCSSParts || state.emojiCSSParts.length === 0 || state.emojiCSSLoaded) return;
+    state.emojiCSSLoaded = true;
+    const style = document.createElement("style");
+    style.id = "emoji-picker-css";
+    style.textContent = state.emojiCSSParts.join("\n");
+    document.head.appendChild(style);
+  };
+
+  // 5. Unified MutationObserver for all DOM changes
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      mutation.addedNodes.forEach((node) => {
-        if (node.nodeType === 1) {
-          processElement(node);
-          node.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue; // Only process Element nodes
+
+        // Process scripts and stylesheets
+        processElement(node);
+
+        // Process child scripts and stylesheets
+        if (node.querySelectorAll) {
+          try {
+            node.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
+          } catch (e) {
+            /* Error querying, continue */
+          }
         }
-      });
+
+        // Process captured CSS styles
+        if (node.tagName === "STYLE") {
+          processCSSStyle(node);
+        }
+
+        // Check for emoji-picker CSS in child styles
+        if (node.querySelectorAll) {
+          try {
+            node.querySelectorAll("style").forEach(processCSSStyle);
+          } catch (e) {
+            /* Error querying, continue */
+          }
+        }
+
+        // Inject CSS when target elements appear
+        if (node.querySelectorAll) {
+          try {
+            if (node.querySelector && state.capturedCSS[config.capturedStyleKeys.ffbEmbed] && !state.injected[config.capturedStyleKeys.ffbEmbed]) {
+              if (node.querySelector(".ffb_embedlink")) {
+                injectCapturedCSS(config.capturedStyleKeys.ffbEmbed);
+              }
+            }
+            if (node.querySelector && state.capturedCSS[config.capturedStyleKeys.elModal] && !state.injected[config.capturedStyleKeys.elModal]) {
+              if (node.querySelector(".el-modal")) {
+                injectCapturedCSS(config.capturedStyleKeys.elModal);
+              }
+            }
+          } catch (e) {
+            /* Error querying, continue */
+          }
+        }
+
+        // Check if node itself has target classes
+        if (node.classList) {
+          if (node.classList.contains("ffb_embedlink") && state.capturedCSS[config.capturedStyleKeys.ffbEmbed]) {
+            injectCapturedCSS(config.capturedStyleKeys.ffbEmbed);
+          }
+          if (node.classList.contains("el-modal") && state.capturedCSS[config.capturedStyleKeys.elModal]) {
+            injectCapturedCSS(config.capturedStyleKeys.elModal);
+          }
+        }
+      }
     }
   });
+
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  document.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
+
+  // Initial scan of existing elements
+  document.querySelectorAll("script, link[rel='stylesheet'], style").forEach((el) => {
+    if (el.tagName === "STYLE") {
+      processCSSStyle(el);
+    } else {
+      processElement(el);
+    }
+  });
 
   // ============================================================
-  // 4. Lazy‑load Turnstile on first form interaction
+  // 6. Lazy-load Turnstile on first form interaction
   // ============================================================
-  let turnstileLoaded = false;
   function loadTurnstile() {
-    if (turnstileLoaded) return;
-    turnstileLoaded = true;
+    if (state.turnstileLoaded) return;
+    state.turnstileLoaded = true;
     const script = document.createElement("script");
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
     script.async = true;
     document.head.appendChild(script);
   }
+
   document.addEventListener("focusin", (e) => {
     if (e.target.closest("form")) loadTurnstile();
   }, { once: true, passive: true });
 
   // ============================================================
-  // 5. Lazy‑load reCAPTCHA on first form interaction
+  // 7. Lazy-load reCAPTCHA on first form interaction
   // ============================================================
-  (function () {
-    let recaptchaSrc = null;
-    let recaptchaLoaded = false;
+  function loadRecaptcha() {
+    if (state.recaptchaLoaded || !state.recaptchaSrc) return;
+    state.recaptchaLoaded = true;
+    const script = document.createElement("script");
+    script.src = state.recaptchaSrc;
+    script.async = true;
+    document.head.appendChild(script);
+  }
 
-    // Watch for the reCAPTCHA script element being added dynamically
-    const recaptchaObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.tagName === "SCRIPT" && node.src && node.src.includes("recaptcha/api.js")) {
-            recaptchaSrc = node.src;
-            node.type = "text/plain";
-            node.removeAttribute("src");
-            node.dataset.original = recaptchaSrc;
-            recaptchaObserver.disconnect();
-            return;
-          }
-        }
-      }
-    });
-    recaptchaObserver.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("focusin", (e) => {
+    if (e.target.closest("form")) loadRecaptcha();
+  }, { once: true, passive: true });
 
-    // Load reCAPTCHA only when the user first interacts with a form
-    function loadRecaptcha() {
-      if (recaptchaLoaded || !recaptchaSrc) return;
-      recaptchaLoaded = true;
-      const script = document.createElement("script");
-      script.src = recaptchaSrc;
-      script.async = true;
-      document.head.appendChild(script);
+  // ============================================================
+  // 8. Lazy-load emoji-picker CSS on editor pages
+  // ============================================================
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".ve-btn-emoji") || e.target.closest("#emoticons");
+    if (!btn) return;
+    if (document.body && config.emojiEditorPages.includes(document.body.id)) {
+      injectEmojiCSS();
     }
-    document.addEventListener("focusin", (e) => {
-      if (e.target.closest("form")) loadRecaptcha();
-    }, { once: true, passive: true });
-  })();
+  }, { passive: true });
 
   // ============================================================
-  // 6. Lazy‑load emoji‑picker CSS (both blocks) – only on editor pages
+  // 9. Release trapped assets at idle (with priority hints)
   // ============================================================
-  (function () {
-    const emojiCSSParts = [];
-    let emojiCSSLoaded = false;
-    let emojiObserver;
-
-    function injectEmojiCSS() {
-      if (emojiCSSParts.length === 0 || emojiCSSLoaded) return;
-      emojiCSSLoaded = true;
-      const style = document.createElement("style");
-      style.id = "emoji-picker-css";
-      style.textContent = emojiCSSParts.join("\n");
-      document.head.appendChild(style);
-      if (emojiObserver) emojiObserver.disconnect();
-    }
-
-    document.addEventListener("click", function (e) {
-      const btn = e.target.closest(".ve-btn-emoji") || e.target.closest("#emoticons");
-      if (!btn) return;
-      if (document.body && (document.body.id === "topic" || document.body.id === "send" || document.body.id === "blog")) {
-        injectEmojiCSS();
-      }
-    }, { passive: true });
-
-    emojiObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType === 1 && node.tagName === "STYLE") {
-            const text = node.textContent || "";
-            if (node.id === "emoji-picker-css" || text.includes(".emoji-picker")) {
-              emojiCSSParts.push(text);
-              node.remove();
-            }
-          }
-        }
-      }
-    });
-    emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
-  })();
-
-  // ============================================================
-  // 7. Lazy‑load ffb_embedlink and el‑modal styles when their elements first appear
-  // ============================================================
-  (function () {
-    const capturedCSS = {};
-    const injected = {};
-
-    function injectCSS(key) {
-      if (!capturedCSS[key] || injected[key]) return;
-      injected[key] = true;
-      const style = document.createElement("style");
-      style.textContent = capturedCSS[key];
-      document.head.appendChild(style);
-    }
-
-    const styleObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== 1 || node.tagName !== "STYLE") continue;
-          const text = node.textContent || "";
-          if (text.includes(".ffb_embedlink") && !capturedCSS["ffb_embedlink"]) {
-            capturedCSS["ffb_embedlink"] = text;
-            node.remove();
-          } else if (text.includes(".el-modal") && !capturedCSS["el-modal"]) {
-            capturedCSS["el-modal"] = text;
-            node.remove();
-          }
-          if (capturedCSS["ffb_embedlink"] && capturedCSS["el-modal"]) {
-            styleObserver.disconnect();
-            return;
-          }
-        }
-      }
-    });
-    styleObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
-
-    const domObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== 1) continue;
-          if (node.querySelectorAll) {
-            if (node.querySelector(".ffb_embedlink") && capturedCSS["ffb_embedlink"]) {
-              injectCSS("ffb_embedlink");
-            }
-            if (node.querySelector(".el-modal") && capturedCSS["el-modal"]) {
-              injectCSS("el-modal");
-            }
-          }
-          if (node.classList) {
-            if (node.classList.contains("ffb_embedlink") && capturedCSS["ffb_embedlink"]) {
-              injectCSS("ffb_embedlink");
-            }
-            if (node.classList.contains("el-modal") && capturedCSS["el-modal"]) {
-              injectCSS("el-modal");
-            }
-          }
-          if (injected["ffb_embedlink"] && injected["el-modal"]) {
-            domObserver.disconnect();
-            return;
-          }
-        }
-      }
-    });
-    domObserver.observe(document.documentElement, { childList: true, subtree: true });
-  })();
-
-  // 8. Release trapped assets at idle (with priority hints)
   window.addEventListener("load", () => {
     const releaseAssets = () => {
       console.log(logBuffer);
@@ -269,19 +305,20 @@
           oldScript.parentNode.replaceChild(newScript, oldScript);
           return;
         }
+
         if (src.includes("event-bus.js") && !src.includes(".min.js")) {
           const minSrc = src.replace(/event-bus\.js$/, "event-bus.min.js");
           const newScript = document.createElement("script");
           newScript.src = minSrc;
-          newScript.defer = false;   // event‑bus must run immediately
+          newScript.defer = false; // event-bus must run immediately
           oldScript.parentNode.replaceChild(newScript, oldScript);
           return;
         }
 
         // Replace original Handlebars with our minified version
-        if (src.includes('handlebars/hb.js') && !src.includes('.min.js')) {
-          const minSrc = 'https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e8e8c12f6bdbf38f74b83492ffc48b0e004b8b1a/core/handlebars.min.js';
-          const newScript = document.createElement('script');
+        if (src.includes("handlebars/hb.js") && !src.includes(".min.js")) {
+          const minSrc = "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e8e8c12f6bdbf38f74b83492ffc48b0e004b8b1a/core/handlebars.min.js";
+          const newScript = document.createElement("script");
           newScript.src = minSrc;
           newScript.defer = true;
           oldScript.parentNode.replaceChild(newScript, oldScript);
@@ -289,15 +326,7 @@
         }
 
         // Skip assets we handle separately
-        if (
-          src.includes("lite-vimeo-embed") ||
-          src.includes("+esm") ||
-          src.includes("challenges.cloudflare.com") ||
-          src.includes("turnstile") ||
-          src.includes("script-loader") ||
-          src.includes("recaptcha")        // ← never released automatically
-        )
-          return;
+        if (shouldSkipRelease(src)) return;
 
         // Popper.js guard: delay tippy if Popper isn't ready
         if (src.includes("tippy.js") && !window.Popper) {
@@ -333,4 +362,12 @@
       setTimeout(releaseAssets, 1000);
     }
   });
+
+  // ============================================================
+  // 10. Cleanup on page unload
+  // ============================================================
+  window.addEventListener("beforeunload", () => {
+    if (observer) observer.disconnect();
+    state.observerDisconnected = true;
+  }, { once: true });
 })();
