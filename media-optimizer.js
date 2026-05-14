@@ -386,59 +386,51 @@
     }
 
     // ===== WESERV OPTIMIZATION =====
-    function buildWeservUrl(img) {
-        var originalSrc = img.src;
-        var originalFormat = detectFormat(originalSrc);
-        var isGif = originalFormat === 'gif';
-
-        // Always use WebP for non-GIF images
-        var outputFormat = isGif ? 'gif' : 'webp';
-        var quality = CONFIG.quality[outputFormat] || CONFIG.quality.unknown;
-
-        var params = [
-            'maxage=' + CONFIG.cache,
-            'q=' + quality
-        ];
-
-        switch (outputFormat) {
-            case 'png':
-                params.push('af');
-                params.push('l=9');
-                params.push('lossless=true');
-                break;
-            case 'webp':
-                params.push('il');
-                break;
-            case 'gif':
-                params.push('n=-1');
-                params.push('lossless=true');
-                break;
-        }
-
-        if (originalFormat === 'png') {
-            params.push('af');
-            params.push('l=9');
-        }
-
-        var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
-        if (filename && /^[a-zA-Z0-9._-]+$/.test(filename)) {
-            params.push('filename=' + encodeURIComponent(filename));
-        }
-
-        var encodedUrl = encodeURIComponent(originalSrc);
-        var optimizedSrc = CONFIG.cdn + '?url=' + encodedUrl + '&output=' + outputFormat;
-
-        if (params.length) {
-            optimizedSrc = optimizedSrc + '&' + params.join('&');
-        }
-
-        return {
-            url: optimizedSrc,
-            format: outputFormat,
-            quality: quality,
-            params: params
-        };
+function buildWeservUrl(img) {
+    var originalSrc = img.src;
+    var originalFormat = detectFormat(originalSrc);
+    
+    // Always output WebP (static or animated)
+    var outputFormat = 'webp';
+    var quality = CONFIG.quality.webp;   // 85
+    
+    var params = [
+        'maxage=' + CONFIG.cache,
+        'q=' + quality,
+        'il'                           // interlace / better loading
+    ];
+    
+    // Animated GIF → animated WebP (keep all frames, infinite loop)
+    if (originalFormat === 'gif') {
+        params.push('n=-1');           // process all frames
+        params.push('loop=0');         // infinite loop
     }
+    
+    // Preserve transparency / lossless hints for PNG sources
+    if (originalFormat === 'png') {
+        params.push('af');
+        params.push('l=9');
+    }
+    
+    var filename = originalSrc.split('/').pop().split('?')[0].split('#')[0];
+    if (filename && /^[a-zA-Z0-9._-]+$/.test(filename)) {
+        params.push('filename=' + encodeURIComponent(filename));
+    }
+    
+    var encodedUrl = encodeURIComponent(originalSrc);
+    var optimizedSrc = CONFIG.cdn + '?url=' + encodedUrl + '&output=' + outputFormat;
+    
+    if (params.length) {
+        optimizedSrc = optimizedSrc + '&' + params.join('&');
+    }
+    
+    return {
+        url: optimizedSrc,
+        format: outputFormat,
+        quality: quality,
+        params: params
+    };
+}
 
     function optimizeImage(img) {
         if (!img || !img.src || img.src.indexOf('data:') === 0) return;
