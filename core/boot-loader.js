@@ -21,7 +21,7 @@
       "+esm",
       "challenges.cloudflare.com",
       "turnstile",
-      "script-loader",
+     
       "recaptcha"
     ],
     emojiEditorPages: ["topic", "send", "blog"],
