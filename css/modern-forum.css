@@ -4,6 +4,7 @@
 .carousel-wrapper {
     padding: 0;
     margin: var(--space-xl) auto var(--space-xl);
+    width: 100%;
 }
 
 /* Prevent FOUC – only the first slide is visible before Slick initialises */
