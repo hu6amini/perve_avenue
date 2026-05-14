@@ -182,12 +182,63 @@ async function bootSystem() {
             setTimeout(loadEnhancer, 1500);
         }
 
-        // Third Party
-        ["https://platform.twitter.com/widgets.js", "https://platform.instagram.com/en_US/embeds.js"].forEach(src => {
+        // ============================================================
+        // LAZY LOAD: Social widgets (Twitter/Instagram) only when needed
+        // ============================================================
+        // Twitter – only when a tweet/timeline element exists and is near the viewport
+        const tweetEl = document.querySelector('.twitter-tweet, .twitter-timeline, [data-twitter]');
+        if (tweetEl) {
+            const tweetObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const s = document.createElement('script');
+                        s.src = 'https://platform.twitter.com/widgets.js';
+                        s.async = true;
+                        document.head.appendChild(s);
+                        observer.disconnect();
+                    }
+                });
+            }, { rootMargin: '200px' });
+            tweetObserver.observe(tweetEl);
+        }
+
+        // Instagram – only if an embed is present
+        if (document.querySelector('.instagram-media, .instagram-embed, [data-instagram]')) {
             const s = document.createElement("script");
-            s.src = src; s.async = true;
+            s.src = "https://platform.instagram.com/en_US/embeds.js";
+            s.async = true;
             document.head.appendChild(s);
-        });
+        }
+
+        // ============================================================
+        // SCRIPT‑LOADER REPLACEMENTS: load essential pieces manually
+        // ============================================================
+        // These were previously injected by the script‑loader, which is now permanently blocked.
+        // Load them only on pages that actually need them.
+        const bodyId = document.body?.id;
+        if (bodyId === 'topic' || bodyId === 'send' || bodyId === 'search' || bodyId === 'blog') {
+            // post_cron8.js – cron job for topic/post updates (load at idle)
+            if (window.requestIdleCallback) {
+                requestIdleCallback(() => {
+                    loadScript('https://mod.forumfree.it/kakashi/post_cron8.js?v67');
+                }, { timeout: 4000 });
+            } else {
+                setTimeout(() => {
+                    loadScript('https://mod.forumfree.it/kakashi/post_cron8.js?v67');
+                }, 2000);
+            }
+        }
+
+        // ffa.js / ffa.css – Free For All section (only if the widget exists)
+        if (document.querySelector('.ffa_widget, .freeforall, [data-ffa]')) {
+            // ffa.css
+            const ffaCSS = document.createElement('link');
+            ffaCSS.rel = 'stylesheet';
+            ffaCSS.href = 'https://cdn.forumfree.it/ffa/ffa.css?v3';
+            document.head.appendChild(ffaCSS);
+            // ffa.js
+            loadScript('https://cdn.forumfree.it/ffa/ffa.js?v8');
+        }
 
         // --- Load lightgallery only on specific pages ---
         if (document.readyState === 'loading') {
