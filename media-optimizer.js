@@ -1,4 +1,4 @@
-/*media attributes - optimized version*/
+/*media attributes - optimized version with adaptive debouncing*/
 (function() {
     'use strict';
 
@@ -12,6 +12,11 @@
         async: 'async',
         cache: '1y',
         posterTimeout: 8000, // timeout for poster generation
+        debounce: {
+            smallBatchDelay: 16,  // One frame (60fps) for responsive feel
+            largeBatchDelay: 100, // More batching for bulk operations
+            batchSizeThreshold: 50 // Switch threshold
+        },
         quality: {
             jpg: '90',
             jpeg: '90',
@@ -58,7 +63,12 @@
             withPoster: 0
         },
         initDone: false,
-        mutationObserverActive: false
+        mutationObserverActive: false,
+        processingMetrics: {
+            lastProcessTime: 0,
+            batchesProcessed: 0,
+            averageBatchSize: 0
+        }
     };
 
     // ===== UTILITY FUNCTIONS =====
@@ -473,37 +483,83 @@
         log('✅ Optimized:', originalSrc.substring(0, 50));
     }
 
-    // ===== DEBOUNCED MUTATION OBSERVER =====
+    // ===== ADAPTIVE DEBOUNCED MUTATION OBSERVER =====
     var mutationTimeout = null;
     var pendingMutations = [];
+    var isProcessing = false;
 
-    function processPendingMutations() {
-        if (pendingMutations.length === 0) return;
+    function processPendingMutations(nodesToProcess) {
+        if (!nodesToProcess || nodesToProcess.length === 0 || isProcessing) return;
 
-        var nodesToProcess = pendingMutations.slice();
-        pendingMutations = [];
+        isProcessing = true;
+        var startTime = performance.now ? performance.now() : Date.now();
+        var processedCount = 0;
 
-        nodesToProcess.forEach(function(node) {
-            if (node.nodeType !== 1) return;
+        if (typeof requestAnimationFrame !== 'undefined') {
+            requestAnimationFrame(function() {
+                nodesToProcess.forEach(function(node) {
+                    if (node.nodeType !== 1) return;
 
-            if (node.tagName === 'IMG') {
-                applyLazyAttributes(node);
-                optimizeImage(node);
-            } else if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
-                applyLazyAttributes(node);
-            }
+                    if (node.tagName === 'IMG') {
+                        applyLazyAttributes(node);
+                        optimizeImage(node);
+                        processedCount++;
+                    } else if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
+                        applyLazyAttributes(node);
+                        processedCount++;
+                    }
 
-            if (node.querySelectorAll) {
-                var allMedia = node.querySelectorAll('img, iframe, video');
-                for (var j = 0; j < allMedia.length; j++) {
-                    var el = allMedia[j];
-                    applyLazyAttributes(el);
-                    if (el.tagName === 'IMG') {
-                        optimizeImage(el);
+                    if (node.querySelectorAll) {
+                        var allMedia = node.querySelectorAll('img, iframe, video');
+                        for (var j = 0; j < allMedia.length; j++) {
+                            var el = allMedia[j];
+                            applyLazyAttributes(el);
+                            if (el.tagName === 'IMG') {
+                                optimizeImage(el);
+                            }
+                            processedCount++;
+                        }
+                    }
+                });
+
+                isProcessing = false;
+
+                // Update metrics
+                if (performance.now) {
+                    var processTime = performance.now() - startTime;
+                    state.processingMetrics.lastProcessTime = processTime;
+                    state.processingMetrics.batchesProcessed++;
+                    state.processingMetrics.averageBatchSize = 
+                        (state.processingMetrics.averageBatchSize * (state.processingMetrics.batchesProcessed - 1) + processedCount) / 
+                        state.processingMetrics.batchesProcessed;
+                    log('⚡ Processed batch:', processedCount + ' nodes in ' + Math.round(processTime) + 'ms');
+                }
+            });
+        } else {
+            // Fallback for browsers without requestAnimationFrame
+            nodesToProcess.forEach(function(node) {
+                if (node.nodeType !== 1) return;
+
+                if (node.tagName === 'IMG') {
+                    applyLazyAttributes(node);
+                    optimizeImage(node);
+                } else if (node.tagName === 'IFRAME' || node.tagName === 'VIDEO') {
+                    applyLazyAttributes(node);
+                }
+
+                if (node.querySelectorAll) {
+                    var allMedia = node.querySelectorAll('img, iframe, video');
+                    for (var j = 0; j < allMedia.length; j++) {
+                        var el = allMedia[j];
+                        applyLazyAttributes(el);
+                        if (el.tagName === 'IMG') {
+                            optimizeImage(el);
+                        }
                     }
                 }
-            }
-        });
+            });
+            isProcessing = false;
+        }
     }
 
     var mutationObserver = new MutationObserver(function(mutations) {
@@ -515,9 +571,19 @@
             }
         });
 
-        // Debounce mutation processing
+        // Adaptive debouncing: shorter delay for small batches (responsive), longer for large (efficient)
+        var adaptiveDelay = pendingMutations.length > CONFIG.debounce.batchSizeThreshold ?
+            CONFIG.debounce.largeBatchDelay :
+            CONFIG.debounce.smallBatchDelay;
+
+        log('📦 Queued mutations:', pendingMutations.length + ' (delay: ' + adaptiveDelay + 'ms)');
+
         clearTimeout(mutationTimeout);
-        mutationTimeout = setTimeout(processPendingMutations, 100);
+        mutationTimeout = setTimeout(function() {
+            var nodesToProcess = pendingMutations.slice();
+            pendingMutations = [];
+            processPendingMutations(nodesToProcess);
+        }, adaptiveDelay);
     });
 
     // ===== CONSOLIDATED IMAGE PROXY (SINGLE ENTRY POINT) =====
@@ -608,7 +674,7 @@
                 subtree: true
             });
             state.mutationObserverActive = true;
-            log('✅ Mutation observer active');
+            log('✅ Mutation observer active (adaptive debouncing: 16-100ms)');
         } else {
             var bodyCheck = setInterval(function() {
                 if (document.body) {
@@ -618,7 +684,7 @@
                         subtree: true
                     });
                     state.mutationObserverActive = true;
-                    log('✅ Mutation observer active (delayed)');
+                    log('✅ Mutation observer active (adaptive debouncing: 16-100ms)');
 
                     // Reprocess any missed media
                     var missedImages = document.querySelectorAll('img:not([data-optimized])');
@@ -707,6 +773,10 @@
             console.log('Lazy loading (all media):', lazyCount + '/' + totalMedia);
             console.log('Async decoding:', asyncCount + '/' + finalImages.length);
             console.log('Placeholder iframes:', placeholderCount);
+            console.log('\n=== MUTATION PROCESSING METRICS ===');
+            console.log('Batches processed:', state.processingMetrics.batchesProcessed);
+            console.log('Average batch size:', Math.round(state.processingMetrics.averageBatchSize));
+            console.log('Last batch process time:', Math.round(state.processingMetrics.lastProcessTime) + 'ms');
             console.log('\n=== VIDEO STATS ===');
             console.log('Total videos:', finalVideos.length);
             console.log('Videos with preload="none":', state.videos.preloadNone);
