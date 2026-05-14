@@ -93,10 +93,8 @@ async function loadLightGallery() {
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c64ef501230b0ff4e87c4be912ba83686da2a8e6/lightgallery@2.7.1/lg-autoplay.min.css"
     ];
 
-    // Inject CSS
     LIGHTGALLERY_CSS.forEach(url => injectStylesheet(url));
 
-    // Load JS modules
     await Promise.all([
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243547e38cee67f93610cf59391795e8380c/lightgallery@2.7.1/lightgallery.min.js"),
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.js"),
@@ -109,7 +107,7 @@ async function loadLightGallery() {
 }
 
 // ============================================================================
-// 5. PHASED EXECUTION LOGIC
+// 5. PHASED EXECUTION LOGIC (heavily optimized)
 // ============================================================================
 async function bootSystem() {
     try {
@@ -129,23 +127,17 @@ async function bootSystem() {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@656799812d69040e171f0dbdf75e04c84e0a770b/forum_core_observer.min.js")
         ]);
 
-        // PHASE C: LIBRARIES (excluding lightgallery, which is loaded conditionally later)
+        // PHASE C: LIBRARIES (no lightgallery)
         await Promise.all([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
-            // lightgallery scripts removed from here
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
             loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
         ]);
 
-        // PHASE D: MODULES
-        await Promise.all([
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1855935f5e479985ea90ee101b275386597e72af/modules/media-dimensions.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@373aa7b49ab74b6f35c9ef229b2b34d70165bb4a/modules/twemoji.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9efe8fc7eba649566cd98b945f0311dcb40c3abe/modules/posts.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js")
-        ]);
+        // PHASE D: ESSENTIAL MODULE (carousel handling)
+        await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js");
 
+        // --- LCP: delay Slick initialisation so the first slide paints without JS ---
         const initSlick = () => {
             if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
                 window.SlickCarouselModule.initialize();
@@ -158,11 +150,37 @@ async function bootSystem() {
             setTimeout(initSlick, 100);
         }
 
-        // PHASE E: THE ENHANCER
-        setTimeout(async () => {
-            await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3bb60f894525b563f9e7f8da8980e1eb90d6fce0/core/forum-enhancer.min.js");
-            console.log('[Boot] System Fully Enhanced');
-        }, 50);
+        // ============================================================
+        // IDLE LOAD: Non‑critical modules that enhance the UI
+        // ============================================================
+        const loadEnhancements = () => {
+            Promise.all([
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1855935f5e479985ea90ee101b275386597e72af/modules/media-dimensions.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@373aa7b49ab74b6f35c9ef229b2b34d70165bb4a/modules/twemoji.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9efe8fc7eba649566cd98b945f0311dcb40c3abe/modules/posts.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js")
+            ]);
+        };
+
+        if (window.requestIdleCallback) {
+            requestIdleCallback(loadEnhancements, { timeout: 3000 });
+        } else {
+            setTimeout(loadEnhancements, 1000);
+        }
+
+        // ============================================================
+        // IDLE LOAD: Forum enhancer (additional UI improvements)
+        // ============================================================
+        const loadEnhancer = () => {
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3bb60f894525b563f9e7f8da8980e1eb90d6fce0/core/forum-enhancer.min.js")
+                .then(() => console.log('[Boot] System Fully Enhanced'));
+        };
+
+        if (window.requestIdleCallback) {
+            requestIdleCallback(loadEnhancer, { timeout: 5000 });
+        } else {
+            setTimeout(loadEnhancer, 1500);
+        }
 
         // Third Party
         ["https://platform.twitter.com/widgets.js", "https://platform.instagram.com/en_US/embeds.js"].forEach(src => {
@@ -180,7 +198,6 @@ async function bootSystem() {
                 }
             });
         } else {
-            // DOM already loaded (unlikely), check immediately
             const id = document.body?.id;
             if (id === 'topic' || id === 'send' || id === 'search' || id === 'blog') {
                 loadLightGallery();
