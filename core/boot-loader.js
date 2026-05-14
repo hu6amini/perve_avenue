@@ -225,6 +225,16 @@
           return;
         }
 
+        // Replace original Handlebars with our minified version
+        if (src.includes('handlebars/hb.js') && !src.includes('.min.js')) {
+          const minSrc = 'https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e8e8c12f6bdbf38f74b83492ffc48b0e004b8b1a/core/handlebars.min.js';
+          const newScript = document.createElement('script');
+          newScript.src = minSrc;
+          newScript.defer = true;
+          oldScript.parentNode.replaceChild(newScript, oldScript);
+          return;
+        }
+
         // Skip assets we handle separately
         if (
           src.includes("lite-vimeo-embed") ||
