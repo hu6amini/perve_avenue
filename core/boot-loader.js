@@ -1,4 +1,4 @@
-/* Optimised Boot Loader – v4 */
+/* Optimised Boot Loader – v5 */
 "use strict";
 (function () {
   let logBuffer = "[Bypass Active]:";
@@ -35,6 +35,15 @@
         el.dataset.original = src;
         el.removeAttribute("src");
         logBuffer += "\n- Forced Trap (Loader): " + fileName;
+        return;
+      }
+
+      // Force-trap reCAPTCHA (may have async, but we want to lazy‑load it)
+      if (isScript && src.includes("recaptcha/api.js")) {
+        el.type = "text/plain";
+        el.dataset.original = src;
+        el.removeAttribute("src");
+        logBuffer += "\n- Forced Trap (reCAPTCHA): " + fileName;
         return;
       }
 
@@ -80,7 +89,9 @@
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.querySelectorAll("script, link[rel='stylesheet']").forEach(processElement);
 
+  // ============================================================
   // 4. Lazy‑load Turnstile on first form interaction
+  // ============================================================
   let turnstileLoaded = false;
   function loadTurnstile() {
     if (turnstileLoaded) return;
@@ -94,7 +105,47 @@
     if (e.target.closest("form")) loadTurnstile();
   }, { once: true, passive: true });
 
-  // 5. Lazy‑load emoji‑picker CSS (both blocks) – only on editor pages
+  // ============================================================
+  // 5. Lazy‑load reCAPTCHA on first form interaction
+  // ============================================================
+  (function () {
+    let recaptchaSrc = null;
+    let recaptchaLoaded = false;
+
+    // Watch for the reCAPTCHA script element being added dynamically
+    const recaptchaObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.tagName === "SCRIPT" && node.src && node.src.includes("recaptcha/api.js")) {
+            recaptchaSrc = node.src;
+            node.type = "text/plain";
+            node.removeAttribute("src");
+            node.dataset.original = recaptchaSrc;
+            recaptchaObserver.disconnect();
+            return;
+          }
+        }
+      }
+    });
+    recaptchaObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+    // Load reCAPTCHA only when the user first interacts with a form
+    function loadRecaptcha() {
+      if (recaptchaLoaded || !recaptchaSrc) return;
+      recaptchaLoaded = true;
+      const script = document.createElement("script");
+      script.src = recaptchaSrc;
+      script.async = true;
+      document.head.appendChild(script);
+    }
+    document.addEventListener("focusin", (e) => {
+      if (e.target.closest("form")) loadRecaptcha();
+    }, { once: true, passive: true });
+  })();
+
+  // ============================================================
+  // 6. Lazy‑load emoji‑picker CSS (both blocks) – only on editor pages
+  // ============================================================
   (function () {
     const emojiCSSParts = [];
     let emojiCSSLoaded = false;
@@ -134,7 +185,9 @@
     emojiObserver.observe(document.head || document.documentElement, { childList: true, subtree: true });
   })();
 
-  // 6. Lazy‑load ffb_embedlink and el‑modal styles when their elements first appear
+  // ============================================================
+  // 7. Lazy‑load ffb_embedlink and el‑modal styles when their elements first appear
+  // ============================================================
   (function () {
     const capturedCSS = {};
     const injected = {};
@@ -198,7 +251,7 @@
     domObserver.observe(document.documentElement, { childList: true, subtree: true });
   })();
 
-  // 7. Release trapped assets at idle (with priority hints)
+  // 8. Release trapped assets at idle (with priority hints)
   window.addEventListener("load", () => {
     const releaseAssets = () => {
       console.log(logBuffer);
@@ -235,13 +288,14 @@
           return;
         }
 
-        // Skip assets we handle separately (including script‑loader – never released)
+        // Skip assets we handle separately
         if (
           src.includes("lite-vimeo-embed") ||
           src.includes("+esm") ||
           src.includes("challenges.cloudflare.com") ||
           src.includes("turnstile") ||
-          src.includes("script-loader")      // ← permanently blocked
+          src.includes("script-loader") ||
+          src.includes("recaptcha")        // ← never released automatically
         )
           return;
 
