@@ -7,7 +7,6 @@ class ForumCoreObserver {
     #intersectionObserver = null;
     #resizeObserver = null;
     #animationObserver = null;
-    #mutationQueue = [];
     #priorityQueue = {
         high: [],
         medium: [],
@@ -16,11 +15,7 @@ class ForumCoreObserver {
     #isProcessing = false;
     #initialScanComplete = false;
     #debounceTimeouts = new Map();
-    #processedNodes = typeof WeakSet !== 'undefined' ? new WeakSet() : {
-        has: () => false,
-        add: () => {},
-        delete: () => {}
-    };
+    #processedNodes = typeof WeakSet !== 'undefined' ? new WeakSet() : new Set();
     #nodeTimestamps = new Map();
     #cleanupIntervalId = null;
     #lastStyleMutation = 0;
@@ -38,6 +33,10 @@ class ForumCoreObserver {
         weserv: false,
         dimensionExtractor: false
     };
+
+    // Store bound event handlers for cleanup
+    #boundVisibilityHandler = null;
+    #boundLoadHandler = null;
     
     static #CONFIG = {
         observer: {
@@ -81,11 +80,9 @@ class ForumCoreObserver {
     };
     
     constructor(debug = false) {
-        // ===== USER TIMING: start of constructor =====
         if (performance && performance.mark) {
             performance.mark('observer-ctor-start');
         }
-        // =============================================
 
         this.#debug = debug;
         this.#iframeObservers = new WeakMap();
@@ -100,21 +97,15 @@ class ForumCoreObserver {
         this.#setupErrorHandling();
         this.#setupPerformanceMonitoring();
         
-        // ===== USER TIMING: after all synchronous init (scan done) =====
         if (performance && performance.mark) {
             performance.mark('observer-init-end');
         }
-        // ==============================================================
 
-        // Dispatch ready event after everything is initialised
         queueMicrotask(() => {
             window.dispatchEvent(new CustomEvent('forum-observer-ready', { detail: { timestamp: Date.now() } }));
             
-            // ===== USER TIMING: ready event dispatched =====
             if (performance && performance.mark) {
                 performance.mark('observer-ready-dispatched');
-                
-                // Create measures (only once)
                 try {
                     performance.measure('observer-init-time', 'observer-ctor-start', 'observer-init-end');
                     performance.measure('observer-total-time', 'observer-ctor-start', 'observer-ready-dispatched');
@@ -122,7 +113,6 @@ class ForumCoreObserver {
                     // Ignore if marks already cleared
                 }
             }
-            // ================================================
 
             if (this.#debug) console.log('[ForumObserver] Ready event dispatched');
         });
@@ -172,12 +162,14 @@ class ForumCoreObserver {
             this.#scanExistingContent();
             this.#setupCleanup();
             
-            document.addEventListener('visibilitychange', this.#handleVisibilityChange.bind(this), { 
+            this.#boundVisibilityHandler = this.#handleVisibilityChange.bind(this);
+            this.#boundLoadHandler = this.#handleLoadEvents.bind(this);
+            
+            document.addEventListener('visibilitychange', this.#boundVisibilityHandler, { 
                 passive: true, 
                 capture: true 
             });
-            
-            document.addEventListener('load', this.#handleLoadEvents.bind(this), true);
+            document.addEventListener('load', this.#boundLoadHandler, true);
             
             this.#observeStyleChanges();
             
@@ -697,7 +689,6 @@ class ForumCoreObserver {
     }
     
     #handleMutations(mutations) {
-        // Filter out editor mutations
         const filteredMutations = [];
         for (let i = 0; i < mutations.length; i++) {
             const mutation = mutations[i];
@@ -773,47 +764,47 @@ class ForumCoreObserver {
         return basePriority === 1 ? 'high' : basePriority === 2 ? 'medium' : 'low';
     }
     
-#shouldProcessMutation(mutation) {
-    const target = mutation.target;
-    if (!target) return false;
-
-    if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
-        return false;
-    }
-
-    // Always process style/class changes – we'll check visibility later asynchronously
-    if (mutation.type === 'attributes' && 
-        (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
-        return true;
-    }
-
-    if (mutation.type === 'childList') {
-        return true;
-    }
-
-    if (mutation.type === 'characterData') {
-        const parent = target.parentElement;
-        return parent ? this.#shouldObserveTextChanges(parent) : false;
-    }
-
-    if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-        return true;
-    }
-
-    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-        // Throttle style-only mutations that don’t affect layout
-        const now = Date.now();
-        if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
+    #shouldProcessMutation(mutation) {
+        const target = mutation.target;
+        if (!target) return false;
+    
+        if (target.dataset && target.dataset.observerOrigin === 'forum-script') {
             return false;
         }
-        this.#lastStyleMutation = now;
-        const oldValue = mutation.oldValue || '';
-        const newValue = target.getAttribute ? target.getAttribute('style') || '' : '';
-        return this.#styleChangeAffectsDOM(oldValue, newValue);
+    
+        // Always process style/class changes – we'll check visibility later asynchronously
+        if (mutation.type === 'attributes' && 
+            (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+            return true;
+        }
+    
+        if (mutation.type === 'childList') {
+            return true;
+        }
+    
+        if (mutation.type === 'characterData') {
+            const parent = target.parentElement;
+            return parent ? this.#shouldObserveTextChanges(parent) : false;
+        }
+    
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+            return true;
+        }
+    
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            // Throttle style-only mutations that don’t affect layout
+            const now = Date.now();
+            if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
+                return false;
+            }
+            this.#lastStyleMutation = now;
+            const oldValue = mutation.oldValue || '';
+            const newValue = target.getAttribute ? target.getAttribute('style') || '' : '';
+            return this.#styleChangeAffectsDOM(oldValue, newValue);
+        }
+    
+        return true;
     }
-
-    return true;
-}
     
     #shouldObserveTextChanges(element) {
         if (!element || !element.tagName) return false;
@@ -921,96 +912,87 @@ class ForumCoreObserver {
         }
     }
     
-async #processMutationBatch(mutations, priority) {
-    const affectedNodes = new Set();
-    const styleChangeNodes = new Set();
-    
-    for (let i = 0; i < mutations.length; i++) {
-        const mutation = mutations[i];
+    async #processMutationBatch(mutations, priority) {
+        const affectedNodes = new Set();
+        const styleChangeNodes = new Set();
         
-        if (!mutation || !mutation.target) continue;
-        
-        switch (mutation.type) {
-            case 'childList':
-                if (mutation.addedNodes) {
-                    for (let j = 0; j < mutation.addedNodes.length; j++) {
-                        const node = mutation.addedNodes[j];
-                        if (node && node.nodeType === Node.ELEMENT_NODE && !this.#isInEditor(node)) {
-                            this.#collectAllElements(node, affectedNodes);
-                            
-                            if (node.shadowRoot) {
-                                this.#collectAllElements(node.shadowRoot, affectedNodes);
-                                this.#observeShadowRoot(node.shadowRoot, node);
+        for (let i = 0; i < mutations.length; i++) {
+            const mutation = mutations[i];
+            
+            if (!mutation || !mutation.target) continue;
+            
+            switch (mutation.type) {
+                case 'childList':
+                    if (mutation.addedNodes) {
+                        for (let j = 0; j < mutation.addedNodes.length; j++) {
+                            const node = mutation.addedNodes[j];
+                            if (node && node.nodeType === Node.ELEMENT_NODE && !this.#isInEditor(node)) {
+                                this.#collectAllElements(node, affectedNodes);
+                                
+                                if (node.shadowRoot) {
+                                    this.#collectAllElements(node.shadowRoot, affectedNodes);
+                                    this.#observeShadowRoot(node.shadowRoot, node);
+                                }
                             }
                         }
                     }
-                }
-                
-                if (mutation.removedNodes) {
-                    for (let j = 0; j < mutation.removedNodes.length; j++) {
-                        const node = mutation.removedNodes[j];
-                        if (node && node.nodeType === Node.ELEMENT_NODE) {
-                            this.#cleanupRemovedNode(node);
+                    
+                    if (mutation.removedNodes) {
+                        for (let j = 0; j < mutation.removedNodes.length; j++) {
+                            const node = mutation.removedNodes[j];
+                            if (node && node.nodeType === Node.ELEMENT_NODE) {
+                                this.#cleanupRemovedNode(node);
+                            }
                         }
                     }
-                }
-                break;
-                
-            case 'attributes':
-                if (mutation.target && !this.#isInEditor(mutation.target)) {
-                    // Handle style‑change visibility (used for style‑reprocess callbacks)
-                    if (mutation.attributeName === 'style') {
-                        const oldDisplay = this.#getDisplayFromStyle(mutation.oldValue);
-                        const newDisplay = this.#getDisplayFromStyle(mutation.target.getAttribute('style') || '');
-                        if ((oldDisplay === 'none' || oldDisplay === null) && 
-                            (newDisplay === 'block' || newDisplay === 'inline-block')) {
-                            styleChangeNodes.add(mutation.target);
+                    break;
+                    
+                case 'attributes':
+                    if (mutation.target && !this.#isInEditor(mutation.target)) {
+                        if (mutation.attributeName === 'style') {
+                            const oldDisplay = this.#getDisplayFromStyle(mutation.oldValue);
+                            const newDisplay = this.#getDisplayFromStyle(mutation.target.getAttribute('style') || '');
+                            if ((oldDisplay === 'none' || oldDisplay === null) && 
+                                (newDisplay === 'block' || newDisplay === 'inline-block')) {
+                                styleChangeNodes.add(mutation.target);
+                            }
+                        }
+                        
+                        affectedNodes.add(mutation.target);
+                        
+                        if (mutation.attributeName === 'data-theme') {
+                            this.#pageState = this.#detectPageState();
+                            const theme = mutation.target.getAttribute ? mutation.target.getAttribute('data-theme') : null;
+                            if (theme) {
+                                this.#notifyThemeDependentCallbacks(theme);
+                            }
                         }
                     }
+                    break;
                     
-                    // Always consider the attribute mutation as affecting the node
-                    affectedNodes.add(mutation.target);
-                    
-                    // Theme changes
-                    if (mutation.attributeName === 'data-theme') {
-                        this.#pageState = this.#detectPageState();
-                        const theme = mutation.target.getAttribute ? mutation.target.getAttribute('data-theme') : null;
-                        if (theme) {
-                            this.#notifyThemeDependentCallbacks(theme);
+                case 'characterData':
+                    if (mutation.target) {
+                        const parent = mutation.target.parentElement;
+                        if (parent && !this.#isInEditor(parent)) {
+                            affectedNodes.add(parent);
                         }
                     }
-                    
-                    // REMOVED: the forced‑reflow getComputedStyle check for class/style.
-                    // The node is already in affectedNodes; any visibility filtering
-                    // can be done asynchronously inside the callbacks / #processNode.
-                }
-                break;
-                
-            case 'characterData':
-                if (mutation.target) {
-                    const parent = mutation.target.parentElement;
-                    if (parent && !this.#isInEditor(parent)) {
-                        affectedNodes.add(parent);
-                    }
-                }
-                break;
+                    break;
+            }
+        }
+        
+        for (const node of affectedNodes) {
+            if (node && !this.#processedNodes.has(node)) {
+                await this.#processNode(node);
+            }
+        }
+        
+        for (const node of styleChangeNodes) {
+            if (node && this.#styleReprocessCallbacks.size > 0) {
+                await this.#processNode(node, { styleChange: true });
+            }
         }
     }
-    
-    // Process all affected nodes (without any synchronous style reads)
-    for (const node of affectedNodes) {
-        if (node && !this.#processedNodes.has(node)) {
-            await this.#processNode(node);
-        }
-    }
-    
-    // Process style‑change nodes (those that became visible)
-    for (const node of styleChangeNodes) {
-        if (node && this.#styleReprocessCallbacks.size > 0) {
-            await this.#processNode(node, { styleChange: true });
-        }
-    }
-}
     
     #getDisplayFromStyle(styleString) {
         if (!styleString) return null;
@@ -1304,8 +1286,9 @@ async #processMutationBatch(mutations, priority) {
                         if (node && !this.#isInEditor(node) && !this.#processedNodes.has(node)) {
                             this.#processNode(node);
                             
-                            if (node.shadowRoot) {
-                                this.#collectAllElements(node.shadowRoot, new Set());
+                            // Also check for shadow root and observe it
+                            if (node.shadowRoot && !this.#shadowObservers?.has(node)) {
+                                this.#observeShadowRoot(node.shadowRoot, node);
                             }
                         }
                     }
@@ -1315,8 +1298,7 @@ async #processMutationBatch(mutations, priority) {
             }
         }
         
-        this.#scanForShadowDOM();
-        
+        // Scan iframes
         if (document.querySelectorAll) {
             document.querySelectorAll('iframe').forEach(iframe => {
                 if (iframe) {
@@ -1327,17 +1309,6 @@ async #processMutationBatch(mutations, priority) {
         
         this.#initialScanComplete = true;
         this.#log('Initial content scan complete (GLOBAL mode)');
-    }
-    
-    #scanForShadowDOM() {
-        if (!document.querySelectorAll) return;
-        
-        const shadowHosts = document.querySelectorAll('*');
-        shadowHosts.forEach(host => {
-            if (host && host.shadowRoot && !this.#shadowObservers.has(host)) {
-                this.#observeShadowRoot(host.shadowRoot, host);
-            }
-        });
     }
     
     #setupCleanup() {
@@ -1458,7 +1429,14 @@ async #processMutationBatch(mutations, priority) {
             });
         }
         
-        this.#scanForShadowDOM();
+        // Re-check existing shadow DOM
+        if (document.querySelectorAll) {
+            document.querySelectorAll('*').forEach(host => {
+                if (host?.shadowRoot && !this.#shadowObservers?.has(host)) {
+                    this.#observeShadowRoot(host.shadowRoot, host);
+                }
+            });
+        }
     }
     
     // ===== PUBLIC API =====
@@ -1705,6 +1683,14 @@ async #processMutationBatch(mutations, priority) {
             this.#resizeObserver.disconnect();
         }
         
+        // Remove event listeners that were added in #init()
+        if (this.#boundVisibilityHandler) {
+            document.removeEventListener('visibilitychange', this.#boundVisibilityHandler, { capture: true });
+        }
+        if (this.#boundLoadHandler) {
+            document.removeEventListener('load', this.#boundLoadHandler, true);
+        }
+        
         this.#callbacks.clear();
         this.#debouncedCallbacks.clear();
         this.#styleReprocessCallbacks.clear();
@@ -1715,11 +1701,7 @@ async #processMutationBatch(mutations, priority) {
         this.#priorityQueue.high = [];
         this.#priorityQueue.medium = [];
         this.#priorityQueue.low = [];
-        this.#mutationQueue.length = 0;
         this.#debounceTimeouts.clear();
-        
-        document.removeEventListener('visibilitychange', this.#handleVisibilityChange);
-        document.removeEventListener('load', this.#handleLoadEvents, true);
         
         this.#log('ForumCoreObserver destroyed');
     }
