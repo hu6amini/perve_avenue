@@ -15,7 +15,6 @@ const STYLESHEETS = Object.freeze([
 const IDLE_TIMEOUT_SLICK = 500;
 const IDLE_TIMEOUT_ENHANCEMENTS = 800;
 const IDLE_TIMEOUT_ENHANCER = 1200;
-const IDLE_TIMEOUT_CRON = 1000;
 
 // ============================================================================
 // 1. STYLESHEETS (global – no lightgallery)
@@ -61,8 +60,6 @@ function scheduleWork(callback, timeout = 0) {
     if (window.requestIdleCallback) {
         requestIdleCallback(callback, { timeout });
     } else {
-        // When requestIdleCallback is unavailable, run after a short delay.
-        // The timeout is divided to keep the delay reasonable.
         setTimeout(callback, Math.max(0, timeout / 2));
     }
 }
@@ -118,7 +115,6 @@ async function loadLightGallery() {
 
     LIGHTGALLERY_CSS.forEach(url => injectStylesheet(url));
 
-    // Use allSettled to prevent one failure from breaking the whole gallery
     const results = await Promise.allSettled([
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243547e38cee67f93610cf59391795e8380c/lightgallery@2.7.1/lightgallery.min.js"),
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.js"),
@@ -271,30 +267,6 @@ async function bootSystem() {
                 });
             }, { rootMargin: '200px' });
             instagramObserver.observe(instagramEl);
-        }
-
-        // ============================================================
-        // SCRIPT‑LOADER REPLACEMENTS: load essential pieces manually
-        // ============================================================
-        const bodyId = document.body?.id;
-        if (CONTENT_PAGE_IDS.includes(bodyId)) {
-            const loadCron = () => {
-                loadScript('https://mod.forumfree.it/kakashi/post_cron8.js?v67')
-                    .then(() => console.debug('[Boot] post_cron8 loaded'))
-                    .catch(err => console.warn('[Boot] post_cron8 failed to load:', err));
-            };
-            scheduleWork(loadCron, IDLE_TIMEOUT_CRON);
-        }
-
-        // ffa.js / ffa.css – Free For All section (only if the widget exists)
-        if (document.querySelector('.ffa_widget, .freeforall, [data-ffa]')) {
-            const ffaCSS = document.createElement('link');
-            ffaCSS.rel = 'stylesheet';
-            ffaCSS.href = 'https://cdn.forumfree.it/ffa/ffa.css?v3';
-            document.head.appendChild(ffaCSS);
-            loadScript('https://cdn.forumfree.it/ffa/ffa.js?v8')
-                .then(() => console.debug('[Boot] FFA widget loaded'))
-                .catch(err => console.warn('[Boot] FFA widget failed to load:', err));
         }
 
         // --- Load lightgallery only on specific pages ---
