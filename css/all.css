@@ -113,7 +113,7 @@
 .fa-user::before { content: "\f007"; }
 .fa-brain-circuit::before { content: "\e0c6"; }
 .fa-share-nodes::before { content: "\f1e0"; }
-.fa-exclamation-circle::before { content: "\f06a"; }
+.fa-circle-exclamation::before { content: "\f06a"; }
 .fa-octagon-exclamation::before { content: "\e204"; }
 .fa-triangle-exclamation::before { content: "\f071"; }
 .fa-toggle-on::before { content: "\f205"; }
