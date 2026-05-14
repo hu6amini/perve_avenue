@@ -3,13 +3,23 @@
 document.documentElement.lang = "en";
 
 // ============================================================================
-// 1. STYLESHEETS (global – no lightgallery)
+// CONSTANTS
 // ============================================================================
+const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']);
+
 const STYLESHEETS = Object.freeze([
     "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
     "https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.min.css"
 ]);
 
+const IDLE_TIMEOUT_SLICK = 500;
+const IDLE_TIMEOUT_ENHANCEMENTS = 800;
+const IDLE_TIMEOUT_ENHANCER = 1200;
+const IDLE_TIMEOUT_CRON = 1000;
+
+// ============================================================================
+// 1. STYLESHEETS (global – no lightgallery)
+// ============================================================================
 STYLESHEETS.forEach(url => {
     const n = document.createElement("link");
     Object.assign(n, { rel: "preload", as: "style", href: url });
@@ -45,7 +55,20 @@ function loadScript(src, isModule = false) {
 }
 
 // ============================================================================
-// 3. LCP HELPERS
+// 3. UTILITY: Schedules work with fallback
+// ============================================================================
+function scheduleWork(callback, timeout = 0) {
+    if (window.requestIdleCallback) {
+        requestIdleCallback(callback, { timeout });
+    } else {
+        // When requestIdleCallback is unavailable, run after a short delay.
+        // The timeout is divided to keep the delay reasonable.
+        setTimeout(callback, Math.max(0, timeout / 2));
+    }
+}
+
+// ============================================================================
+// 4. LCP HELPERS
 // ============================================================================
 function injectCriticalCSS() {
     const style = document.createElement('style');
@@ -72,7 +95,7 @@ function preloadLCPImage() {
 }
 
 // ============================================================================
-// 4. CONDITIONAL LIGHTGALLERY LOADING (only on content pages)
+// 5. CONDITIONAL LIGHTGALLERY LOADING (only on content pages)
 // ============================================================================
 function injectStylesheet(url) {
     const preload = document.createElement("link");
@@ -95,7 +118,8 @@ async function loadLightGallery() {
 
     LIGHTGALLERY_CSS.forEach(url => injectStylesheet(url));
 
-    await Promise.all([
+    // Use allSettled to prevent one failure from breaking the whole gallery
+    const results = await Promise.allSettled([
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@77a2243547e38cee67f93610cf59391795e8380c/lightgallery@2.7.1/lightgallery.min.js"),
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.js"),
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b199e98bff31d5d7d4cf359f779edc7a09ac2086/lightgallery@2.7.1/lg-thumbnail.min.js"),
@@ -104,83 +128,111 @@ async function loadLightGallery() {
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a7e3cfe5755e6520972b53e8f0563d0b88771e5a/lightgallery@2.7.1/lg-autoplay.min.js"),
         loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c98180cb5d0223215fbcce99520b806470836e40/lightgallery@2.7.1/lg-hash.min.js")
     ]);
+
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+        console.warn('[Boot] Some lightgallery modules failed to load:', failed);
+    }
 }
 
 // ============================================================================
-// 5. PHASED EXECUTION LOGIC (heavily optimized)
+// 6. PHASED EXECUTION LOGIC (heavily optimized)
 // ============================================================================
 async function bootSystem() {
     try {
+        const startTime = performance.now();
+
         // PHASE A: THE FOUNDATION
-        await Promise.all([
+        const phaseAStart = performance.now();
+        const resultsA = await Promise.allSettled([
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@6010a8c0698d3642e644442e0e963a0746133cbc/media-optimizer.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1977fabb5553b0f825fa92671a03b2ae26c67702/core/event-bus.min.js")
         ]);
+        const failedA = resultsA.filter(r => r.status === 'rejected');
+        if (failedA.length > 0) {
+            console.error('[Boot] Phase A failures – system may not function correctly:', failedA);
+        }
+        console.debug(`[Boot] Phase A completed in ${(performance.now() - phaseAStart).toFixed(2)}ms`);
 
         injectCriticalCSS();
         preloadLCPImage();
 
         // PHASE B: VISUAL CORE (LCP)
-        await Promise.all([
+        const phaseBStart = performance.now();
+        const resultsB = await Promise.allSettled([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9681242beef6f3a2e2e4c8de461c2e6eeabec26a/core/dom-utils.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@656799812d69040e171f0dbdf75e04c84e0a770b/forum_core_observer.min.js")
         ]);
+        const failedB = resultsB.filter(r => r.status === 'rejected');
+        if (failedB.length > 0) {
+            console.warn('[Boot] Phase B had failures:', failedB);
+        }
+        console.debug(`[Boot] Phase B completed in ${(performance.now() - phaseBStart).toFixed(2)}ms`);
 
         // PHASE C: LIBRARIES (no lightgallery)
-        await Promise.all([
+        const phaseCStart = performance.now();
+        const resultsC = await Promise.allSettled([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
             loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
         ]);
+        const failedC = resultsC.filter(r => r.status === 'rejected');
+        if (failedC.length > 0) {
+            console.warn('[Boot] Phase C had failures:', failedC);
+        }
+        console.debug(`[Boot] Phase C completed in ${(performance.now() - phaseCStart).toFixed(2)}ms`);
 
         // PHASE D: ESSENTIAL MODULE (carousel handling)
-        await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js");
+        const phaseDStart = performance.now();
+        try {
+            await loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@aa4b053757399bdc7d19ad6e9ae0892b30922b2c/modules/slick-carousel.min.js");
+            console.debug(`[Boot] Phase D completed in ${(performance.now() - phaseDStart).toFixed(2)}ms`);
+        } catch (err) {
+            console.error('[Boot] Phase D critical failure:', err);
+        }
 
         // --- LCP: delay Slick initialisation so the first slide paints without JS ---
         const initSlick = () => {
             if (window.SlickCarouselModule && typeof window.SlickCarouselModule.initialize === 'function') {
                 window.SlickCarouselModule.initialize();
+                console.debug('[Boot] Slick carousel initialized');
             }
         };
 
-        if (window.requestIdleCallback) {
-            requestIdleCallback(initSlick, { timeout: 2000 });
-        } else {
-            setTimeout(initSlick, 100);
-        }
+        scheduleWork(initSlick, IDLE_TIMEOUT_SLICK);
 
         // ============================================================
         // IDLE LOAD: Non‑critical modules that enhance the UI
         // ============================================================
         const loadEnhancements = () => {
-            Promise.all([
+            const enhStart = performance.now();
+            Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1855935f5e479985ea90ee101b275386597e72af/modules/media-dimensions.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@373aa7b49ab74b6f35c9ef229b2b34d70165bb4a/modules/twemoji.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9efe8fc7eba649566cd98b945f0311dcb40c3abe/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js")
-            ]);
+            ]).then(results => {
+                const failed = results.filter(r => r.status === 'rejected');
+                if (failed.length > 0) {
+                    console.warn('[Boot] Enhancement load had failures:', failed);
+                }
+                console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
+            });
         };
 
-        if (window.requestIdleCallback) {
-            requestIdleCallback(loadEnhancements, { timeout: 3000 });
-        } else {
-            setTimeout(loadEnhancements, 1000);
-        }
+        scheduleWork(loadEnhancements, IDLE_TIMEOUT_ENHANCEMENTS);
 
         // ============================================================
         // IDLE LOAD: Forum enhancer (additional UI improvements)
         // ============================================================
         const loadEnhancer = () => {
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3bb60f894525b563f9e7f8da8980e1eb90d6fce0/core/forum-enhancer.min.js")
-                .then(() => console.log('[Boot] System Fully Enhanced'));
+                .then(() => console.log('[Boot] System Fully Enhanced'))
+                .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
         };
 
-        if (window.requestIdleCallback) {
-            requestIdleCallback(loadEnhancer, { timeout: 5000 });
-        } else {
-            setTimeout(loadEnhancer, 1500);
-        }
+        scheduleWork(loadEnhancer, IDLE_TIMEOUT_ENHANCER);
 
         // ============================================================
         // LAZY LOAD: Social widgets (Twitter/Instagram) only when needed
@@ -188,72 +240,78 @@ async function bootSystem() {
         // Twitter – only when a tweet/timeline element exists and is near the viewport
         const tweetEl = document.querySelector('.twitter-tweet, .twitter-timeline, [data-twitter]');
         if (tweetEl) {
-            const tweetObserver = new IntersectionObserver((entries, observer) => {
+            const tweetObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         const s = document.createElement('script');
                         s.src = 'https://platform.twitter.com/widgets.js';
                         s.async = true;
                         document.head.appendChild(s);
-                        observer.disconnect();
+                        tweetObserver.disconnect();
+                        console.debug('[Boot] Twitter widgets loaded');
                     }
                 });
             }, { rootMargin: '200px' });
             tweetObserver.observe(tweetEl);
         }
 
-        // Instagram – only if an embed is present
-        if (document.querySelector('.instagram-media, .instagram-embed, [data-instagram]')) {
-            const s = document.createElement("script");
-            s.src = "https://platform.instagram.com/en_US/embeds.js";
-            s.async = true;
-            document.head.appendChild(s);
+        // Instagram – only if an embed is present (now also uses IntersectionObserver)
+        const instagramEl = document.querySelector('.instagram-media, .instagram-embed, [data-instagram]');
+        if (instagramEl) {
+            const instagramObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const s = document.createElement("script");
+                        s.src = "https://platform.instagram.com/en_US/embeds.js";
+                        s.async = true;
+                        document.head.appendChild(s);
+                        instagramObserver.disconnect();
+                        console.debug('[Boot] Instagram embeds loaded');
+                    }
+                });
+            }, { rootMargin: '200px' });
+            instagramObserver.observe(instagramEl);
         }
 
         // ============================================================
         // SCRIPT‑LOADER REPLACEMENTS: load essential pieces manually
         // ============================================================
-        // These were previously injected by the script‑loader, which is now permanently blocked.
-        // Load them only on pages that actually need them.
         const bodyId = document.body?.id;
-        if (bodyId === 'topic' || bodyId === 'send' || bodyId === 'search' || bodyId === 'blog') {
-            // post_cron8.js – cron job for topic/post updates (load at idle)
-            if (window.requestIdleCallback) {
-                requestIdleCallback(() => {
-                    loadScript('https://mod.forumfree.it/kakashi/post_cron8.js?v67');
-                }, { timeout: 4000 });
-            } else {
-                setTimeout(() => {
-                    loadScript('https://mod.forumfree.it/kakashi/post_cron8.js?v67');
-                }, 2000);
-            }
+        if (CONTENT_PAGE_IDS.includes(bodyId)) {
+            const loadCron = () => {
+                loadScript('https://mod.forumfree.it/kakashi/post_cron8.js?v67')
+                    .then(() => console.debug('[Boot] post_cron8 loaded'))
+                    .catch(err => console.warn('[Boot] post_cron8 failed to load:', err));
+            };
+            scheduleWork(loadCron, IDLE_TIMEOUT_CRON);
         }
 
         // ffa.js / ffa.css – Free For All section (only if the widget exists)
         if (document.querySelector('.ffa_widget, .freeforall, [data-ffa]')) {
-            // ffa.css
             const ffaCSS = document.createElement('link');
             ffaCSS.rel = 'stylesheet';
             ffaCSS.href = 'https://cdn.forumfree.it/ffa/ffa.css?v3';
             document.head.appendChild(ffaCSS);
-            // ffa.js
-            loadScript('https://cdn.forumfree.it/ffa/ffa.js?v8');
+            loadScript('https://cdn.forumfree.it/ffa/ffa.js?v8')
+                .then(() => console.debug('[Boot] FFA widget loaded'))
+                .catch(err => console.warn('[Boot] FFA widget failed to load:', err));
         }
 
         // --- Load lightgallery only on specific pages ---
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                const id = document.body?.id;
-                if (id === 'topic' || id === 'send' || id === 'search' || id === 'blog') {
-                    loadLightGallery();
-                }
-            });
-        } else {
+        const checkAndLoadLightGallery = () => {
             const id = document.body?.id;
-            if (id === 'topic' || id === 'send' || id === 'search' || id === 'blog') {
-                loadLightGallery();
+            if (CONTENT_PAGE_IDS.includes(id)) {
+                loadLightGallery().catch(err => console.error('[Boot] LightGallery failed:', err));
             }
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkAndLoadLightGallery, { once: true });
+        } else {
+            checkAndLoadLightGallery();
         }
+
+        console.log(`[Boot] System initialization completed in ${(performance.now() - startTime).toFixed(2)}ms`);
 
     } catch (err) {
         console.error('[Boot] Critical failure:', err);
