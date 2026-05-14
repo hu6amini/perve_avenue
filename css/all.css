@@ -105,7 +105,7 @@
 .fa-pen-to-square::before { content: "\f044"; }
 .fa-thumbs-up::before { content: "\f164"; }
 .fa-thumbs-down::before { content: "\f165"; }
-.fa-quote-left-alt::before { content: "\f10d"; }
+.fa-quote-left::before { content: "\f10d"; }
 .fa-contact-book::before { content: "\f2b9"; }
 .fa-globe::before { content: "\f0ac"; }
 .fa-arrow-up::before { content: "\f062"; }
