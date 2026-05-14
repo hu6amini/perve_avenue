@@ -1,4 +1,4 @@
-/* Optimised Boot Loader – v3 */
+/* Optimised Boot Loader – v4 */
 "use strict";
 (function () {
   let logBuffer = "[Bypass Active]:";
@@ -235,12 +235,13 @@
           return;
         }
 
-        // Skip assets we handle separately
+        // Skip assets we handle separately (including script‑loader – never released)
         if (
           src.includes("lite-vimeo-embed") ||
           src.includes("+esm") ||
           src.includes("challenges.cloudflare.com") ||
-          src.includes("turnstile")
+          src.includes("turnstile") ||
+          src.includes("script-loader")      // ← permanently blocked
         )
           return;
 
