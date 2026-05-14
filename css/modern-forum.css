@@ -2,7 +2,7 @@
    5b. slick carousel – emerald theme overrides
 --------------------------------------------*/
 .carousel-wrapper {
-    padding: 0 var(--space-md);
+    padding: 0;
     margin: var(--space-xl) auto var(--space-xl);
 }
 
