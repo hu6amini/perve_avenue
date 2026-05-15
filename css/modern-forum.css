@@ -1658,7 +1658,6 @@ body#msg .top-editor .left.Sub button[title^="Create a list"] img {
    PM Editor: Text inputs (URL, IMG, QUOTE, CODE, SPOILER)
    ========================================================================== */
 body#msg .top-editor .left.Sub input[type="button"] {
-    font-family: 'Courier New', Courier, monospace;
     font-size: 0.85rem;
     padding: 2px 6px;
     background: transparent;
