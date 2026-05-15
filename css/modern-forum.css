@@ -2088,6 +2088,7 @@ body#msg .top-editor .left.Sub [onclick*="float: left"],
 body#msg .top-editor .left.Sub [onclick*="[CENTER]"],
 body#msg .top-editor .left.Sub [onclick*="transform: rotate(90deg)"],
 body#msg .top-editor .left.Sub [onclick="tag_email()"],
+body#msg .top-editor .left.Sub [onclick="tag_code()"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="], body#msg .right-top-icons
