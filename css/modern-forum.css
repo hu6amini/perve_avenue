@@ -1673,6 +1673,10 @@ body#msg .cp.send .list > li {
     gap: var(--space-md);
 }
 
+body#msg .cp.send .list > li:nth-child(1) {padding: 0!important}
+
+body#msg .cp.send .list > li:nth-child(2) {padding: var(--pad-6)!important}
+
 body#msg .cp.send .list > li > .Sub.Item:first-child {
     flex: 0 0 120px;
     font-weight: 600;
