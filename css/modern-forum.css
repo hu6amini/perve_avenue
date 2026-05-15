@@ -1659,7 +1659,8 @@ body#msg .top-editor .left.Sub button[title^="Create a list"] img {
    ========================================================================== */
 body#msg .top-editor .left.Sub input[type="button"] {
     font-family: 'Quicksand', sans-serif;
-   font-size: 0.85rem;
+    font-weight: 600;
+    font-size: 0.85rem;
     padding: 2px 6px;
     background: transparent;
     border: 1px solid var(--border-color, #555);
