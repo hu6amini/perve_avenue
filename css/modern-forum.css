@@ -1590,226 +1590,204 @@ input[type="radio"]:checked::before {
 }
 
 /* ==========================================================================
-   MODERN MESSENGER (body#msg) – CSS‑only overhaul
+   MODERN MESSENGER OVERHAUL (CSS only)
+   Fully compatible with Emerald theme & Font Awesome Pro 6.1.0
    ========================================================================== */
 
-/* ----- Main container & layout -------------------------------------------- */
+/* ----- 1. Base messenger container – card style ----- */
 body#msg .cp.send {
-    max-width: 1200px;
-    margin: 2rem auto;
     background: var(--surface-color);
     border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
+    margin: var(--space-lg) auto;
     overflow: hidden;
 }
 
-/* Tabs – modern pill style */
+/* ----- 2. Modern tabs (consistent with posts module) ----- */
 body#msg .cp.send .tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
-    padding: 0.75rem 1rem 0 1rem;
+    padding: 0;
     margin: 0;
     list-style: none;
 }
 
 body#msg .cp.send .tabs li {
     margin: 0;
+    border: none;
 }
 
 body#msg .cp.send .tabs li a,
 body#msg .cp.send .tabs li.current h2 a {
     display: inline-block;
-    padding: 0.6rem 1.2rem;
-    font-size: 0.9rem;
+    padding: var(--pad-4) var(--pad-6);
+    font-family: var(--font-primary);
     font-weight: 600;
+    font-size: var(--text-sm);
     color: var(--text-secondary);
-    background: transparent;
-    border-radius: var(--radius) var(--radius) 0 0;
-    transition: all 0.2s ease;
     text-decoration: none;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
 }
 
 body#msg .cp.send .tabs li.current h2 a {
-    background: var(--surface-color);
-    color: var(--primary-color);
-    border-bottom: 2px solid var(--primary-color);
+    color: var(--primary-light);
+    border-bottom-color: var(--primary-light);
+    background: transparent;
 }
 
 body#msg .cp.send .tabs li a:hover {
-    color: var(--primary-light);
+    color: var(--text-primary);
     background: var(--hover-color);
 }
 
-/* Skin table & main list – remove legacy table look */
-body#msg .cp.send .skin_tbl,
-body#msg .cp.send .main_list {
+/* Move "Notification centre" to the right (already has float:right, preserve) */
+body#msg .cp.send .tabs li[style*="float:right"] a {
     background: transparent;
-    border: none;
+}
+
+/* ----- 3. Form sections as cards ----- */
+body#msg .cp.send .skin_tbl {
+    background: transparent;
+    padding: var(--space-md);
 }
 
 body#msg .cp.send .main_list > li {
     background: var(--surface-color);
-    margin: 0;
-    padding: 0;
-    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
 }
 
-body#msg .cp.send .main_list > li:last-child {
-    border-bottom: none;
-}
-
-/* Section headers */
-body#msg .cp.send h3.sunbar {
+body#msg .cp.send .main_list > li .sunbar {
     background: var(--bg-color);
-    font-size: 1.1rem;
-    font-weight: 600;
-    padding: 0.9rem 1.5rem;
-    margin: 0;
+    padding: var(--pad-4) var(--pad-6);
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-color);
-    font-family: var(--font-heading);
-}
-
-/* ----- Message details (recipient & title) ------------------------------ */
-body#msg .cp.send .main_list li:first-child .list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1.5rem;
     margin: 0;
 }
 
-body#msg .cp.send .main_list li:first-child .list > li {
-    display: grid;
-    grid-template-columns: 120px 1fr;
+/* Recipient & title rows (modern inputs) */
+body#msg .cp.send .list > li {
+    background: transparent;
+    padding: var(--space-sm) var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
-    list-style: none;
-    padding: 0;
+    gap: var(--space-md);
 }
 
-/* Remove hardcoded widths */
-body#msg .cp.send .list li .Sub.Item[style*="width"] {
-    width: auto !important;
-}
-
-body#msg .cp.send .list li .Sub.Item:first-child {
+body#msg .cp.send .list > li > .Sub.Item:first-child {
+    flex: 0 0 120px;
     font-weight: 600;
     color: var(--text-secondary);
 }
 
+body#msg .cp.send .list > li > .Sub.Item:last-child {
+    flex: 1;
+    min-width: 200px;
+}
+
 /* Inputs & selects */
-body#msg .cp.send input.forminput,
-body#msg .cp.send select.forminput {
+body#msg input.forminput,
+body#msg select.forminput {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 0.6rem 0.8rem;
+    padding: var(--pad-3) var(--pad-4);
     color: var(--text-primary);
-    font-size: 0.9rem;
-    width: 100%;
-    transition: all 0.2s;
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    transition: all 0.2s ease;
 }
 
-body#msg .cp.send input.forminput:focus,
-body#msg .cp.send select.forminput:focus {
+body#msg input.forminput:focus,
+body#msg select.forminput:focus {
     border-color: var(--primary-color);
     outline: none;
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* Recipient select & “Other” */
-body#msg .cp.send select[name="from_contact"] {
-    width: auto;
-    min-width: 160px;
+body#msg select.forminput {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+    background-repeat: no-repeat;
+    background-position: right var(--pad-3) center;
+    appearance: none;
+    padding-right: var(--space-lg);
 }
 
-/* ----- Editor area ------------------------------------------------------- */
+/* ----- 4. Editor toolbar – fully redesigned (buttons + selects) ----- */
 body#msg .top-editor {
-    background: var(--surface-color);
-    padding: 1rem 1.5rem;
+    background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
+    padding: var(--pad-3) var(--pad-4);
 }
 
 body#msg .top-editor .left.Sub {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    gap: var(--space-xs);
 }
 
-/* Formatting buttons (already enhanced, now consistent sizing) */
+/* All editor buttons (both <button> and <input>) */
 body#msg .top-editor .left.Sub button,
 body#msg .top-editor .left.Sub input[type="button"] {
-    background: var(--surface-light);
+    background: transparent;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 0.4rem 0.7rem;
-    font-size: 0.8rem;
-    font-weight: 500;
     color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-weight: 500;
+    font-size: var(--text-xs);
+    padding: var(--pad-2) var(--pad-3);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+    height: auto;
+    min-width: 2rem;
 }
 
 body#msg .top-editor .left.Sub button:hover,
 body#msg .top-editor .left.Sub input[type="button"]:hover {
     background: var(--hover-color);
     border-color: var(--primary-color);
-    color: var(--primary-light);
 }
 
-body#msg .top-editor .left.Sub button[title^="Insert Bold Text"],
-body#msg .top-editor .left.Sub button[title^="Insert Italic Text"],
-body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"],
-body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"],
-body#msg .top-editor .left.Sub button[title^="Create a list"] {
-    width: 2.2rem;
-    height: 2.2rem;
-    padding: 0;
-    font-size: 0;
-}
-
-/* Right side icons (upload, color picker, etc.) */
-body#msg .top-editor .right.Sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    justify-content: flex-end;
-    margin-top: 0.5rem;
-}
-
-body#msg .top-editor .right.Sub img,
-body#msg .top-editor .right.Sub a img {
-    width: 24px;
-    height: 24px;
-    filter: invert(0.7);
-    transition: filter 0.2s, transform 0.1s;
+/* Specifically style the select dropdowns (font, size, color) */
+body#msg .top-editor .left.Sub select.codebuttons {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--pad-2) var(--pad-3);
+    color: var(--text-primary);
+    font-size: var(--text-xs);
+    font-family: var(--font-primary);
     cursor: pointer;
 }
 
-body#msg .top-editor .right.Sub img:hover,
-body#msg .top-editor .right.Sub a img:hover {
-    filter: invert(0.9);
-    transform: scale(1.05);
+/* The "div" wrapping some selects – remove extra padding */
+body#msg .top-editor .left.Sub > div {
+    display: inline-flex;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
 }
 
-/* Textarea */
+/* ----- 5. Textarea (the message body) ----- */
 body#msg #Post {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 1rem;
+    padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
-    width: 100%;
     resize: vertical;
 }
 
@@ -1819,89 +1797,14 @@ body#msg #Post:focus {
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* “Add image to post” div – restyled as subtle button */
-body#msg .Item > div[style*="margin-bottom: 0.5em"] {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
-    padding: 0.5rem;
-    background: var(--surface-light);
-    border-radius: var(--radius);
-    width: fit-content;
-}
-
-body#msg .Item > div[style*="margin-bottom: 0.5em"] img {
-    width: 20px;
-    height: 20px;
-}
-
-body#msg .Item > div[style*="margin-bottom: 0.5em"] a {
-    color: var(--primary-color);
-    font-weight: 500;
-    text-decoration: none;
-}
-
-body#msg .Item > div[style*="margin-bottom: 0.5em"] a:hover {
-    text-decoration: underline;
-}
-
-/* ----- Smilies & attachments (always visible, no JS needed) -------------- */
-body#msg #smilies,
-body#msg #attach {
-    display: block !important;
-    margin: 0;
-    border-top: 1px solid var(--border-color);
-}
-
-body#msg #smilies .list,
-body#msg #attach .list {
-    padding: 1rem;
-}
-
-/* Smilies grid */
-body#msg #smilies table {
-    width: 100%;
-    background: transparent;
-}
-
-body#msg #smilies td {
-    padding: 0.4rem;
-    text-align: center;
-    vertical-align: middle;
-}
-
-body#msg #smilies img {
-    cursor: pointer;
-    transition: transform 0.1s ease;
-    max-width: 32px;
-    height: auto;
-}
-
-body#msg #smilies img:hover {
-    transform: scale(1.15);
-}
-
-/* File attachment input */
-body#msg #attach input[type="file"] {
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 0.6rem;
-    color: var(--text-primary);
-    width: 100%;
-    max-width: 320px;
-}
-
-/* ----- Bottom checkboxes & buttons --------------------------------------- */
+/* ----- 6. Bottom editor: checkboxes, file attachment, smilies triggers ----- */
 body#msg .bottom-editor {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.5rem;
+    gap: var(--space-md);
+    padding: var(--pad-4);
     background: var(--bg-color);
     border-top: 1px solid var(--border-color);
 }
@@ -1909,165 +1812,291 @@ body#msg .bottom-editor {
 body#msg .bottom-editor .left.Sub {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: var(--space-sm);
 }
 
 body#msg .bottom-editor .left.Sub label {
-    margin-left: 0.3rem;
     color: var(--text-secondary);
+    font-size: var(--text-sm);
+    cursor: pointer;
 }
 
 body#msg .bottom-editor .right-bottom-icons {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--space-sm);
     align-items: center;
 }
 
 body#msg .bottom-editor .right-bottom-icons img {
-    width: 24px;
-    height: 24px;
     filter: invert(0.6);
+    transition: filter 0.2s, transform 0.2s;
     cursor: pointer;
-    transition: filter 0.2s;
+    width: 20px;
+    height: 20px;
 }
 
 body#msg .bottom-editor .right-bottom-icons img:hover {
-    filter: invert(0.9);
+    filter: invert(0.8);
+    transform: scale(1.05);
 }
 
-/* Buttons (send & preview) */
+/* The hidden smilies & attachment areas – style when visible */
+body#msg #smilies.nascosta,
+body#msg #attach.nascosta {
+    display: none;
+}
+
+body#msg #smilies:not(.nascosta),
+body#msg #attach:not(.nascosta) {
+    display: block;
+    background: var(--surface-color);
+    border-radius: var(--radius);
+    margin: var(--space-md);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+body#msg #smilies .sunbar,
+body#msg #attach .sunbar {
+    background: var(--bg-color);
+    padding: var(--pad-3) var(--pad-5);
+    font-size: var(--text-sm);
+}
+
+body#msg #smilies table {
+    width: 100%;
+    background: transparent;
+}
+
+body#msg #smilies td {
+    padding: var(--pad-2);
+    text-align: center;
+}
+
+body#msg #smilies img {
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    max-width: 32px;
+}
+
+body#msg #smilies img:hover {
+    transform: scale(1.1);
+}
+
+/* File attachment input */
+body#msg #attach input[type="file"] {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: var(--pad-2);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    width: 90%;
+    margin: var(--space-sm) auto;
+    display: block;
+}
+
+/* ----- 7. Action buttons (Send / Preview) ----- */
 body#msg .darkbar.Item {
     background: transparent;
-    padding: 1rem 1.5rem;
+    padding: var(--pad-5);
     display: flex;
-    gap: 1rem;
+    gap: var(--space-md);
+    justify-content: flex-end;
     border-top: 1px solid var(--border-color);
 }
 
-body#msg .darkbar.Item input[type="submit"],
-body#msg .darkbar.Item button {
+body#msg input[name="sub_mit"],
+body#msg button[name="preview"] {
     background: var(--primary-color);
     border: none;
     border-radius: var(--radius);
-    padding: 0.6rem 1.5rem;
+    padding: var(--pad-3) var(--pad-6);
+    font-family: var(--font-primary);
     font-weight: 600;
+    font-size: var(--text-sm);
     color: white;
     cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
+    transition: all 0.2s ease;
 }
 
-body#msg .darkbar.Item input[type="submit"]:hover,
-body#msg .darkbar.Item button:hover {
+body#msg button[name="preview"] {
+    background: var(--surface-light);
+    color: var(--text-primary);
+}
+
+body#msg input[name="sub_mit"]:hover {
     background: var(--primary-dark);
     transform: translateY(-1px);
 }
 
-body#msg .darkbar.Item button[name="preview"] {
-    background: var(--surface-light);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-}
-
-body#msg .darkbar.Item button[name="preview"]:hover {
+body#msg button[name="preview"]:hover {
     background: var(--hover-color);
-    border-color: var(--primary-color);
-    color: var(--primary-light);
+    transform: translateY(-1px);
 }
 
-/* ----- AJAX preview / loading area --------------------------------------- */
-body#msg #loading {
-    margin-top: 1rem;
-    padding: 1rem;
+/* ----- 8. AJAX Preview area (styled card) ----- */
+body#msg #loading.nascosta {
+    display: none;
+}
+
+body#msg #loading:not(.nascosta) {
+    display: block;
     background: var(--surface-color);
     border-radius: var(--radius);
+    margin: var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
-}
-
-body#msg #preview {
-    font-weight: bold;
-    margin-bottom: 0.5rem;
-    color: var(--primary-light);
+    padding: var(--space-md);
 }
 
 body#msg #ajaxObject {
     background: var(--bg-color);
-    padding: 1rem;
     border-radius: var(--radius);
+    padding: var(--space-md);
 }
 
-/* ----- Checkboxes (custom) ----------------------------------------------- */
-body#msg input[type="checkbox"] {
-    appearance: none;
-    width: 1.1rem;
-    height: 1.1rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    background: var(--bg-color);
-    vertical-align: middle;
-    position: relative;
-    cursor: pointer;
+body#msg #preview {
+    position: static;
+    margin-bottom: var(--space-md);
 }
 
-body#msg input[type="checkbox"]:checked {
-    background: var(--primary-color);
-    border-color: var(--primary-color);
-}
-
-body#msg input[type="checkbox"]:checked::before {
-    content: "\f00c";
-    font-family: "Font Awesome 6 Pro";
-    font-weight: 900;
-    font-size: 0.75rem;
-    color: white;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-/* ----- Misc cleanup & responsiveness ------------------------------------- */
+/* ----- 9. Hide leftover legacy junk ----- */
 body#msg .Break.Sub,
-body#msg .nascosta:not(#smilies):not(#attach) {
+body#msg .popup#popup,
+body#msg .top-editor .right.Sub,
+body#msg .bottom-editor .Break.Sub {
     display: none !important;
 }
 
-body#msg .popup,
-body#msg .forumfree-modal {
-    visibility: hidden !important;
+/* The extra "Add image to post" div (from Postimage) – optional hide */
+body#msg .Item[style*="margin-bottom: 0.5em"] {
+    display: none;
 }
 
-/* Responsive */
+/* ----- 10. Responsive adjustments ----- */
 @media (max-width: 680px) {
-    body#msg .cp.send .main_list li:first-child .list > li {
-        grid-template-columns: 1fr;
-        gap: 0.3rem;
+    body#msg .cp.send .list > li {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    body#msg .cp.send .list > li > .Sub.Item:first-child {
+        flex-basis: auto;
+    }
+
+    body#msg .top-editor .left.Sub {
+        justify-content: center;
+    }
+
+    body#msg .darkbar.Item {
+        justify-content: center;
     }
 
     body#msg .bottom-editor {
         flex-direction: column;
         align-items: stretch;
     }
-
-    body#msg .top-editor .left.Sub,
-    body#msg .top-editor .right.Sub {
-        justify-content: center;
-    }
-
-    body#msg .darkbar.Item {
-        flex-direction: column;
-    }
-
-    body#msg .darkbar.Item input,
-    body#msg .darkbar.Item button {
-        width: 100%;
-    }
 }
 
-/* Print-friendly */
-@media print {
-    body#msg .cp.send {
-        background: white;
-        color: black;
-        box-shadow: none;
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"],
+body#msg .top-editor .left.Sub button[title^="Create a list"] {
+    font-size: 0;                    /* hide original text */
+    width: 2em;
+    height: 2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+/* Bold */
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"]::before {
+    content: "\f032";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Italic */
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"]::before {
+    content: "\f033";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Underline */
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"]::before {
+    content: "\f0cd";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Strikethrough */
+body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"]::before {
+    content: "\f0cc";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* List (unordered) */
+body#msg .top-editor .left.Sub button[title^="Create a list"]::before {
+    content: "\f0ca";                /* fa-list-ul */
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Hide the original image inside the list button */
+body#msg .top-editor .left.Sub button[title^="Create a list"] img {
+    display: none;
+}
+
+/* ==========================================================================
+   PM Editor: Text inputs (URL, IMG, QUOTE, CODE, SPOILER)
+   ========================================================================== */
+body#msg .top-editor .left.Sub input[type="button"] {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 2px 6px;
+    background: transparent;
+    border: 1px solid var(--border-color, #555);
+    color: var(--text-primary, #ddd);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+body#msg .top-editor .left.Sub input[type="button"]:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* PM editor: hide advanced formatting buttons */
+body#msg .top-editor .left.Sub [onclick*="<sup>"],
+body#msg .top-editor .left.Sub [onclick*="<sub>"],
+body#msg .top-editor .left.Sub [onclick*="float: left"],
+body#msg .top-editor .left.Sub [onclick*="[CENTER]"],
+body#msg .top-editor .left.Sub [onclick*="transform: rotate(90deg)"],
+body#msg .top-editor .left.Sub [onclick="tag_email()"],
+body#msg .top-editor .left.Sub select[onchange*="[font="],
+body#msg .top-editor .left.Sub select[onchange*="[size="],
+body#msg .top-editor .left.Sub select[onchange*="[color="], body#msg .right-top-icons
+{
+    display: none;
+}
+
+/* ----- 11. Accessibility & reduced motion ----- */
+@media (prefers-reduced-motion: reduce) {
+    body#msg * {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
     }
 }
