@@ -1726,7 +1726,9 @@ body#msg select.forminput {
 body#msg .top-editor {
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
-    padding: var(--pad-3) var(--pad-4);
+    padding: var(--pad-5) var(--pad-6);
+    display: flex;
+    width:100%; 
 }
 
 body#msg .top-editor .left.Sub {
