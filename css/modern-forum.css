@@ -1589,6 +1589,89 @@ input[type="radio"]:checked::before {
     visibility: hidden !important;
 }
 
+/* ==========================================================================
+   PM Editor: Font Awesome icons for formatting buttons
+   ========================================================================== */
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"],
+body#msg .top-editor .left.Sub button[title^="Create a list"] {
+    font-size: 0;                    /* hide original text */
+    width: 2em;
+    height: 2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+/* Bold */
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"]::before {
+    content: "\f032";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Italic */
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"]::before {
+    content: "\f033";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Underline */
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"]::before {
+    content: "\f0cd";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Strikethrough */
+body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"]::before {
+    content: "\f0cc";
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* List (unordered) */
+body#msg .top-editor .left.Sub button[title^="Create a list"]::before {
+    content: "\f0ca";                /* fa-list-ul */
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 1rem;
+}
+
+/* Hide the original image inside the list button */
+body#msg .top-editor .left.Sub button[title^="Create a list"] img {
+    display: none;
+}
+
+/* ==========================================================================
+   PM Editor: Text inputs (URL, IMG, QUOTE, CODE, SPOILER)
+   ========================================================================== */
+body#msg .top-editor .left.Sub input[type="button"] {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    padding: 2px 6px;
+    background: transparent;
+    border: 1px solid var(--border-color, #555);
+    color: var(--text-primary, #ddd);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+body#msg .top-editor .left.Sub input[type="button"]:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
 /* PM editor: hide advanced formatting buttons */
 body#msg .top-editor .left.Sub [onclick*="<sup>"],
 body#msg .top-editor .left.Sub [onclick*="<sub>"],
