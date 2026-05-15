@@ -1780,7 +1780,7 @@ body#msg .top-editor .left.Sub > div {
     flex-wrap: wrap;
 }
 
-#msg ul.list {padding:0!important}
+#msg ul.list {margin: 0!important}
 
 /* ----- 5. Textarea (the message body) ----- */
 body#msg #Post {
