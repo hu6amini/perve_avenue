@@ -1780,6 +1780,8 @@ body#msg .top-editor .left.Sub > div {
     flex-wrap: wrap;
 }
 
+#msg ul.list {padding:0!important}
+
 /* ----- 5. Textarea (the message body) ----- */
 body#msg #Post {
     background: var(--bg-color);
@@ -1791,6 +1793,7 @@ body#msg #Post {
     font-size: var(--text-sm);
     line-height: 1.5;
     resize: vertical;
+    width:100%!important;
 }
 
 body#msg #Post:focus {
