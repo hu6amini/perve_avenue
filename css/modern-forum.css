@@ -1663,16 +1663,6 @@ body#msg .cp.send .main_list > li {
     overflow: hidden;
 }
 
-body#msg .cp.send .main_list > li .sunbar {
-    background: var(--bg-color);
-    padding: var(--pad-4) var(--pad-6);
-    font-family: var(--font-heading);
-    font-size: var(--text-md);
-    color: var(--text-primary);
-    border-bottom: 1px solid var(--border-color);
-    margin: 0;
-}
-
 /* Recipient & title rows (modern inputs) */
 body#msg .cp.send .list > li {
     background: transparent;
@@ -2094,7 +2084,8 @@ body#msg .top-editor .left.Sub [onclick="tag_email()"],
 body#msg .top-editor .left.Sub [onclick="tag_code()"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
-body#msg .top-editor .left.Sub select[onchange*="[color="], body#msg .right-top-icons
+body#msg .top-editor .left.Sub select[onchange*="[color="], body#msg .right-top-icons,
+.cp.send .sunbar
 {
     display: none;
 }
