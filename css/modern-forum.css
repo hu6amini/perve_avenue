@@ -1523,6 +1523,63 @@ img,
     max-width: calc(100% - (2 * 5px)) !important;
 }
 
+/*============================================
+ checkboxes & radios - harmonized
+============================================*/
+input[type="checkbox"] {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex;
+  font-size: 0.75rem;
+  height: 1rem;
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  text-align: center;
+  width: 1rem;
+}
+input[type="checkbox"]:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+input[type="checkbox"]:checked::before {
+  color: #fff;
+  content: '\f00c';
+  font-family: "Font Awesome 6 Pro";
+  font-weight: 900;
+}
+
+input[type="radio"] {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  font-size: 0.5rem;
+  height: 1rem;
+  justify-content: center;
+  margin: 0;
+  outline-style: none;
+  padding: 0;
+  text-align: center;
+  width: 1rem;
+}
+input[type="radio"]:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+input[type="radio"]:checked::before {
+  color: #fff;
+  content: '\f111';
+  font-family: "Font Awesome 6 Pro";
+  font-weight: 900;
+}
+
 /*--------------------------------------------
    15. HIDE LEGACY POPUP ELEMENTS
 --------------------------------------------*/
