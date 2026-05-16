@@ -1724,7 +1724,7 @@ body#msg .top-editor {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     width: 100%;
 }
 
@@ -1733,6 +1733,7 @@ body#msg .top-editor .left.Sub {
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-xs);
+    font-size: 0;
 }
 
 /* All editor buttons (both <button> and <input>) */
@@ -1806,7 +1807,7 @@ body#msg #Post:focus {
 body#msg .bottom-editor {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: space-between;
     align-items: center;
     gap: var(--space-md);
     padding: var(--pad-4);
