@@ -1995,56 +1995,6 @@ body#msg .right-top-icons script {
     display: none !important;
 }
 
-/* Style the ImgBB icon as a prominent toolbar button */
-body#msg #imgbb-icon {
-    width: 32px !important;
-    height: 32px !important;
-    padding: 6px;
-    background: var(--surface-light);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    filter: none !important;       /* remove any previous filter */
-    margin: 0 !important;
-}
-
-body#msg #imgbb-icon:hover {
-    background: var(--primary-color);
-    border-color: var(--primary-color);
-    transform: scale(1.05);
-    filter: brightness(1.1);
-}
-
-/* Optional tooltip for ImgBB */
-body#msg #imgbb-icon {
-    position: relative;
-}
-
-body#msg #imgbb-icon::after {
-    content: "Upload image (ImgBB)";
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--surface-color);
-    color: var(--text-primary);
-    font-size: var(--text-xs);
-    padding: var(--pad-2) var(--pad-3);
-    border-radius: var(--radius-sm);
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-    z-index: 10;
-    border: 1px solid var(--border-color);
-    margin-bottom: 6px;
-}
-
-body#msg #imgbb-icon:hover::after {
-    opacity: 1;
-}
-
 /* Ensure the old IMG button is definitely hidden */
 body#msg .top-editor .left.Sub [onclick="tag_image()"] {
     display: none !important;
@@ -2099,7 +2049,7 @@ body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
     padding: 0 !important;
     margin: 0 var(--space-xs) !important;
     border: 1px solid var(--border-color) !important;
-    background-color: transparent !important;
+    background-color: var(--surface-color);
 }
 
 /* Bold icon */
@@ -2137,7 +2087,7 @@ body#msg #imgbb-icon {
     margin: 0 var(--space-xs) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: var(--radius-sm) !important;
-    background-color: transparent !important;
+    background-color: var(--surface-color);
     padding: 0 !important;
     /* Ensure the content replacement works */
     object-fit: contain !important;
