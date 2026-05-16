@@ -2085,6 +2085,7 @@ body#msg .top-editor .left.Sub button[title^="Create a list"],
 body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"],
 body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"],
 body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
+    background-size: auto 1rem!important;
     font-size: 0 !important;           /* hide original text */
     text-indent: -9999px !important;
     overflow: hidden !important;
@@ -2168,7 +2169,6 @@ body#msg .top-editor .left.Sub button[title^="Create a list"]:hover,
 body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"]:hover,
 body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"]:hover,
 body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"]:hover {
-    background-size: 1rem !important;
     border-color: var(--primary-color) !important;
     background-color: var(--hover-color) !important;
     transform: translateY(-1px);
@@ -2186,7 +2186,8 @@ body#msg .top-editor .left.Sub [onclick="tag('<del>','</del>')"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="],
-.cp.send .sunbar {
+.cp.send .sunbar,
+body#msg .top-editor .left.Sub button [onclick="tag_list()"] img{
     display: none;
 }
 
