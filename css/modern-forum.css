@@ -1771,13 +1771,6 @@ body#msg .top-editor .left.Sub select.codebuttons {
     cursor: pointer;
 }
 
-/* The "div" wrapping some selects – remove extra padding */
-body#msg .top-editor .left.Sub > div {
-    display: inline-flex;
-    gap: var(--space-xs);
-    flex-wrap: wrap;
-}
-
 /* Remove extra margin from list */
 #msg ul.list {
     margin: 0 !important;
@@ -1809,10 +1802,10 @@ body#msg .bottom-editor {
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
-    gap: var(--space-md);
     padding: var(--pad-4);
     background: var(--bg-color);
     border-top: 1px solid var(--border-color);
+    font-size: 0;
 }
 
 body#msg .bottom-editor .left.Sub {
@@ -1979,13 +1972,8 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     display: none;
 }
 
-/* ----- 10. Promote ImgBB icon to main toolbar (replace old IMG button) ----- */
-body#msg .right-top-icons {
-    order: -1;                     /* moves it to the front */
-    display: flex;
-    gap: var(--space-sm);
-    align-items: center;
-    margin-right: var(--space-md);
+body#msg .right-top-icons, body#msg .top-editor .left.Sub > div {
+    display: contents;
 }
 
 /* Hide ALL icons inside .right-top-icons except the ImgBB one */
@@ -2047,7 +2035,7 @@ body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
     height: 2rem !important;
     min-width: 2rem !important;
     padding: 0 !important;
-    margin: 0 var(--space-xs) !important;
+    margin: 0 var(--space-micro) !important;
     border: 1px solid var(--border-color) !important;
     background-color: var(--surface-color);
 }
@@ -2084,7 +2072,7 @@ body#msg #imgbb-icon {
     background-position: center !important;
     cursor: pointer !important;
     transition: all 0.2s ease !important;
-    margin: 0 var(--space-xs) !important;
+    margin: 0 var(--space-micro) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: var(--radius-sm) !important;
     background-color: var(--surface-color);
