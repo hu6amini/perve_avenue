@@ -1591,7 +1591,7 @@ input[type="radio"]:checked::before {
 
 /* ==========================================================================
    MODERN MESSENGER OVERHAUL (CSS only)
-   Reordered toolbar: B, I, U, List, Link, Quote, Image, Spoiler
+   Fully compatible with Emerald theme & Font Awesome Pro 6.1.0
    ========================================================================== */
 
 /* ----- 1. Base messenger container – card style ----- */
@@ -1604,7 +1604,7 @@ body#msg .cp.send {
     overflow: hidden;
 }
 
-/* ----- 2. Modern tabs ----- */
+/* ----- 2. Modern tabs (consistent with posts module) ----- */
 body#msg .cp.send .tabs {
     display: flex;
     flex-wrap: wrap;
@@ -1644,7 +1644,12 @@ body#msg .cp.send .tabs li a:hover {
     background: var(--hover-color);
 }
 
-/* ----- 3. Form sections ----- */
+/* Move "Notification centre" to the right (already has float:right, preserve) */
+body#msg .cp.send .tabs li[style*="float:right"] a {
+    background: transparent;
+}
+
+/* ----- 3. Form sections as cards ----- */
 body#msg .cp.send .skin_tbl {
     background: transparent;
     padding: var(--space-md);
@@ -1658,7 +1663,7 @@ body#msg .cp.send .main_list > li {
     overflow: hidden;
 }
 
-/* Recipient & title rows */
+/* Recipient & title rows (modern inputs) */
 body#msg .cp.send .list > li {
     background: transparent;
     padding: var(--space-sm) var(--space-md);
@@ -1711,7 +1716,7 @@ body#msg select.forminput {
     padding-right: var(--space-lg);
 }
 
-/* ----- 4. Editor toolbar – flex container for reordering ----- */
+/* ----- 4. Editor toolbar – fully redesigned (buttons + selects) ----- */
 body#msg .top-editor {
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
@@ -1719,140 +1724,59 @@ body#msg .top-editor {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-xs);
+    justify-content: flex-start;
     width: 100%;
+    font-size:0;
 }
 
-/* Left.Sub and right-top-icons become one unified flex group */
-body#msg .top-editor .left.Sub,
-body#msg .right-top-icons {
-    display: contents;   /* children become direct flex children of .top-editor */
+body#msg .top-editor .left.Sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 0;
 }
 
-/* All toolbar buttons (inside .left.Sub and #imgbb-icon) share consistent style */
-body#msg .top-editor button[type="button"],
-body#msg .top-editor input[type="button"],
-body#msg #imgbb-icon {
-    background: var(--surface-color);
+/* All editor buttons (both <button> and <input>) */
+body#msg .top-editor .left.Sub button,
+body#msg .top-editor .left.Sub input[type="button"] {
+    background: transparent;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 0;
-    margin: 0;
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-weight: 500;
+    font-size: var(--text-xs);
+    padding: var(--pad-2) var(--pad-3);
     cursor: pointer;
     transition: all 0.2s ease;
-    width: 2rem;
-    height: 2rem;
+    height: auto;
     min-width: 2rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-size: auto 1rem !important;
-    background-repeat: no-repeat !important;
-    background-position: center !important;
-    background-color: var(--surface-color);
 }
 
-body#msg .top-editor button[type="button"]:hover,
-body#msg .top-editor input[type="button"]:hover,
-body#msg #imgbb-icon:hover {
-    background-color: var(--hover-color);
+body#msg .top-editor .left.Sub button:hover,
+body#msg .top-editor .left.Sub input[type="button"]:hover {
+    background: var(--hover-color);
     border-color: var(--primary-color);
-    transform: translateY(-1px);
 }
 
-/* ----- 5. Assign order to keep only desired buttons ----- */
-/* Hide all unwanted buttons */
-body#msg .top-editor button[title*="Strikethrough"],
-body#msg .top-editor button[title*="superscript"],
-body#msg .top-editor button[title*="subscript"],
-body#msg .top-editor button[title*="initial letter"],
-body#msg .top-editor button[title*="center"],
-body#msg .top-editor input[title*="Email"],
-body#msg .top-editor button[title*="ROTATE"],
-body#msg .top-editor input[title*="CODE"],
-body#msg .top-editor select.codebuttons,
-body#msg .top-editor .left.Sub > div {  /* hides the div wrapping selects */
-    display: none !important;
+/* Specifically style the select dropdowns (font, size, color) */
+body#msg .top-editor .left.Sub select.codebuttons {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--pad-2) var(--pad-3);
+    color: var(--text-primary);
+    font-size: var(--text-xs);
+    font-family: var(--font-primary);
+    cursor: pointer;
 }
 
-/* Now reorder the visible ones with explicit order values */
-/* Bold */
-body#msg .top-editor button[title^="Insert Bold Text"] { order: 1; }
-/* Italic */
-body#msg .top-editor button[title^="Insert Italic Text"] { order: 2; }
-/* Underline */
-body#msg .top-editor button[title^="Insert Underlined Text"] { order: 3; }
-/* List */
-body#msg .top-editor button[title^="Create a list"] { order: 4; }
-/* Hyperlink (URL) */
-body#msg .top-editor input[title="Insert Hyperlink (alt + w)"] { order: 5; }
-/* Quote */
-body#msg .top-editor input[title="Insert Quoted Text (alt + q)"] { order: 6; }
-/* ImgBB (image upload) */
-body#msg #imgbb-icon { order: 7; }
-/* Spoiler */
-body#msg .top-editor input[title="Insert hidden elements (alt + h)"] { order: 8; }
-
-/* ----- 6. SVG icons for each button (color #D1D5DB) ----- */
-/* Bold */
-body#msg .top-editor button[title^="Insert Bold Text"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%23D1D5DB' d='M303.8 241.7c2.084-1.838 4.41-3.307 6.385-5.303c22.72-22.91 35.03-53.31 34.72-85.59C344.3 85.31 290.4 32 224.9 32H24C10.75 32 0 42.75 0 56S10.75 80 24 80H48v352H24C10.75 432 0 442.8 0 456S10.75 480 24 480h216c70.59 0 128-57.41 128-128C368 304.8 341.1 263.9 303.8 241.7zM224.9 80c39.31 0 71.59 32 72 71.31c.1875 19.34-7.219 37.56-20.84 51.34C262.5 216.4 244.3 224 224.9 224H96V80H224.9zM240 432H96v-160h144c44.13 0 80 35.88 80 80.01S284.1 432 240 432z'/%3E%3C/svg%3E") !important;
+/* Remove extra margin from list */
+#msg ul.list {
+    margin: 0 !important;
 }
 
-/* Italic */
-body#msg .top-editor button[title^="Insert Italic Text"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%23D1D5DB' d='M384 56c0 13.25-10.75 24-24 24h-67.98l-146.9 352H232c13.25 0 24 10.75 24 24S245.3 480 232 480h-208C10.75 480 0 469.3 0 456s10.75-24 24-24h70.6l146.9-352H152C138.8 80 128 69.25 128 56S138.8 32 152 32h208C373.3 32 384 42.75 384 56z'/%3E%3C/svg%3E") !important;
-}
-
-/* Underline */
-body#msg .top-editor button[title^="Insert Underlined Text"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M40 48H64v192c0 88.22 71.78 160 160 160s160-71.78 160-160v-192h24c13.25 0 24-10.75 24-24S421.3 0 408 0h-96C298.8 0 288 10.75 288 24s10.75 24 24 24h24v192c0 61.75-50.25 112-112 112S112 301.8 112 240v-192h24C149.3 48 160 37.25 160 24S149.3 0 136 0h-96C26.75 0 16 10.75 16 24S26.75 48 40 48zM424 464H24C10.75 464 0 474.8 0 488S10.75 512 24 512h400c13.25 0 24-10.75 24-24S437.3 464 424 464z'/%3E%3C/svg%3E") !important;
-}
-
-/* List */
-body#msg .top-editor button[title^="Create a list"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 576 512'%3E%3Cpath fill='%23D1D5DB' d='M55.1 56.04C55.1 42.78 66.74 32.04 79.1 32.04H111.1C125.3 32.04 135.1 42.78 135.1 56.04V176H151.1C165.3 176 175.1 186.8 175.1 200C175.1 213.3 165.3 224 151.1 224H71.1C58.74 224 47.1 213.3 47.1 200C47.1 186.8 58.74 176 71.1 176H87.1V80.04H79.1C66.74 80.04 55.1 69.29 55.1 56.04V56.04zM118.7 341.2C112.1 333.8 100.4 334.3 94.65 342.4L83.53 357.9C75.83 368.7 60.84 371.2 50.05 363.5C39.26 355.8 36.77 340.8 44.47 330.1L55.59 314.5C79.33 281.2 127.9 278.8 154.8 309.6C176.1 333.1 175.6 370.5 153.7 394.3L118.8 432H152C165.3 432 176 442.7 176 456C176 469.3 165.3 480 152 480H64C54.47 480 45.84 474.4 42.02 465.6C38.19 456.9 39.9 446.7 46.36 439.7L118.4 361.7C123.7 355.9 123.8 347.1 118.7 341.2L118.7 341.2zM520 72C533.3 72 544 82.75 544 96C544 109.3 533.3 120 520 120H248C234.7 120 224 109.3 224 96C224 82.75 234.7 72 248 72H520zM520 232C533.3 232 544 242.7 544 256C544 269.3 533.3 280 520 280H248C234.7 280 224 269.3 224 256C224 242.7 234.7 232 248 232H520zM520 392C533.3 392 544 402.7 544 416C544 429.3 533.3 440 520 440H248C234.7 440 224 429.3 224 416C224 402.7 234.7 392 248 392H520z'/%3E%3C/svg%3E") !important;
-}
-
-/* Hyperlink (chain) */
-body#msg .top-editor input[title="Insert Hyperlink (alt + w)"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 512'%3E%3Cpath fill='%23D1D5DB' d='M173 131.5C229.2 75.27 320.3 75.27 376.5 131.5C430 185 432.9 270.9 383 327.9L377.7 334C368.9 344 353.8 345 343.8 336.3C333.8 327.6 332.8 312.4 341.5 302.4L346.9 296.3C380.1 258.3 378.2 201.1 342.5 165.4C305.1 127.1 244.4 127.1 206.1 165.4L93.63 278.7C56.19 316.2 56.19 376.9 93.63 414.3C129.3 449.1 186.6 451.9 224.5 418.7L230.7 413.3C240.6 404.6 255.8 405.6 264.5 415.6C273.3 425.5 272.2 440.7 262.3 449.4L256.1 454.8C199.1 504.6 113.2 501.8 59.69 448.2C3.505 392.1 3.505 300.1 59.69 244.8L173 131.5zM467 380.5C410.8 436.7 319.7 436.7 263.5 380.5C209.1 326.1 207.1 241.1 256.9 184.1L261.6 178.7C270.3 168.7 285.5 167.7 295.5 176.4C305.5 185.1 306.5 200.3 297.8 210.3L293.1 215.7C259.8 253.7 261.8 310.9 297.4 346.6C334.9 384 395.6 384 433.1 346.6L546.4 233.3C583.8 195.8 583.8 135.1 546.4 97.7C510.7 62.02 453.4 60.11 415.5 93.35L409.3 98.7C399.4 107.4 384.2 106.4 375.5 96.44C366.7 86.47 367.8 71.3 377.7 62.58L383.9 57.22C440.9 7.348 526.8 10.21 580.3 63.76C636.5 119.9 636.5 211 580.3 267.2L467 380.5z'/%3E%3C/svg%3E") !important;
-}
-
-/* Quote */
-body#msg .top-editor input[title="Insert Quoted Text (alt + q)"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M96 416c53.02 0 96-42.98 96-96S149 224 96 224C78.42 224 62.17 229.1 48 237.3V216c0-39.7 32.31-72 72-72h16C149.3 144 160 133.3 160 120S149.3 96 136 96h-16C53.84 96 0 149.8 0 216V320C0 373 42.98 416 96 416zM96 272c26.47 0 48 21.53 48 48S122.5 368 96 368S48 346.5 48 320S69.53 272 96 272zM352 416c53.02 0 96-42.98 96-96s-42.98-96-96-96c-17.58 0-33.83 5.068-48 13.31V216c0-39.7 32.31-72 72-72h16C405.3 144 416 133.3 416 120S405.3 96 392 96h-16C309.8 96 256 149.8 256 216V320C256 373 298.1 416 352 416zM352 272c26.47 0 48 21.53 48 48s-21.53 48-48 48s-48-21.53-48-48S325.5 272 352 272z'/%3E%3C/svg%3E") !important;
-}
-
-/* ImgBB (image) – replace PNG with SVG */
-body#msg #imgbb-icon {
-    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M448 32C483.3 32 512 60.65 512 96V416C512 451.3 483.3 480 448 480H64C28.65 480 0 451.3 0 416V96C0 60.65 28.65 32 64 32H448zM448 80H64C55.16 80 48 87.16 48 96V416C48 424.8 55.16 432 64 432H448C456.8 432 464 424.8 464 416V96C464 87.16 456.8 80 448 80zM152 232C133.5 232 120 218.5 120 200C120 181.5 133.5 168 152 168C170.5 168 184 181.5 184 200C184 218.5 170.5 232 152 232zM384 352H128L304 192L384 352z'/%3E%3C/svg%3E") !important;
-    background-size: auto 1rem !important;
-    background-color: var(--surface-color);
-}
-
-/* Spoiler */
-body#msg .top-editor input[title="Insert hidden elements (alt + h)"] {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 512'%3E%3Cpath fill='%23D1D5DB' d='M150.7 92.77C195 58.27 251.8 32 320 32C400.8 32 465.5 68.84 512.6 112.6C559.4 156 590.7 207.1 605.5 243.7C608.8 251.6 608.8 260.4 605.5 268.3C592.1 300.6 565.2 346.1 525.6 386.7L630.8 469.1C641.2 477.3 643.1 492.4 634.9 502.8C626.7 513.2 611.6 515.1 601.2 506.9L9.196 42.89C-1.236 34.71-3.065 19.63 5.112 9.196C13.29-1.236 28.37-3.065 38.81 5.112L150.7 92.77zM189.8 123.5L235.8 159.5C258.3 139.9 287.8 128 320 128C390.7 128 448 185.3 448 256C448 277.2 442.9 297.1 433.8 314.7L487.6 356.9C521.1 322.8 545.9 283.1 558.6 256C544.1 225.1 518.4 183.5 479.9 147.7C438.8 109.6 385.2 79.1 320 79.1C269.5 79.1 225.1 97.73 189.8 123.5zM394.9 284.2C398.2 275.4 400 265.9 400 255.1C400 211.8 364.2 175.1 320 175.1C319.3 175.1 318.7 176 317.1 176C319.3 181.1 320 186.5 320 191.1C320 202.2 317.6 211.8 313.4 220.3L394.9 284.2zM404.3 414.5L446.2 447.5C409.9 467.1 367.8 480 320 480C239.2 480 174.5 443.2 127.4 399.4C80.62 355.1 49.34 304 34.46 268.3C31.18 260.4 31.18 251.6 34.46 243.7C44 220.8 60.29 191.2 83.09 161.5L120.8 191.2C102.1 214.5 89.76 237.6 81.45 255.1C95.02 286 121.6 328.5 160.1 364.3C201.2 402.4 254.8 432 320 432C350.7 432 378.8 425.4 404.3 414.5zM192 255.1C192 253.1 192.1 250.3 192.3 247.5L248.4 291.7C258.9 312.8 278.5 328.6 302 333.1L358.2 378.2C346.1 381.1 333.3 384 319.1 384C249.3 384 191.1 326.7 191.1 255.1z'/%3E%3C/svg%3E") !important;
-}
-
-/* Remove original text and images from buttons */
-body#msg .top-editor button[type="button"] b,
-body#msg .top-editor button[type="button"] i,
-body#msg .top-editor button[type="button"] u,
-body#msg .top-editor button[type="button"] del,
-body#msg .top-editor button[type="button"] img,
-body#msg .top-editor input[type="button"] {
-    display: none !important;
-}
-
-/* Hide the original image inside the list button */
-body#msg .top-editor button[title^="Create a list"] img {
-    display: none !important;
-}
-
-/* ----- 7. Textarea ----- */
+/* ----- 5. Textarea (the message body) ----- */
 body#msg #Post {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -1872,7 +1796,7 @@ body#msg #Post:focus {
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* ----- 8. Bottom editor & attachments ----- */
+/* ----- 6. Bottom editor: checkboxes, file attachment, smilies triggers ----- */
 body#msg .bottom-editor {
     display: flex;
     flex-wrap: wrap;
@@ -1882,12 +1806,12 @@ body#msg .bottom-editor {
     padding: var(--pad-4);
     background: var(--bg-color);
     border-top: 1px solid var(--border-color);
+    font-size: 0;
 }
 
 body#msg .bottom-editor .left.Sub {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
 }
 
 body#msg .bottom-editor .left.Sub label {
@@ -1915,7 +1839,7 @@ body#msg .bottom-editor .right-bottom-icons img:hover {
     transform: scale(1.05);
 }
 
-/* Hidden smilies & attachment panels */
+/* The hidden smilies & attachment areas – style when visible */
 body#msg #smilies.nascosta,
 body#msg #attach.nascosta {
     display: none;
@@ -1958,6 +1882,7 @@ body#msg #smilies img:hover {
     transform: scale(1.1);
 }
 
+/* File attachment input */
 body#msg #attach input[type="file"] {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -1970,7 +1895,7 @@ body#msg #attach input[type="file"] {
     display: block;
 }
 
-/* ----- 9. Action buttons (Send / Preview) ----- */
+/* ----- 7. Action buttons (Send / Preview) ----- */
 body#msg .darkbar.Item {
     background: transparent;
     padding: var(--pad-5);
@@ -2009,7 +1934,7 @@ body#msg button[name="preview"]:hover {
     transform: translateY(-1px);
 }
 
-/* ----- 10. AJAX Preview area ----- */
+/* ----- 8. AJAX Preview area (styled card) ----- */
 body#msg #loading.nascosta {
     display: none;
 }
@@ -2034,18 +1959,35 @@ body#msg #preview {
     margin-bottom: var(--space-md);
 }
 
-/* ----- 11. Hide legacy junk ----- */
+/* ----- 9. Hide leftover legacy junk ----- */
 body#msg .Break.Sub,
 body#msg .popup#popup,
-body#msg .bottom-editor .Break.Sub,
-body#msg .Item[style*="margin-bottom: 0.5em"],
-body#msg .right-top-icons script,
-body#msg .right-top-icons a,
-body#msg .right-top-icons img:not(#imgbb-icon) {
+body#msg .bottom-editor .Break.Sub {
     display: none !important;
 }
 
-/* ----- 12. Responsive adjustments ----- */
+/* The extra "Add image to post" div (from Postimage) – optional hide */
+body#msg .Item[style*="margin-bottom: 0.5em"] {
+    display: none;
+}
+
+body#msg .right-top-icons, body#msg .top-editor .left.Sub > div {
+    display: contents;
+}
+
+/* Hide ALL icons inside .right-top-icons except the ImgBB one */
+body#msg .right-top-icons img:not(#imgbb-icon),
+body#msg .right-top-icons a,
+body#msg .right-top-icons script {
+    display: none !important;
+}
+
+/* Ensure the old IMG button is definitely hidden */
+body#msg .top-editor .left.Sub [onclick="tag_image()"] {
+    display: none !important;
+}
+
+/* ----- 11. Responsive adjustments ----- */
 @media (max-width: 680px) {
     body#msg .cp.send .list > li {
         flex-direction: column;
@@ -2054,6 +1996,10 @@ body#msg .right-top-icons img:not(#imgbb-icon) {
 
     body#msg .cp.send .list > li > .Sub.Item:first-child {
         flex-basis: auto;
+    }
+
+    body#msg .top-editor .left.Sub {
+        justify-content: center;
     }
 
     body#msg .darkbar.Item {
@@ -2066,7 +2012,127 @@ body#msg .right-top-icons img:not(#imgbb-icon) {
     }
 }
 
-/* ----- 13. Reduced motion ----- */
+/* ==========================================================================
+   Replace editor buttons with Font Awesome SVG icons (color #D1D5DB)
+   ========================================================================== */
+
+/* Common button reset for the targeted buttons */
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"],
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"],
+body#msg .top-editor .left.Sub button[title^="Create a list"],
+body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"],
+body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"],
+body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
+    background-size: auto 1rem!important;
+    font-size: 0 !important;           /* hide original text */
+    text-indent: -9999px !important;
+    overflow: hidden !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    min-width: 2rem !important;
+    padding: 0 !important;
+    margin: 0 var(--space-micro) !important;
+    border: 1px solid var(--border-color) !important;
+    background-color: var(--surface-color);
+}
+
+/* Bold icon */
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%23D1D5DB' d='M303.8 241.7c2.084-1.838 4.41-3.307 6.385-5.303c22.72-22.91 35.03-53.31 34.72-85.59C344.3 85.31 290.4 32 224.9 32H24C10.75 32 0 42.75 0 56S10.75 80 24 80H48v352H24C10.75 432 0 442.8 0 456S10.75 480 24 480h216c70.59 0 128-57.41 128-128C368 304.8 341.1 263.9 303.8 241.7zM224.9 80c39.31 0 71.59 32 72 71.31c.1875 19.34-7.219 37.56-20.84 51.34C262.5 216.4 244.3 224 224.9 224H96V80H224.9zM240 432H96v-160h144c44.13 0 80 35.88 80 80.01S284.1 432 240 432z'/%3E%3C/svg%3E") !important;
+}
+
+/* Italic icon */
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%23D1D5DB' d='M384 56c0 13.25-10.75 24-24 24h-67.98l-146.9 352H232c13.25 0 24 10.75 24 24S245.3 480 232 480h-208C10.75 480 0 469.3 0 456s10.75-24 24-24h70.6l146.9-352H152C138.8 80 128 69.25 128 56S138.8 32 152 32h208C373.3 32 384 42.75 384 56z'/%3E%3C/svg%3E") !important;
+}
+
+/* Underline icon */
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M40 48H64v192c0 88.22 71.78 160 160 160s160-71.78 160-160v-192h24c13.25 0 24-10.75 24-24S421.3 0 408 0h-96C298.8 0 288 10.75 288 24s10.75 24 24 24h24v192c0 61.75-50.25 112-112 112S112 301.8 112 240v-192h24C149.3 48 160 37.25 160 24S149.3 0 136 0h-96C26.75 0 16 10.75 16 24S26.75 48 40 48zM424 464H24C10.75 464 0 474.8 0 488S10.75 512 24 512h400c13.25 0 24-10.75 24-24S437.3 464 424 464z'/%3E%3C/svg%3E") !important;
+}
+
+/* List (unordered) icon */
+body#msg .top-editor .left.Sub button[title^="Create a list"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 576 512'%3E%3Cpath fill='%23D1D5DB' d='M55.1 56.04C55.1 42.78 66.74 32.04 79.1 32.04H111.1C125.3 32.04 135.1 42.78 135.1 56.04V176H151.1C165.3 176 175.1 186.8 175.1 200C175.1 213.3 165.3 224 151.1 224H71.1C58.74 224 47.1 213.3 47.1 200C47.1 186.8 58.74 176 71.1 176H87.1V80.04H79.1C66.74 80.04 55.1 69.29 55.1 56.04V56.04zM118.7 341.2C112.1 333.8 100.4 334.3 94.65 342.4L83.53 357.9C75.83 368.7 60.84 371.2 50.05 363.5C39.26 355.8 36.77 340.8 44.47 330.1L55.59 314.5C79.33 281.2 127.9 278.8 154.8 309.6C176.1 333.1 175.6 370.5 153.7 394.3L118.8 432H152C165.3 432 176 442.7 176 456C176 469.3 165.3 480 152 480H64C54.47 480 45.84 474.4 42.02 465.6C38.19 456.9 39.9 446.7 46.36 439.7L118.4 361.7C123.7 355.9 123.8 347.1 118.7 341.2L118.7 341.2zM520 72C533.3 72 544 82.75 544 96C544 109.3 533.3 120 520 120H248C234.7 120 224 109.3 224 96C224 82.75 234.7 72 248 72H520zM520 232C533.3 232 544 242.7 544 256C544 269.3 533.3 280 520 280H248C234.7 280 224 269.3 224 256C224 242.7 234.7 232 248 232H520zM520 392C533.3 392 544 402.7 544 416C544 429.3 533.3 440 520 440H248C234.7 440 224 429.3 224 416C224 402.7 234.7 392 248 392H520z'/%3E%3C/svg%3E") !important;
+}
+
+/* ImgBB icon: replace original PNG with SVG (preserve onclick) */
+body#msg #imgbb-icon {
+    /* Hide the original PNG by replacing its src with a transparent GIF */
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M152 120c-26.51 0-48 21.49-48 48s21.49 48 48 48s48-21.49 48-48S178.5 120 152 120zM447.1 32h-384C28.65 32-.0091 60.65-.0091 96v320c0 35.35 28.65 64 63.1 64h384c35.35 0 64-28.65 64-64V96C511.1 60.65 483.3 32 447.1 32zM463.1 409.3l-136.8-185.9C323.8 218.8 318.1 216 312 216c-6.113 0-11.82 2.768-15.21 7.379l-106.6 144.1l-37.09-46.1c-3.441-4.279-8.934-6.809-14.77-6.809c-5.842 0-11.33 2.529-14.78 6.809l-75.52 93.81c0-.0293 0 .0293 0 0L47.99 96c0-8.822 7.178-16 16-16h384c8.822 0 16 7.178 16 16V409.3z'/%3E%3C/svg%3E") !important;
+    background-size: auto 1rem !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    margin: 0 var(--space-micro) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-sm) !important;
+    background-color: var(--surface-color);
+    padding: 0 !important;
+    /* Ensure the content replacement works */
+    object-fit: contain !important;
+}
+
+/* Hover effect */
+body#msg #imgbb-icon:hover {
+    background-color: var(--hover-color) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* URL (Hyperlink) icon */
+body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 512'%3E%3Cpath fill='%23D1D5DB' d='M173 131.5C229.2 75.27 320.3 75.27 376.5 131.5C430 185 432.9 270.9 383 327.9L377.7 334C368.9 344 353.8 345 343.8 336.3C333.8 327.6 332.8 312.4 341.5 302.4L346.9 296.3C380.1 258.3 378.2 201.1 342.5 165.4C305.1 127.1 244.4 127.1 206.1 165.4L93.63 278.7C56.19 316.2 56.19 376.9 93.63 414.3C129.3 449.1 186.6 451.9 224.5 418.7L230.7 413.3C240.6 404.6 255.8 405.6 264.5 415.6C273.3 425.5 272.2 440.7 262.3 449.4L256.1 454.8C199.1 504.6 113.2 501.8 59.69 448.2C3.505 392.1 3.505 300.1 59.69 244.8L173 131.5zM467 380.5C410.8 436.7 319.7 436.7 263.5 380.5C209.1 326.1 207.1 241.1 256.9 184.1L261.6 178.7C270.3 168.7 285.5 167.7 295.5 176.4C305.5 185.1 306.5 200.3 297.8 210.3L293.1 215.7C259.8 253.7 261.8 310.9 297.4 346.6C334.9 384 395.6 384 433.1 346.6L546.4 233.3C583.8 195.8 583.8 135.1 546.4 97.7C510.7 62.02 453.4 60.11 415.5 93.35L409.3 98.7C399.4 107.4 384.2 106.4 375.5 96.44C366.7 86.47 367.8 71.3 377.7 62.58L383.9 57.22C440.9 7.348 526.8 10.21 580.3 63.76C636.5 119.9 636.5 211 580.3 267.2L467 380.5z'/%3E%3C/svg%3E") !important;
+}
+
+/* QUOTE icon */
+body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M96 416c53.02 0 96-42.98 96-96S149 224 96 224C78.42 224 62.17 229.1 48 237.3V216c0-39.7 32.31-72 72-72h16C149.3 144 160 133.3 160 120S149.3 96 136 96h-16C53.84 96 0 149.8 0 216V320C0 373 42.98 416 96 416zM96 272c26.47 0 48 21.53 48 48S122.5 368 96 368S48 346.5 48 320S69.53 272 96 272zM352 416c53.02 0 96-42.98 96-96s-42.98-96-96-96c-17.58 0-33.83 5.068-48 13.31V216c0-39.7 32.31-72 72-72h16C405.3 144 416 133.3 416 120S405.3 96 392 96h-16C309.8 96 256 149.8 256 216V320C256 373 298.1 416 352 416zM352 272c26.47 0 48 21.53 48 48s-21.53 48-48 48s-48-21.53-48-48S325.5 272 352 272z'/%3E%3C/svg%3E") !important;
+}
+
+/* SPOILER icon (eye/hide) */
+body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 512'%3E%3Cpath fill='%23D1D5DB' d='M150.7 92.77C195 58.27 251.8 32 320 32C400.8 32 465.5 68.84 512.6 112.6C559.4 156 590.7 207.1 605.5 243.7C608.8 251.6 608.8 260.4 605.5 268.3C592.1 300.6 565.2 346.1 525.6 386.7L630.8 469.1C641.2 477.3 643.1 492.4 634.9 502.8C626.7 513.2 611.6 515.1 601.2 506.9L9.196 42.89C-1.236 34.71-3.065 19.63 5.112 9.196C13.29-1.236 28.37-3.065 38.81 5.112L150.7 92.77zM189.8 123.5L235.8 159.5C258.3 139.9 287.8 128 320 128C390.7 128 448 185.3 448 256C448 277.2 442.9 297.1 433.8 314.7L487.6 356.9C521.1 322.8 545.9 283.1 558.6 256C544.1 225.1 518.4 183.5 479.9 147.7C438.8 109.6 385.2 79.1 320 79.1C269.5 79.1 225.1 97.73 189.8 123.5zM394.9 284.2C398.2 275.4 400 265.9 400 255.1C400 211.8 364.2 175.1 320 175.1C319.3 175.1 318.7 176 317.1 176C319.3 181.1 320 186.5 320 191.1C320 202.2 317.6 211.8 313.4 220.3L394.9 284.2zM404.3 414.5L446.2 447.5C409.9 467.1 367.8 480 320 480C239.2 480 174.5 443.2 127.4 399.4C80.62 355.1 49.34 304 34.46 268.3C31.18 260.4 31.18 251.6 34.46 243.7C44 220.8 60.29 191.2 83.09 161.5L120.8 191.2C102.1 214.5 89.76 237.6 81.45 255.1C95.02 286 121.6 328.5 160.1 364.3C201.2 402.4 254.8 432 320 432C350.7 432 378.8 425.4 404.3 414.5zM192 255.1C192 253.1 192.1 250.3 192.3 247.5L248.4 291.7C258.9 312.8 278.5 328.6 302 333.1L358.2 378.2C346.1 381.1 333.3 384 319.1 384C249.3 384 191.1 326.7 191.1 255.1z'/%3E%3C/svg%3E") !important;
+}
+
+/* Hover effect – change border color to match theme */
+body#msg .top-editor .left.Sub button[title^="Insert Bold Text"]:hover,
+body#msg .top-editor .left.Sub button[title^="Insert Italic Text"]:hover,
+body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"]:hover,
+body#msg .top-editor .left.Sub button[title^="Create a list"]:hover,
+body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"]:hover,
+body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"]:hover,
+body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"]:hover {
+    border-color: var(--primary-color) !important;
+    background-color: var(--hover-color) !important;
+    transform: translateY(-1px);
+}
+
+/* ----- 13. Hide other advanced/unused formatting buttons ----- */
+body#msg .top-editor .left.Sub [onclick*="<sup>"],
+body#msg .top-editor .left.Sub [onclick*="<sub>"],
+body#msg .top-editor .left.Sub [onclick*="float: left"],
+body#msg .top-editor .left.Sub [onclick*="[CENTER]"],
+body#msg .top-editor .left.Sub [onclick*="transform: rotate(90deg)"],
+body#msg .top-editor .left.Sub [onclick="tag_email()"],
+body#msg .top-editor .left.Sub [onclick="tag_code()"],
+body#msg .top-editor .left.Sub [onclick="tag('<del>','</del>')"],
+body#msg .top-editor .left.Sub select[onchange*="[font="],
+body#msg .top-editor .left.Sub select[onchange*="[size="],
+body#msg .top-editor .left.Sub select[onchange*="[color="],
+.cp.send .sunbar,
+body#msg .top-editor .left.Sub button[title^="Create a list"] img{
+    display: none;
+}
+
+/* ----- 14. Accessibility & reduced motion ----- */
 @media (prefers-reduced-motion: reduce) {
     body#msg * {
         transition-duration: 0.01ms !important;
