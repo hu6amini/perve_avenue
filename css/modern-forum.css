@@ -1805,9 +1805,9 @@ body#msg .bottom-editor {
     align-items: center;
     gap: var(--space-xs);
     padding: var(--pad-4);
-    background: var(--bg-color);
     border-top: 1px solid var(--border-color);
     font-size: 0;
+    width:100%;
 }
 
 body#msg .bottom-editor .left.Sub {
