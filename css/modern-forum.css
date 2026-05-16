@@ -1823,19 +1823,7 @@ body#msg .bottom-editor .left.Sub label {
 
 body#msg .bottom-editor .right-bottom-icons {
     display: flex;
-    gap: var(--space-sm);
     align-items: center;
-}
-
-body#msg .bottom-editor .right-bottom-icons img {
-    cursor: pointer;
-    width: 20px;
-    height: 20px;
-}
-
-body#msg .bottom-editor .right-bottom-icons img:hover {
-    filter: invert(0.8);
-    transform: scale(1.05);
 }
 
 /* The hidden smilies & attachment areas – style when visible */
@@ -2104,7 +2092,7 @@ body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"] {
     border-radius: var(--radius-sm) !important;
     background-color: transparent !important;
     transition: all 0.2s ease !important;
-    margin: 0 var(--space-xs) !important;
+    margin: 0 var(--space-micro) !important;
     padding: 0 !important;
 }
 
@@ -2129,7 +2117,7 @@ body#msg .bottom-editor .right-bottom-icons img[id="emoticons"] {
     border-radius: var(--radius-sm) !important;
     background-color: transparent !important;
     transition: all 0.2s ease !important;
-    margin: 0 var(--space-xs) !important;
+    margin: 0 var(--space-micro) !important;
     padding: 0 !important;
 }
 
