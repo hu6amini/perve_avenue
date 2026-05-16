@@ -2085,13 +2085,12 @@ body#msg .top-editor .left.Sub button[title^="Create a list"],
 body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"],
 body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"],
 body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
-    background-size: auto 1rem!important;
+    c
     font-size: 0 !important;           /* hide original text */
     text-indent: -9999px !important;
     overflow: hidden !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
-    background-size: contain !important;
     width: 2rem !important;
     height: 2rem !important;
     min-width: 2rem !important;
@@ -2123,11 +2122,11 @@ body#msg .top-editor .left.Sub button[title^="Create a list"] {
 
 /* ----- ImgBB icon: replace PNG with SVG (preserve functionality) ----- */
 body#msg #imgbb-icon {
+    background-size: auto 1rem!important;
     opacity: 0 !important;                     /* hide original PNG */
     width: 2rem !important;
     height: 2rem !important;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M448 32C483.3 32 512 60.65 512 96V416C512 451.3 483.3 480 448 480H64C28.65 480 0 451.3 0 416V96C0 60.65 28.65 32 64 32H448zM448 80H64C55.16 80 48 87.16 48 96V416C48 424.8 55.16 432 64 432H448C456.8 432 464 424.8 464 416V96C464 87.16 456.8 80 448 80zM152 232C133.5 232 120 218.5 120 200C120 181.5 133.5 168 152 168C170.5 168 184 181.5 184 200C184 218.5 170.5 232 152 232zM384 352H128L304 192L384 352z'/%3E%3C/svg%3E") !important;
-    background-size: contain !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
     cursor: pointer !important;
@@ -2187,7 +2186,7 @@ body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="],
 .cp.send .sunbar,
-body#msg .top-editor .left.Sub button [onclick="tag_list()"] img{
+body#msg .top-editor .left.Sub button[title^="Create a list"] img{
     display: none;
 }
 
