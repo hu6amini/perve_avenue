@@ -1828,8 +1828,6 @@ body#msg .bottom-editor .right-bottom-icons {
 }
 
 body#msg .bottom-editor .right-bottom-icons img {
-    filter: invert(0.6);
-    transition: filter 0.2s, transform 0.2s;
     cursor: pointer;
     width: 20px;
     height: 20px;
@@ -2083,6 +2081,84 @@ body#msg #imgbb-icon {
 
 /* Hover effect */
 body#msg #imgbb-icon:hover {
+    background-color: var(--hover-color) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ==========================================================================
+   Replace attachment & emoticons icons (bottom toolbar) with SVGs
+   ========================================================================== */
+
+/* Attachment (paperclip) icon */
+body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"] {
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    width: 32px !important;
+    height: 32px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M375 72.97C349.1 46.1 306.9 46.1 280.1 72.97L88.97 264.1C45.32 308.6 45.32 379.4 88.97 423C132.6 466.7 203.4 466.7 247 423L399 271C408.4 261.7 423.6 261.7 432.1 271C442.3 280.4 442.3 295.6 432.1 304.1L280.1 456.1C218.6 519.4 117.4 519.4 55.03 456.1C-7.364 394.6-7.364 293.4 55.03 231L247 39.03C291.7-5.689 364.2-5.689 408.1 39.03C453.7 83.75 453.7 156.3 408.1 200.1L225.2 384.7C193.6 416.3 141.6 413.4 113.7 378.6C89.88 348.8 92.26 305.8 119.2 278.8L271 127C280.4 117.7 295.6 117.7 304.1 127C314.3 136.4 314.3 151.6 304.1 160.1L153.2 312.7C143.5 322.4 142.6 337.9 151.2 348.6C161.2 361.1 179.9 362.2 191.2 350.8L375 167C401 141.1 401 98.94 375 72.97V72.97z'/%3E%3C/svg%3E") !important;
+    background-size: auto 1rem !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    cursor: pointer !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-sm) !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease !important;
+    margin: 0 var(--space-xs) !important;
+    padding: 0 !important;
+}
+
+/* Attachment hover effect */
+body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"]:hover {
+    background-color: var(--hover-color) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Smiley (emoticons) icon – first one (id="emoticons") */
+body#msg .bottom-editor .right-bottom-icons img[id="emoticons"] {
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    width: 32px !important;
+    height: 32px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M256 352C293.2 352 319.2 334.5 334.4 318.1C343.3 308.4 358.5 307.7 368.3 316.7C378 325.7 378.6 340.9 369.6 350.6C347.7 374.5 309.7 400 256 400C202.3 400 164.3 374.5 142.4 350.6C133.4 340.9 133.1 325.7 143.7 316.7C153.5 307.7 168.7 308.4 177.6 318.1C192.8 334.5 218.8 352 256 352zM208.4 208C208.4 225.7 194 240 176.4 240C158.7 240 144.4 225.7 144.4 208C144.4 190.3 158.7 176 176.4 176C194 176 208.4 190.3 208.4 208zM304.4 208C304.4 190.3 318.7 176 336.4 176C354 176 368.4 190.3 368.4 208C368.4 225.7 354 240 336.4 240C318.7 240 304.4 225.7 304.4 208zM512 256C512 397.4 397.4 512 256 512C114.6 512 0 397.4 0 256C0 114.6 114.6 0 256 0C397.4 0 512 114.6 512 256zM256 48C141.1 48 48 141.1 48 256C48 370.9 141.1 464 256 464C370.9 464 464 370.9 464 256C464 141.1 370.9 48 256 48z'/%3E%3C/svg%3E") !important;
+    background-size: auto 1rem !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    cursor: pointer !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-sm) !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease !important;
+    margin: 0 var(--space-xs) !important;
+    padding: 0 !important;
+}
+
+/* Smiley hover effect */
+body#msg .bottom-editor .right-bottom-icons img[id="emoticons"]:hover {
+    background-color: var(--hover-color) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Optional: also style the second smiley icon (id="emoticons2") if needed – can reuse same SVG */
+body#msg .bottom-editor .right-bottom-icons img[id="emoticons2"] {
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    width: 32px !important;
+    height: 32px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M256 352C293.2 352 319.2 334.5 334.4 318.1C343.3 308.4 358.5 307.7 368.3 316.7C378 325.7 378.6 340.9 369.6 350.6C347.7 374.5 309.7 400 256 400C202.3 400 164.3 374.5 142.4 350.6C133.4 340.9 133.1 325.7 143.7 316.7C153.5 307.7 168.7 308.4 177.6 318.1C192.8 334.5 218.8 352 256 352zM208.4 208C208.4 225.7 194 240 176.4 240C158.7 240 144.4 225.7 144.4 208C144.4 190.3 158.7 176 176.4 176C194 176 208.4 190.3 208.4 208zM304.4 208C304.4 190.3 318.7 176 336.4 176C354 176 368.4 190.3 368.4 208C368.4 225.7 354 240 336.4 240C318.7 240 304.4 225.7 304.4 208zM512 256C512 397.4 397.4 512 256 512C114.6 512 0 397.4 0 256C0 114.6 114.6 0 256 0C397.4 0 512 114.6 512 256zM256 48C141.1 48 48 141.1 48 256C48 370.9 141.1 464 256 464C370.9 464 464 370.9 464 256C464 141.1 370.9 48 256 48z'/%3E%3C/svg%3E") !important;
+    background-size: auto 1rem !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    cursor: pointer !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-sm) !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease !important;
+    margin: 0 var(--space-xs) !important;
+    padding: 0 !important;
+}
+
+body#msg .bottom-editor .right-bottom-icons img[id="emoticons2"]:hover {
     background-color: var(--hover-color) !important;
     border-color: var(--primary-color) !important;
     transform: translateY(-1px) !important;
