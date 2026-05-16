@@ -1806,7 +1806,7 @@ body#msg #Post:focus {
 body#msg .bottom-editor {
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     gap: var(--space-md);
     padding: var(--pad-4);
@@ -1818,6 +1818,7 @@ body#msg .bottom-editor .left.Sub {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    font-size:0;
 }
 
 body#msg .bottom-editor .left.Sub label {
