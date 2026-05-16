@@ -1673,7 +1673,7 @@ body#msg .cp.send .list > li {
     gap: var(--space-md);
 }
 
-body#msg .cp.send .list > li:nth-child(2) {
+body#msg .cp.send .list .Item.top-addons + .Item {
     padding: var(--pad-6) !important;
 }
 
@@ -1686,6 +1686,11 @@ body#msg .cp.send .list > li > .Sub.Item:first-child {
 body#msg .cp.send .list > li > .Sub.Item:last-child {
     flex: 1;
     min-width: 200px;
+}
+
+/* Neutralize inline width styles */
+body#msg .cp.send .list > li > .Sub.Item {
+    width: auto !important;
 }
 
 /* Inputs & selects */
