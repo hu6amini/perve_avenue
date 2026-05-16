@@ -1775,7 +1775,7 @@ body#msg .top-editor .left.Sub select.codebuttons {
 #msg ul.list {
     margin: 0 !important;
 }
-#msg .Item {padding: 0 !important}
+#msg .Item:not(.darkbar) {padding: 0 !important}
 
 /* ----- 5. Textarea (the message body) ----- */
 body#msg #Post {
