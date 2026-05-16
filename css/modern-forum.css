@@ -1998,7 +1998,6 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
 body#msg .top-editor .left.Sub button[title^="Insert Bold Text"],
 body#msg .top-editor .left.Sub button[title^="Insert Italic Text"],
 body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"],
-body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"],
 body#msg .top-editor .left.Sub button[title^="Create a list"] {
     font-size: 0;                    /* hide original text */
     width: 2em;
@@ -2031,14 +2030,6 @@ body#msg .top-editor .left.Sub button[title^="Insert Italic Text"]::before {
 /* Underline */
 body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"]::before {
     content: "\f0cd";
-    font-family: "Font Awesome 6 Pro";
-    font-weight: 400;
-    font-size: 1rem;
-}
-
-/* Strikethrough */
-body#msg .top-editor .left.Sub button[title^="Insert Strikethrough Text"]::before {
-    content: "\f0cc";
     font-family: "Font Awesome 6 Pro";
     font-weight: 400;
     font-size: 1rem;
