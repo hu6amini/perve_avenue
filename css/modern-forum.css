@@ -2129,7 +2129,8 @@ body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="],
 .cp.send .sunbar,
-body#msg .top-editor .left.Sub button[title^="Create a list"] img{
+body#msg .top-editor .left.Sub button[title^="Create a list"] img,
+#emoticons2{
     display: none;
 }
 
