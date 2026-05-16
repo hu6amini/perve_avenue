@@ -2085,7 +2085,7 @@ body#msg .top-editor .left.Sub button[title^="Create a list"],
 body#msg .top-editor .left.Sub input[title="Insert Hyperlink (alt + w)"],
 body#msg .top-editor .left.Sub input[title="Insert Quoted Text (alt + q)"],
 body#msg .top-editor .left.Sub input[title="Insert hidden elements (alt + h)"] {
-    c
+    background-size: auto 1rem!important;
     font-size: 0 !important;           /* hide original text */
     text-indent: -9999px !important;
     overflow: hidden !important;
