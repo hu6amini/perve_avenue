@@ -1726,13 +1726,13 @@ body#msg .top-editor {
     align-items: center;
     justify-content: flex-start;
     width: 100%;
+    font-size:0;
 }
 
 body#msg .top-editor .left.Sub {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-xs);
     font-size: 0;
 }
 
@@ -1802,6 +1802,7 @@ body#msg .bottom-editor {
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: var(--space-xs);
     padding: var(--pad-4);
     background: var(--bg-color);
     border-top: 1px solid var(--border-color);
@@ -1811,8 +1812,6 @@ body#msg .bottom-editor {
 body#msg .bottom-editor .left.Sub {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    font-size:0;
 }
 
 body#msg .bottom-editor .left.Sub label {
