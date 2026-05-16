@@ -1673,7 +1673,9 @@ body#msg .cp.send .list > li {
     gap: var(--space-md);
 }
 
-body#msg .cp.send .list > li:nth-child(2) {padding: var(--pad-6)!important}
+body#msg .cp.send .list > li:nth-child(2) {
+    padding: var(--pad-6) !important;
+}
 
 body#msg .cp.send .list > li > .Sub.Item:first-child {
     flex: 0 0 120px;
@@ -1720,7 +1722,10 @@ body#msg .top-editor {
     border-bottom: 1px solid var(--border-color);
     padding: var(--pad-5) var(--pad-6);
     display: flex;
-    width:100%; 
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
 }
 
 body#msg .top-editor .left.Sub {
@@ -1772,7 +1777,10 @@ body#msg .top-editor .left.Sub > div {
     flex-wrap: wrap;
 }
 
-#msg ul.list {margin: 0!important}
+/* Remove extra margin from list */
+#msg ul.list {
+    margin: 0 !important;
+}
 
 /* ----- 5. Textarea (the message body) ----- */
 body#msg #Post {
@@ -1785,7 +1793,7 @@ body#msg #Post {
     font-size: var(--text-sm);
     line-height: 1.5;
     resize: vertical;
-    width:100%!important;
+    width: 100% !important;
 }
 
 body#msg #Post:focus {
@@ -1969,7 +1977,78 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     display: none;
 }
 
-/* ----- 10. Responsive adjustments ----- */
+/* ----- 10. Promote ImgBB icon to main toolbar (replace old IMG button) ----- */
+body#msg .right-top-icons {
+    order: -1;                     /* moves it to the front */
+    display: flex;
+    gap: var(--space-sm);
+    align-items: center;
+    margin-right: var(--space-md);
+}
+
+/* Hide ALL icons inside .right-top-icons except the ImgBB one */
+body#msg .right-top-icons img:not(#imgbb-icon),
+body#msg .right-top-icons a,
+body#msg .right-top-icons script {
+    display: none !important;
+}
+
+/* Style the ImgBB icon as a prominent toolbar button */
+body#msg #imgbb-icon {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 6px;
+    background: var(--surface-light);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    filter: none !important;       /* remove any previous filter */
+    margin: 0 !important;
+}
+
+body#msg #imgbb-icon:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    transform: scale(1.05);
+    filter: brightness(1.1);
+}
+
+/* Optional tooltip for ImgBB */
+body#msg #imgbb-icon {
+    position: relative;
+}
+
+body#msg #imgbb-icon::after {
+    content: "Upload image (ImgBB)";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-color);
+    color: var(--text-primary);
+    font-size: var(--text-xs);
+    padding: var(--pad-2) var(--pad-3);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
+    border: 1px solid var(--border-color);
+    margin-bottom: 6px;
+}
+
+body#msg #imgbb-icon:hover::after {
+    opacity: 1;
+}
+
+/* Ensure the old IMG button is definitely hidden */
+body#msg .top-editor .left.Sub [onclick="tag_image()"] {
+    display: none !important;
+}
+
+/* ----- 11. Responsive adjustments ----- */
 @media (max-width: 680px) {
     body#msg .cp.send .list > li {
         flex-direction: column;
@@ -1994,11 +2073,12 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     }
 }
 
+/* ----- 12. Special button icon conversions (Bold, Italic, Underline, List) ----- */
 body#msg .top-editor .left.Sub button[title^="Insert Bold Text"],
 body#msg .top-editor .left.Sub button[title^="Insert Italic Text"],
 body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"],
 body#msg .top-editor .left.Sub button[title^="Create a list"] {
-    font-size: 0;                    /* hide original text */
+    font-size: 0;
     width: 2em;
     height: 2em;
     display: inline-flex;
@@ -2010,7 +2090,6 @@ body#msg .top-editor .left.Sub button[title^="Create a list"] {
     vertical-align: middle;
 }
 
-/* Bold */
 body#msg .top-editor .left.Sub button[title^="Insert Bold Text"]::before {
     content: "\f032";
     font-family: "Font Awesome 6 Pro";
@@ -2018,7 +2097,6 @@ body#msg .top-editor .left.Sub button[title^="Insert Bold Text"]::before {
     font-size: 1rem;
 }
 
-/* Italic */
 body#msg .top-editor .left.Sub button[title^="Insert Italic Text"]::before {
     content: "\f033";
     font-family: "Font Awesome 6 Pro";
@@ -2026,7 +2104,6 @@ body#msg .top-editor .left.Sub button[title^="Insert Italic Text"]::before {
     font-size: 1rem;
 }
 
-/* Underline */
 body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"]::before {
     content: "\f0cd";
     font-family: "Font Awesome 6 Pro";
@@ -2034,57 +2111,34 @@ body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"]::before {
     font-size: 1rem;
 }
 
-/* List (unordered) */
 body#msg .top-editor .left.Sub button[title^="Create a list"]::before {
-    content: "\f0ca";                /* fa-list-ul */
+    content: "\f0ca";
     font-family: "Font Awesome 6 Pro";
     font-weight: 400;
     font-size: 1rem;
 }
 
-/* Hide the original image inside the list button */
 body#msg .top-editor .left.Sub button[title^="Create a list"] img {
     display: none;
 }
 
-/* ==========================================================================
-   PM Editor: Text inputs (URL, IMG, QUOTE, CODE, SPOILER)
-   ========================================================================== */
-body#msg .top-editor .left.Sub input[type="button"] {
-    font-family: 'Quicksand', sans-serif;
-    font-weight: 600;
-    font-size: 0.85rem;
-    padding: 2px 6px;
-    background: transparent;
-    border: 1px solid var(--border-color, #555);
-    color: var(--text-primary, #ddd);
-    cursor: pointer;
-    vertical-align: middle;
-}
-
-body#msg .top-editor .left.Sub input[type="button"]:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-/* PM editor: hide advanced formatting buttons */
+/* ----- 13. Hide other advanced/unused formatting buttons ----- */
 body#msg .top-editor .left.Sub [onclick*="<sup>"],
 body#msg .top-editor .left.Sub [onclick*="<sub>"],
 body#msg .top-editor .left.Sub [onclick*="float: left"],
 body#msg .top-editor .left.Sub [onclick*="[CENTER]"],
-body#msg .top-editor .left.Sub [onclick="tag_image()"],
 body#msg .top-editor .left.Sub [onclick*="transform: rotate(90deg)"],
 body#msg .top-editor .left.Sub [onclick="tag_email()"],
 body#msg .top-editor .left.Sub [onclick="tag_code()"],
 body#msg .top-editor .left.Sub [onclick="tag('<del>','</del>')"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
-body#msg .top-editor .left.Sub select[onchange*="[color="], 
-.cp.send .sunbar
-{
+body#msg .top-editor .left.Sub select[onchange*="[color="],
+.cp.send .sunbar {
     display: none;
 }
 
-/* ----- 11. Accessibility & reduced motion ----- */
+/* ----- 14. Accessibility & reduced motion ----- */
 @media (prefers-reduced-motion: reduce) {
     body#msg * {
         transition-duration: 0.01ms !important;
