@@ -1960,7 +1960,6 @@ body#msg #preview {
 /* ----- 9. Hide leftover legacy junk ----- */
 body#msg .Break.Sub,
 body#msg .popup#popup,
-body#msg .top-editor .right.Sub,
 body#msg .bottom-editor .Break.Sub {
     display: none !important;
 }
