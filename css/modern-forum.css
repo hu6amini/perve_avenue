@@ -2122,25 +2122,39 @@ body#msg .top-editor .left.Sub button[title^="Create a list"] {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 576 512'%3E%3Cpath fill='%23D1D5DB' d='M55.1 56.04C55.1 42.78 66.74 32.04 79.1 32.04H111.1C125.3 32.04 135.1 42.78 135.1 56.04V176H151.1C165.3 176 175.1 186.8 175.1 200C175.1 213.3 165.3 224 151.1 224H71.1C58.74 224 47.1 213.3 47.1 200C47.1 186.8 58.74 176 71.1 176H87.1V80.04H79.1C66.74 80.04 55.1 69.29 55.1 56.04V56.04zM118.7 341.2C112.1 333.8 100.4 334.3 94.65 342.4L83.53 357.9C75.83 368.7 60.84 371.2 50.05 363.5C39.26 355.8 36.77 340.8 44.47 330.1L55.59 314.5C79.33 281.2 127.9 278.8 154.8 309.6C176.1 333.1 175.6 370.5 153.7 394.3L118.8 432H152C165.3 432 176 442.7 176 456C176 469.3 165.3 480 152 480H64C54.47 480 45.84 474.4 42.02 465.6C38.19 456.9 39.9 446.7 46.36 439.7L118.4 361.7C123.7 355.9 123.8 347.1 118.7 341.2L118.7 341.2zM520 72C533.3 72 544 82.75 544 96C544 109.3 533.3 120 520 120H248C234.7 120 224 109.3 224 96C224 82.75 234.7 72 248 72H520zM520 232C533.3 232 544 242.7 544 256C544 269.3 533.3 280 520 280H248C234.7 280 224 269.3 224 256C224 242.7 234.7 232 248 232H520zM520 392C533.3 392 544 402.7 544 416C544 429.3 533.3 440 520 440H248C234.7 440 224 429.3 224 416C224 402.7 234.7 392 248 392H520z'/%3E%3C/svg%3E") !important;
 }
 
-/* ----- ImgBB icon: replace PNG with SVG (preserve functionality) ----- */
+/* ImgBB icon: replace PNG with SVG (preserve functionality) */
 body#msg #imgbb-icon {
-    background-size: auto 1rem!important;
-    opacity: 0 !important;                     /* hide original PNG */
+    /* Hide the original PNG image by making it transparent and invisible */
+    opacity: 0 !important;
     width: 2rem !important;
     height: 2rem !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M448 32C483.3 32 512 60.65 512 96V416C512 451.3 483.3 480 448 480H64C28.65 480 0 451.3 0 416V96C0 60.65 28.65 32 64 32H448zM448 80H64C55.16 80 48 87.16 48 96V416C48 424.8 55.16 432 64 432H448C456.8 432 464 424.8 464 416V96C464 87.16 456.8 80 448 80zM152 232C133.5 232 120 218.5 120 200C120 181.5 133.5 168 152 168C170.5 168 184 181.5 184 200C184 218.5 170.5 232 152 232zM384 352H128L304 192L384 352z'/%3E%3C/svg%3E") !important;
-    background-repeat: no-repeat !important;
-    background-position: center !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
     margin: 0 var(--space-xs) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: var(--radius-sm) !important;
     background-color: transparent !important;
     padding: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    position: relative !important;
 }
 
-/* ImgBB hover effect */
+/* Add the SVG as a pseudo-element overlay */
+body#msg #imgbb-icon::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 1rem !important;
+    height: 1rem !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M448 32C483.3 32 512 60.65 512 96V416C512 451.3 483.3 480 448 480H64C28.65 480 0 451.3 0 416V96C0 60.65 28.65 32 64 32H448zM448 80H64C55.16 80 48 87.16 48 96V416C48 424.8 55.16 432 64 432H448C456.8 432 464 424.8 464 416V96C464 87.16 456.8 80 448 80zM152 232C133.5 232 120 218.5 120 200C120 181.5 133.5 168 152 168C170.5 168 184 181.5 184 200C184 218.5 170.5 232 152 232zM384 352H128L304 192L384 352z'/%3E%3C/svg%3E") !important;
+    background-size: auto 1rem !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    pointer-events: none !important; /* allow clicks to pass to the original element */
+}
+
+/* Hover effect for the container */
 body#msg #imgbb-icon:hover {
     background-color: var(--hover-color) !important;
     border-color: var(--primary-color) !important;
