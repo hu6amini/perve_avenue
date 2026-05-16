@@ -1733,7 +1733,6 @@ body#msg .top-editor .left.Sub {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-micro);
     font-size: 0;
 }
 
@@ -1790,7 +1789,8 @@ body#msg .top-editor .left.Sub [onclick="tag('<del>','</del>')"],
 body#msg .top-editor .left.Sub [onclick="tag_image()"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
-body#msg .top-editor .left.Sub select[onchange*="[color="] {
+body#msg .top-editor .left.Sub select[onchange*="[color="],
+body#msg .bottom-editor .right-bottom-icons #emoticons2 {
     display: none !important;
 }
 
@@ -1890,7 +1890,6 @@ body#msg .bottom-editor .left.Sub label {
 body#msg .bottom-editor .right-bottom-icons {
     display: flex;
     align-items: center;
-    gap: var(--space-micro);
 }
 
 /* Paperclip attachment */
@@ -1918,8 +1917,7 @@ body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"]:hover {
 }
 
 /* Smiley icons */
-body#msg .bottom-editor .right-bottom-icons img[id="emoticons"],
-body#msg .bottom-editor .right-bottom-icons img[id="emoticons2"] {
+body#msg .bottom-editor .right-bottom-icons img[id="emoticons"] {
     content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
     width: 32px !important;
     height: 32px !important;
@@ -1936,17 +1934,11 @@ body#msg .bottom-editor .right-bottom-icons img[id="emoticons2"] {
     transition: all 0.2s ease;
 }
 
-body#msg .bottom-editor .right-bottom-icons img[id="emoticons"]:hover,
-body#msg .bottom-editor .right-bottom-icons img[id="emoticons2"]:hover {
+body#msg .bottom-editor .right-bottom-icons img[id="emoticons"]:hover {
     background-color: var(--hover-color) !important;
     border-color: var(--primary-color) !important;
     transform: translateY(-1px) !important;
 }
-
-/* Hide the second smiley if you prefer (currently visible) */
-/* If you want to hide emoticons2, uncomment:
-#emoticons2 { display: none; }
-*/
 
 /* ----- 8. Textarea (message body) ----- */
 body#msg #Post {
