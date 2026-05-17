@@ -1705,7 +1705,7 @@ body#msg .cp.send .skin_tbl {
     padding: var(--space-md);
 }
 
-body#msg .cp.send .main_list > linot(#attach + li) {
+body#msg .cp.send .main_list > li:not(#attach + li) {
     background: var(--surface-color);
     border-radius: var(--radius);
     margin-bottom: var(--space-lg);
@@ -1882,10 +1882,12 @@ body#msg .top-editor .left.Sub button[title^="Insert Italic Text"] {
 
 body#msg .top-editor .left.Sub button[title^="Insert Underlined Text"] {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M40 48H64v192c0 88.22 71.78 160 160 160s160-71.78 160-160v-192h24c13.25 0 24-10.75 24-24S421.3 0 408 0h-96C298.8 0 288 10.75 288 24s10.75 24 24 24h24v192c0 61.75-50.25 112-112 112S112 301.8 112 240v-192h24C149.3 48 160 37.25 160 24S149.3 0 136 0h-96C26.75 0 16 10.75 16 24S26.75 48 40 48zM424 464H24C10.75 464 0 474.8 0 488S10.75 512 24 512h400c13.25 0 24-10.75 24-24S437.3 464 424 464z'/%3E%3C/svg%3E");
+    margin-right: calc(var(--space-md) + var(--space-micro));
 }
 
 body#msg .top-editor .left.Sub button[title^="Create a list"] {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M88 48C101.3 48 112 58.75 112 72V120C112 133.3 101.3 144 88 144H40C26.75 144 16 133.3 16 120V72C16 58.75 26.75 48 40 48H88zM488 72C501.3 72 512 82.75 512 96C512 109.3 501.3 120 488 120H184C170.7 120 160 109.3 160 96C160 82.75 170.7 72 184 72H488zM488 232C501.3 232 512 242.7 512 256C512 269.3 501.3 280 488 280H184C170.7 280 160 269.3 160 256C160 242.7 170.7 232 184 232H488zM488 392C501.3 392 512 402.7 512 416C512 429.3 501.3 440 488 440H184C170.7 440 160 429.3 160 416C160 402.7 170.7 392 184 392H488zM16 232C16 218.7 26.75 208 40 208H88C101.3 208 112 218.7 112 232V280C112 293.3 101.3 304 88 304H40C26.75 304 16 293.3 16 280V232zM88 368C101.3 368 112 378.7 112 392V440C112 453.3 101.3 464 88 464H40C26.75 464 16 453.3 16 440V392C16 378.7 26.75 368 40 368H88z'/%3E%3C/svg%3E");
+    margin-right: calc(var(--space-md) + var(--space-micro));
 }
 
 body#msg .top-editor .left.Sub button[title^="Create a list"] img {
