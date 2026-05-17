@@ -2088,7 +2088,7 @@ body#msg .darkbar.Item {
     background: transparent;
     padding: var(--pad-5);
     display: flex;
-    gap: var(--space-md);
+    gap: var(--space-sm);
     justify-content: flex-end;
     border-top: 1px solid var(--border-color);
     font-size: 0;
