@@ -1696,7 +1696,7 @@ body#msg .cp.send .skin_tbl {
     padding: var(--space-md);
 }
 
-body#msg .cp.send .main_list > li {
+body#msg .cp.send .main_list > linot(#attach + li) {
     background: var(--surface-color);
     border-radius: var(--radius);
     margin-bottom: var(--space-lg);
