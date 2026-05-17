@@ -2164,6 +2164,16 @@ body#msg #ajaxObject > b:first-of-type {
     font-sizze: clamp(1rem, 2.5vw, var(--text-base));
 }
 
+body#msg #ajaxObject > b:first-of-type::before {
+    content: '\f06e';
+    font-size: 1rem;
+    color: var(--primary-color);
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    margin-right: var(--space-xs);
+    display: inline-block;
+}
+
 body#msg #ajaxObject hr {
     display: none;  /* hide the legacy <hr> */
 }
