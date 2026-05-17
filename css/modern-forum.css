@@ -1726,10 +1726,13 @@ body#msg .cp.send .list > li > .Sub.Item:first-child {
 
 body#msg .cp.send .list > li > .Sub.Item:last-child {
     flex: 1;
-    min-width: 200px;
     min-width: 0 !important;
     font-size: 0;
     display: flex;
+}
+
+body#msg input.forminput[name="msg_title"] {
+   width: 100%;
 }
 
 /* Neutralize inline width styles */
