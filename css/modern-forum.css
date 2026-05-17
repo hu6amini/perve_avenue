@@ -1750,6 +1750,10 @@ body#msg select.forminput {
     max-width: 100% !important;
 }
 
+body#msg .cp.send .list > li:first-child input[name="entered_name"] {
+    margin-right: var(--space-sm);
+}
+
 body#msg input.forminput:focus,
 body#msg select.forminput:focus {
     border-color: var(--primary-color);
