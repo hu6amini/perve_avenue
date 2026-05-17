@@ -2153,15 +2153,15 @@ body#msg #loading:not(.nascosta) {
     will-change: transform;
 }
 
-body#msg #ajaxObject b:first-child {
-    display: block;
-    font-family: var(--font-heading);
-    font-size: var(--text-md);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: var(--space-sm);
-    padding-bottom: var(--space-xs);
+body#msg #ajaxObject > b:first-of-type {
+    background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
+    width: 100%;
+    display: flex;
+    padding: var(--pad-4) var(--pad-6);
+    font-family: 'Bree Serif';
+    font-weight: 400;
+    font-sizze: clamp(1rem, 2.5vw, var(--text-base));
 }
 
 body#msg #ajaxObject hr {
