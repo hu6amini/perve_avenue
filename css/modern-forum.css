@@ -2174,14 +2174,6 @@ body#msg #ajaxObject .color {
 padding: var(--space-lg) var(--pad-6);
 }
 
-/* Adjust the preview anchor offset */
-body#msg #preview {
-    position: static;
-    margin-top: calc(-1 * var(--space-lg));  /* cancel the top margin from loading */
-    visibility: hidden;
-    height: 0;
-}
-
 /* ----- 12. Hide legacy junk (popups, breaks, extra divs) ----- */
 body#msg .Break.Sub,
 body#msg .popup#popup,
