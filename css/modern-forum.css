@@ -1855,19 +1855,17 @@ body#msg .top-editor .left.Sub [onclick="tag_image()"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="],
-body#msg .bottom-editor .right-bottom-icons #emoticons2 {
+body#msg .bottom-editor .right-bottom-icons #emoticons2,
+body#msg .right-top-icons img:not(#imgbb-icon),
+body#msg .right-top-icons a,
+body#msg .right-top-icons script,
+#ajaxObject + br {
     display: none !important;
 }
 
 /* Right‑side icons container – move ImgBB to main row, hide others */
 body#msg .right-top-icons {
     display: contents;
-}
-
-body#msg .right-top-icons img:not(#imgbb-icon),
-body#msg .right-top-icons a,
-body#msg .right-top-icons script {
-    display: none !important;
 }
 
 /* ----- 5. Editor button SVGs (color #D1D5DB) ----- */
