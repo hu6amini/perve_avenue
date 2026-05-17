@@ -2143,29 +2143,52 @@ body#msg button[name="preview"]:hover {
     transform: translateY(-1px);
 }
 
-/* ----- 11. AJAX Preview area ----- */
-body#msg #loading.nascosta {
-    display: none;
-}
-
+/* ----- 11. AJAX Preview area – modern card style ----- */
 body#msg #loading:not(.nascosta) {
-    display: block;
     background: var(--surface-color);
     border-radius: var(--radius);
-    margin: var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
-    padding: var(--space-md);
+    box-shadow: var(--shadow-sm);
+    margin: var(--space-lg) var(--space-md);
+    padding: 0;
+    overflow: hidden;
 }
 
 body#msg #ajaxObject {
     background: var(--bg-color);
-    border-radius: var(--radius);
     padding: var(--space-md);
 }
 
+body#msg #ajaxObject b:first-child {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--border-color);
+}
+
+body#msg #ajaxObject hr {
+    display: none;  /* hide the legacy <hr> */
+}
+
+body#msg #ajaxObject .color {
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    line-height: 1.618;
+    color: var(--text-primary);
+    background: var(--bg-color);
+    padding: var(--space-sm) 0;
+}
+
+/* Adjust the preview anchor offset */
 body#msg #preview {
     position: static;
-    margin-bottom: var(--space-md);
+    margin-top: calc(-1 * var(--space-lg));  /* cancel the top margin from loading */
+    visibility: hidden;
+    height: 0;
 }
 
 /* ----- 12. Hide legacy junk (popups, breaks, extra divs) ----- */
