@@ -2090,6 +2090,14 @@ body#msg button[name="preview"] {
     transition: all 0.2s ease;
 }
 
+body#msg button[name="preview"] { 
+    order: 1;
+}
+
+body#msg input[name="sub_mit"] {
+    order: 2;
+}
+
 body#msg button[name="preview"] {
     background: var(--surface-light);
     color: var(--text-primary);
