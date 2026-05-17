@@ -1706,7 +1706,6 @@ body#msg select.forminput {
     font-size: var(--text-sm);
     transition: all 0.2s ease;
     max-width: 100% !important;
-    width: 100% !important;
 }
 
 body#msg input.forminput:focus,
