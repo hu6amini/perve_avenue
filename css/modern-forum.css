@@ -1594,6 +1594,10 @@ input[type="radio"]:checked::before {
    Emerald theme · Font Awesome Pro 6.1.0 compatible
    ========================================================================== */
 
+body#msg .slick_carousel a {
+   visibility: hidden;
+}
+
 /* ----- 1. Base messenger container – card style ----- */
 body#msg .cp.send {
     background: var(--surface-color);
