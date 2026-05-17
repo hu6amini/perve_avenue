@@ -1662,10 +1662,10 @@ input[type="radio"]:checked::before {
 body#msg .slick_carousel {
     position: relative;
     background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png') !important;
-    background-size: contain !important;
+    background-size: cover !important;
     background-position: center !important;
     background-repeat: no-repeat !important;
-    background-color: var(--primary-dark) !important;
+    background-color: var(--surface-color) !important;
     min-height: 100px;
 }
 
