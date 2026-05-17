@@ -1598,6 +1598,11 @@ body#msg .slick_carousel a {
    visibility: hidden;
 }
 
+body#msg .slick_carousel {
+   background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png');
+   background-size: contain;
+}
+
 /* ----- 1. Base messenger container – card style ----- */
 body#msg .cp.send {
     background: var(--surface-color);
