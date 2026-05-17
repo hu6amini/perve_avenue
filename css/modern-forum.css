@@ -1756,7 +1756,7 @@ body#msg .cp.send .skin_tbl {
 }
 
 /* All main_list > li cards (including #attach and #smilies when visible) */
-body#msg .cp.send .main_list > li,
+body#msg .cp.send .main_list > li:not(#attach + li),
 body#msg #attach:not(.nascosta),
 body#msg #smilies:not(.nascosta) {
     background: var(--surface-color);
