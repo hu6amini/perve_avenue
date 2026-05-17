@@ -1729,6 +1729,7 @@ body#msg .cp.send .list > li > .Sub.Item:last-child {
     min-width: 200px;
     min-width: 0 !important;
     font-size: 0;
+    display: flex;
 }
 
 /* Neutralize inline width styles */
