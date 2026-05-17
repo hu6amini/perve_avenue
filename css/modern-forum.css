@@ -1599,8 +1599,8 @@ body#msg .slick_carousel a {
 }
 
 body#msg .slick_carousel {
-   background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png');
-   background-size: contain;
+   background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png') !important;
+   background-size: contain !important;
 }
 
 /* ----- 1. Base messenger container – card style ----- */
