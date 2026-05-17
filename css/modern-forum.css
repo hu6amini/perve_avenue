@@ -1687,6 +1687,7 @@ body#msg .cp.send .list > li > .Sub.Item:last-child {
     flex: 1;
     min-width: 200px;
     min-width: 0 !important;
+    font-size: 0;
 }
 
 /* Neutralize inline width styles */
