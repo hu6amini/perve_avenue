@@ -211,6 +211,8 @@
 .fa-plus::before { content: "\2b"; }
 .fa-hashtag::before { content: "\23"; }
 .fa-at::before { content: "\40"; }
+.fa-paper-plane::before { content: "\f1d8"; }
+.fa-pen::before { content: "\f304"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
