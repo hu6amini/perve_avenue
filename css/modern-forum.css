@@ -1707,7 +1707,7 @@ body#msg .cp.send .skin_tbl {
 body#msg .cp.send .main_list > li:not(#attach + li) {
     background: var(--surface-color);
     border-radius: var(--radius);
-    margin: margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
+    margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
     overflow: hidden;
 }
