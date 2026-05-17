@@ -1686,6 +1686,7 @@ body#msg .cp.send .list > li > .Sub.Item:first-child {
 body#msg .cp.send .list > li > .Sub.Item:last-child {
     flex: 1;
     min-width: 200px;
+    min-width: 0 !important;
 }
 
 /* Neutralize inline width styles */
@@ -1704,7 +1705,8 @@ body#msg select.forminput {
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     transition: all 0.2s ease;
-    max-width: 100%;
+    max-width: 100% !important;
+    width: 100% !important;
 }
 
 body#msg input.forminput:focus,
