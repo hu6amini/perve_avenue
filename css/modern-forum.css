@@ -1,3 +1,394 @@
+/*============================================
+ midnight emerald skin - forum modernized css
+ optimized & mathematically perfected with φ(1.618)
+ essential styles - modern posts edition
+ accessibility enhanced(v2.0)
+ added: group-specific avatar borders & badges(posts + modal)
+ added: modern blog card styles(body#topic articles)
+ added: slick carousel overrides(hero slider)============================================*/
+
+/*--------------------------------------------
+ 1. css reset & base normalization
+--------------------------------------------*/
+*,
+*::before,
+*::after {box-sizing: border-box;
+ margin: 0;
+ padding: 0;
+ outline: none}
+
+html {font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+ font-size: 16px;
+ line-height: 1.618;
+ scrollbar-color: var(--surface-color) transparent;
+ scrollbar-width: thin;
+ scrollbar-gutter: stable;
+ -webkit-font-smoothing: antialiased;
+ -moz-osx-font-smoothing: grayscale;
+ text-rendering: optimizelegibility}
+
+body {background-color: var(--bg-color);
+ color: var(--text-primary);
+ font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+ font-size: var(--text-base);
+ line-height: 1.618;
+ margin: 0;
+ padding: 0 var(--pad-4) 0 var(--pad-4);
+ min-height: 100vh;
+
+ /* Modern forum polish */
+ -webkit-text-size-adjust: 100%;
+ -moz-text-size-adjust: 100%;
+ text-size-adjust: 100%;
+ overflow-wrap: break-word;
+ -webkit-tap-highlight-color: transparent;
+ accent-color: var(--primary-color)}
+
+/*--------------------------------------------
+ 2. css variables & themes
+--------------------------------------------*/:root {/* Golden ratio constants */
+ --phi: 1.618;
+ --phi-inverse: 0.618;
+ --phi-squared: 2.618;
+ --phi-cubed: 4.236;
+
+ /* Primary Colors - Emerald greens */
+ --primary-color: #059669;
+ --primary-dark: #047857;
+ --primary-light: #10B981;
+
+ /* Accent Colors */
+ --secondary-color: #7C3AED;
+ --accent-color: #0EA5E9;
+ --success-color: #10B981;
+ --warning-color: #F59E0B;
+ --danger-color: #DC2626;
+
+ /* Theme Colors - Dark Mode(Default) */
+ --bg-color: #111827;
+ --surface-color: #1F2937;
+ --surface-light: #374151;
+ --border-color: rgba(255, 255, 255, 0.1);
+
+ /* Text Colors */
+ --text-primary: #F9FAFB;
+ --text-secondary: #D1D5DB;
+ --text-tertiary: #6B7280;
+ --text-muted: #4B5563;
+
+ /* Interactive States */
+ --hover-color: rgba(255, 255, 255, 0.05);
+ --active-color: rgba(255, 255, 255, 0.1);
+ --focus-ring: rgba(5, 150, 105, 0.3);
+
+ /* Role colors */
+ --admin-color: #DC2626;
+ --global-mod-color: #06B6D4;
+ --mod-color: #8B5CF6;
+ --dev-color: #0EA5E9;
+ --member-color: #059669;
+ --guest-color: #6B7280;
+ --founder-color: #F59E0B;
+ --game-dev-color: #3B82F6;
+ --fan-color: #EC4899;
+
+ /* Shadows - Golden ratio progression */
+ --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+ --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+ --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+ --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+ --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6);
+
+ /* Border Radius */
+ --radius-sm: 4px;
+ --radius: 8px;
+ --radius-lg: 13px;
+ --radius-xl: 21px;
+ --radius-full: 9999px;
+
+ /* Spacing scale */
+ --space-micro: 0.146rem;
+ --space-xs: 0.382rem;
+ --space-sm: 0.618rem;
+ --space-md: 1rem;
+ --space-lg: 1.618rem;
+ --space-xl: 2.618rem;
+ --space-xxl: 4.236rem;
+ --space-xxxl: 6.854rem;
+
+ /* Padding scale */
+ --pad-micro: 0.073rem;
+ --pad-1: 0.146rem;
+ --pad-2: 0.236rem;
+ --pad-3: 0.382rem;
+ --pad-4: 0.618rem;
+ --pad-5: 1rem;
+ --pad-6: 1.618rem;
+ --pad-7: 2.618rem;
+ --pad-8: 4.236rem;
+
+ /* Typography */
+ --text-xs: 0.75rem;
+ --text-sm: 0.875rem;
+ --text-base: 1rem;
+ --text-md: 1.125rem;
+ --text-lg: 1.25rem;
+ --text-xl: 1.618rem;
+ --text-2xl: 2rem;
+ --text-3xl: 3.236rem;
+
+ /* Font families */
+ --font-primary: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+ --font-heading: 'Bree Serif', Georgia, 'Times New Roman', serif;
+ --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+
+ /* Button height */
+ --btn-height: 2rem}
+
+/* Emerald Light theme */
+[data-theme="emerald-light"] {--bg-color: #FDFDFD;
+ --surface-color: #FFFFFF;
+ --surface-light: #F3F4F6;
+ --border-color: rgba(0, 0, 0, 0.08);
+ --text-primary: #111827;
+ --text-secondary: #4B5563;
+ --text-tertiary: #6B7280;
+ --text-muted: #9CA3AF;
+ --hover-color: rgba(0, 0, 0, 0.05);
+ --active-color: rgba(0, 0, 0, 0.1);
+ --focus-ring: rgba(5, 150, 105, 0.2);
+ --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+ --shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+ --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+ --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
+ --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.18)}
+
+/*--------------------------------------------
+ 3. font face declarations
+--------------------------------------------*/
+@font-face {font-family: 'Font Awesome 6 Pro';
+ src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
+ url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@061124ece8d3eb2f877a995e2b077c51773006a9/fonts/fa-regular-400-subset.woff2')
+ format('woff2');
+ font-weight: 400;
+ font-style: normal;
+ font-display: swap;
+ size-adjust: 100%;
+ descent-override: 0%;
+ ascent-override: 100%;
+ line-gap-override: 0%;
+ unicode-range: u+f000-ffff}
+
+/* Quicksand Variable(300-700) */
+@font-face {font-family: 'Quicksand';
+ src: local('Quicksand'),
+ url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5908ccc38ea8c007f4fc3f5c74dda3293f262c95/fonts/quicksand-variable.woff2') format('woff2-variations'),
+url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5908ccc38ea8c007f4fc3f5c74dda3293f262c95/fonts/quicksand-variable.woff2') format('woff2');
+ font-weight: 300 700;
+ font-display: swap}
+
+/* Bree Serif Regular */
+@font-face {font-family: 'Bree Serif';
+ src: local('Bree Serif'), local('BreeSerif-Regular'),
+ url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@141d63e2dbc9622f67bb5d8f7f1fb3ff982caf5f/fonts/bree-serif.woff2') format('woff2');
+ font-weight: 400;
+ font-style: normal;
+ font-display: swap}
+
+/*--------------------------------------------
+ 4. base elements(headings, emojis, links)
+--------------------------------------------*/
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {font-family: var(--font-heading);
+ font-weight: 400}
+
+/* Refined heading sizes & spacing */
+h1 {font-size: clamp(1.5rem, 4vw, calc(var(--text-xl) * 1.1))!important;
+ margin-top: var(--space-lg)!important;
+ margin-bottom: var(--space-lg)!important;
+ letter-spacing: -0.015em}
+
+h2:not(#msg .tabs .current h2) {font-size: clamp(1.25rem, 3vw, var(--text-lg))!important;
+ margin-top: var(--space-lg)!important;
+ margin-bottom: var(--space-md)!important}
+
+h3 {font-size: clamp(1rem, 2.5vw, var(--text-base))!important;
+ margin-top: var(--space-md)!important;
+ margin-bottom: var(--space-sm)!important}
+
+h4 {font-size: clamp(0.875rem, 2vw, var(--text-sm))!important;
+ margin-top: var(--space-md)!important}
+
+h5 {font-size: clamp(0.75rem, 1.5vw, var(--text-xs))!important;
+ margin-top: var(--space-sm)!important}
+
+h6 {font-size: clamp(0.6875rem, 1vw, 0.6875rem)!important;
+ margin-top: var(--space-sm)!important}
+h1 .twemoji {height: 1.1em;
+ width: 1.1em;
+ vertical-align: -0.18em;
+ margin: 0 0.08em}
+
+h2 .twemoji {height: 1.15em;
+ width: 1.15em;
+ vertical-align: -0.2em;
+ margin: 0 0.06em}
+
+h3 .twemoji {height: 1.2em;
+ width: 1.2em;
+ vertical-align: -0.22em;
+ margin: 0 0.04em}
+
+h4 .twemoji {height: 1.25em;
+ width: 1.25em;
+ vertical-align: -0.25em;
+ margin: 0 0.02em}
+
+h5 .twemoji {height: 1.3em;
+ width: 1.3em;
+ vertical-align: -0.28em;
+ margin: 0}
+
+h6 .twemoji {height: 1.35em;
+ width: 1.35em;
+ vertical-align: -0.3em}
+
+.twemoji {height: 1.25em;
+ width: 1.25em;
+ vertical-align: -0.2em;
+ display: inline-block}
+
+.reaction-emoji-img {width: 16px;
+ height: 16px;
+ vertical-align: middle}
+
+a {color: var(--primary-color);
+ text-decoration: none;
+ transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
+
+a:hover {color: var(--primary-light);
+ text-decoration: underline}
+
+img {max-width: 100%;
+ height: auto;
+ display: block;
+ color: transparent}
+
+ img, svg {vertical-align: middle}
+
+.default-avatar {width: 60px;
+ height: 60px;
+ min-width: 60px;
+ min-height: 60px;
+ background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ color: white;
+ font-size: 1.5rem;
+ margin: 0;
+ border-radius: 50% !important;
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
+
+/*--------------------------------------------
+ 5. layout containers
+--------------------------------------------*/
+#modern-forum-wrapper {max-width: 1200px;
+ margin: 0 auto;
+ padding: 0}
+
+#posts-container,
+#modern-summary-container {display: block}
+
+
+/*Unsorted*/
+img:not(.slick_carousel img) {content-visibility: auto}
+/*============================================
+ hide original posts============================================*/
+#topic .topic, #topic .topic .mainbg, #topic .post, #send .post, #search .post, #blog .post, .summary, blockquote.twitter-tweet, .slick_carousel:not(.slick-initialized) > *:not(:first-child) {display: none !important; visibility:hidden!important; opacity: 0!important; pointer-events: none!important}
+.ve-content.color img {user-select:all}
+.ve-content.color {background-color: #000}
+div, table {margin:unset}
+[rows].textinput {field-sizing: content;
+ min-height: 100px; /* Highly recommended so it doesn't look like a tiny sliver when empty */
+ max-height: 500px}
+
+
+/* --- Base Mobile Styles(Default) --- */
+/* --- Hide the original platform menu on user/msg pages --- */
+body#user .menuwrap,
+body#msg .menuwrap {display: none !important}
+
+/*===================== Custom Navigation===================== */
+.custom-nav {position: relative;
+ z-index: 9;
+ font-family: var(--font-primary);
+ background: var(--surface-color);
+ border-bottom: 1px solid var(--border-color)}
+
+/* Hidden checkbox */
+#nav-toggle, .menu.st-emoji-notice {display: none}
+
+/* Hamburger button */
+.nav-hamburger {display: block;
+ font-size: 1.8rem;
+ cursor: pointer;
+ user-select: none;
+ padding: 0.5rem 1rem;
+ color: var(--text-primary)}
+
+/* Menu items */
+.nav-list {display: none;
+ list-style: none;
+ margin: 0;
+ padding: 0;
+ background: var(--surface-color);
+ border-top: 1px solid var(--border-color)}
+
+/* Show menu when checkbox is toggled */
+#nav-toggle:checked ~ .nav-list {display: flex;
+ flex-direction: column}
+
+.nav-list li {border-bottom: 1px solid var(--border-color)}
+
+.nav-list a {display: block;
+ padding: 0.8rem 1.5rem;
+ color: var(--text-primary);
+ text-decoration: none;
+ transition: background 0.2s}
+
+.nav-list a:hover {background: var(--hover-color)}
+
+/* Admin links – hidden by default */
+.admin-link {display: none !important}
+
+/* --- Desktop: horizontal menu, always visible --- */
+@media(min-width: 768px) {.nav-hamburger {display: none}
+
+ .nav-list {display: flex;
+ flex-direction: row;
+ align-items: center;
+ border-top: none}
+
+ .nav-list li {border-bottom: none}
+
+ .nav-list a {padding: 0.6rem 1rem}}
+
+/* --- Show admin links only for admin group --- */
+/* Replace .gruppo1 with the actual class on your <body> when logged in as admin */
+body.gruppo1 .admin-link {display: block !important}
+
+/* On desktop the admin links are also block‑ ish(but flex context makes them inline) */
+@media(min-width: 768px) {body.gruppo1 .admin-link {display: inline-block !important}}
+
+
+
+body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Menlo', 'Consolas', monospace}
+
 /*--------------------------------------------
    5b. slick carousel – emerald theme overrides
 --------------------------------------------*/
