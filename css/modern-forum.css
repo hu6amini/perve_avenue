@@ -1702,13 +1702,12 @@ body#msg .cp.send .tabs li[style*="float:right"] a {
 /* ----- 3. Form sections as cards ----- */
 body#msg .cp.send .skin_tbl {
     background: transparent;
-    padding: var(--space-md);
 }
 
 body#msg .cp.send .main_list > li:not(#attach + li) {
     background: var(--surface-color);
     border-radius: var(--radius);
-    margin-bottom: var(--space-lg);
+    margin: margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
     overflow: hidden;
 }
