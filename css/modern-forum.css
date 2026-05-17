@@ -2031,6 +2031,7 @@ body#msg .darkbar.Item {
     gap: var(--space-md);
     justify-content: flex-end;
     border-top: 1px solid var(--border-color);
+    font-size: 0;
 }
 
 body#msg input[name="sub_mit"],
