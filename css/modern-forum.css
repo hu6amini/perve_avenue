@@ -2,395 +2,449 @@
  midnight emerald skin - forum modernized css
  optimized & mathematically perfected with φ(1.618)
  essential styles - modern posts edition
- accessibility enhanced(v2.0)
- added: group-specific avatar borders & badges(posts + modal)
- added: modern blog card styles(body#topic articles)
- added: slick carousel overrides(hero slider)============================================*/
+ accessibility enhanced (v2.0)
+ added: group-specific avatar borders & badges (posts + modal)
+ added: modern blog card styles (body#topic articles)
+ added: slick carousel overrides (hero slider)
+ added: complete messenger modernization
+============================================*/
 
 /*--------------------------------------------
  1. css reset & base normalization
 --------------------------------------------*/
 *,
 *::before,
-*::after {box-sizing: border-box;
- margin: 0;
- padding: 0;
- outline: none}
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    outline: none;
+}
 
-html {font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
- font-size: 16px;
- line-height: 1.618;
- scrollbar-color: var(--surface-color) transparent;
- scrollbar-width: thin;
- scrollbar-gutter: stable;
- -webkit-font-smoothing: antialiased;
- -moz-osx-font-smoothing: grayscale;
- text-rendering: optimizelegibility}
+html {
+    font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.618;
+    scrollbar-color: var(--surface-color) transparent;
+    scrollbar-width: thin;
+    scrollbar-gutter: stable;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizelegibility;
+}
 
-body {background-color: var(--bg-color);
- color: var(--text-primary);
- font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
- font-size: var(--text-base);
- line-height: 1.618;
- margin: 0;
- padding: 0 var(--pad-4) 0 var(--pad-4);
- min-height: 100vh;
-
- /* Modern forum polish */
- -webkit-text-size-adjust: 100%;
- -moz-text-size-adjust: 100%;
- text-size-adjust: 100%;
- overflow-wrap: break-word;
- -webkit-tap-highlight-color: transparent;
- accent-color: var(--primary-color)}
+body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: var(--text-base);
+    line-height: 1.618;
+    margin: 0;
+    padding: 0 var(--pad-4) 0 var(--pad-4);
+    min-height: 100vh;
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overflow-wrap: break-word;
+    -webkit-tap-highlight-color: transparent;
+    accent-color: var(--primary-color);
+}
 
 /*--------------------------------------------
  2. css variables & themes
---------------------------------------------*/:root {/* Golden ratio constants */
- --phi: 1.618;
- --phi-inverse: 0.618;
- --phi-squared: 2.618;
- --phi-cubed: 4.236;
+--------------------------------------------*/
+:root {
+    /* Golden ratio constants */
+    --phi: 1.618;
+    --phi-inverse: 0.618;
+    --phi-squared: 2.618;
+    --phi-cubed: 4.236;
 
- /* Primary Colors - Emerald greens */
- --primary-color: #059669;
- --primary-dark: #047857;
- --primary-light: #10B981;
+    /* Primary Colors - Emerald greens */
+    --primary-color: #059669;
+    --primary-dark: #047857;
+    --primary-light: #10B981;
 
- /* Accent Colors */
- --secondary-color: #7C3AED;
- --accent-color: #0EA5E9;
- --success-color: #10B981;
- --warning-color: #F59E0B;
- --danger-color: #DC2626;
+    /* Accent Colors */
+    --secondary-color: #7C3AED;
+    --accent-color: #0EA5E9;
+    --success-color: #10B981;
+    --warning-color: #F59E0B;
+    --danger-color: #DC2626;
 
- /* Theme Colors - Dark Mode(Default) */
- --bg-color: #111827;
- --surface-color: #1F2937;
- --surface-light: #374151;
- --border-color: rgba(255, 255, 255, 0.1);
+    /* Theme Colors - Dark Mode (Default) */
+    --bg-color: #111827;
+    --surface-color: #1F2937;
+    --surface-light: #374151;
+    --border-color: rgba(255, 255, 255, 0.1);
 
- /* Text Colors */
- --text-primary: #F9FAFB;
- --text-secondary: #D1D5DB;
- --text-tertiary: #6B7280;
- --text-muted: #4B5563;
+    /* Text Colors */
+    --text-primary: #F9FAFB;
+    --text-secondary: #D1D5DB;
+    --text-tertiary: #6B7280;
+    --text-muted: #4B5563;
 
- /* Interactive States */
- --hover-color: rgba(255, 255, 255, 0.05);
- --active-color: rgba(255, 255, 255, 0.1);
- --focus-ring: rgba(5, 150, 105, 0.3);
+    /* Interactive States */
+    --hover-color: rgba(255, 255, 255, 0.05);
+    --active-color: rgba(255, 255, 255, 0.1);
+    --focus-ring: rgba(5, 150, 105, 0.3);
 
- /* Role colors */
- --admin-color: #DC2626;
- --global-mod-color: #06B6D4;
- --mod-color: #8B5CF6;
- --dev-color: #0EA5E9;
- --member-color: #059669;
- --guest-color: #6B7280;
- --founder-color: #F59E0B;
- --game-dev-color: #3B82F6;
- --fan-color: #EC4899;
+    /* Role colors */
+    --admin-color: #DC2626;
+    --global-mod-color: #06B6D4;
+    --mod-color: #8B5CF6;
+    --dev-color: #0EA5E9;
+    --member-color: #059669;
+    --guest-color: #6B7280;
+    --founder-color: #F59E0B;
+    --game-dev-color: #3B82F6;
+    --fan-color: #EC4899;
 
- /* Shadows - Golden ratio progression */
- --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
- --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
- --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
- --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
- --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6);
+    /* Shadows - Golden ratio progression */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6);
 
- /* Border Radius */
- --radius-sm: 4px;
- --radius: 8px;
- --radius-lg: 13px;
- --radius-xl: 21px;
- --radius-full: 9999px;
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius: 8px;
+    --radius-lg: 13px;
+    --radius-xl: 21px;
+    --radius-full: 9999px;
 
- /* Spacing scale */
- --space-micro: 0.146rem;
- --space-xs: 0.382rem;
- --space-sm: 0.618rem;
- --space-md: 1rem;
- --space-lg: 1.618rem;
- --space-xl: 2.618rem;
- --space-xxl: 4.236rem;
- --space-xxxl: 6.854rem;
+    /* Spacing scale */
+    --space-micro: 0.146rem;
+    --space-xs: 0.382rem;
+    --space-sm: 0.618rem;
+    --space-md: 1rem;
+    --space-lg: 1.618rem;
+    --space-xl: 2.618rem;
+    --space-xxl: 4.236rem;
+    --space-xxxl: 6.854rem;
 
- /* Padding scale */
- --pad-micro: 0.073rem;
- --pad-1: 0.146rem;
- --pad-2: 0.236rem;
- --pad-3: 0.382rem;
- --pad-4: 0.618rem;
- --pad-5: 1rem;
- --pad-6: 1.618rem;
- --pad-7: 2.618rem;
- --pad-8: 4.236rem;
+    /* Padding scale */
+    --pad-micro: 0.073rem;
+    --pad-1: 0.146rem;
+    --pad-2: 0.236rem;
+    --pad-3: 0.382rem;
+    --pad-4: 0.618rem;
+    --pad-5: 1rem;
+    --pad-6: 1.618rem;
+    --pad-7: 2.618rem;
+    --pad-8: 4.236rem;
 
- /* Typography */
- --text-xs: 0.75rem;
- --text-sm: 0.875rem;
- --text-base: 1rem;
- --text-md: 1.125rem;
- --text-lg: 1.25rem;
- --text-xl: 1.618rem;
- --text-2xl: 2rem;
- --text-3xl: 3.236rem;
+    /* Typography */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-md: 1.125rem;
+    --text-lg: 1.25rem;
+    --text-xl: 1.618rem;
+    --text-2xl: 2rem;
+    --text-3xl: 3.236rem;
 
- /* Font families */
- --font-primary: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
- --font-heading: 'Bree Serif', Georgia, 'Times New Roman', serif;
- --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    /* Font families */
+    --font-primary: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-heading: 'Bree Serif', Georgia, 'Times New Roman', serif;
+    --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 
- /* Button height */
- --btn-height: 2rem}
+    /* Button height */
+    --btn-height: 2rem;
+}
 
 /* Emerald Light theme */
-[data-theme="emerald-light"] {--bg-color: #FDFDFD;
- --surface-color: #FFFFFF;
- --surface-light: #F3F4F6;
- --border-color: rgba(0, 0, 0, 0.08);
- --text-primary: #111827;
- --text-secondary: #4B5563;
- --text-tertiary: #6B7280;
- --text-muted: #9CA3AF;
- --hover-color: rgba(0, 0, 0, 0.05);
- --active-color: rgba(0, 0, 0, 0.1);
- --focus-ring: rgba(5, 150, 105, 0.2);
- --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
- --shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
- --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
- --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
- --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.18)}
+[data-theme="emerald-light"] {
+    --bg-color: #FDFDFD;
+    --surface-color: #FFFFFF;
+    --surface-light: #F3F4F6;
+    --border-color: rgba(0, 0, 0, 0.08);
+    --text-primary: #111827;
+    --text-secondary: #4B5563;
+    --text-tertiary: #6B7280;
+    --text-muted: #9CA3AF;
+    --hover-color: rgba(0, 0, 0, 0.05);
+    --active-color: rgba(0, 0, 0, 0.1);
+    --focus-ring: rgba(5, 150, 105, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
 
 /*--------------------------------------------
  3. font face declarations
 --------------------------------------------*/
-@font-face {font-family: 'Font Awesome 6 Pro';
- src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
- url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@061124ece8d3eb2f877a995e2b077c51773006a9/fonts/fa-regular-400-subset.woff2')
- format('woff2');
- font-weight: 400;
- font-style: normal;
- font-display: swap;
- size-adjust: 100%;
- descent-override: 0%;
- ascent-override: 100%;
- line-gap-override: 0%;
- unicode-range: u+f000-ffff}
+@font-face {
+    font-family: 'Font Awesome 6 Pro';
+    src: local('Font Awesome 6 Pro'), local('FontAwesome6Pro'),
+        url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@061124ece8d3eb2f877a995e2b077c51773006a9/fonts/fa-regular-400-subset.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    size-adjust: 100%;
+    descent-override: 0%;
+    ascent-override: 100%;
+    line-gap-override: 0%;
+    unicode-range: u+f000-ffff;
+}
 
-/* Quicksand Variable(300-700) */
-@font-face {font-family: 'Quicksand';
- src: local('Quicksand'),
- url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5908ccc38ea8c007f4fc3f5c74dda3293f262c95/fonts/quicksand-variable.woff2') format('woff2-variations'),
-url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5908ccc38ea8c007f4fc3f5c74dda3293f262c95/fonts/quicksand-variable.woff2') format('woff2');
- font-weight: 300 700;
- font-display: swap}
+/* Quicksand Variable (300-700) */
+@font-face {
+    font-family: 'Quicksand';
+    src: local('Quicksand'),
+        url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5908ccc38ea8c007f4fc3f5c74dda3293f262c95/fonts/quicksand-variable.woff2') format('woff2-variations'),
+        url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@5908ccc38ea8c007f4fc3f5c74dda3293f262c95/fonts/quicksand-variable.woff2') format('woff2');
+    font-weight: 300 700;
+    font-display: swap;
+}
 
 /* Bree Serif Regular */
-@font-face {font-family: 'Bree Serif';
- src: local('Bree Serif'), local('BreeSerif-Regular'),
- url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@141d63e2dbc9622f67bb5d8f7f1fb3ff982caf5f/fonts/bree-serif.woff2') format('woff2');
- font-weight: 400;
- font-style: normal;
- font-display: swap}
+@font-face {
+    font-family: 'Bree Serif';
+    src: local('Bree Serif'), local('BreeSerif-Regular'),
+        url('https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@141d63e2dbc9622f67bb5d8f7f1fb3ff982caf5f/fonts/bree-serif.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
 
 /*--------------------------------------------
- 4. base elements(headings, emojis, links)
+ 4. base elements (headings, emojis, links)
 --------------------------------------------*/
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {font-family: var(--font-heading);
- font-weight: 400}
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    font-weight: 400;
+}
 
-/* Refined heading sizes & spacing */
-h1 {font-size: clamp(1.5rem, 4vw, calc(var(--text-xl) * 1.1))!important;
- margin-top: var(--space-lg)!important;
- margin-bottom: var(--space-lg)!important;
- letter-spacing: -0.015em}
+h1 {
+    font-size: clamp(1.5rem, 4vw, calc(var(--text-xl) * 1.1)) !important;
+    margin-top: var(--space-lg) !important;
+    margin-bottom: var(--space-lg) !important;
+    letter-spacing: -0.015em;
+}
 
-h2:not(#msg .tabs .current h2) {font-size: clamp(1.25rem, 3vw, var(--text-lg))!important;
- margin-top: var(--space-lg)!important;
- margin-bottom: var(--space-md)!important}
+h2:not(#msg .tabs .current h2) {
+    font-size: clamp(1.25rem, 3vw, var(--text-lg)) !important;
+    margin-top: var(--space-lg) !important;
+    margin-bottom: var(--space-md) !important;
+}
 
-h3 {font-size: clamp(1rem, 2.5vw, var(--text-base))!important;
- margin-top: var(--space-md)!important;
- margin-bottom: var(--space-sm)!important}
+h3 {
+    font-size: clamp(1rem, 2.5vw, var(--text-base)) !important;
+    margin-top: var(--space-md) !important;
+    margin-bottom: var(--space-sm) !important;
+}
 
-h4 {font-size: clamp(0.875rem, 2vw, var(--text-sm))!important;
- margin-top: var(--space-md)!important}
+h4 {
+    font-size: clamp(0.875rem, 2vw, var(--text-sm)) !important;
+    margin-top: var(--space-md) !important;
+}
 
-h5 {font-size: clamp(0.75rem, 1.5vw, var(--text-xs))!important;
- margin-top: var(--space-sm)!important}
+h5 {
+    font-size: clamp(0.75rem, 1.5vw, var(--text-xs)) !important;
+    margin-top: var(--space-sm) !important;
+}
 
-h6 {font-size: clamp(0.6875rem, 1vw, 0.6875rem)!important;
- margin-top: var(--space-sm)!important}
-h1 .twemoji {height: 1.1em;
- width: 1.1em;
- vertical-align: -0.18em;
- margin: 0 0.08em}
+h6 {
+    font-size: clamp(0.6875rem, 1vw, 0.6875rem) !important;
+    margin-top: var(--space-sm) !important;
+}
 
-h2 .twemoji {height: 1.15em;
- width: 1.15em;
- vertical-align: -0.2em;
- margin: 0 0.06em}
+.twemoji {
+    height: 1.25em;
+    width: 1.25em;
+    vertical-align: -0.2em;
+    display: inline-block;
+}
 
-h3 .twemoji {height: 1.2em;
- width: 1.2em;
- vertical-align: -0.22em;
- margin: 0 0.04em}
+.reaction-emoji-img {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
 
-h4 .twemoji {height: 1.25em;
- width: 1.25em;
- vertical-align: -0.25em;
- margin: 0 0.02em}
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-h5 .twemoji {height: 1.3em;
- width: 1.3em;
- vertical-align: -0.28em;
- margin: 0}
+a:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
 
-h6 .twemoji {height: 1.35em;
- width: 1.35em;
- vertical-align: -0.3em}
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    color: transparent;
+}
 
-.twemoji {height: 1.25em;
- width: 1.25em;
- vertical-align: -0.2em;
- display: inline-block}
+img, svg {
+    vertical-align: middle;
+}
 
-.reaction-emoji-img {width: 16px;
- height: 16px;
- vertical-align: middle}
-
-a {color: var(--primary-color);
- text-decoration: none;
- transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
-
-a:hover {color: var(--primary-light);
- text-decoration: underline}
-
-img {max-width: 100%;
- height: auto;
- display: block;
- color: transparent}
-
- img, svg {vertical-align: middle}
-
-.default-avatar {width: 60px;
- height: 60px;
- min-width: 60px;
- min-height: 60px;
- background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
- display: flex;
- align-items: center;
- justify-content: center;
- color: white;
- font-size: 1.5rem;
- margin: 0;
- border-radius: 50% !important;
- transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1)}
+.default-avatar {
+    width: 60px;
+    height: 60px;
+    min-width: 60px;
+    min-height: 60px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.5rem;
+    margin: 0;
+    border-radius: 50% !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 /*--------------------------------------------
  5. layout containers
 --------------------------------------------*/
-#modern-forum-wrapper {max-width: 1200px;
- margin: 0 auto;
- padding: 0}
+#modern-forum-wrapper {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0;
+}
 
 #posts-container,
-#modern-summary-container {display: block}
+#modern-summary-container {
+    display: block;
+}
 
+/* Unsorted */
+img:not(.slick_carousel img) {
+    content-visibility: auto;
+}
 
-/*Unsorted*/
-img:not(.slick_carousel img) {content-visibility: auto}
-/*============================================
- hide original posts============================================*/
-#topic .topic, #topic .topic .mainbg, #topic .post, #send .post, #search .post, #blog .post, .summary, blockquote.twitter-tweet, .slick_carousel:not(.slick-initialized) > *:not(:first-child) {display: none !important; visibility:hidden!important; opacity: 0!important; pointer-events: none!important}
-.ve-content.color img {user-select:all}
-.ve-content.color {background-color: #000}
-div, table {margin:unset}
-[rows].textinput {field-sizing: content;
- min-height: 100px; /* Highly recommended so it doesn't look like a tiny sliver when empty */
- max-height: 500px}
+/* Hide original posts */
+#topic .topic, #topic .topic .mainbg, #topic .post, #send .post, #search .post, #blog .post, .summary, blockquote.twitter-tweet, .slick_carousel:not(.slick-initialized) > *:not(:first-child) {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
 
+.ve-content.color img {
+    user-select: all;
+}
 
-/* --- Base Mobile Styles(Default) --- */
-/* --- Hide the original platform menu on user/msg pages --- */
+.ve-content.color {
+    background-color: #000;
+}
+
+div, table {
+    margin: unset;
+}
+
+[rows].textinput {
+    field-sizing: content;
+    min-height: 100px;
+    max-height: 500px;
+}
+
+/* Hide original platform menu on user/msg pages */
 body#user .menuwrap,
-body#msg .menuwrap {display: none !important}
+body#msg .menuwrap {
+    display: none !important;
+}
 
-/*===================== Custom Navigation===================== */
-.custom-nav {position: relative;
- z-index: 9;
- font-family: var(--font-primary);
- background: var(--surface-color);
- border-bottom: 1px solid var(--border-color)}
+/*===================== Custom Navigation =====================*/
+.custom-nav {
+    position: relative;
+    z-index: 9;
+    font-family: var(--font-primary);
+    background: var(--surface-color);
+    border-bottom: 1px solid var(--border-color);
+}
 
-/* Hidden checkbox */
-#nav-toggle, .menu.st-emoji-notice {display: none}
+#nav-toggle, .menu.st-emoji-notice {
+    display: none;
+}
 
-/* Hamburger button */
-.nav-hamburger {display: block;
- font-size: 1.8rem;
- cursor: pointer;
- user-select: none;
- padding: 0.5rem 1rem;
- color: var(--text-primary)}
+.nav-hamburger {
+    display: block;
+    font-size: 1.8rem;
+    cursor: pointer;
+    user-select: none;
+    padding: 0.5rem 1rem;
+    color: var(--text-primary);
+}
 
-/* Menu items */
-.nav-list {display: none;
- list-style: none;
- margin: 0;
- padding: 0;
- background: var(--surface-color);
- border-top: 1px solid var(--border-color)}
+.nav-list {
+    display: none;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--surface-color);
+    border-top: 1px solid var(--border-color);
+}
 
-/* Show menu when checkbox is toggled */
-#nav-toggle:checked ~ .nav-list {display: flex;
- flex-direction: column}
+#nav-toggle:checked ~ .nav-list {
+    display: flex;
+    flex-direction: column;
+}
 
-.nav-list li {border-bottom: 1px solid var(--border-color)}
+.nav-list li {
+    border-bottom: 1px solid var(--border-color);
+}
 
-.nav-list a {display: block;
- padding: 0.8rem 1.5rem;
- color: var(--text-primary);
- text-decoration: none;
- transition: background 0.2s}
+.nav-list a {
+    display: block;
+    padding: 0.8rem 1.5rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: background 0.2s;
+}
 
-.nav-list a:hover {background: var(--hover-color)}
+.nav-list a:hover {
+    background: var(--hover-color);
+}
 
-/* Admin links – hidden by default */
-.admin-link {display: none !important}
+.admin-link {
+    display: none !important;
+}
 
-/* --- Desktop: horizontal menu, always visible --- */
-@media(min-width: 768px) {.nav-hamburger {display: none}
+@media (min-width: 768px) {
+    .nav-hamburger {
+        display: none;
+    }
+    .nav-list {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        border-top: none;
+    }
+    .nav-list li {
+        border-bottom: none;
+    }
+    .nav-list a {
+        padding: 0.6rem 1rem;
+    }
+}
 
- .nav-list {display: flex;
- flex-direction: row;
- align-items: center;
- border-top: none}
+body.gruppo1 .admin-link {
+    display: block !important;
+}
 
- .nav-list li {border-bottom: none}
+@media (min-width: 768px) {
+    body.gruppo1 .admin-link {
+        display: inline-block !important;
+    }
+}
 
- .nav-list a {padding: 0.6rem 1rem}}
-
-/* --- Show admin links only for admin group --- */
-/* Replace .gruppo1 with the actual class on your <body> when logged in as admin */
-body.gruppo1 .admin-link {display: block !important}
-
-/* On desktop the admin links are also block‑ ish(but flex context makes them inline) */
-@media(min-width: 768px) {body.gruppo1 .admin-link {display: inline-block !important}}
-
-
-
-body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Menlo', 'Consolas', monospace}
+body#msg .textinput {
+    font-family: 'Courier New', Courier, 'Liberation Mono', 'Menlo', 'Consolas', monospace;
+}
 
 /*--------------------------------------------
-   5b. slick carousel – emerald theme overrides
+ 5b. slick carousel – emerald theme overrides
 --------------------------------------------*/
 .carousel-wrapper {
     padding: 0;
@@ -398,23 +452,21 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     width: 100%;
 }
 
-/* Prevent FOUC – only the first slide is visible before Slick initialises */
 .slick_carousel {
     border-radius: var(--radius);
     overflow: hidden;
     box-shadow: var(--shadow-lg);
 }
 
-/* ----- Arrows ----- */
 .slick-prev,
 .slick-next {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
     z-index: 9;
-    width: 2.618rem; /* golden‑ratio size */
+    width: 2.618rem;
     height: 2.618rem;
-    display: flex !important; /* force override if inline style missing */
+    display: flex !important;
     align-items: center;
     justify-content: center;
     background: var(--surface-color);
@@ -435,16 +487,19 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     opacity: 1;
 }
 
-.slick-prev { left: var(--space-md); }
-.slick-next { right: var(--space-md); }
+.slick-prev {
+    left: var(--space-md);
+}
 
-/* Arrow inner icons inherit color */
+.slick-next {
+    right: var(--space-md);
+}
+
 .slick-prev i,
 .slick-next i {
     font-size: 1rem;
 }
 
-/* ----- Dots ----- */
 .slick-dots {
     position: absolute;
     bottom: var(--space-sm);
@@ -458,7 +513,9 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     z-index: 9;
 }
 
-.slick-dots li { margin: 0; }
+.slick-dots li {
+    margin: 0;
+}
 
 .slick-dots li button {
     width: 0.618rem;
@@ -483,9 +540,8 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     border-color: var(--primary-light);
 }
 
-/* ----- Slide images ----- */
 .slick-slide img {
-    border-radius: 0; /* container already has border-radius */
+    border-radius: 0;
     display: block;
     width: 100%;
     height: auto;
@@ -494,17 +550,15 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
 }
 
 /*--------------------------------------------
-   6. MODERN POST CARD STYLES
+ 6. MODERN POST CARD STYLES
 --------------------------------------------*/
-/* Card container */
 .post-card {
     background-color: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     margin-bottom: var(--space-lg);
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        box-shadow 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
     overflow: hidden;
     will-change: transform;
 }
@@ -515,7 +569,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     border-color: rgba(5, 150, 105, 0.4);
 }
 
-/* Post header */
 .post-card-header {
     display: flex;
     align-items: center;
@@ -552,7 +605,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     gap: 6px;
 }
 
-/* Action buttons */
 .post-actions,
 .post-member-actions {
     display: flex;
@@ -594,7 +646,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     background: rgba(245, 158, 11, 0.1);
 }
 
-/* User area (avatar + info) */
 .post-card-body {
     display: flex;
     gap: var(--space-md);
@@ -607,7 +658,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     flex-shrink: 0;
 }
 
-/* Avatar wrapper with status dot for posts */
 .post-avatar-wrapper {
     position: relative;
     width: 60px;
@@ -623,9 +673,7 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     border: 2px solid var(--primary-color);
     display: block;
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1),
-        box-shadow 0.2s ease,
-        border-color 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .avatar-circle:hover {
@@ -644,12 +692,9 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     font-weight: 600;
     color: white;
     background-color: var(--primary-color);
-    /* will be overwritten inline */
     border: 2px solid var(--primary-color);
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1),
-        box-shadow 0.2s ease,
-        border-color 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease, border-color 0.2s ease;
     font-size: calc(60px * 0.618);
 }
 
@@ -689,7 +734,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     background: #dc2626;
 }
 
-/* Optional hover tooltip for status dot */
 .status-dot:hover::after {
     content: attr(data-status);
     position: absolute;
@@ -723,14 +767,15 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     width: fit-content;
 }
 
-.user-name a {color: var(--text-primary)}
+.user-name a {
+    color: var(--text-primary);
+}
 
 .user-name a:hover {
     color: var(--primary-light);
     text-decoration: underline;
 }
 
-/* Badge container */
 .user-group {
     display: flex;
     flex-wrap: wrap;
@@ -763,7 +808,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     background: var(--primary-color);
 }
 
-/* Group-specific badges */
 .role-badge.founder {
     background: linear-gradient(135deg, #f59e0b, #d97706) !important;
 }
@@ -780,7 +824,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     background: linear-gradient(135deg, #ec4899, #be185d) !important;
 }
 
-/* User stats grid */
 .user-stats {
     display: flex;
     flex-wrap: wrap;
@@ -803,7 +846,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     color: var(--primary-light);
 }
 
-/* Post body */
 .post-content {
     padding: var(--space-lg) var(--pad-6);
 }
@@ -822,7 +864,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     height: auto;
 }
 
-/* Edit indicator */
 .post-edit-info {
     display: inline-flex;
     align-items: center;
@@ -843,7 +884,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     color: var(--primary-color);
 }
 
-/* Signature */
 .post-signature {
     border-top: 1px solid var(--border-color);
     margin-top: 1.5rem;
@@ -856,7 +896,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     flex-wrap: wrap;
 }
 
-/* Post footer */
 .post-footer {
     background: var(--bg-color);
     border-top: 1px solid var(--border-color);
@@ -868,7 +907,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     gap: var(--space-md);
 }
 
-/* Reaction cluster */
 .post-reactions {
     display: flex;
     gap: 0.8rem;
@@ -910,14 +948,13 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     color: var(--primary-light);
 }
 
-/* IP info */
 .post-ip {
     font-size: 0.7rem;
     color: var(--text-tertiary);
 }
 
 /*--------------------------------------------
-   6b. GROUP-SPECIFIC AVATAR BORDERS (POSTS)
+ 6b. GROUP-SPECIFIC AVATAR BORDERS (POSTS)
 --------------------------------------------*/
 .post-card.group-founder .avatar-circle,
 .post-card.group-founder .initial-avatar {
@@ -975,14 +1012,12 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
 }
 
 /*--------------------------------------------
-   6c. MODERN BLOG CARD STYLES (body#topic articles)
+ 6c. MODERN BLOG CARD STYLES (body#topic articles)
 --------------------------------------------*/
 .post-card--blog {
-    /* Extends .post-card, subtle visual difference */
     border-color: rgba(5, 150, 105, 0.15);
 }
 
-/* Blog header: title + meta row */
 .blog-card-header {
     padding: var(--pad-6) var(--pad-6) var(--pad-4);
     border-bottom: 1px solid var(--border-color);
@@ -995,7 +1030,7 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     line-height: 1.2;
     margin: 0 0 var(--space-sm) 0;
     color: var(--text-primary);
-    display:flex;
+    display: flex;
 }
 
 .blog-title a {
@@ -1040,11 +1075,8 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     gap: var(--space-sm);
 }
 
-/* Blog avatar area uses same post-card-body, no extra rules */
-/* Blog content uses same post-content, post-message */
-
 /*--------------------------------------------
-   7. EMBEDDED LINK STYLES (with responsive)
+ 7. EMBEDDED LINK STYLES
 --------------------------------------------*/
 .modern-embedded-link {
     background: var(--surface-color);
@@ -1077,7 +1109,7 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
 
 .embedded-link-container:hover {
     background: var(--hover-color);
-    text-decoration:none;
+    text-decoration: none;
 }
 
 .embedded-link-image {
@@ -1173,14 +1205,6 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     flex: none;
 }
 
-.embedded-link-title,
-.embedded-link-description,
-.embedded-link-meta {
-    width: 100%;
-    display: block;
-}
-
-/* Responsive: Desktop grid layout for embedded links */
 @media (min-width: 48.0625em) {
     .modern-embedded-link .embedded-link-container {
         display: grid;
@@ -1188,13 +1212,11 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
         grid-template-rows: auto;
         min-height: 140px;
     }
-
     .modern-embedded-link .embedded-link-image {
         grid-column: 1;
         width: 100%;
         height: 100%;
     }
-
     .modern-embedded-link .embedded-link-content {
         grid-column: 2;
         width: 100%;
@@ -1204,55 +1226,45 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
     }
 }
 
-/* Responsive: Tablet */
 @media (max-width: 48em) {
     .modern-embedded-link .embedded-link-container {
         flex-direction: column;
         min-height: auto;
     }
-
     .modern-embedded-link .embedded-link-image {
         flex: 0 0 140px;
         width: 100%;
     }
-
     .modern-embedded-link .embedded-link-image img {
         position: relative;
         height: 140px;
     }
-
     .modern-embedded-link .embedded-link-content {
         padding: var(--pad-4) var(--pad-5);
         width: 100%;
         flex: 1 1 auto;
     }
-
     .modern-embedded-link .embedded-link-title {
         font-size: var(--text-sm);
         margin-bottom: var(--space-xs);
     }
-
     .modern-embedded-link .embedded-link-description {
         font-size: var(--text-xs);
         margin-bottom: var(--space-xs);
     }
 }
 
-/* Responsive: Mobile */
 @media (max-width: 30em) {
     .modern-embedded-link .embedded-link-image {
         flex: 0 0 100px;
     }
-
     .modern-embedded-link .embedded-link-image img {
         height: 100px;
     }
-
     .modern-embedded-link .embedded-link-content {
         padding: var(--pad-3) var(--pad-4);
         width: 100%;
     }
-
     .modern-embedded-link .embedded-link-title {
         font-size: var(--text-sm);
         margin-bottom: var(--pad-1);
@@ -1260,9 +1272,8 @@ body#msg .textinput {font-family: 'Courier New', Courier, 'Liberation Mono', 'Me
 }
 
 /*--------------------------------------------
-   8. MODERN LIKES MODAL (Accessibility Enhanced)
+ 8. MODERN LIKES MODAL (Accessibility Enhanced)
 --------------------------------------------*/
-/* Scroll lock utility (applied via JS) */
 .modal-scrollbar-measure {
     position: absolute;
     top: -9999px;
@@ -1276,7 +1287,6 @@ body.modal-open {
     padding-right: var(--scrollbar-width, 0px);
 }
 
-/* Modal overlay */
 .modern-modal-overlay,
 .modern-report-overlay,
 .modern-report-notify-overlay {
@@ -1293,7 +1303,6 @@ body.modal-open {
     animation: modalFadeIn 0.2s ease;
 }
 
-/* Modal container - fully ARIA compliant */
 .modern-likes-modal,
 .modern-report-container,
 .modern-report-notify-container {
@@ -1316,7 +1325,6 @@ body.modal-open {
     outline-offset: 2px;
 }
 
-/* Modal header */
 .modern-modal-header,
 .report-modal-header,
 .notify-modal-header {
@@ -1381,7 +1389,6 @@ body.modal-open {
     transform: rotate(90deg);
 }
 
-/* Likes list with live region support */
 .modern-likes-list {
     flex: 1;
     overflow-y: auto;
@@ -1401,7 +1408,6 @@ body.modal-open {
     border-radius: 20px;
 }
 
-/* Live region for screen reader announcements (visually hidden) */
 .modal-live-region {
     position: absolute;
     width: 1px;
@@ -1414,7 +1420,6 @@ body.modal-open {
     border: 0;
 }
 
-/* Like item - keyboard accessible */
 .modern-like-item {
     display: flex;
     align-items: center;
@@ -1435,7 +1440,6 @@ body.modal-open {
     background: var(--hover-color);
 }
 
-/* Avatar wrapper and status dot for modal */
 .modern-like-avatar-wrapper {
     position: relative;
     flex-shrink: 0;
@@ -1464,12 +1468,9 @@ body.modal-open {
     font-weight: 600;
     color: white;
     background-color: var(--primary-color);
-    /* will be overwritten inline */
     border: 2px solid var(--primary-color);
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1),
-        box-shadow 0.2s ease,
-        border-color 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1), box-shadow 0.2s ease, border-color 0.2s ease;
     font-size: calc(48px * 0.618);
 }
 
@@ -1544,7 +1545,6 @@ body.modal-open {
     text-decoration: underline;
 }
 
-/* Role badges in modal */
 .modern-role-badge {
     display: inline-block;
     padding: 0.125rem 0.5rem;
@@ -1599,7 +1599,6 @@ body.modal-open {
     background: linear-gradient(135deg, #4b5563, #374151);
 }
 
-/* User stats in modal */
 .modern-like-stats {
     display: flex;
     flex-wrap: wrap;
@@ -1615,7 +1614,6 @@ body.modal-open {
     color: var(--primary-light, #10b981);
 }
 
-/* Loading & empty states */
 .modern-loading,
 .modern-empty {
     text-align: center;
@@ -1630,7 +1628,6 @@ body.modal-open {
     display: block;
 }
 
-/* Modal footer */
 .modern-modal-footer,
 .report-modal-footer,
 .notify-modal-footer {
@@ -1649,7 +1646,7 @@ body.modal-open {
 }
 
 /*--------------------------------------------
-   8b. MODAL GROUP-SPECIFIC AVATAR BORDERS
+ 8b. MODAL GROUP-SPECIFIC AVATAR BORDERS
 --------------------------------------------*/
 .modern-like-item.group-founder .modern-like-avatar,
 .modern-like-item.group-founder .modal-initial-avatar {
@@ -1707,14 +1704,11 @@ body.modal-open {
 }
 
 /*--------------------------------------------
-   9. LOADING SHIMMER & UTILITIES
+ 9. LOADING SHIMMER & UTILITIES
 --------------------------------------------*/
 .modern-forum-wrapper:empty {
     min-height: 200px;
-    background: linear-gradient(90deg,
-            var(--surface-color) 25%,
-            var(--surface-light) 50%,
-            var(--surface-color) 75%);
+    background: linear-gradient(90deg, var(--surface-color) 25%, var(--surface-light) 50%, var(--surface-color) 75%);
     background-size: 200% 100%;
     animation: loading-shimmer 1.5s infinite;
     border-radius: var(--radius);
@@ -1724,20 +1718,18 @@ body.modal-open {
     0% {
         background-position: 200% 0;
     }
-
     100% {
         background-position: -200% 0;
     }
 }
 
-/* Performance hint */
 img,
 .avatar-circle {
     content-visibility: auto;
 }
 
 /*--------------------------------------------
-   10. SUMMARY MODERN HEADER (body#send)
+ 10. SUMMARY MODERN HEADER (body#send)
 --------------------------------------------*/
 .summary-header.modern-section-header {
     margin-bottom: var(--space-lg);
@@ -1774,12 +1766,10 @@ img,
     margin-left: var(--space-xs);
 }
 
-/* Responsive: summary header */
 @media (max-width: 48em) {
     .summary-header-content h3 {
         font-size: var(--text-md);
     }
-
     .summary-subtitle {
         display: block;
         margin-left: 0;
@@ -1788,75 +1778,64 @@ img,
 }
 
 /*--------------------------------------------
-   11. CONSOLIDATED RESPONSIVE STYLES (680px)
+ 11. CONSOLIDATED RESPONSIVE STYLES (680px)
 --------------------------------------------*/
 @media (max-width: 680px) {
     body {
         padding: 1rem;
     }
-
     .user-area {
         flex-direction: column;
         align-items: center;
         text-align: center;
     }
-
     .username-row {
         justify-content: center;
     }
-
     .badge-container {
         justify-content: center;
     }
-
     .user-stats-grid {
         justify-content: center;
     }
-
     .post-footer-modern {
         flex-direction: column;
         align-items: flex-start;
     }
-
     .topic-title {
         font-size: 1.4rem;
     }
-
     .action-buttons-group {
         flex-wrap: wrap;
         justify-content: flex-end;
     }
-   
     .post-signature {
         display: none;
     }
-
-    /* blog card responsive */
     .blog-card-header {
         padding: var(--pad-4) var(--pad-4) var(--pad-3);
     }
-
     .blog-title {
         font-size: var(--text-xl);
     }
-
     .blog-meta {
         gap: var(--space-sm);
         flex-direction: column;
         align-items: flex-start;
     }
-
     .blog-actions.top-actions {
         margin-left: 0;
         align-self: flex-end;
     }
-
-    /* slick carousel responsive */
-    .slick-prev { left: var(--space-sm); }
-    .slick-next { right: var(--space-sm); }
-
-    .slick-dots { bottom: var(--space-xs); }
-
+    .slick-prev {
+        left: var(--space-sm);
+    }
+    .slick-next {
+        right: var(--space-sm);
+    }
+    .slick-dots {
+        bottom: var(--space-xs);
+    }
     .slick-dots li button {
         width: 0.5rem;
         height: 0.5rem;
@@ -1864,10 +1843,9 @@ img,
 }
 
 /*--------------------------------------------
-   12. REDUCED MOTION PREFERENCE
+ 12. REDUCED MOTION PREFERENCE
 --------------------------------------------*/
 @media (prefers-reduced-motion: reduce) {
-
     *,
     *::before,
     *::after {
@@ -1878,13 +1856,12 @@ img,
 }
 
 /*--------------------------------------------
-   13. MODAL ANIMATIONS
+ 13. MODAL ANIMATIONS
 --------------------------------------------*/
 @keyframes modalFadeIn {
     from {
         opacity: 0;
     }
-
     to {
         opacity: 1;
     }
@@ -1895,7 +1872,6 @@ img,
         opacity: 0;
         transform: translateY(20px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -1903,7 +1879,7 @@ img,
 }
 
 /*--------------------------------------------
-   14. WYSIWYG IMAGES OVERRIDE
+ 14. WYSIWYG IMAGES OVERRIDE
 --------------------------------------------*/
 .ve-content.color img:not(img[alt="fav"],
     img[src^="https://img.forumfree.net/html/emoticons/new/"],
@@ -1918,61 +1894,65 @@ img,
  checkboxes & radios - harmonized
 ============================================*/
 input[type="checkbox"] {
-  align-items: center;
-  appearance: none;
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  display: flex;
-  font-size: 0.75rem;
-  height: 1rem;
-  justify-content: center;
-  margin: 0;
-  outline-style: none;
-  padding: 0;
-  text-align: center;
-  width: 1rem;
+    align-items: center;
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    display: flex;
+    font-size: 0.75rem;
+    height: 1rem;
+    justify-content: center;
+    margin: 0;
+    outline-style: none;
+    padding: 0;
+    text-align: center;
+    width: 1rem;
 }
+
 input[type="checkbox"]:checked {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+    background: var(--primary-color);
+    border-color: var(--primary-color);
 }
+
 input[type="checkbox"]:checked::before {
-  color: #fff;
-  content: '\f00c';
-  font-family: "Font Awesome 6 Pro";
-  font-weight: 900;
+    color: #fff;
+    content: '\f00c';
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 900;
 }
 
 input[type="radio"] {
-  align-items: center;
-  appearance: none;
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 50%;
-  display: flex;
-  font-size: 0.5rem;
-  height: 1rem;
-  justify-content: center;
-  margin: 0;
-  outline-style: none;
-  padding: 0;
-  text-align: center;
-  width: 1rem;
+    align-items: center;
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    display: flex;
+    font-size: 0.5rem;
+    height: 1rem;
+    justify-content: center;
+    margin: 0;
+    outline-style: none;
+    padding: 0;
+    text-align: center;
+    width: 1rem;
 }
+
 input[type="radio"]:checked {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+    background: var(--primary-color);
+    border-color: var(--primary-color);
 }
+
 input[type="radio"]:checked::before {
-  color: #fff;
-  content: '\f111';
-  font-family: "Font Awesome 6 Pro";
-  font-weight: 900;
+    color: #fff;
+    content: '\f111';
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 900;
 }
 
 /*--------------------------------------------
-   15. HIDE LEGACY POPUP ELEMENTS
+ 15. HIDE LEGACY POPUP ELEMENTS
 --------------------------------------------*/
 .popup.pop_points,
 .forumfree-modal\.report-modal-notify.Blocker.current,
@@ -1982,16 +1962,26 @@ input[type="radio"]:checked::before {
 
 /* ==========================================================================
    MODERN MESSENGER OVERHAUL (CSS only)
-   Emerald theme · Font Awesome Pro 6.1.0 compatible
    ========================================================================== */
 
-body#msg .slick_carousel a {
-   visibility: hidden;
+/* ----- Messenger carousel (frozen) – replace with background ----- */
+body#msg .slick_carousel {
+    position: relative;
+    background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png') !important;
+    background-size: contain !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-color: var(--primary-dark) !important;
+    min-height: 100px;
 }
 
-body#msg .slick_carousel {
-   background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png') !important;
-   background-size: contain !important;
+body#msg .slick_carousel * {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+body#msg .slick_carousel a {
+    visibility: hidden;
 }
 
 /* ----- 1. Base messenger container – card style ----- */
@@ -2039,7 +2029,7 @@ body#msg .cp.send .tabs li.current h2 a {
     background: transparent;
 }
 
-/* Tab icons – consistent with modern UI */
+/* Tab icons */
 body#msg .cp.send .tabs li a::before,
 body#msg .cp.send .tabs li.current h2 a::before {
     font-family: "Font Awesome 6 Pro";
@@ -2050,42 +2040,18 @@ body#msg .cp.send .tabs li.current h2 a::before {
     text-align: center;
 }
 
-/* Send message */
-body#msg .cp.send .tabs li:first-child a::before {
-    content: "\f1d8"; /* paper-plane */
-}
-
-/* Messages */
-body#msg .cp.send .tabs li:nth-child(2) a::before {
-    content: "\f0e0"; /* envelope */
-}
-
-/* Notification centre (floated right, but we target by position) */
-body#msg .cp.send .tabs li[style*="float:right"] a::before {
-    content: "\f0f3"; /* bell */
-}
-
-/* Folders */
-body#msg .cp.send .tabs li:nth-child(4) a::before {
-    content: "\f07b"; /* folder */
-}
-
-/* Contacts */
-body#msg .cp.send .tabs li:nth-child(5) a::before {
-    content: "\f2bb"; /* address-book */
-}
-
-/* Notepad */
-body#msg .cp.send .tabs li:nth-child(6) a::before {
-    content: "\f304"; /* pen */
-}
+body#msg .cp.send .tabs li:first-child a::before { content: "\f1d8"; } /* paper-plane */
+body#msg .cp.send .tabs li:nth-child(2) a::before { content: "\f0e0"; } /* envelope */
+body#msg .cp.send .tabs li[style*="float:right"] a::before { content: "\f0f3"; } /* bell */
+body#msg .cp.send .tabs li:nth-child(4) a::before { content: "\f07b"; } /* folder */
+body#msg .cp.send .tabs li:nth-child(5) a::before { content: "\f2bb"; } /* address-book */
+body#msg .cp.send .tabs li:nth-child(6) a::before { content: "\f304"; } /* pen */
 
 body#msg .cp.send .tabs li a:hover {
     color: var(--text-primary);
     background: var(--hover-color);
 }
 
-/* "Notification centre" stays on the right (preserve inline float) */
 body#msg .cp.send .tabs li[style*="float:right"] a {
     background: transparent;
 }
@@ -2095,7 +2061,10 @@ body#msg .cp.send .skin_tbl {
     background: transparent;
 }
 
-body#msg .cp.send .main_list > li:not(#attach + li) {
+/* All main_list > li cards (including #attach and #smilies when visible) */
+body#msg .cp.send .main_list > li,
+body#msg #attach:not(.nascosta),
+body#msg #smilies:not(.nascosta) {
     background: var(--surface-color);
     border-radius: var(--radius);
     margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
@@ -2131,10 +2100,9 @@ body#msg .cp.send .list > li > .Sub.Item:last-child {
 }
 
 body#msg input.forminput[name="msg_title"] {
-   width: 100%;
+    width: 100%;
 }
 
-/* Neutralize inline width styles */
 body#msg .cp.send .list > li > .Sub.Item {
     width: auto !important;
 }
@@ -2192,16 +2160,13 @@ body#msg .top-editor .left.Sub {
     font-size: 0;
 }
 
-/* All editor buttons (<button> and <input>) */
+/* All editor buttons */
 body#msg .top-editor .left.Sub button,
 body#msg .top-editor .left.Sub input[type="button"] {
     background: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-family: var(--font-primary);
-    font-weight: 500;
-    font-size: 0;                     /* hide original text */
+    font-size: 0;
     padding: 0;
     margin: 0 var(--space-micro);
     cursor: pointer;
@@ -2221,7 +2186,7 @@ body#msg .top-editor .left.Sub input[type="button"]:hover {
     transform: translateY(-1px);
 }
 
-/* Dropdown selects (font, size, color) */
+/* Dropdown selects */
 body#msg .top-editor .left.Sub select.codebuttons {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -2246,17 +2211,19 @@ body#msg .top-editor .left.Sub [onclick="tag_image()"],
 body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="],
-body#msg .bottom-editor .right-bottom-icons #emoticons2,
-body#msg .right-top-icons img:not(#imgbb-icon),
-body#msg .right-top-icons a,
-body#msg .right-top-icons script,
-#ajaxObject + br {
+body#msg .bottom-editor .right-bottom-icons #emoticons2 {
     display: none !important;
 }
 
 /* Right‑side icons container – move ImgBB to main row, hide others */
 body#msg .right-top-icons {
     display: contents;
+}
+
+body#msg .right-top-icons img:not(#imgbb-icon),
+body#msg .right-top-icons a,
+body#msg .right-top-icons script {
+    display: none !important;
 }
 
 /* ----- 5. Editor button SVGs (color #D1D5DB) ----- */
@@ -2348,12 +2315,7 @@ body#msg .bottom-editor .right-bottom-icons {
     align-items: center;
 }
 
-/* Paperclip attachment */
-body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"] {
-    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
-    width: 32px !important;
-    height: 32px !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M375 72.97C349.1 46.1 306.9 46.1 280.1 72.97L88.97 264.1C45.32 308.6 45.32 379.4 88.97 423C132.6 466.7 203.4 466.7 247 423L399 271C408.4 261.7 423.6 261.7 432.1 271C442.3 280.4 442.3 295.6 432.1 304.1L280.1 456.1C218.6 519.4 117.4 519.4 55.03 456.1C-7.364 394.6-7.364 293.4 55.03 231L247 39.03C291.7-5.689 364.2-5.689 408.1 39.03C453.7 83.75 453.7 156.3 408.1 200.1L225.2 384.7C193.6 416.3 141.6 413.4 113.7 378.6C89.88 348.8 92.26 305.8 119.2 278.8L271 127C280.4 117.7 295.6 117.7 304.1 127C314.3 136.4 314.3 151.6 304.1 160.1L153.2 312.7C143.5 322.4 142.6 337.9 151.2 348.6C161.2 361.1 179.9 362.2 191.2 350.8L375 167C401 141.1 401 98.94 375 72.97V72.97z'/%3E%3C/svg%3E") !important;
+body#msg .bottom-editor .right-bottom-icons img {
     background-size: auto 1rem !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
@@ -2366,10 +2328,18 @@ body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"] {
     transition: all 0.2s ease;
 }
 
-body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"]:hover {
+body#msg .bottom-editor .right-bottom-icons img:hover {
     background-color: var(--hover-color) !important;
     border-color: var(--primary-color) !important;
     transform: translateY(-1px) !important;
+}
+
+/* Paperclip attachment */
+body#msg .bottom-editor .right-bottom-icons img[alt="File Attachments"] {
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    width: 32px !important;
+    height: 32px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 448 512'%3E%3Cpath fill='%23D1D5DB' d='M375 72.97C349.1 46.1 306.9 46.1 280.1 72.97L88.97 264.1C45.32 308.6 45.32 379.4 88.97 423C132.6 466.7 203.4 466.7 247 423L399 271C408.4 261.7 423.6 261.7 432.1 271C442.3 280.4 442.3 295.6 432.1 304.1L280.1 456.1C218.6 519.4 117.4 519.4 55.03 456.1C-7.364 394.6-7.364 293.4 55.03 231L247 39.03C291.7-5.689 364.2-5.689 408.1 39.03C453.7 83.75 453.7 156.3 408.1 200.1L225.2 384.7C193.6 416.3 141.6 413.4 113.7 378.6C89.88 348.8 92.26 305.8 119.2 278.8L271 127C280.4 117.7 295.6 117.7 304.1 127C314.3 136.4 314.3 151.6 304.1 160.1L153.2 312.7C143.5 322.4 142.6 337.9 151.2 348.6C161.2 361.1 179.9 362.2 191.2 350.8L375 167C401 141.1 401 98.94 375 72.97V72.97z'/%3E%3C/svg%3E") !important;
 }
 
 /* Smiley icons */
@@ -2378,22 +2348,6 @@ body#msg .bottom-editor .right-bottom-icons img[id="emoticons"] {
     width: 32px !important;
     height: 32px !important;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23D1D5DB' d='M256 352C293.2 352 319.2 334.5 334.4 318.1C343.3 308.4 358.5 307.7 368.3 316.7C378 325.7 378.6 340.9 369.6 350.6C347.7 374.5 309.7 400 256 400C202.3 400 164.3 374.5 142.4 350.6C133.4 340.9 133.1 325.7 143.7 316.7C153.5 307.7 168.7 308.4 177.6 318.1C192.8 334.5 218.8 352 256 352zM208.4 208C208.4 225.7 194 240 176.4 240C158.7 240 144.4 225.7 144.4 208C144.4 190.3 158.7 176 176.4 176C194 176 208.4 190.3 208.4 208zM304.4 208C304.4 190.3 318.7 176 336.4 176C354 176 368.4 190.3 368.4 208C368.4 225.7 354 240 336.4 240C318.7 240 304.4 225.7 304.4 208zM512 256C512 397.4 397.4 512 256 512C114.6 512 0 397.4 0 256C0 114.6 114.6 0 256 0C397.4 0 512 114.6 512 256zM256 48C141.1 48 48 141.1 48 256C48 370.9 141.1 464 256 464C370.9 464 464 370.9 464 256C464 141.1 370.9 48 256 48z'/%3E%3C/svg%3E") !important;
-    background-size: auto 1rem !important;
-    background-repeat: no-repeat !important;
-    background-position: center !important;
-    background-color: transparent !important;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    margin: 0 var(--space-micro);
-    padding: 0;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-body#msg .bottom-editor .right-bottom-icons img[id="emoticons"]:hover {
-    background-color: var(--hover-color) !important;
-    border-color: var(--primary-color) !important;
-    transform: translateY(-1px) !important;
 }
 
 /* ----- 8. Textarea (message body) ----- */
@@ -2416,7 +2370,7 @@ body#msg #Post:focus {
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* ----- 9. Hidden sections (smilies & attachment panels) ----- */
+/* ----- 9. Hidden sections (smilies & attachment panels) – styled when visible ----- */
 body#msg #smilies.nascosta,
 body#msg #attach.nascosta {
     display: none;
@@ -2424,7 +2378,6 @@ body#msg #attach.nascosta {
 
 body#msg #smilies:not(.nascosta),
 body#msg #attach:not(.nascosta) {
-    display: block;
     background: var(--surface-color);
     border-radius: var(--radius);
     margin: var(--space-md);
@@ -2485,38 +2438,29 @@ body#msg .darkbar.Item {
 
 body#msg input[name="sub_mit"],
 body#msg button[name="preview"] {
-    background: var(--primary-color);
     border: none;
     border-radius: var(--radius);
     padding: var(--pad-3) var(--pad-6);
     font-family: var(--font-primary);
     font-weight: 500;
     font-size: var(--text-sm);
-    color: white;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-body#msg button[name="preview"] { 
-    order: 1;
-}
-
 body#msg input[name="sub_mit"] {
+    background: var(--primary-color);
+    color: white;
     order: 2;
 }
 
 body#msg button[name="preview"] {
+    order: 1;
     align-items: center;
     background: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius);
     color: var(--text-secondary);
-    cursor: pointer;
-    display: flex;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    font-family: var(--font-primary);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
     justify-content: center;
 }
 
@@ -2539,9 +2483,7 @@ body#msg #loading:not(.nascosta) {
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     margin-bottom: var(--space-lg);
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
     overflow: hidden;
-    will-change: transform;
 }
 
 body#msg #ajaxObject > b:first-of-type {
@@ -2549,10 +2491,12 @@ body#msg #ajaxObject > b:first-of-type {
     border-bottom: 1px solid var(--border-color);
     width: 100%;
     display: flex;
+    align-items: center;
     padding: var(--pad-4) var(--pad-6);
-    font-family: 'Bree Serif';
+    font-family: 'Bree Serif', var(--font-heading);
     font-weight: 400;
-    font-sizze: clamp(1rem, 2.5vw, var(--text-base));
+    font-size: clamp(1rem, 2.5vw, var(--text-base));
+    color: var(--text-primary);
 }
 
 body#msg #ajaxObject > b:first-of-type::before {
@@ -2566,11 +2510,13 @@ body#msg #ajaxObject > b:first-of-type::before {
 }
 
 body#msg #ajaxObject hr {
-    display: none;  /* hide the legacy <hr> */
+    display: none;
 }
 
 body#msg #ajaxObject .color {
-padding: var(--space-lg) var(--pad-6);
+    padding: var(--space-lg) var(--pad-6);
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 /* ----- 12. Hide legacy junk (popups, breaks, extra divs) ----- */
@@ -2585,7 +2531,6 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     display: none;
 }
 
-/* Remove default list margin */
 #msg ul.list {
     margin: 0 !important;
 }
@@ -2594,7 +2539,12 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     padding: 0 !important;
 }
 
-/* ----- 13. Responsive adjustments (≤680px) ----- */
+/* Hide extra <br> after preview */
+#ajaxObject + br {
+    display: none !important;
+}
+
+/* ----- 13. Responsive adjustments (≤680px) for messenger ----- */
 @media (max-width: 680px) {
     body#msg .cp.send .list > li {
         flex-direction: column;
@@ -2619,7 +2569,7 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     }
 }
 
-/* ----- 14. Reduced motion preference ----- */
+/* ----- 14. Reduced motion preference (messenger) ----- */
 @media (prefers-reduced-motion: reduce) {
     body#msg * {
         transition-duration: 0.01ms !important;
