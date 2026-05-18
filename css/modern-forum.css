@@ -1807,6 +1807,7 @@ body#msg .cp.send .list > li > .Sub.Item:last-child {
     min-width: 0 !important;
     font-size: 0;
     display: flex;
+    flex-wrap: wrap;
 }
 
 body#msg input.forminput[name="msg_title"] {
