@@ -1713,7 +1713,7 @@ body#msg .cp.send .tabs li {
     float: none !important;
     flex: 1 1 0;
     min-width: 0;
-    text-align: left;
+    text-align: center;
 }
 
 body#msg .cp.send .tabs li[style*="float:right"] {
