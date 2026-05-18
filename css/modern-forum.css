@@ -1681,6 +1681,7 @@ body#msg .slick_carousel a {
 body#msg form {
     display: flex;
     flex-direction: column;
+    max-width: 1200px;
 }
 
 /* ----- 1. Base messenger container – card style ----- */
@@ -1689,7 +1690,7 @@ body#msg .cp.send {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
-    margin: var(--space-lg) auto;
+    margin: var(--space-lg) 0;
     overflow: hidden;
     order: 2;
 }
@@ -2194,7 +2195,8 @@ body#msg #loading:not(.nascosta) {
     margin-bottom: var(--space-lg);
     overflow: hidden;
     order: 2;
-    margin-top: var(--space-md);
+    margin: var(--space-md); auto 0 auto;
+    max-widht: 1200px;
 }
 
 body#msg #ajaxObject > b:first-of-type {
