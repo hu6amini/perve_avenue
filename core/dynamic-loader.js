@@ -158,7 +158,7 @@ async function bootSystem() {
         const resultsB = await Promise.allSettled([
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.js"),
             loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9681242beef6f3a2e2e4c8de461c2e6eeabec26a/core/dom-utils.min.js"),
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9cd3ca0a009035efcbf57e9c17d2b2bfdb66ff95/forum_core_observer.min.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@70efe7c7bca10a5093093841f67994aef3b76819/forum_core_observer.min.js")
         ]);
         const failedB = resultsB.filter(r => r.status === 'rejected');
         if (failedB.length > 0) {
