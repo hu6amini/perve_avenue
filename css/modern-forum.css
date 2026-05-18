@@ -2195,7 +2195,7 @@ body#msg #loading:not(.nascosta) {
     margin-bottom: var(--space-lg);
     overflow: hidden;
     order: 2;
-    margin: var(--space-md); 0 0 0;
+    margin: var(--space-md); auto 0 auto;
     max-widht: 1200px;
     width:100%;
 }
