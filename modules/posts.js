@@ -1,8 +1,7 @@
-// Forum Modernizer - Posts Module
+// Forum Modernizer - Posts Module (Refactored)
+'use strict';
 
-var ForumPostsModule = (function(Utils, EventBus) {
-    'use strict';
-
+const ForumPostsModule = (function () {
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('posts-module-start');
@@ -12,7 +11,7 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     // CONFIGURATION
     // ============================================================================
-    var CONFIG = {
+    const CONFIG = Object.freeze({
         POST_SELECTOR: '.post',
         POST_ID_PREFIX: 'ee',
         CONTAINER_ID: 'posts-container',
@@ -21,10 +20,10 @@ var ForumPostsModule = (function(Utils, EventBus) {
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80
-    };
+    });
 
     // Avatar colour palette (for initial fallback)
-    var AVATAR_COLORS = [
+    const AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
         '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
@@ -35,21 +34,76 @@ var ForumPostsModule = (function(Utils, EventBus) {
     ];
 
     // Track converted posts
-    var convertedPostIds = new Set();
-    var isInitialized = false;
-    var postReactions = new Map();
-    var activePopup = null;
-    var conversionInProgress = false;
-    var conversionPending = false;
+    const convertedPostIds = new Set();
+    let isInitialized = false;
+    const postReactions = new Map();
+    let activePopup = null;
+    let conversionInProgress = false;
+    let conversionPending = false;
 
     // Cache for user API data (MID -> user object)
-    var userDataCache = new Map();
+    const userDataCache = new Map();
+
+    // Abort controllers for pending fetch requests
+    let currentAbortController = null;
+
+    // ============================================================================
+    // BASIC HTML ESCAPE (already available via Utils, but fallback)
+    // ============================================================================
+    const escapeHtml = (str) => {
+        if (typeof str !== 'string') return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    };
+
+    // ============================================================================
+    // HTML SANITIZER (removes scripts, event handlers, dangerous elements)
+    // ============================================================================
+    const sanitizeHTML = (dirty) => {
+        if (!dirty || typeof dirty !== 'string') return '';
+        const template = document.createElement('template');
+        template.innerHTML = dirty;
+        const doc = template.content;
+        const walker = document.createTreeWalker(doc, NodeFilter.SHOW_ELEMENT, null);
+        const toRemove = [];
+        let node;
+        while ((node = walker.nextNode())) {
+            // Remove script and iframe elements
+            if (node.tagName === 'SCRIPT' || node.tagName === 'IFRAME') {
+                toRemove.push(node);
+                continue;
+            }
+            // Strip event handlers and javascript: URLs
+            const attrs = node.attributes;
+            for (let i = attrs.length - 1; i >= 0; i--) {
+                const attr = attrs[i];
+                if (attr.name.startsWith('on') || (attr.name === 'href' && /^\s*javascript\s*:/i.test(attr.value))) {
+                    node.removeAttribute(attr.name);
+                }
+            }
+        }
+        toRemove.forEach(el => el.remove());
+        return template.innerHTML;
+    };
+
+    // Set sanitized HTML on an element
+    const setSanitizedHTML = (element, htmlString) => {
+        element.innerHTML = sanitizeHTML(htmlString);
+    };
+
+    // Create element from sanitized HTML string
+    const createElementFromHTML = (htmlString) => {
+        const div = document.createElement('div');
+        setSanitizedHTML(div, htmlString);
+        return div.firstElementChild;
+    };
 
     // ============================================================================
     // PAGE VALIDATION
     // ============================================================================
     function isValidPage() {
-        var bodyId = document.body.id;
+        const bodyId = document.body.id;
         if (bodyId === 'topic' || bodyId === 'send' || bodyId === 'blog') {
             return true;
         }
@@ -65,25 +119,25 @@ var ForumPostsModule = (function(Utils, EventBus) {
     function parseDateFromTitle(title) {
         if (!title) return null;
         title = title.replace(/(\d{1,2}):(\d{2})\s*(AM|PM)?:(\d+)/i, '$1:$2 $3');
-        var hasMeridiem = /[ap]m/i.test(title);
-        var nums = title.match(/\d+/g);
+        const hasMeridiem = /[ap]m/i.test(title);
+        const nums = title.match(/\d+/g);
         if (!nums || nums.length < 3) return null;
-        var year, month, day, hour, minute, second;
+        let year, month, day, hour, minute, second;
         if (hasMeridiem) {
             month = parseInt(nums[0], 10) - 1;
-            day   = parseInt(nums[1], 10);
-            year  = parseInt(nums[2], 10);
-            hour  = parseInt(nums[3] || 0, 10);
+            day = parseInt(nums[1], 10);
+            year = parseInt(nums[2], 10);
+            hour = parseInt(nums[3] || 0, 10);
             minute = parseInt(nums[4] || 0, 10);
             second = parseInt(nums[5] || 0, 10);
-            var isPM = /pm/i.test(title);
+            const isPM = /pm/i.test(title);
             if (isPM && hour < 12) hour += 12;
             if (!isPM && hour === 12) hour = 0;
         } else {
-            day   = parseInt(nums[0], 10);
+            day = parseInt(nums[0], 10);
             month = parseInt(nums[1], 10) - 1;
-            year  = parseInt(nums[2], 10);
-            hour  = parseInt(nums[3] || 0, 10);
+            year = parseInt(nums[2], 10);
+            hour = parseInt(nums[3] || 0, 10);
             minute = parseInt(nums[4] || 0, 10);
             second = parseInt(nums[5] || 0, 10);
         }
@@ -92,48 +146,60 @@ var ForumPostsModule = (function(Utils, EventBus) {
 
     function getRelativeTimeString(date) {
         if (!date || isNaN(date.getTime())) return 'Unknown';
-        var now = new Date();
-        var diff = (date - now);
-        var absDiff = Math.abs(diff) / 1000;
-        var rtf = new Intl.RelativeTimeFormat(document.documentElement.lang || 'en', { numeric: 'auto' });
+        const now = new Date();
+        const diff = date - now;
+        const absDiff = Math.abs(diff) / 1000;
+        const rtf = new Intl.RelativeTimeFormat(document.documentElement.lang || 'en', { numeric: 'auto' });
         if (absDiff < 60) return rtf.format(Math.floor(diff / 1000), 'second');
         if (absDiff < 3600) return rtf.format(Math.floor(diff / 60000), 'minute');
         if (absDiff < 86400) return rtf.format(Math.floor(diff / 3600000), 'hour');
         if (absDiff < 2592000) {
-            var days = Math.floor(absDiff / 86400);
+            const days = Math.floor(absDiff / 86400);
             return rtf.format(-days, 'day');
         }
         if (absDiff < 31536000) {
-            var months = Math.floor(absDiff / 2592000);
+            const months = Math.floor(absDiff / 2592000);
             return rtf.format(-months, 'month');
         }
-        var years = Math.floor(absDiff / 31536000);
+        const years = Math.floor(absDiff / 31536000);
         return rtf.format(-years, 'year');
     }
 
     // ============================================================================
-    // API USER DATA FETCHING
+    // API USER DATA FETCHING WITH ABORT & TIMEOUT
     // ============================================================================
-    async function fetchUserData(mid) {
+    async function fetchUserData(mid, signal) {
         if (userDataCache.has(mid)) return userDataCache.get(mid);
         try {
-            var response = await fetch('/api.php?mid=' + mid);
-            var data = await response.json();
-            var user = data['m' + mid] || data.info;
+            const response = await fetch('/api.php?mid=' + mid, { signal });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+            const user = data['m' + mid] || data.info;
             if (user && user.id) {
                 userDataCache.set(mid, user);
                 return user;
             }
             return null;
         } catch (e) {
-            console.error('[PostsModule] API error for MID', mid, e);
+            if (e.name !== 'AbortError') {
+                console.error('[PostsModule] API error for MID', mid, e);
+            }
             return null;
         }
     }
 
     async function fetchMultipleUsers(midList) {
-        var uniqueMids = [...new Set(midList.filter(Boolean))];
-        await Promise.all(uniqueMids.map(mid => fetchUserData(mid)));
+        const uniqueMids = [...new Set(midList.filter(Boolean))];
+        if (uniqueMids.length === 0) return;
+        // Create a new AbortController for this batch
+        currentAbortController?.abort();
+        currentAbortController = new AbortController();
+        const signal = currentAbortController.signal;
+        try {
+            await Promise.all(uniqueMids.map(mid => fetchUserData(mid, signal)));
+        } catch (e) {
+            // Ignore batch errors, individual fetch already logs
+        }
     }
 
     // ============================================================================
@@ -141,36 +207,36 @@ var ForumPostsModule = (function(Utils, EventBus) {
     // ============================================================================
     function isValidAvatarUrl(url) {
         if (!url || typeof url !== 'string') return false;
-        var trimmed = url.trim();
+        const trimmed = url.trim();
         if (!/^(https?:)?\/\//i.test(trimmed)) return false;
         if (trimmed === 'http' || trimmed === 'https' || trimmed === '//') return false;
         return true;
     }
 
     function getColorFromNickname(nickname, userId) {
-        var hash = 0;
-        var str = nickname || userId || 'user';
-        for (var i = 0; i < str.length; i++) {
+        let hash = 0;
+        const str = nickname || userId || 'user';
+        for (let i = 0; i < str.length; i++) {
             hash = ((hash << 5) - hash) + str.charCodeAt(i);
             hash = hash & hash;
         }
-        var colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
+        const colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
         return AVATAR_COLORS[colorIndex];
     }
 
     function optimizeImageUrl(url, width, height) {
         if (!isValidAvatarUrl(url)) return null;
-        var lowerUrl = url.toLowerCase();
+        const lowerUrl = url.toLowerCase();
         if (lowerUrl.indexOf('weserv.nl') !== -1 || lowerUrl.indexOf('data:') === 0) {
             return url;
         }
-        var targetWidth = width || CONFIG.AVATAR_SIZE;
-        var targetHeight = height || CONFIG.AVATAR_SIZE;
-        var isGif = (lowerUrl.indexOf('.gif') !== -1 || /\.gif($|\?|#)/i.test(lowerUrl));
-        var outputFormat = 'webp';
-        var quality = CONFIG.QUALITY;
-        var encodedUrl = encodeURIComponent(url);
-        var optimizedUrl = CONFIG.WESERV_CDN + '?url=' + encodedUrl +
+        const targetWidth = width || CONFIG.AVATAR_SIZE;
+        const targetHeight = height || CONFIG.AVATAR_SIZE;
+        const isGif = (lowerUrl.indexOf('.gif') !== -1 || /\.gif($|\?|#)/i.test(lowerUrl));
+        const outputFormat = 'webp';
+        const quality = CONFIG.QUALITY;
+        const encodedUrl = encodeURIComponent(url);
+        let optimizedUrl = CONFIG.WESERV_CDN + '?url=' + encodedUrl +
             '&output=' + outputFormat +
             '&maxage=' + CONFIG.CACHE +
             '&q=' + quality +
@@ -188,147 +254,131 @@ var ForumPostsModule = (function(Utils, EventBus) {
             if (!url) return false;
             return url.includes('style_images/default_avatar.png');
         }
-        if (user && user.avatar && isValidAvatarUrl(user.avatar) && !isDefaultAvatarUrl(user.avatar)) {
-            var avatarUrl = user.avatar;
+        if (user?.avatar && isValidAvatarUrl(user.avatar) && !isDefaultAvatarUrl(user.avatar)) {
+            let avatarUrl = user.avatar;
             if (avatarUrl.startsWith('//')) avatarUrl = 'https:' + avatarUrl;
-            if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:')
+            if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
                 avatarUrl = avatarUrl.replace('http://', 'https://');
-            var optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE, CONFIG.AVATAR_SIZE);
+            }
+            const optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE, CONFIG.AVATAR_SIZE);
             if (optimized) return { type: 'img', url: optimized };
         }
-        var initial = username ? username.charAt(0).toUpperCase() : '?';
-        if (!initial.match(/[A-Z0-9]/i)) initial = '?';
-        var bgColor = getColorFromNickname(username, userId);
-        return { type: 'initial', initial: initial, bgColor: bgColor };
+        const initial = username ? username.charAt(0).toUpperCase() : '?';
+        const safeInitial = (/[A-Z0-9]/i.test(initial)) ? initial : '?';
+        const bgColor = getColorFromNickname(username, userId);
+        return { type: 'initial', initial: safeInitial, bgColor: bgColor };
     }
 
     // ============================================================================
     // HELPERS
     // ============================================================================
-function getPostsContainer() {
-    var modernContainer = document.getElementById('modern-posts-container');
+    function getPostsContainer() {
+        let wrapper = document.getElementById('modern-forum-wrapper');
+        const carouselWrapper = document.querySelector('.carousel-wrapper');
 
-    // 1. Ensure the wrapper is positioned after .carousel-wrapper (only if the
-    //    carousel is NOT already inside the wrapper – i.e., they are siblings)
-    var wrapper = document.getElementById('modern-forum-wrapper');
-    var carouselWrapper = document.querySelector('.carousel-wrapper');
-
-    if (wrapper && carouselWrapper) {
-        // If the carousel is already a descendant of the wrapper, do nothing
-        if (!wrapper.contains(carouselWrapper)) {
-            // Carousel is outside the wrapper (sibling situation)
+        // Ensure the wrapper is positioned correctly
+        if (wrapper && carouselWrapper && !wrapper.contains(carouselWrapper)) {
             if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
                 carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
             }
+        } else if (!wrapper && carouselWrapper) {
+            wrapper = document.createElement('div');
+            wrapper.id = 'modern-forum-wrapper';
+            wrapper.className = 'modern-forum-wrapper';
+            carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
+        } else if (!wrapper) {
+            wrapper = document.createElement('div');
+            wrapper.id = 'modern-forum-wrapper';
+            wrapper.className = 'modern-forum-wrapper';
+            document.body.appendChild(wrapper);
         }
-        // else: carousel is inside wrapper – perfect, no repositioning needed
-    } else if (!wrapper && carouselWrapper) {
-        // Wrapper doesn't exist yet – create it and insert after the carousel
-        wrapper = document.createElement('div');
-        wrapper.id = 'modern-forum-wrapper';
-        wrapper.className = 'modern-forum-wrapper';
-        carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
+
+        let container = document.getElementById('modern-posts-container');
+        if (container) return container;
+
+        const originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
+        if (originalContainer) return originalContainer;
+
+        container = document.createElement('div');
+        container.id = CONFIG.CONTAINER_ID;
+        container.className = 'modern-posts-container';
+        wrapper.appendChild(container);
+        return container;
     }
-
-    // 2. Return or create the posts container inside the wrapper
-    if (modernContainer) {
-        return modernContainer;
-    }
-
-    var originalContainer = document.getElementById(CONFIG.CONTAINER_ID);
-    if (originalContainer) return originalContainer;
-
-    var newContainer = document.createElement('div');
-    newContainer.id = CONFIG.CONTAINER_ID;
-    newContainer.className = 'modern-posts-container';
-
-    if (wrapper) {
-        wrapper.appendChild(newContainer);
-    } else {
-        // Fallback – no carousel, no wrapper yet
-        var enhancerWrapper = document.getElementById('modern-forum-wrapper');
-        if (enhancerWrapper) {
-            enhancerWrapper.appendChild(newContainer);
-        } else {
-            document.body.appendChild(newContainer);
-        }
-    }
-
-    return newContainer;
-}
 
     function isValidPost(postEl) {
         if (!postEl) return false;
-        var id = postEl.getAttribute('id');
+        const id = postEl.getAttribute('id');
         return id && id.startsWith(CONFIG.POST_ID_PREFIX) && postEl.tagName !== 'BODY';
     }
 
     function getPostId($post) {
-        var fullId = $post.getAttribute('id');
-        if (!fullId) return null;
-        if (!fullId.startsWith(CONFIG.POST_ID_PREFIX)) return null;
+        const fullId = $post.getAttribute('id');
+        if (!fullId || !fullId.startsWith(CONFIG.POST_ID_PREFIX)) return null;
         return fullId.replace(CONFIG.POST_ID_PREFIX, '');
     }
 
     function getMidFromPost($post) {
-        var nickLink = $post.querySelector('.nick a');
+        const nickLink = $post.querySelector('.nick a');
         if (nickLink) {
-            var match = nickLink.href.match(/MID=(\d+)/);
+            const match = nickLink.href.match(/MID=(\d+)/);
             if (match) return match[1];
         }
-        var avatarLink = $post.querySelector('.avatar a');
+        const avatarLink = $post.querySelector('.avatar a');
         if (avatarLink) {
-            var match = avatarLink.href.match(/MID=(\d+)/);
+            const match = avatarLink.href.match(/MID=(\d+)/);
             if (match) return match[1];
         }
         return null;
     }
 
     // ============================================================================
-    // DATA EXTRACTION (same as before, unchanged)
+    // DATA EXTRACTION
     // ============================================================================
     function getUsername($post) {
-        var nickLink = $post.querySelector('.nick a');
+        const nickLink = $post.querySelector('.nick a');
         return nickLink ? nickLink.textContent.trim() : 'Unknown';
     }
 
     function getGroupText($post) {
-        var groupDd = $post.querySelector('.u_group dd');
+        const groupDd = $post.querySelector('.u_group dd');
         return groupDd ? groupDd.textContent.trim() : '';
     }
 
     function getPostCount($post) {
-        var postsLink = $post.querySelector('.u_posts dd a');
+        const postsLink = $post.querySelector('.u_posts dd a');
         return postsLink ? postsLink.textContent.trim() : '0';
     }
 
     function getReputation($post) {
-        var repLink = $post.querySelector('.u_reputation dd a');
+        const repLink = $post.querySelector('.u_reputation dd a');
         if (!repLink) return '0';
         return repLink.textContent.trim().replace('+', '');
     }
 
     function getIsOnline($post) {
-        var statusTitle = $post.querySelector('.u_status');
+        const statusTitle = $post.querySelector('.u_status');
         if (!statusTitle) return false;
-        var title = statusTitle.getAttribute('title') || '';
+        const title = statusTitle.getAttribute('title') || '';
         return title.toLowerCase().includes('online');
     }
 
     function getUserTitleAndIcon($post) {
-        var uRankSpan = $post.querySelector('.u_rank');
+        const uRankSpan = $post.querySelector('.u_rank');
         if (!uRankSpan) return { title: 'Member', iconClass: 'fa-medal fa-regular' };
-        var icon = uRankSpan.querySelector('i');
-        var iconClass = '';
+        const icon = uRankSpan.querySelector('i');
+        let iconClass = '';
         if (icon) {
-            var classAttr = icon.getAttribute('class') || '';
+            let classAttr = icon.getAttribute('class') || '';
             if (classAttr.includes('fa-solid')) classAttr = classAttr.replace('fa-solid', 'fa-regular');
             iconClass = classAttr;
-        } else iconClass = 'fa-medal fa-regular';
-        var rankSpan = uRankSpan.querySelector('span');
-        var title = rankSpan ? rankSpan.textContent.trim() : uRankSpan.textContent.trim();
+        } else {
+            iconClass = 'fa-medal fa-regular';
+        }
+        const rankSpan = uRankSpan.querySelector('span');
+        let title = rankSpan ? rankSpan.textContent.trim() : uRankSpan.textContent.trim();
         if (title === 'Member') {
-            var stars = $post.querySelectorAll('.u_rank i.fa-star').length;
+            const stars = $post.querySelectorAll('.u_rank i.fa-star').length;
             if (stars === 3) title = 'Famous';
             else if (stars === 2) title = 'Senior';
             else if (stars === 1) title = 'Junior';
@@ -337,36 +387,31 @@ function getPostsContainer() {
     }
 
     function getCleanContent($post) {
-        var contentTable = $post.querySelector('.right.Item table.color');
+        let contentTable = $post.querySelector('.right.Item table.color');
         if (!contentTable) {
             contentTable = $post.querySelector('td.Item table.color');
         }
         if (!contentTable) return '';
-        var contentClone = contentTable.cloneNode(true);
-        var editSpans = contentClone.querySelectorAll('.edit');
-        for (var i = 0; i < editSpans.length; i++) {
-            var edit = editSpans[i];
-            var prev = edit.previousSibling;
+        const contentClone = contentTable.cloneNode(true);
+        const editSpans = contentClone.querySelectorAll('.edit');
+        editSpans.forEach(edit => {
+            let prev = edit.previousSibling;
             while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
-                var toRemove = prev;
+                const toRemove = prev;
                 prev = prev.previousSibling;
                 toRemove.remove();
             }
-        }
-        var signatures = contentClone.querySelectorAll('.signature, .edit');
-        signatures.forEach(function(el) { if (el && el.remove) el.remove(); });
-        var borders = contentClone.querySelectorAll('.bottomborder');
-        borders.forEach(function(el) { if (el && el.remove) el.remove(); });
-        var breaks = contentClone.querySelectorAll('br');
-        breaks.forEach(function(br) {
-            var prev = br.previousElementSibling;
-            var next = br.nextElementSibling;
-            if ((next && next.classList && next.classList.contains('bottomborder')) ||
-                (prev && prev.classList && prev.classList.contains('bottomborder'))) {
-                if (br.remove) br.remove();
+        });
+        contentClone.querySelectorAll('.signature, .edit').forEach(el => el.remove());
+        contentClone.querySelectorAll('.bottomborder').forEach(el => el.remove());
+        contentClone.querySelectorAll('br').forEach(br => {
+            const prev = br.previousElementSibling;
+            const next = br.nextElementSibling;
+            if ((next?.classList?.contains('bottomborder')) || (prev?.classList?.contains('bottomborder'))) {
+                br.remove();
             }
         });
-        var html = contentClone.innerHTML || '';
+        let html = contentClone.innerHTML || '';
         html = html.replace(/<p>\s*<\/p>/g, '');
         html = html.trim();
         html = transformEmbeddedLinks(html);
@@ -374,23 +419,22 @@ function getPostsContainer() {
     }
 
     function getSignatureHtml($post) {
-        var signature = $post.querySelector('.signature');
+        const signature = $post.querySelector('.signature');
         if (!signature) return '';
-        var sigClone = signature.cloneNode(true);
-        return sigClone.innerHTML;
+        return signature.innerHTML; // will be sanitized later
     }
 
     function getEditInfo($post) {
-        var editSpan = $post.querySelector('.edit');
+        const editSpan = $post.querySelector('.edit');
         if (!editSpan) return null;
-        var fullText = editSpan.textContent.trim();
-        var parts = fullText.split(' - ');
+        const fullText = editSpan.textContent.trim();
+        const parts = fullText.split(' - ');
         if (parts.length < 2) return null;
-        var editorPart = parts.slice(0, -1).join(' - ');
-        var dateStr = parts[parts.length - 1].trim();
-        var date = parseDateFromTitle(dateStr);
+        const editorPart = parts.slice(0, -1).join(' - ');
+        const dateStr = parts[parts.length - 1].trim();
+        const date = parseDateFromTitle(dateStr);
         if (!date || isNaN(date.getTime())) return null;
-        var relative = getRelativeTimeString(date);
+        const relative = getRelativeTimeString(date);
         return {
             editor: editorPart,
             relative: relative,
@@ -399,113 +443,105 @@ function getPostsContainer() {
     }
 
     function getLikes($post) {
-        var pointsPos = $post.querySelector('.points .points_pos');
+        const pointsPos = $post.querySelector('.points .points_pos');
         if (!pointsPos) return 0;
         return parseInt(pointsPos.textContent) || 0;
     }
 
-function getReactionData($post) {
-    var hasReactions = false;
-    var reactionCount = 0;
-    var reactions = [];
+    function getReactionData($post) {
+        let hasReactions = false;
+        let reactionCount = 0;
+        const reactions = [];
 
-    // Aggregates total counter from ALL containers (top preview + bottom widget)
-    var allContainers = $post.querySelectorAll('.st-emoji-container');
-    allContainers.forEach(function (container) {
-        var counters = container.querySelectorAll('.st-emoji-counter');
-        counters.forEach(function (counter) {
-            var count = parseInt(counter.getAttribute('data-count') || counter.textContent || 0);
-            if (count > 0) {
-                hasReactions = true;
-                reactionCount += count;
-            }
+        const allContainers = $post.querySelectorAll('.st-emoji-container');
+        allContainers.forEach(container => {
+            const counters = container.querySelectorAll('.st-emoji-counter');
+            counters.forEach(counter => {
+                const count = parseInt(counter.getAttribute('data-count') || counter.textContent || 0);
+                if (count > 0) {
+                    hasReactions = true;
+                    reactionCount += count;
+                }
+            });
         });
-    });
 
-    // Extract individual reaction images
-    // Prefer the widget (detailed list) if present
-    var widgetContainer = null;
-    var widget = $post.querySelector('.st-emoji-widget');
-    if (widget) {
-        widgetContainer = widget.querySelector('.st-emoji-container');
-    }
+        let widgetContainer = null;
+        const widget = $post.querySelector('.st-emoji-widget');
+        if (widget) {
+            widgetContainer = widget.querySelector('.st-emoji-container');
+        }
 
-    if (widgetContainer) {
-        // Widget format: each .st-emoji-info has its own counter
-        var items = widgetContainer.querySelectorAll('.st-emoji-info');
-        items.forEach(function (item) {
-            var counterEl = item.querySelector('.st-emoji-counter');
-            if (!counterEl) return;
-            var count = parseInt(counterEl.getAttribute('data-count') || counterEl.textContent || 0);
-            if (count <= 0) return;
-            var contentEl = item.querySelector('.st-emoji-content');
-            if (!contentEl) return;
-            var img = contentEl.querySelector('img');
-            if (!img) return;
-            var src = img.getAttribute('src') || '';
-            var alt = img.getAttribute('alt') || '';
-            if (src) {
-                reactions.push({
-                    name: alt.replace(/:/g, ''),
-                    alt: alt,
-                    src: src,
-                    rid: contentEl.getAttribute('data-rid'),
-                    count: count
-                });
-            }
-        });
-    } else {
-        // Fallback to preview container (regular posts)
-        var previewContainer = $post.querySelector('.st-emoji-container');
-        if (previewContainer) {
-            var previewDiv = previewContainer.querySelector('.st-emoji-preview');
-            if (previewDiv) {
-                var images = previewDiv.querySelectorAll('img');
-                images.forEach(function (img) {
-                    var src = img.getAttribute('src') || '';
-                    var alt = img.getAttribute('alt') || '';
-                    if (src) {
-                        reactions.push({
-                            name: alt.replace(/:/g, ''),
-                            alt: alt,
-                            src: src,
-                            count: reactionCount  // all points belong to this one image
-                        });
-                    }
-                });
+        if (widgetContainer) {
+            const items = widgetContainer.querySelectorAll('.st-emoji-info');
+            items.forEach(item => {
+                const counterEl = item.querySelector('.st-emoji-counter');
+                if (!counterEl) return;
+                const count = parseInt(counterEl.getAttribute('data-count') || counterEl.textContent || 0);
+                if (count <= 0) return;
+                const contentEl = item.querySelector('.st-emoji-content');
+                if (!contentEl) return;
+                const img = contentEl.querySelector('img');
+                if (!img) return;
+                const src = img.getAttribute('src') || '';
+                const alt = img.getAttribute('alt') || '';
+                if (src) {
+                    reactions.push({
+                        name: alt.replace(/:/g, ''),
+                        alt: alt,
+                        src: src,
+                        rid: contentEl.getAttribute('data-rid'),
+                        count: count
+                    });
+                }
+            });
+        } else {
+            const previewContainer = $post.querySelector('.st-emoji-container');
+            if (previewContainer) {
+                const previewDiv = previewContainer.querySelector('.st-emoji-preview');
+                if (previewDiv) {
+                    const images = previewDiv.querySelectorAll('img');
+                    images.forEach(img => {
+                        const src = img.getAttribute('src') || '';
+                        const alt = img.getAttribute('alt') || '';
+                        if (src) {
+                            reactions.push({
+                                name: alt.replace(/:/g, ''),
+                                alt: alt,
+                                src: src,
+                                count: reactionCount
+                            });
+                        }
+                    });
+                }
             }
         }
+
+        return { hasReactions, reactionCount, reactions };
     }
 
-    return { hasReactions: hasReactions, reactionCount: reactionCount, reactions: reactions };
-}
-    
     function getMaskedIp($post) {
-        var ipLink = $post.querySelector('.ip_address dd a');
+        const ipLink = $post.querySelector('.ip_address dd a');
         if (!ipLink) return '';
-        var ip = ipLink.textContent.trim();
-        var parts = ip.split('.');
+        const ip = ipLink.textContent.trim();
+        const parts = ip.split('.');
         if (parts.length === 4) return parts[0] + '.' + parts[1] + '.' + parts[2] + '.xxx';
         return ip;
     }
 
     function getAvailableActions($post, postId) {
-        var actions = { quote: false, edit: false, delete: false, report: true, share: true };
-        var quoteLink = $post.querySelector('a[href*="CODE=02"]');
-        if (quoteLink) actions.quote = true;
-        var editLink = $post.querySelector('a[href*="CODE=08"]');
-        if (editLink) actions.edit = true;
-        var deleteEl = $post.querySelector('a[onclick*="delete_post"], a[href*="delete_post"], .deletepost, a[href*="CODE=09"]');
-        if (deleteEl) actions.delete = true;
+        const actions = { quote: false, edit: false, delete: false, report: true, share: true };
+        if ($post.querySelector('a[href*="CODE=02"]')) actions.quote = true;
+        if ($post.querySelector('a[href*="CODE=08"]')) actions.edit = true;
+        if ($post.querySelector('a[onclick*="delete_post"], a[href*="delete_post"], .deletepost, a[href*="CODE=09"]')) actions.delete = true;
         return actions;
     }
 
     function getMemberPostLinks($post) {
-        var rtSub = $post.querySelector('.rt.Sub');
+        const rtSub = $post.querySelector('.rt.Sub');
         if (!rtSub) return { topicLink: null, topicTitle: null, forumLink: null, forumName: null };
-        var links = rtSub.querySelectorAll('a');
-        var topicLink = null, forumLink = null;
-        var topicTitle = '', forumName = '';
+        const links = rtSub.querySelectorAll('a');
+        let topicLink = null, forumLink = null;
+        let topicTitle = '', forumName = '';
         if (links.length >= 1) {
             topicLink = links[0].getAttribute('href');
             topicTitle = links[0].textContent.trim();
@@ -514,162 +550,123 @@ function getReactionData($post) {
             forumLink = links[1].getAttribute('href');
             forumName = links[1].textContent.trim();
         }
-        return { topicLink: topicLink, topicTitle: topicTitle, forumLink: forumLink, forumName: forumName };
+        return { topicLink, topicTitle, forumLink, forumName };
     }
 
     // ============================================================================
-    // BLOG ARTICLE DATA EXTRACTION (NEW)
+    // BLOG ARTICLE DATA EXTRACTION
     // ============================================================================
-function getBlogArticleData(articleLi) {
-    var postId = getPostId(articleLi);
-    var mid = null;
-    var userLink = articleLi.querySelector('.who a[href*="MID="]');
-    if (userLink) {
-        var match = userLink.href.match(/MID=(\d+)/);
-        if (match) mid = match[1];
-    }
-    var username = userLink ? userLink.textContent.trim() : 'Unknown';
-    
-    var titleLink = articleLi.querySelector('.btitle a');
-    var title = titleLink ? titleLink.textContent.trim() : '';
-    var permalink = titleLink ? titleLink.getAttribute('href') : '';
-    
-    var whenSpan = articleLi.querySelector('.when');
-    var rawDate = null;
-    if (whenSpan) {
-        rawDate = whenSpan.getAttribute('title');
-    }
-    var postDate = parseDateFromTitle(rawDate);
-    var absoluteDate = postDate ? postDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown';
-    
-    var editInfo = getEditInfo(articleLi);
-    
-    // ==========================================================================
-    // CONTENT EXTRACTION WITH <br> CLEANUP (NEW)
-    // ==========================================================================
-    var contentDiv = articleLi.querySelector('.center .color');
-    var contentHtml = '';
-    if (contentDiv) {
-        var clone = contentDiv.cloneNode(true);
+    function getBlogArticleData(articleLi) {
+        const postId = getPostId(articleLi);
+        let mid = null;
+        const userLink = articleLi.querySelector('.who a[href*="MID="]');
+        if (userLink) {
+            const match = userLink.href.match(/MID=(\d+)/);
+            if (match) mid = match[1];
+        }
+        const username = userLink ? userLink.textContent.trim() : 'Unknown';
 
-        // 1. Remove reaction widget and its preceding <br> tags
-        var reactionWidget = clone.querySelector('.st-emoji-widget');
-        if (reactionWidget) {
-            var prev = reactionWidget.previousSibling;
-            while (prev) {
-                if (prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
-                    var toRemove = prev;
+        const titleLink = articleLi.querySelector('.btitle a');
+        const title = titleLink ? titleLink.textContent.trim() : '';
+        const permalink = titleLink ? titleLink.getAttribute('href') : '';
+
+        const whenSpan = articleLi.querySelector('.when');
+        const rawDate = whenSpan ? whenSpan.getAttribute('title') : null;
+        const postDate = parseDateFromTitle(rawDate);
+        const absoluteDate = postDate ? postDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown';
+
+        const editInfo = getEditInfo(articleLi);
+
+        // Content extraction
+        const contentDiv = articleLi.querySelector('.center .color');
+        let contentHtml = '';
+        if (contentDiv) {
+            const clone = contentDiv.cloneNode(true);
+            // Remove reaction widget and preceding <br>
+            const reactionWidget = clone.querySelector('.st-emoji-widget');
+            if (reactionWidget) {
+                let prev = reactionWidget.previousSibling;
+                while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
+                    const toRemove = prev;
                     prev = prev.previousSibling;
                     toRemove.remove();
-                } else {
-                    break;
                 }
+                reactionWidget.remove();
             }
-            reactionWidget.remove();
-        }
-
-        // 2. Remove edit span and its preceding <br> tags
-        var editSpan = clone.querySelector('.edit');
-        if (editSpan) {
-            var prev2 = editSpan.previousSibling;
-            while (prev2) {
-                if (prev2.nodeType === Node.ELEMENT_NODE && prev2.tagName === 'BR') {
-                    var toRemove2 = prev2;
-                    prev2 = prev2.previousSibling;
-                    toRemove2.remove();
-                } else {
-                    break;
+            // Remove edit span and preceding <br>
+            const editSpan = clone.querySelector('.edit');
+            if (editSpan) {
+                let prev = editSpan.previousSibling;
+                while (prev && prev.nodeType === Node.ELEMENT_NODE && prev.tagName === 'BR') {
+                    const toRemove = prev;
+                    prev = prev.previousSibling;
+                    toRemove.remove();
                 }
+                editSpan.remove();
             }
-            editSpan.remove();
+            // Remove trailing <br>
+            while (clone.lastChild && clone.lastChild.nodeType === Node.ELEMENT_NODE && clone.lastChild.tagName === 'BR') {
+                clone.removeChild(clone.lastChild);
+            }
+            contentHtml = clone.innerHTML.trim();
+            contentHtml = transformEmbeddedLinks(contentHtml);
         }
 
-        // 3. Remove any trailing <br> at the very end of the clone
-        while (clone.lastChild && clone.lastChild.nodeType === Node.ELEMENT_NODE && clone.lastChild.tagName === 'BR') {
-            clone.removeChild(clone.lastChild);
-        }
+        const pointsPos = articleLi.querySelector('.points_pos');
+        const likes = pointsPos ? parseInt(pointsPos.textContent.replace(/[^0-9]/g, '')) || 0 : 0;
 
-        contentHtml = clone.innerHTML.trim();
-        contentHtml = transformEmbeddedLinks(contentHtml);
+        const reactionData = getReactionData(articleLi);
+
+        const commentsEm = articleLi.querySelector('.replies em');
+        const commentsCount = commentsEm ? parseInt(commentsEm.textContent) || 0 : 0;
+        const viewsEm = articleLi.querySelector('.views em');
+        const viewsCount = viewsEm ? parseInt(viewsEm.textContent) || 0 : 0;
+
+        const availableActions = getAvailableActions(articleLi, postId);
+
+        return {
+            postId,
+            mid,
+            username,
+            title,
+            permalink,
+            postDate,
+            absoluteDate,
+            contentHtml,
+            editInfo,
+            likes,
+            hasReactions: reactionData.hasReactions,
+            reactionCount: reactionData.reactionCount,
+            reactions: reactionData.reactions,
+            commentsCount,
+            viewsCount,
+            availableActions,
+            originalPost: articleLi
+        };
     }
-    // ==========================================================================
-
-    // Likes (points)
-    var pointsPos = articleLi.querySelector('.points_pos');
-    var likes = 0;
-    if (pointsPos) {
-        likes = parseInt(pointsPos.textContent.replace(/[^0-9]/g,'')) || 0;
-    }
-
-    // Reactions preview (top)
-    var reactionData = getReactionData(articleLi);
-    
-    // Comments & views
-    var commentsEm = articleLi.querySelector('.replies em');
-    var commentsCount = commentsEm ? parseInt(commentsEm.textContent) || 0 : 0;
-    var viewsEm = articleLi.querySelector('.views em');
-    var viewsCount = viewsEm ? parseInt(viewsEm.textContent) || 0 : 0;
-    
-    // Available actions
-    var availableActions = getAvailableActions(articleLi, postId);
-    
-    return {
-        postId: postId,
-        mid: mid,
-        username: username,
-        title: title,
-        permalink: permalink,
-        postDate: postDate,
-        absoluteDate: absoluteDate,
-        contentHtml: contentHtml,
-        editInfo: editInfo,
-        likes: likes,
-        hasReactions: reactionData.hasReactions,
-        reactionCount: reactionData.reactionCount,
-        reactions: reactionData.reactions,
-        commentsCount: commentsCount,
-        viewsCount: viewsCount,
-        availableActions: availableActions,
-        originalPost: articleLi
-    };
-}
 
     // ============================================================================
-    // GENERATE MODERN BLOG CARD (NEW)
+    // GENERATE MODERN BLOG CARD (template literal free)
     // ============================================================================
     function generateBlogPost(data, apiUser) {
-        var user = apiUser || {};
-        var username = data.username;
-        var userId = data.mid;
-        var isOnline = (user.status === 'online') || false;
-        var statusClass = isOnline ? 'online' : 'offline';
-        var statusText = isOnline ? 'Online' : 'Offline';
-        var profileUrl = userId ? '/?act=Profile&MID=' + userId : '#';
-        
-        var avatarData = getUserAvatarData(user, username, userId);
-        var avatarHtml = '';
+        const user = apiUser || {};
+        const username = data.username;
+        const userId = data.mid;
+        const isOnline = (user.status === 'online');
+        const statusClass = isOnline ? 'online' : 'offline';
+        const statusText = isOnline ? 'Online' : 'Offline';
+        const profileUrl = userId ? '/?act=Profile&MID=' + userId : '#';
+        const avatarData = getUserAvatarData(user, username, userId);
+        let avatarHtml = '';
         if (avatarData.type === 'img') {
-            avatarHtml = '<div class="post-avatar-wrapper">' +
-                '<a href="' + profileUrl + '" class="avatar-link" aria-label="Profile of ' + Utils.escapeHtml(username) + '">' +
-                '<img class="avatar-circle" src="' + avatarData.url + '" alt="Avatar of ' + Utils.escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy">' +
-                '</a>' +
-                '<span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
-                '</div>';
+            avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><img class="avatar-circle" src="' + escapeHtml(avatarData.url) + '" alt="Avatar of ' + escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy"></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
         } else {
-            avatarHtml = '<div class="post-avatar-wrapper">' +
-                '<a href="' + profileUrl + '" class="avatar-link" aria-label="Profile of ' + Utils.escapeHtml(username) + '">' +
-                '<div class="initial-avatar" style="background-color: #' + avatarData.bgColor + ';" data-initial="' + Utils.escapeHtml(avatarData.initial) + '">' + Utils.escapeHtml(avatarData.initial) + '</div>' +
-                '</a>' +
-                '<span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
-                '</div>';
+            avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><div class="initial-avatar" style="background-color: #' + avatarData.bgColor + ';" data-initial="' + escapeHtml(avatarData.initial) + '">' + escapeHtml(avatarData.initial) + '</div></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
         }
-        
-        var groupName = (user.group && user.group.name) ? user.group.name : 'Member';
-        var roleClass = 'role-badge';
-        var isFounder = user && user.group && (
-            (user.group.class && user.group.class.includes('founder')) ||
-            (user.group.bodyclass && user.group.bodyclass.includes('founder'))
-        );
+
+        let groupName = user?.group?.name || 'Member';
+        let roleClass = 'role-badge';
+        const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
         if (isFounder) {
             roleClass += ' founder';
             groupName = 'Founder';
@@ -682,250 +679,184 @@ function getBlogArticleData(articleLi) {
         } else {
             roleClass += ' member';
         }
-        var groupCssClass = 'group-' + sanitizeGroupName(groupName);
-        
-        var postCount = (user.messages !== undefined) ? user.messages : 0;
-        var reputation = (user.reputation !== undefined) ? user.reputation : 0;
-        var joinDateFormatted = '';
+        const groupCssClass = 'group-' + sanitizeGroupName(groupName);
+
+        const postCount = (user.messages !== undefined) ? user.messages : 0;
+        const reputation = (user.reputation !== undefined) ? user.reputation : 0;
+        let joinDateFormatted = 'Unknown join date';
         if (user.registration) {
-            var joinDate = new Date(user.registration);
+            const joinDate = new Date(user.registration);
             joinDateFormatted = joinDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        } else {
-            joinDateFormatted = 'Unknown join date';
         }
-        
-        var editHtml = '';
-        if (data.editInfo && data.editInfo.relative) {
-            var editDate = data.editInfo.rawDate;
-            var isoEdit = editDate ? editDate.toISOString() : '';
-            var titleEdit = editDate ? editDate.toLocaleString() : '';
-            editHtml = '<div class="post-edit-info">' +
-                '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' +
-                'Edited ' +
-                '<time datetime="' + isoEdit + '" title="' + Utils.escapeHtml(titleEdit) + '">' +
-                    Utils.escapeHtml(data.editInfo.relative) +
-                '</time>' +
-            '</div>';
+
+        let editHtml = '';
+        if (data.editInfo?.relative) {
+            const editDate = data.editInfo.rawDate;
+            const isoEdit = editDate ? editDate.toISOString() : '';
+            const titleEdit = editDate ? editDate.toLocaleString() : '';
+            editHtml = '<div class="post-edit-info"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited <time datetime="' + isoEdit + '" title="' + escapeHtml(titleEdit) + '">' + escapeHtml(data.editInfo.relative) + '</time></div>';
         }
-        
-        var likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-            '<i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
+
+        // Reactions and actions
+        let likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '"><i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
         if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
         likeButton += '</button>';
-        
-        var reactionsHtml = generateReactionButtons({
+
+        const reactionsHtml = generateReactionButtons({
             postId: data.postId,
             hasReactions: data.hasReactions,
             reactionCount: data.reactionCount,
             reactions: data.reactions
         });
-        
-        var actionsHtml = '';
-        if (data.availableActions.quote) {
-            actionsHtml += '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left"></i></button>';
-        }
-        if (data.availableActions.edit) {
-            actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
-        }
-        if (data.availableActions.share) {
-            actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
-        }
-        if (data.availableActions.delete) {
-            actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
-        }
-        
+
+        let actionsHtml = '';
+        if (data.availableActions.quote) actionsHtml += '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left"></i></button>';
+        if (data.availableActions.edit) actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
+        if (data.availableActions.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
+        if (data.availableActions.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
+
         return '<article class="post-card post-card--blog ' + groupCssClass + '" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
-            '<header class="blog-card-header">' +
-                '<h1 class="blog-title"><a href="' + Utils.escapeHtml(data.permalink) + '">' + Utils.escapeHtml(data.title) + '</a></h1>' +
-                '<div class="blog-meta">' +
-                    '<span class="blog-date">' + data.absoluteDate + '</span>' +
-                    (actionsHtml ? '<div class="blog-actions top-actions">' + actionsHtml + '</div>' : '') +
-                '</div>' +
-            '</header>' +
-            '<div class="post-card-body">' +
-                '<div class="avatar-modern">' + avatarHtml + '</div>' +
-                '<div class="post-user-info">' +
-                    '<div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + Utils.escapeHtml(username) + '</a></div>' +
-                    '<div class="user-group"><span class="' + roleClass + '">' + Utils.escapeHtml(groupName) + '</span></div>' +
-'<div class="user-stats">' +
-    '<div class="user-rank"><i class="fa-regular fa-medal"></i> ' + Utils.escapeHtml(data.userTitle || 'Member') + '</div>' +
-    '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
-    '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' +
-    '<div class="user-joined"><i class="fa-regular fa-user-plus"></i> ' + joinDateFormatted + '</div>' +
-'</div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="post-content">' +
-                '<div class="post-message">' + data.contentHtml + editHtml + '</div>' +
-            '</div>' +
-            '<footer class="post-footer">' +
-                '<div class="post-reactions">' + likeButton + reactionsHtml + '</div>' +
-            '</footer>' +
-        '</article>';
+            '<header class="blog-card-header"><h1 class="blog-title"><a href="' + escapeHtml(data.permalink) + '">' + escapeHtml(data.title) + '</a></h1><div class="blog-meta"><span class="blog-date">' + data.absoluteDate + '</span>' + (actionsHtml ? '<div class="blog-actions top-actions">' + actionsHtml + '</div>' : '') + '</div></header>' +
+            '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
+            '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
+            '<div class="user-group"><span class="' + roleClass + '">' + escapeHtml(groupName) + '</span></div>' +
+            '<div class="user-stats"><div class="user-rank"><i class="fa-regular fa-medal"></i> ' + escapeHtml(data.userTitle || 'Member') + '</div>' +
+            '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
+            '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' +
+            '<div class="user-joined"><i class="fa-regular fa-user-plus"></i> ' + joinDateFormatted + '</div></div>' +
+            '</div></div>' +
+            '<div class="post-content"><div class="post-message">' + data.contentHtml + editHtml + '</div></div>' +
+            '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div></footer></article>';
     }
 
     // ============================================================================
-    // EMBEDDED LINK TRANSFORMATION (unchanged)
+    // EMBEDDED LINK TRANSFORMATION (sanitized output)
     // ============================================================================
     function transformEmbeddedLinks(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
-        var tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-        var embedContainers = tempDiv.querySelectorAll('.ffb_embedlink');
-        for (var i = 0; i < embedContainers.length; i++) {
-            var container = embedContainers[i];
-            var modernEmbed = convertToModernEmbed(container);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent; // only for parsing, we'll sanitize later
+        const embedContainers = tempDiv.querySelectorAll('.ffb_embedlink');
+        for (const container of embedContainers) {
+            const modernEmbed = convertToModernEmbed(container);
             if (modernEmbed) container.parentNode.replaceChild(modernEmbed, container);
         }
         return tempDiv.innerHTML;
     }
 
-function convertToModernEmbed(originalContainer) {
-    try {
-        // 1. Extract favicon from the hidden div (if available)
-        var hiddenDiv = originalContainer.querySelector('div[style="display:none"]');
-        var faviconUrl = null;
-        if (hiddenDiv) {
-            var favImg = hiddenDiv.querySelector('img');
-            if (favImg && favImg.getAttribute('src')) {
-                faviconUrl = favImg.getAttribute('src');
+    function convertToModernEmbed(originalContainer) {
+        try {
+            const hiddenDiv = originalContainer.querySelector('div[style="display:none"]');
+            let faviconUrl = null;
+            if (hiddenDiv) {
+                const favImg = hiddenDiv.querySelector('img');
+                if (favImg) faviconUrl = favImg.getAttribute('src');
             }
-        }
 
-        // 2. The visible part is the second child (index 1)
-        var visiblePart = originalContainer.children[1];
-        if (!visiblePart) return null;
+            const visiblePart = originalContainer.children[1];
+            if (!visiblePart) return null;
 
-        // 3. Inside it, the second child is the content div with the title, description, and links
-        var contentDiv = visiblePart.children[1];
-        if (!contentDiv) contentDiv = visiblePart.children[0]; // fallback
+            const contentDiv = visiblePart.children[1] || visiblePart.children[0];
+            if (!contentDiv) return null;
 
-        // 4. Extract preview image (from the first child of visiblePart)
-        var previewDiv = visiblePart.children[0];
-        var imageUrl = null;
-        if (previewDiv) {
-            var previewImg = previewDiv.querySelector('img');
-            if (previewImg && previewImg.getAttribute('src')) {
-                imageUrl = previewImg.getAttribute('src');
+            const previewDiv = visiblePart.children[0];
+            let imageUrl = null;
+            if (previewDiv) {
+                const previewImg = previewDiv.querySelector('img');
+                if (previewImg) imageUrl = previewImg.getAttribute('src');
             }
-        }
 
-        // 5. Title: first <a> inside contentDiv
-        var titleLink = contentDiv.querySelector('a');
-        var title = titleLink ? titleLink.textContent.trim() : '';
-        var mainUrl = titleLink ? titleLink.getAttribute('href') : '';
+            const titleLink = contentDiv.querySelector('a');
+            const title = titleLink ? titleLink.textContent.trim() : '';
+            const mainUrl = titleLink ? titleLink.getAttribute('href') : '';
 
-        // 6. Description: clone content, remove all links, then clean up boilerplate
-        var clone = contentDiv.cloneNode(true);
-        var allCloneLinks = clone.querySelectorAll('a');
-        for (var r = 0; r < allCloneLinks.length; r++) {
-            allCloneLinks[r].remove();
-        }
-        var rawDescription = clone.textContent.trim();
-        rawDescription = rawDescription
-            .replace(/\s*Leggi altro su\s*/gi, '')
-            .replace(/\s*[>›]\s*$/, '')
-            .trim();
+            const clone = contentDiv.cloneNode(true);
+            clone.querySelectorAll('a').forEach(a => a.remove());
+            let rawDescription = clone.textContent.trim()
+                .replace(/\s*Leggi altro su\s*/gi, '')
+                .replace(/\s*[>›]\s*$/, '')
+                .trim();
 
-        // 7. Domain link: the last <a> inside the original contentDiv
-        var allLinksInContent = contentDiv.querySelectorAll('a');
-        var domainLink = allLinksInContent.length >= 2 ? allLinksInContent[allLinksInContent.length - 1] : null;
-        var domainText = '';
-        if (domainLink) {
-            domainText = domainLink.textContent.trim();
-            if (!domainText) domainText = extractDomain(domainLink.getAttribute('href') || '');
-        } else {
-            domainText = extractDomain(mainUrl); // fallback
-        }
-
-        // 8. Ensure we always have a favicon – fallback to Google Favicons API
-        if (!faviconUrl) {
-            var fallbackDomain = domainLink ? extractDomain(domainLink.getAttribute('href') || '') : extractDomain(mainUrl);
-            if (fallbackDomain) {
-                faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(fallbackDomain) + '&sz=32';
+            const allLinksInContent = contentDiv.querySelectorAll('a');
+            const domainLink = allLinksInContent.length >= 2 ? allLinksInContent[allLinksInContent.length - 1] : null;
+            let domainText = '';
+            if (domainLink) {
+                domainText = domainLink.textContent.trim();
+                if (!domainText) domainText = extractDomain(domainLink.getAttribute('href') || '');
+            } else {
+                domainText = extractDomain(mainUrl);
             }
+
+            if (!faviconUrl) {
+                const fallbackDomain = domainLink ? extractDomain(domainLink.getAttribute('href') || '') : extractDomain(mainUrl);
+                if (fallbackDomain) {
+                    faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(fallbackDomain) + '&sz=32';
+                }
+            }
+
+            const siteName = domainText.replace(/^www\./i, '').split('.')[0];
+
+            let modernHtml = '<div class="modern-embedded-link"><a href="' + escapeHtml(mainUrl) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + escapeHtml(title) + '">';
+            if (imageUrl) {
+                modernHtml += '<div class="embedded-link-image"><img src="' + imageUrl + '" alt="' + escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width:100%;object-fit:cover;display:block;"></div>';
+            }
+            modernHtml += '<div class="embedded-link-content"><h3 class="embedded-link-title">' + escapeHtml(title) + '</h3>';
+            if (rawDescription) {
+                modernHtml += '<p class="embedded-link-description">' + escapeHtml(rawDescription) + '</p>';
+            }
+            modernHtml += '<div class="embedded-link-meta"><span class="embedded-link-read-more" style="background-image:url(' + faviconUrl + ');background-repeat:no-repeat;background-position:left center;background-size:16px 16px;padding-left:22px;display:inline;">' + escapeHtml(siteName) + '</span></div>';
+            modernHtml += '</div></a></div>';
+
+            return createElementFromHTML(modernHtml);
+        } catch (e) {
+            return null;
         }
+    }
 
-        // Extract site name: remove "www." and everything after the first dot
-        var siteName = domainText.replace(/^www\./i, '').split('.')[0];
-
-        // 9. Build modern embed HTML
-        var modernHtml = '<div class="modern-embedded-link">' +
-            '<a href="' + Utils.escapeHtml(mainUrl) + '" class="embedded-link-container" target="_blank" rel="noopener noreferrer" title="' + Utils.escapeHtml(title) + '">';
-
-        if (imageUrl) {
-            modernHtml += '<div class="embedded-link-image"><img src="' + imageUrl + '" alt="' + Utils.escapeHtml(title) + '" loading="lazy" decoding="async" style="max-width:100%;object-fit:cover;display:block;"></div>';
-        }
-
-        modernHtml += '<div class="embedded-link-content">';
-        modernHtml += '<h3 class="embedded-link-title">' + Utils.escapeHtml(title) + '</h3>';
-
-        if (rawDescription) {
-            modernHtml += '<p class="embedded-link-description">' + Utils.escapeHtml(rawDescription) + '</p>';
-        }
-
-        // "Read more" line – always show favicon as background + site name
-        modernHtml += '<div class="embedded-link-meta"><span class="embedded-link-read-more" style="';
-        modernHtml += 'background-image:url(' + faviconUrl + ');background-repeat:no-repeat;background-position:left center;background-size:16px 16px;padding-left:22px;display:inline;';
-        modernHtml += '">' + Utils.escapeHtml(siteName) + '</span></div>';
-
-        modernHtml += '</div></a></div>';
-
-        return createElementFromHTML(modernHtml);
-    } catch(e) { return null; }
-}
-    
     function extractDomain(url) {
         try {
-            var a = document.createElement('a');
+            const a = document.createElement('a');
             a.href = url;
-            var hostname = a.hostname;
+            let hostname = a.hostname;
             if (hostname.startsWith('www.')) hostname = hostname.substring(4);
             return hostname;
-        } catch(e) { return url.split('/')[2] || url; }
-    }
-
-    function createElementFromHTML(htmlString) {
-        var div = document.createElement('div');
-        div.innerHTML = htmlString.trim();
-        return div.firstChild;
+        } catch (e) {
+            return url.split('/')[2] || url;
+        }
     }
 
     // ============================================================================
-    // REACTION POPUP (unchanged)
+    // REACTION POPUP (no eval, no innerHTML)
     // ============================================================================
     function getAvailableReactions(postId) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (!originalPost) return Promise.resolve([]);
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        const emojiContainer = originalPost.querySelector('.st-emoji-container');
         if (!emojiContainer) return Promise.resolve([]);
-        var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+        const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
         if (!previewTrigger) return Promise.resolve([]);
-        var originalDisplay = previewTrigger.style.display;
         previewTrigger.style.display = 'block';
         previewTrigger.click();
-        previewTrigger.style.display = originalDisplay;
-        return new Promise(function(resolve) {
-            setTimeout(function() {
-                var originalPopup = document.querySelector('.st-emoji-pop');
-                var emojis = [];
+        previewTrigger.style.display = '';
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const originalPopup = document.querySelector('.st-emoji-pop');
+                const emojis = [];
                 if (originalPopup) {
-                    var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-                    for (var i = 0; i < reactionElements.length; i++) {
-                        var el = reactionElements[i];
-                        var dataFui = el.getAttribute('data-fui');
-                        var img = el.querySelector('img');
-                        var imgSrc = img ? img.getAttribute('src') : '';
-                        var imgAlt = img ? img.getAttribute('alt') : '';
-                        var name = dataFui ? dataFui.replace(/:/g, '') : '';
+                    originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
+                        const dataFui = el.getAttribute('data-fui');
+                        const img = el.querySelector('img');
+                        const imgSrc = img ? img.getAttribute('src') : '';
+                        const imgAlt = img ? img.getAttribute('alt') : '';
+                        let name = dataFui ? dataFui.replace(/:/g, '') : '';
                         if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
                         emojis.push({
-                            name: name,
+                            name,
                             alt: dataFui || imgAlt,
                             src: imgSrc,
                             rid: el.getAttribute('data-rid')
                         });
-                    }
+                    });
                 }
                 if (originalPopup) originalPopup.remove();
                 resolve(emojis);
@@ -941,73 +872,76 @@ function convertToModernEmbed(originalContainer) {
     }
 
     function createCustomReactionPopup(buttonElement, postId) {
-        if (activePopup) { activePopup.remove(); activePopup = null; }
-        var buttonRect = buttonElement.getBoundingClientRect();
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (activePopup) {
+            activePopup.remove();
+            activePopup = null;
+            document.removeEventListener('click', activePopupClickHandler);
+        }
+        const buttonRect = buttonElement.getBoundingClientRect();
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (originalPost) {
-            var emojiContainer = originalPost.querySelector('.st-emoji-container');
+            const emojiContainer = originalPost.querySelector('.st-emoji-container');
             if (emojiContainer) {
-                var previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+                const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
                 if (previewTrigger) {
-                    var originalDisplay = previewTrigger.style.display;
                     previewTrigger.style.display = 'block';
                     previewTrigger.click();
-                    previewTrigger.style.display = originalDisplay;
+                    previewTrigger.style.display = '';
                 }
             }
         }
-        var loadingPopup = document.createElement('div');
+
+        let loadingPopup = document.createElement('div');
         loadingPopup.className = 'custom-reaction-popup loading';
         loadingPopup.style.cssText = 'position:fixed;z-index:100000;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:20px;border:1px solid #333;left:' + (buttonRect.left - 50) + 'px;top:' + (buttonRect.bottom + 10) + 'px;color:white;font-size:14px;';
         loadingPopup.textContent = 'Loading reactions...';
         document.body.appendChild(loadingPopup);
-        setTimeout(function() {
-            var originalPopup = document.querySelector('.st-emoji-pop');
-            var emojis = [];
+
+        setTimeout(() => {
+            const originalPopup = document.querySelector('.st-emoji-pop');
+            let emojis = [];
             if (originalPopup) {
-                var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-                for (var i = 0; i < reactionElements.length; i++) {
-                    var el = reactionElements[i];
-                    var dataFui = el.getAttribute('data-fui');
-                    var img = el.querySelector('img');
-                    var imgSrc = img ? img.getAttribute('src') : '';
-                    var imgAlt = img ? img.getAttribute('alt') : '';
-                    var name = dataFui ? dataFui.replace(/:/g, '') : '';
+                originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
+                    const dataFui = el.getAttribute('data-fui');
+                    const img = el.querySelector('img');
+                    const imgSrc = img ? img.getAttribute('src') : '';
+                    const imgAlt = img ? img.getAttribute('alt') : '';
+                    let name = dataFui ? dataFui.replace(/:/g, '') : '';
                     if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
-                    emojis.push({ name: name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
-                }
+                    emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
+                });
             }
             loadingPopup.remove();
             if (emojis.length === 0) emojis = getDefaultEmojis();
-            var popup = document.createElement('div');
+
+            const popup = document.createElement('div');
             popup.className = 'custom-reaction-popup';
             popup.style.cssText = 'position:fixed;z-index:100001;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:12px;border:1px solid #333;left:' + (buttonRect.left - 100) + 'px;top:' + (buttonRect.bottom + 10) + 'px;';
-            var emojiGrid = document.createElement('div');
+
+            const emojiGrid = document.createElement('div');
             emojiGrid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
-            emojis.forEach(function(emoji) {
-                var emojiItem = document.createElement('div');
+            emojis.forEach(emoji => {
+                const emojiItem = document.createElement('div');
                 emojiItem.className = 'custom-emoji-item';
                 emojiItem.style.cssText = 'cursor:pointer;padding:8px;text-align:center;border-radius:8px;transition:background 0.2s;';
-                var img = document.createElement('img');
-                if (emoji.src) img.src = emoji.src;
-                else img.src = 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
+                const img = document.createElement('img');
+                img.src = emoji.src || 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
                 img.alt = emoji.alt || ':' + emoji.name + ':';
                 img.style.cssText = 'width:32px;height:32px;object-fit:contain;';
                 img.loading = 'lazy';
-                img.onerror = function() { if (!this.src.includes('twemoji')) this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg'; };
+                img.onerror = function () { if (!this.src.includes('twemoji')) this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg'; };
                 emojiItem.appendChild(img);
-                emojiItem.addEventListener('mouseenter', function() { this.style.backgroundColor = '#333'; });
-                emojiItem.addEventListener('mouseleave', function() { this.style.backgroundColor = 'transparent'; });
-                emojiItem.addEventListener('click', function() {
-                    var originalPopup = document.querySelector('.st-emoji-pop');
+                emojiItem.addEventListener('mouseenter', function () { this.style.backgroundColor = '#333'; });
+                emojiItem.addEventListener('mouseleave', function () { this.style.backgroundColor = 'transparent'; });
+                emojiItem.addEventListener('click', function () {
+                    const originalPopup = document.querySelector('.st-emoji-pop');
                     if (originalPopup) {
-                        var reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
-                        var found = false;
-                        for (var i = 0; i < reactionElements.length; i++) {
-                            var el = reactionElements[i];
-                            var dataFui = el.getAttribute('data-fui');
-                            var img = el.querySelector('img');
-                            var imgAlt = img ? img.getAttribute('alt') : '';
+                        const reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                        let found = false;
+                        for (const el of reactionElements) {
+                            const dataFui = el.getAttribute('data-fui');
+                            const imgEl = el.querySelector('img');
+                            const imgAlt = imgEl ? imgEl.getAttribute('alt') : '';
                             if (dataFui === emoji.alt || imgAlt === emoji.alt || dataFui === ':' + emoji.name + ':' || (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
                                 el.click();
                                 found = true;
@@ -1018,60 +952,62 @@ function convertToModernEmbed(originalContainer) {
                     }
                     popup.remove();
                     activePopup = null;
-                    setTimeout(function() { refreshReactionDisplay(postId); }, CONFIG.REACTION_DELAY);
+                    setTimeout(() => refreshReactionDisplay(postId), CONFIG.REACTION_DELAY);
                 });
                 emojiGrid.appendChild(emojiItem);
             });
             popup.appendChild(emojiGrid);
-            var closeHandler = function(e) { if (!popup.contains(e.target) && !e.target.closest('.reaction-btn')) { popup.remove(); activePopup = null; document.removeEventListener('click', closeHandler); } };
-            setTimeout(function() { document.addEventListener('click', closeHandler); }, 100);
             document.body.appendChild(popup);
             activePopup = popup;
+            document.addEventListener('click', activePopupClickHandler);
         }, 200);
     }
 
+    function activePopupClickHandler(e) {
+        if (activePopup && !activePopup.contains(e.target) && !e.target.closest('.reaction-btn')) {
+            activePopup.remove();
+            activePopup = null;
+            document.removeEventListener('click', activePopupClickHandler);
+        }
+    }
+
     function handleReactionCountClick(pid) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
-        var emojiContainer = originalPost.querySelector('.st-emoji-container');
+        const emojiContainer = originalPost.querySelector('.st-emoji-container');
         if (!emojiContainer) return;
-        var counter = emojiContainer.querySelector('.st-emoji-counter');
+        const counter = emojiContainer.querySelector('.st-emoji-counter');
         if (!counter) return;
-        var originalVisibility = counter.style.visibility;
-        var originalOpacity = counter.style.opacity;
-        var originalPosition = counter.style.position;
         counter.style.visibility = 'visible';
         counter.style.opacity = '1';
         counter.style.position = 'relative';
         counter.style.zIndex = '9999';
         counter.click();
-        setTimeout(function() {
-            counter.style.visibility = originalVisibility;
-            counter.style.opacity = originalOpacity;
-            counter.style.position = originalPosition;
+        setTimeout(() => {
+            counter.style.visibility = '';
+            counter.style.opacity = '';
+            counter.style.position = '';
         }, 500);
     }
 
     // ============================================================================
-    // REACTION BUTTONS HTML
+    // REACTION BUTTONS HTML (no template literals)
     // ============================================================================
     function generateReactionButtons(data) {
         if (!data.hasReactions || data.reactionCount === 0) {
-            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '">' +
-                '<i class="fa-regular fa-face-smile" aria-hidden="true"></i></button>';
+            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '"><i class="fa-regular fa-face-smile" aria-hidden="true"></i></button>';
         }
-        var reactionMap = new Map();
-        for (var i = 0; i < data.reactions.length; i++) {
-            var r = data.reactions[i];
-            var src = r.src;
-            if (reactionMap.has(src)) reactionMap.get(src).count++;
-            else reactionMap.set(src, { src: src, alt: r.alt, name: r.name, count: 1 });
+        const reactionMap = new Map();
+        for (const r of data.reactions) {
+            if (reactionMap.has(r.src)) {
+                reactionMap.get(r.src).count++;
+            } else {
+                reactionMap.set(r.src, { src: r.src, alt: r.alt, name: r.name, count: 1 });
+            }
         }
-        var html = '<div class="reactions-container" data-pid="' + data.postId + '">';
-        reactionMap.forEach(function(r) {
-            html += '<button class="reaction-btn reaction-with-image" title="' + Utils.escapeHtml(r.name || 'Reaction') + '" data-pid="' + data.postId + '">' +
-                '<img src="' + r.src + '" alt="' + Utils.escapeHtml(r.alt || 'reaction') + '" width="18" height="18" loading="lazy">' +
-                '<span class="reaction-count">' + r.count + '</span></button>';
+        let html = '<div class="reactions-container" data-pid="' + data.postId + '">';
+        reactionMap.forEach(r => {
+            html += '<button class="reaction-btn reaction-with-image" title="' + escapeHtml(r.name || 'Reaction') + '" data-pid="' + data.postId + '"><img src="' + r.src + '" alt="' + escapeHtml(r.alt || 'reaction') + '" width="18" height="18" loading="lazy"><span class="reaction-count">' + r.count + '</span></button>';
         });
         html += '</div>';
         return html;
@@ -1085,49 +1021,32 @@ function convertToModernEmbed(originalContainer) {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (regular post, unchanged)
+    // GENERATE MODERN CARD (regular post)
     // ============================================================================
     function formatNumber(num) {
-        if (!num && num !== 0) return '0';
-        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
 
     function generateModernPost(data) {
         if (!data) return '';
-        var user = data.apiUser;
-        var username = data.username;
-        var userId = data.mid;
-        var isOnline = (user && user.status === 'online') || data.isOnline || false;
-        var statusClass = isOnline ? 'online' : 'offline';
-        var statusText = isOnline ? 'Online' : 'Offline';
-        
-        // Profile URL
-        var profileUrl = userId ? '/?act=Profile&MID=' + userId : '#';
-        
-        var avatarData = getUserAvatarData(user, username, userId);
-        var avatarHtml = '';
+        const user = data.apiUser;
+        const username = data.username;
+        const userId = data.mid;
+        const isOnline = (user?.status === 'online') || data.isOnline;
+        const statusClass = isOnline ? 'online' : 'offline';
+        const statusText = isOnline ? 'Online' : 'Offline';
+        const profileUrl = userId ? '/?act=Profile&MID=' + userId : '#';
+        const avatarData = getUserAvatarData(user, username, userId);
+        let avatarHtml = '';
         if (avatarData.type === 'img') {
-            avatarHtml = '<div class="post-avatar-wrapper">' +
-                '<a href="' + profileUrl + '" class="avatar-link" aria-label="Profile of ' + Utils.escapeHtml(username) + '">' +
-                '<img class="avatar-circle" src="' + avatarData.url + '" alt="Avatar of ' + Utils.escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy">' +
-                '</a>' +
-                '<span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
-                '</div>';
+            avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><img class="avatar-circle" src="' + escapeHtml(avatarData.url) + '" alt="Avatar of ' + escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy"></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
         } else {
-            avatarHtml = '<div class="post-avatar-wrapper">' +
-                '<a href="' + profileUrl + '" class="avatar-link" aria-label="Profile of ' + Utils.escapeHtml(username) + '">' +
-                '<div class="initial-avatar" style="background-color: #' + avatarData.bgColor + ';" data-initial="' + Utils.escapeHtml(avatarData.initial) + '">' + Utils.escapeHtml(avatarData.initial) + '</div>' +
-                '</a>' +
-                '<span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span>' +
-                '</div>';
+            avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><div class="initial-avatar" style="background-color: #' + avatarData.bgColor + ';" data-initial="' + escapeHtml(avatarData.initial) + '">' + escapeHtml(avatarData.initial) + '</div></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
         }
-        
-        var groupName = (user && user.group && user.group.name) ? user.group.name : (data.groupText || 'Member');
-        var roleClass = 'role-badge';
-        var isFounder = user && user.group && (
-            (user.group.class && user.group.class.includes('founder')) ||
-            (user.group.bodyclass && user.group.bodyclass.includes('founder'))
-        );
+
+        let groupName = user?.group?.name || data.groupText || 'Member';
+        let roleClass = 'role-badge';
+        const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
         if (isFounder) {
             roleClass += ' founder';
             groupName = 'Founder';
@@ -1140,28 +1059,24 @@ function convertToModernEmbed(originalContainer) {
         } else {
             roleClass += ' member';
         }
-        
-        var groupCssClass = 'group-' + sanitizeGroupName(groupName);
-        
-        var postCount = (user && typeof user.messages !== 'undefined') ? user.messages : data.postCount;
-        var reputation = (user && typeof user.reputation !== 'undefined') ? user.reputation : data.reputation;
-        var joinDateFormatted = '';
-        if (user && user.registration) {
-            var date = new Date(user.registration);
+        const groupCssClass = 'group-' + sanitizeGroupName(groupName);
+
+        const postCount = user?.messages ?? data.postCount;
+        const reputation = user?.reputation ?? data.reputation;
+        let joinDateFormatted = 'Unknown join date';
+        if (user?.registration) {
+            const date = new Date(user.registration);
             joinDateFormatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        } else {
-            joinDateFormatted = 'Unknown join date';
         }
-        
-        var likeButton = '';
+
+        let likeButton = '';
         if (!data.hideFooter) {
-            likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '">' +
-                '<i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
+            likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '"><i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
             if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
             likeButton += '</button>';
         }
-        
-        var reactionsHtml = '';
+
+        let reactionsHtml = '';
         if (!data.isMemberPostsPage && !data.hideFooter) {
             reactionsHtml = generateReactionButtons({
                 postId: data.postId,
@@ -1170,105 +1085,60 @@ function convertToModernEmbed(originalContainer) {
                 reactions: data.reactions
             });
         }
-        
-        var editHtml = '';
-        if (data.editInfo && data.editInfo.relative) {
-            var editDate = data.editInfo.rawDate;
-            var isoEdit = editDate ? editDate.toISOString() : '';
-            var titleEdit = editDate ? editDate.toLocaleString() : '';
-            editHtml = '<div class="post-edit-info">' +
-                '<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> ' +
-                    'Edited ' +
-                    '<time datetime="' + isoEdit + '" title="' + Utils.escapeHtml(titleEdit) + '">' +
-                        Utils.escapeHtml(data.editInfo.relative) +
-                    '</time>' +
-            '</div>';
+
+        let editHtml = '';
+        if (data.editInfo?.relative) {
+            const editDate = data.editInfo.rawDate;
+            const isoEdit = editDate ? editDate.toISOString() : '';
+            const titleEdit = editDate ? editDate.toLocaleString() : '';
+            editHtml = '<div class="post-edit-info"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited <time datetime="' + isoEdit + '" title="' + escapeHtml(titleEdit) + '">' + escapeHtml(data.editInfo.relative) + '</time></div>';
         }
-        
-        var signatureHtml = data.signatureHtml ? '<div class="post-signature">' + data.signatureHtml + '</div>' : '';
-        var ipHtml = data.ipAddress ? '<div class="post-ip">IP: ' + data.ipAddress + '</div>' : '';
-        
-        var postTimeHtml = '<div class="post-time">' +
-            '<time datetime="' + (data.postDate ? data.postDate.toISOString() : '') + '">' +
-            Utils.escapeHtml(data.relativeTime) +
-            '</time>' +
-            '</div>';
-        
-        var actionsHtml = '';
+
+        const signatureHtml = data.signatureHtml ? '<div class="post-signature">' + data.signatureHtml + '</div>' : '';
+        const ipHtml = data.ipAddress ? '<div class="post-ip">IP: ' + data.ipAddress + '</div>' : '';
+        const postTimeHtml = '<div class="post-time"><time datetime="' + (data.postDate ? data.postDate.toISOString() : '') + '">' + escapeHtml(data.relativeTime) + '</time></div>';
+
+        let actionsHtml = '';
         if (!data.hideActions && !data.isMemberPostsPage) {
-            if (data.availableActions && data.availableActions.quote) {
-                actionsHtml += '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left"></i></button>';
-            }
-            if (data.availableActions && data.availableActions.edit) {
-                actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
-            }
-            if (data.availableActions && data.availableActions.share) {
-                actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
-            }
-            if (data.availableActions && data.availableActions.report) {
-                actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
-            }
-            if (data.availableActions && data.availableActions.delete) {
-                actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
-            }
+            if (data.availableActions?.quote) actionsHtml += '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left"></i></button>';
+            if (data.availableActions?.edit) actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
+            if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
+            if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
+            if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
         }
-        
-        var memberActionsHtml = '';
+
+        let memberActionsHtml = '';
         if (data.isMemberPostsPage && (data.topicLink || data.forumLink)) {
             memberActionsHtml = '<div class="post-member-actions">';
             if (data.topicLink) {
-                memberActionsHtml += '<button class="action-icon member-topic-link" title="Go to topic" aria-label="Go to topic" data-topic-url="' + Utils.escapeHtml(data.topicLink) + '">' +
-                    '<i class="fa-regular fa-message" aria-hidden="true"></i>' +
-                    '</button>';
+                memberActionsHtml += '<button class="action-icon member-topic-link" title="Go to topic" aria-label="Go to topic" data-topic-url="' + escapeHtml(data.topicLink) + '"><i class="fa-regular fa-message" aria-hidden="true"></i></button>';
             }
             if (data.forumLink) {
-                memberActionsHtml += '<button class="action-icon member-forum-link" title="Go to forum" aria-label="Go to forum" data-forum-url="' + Utils.escapeHtml(data.forumLink) + '">' +
-                    '<i class="fa-regular fa-folder" aria-hidden="true"></i>' +
-                    '</button>';
+                memberActionsHtml += '<button class="action-icon member-forum-link" title="Go to forum" aria-label="Go to forum" data-forum-url="' + escapeHtml(data.forumLink) + '"><i class="fa-regular fa-folder" aria-hidden="true"></i></button>';
             }
             memberActionsHtml += '</div>';
         }
-        
-        var statsHtml = '<div class="user-rank"><i class="' + (data.rankIconClass || 'fa-medal fa-regular') + '" aria-hidden="true"></i> ' + (data.userTitle || 'Member') + '</div>' +
-            '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>';
-        if (!data.isMemberPostsPage) {
-            statsHtml += '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>';
-        }
-        statsHtml += '<div class="user-joined"><i class="fa-regular fa-user-plus"></i> ' + joinDateFormatted + '</div>';
-        
-        var headerActionsHtml = (actionsHtml !== '') ? '<div class="post-actions">' + actionsHtml + '</div>' : '';
-        
-        var footerHtml = '';
+
+        const statsHtml = '<div class="user-rank"><i class="' + (data.rankIconClass || 'fa-medal fa-regular') + '" aria-hidden="true"></i> ' + (data.userTitle || 'Member') + '</div>' +
+            '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
+            (!data.isMemberPostsPage ? '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' : '') +
+            '<div class="user-joined"><i class="fa-regular fa-user-plus"></i> ' + joinDateFormatted + '</div>';
+
+        const headerActionsHtml = actionsHtml ? '<div class="post-actions">' + actionsHtml + '</div>' : '';
+
+        let footerHtml = '';
         if (!data.hideFooter) {
-            footerHtml = '<footer class="post-footer">' +
-                '<div class="post-reactions">' + likeButton + reactionsHtml + '</div>' +
-                memberActionsHtml +
-                ipHtml +
-            '</footer>';
+            footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + ipHtml + '</footer>';
         }
-        
+
         return '<article class="post-card ' + groupCssClass + '" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
-            '<header class="post-card-header">' +
-                '<div class="post-meta">' +
-                    '<div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' +
-                    postTimeHtml +
-                '</div>' +
-                headerActionsHtml +
-            '</header>' +
-            '<div class="post-card-body">' +
-                '<div class="avatar-modern">' + avatarHtml + '</div>' +
-                '<div class="post-user-info">' +
-                    '<div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + Utils.escapeHtml(username) + '</a></div>' +
-                    '<div class="user-group"><span class="' + roleClass + '">' + Utils.escapeHtml(groupName) + '</span></div>' +
-                    '<div class="user-stats">' + statsHtml + '</div>' +
-                '</div>' +
-            '</div>' +
-            '<div class="post-content">' +
-                '<div class="post-message">' + data.contentHtml + editHtml + '</div>' +
-                signatureHtml +
-            '</div>' +
-            footerHtml +
-        '</article>';
+            '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
+            '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
+            '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
+            '<div class="user-group"><span class="' + roleClass + '">' + escapeHtml(groupName) + '</span></div>' +
+            '<div class="user-stats">' + statsHtml + '</div></div></div>' +
+            '<div class="post-content"><div class="post-message">' + data.contentHtml + editHtml + '</div>' + signatureHtml + '</div>' +
+            footerHtml + '</article>';
     }
 
     // ============================================================================
@@ -1276,101 +1146,96 @@ function convertToModernEmbed(originalContainer) {
     // ============================================================================
     function applyFaviconsToMessageLinks(container) {
         if (!container) return;
-        // select all links inside .post-message that don't already have a favicon
-        var links = container.querySelectorAll('.post-message a[href]:not(.has-favicon)');
-        for (var i = 0; i < links.length; i++) {
-            var link = links[i];
-            // skip if link contains an image (e.g., thumbnail)
+        const links = container.querySelectorAll('.post-message a[href]:not(.has-favicon)');
+        for (const link of links) {
             if (link.querySelector('img')) continue;
             try {
-                var urlObj = new URL(link.href);
-                var domain = urlObj.hostname;
-                var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=32';
-
+                const urlObj = new URL(link.href);
+                const domain = urlObj.hostname;
+                const faviconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=32';
                 link.style.backgroundImage = 'url(' + faviconUrl + ')';
                 link.style.backgroundRepeat = 'no-repeat';
                 link.style.backgroundPosition = 'left center';
                 link.style.backgroundSize = '16px 16px';
-                link.style.paddingLeft = '22px';   // 16px icon + 6px gap
-                link.style.display = 'inline';      // ensure inline flow
+                link.style.paddingLeft = '22px';
+                link.style.display = 'inline';
                 link.classList.add('has-favicon');
-            } catch (e) {
-                // invalid href – skip
-            }
+            } catch (e) {}
         }
     }
 
     // ============================================================================
-    // REFRESH FUNCTIONS (unchanged)
+    // REFRESH FUNCTIONS
     // ============================================================================
     function refreshLikeDisplay(postId) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (!originalPost) return;
-        var pointsPos = originalPost.querySelector('.points .points_pos');
-        var newLikeCount = pointsPos ? parseInt(pointsPos.textContent) || 0 : 0;
-        var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
+        const pointsPos = originalPost.querySelector('.points .points_pos');
+        const newLikeCount = pointsPos ? parseInt(pointsPos.textContent) || 0 : 0;
+        const modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
         if (!modernCard) return;
-        var likeBtn = modernCard.querySelector('.like-btn');
+        const likeBtn = modernCard.querySelector('.like-btn');
         if (!likeBtn) return;
-        var likeCountSpan = likeBtn.querySelector('.like-count-display');
+        const likeCountSpan = likeBtn.querySelector('.like-count-display');
         if (newLikeCount > 0) {
-            if (likeCountSpan) likeCountSpan.textContent = newLikeCount;
-            else {
-                var newSpan = document.createElement('span');
+            if (likeCountSpan) {
+                likeCountSpan.textContent = newLikeCount;
+            } else {
+                const newSpan = document.createElement('span');
                 newSpan.className = 'like-count like-count-display';
                 newSpan.textContent = newLikeCount;
                 likeBtn.appendChild(newSpan);
             }
-        } else {
-            if (likeCountSpan) likeCountSpan.remove();
+        } else if (likeCountSpan) {
+            likeCountSpan.remove();
         }
     }
 
     function refreshReactionDisplay(postId) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
         if (!originalPost) return;
-        var reactionData = getReactionData(originalPost);
-        var modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
+        const reactionData = getReactionData(originalPost);
+        const modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
         if (!modernCard) return;
-        var postReactionsDiv = modernCard.querySelector('.post-reactions');
+        const postReactionsDiv = modernCard.querySelector('.post-reactions');
         if (!postReactionsDiv) return;
         if (reactionData.reactions.length > 0) postReactions.set(postId, reactionData.reactions);
-        var likeButton = postReactionsDiv.querySelector('.like-btn');
-        var likeButtonHtml = likeButton ? likeButton.outerHTML : '';
-        var newReactionsHtml = generateReactionButtons({
-            postId: postId,
+        const likeButton = postReactionsDiv.querySelector('.like-btn');
+        const likeButtonHtml = likeButton ? likeButton.outerHTML : '';
+        const newReactionsHtml = generateReactionButtons({
+            postId,
             hasReactions: reactionData.hasReactions,
             reactionCount: reactionData.reactionCount,
             reactions: reactionData.reactions
         });
-        if (likeButtonHtml) postReactionsDiv.innerHTML = likeButtonHtml + newReactionsHtml;
-        else postReactionsDiv.innerHTML = newReactionsHtml;
+        setSanitizedHTML(postReactionsDiv, likeButtonHtml + newReactionsHtml);
     }
 
     // ============================================================================
-    // EVENT HANDLERS – unchanged
+    // EVENT HANDLERS – sanitized, no eval
     // ============================================================================
     function handleQuote(pid) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
-        var quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
+        const quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
         if (quoteLink) window.location.href = quoteLink.getAttribute('href');
     }
 
     function handleEdit(pid) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
-        var editLink = originalPost.querySelector('a[href*="CODE=08"]');
+        const editLink = originalPost.querySelector('a[href*="CODE=08"]');
         if (editLink) window.location.href = editLink.getAttribute('href');
     }
 
     function handleDelete(pid) {
         if (confirm('Are you sure you want to delete this post?')) {
-            if (typeof window.delete_post === 'function') window.delete_post(pid);
-            else {
-                var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+            if (typeof window.delete_post === 'function') {
+                window.delete_post(pid);
+            } else {
+                const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
                 if (originalPost) {
-                    var deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
+                    const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
                     if (deleteLink) deleteLink.click();
                 }
             }
@@ -1378,33 +1243,34 @@ function convertToModernEmbed(originalContainer) {
     }
 
     function handleShare(pid, buttonElement) {
-        var url = window.location.href.split('#')[0] + '#entry' + pid;
-        navigator.clipboard.writeText(url).then(function() {
-            var originalHtml = buttonElement.innerHTML;
+        const url = window.location.href.split('#')[0] + '#entry' + pid;
+        navigator.clipboard.writeText(url).then(() => {
+            const originalHtml = buttonElement.innerHTML;
             buttonElement.innerHTML = '<i class="fa-regular fa-check" aria-hidden="true"></i>';
-            setTimeout(function() { buttonElement.innerHTML = originalHtml; }, 1500);
-        }).catch(function(err) { console.error('Copy failed:', err); });
+            setTimeout(() => { buttonElement.innerHTML = originalHtml; }, 1500);
+        }).catch(err => console.error('Copy failed:', err));
     }
 
     function handleReport(pid) {
-        var reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button');
-        if (!reportBtn) reportBtn = document.querySelector('.report_button[data-pid="' + pid + '"]');
+        const reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button') ||
+            document.querySelector('.report_button[data-pid="' + pid + '"]');
         if (reportBtn) reportBtn.click();
     }
 
     function handleLike(pid, isCountClick) {
-        var originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
         if (!originalPost) return;
-        var pointsContainer = originalPost.querySelector('.points');
+        const pointsContainer = originalPost.querySelector('.points');
         if (!pointsContainer) return;
+
         if (isCountClick) {
-            var pointsPos = pointsContainer.querySelector('.points_pos');
+            const pointsPos = pointsContainer.querySelector('.points_pos');
             if (pointsPos) {
-                var overlayLink = pointsPos.closest('a[rel="#overlay"]');
+                const overlayLink = pointsPos.closest('a[rel="#overlay"]');
                 if (overlayLink) {
                     if (typeof $ !== 'undefined' && $.fn.overlay) {
                         if (!overlayLink.hasAttribute('data-overlay-init')) {
-                            $(overlayLink).overlay({
+                            $(overlayLink).overlay({ /* jshint ignore:line */
                                 onBeforeLoad: function() {
                                     var wrap = this.getOverlay();
                                     var content = wrap.find('div');
@@ -1416,49 +1282,29 @@ function convertToModernEmbed(originalContainer) {
                         $(overlayLink).trigger('click');
                         return;
                     } else {
-                        var mouseoverEvent = new MouseEvent('mouseover', { view: window, bubbles: true, cancelable: true });
-                        overlayLink.dispatchEvent(mouseoverEvent);
-                        setTimeout(function() {
-                            var clickEvent = new MouseEvent('click', { view: window, bubbles: true, cancelable: true });
-                            overlayLink.dispatchEvent(clickEvent);
-                        }, 50);
+                        overlayLink.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                        setTimeout(() => overlayLink.dispatchEvent(new MouseEvent('click', { bubbles: true })), 50);
                         return;
                     }
                 }
             }
-            var pointsPosDirect = pointsContainer.querySelector('.points_pos');
-            if (pointsPosDirect) { pointsPosDirect.click(); return; }
-            var anyLink = pointsContainer.querySelector('a[href*="votes"]');
-            if (anyLink) { anyLink.click(); return; }
+            pointsContainer.querySelector('.points_pos')?.click();
             return;
         }
-        var undoButton = pointsContainer.querySelector('.bullet_delete');
+
+        const undoButton = pointsContainer.querySelector('.bullet_delete');
         if (undoButton) {
-            var undoOnclick = undoButton.getAttribute('onclick');
-            if (undoOnclick) eval(undoOnclick);
-            else undoButton.click();
+            undoButton.click();
         } else {
-            var likeBtn = pointsContainer.querySelector('.points_up');
+            const likeBtn = pointsContainer.querySelector('.points_up');
             if (likeBtn) {
-                if (likeBtn.tagName === 'A') {
-                    var likeOnclick = likeBtn.getAttribute('onclick');
-                    if (likeOnclick) eval(likeOnclick);
-                    else likeBtn.click();
-                } else {
-                    var onclickAttr = likeBtn.getAttribute('onclick');
-                    if (onclickAttr) eval(onclickAttr);
-                    else likeBtn.click();
-                }
+                likeBtn.click();
             } else {
-                var pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
-                if (pointsUpLink) {
-                    var upOnclick = pointsUpLink.getAttribute('onclick');
-                    if (upOnclick) eval(upOnclick);
-                    else pointsUpLink.click();
-                }
+                const pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
+                if (pointsUpLink) pointsUpLink.click();
             }
         }
-        setTimeout(function() { refreshLikeDisplay(pid); refreshReactionDisplay(pid); }, CONFIG.REACTION_DELAY);
+        setTimeout(() => { refreshLikeDisplay(pid); refreshReactionDisplay(pid); }, CONFIG.REACTION_DELAY);
     }
 
     function handleReact(pid, buttonElement) {
@@ -1466,490 +1312,388 @@ function convertToModernEmbed(originalContainer) {
     }
 
     function attachEventHandlers() {
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.action-icon[data-action="quote"]');
-            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleQuote(pid); }
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="quote"]');
+            if (btn) { e.preventDefault(); handleQuote(btn.getAttribute('data-pid')); }
         });
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.action-icon[data-action="edit"]');
-            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleEdit(pid); }
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="edit"]');
+            if (btn) { e.preventDefault(); handleEdit(btn.getAttribute('data-pid')); }
         });
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.action-icon[data-action="delete"]');
-            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleDelete(pid); }
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="delete"]');
+            if (btn) { e.preventDefault(); handleDelete(btn.getAttribute('data-pid')); }
         });
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.action-icon[data-action="share"]');
-            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleShare(pid, btn); }
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="share"]');
+            if (btn) { e.preventDefault(); handleShare(btn.getAttribute('data-pid'), btn); }
         });
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.action-icon[data-action="report"]');
-            if (btn) { e.preventDefault(); var pid = btn.getAttribute('data-pid'); if (pid) handleReport(pid); }
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="report"]');
+            if (btn) { e.preventDefault(); handleReport(btn.getAttribute('data-pid')); }
         });
-        document.addEventListener('click', function(e) {
-            var topicBtn = e.target.closest('.member-topic-link');
+        document.addEventListener('click', function (e) {
+            const topicBtn = e.target.closest('.member-topic-link');
             if (topicBtn) {
                 e.preventDefault();
-                var url = topicBtn.getAttribute('data-topic-url');
+                const url = topicBtn.getAttribute('data-topic-url');
                 if (url) window.location.href = url;
             }
         });
-        document.addEventListener('click', function(e) {
-            var forumBtn = e.target.closest('.member-forum-link');
+        document.addEventListener('click', function (e) {
+            const forumBtn = e.target.closest('.member-forum-link');
             if (forumBtn) {
                 e.preventDefault();
-                var url = forumBtn.getAttribute('data-forum-url');
+                const url = forumBtn.getAttribute('data-forum-url');
                 if (url) window.location.href = url;
             }
         });
-        document.addEventListener('click', function(e) {
-            var likeBtn = e.target.closest('.like-btn');
-            if (likeBtn) { e.preventDefault(); var pid = likeBtn.getAttribute('data-pid'); if (pid) handleLike(pid, e.target.classList && e.target.classList.contains('like-count-display')); }
+        document.addEventListener('click', function (e) {
+            const likeBtn = e.target.closest('.like-btn');
+            if (likeBtn) {
+                e.preventDefault();
+                handleLike(likeBtn.getAttribute('data-pid'), e.target.classList.contains('like-count-display'));
+            }
         });
-        document.addEventListener('click', function(e) {
-            var reactionCount = e.target.closest('.reaction-count');
+        document.addEventListener('click', function (e) {
+            const reactionCount = e.target.closest('.reaction-count');
             if (reactionCount) {
                 e.preventDefault(); e.stopPropagation();
-                var reactionBtn = reactionCount.closest('.reaction-btn');
-                if (reactionBtn) { var pid = reactionBtn.getAttribute('data-pid'); if (pid) handleReactionCountClick(pid); }
+                const reactionBtn = reactionCount.closest('.reaction-btn');
+                if (reactionBtn) handleReactionCountClick(reactionBtn.getAttribute('data-pid'));
             }
         });
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.reaction-btn:not(.like-btn)');
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.reaction-btn:not(.like-btn)');
             if (btn && !e.target.classList.contains('reaction-count')) {
                 e.preventDefault(); e.stopPropagation();
-                var pid = btn.getAttribute('data-pid');
-                if (pid) handleReact(pid, btn);
+                handleReact(btn.getAttribute('data-pid'), btn);
             }
         });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape' && activePopup) { activePopup.remove(); activePopup = null; }
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && activePopup) {
+                activePopup.remove();
+                activePopup = null;
+            }
         });
     }
 
     // ============================================================================
-    // MAIN CONVERSION PIPELINE (blog article + regular posts)
+    // MAIN CONVERSION PIPELINE
     // ============================================================================
-async function convertAllPosts() {
-    if (conversionInProgress) {
-        conversionPending = true;
-        return;
-    }
+    async function convertAllPosts() {
+        if (conversionInProgress) {
+            conversionPending = true;
+            return;
+        }
+        conversionInProgress = true;
+        conversionPending = false;
+        try {
+            const container = getPostsContainer();
+            setSanitizedHTML(container, '');
+            convertedPostIds.clear();
+            postReactions.clear();
 
-    conversionInProgress = true;
-    conversionPending = false;
+            const blogArticles = document.querySelectorAll('.blog .article');
+            let blogCount = 0;
+            const allMids = [];
 
-    try {
-        var container = getPostsContainer();
-        if (container) container.innerHTML = '';
-        convertedPostIds.clear();
-        postReactions.clear();
-
-        // Convert ALL blog articles (there may be more than one)
-        var blogArticles = document.querySelectorAll('.blog .article');
-        var blogCount = 0;
-        var allMids = [];
-
-        if (blogArticles.length > 0) {
-            for (var a = 0; a < blogArticles.length; a++) {
-                var articleLi = blogArticles[a];
-                var blogData = getBlogArticleData(articleLi);
+            for (const articleLi of blogArticles) {
+                const blogData = getBlogArticleData(articleLi);
                 if (blogData.postId && convertedPostIds.has(blogData.postId)) continue;
-
                 if (blogData.mid) allMids.push(blogData.mid);
-                var apiUser = null;
-                if (blogData.mid) {
-                    await fetchUserData(blogData.mid);
-                    apiUser = userDataCache.get(blogData.mid);
-                }
 
-                var blogCardHtml = generateBlogPost(blogData, apiUser);
-                var temp = document.createElement('div');
-                temp.innerHTML = blogCardHtml;
-                var blogCard = temp.firstElementChild;
+                await fetchMultipleUsers(allMids);
+                const apiUser = blogData.mid ? userDataCache.get(blogData.mid) : null;
+                const blogCardHtml = generateBlogPost(blogData, apiUser);
+                const blogCard = createElementFromHTML(blogCardHtml);
                 container.appendChild(blogCard);
                 applyFaviconsToMessageLinks(blogCard);
-
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
             }
-        }
 
-        // Collect regular posts (comments)
-        var posts = Utils.getAllElements(CONFIG.POST_SELECTOR);
-        var validPosts = [];
-        for (var i = 0; i < posts.length; i++) {
-            if (isValidPost(posts[i])) validPosts.push(posts[i]);
-        }
-
-        var globalMid = null;
-        var globalUsername = null;
-        var isMemberPostsPage = false;
-        var memberPostsHeader = document.querySelector('.topic.member_posts .mtitle b');
-        if (memberPostsHeader) {
-            isMemberPostsPage = true;
-            var classNames = memberPostsHeader.className;
-            var match = classNames.match(/user(\d+)/);
-            if (match) {
-                globalMid = match[1];
-            } else {
-                var onclickAttr = memberPostsHeader.getAttribute('onclick');
-                if (onclickAttr) {
-                    var midMatch = onclickAttr.match(/MID=(\d+)/);
-                    if (midMatch) globalMid = midMatch[1];
+            const posts = document.querySelectorAll(CONFIG.POST_SELECTOR);
+            const validPosts = Array.from(posts).filter(isValidPost);
+            let globalMid = null, globalUsername = null, isMemberPostsPage = false;
+            const memberPostsHeader = document.querySelector('.topic.member_posts .mtitle b');
+            if (memberPostsHeader) {
+                isMemberPostsPage = true;
+                const match = memberPostsHeader.className.match(/user(\d+)/);
+                if (match) {
+                    globalMid = match[1];
+                } else {
+                    const onclickAttr = memberPostsHeader.getAttribute('onclick');
+                    if (onclickAttr) {
+                        const midMatch = onclickAttr.match(/MID=(\d+)/);
+                        if (midMatch) globalMid = midMatch[1];
+                    }
                 }
+                globalUsername = memberPostsHeader.textContent.trim();
             }
-            globalUsername = memberPostsHeader.textContent.trim();
-        }
 
-        var mids = [];
-        var postsData = [];
-        for (var i = 0; i < validPosts.length; i++) {
-            var $post = validPosts[i];
-            var postId = getPostId($post);
-            if (!postId || convertedPostIds.has(postId)) continue;
-            var mid = getMidFromPost($post);
-            if (!mid && globalMid) mid = globalMid;
-            mids.push(mid);
-            var reactionData = getReactionData($post);
-            var userTitleData = getUserTitleAndIcon($post);
-            if (reactionData.hasReactions) postReactions.set(postId, reactionData.reactions);
-            var whenSpan = $post.querySelector('.when');
-            var postPermalink = null;
-            var postDate = null;
-            if (whenSpan) {
-                var anchor = whenSpan.closest('a');
-                if (anchor && anchor.getAttribute('href')) postPermalink = anchor.getAttribute('href');
-                var title = whenSpan.getAttribute('title');
-                if (title) postDate = parseDateFromTitle(title);
-                else {
-                    var text = whenSpan.textContent.trim();
-                    text = text.replace(/^Posted:\s*/i, '');
-                    if (text) postDate = parseDateFromTitle(text);
+            const mids = [];
+            const postsData = [];
+            for (const $post of validPosts) {
+                const postId = getPostId($post);
+                if (!postId || convertedPostIds.has(postId)) continue;
+                let mid = getMidFromPost($post) || globalMid;
+                mids.push(mid);
+                const reactionData = getReactionData($post);
+                const userTitleData = getUserTitleAndIcon($post);
+                if (reactionData.hasReactions) postReactions.set(postId, reactionData.reactions);
+                const whenSpan = $post.querySelector('.when');
+                let postDate = null;
+                if (whenSpan) {
+                    const title = whenSpan.getAttribute('title') || whenSpan.textContent.replace(/^Posted:\s*/i, '');
+                    postDate = parseDateFromTitle(title);
                 }
+                const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+                const editInfo = getEditInfo($post);
+                let availableActions = getAvailableActions($post, postId);
+                if (isMemberPostsPage) {
+                    availableActions = { quote: false, edit: false, delete: false, report: false, share: false };
+                }
+                const memberLinks = isMemberPostsPage ? getMemberPostLinks($post) : {};
+                const username = getUsername($post) === 'Unknown' ? globalUsername : getUsername($post);
+                postsData.push({
+                    postId, mid, originalPost: $post,
+                    username,
+                    groupText: getGroupText($post),
+                    postCount: getPostCount($post),
+                    reputation: getReputation($post),
+                    isOnline: getIsOnline($post),
+                    userTitle: userTitleData.title,
+                    rankIconClass: userTitleData.iconClass,
+                    contentHtml: getCleanContent($post),
+                    signatureHtml: getSignatureHtml($post),
+                    editInfo,
+                    likes: getLikes($post),
+                    hasReactions: reactionData.hasReactions,
+                    reactionCount: reactionData.reactionCount,
+                    reactions: reactionData.reactions,
+                    ipAddress: getMaskedIp($post),
+                    relativeTime,
+                    postDate,
+                    availableActions,
+                    isMemberPostsPage,
+                    topicLink: memberLinks.topicLink,
+                    topicTitle: memberLinks.topicTitle,
+                    forumLink: memberLinks.forumLink,
+                    forumName: memberLinks.forumName,
+                    hideActions: false,
+                    hideFooter: false
+                });
+                convertedPostIds.add(postId);
             }
-            var relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
-            var editInfo = getEditInfo($post);
-            var availableActions = getAvailableActions($post, postId);
-            if (isMemberPostsPage) {
-                availableActions.quote = false;
-                availableActions.edit = false;
-                availableActions.delete = false;
-                availableActions.report = false;
-                availableActions.share = false;
+
+            await fetchMultipleUsers(mids);
+            for (let i = 0; i < postsData.length; i++) {
+                const data = postsData[i];
+                const apiUser = data.mid ? userDataCache.get(data.mid) : null;
+                const completeData = { ...data, apiUser, postNumber: i + 1 + blogCount };
+                const cardHtml = generateModernPost(completeData);
+                const card = createElementFromHTML(cardHtml);
+                container.appendChild(card);
+                applyFaviconsToMessageLinks(card);
             }
-            var memberLinks = isMemberPostsPage ? getMemberPostLinks($post) : { topicLink: null, topicTitle: null, forumLink: null, forumName: null };
-            var username = getUsername($post);
-            if (username === 'Unknown' && globalUsername) username = globalUsername;
-            postsData.push({
-                postId: postId,
-                mid: mid,
-                originalPost: $post,
-                index: i,
-                username: username,
-                groupText: getGroupText($post),
-                postCount: getPostCount($post),
-                reputation: getReputation($post),
-                isOnline: getIsOnline($post),
-                userTitle: userTitleData.title,
-                rankIconClass: userTitleData.iconClass,
-                contentHtml: getCleanContent($post),
-                signatureHtml: getSignatureHtml($post),
-                editInfo: editInfo,
-                likes: getLikes($post),
-                hasReactions: reactionData.hasReactions,
-                reactionCount: reactionData.reactionCount,
-                reactions: reactionData.reactions,
-                ipAddress: getMaskedIp($post),
-                relativeTime: relativeTime,
-                postDate: postDate,
-                postPermalink: postPermalink,
-                availableActions: availableActions,
-                isMemberPostsPage: isMemberPostsPage,
-                topicLink: memberLinks.topicLink,
-                topicTitle: memberLinks.topicTitle,
-                forumLink: memberLinks.forumLink,
-                forumName: memberLinks.forumName,
-                hideActions: false,
-                hideFooter: false
-            });
-            convertedPostIds.add(postId);
-        }
-        await fetchMultipleUsers(mids);
-        for (var i = 0; i < postsData.length; i++) {
-            var data = postsData[i];
-            var apiUser = data.mid ? userDataCache.get(data.mid) : null;
-            var completeData = Object.assign({}, data, { apiUser: apiUser, postNumber: i + 1 + blogCount });
-            var cardHtml = generateModernPost(completeData);
-            var temp = document.createElement('div');
-            temp.innerHTML = cardHtml;
-            var card = temp.firstElementChild;
-            container.appendChild(card);
-            applyFaviconsToMessageLinks(card);
-        }
-        attachEventHandlers();
-        if (EventBus) EventBus.trigger('posts:ready', { count: postsData.length + blogCount });
-        console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
-    } catch (err) {
-        console.error('[PostsModule] Conversion error:', err);
-    } finally {
-        conversionInProgress = false;
-        if (conversionPending) {
-            convertAllPosts();
+
+            attachEventHandlers();
+            console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
+        } catch (err) {
+            console.error('[PostsModule] Conversion error:', err);
+        } finally {
+            conversionInProgress = false;
+            if (conversionPending) {
+                convertAllPosts();
+            }
         }
     }
-}
 
     // ============================================================================
-    // SUMMARY CONVERSION (unchanged)
+    // SUMMARY CONVERSION
     // ============================================================================
     async function convertSummaryPosts() {
         if (document.body.id !== 'send') return;
-        var summaryEl = document.querySelector('.summary');
+        const summaryEl = document.querySelector('.summary');
         if (!summaryEl) return;
-        var container = document.getElementById('modern-summary-container');
+        let container = document.getElementById('modern-summary-container');
         if (!container) {
             container = document.createElement('div');
             container.id = 'modern-summary-container';
             container.className = 'modern-posts-container';
-            var wrapper = document.getElementById('modern-forum-wrapper');
-            if (wrapper) wrapper.appendChild(container);
-            else document.body.appendChild(container);
+            const wrapper = document.getElementById('modern-forum-wrapper') || document.body;
+            wrapper.appendChild(container);
         } else {
-            container.innerHTML = '';
+            setSanitizedHTML(container, '');
         }
-        var header = document.createElement('div');
+        const header = document.createElement('div');
         header.className = 'summary-header modern-section-header';
-        header.innerHTML = `
-            <div class="summary-header-content">
-                <i class="fa-regular fa-clock" aria-hidden="true"></i>
-                <h3>Latest posts <span class="summary-subtitle">(last 10, newest first)</span></h3>
-            </div>
-        `;
+        setSanitizedHTML(header, '<div class="summary-header-content"><i class="fa-regular fa-clock" aria-hidden="true"></i><h3>Latest posts <span class="summary-subtitle">(last 10, newest first)</span></h3></div>');
         container.appendChild(header);
-        var listItems = summaryEl.querySelectorAll('.list > li');
+        const listItems = summaryEl.querySelectorAll('.list > li');
         if (!listItems.length) return;
-        var mids = [];
-        var postsData = [];
-        for (var i = 0; i < listItems.length; i++) {
-            var li = listItems[i];
-            var nickLink = li.querySelector('.nick a');
+        const mids = [], postsData = [];
+        for (let i = 0; i < listItems.length; i++) {
+            const li = listItems[i];
+            const nickLink = li.querySelector('.nick a');
             if (!nickLink) continue;
-            var username = nickLink.textContent.trim();
-            var midMatch = nickLink.href.match(/MID=(\d+)/);
-            var mid = midMatch ? midMatch[1] : null;
+            const username = nickLink.textContent.trim();
+            const midMatch = nickLink.href.match(/MID=(\d+)/);
+            const mid = midMatch ? midMatch[1] : null;
             mids.push(mid);
-            var groupName = 'Member';
-            var classNames = li.className;
-            if (classNames.includes('box_founder')) groupName = 'Founder';
-            else if (classNames.includes('box_amministratore')) groupName = 'Administrator';
-            else if (classNames.includes('box_moderatore')) groupName = 'Moderator';
-            var whenSpan = li.querySelector('.when');
-            var postDate = null;
+            let groupName = 'Member';
+            if (li.className.includes('box_founder')) groupName = 'Founder';
+            else if (li.className.includes('box_amministratore')) groupName = 'Administrator';
+            else if (li.className.includes('box_moderatore')) groupName = 'Moderator';
+            const whenSpan = li.querySelector('.when');
+            let postDate = null;
             if (whenSpan) {
-                var title = whenSpan.getAttribute('title');
-                if (title) postDate = parseDateFromTitle(title);
-                else {
-                    var text = whenSpan.textContent.trim();
-                    text = text.replace(/^Posted\s*/i, '');
-                    postDate = parseDateFromTitle(text);
-                }
+                const title = whenSpan.getAttribute('title') || whenSpan.textContent.replace(/^Posted\s*/i, '');
+                postDate = parseDateFromTitle(title);
             }
-            var relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
-            var contentDiv = li.querySelector('.color.Item');
-            var contentHtml = '';
+            const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+            const contentDiv = li.querySelector('.color.Item');
+            let contentHtml = '';
             if (contentDiv) {
-                var clone = contentDiv.cloneNode(true);
-                var sig = clone.querySelector('.signature');
-                if (sig) sig.remove();
-                var editSpan = clone.querySelector('.edit');
-                if (editSpan) editSpan.remove();
-                var tempHtml = clone.innerHTML;
-                tempHtml = transformEmbeddedLinks(tempHtml);
-                contentHtml = tempHtml;
+                const clone = contentDiv.cloneNode(true);
+                clone.querySelector('.signature')?.remove();
+                clone.querySelector('.edit')?.remove();
+                contentHtml = transformEmbeddedLinks(clone.innerHTML);
             }
             postsData.push({
                 postId: 'summary_' + i,
-                mid: mid,
-                username: username,
-                groupText: groupName,
-                contentHtml: contentHtml,
-                relativeTime: relativeTime,
-                postDate: postDate,
-                isSummary: true,
-                hideActions: true,
-                hideFooter: true,
-                postNumber: i + 1,
-                postCount: '0',
-                reputation: '0',
-                isOnline: false,
-                userTitle: 'Member',
-                rankIconClass: 'fa-medal fa-regular',
-                likes: 0,
-                hasReactions: false,
-                reactionCount: 0,
-                reactions: [],
+                mid, username, groupText: groupName, contentHtml,
+                relativeTime, postDate, isSummary: true,
+                hideActions: true, hideFooter: true, postNumber: i + 1,
+                postCount: '0', reputation: '0', isOnline: false,
+                userTitle: 'Member', rankIconClass: 'fa-medal fa-regular',
+                likes: 0, hasReactions: false, reactionCount: 0, reactions: [],
                 availableActions: {}
             });
         }
         if (!mids.length) return;
         await fetchMultipleUsers(mids);
-        for (var i = 0; i < postsData.length; i++) {
-            var data = postsData[i];
-            var apiUser = data.mid ? userDataCache.get(data.mid) : null;
-            var completeData = Object.assign({}, data, { apiUser: apiUser });
-            var cardHtml = generateModernPost(completeData);
-            var temp = document.createElement('div');
-            temp.innerHTML = cardHtml;
-            var card = temp.firstElementChild;
+        for (const data of postsData) {
+            const apiUser = data.mid ? userDataCache.get(data.mid) : null;
+            const completeData = { ...data, apiUser };
+            const cardHtml = generateModernPost(completeData);
+            const card = createElementFromHTML(cardHtml);
             container.appendChild(card);
             applyFaviconsToMessageLinks(card);
         }
-        console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts displayed with favicons');
+        console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts');
     }
 
     // ============================================================================
     // INITIALIZE
     // ============================================================================
-function initialize() {
-    if (isInitialized) { return Promise.resolve(); }  // already done
-
-    // ---- Wait for dependencies if they aren't loaded yet ----
-    var depsReady = new Promise(function(resolve) {
-        var ready = { Utils: false, EventBus: false };
-        function check() {
-            if (ready.Utils && ready.EventBus) {
-                resolve();
+    function initialize() {
+        if (isInitialized) return Promise.resolve();
+        const depsReady = new Promise(resolve => {
+            let readyUtils = false, readyBus = false;
+            function check() { if (readyUtils && readyBus) resolve(); }
+            if (typeof ForumDOMUtils !== 'undefined') readyUtils = true;
+            else window.addEventListener('dom-utils-ready', () => { readyUtils = true; check(); });
+            if (typeof ForumEventBus !== 'undefined') readyBus = true;
+            else window.addEventListener('event-bus-ready', () => { readyBus = true; check(); });
+            check();
+            setTimeout(resolve, 5000);
+        });
+        return depsReady.then(() => {
+            if (isInitialized) return;
+            isInitialized = true;
+            const Utils = window.ForumDOMUtils || {};
+            const EventBus = window.ForumEventBus || {};
+            if (!isValidPage()) {
+                if (document.body.id === 'send' && document.querySelector('.summary')) {
+                    convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
+                }
+                return;
             }
-        }
-        if (typeof ForumDOMUtils !== 'undefined') {
-            ready.Utils = true;
-        } else {
-            window.addEventListener('dom-utils-ready', function() {
-                ready.Utils = true;
-                check();
-            });
-        }
-        if (typeof ForumEventBus !== 'undefined') {
-            ready.EventBus = true;
-        } else {
-            window.addEventListener('event-bus-ready', function() {
-                ready.EventBus = true;
-                check();
-            });
-        }
-        check();
-        setTimeout(resolve, 5000); // safety timeout
-    });
-
-    // RETURN THE PROMISE – this is the crucial fix
-    return depsReady.then(function() {
-        if (isInitialized) return;
-        isInitialized = true;
-
-        // Refresh references in case they were set after the module defined
-        Utils = typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils;
-        EventBus = typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus;
-
-        if (!isValidPage()) {
             if (document.body.id === 'send' && document.querySelector('.summary')) {
                 convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
+            } else {
+                convertAllPosts().catch(err => console.error('[PostsModule] Init error', err));
             }
-            return;
-        }
-
-        if (document.body.id === 'send' && document.querySelector('.summary')) {
-            convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
-        } else {
-            convertAllPosts().catch(err => console.error('[PostsModule] Init error', err));
-        }
-
-        // Register observer callbacks
-        if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
-            globalThis.forumObserver.register({
-                id: 'posts-module',
-                selector: CONFIG.POST_SELECTOR,
-                priority: 'high',
-                callback: function(node) {
-                    if (!isValidPost(node)) return;
-                    var postId = getPostId(node);
-                    if (!postId || convertedPostIds.has(postId)) return;
-                    convertAllPosts();
-                }
-            });
-            globalThis.forumObserver.register({
-                id: 'posts-module-reactions',
-                selector: '.st-emoji-container',
-                priority: 'medium',
-                callback: function(node) {
-                    var postEl = node.closest('.post');
-                    if (postEl && isValidPost(postEl)) {
-                        var postId = getPostId(postEl);
-                        if (postId) {
-                            setTimeout(function() { refreshReactionDisplay(postId); }, 100);
-                        }
-                        return;
+            if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
+                globalThis.forumObserver.register({
+                    id: 'posts-module',
+                    selector: CONFIG.POST_SELECTOR,
+                    priority: 'high',
+                    callback: (node) => {
+                        if (!isValidPost(node)) return;
+                        const postId = getPostId(node);
+                        if (!postId || convertedPostIds.has(postId)) return;
+                        convertAllPosts();
                     }
-                    var articleEl = node.closest('.article');
-                    if (articleEl) {
-                        var pid = getPostId(articleEl);
-                        if (pid) {
-                            setTimeout(function() { refreshReactionDisplay(pid); }, 100);
+                });
+                globalThis.forumObserver.register({
+                    id: 'posts-module-reactions',
+                    selector: '.st-emoji-container',
+                    priority: 'medium',
+                    callback: (node) => {
+                        const postEl = node.closest('.post');
+                        if (postEl && isValidPost(postEl)) {
+                            const postId = getPostId(postEl);
+                            if (postId) setTimeout(() => refreshReactionDisplay(postId), 100);
+                            return;
+                        }
+                        const articleEl = node.closest('.article');
+                        if (articleEl) {
+                            const pid = getPostId(articleEl);
+                            if (pid) setTimeout(() => refreshReactionDisplay(pid), 100);
                         }
                     }
-                }
-            });
-            globalThis.forumObserver.register({
-                id: 'posts-module-reaction-images',
-                selector: '.st-emoji-preview img',
-                priority: 'low',
-                callback: function(node) {
-                    var postEl = node.closest('.post');
-                    if (postEl && isValidPost(postEl)) {
-                        var postId = getPostId(postEl);
-                        if (postId) refreshReactionDisplay(postId);
+                });
+                globalThis.forumObserver.register({
+                    id: 'posts-module-reaction-images',
+                    selector: '.st-emoji-preview img',
+                    priority: 'low',
+                    callback: (node) => {
+                        const postEl = node.closest('.post');
+                        if (postEl && isValidPost(postEl)) {
+                            const postId = getPostId(postEl);
+                            if (postId) refreshReactionDisplay(postId);
+                        }
                     }
-                }
-            });
-        }
-    }).catch(function(err) {
-        console.error('[PostsModule] Dependency wait failed:', err);
-    });
-}
+                });
+            }
+        }).catch(err => console.error('[PostsModule] Dependency wait failed:', err));
+    }
 
     // ============================================================================
     // PUBLIC API
     // ============================================================================
     return {
-        initialize: initialize,
-        refreshReactionDisplay: refreshReactionDisplay,
-        refreshLikeDisplay: refreshLikeDisplay,
-        getPostsContainer: getPostsContainer,
-        isValidPost: isValidPost,
-        reset: function() {
+        initialize,
+        refreshReactionDisplay,
+        refreshLikeDisplay,
+        getPostsContainer,
+        isValidPost,
+        reset: function () {
             convertedPostIds.clear();
             postReactions.clear();
             userDataCache.clear();
             isInitialized = false;
-            if (activePopup) activePopup.remove();
-            activePopup = null;
+            if (activePopup) {
+                activePopup.remove();
+                activePopup = null;
+                document.removeEventListener('click', activePopupClickHandler);
+            }
         },
-        CONFIG: CONFIG
+        CONFIG
     };
-})(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
-   typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus);
+})();
 
 if (typeof window !== 'undefined') {
+    window.ForumPostsModule = ForumPostsModule;
     window.dispatchEvent(new CustomEvent('posts-module-ready'));
 
-    // ===== USER TIMING: mark ready and measure =====
     if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('posts-module-ready');
         try {
             performance.measure('posts-module-load-time', 'posts-module-start', 'posts-module-ready');
-        } catch (e) {
-            // Ignore if marks missing
-        }
+        } catch (e) {}
     }
-    // ================================================
 }
