@@ -1690,7 +1690,7 @@ body#msg .cp.send {
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
-    margin: var(--space-lg) 0;
+    margin: var(--space-lg) 0 0 0;
     overflow: hidden;
     order: 1;
 }
