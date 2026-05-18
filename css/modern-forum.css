@@ -1692,7 +1692,7 @@ body#msg .cp.send {
     box-shadow: var(--shadow-md);
     margin: var(--space-lg) 0;
     overflow: hidden;
-    order: 2;
+    order: 1;
 }
 
 /* ----- 2. Modern tabs (consistent with posts module) ----- */
@@ -2195,7 +2195,7 @@ body#msg #loading:not(.nascosta) {
     margin-bottom: var(--space-lg);
     overflow: hidden;
     order: 2;
-    margin: var(--space-md); auto 0 auto;
+    margin: var(--space-md); 0 0 0;
     max-widht: 1200px;
 }
 
