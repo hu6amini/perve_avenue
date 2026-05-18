@@ -1702,6 +1702,14 @@ body#msg .cp.send .tabs {
 body#msg .cp.send .tabs li {
     margin: 0;
     border: none;
+    float: none !important;
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+}
+
+body#msg .cp.send .tabs li[style*="float:right"] {
+    float: none !important;
 }
 
 body#msg .cp.send .tabs li a,
