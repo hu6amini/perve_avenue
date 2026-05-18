@@ -37,6 +37,10 @@ class ForumCoreObserver {
     // Store bound event handlers for cleanup
     #boundVisibilityHandler = null;
     #boundLoadHandler = null;
+    #boundThemeHandler = null;
+    #boundColorSchemeHandler = null;
+    #boundAnimationStartHandler = null;
+    #boundTransitionStartHandler = null;
     
     static #CONFIG = {
         observer: {
@@ -118,26 +122,36 @@ class ForumCoreObserver {
         });
     }
     
-    #log(...args) {
+    #log() {
         if (this.#debug) {
-            console.log('[ForumObserver]', ...args);
+            const args = ['[ForumObserver]'];
+            for (let i = 0; i < arguments.length; i++) {
+                args.push(arguments[i]);
+            }
+            console.log.apply(console, args);
         }
     }
     
-    #error(...args) {
-        console.error('[ForumObserver]', ...args);
+    #error() {
+        const args = ['[ForumObserver]'];
+        for (let i = 0; i < arguments.length; i++) {
+            args.push(arguments[i]);
+        }
+        console.error.apply(console, args);
         this.#mutationMetrics.errors++;
-        this.#mutationMetrics.lastError = args.join(' ');
+        this.#mutationMetrics.lastError = Array.prototype.join.call(arguments, ' ');
     }
     
     #isInEditor(element) {
         if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
         try {
             if (element.closest) {
-                return !!(element.closest('.tiptap') ||
+                return !!(
+                    element.closest('.tiptap') ||
                     element.closest('.ProseMirror') ||
                     element.closest('[contenteditable="true"]') ||
-                    element.closest('[role="textbox"]'));
+                    element.closest('[role="textbox"]')
+                );
             }
             let parent = element;
             while (parent && parent !== document.body) {
@@ -429,17 +443,18 @@ class ForumCoreObserver {
                 });
             });
         } else {
-            document.addEventListener('animationstart', (e) => {
+            this.#boundAnimationStartHandler = (e) => {
                 if (e.target && !this.#processedNodes.has(e.target) && !this.#isInEditor(e.target)) {
                     this.#processNode(e.target);
                 }
-            }, true);
-            
-            document.addEventListener('transitionstart', (e) => {
+            };
+            this.#boundTransitionStartHandler = (e) => {
                 if (e.target && !this.#processedNodes.has(e.target) && !this.#isInEditor(e.target)) {
                     this.#processNode(e.target);
                 }
-            }, true);
+            };
+            document.addEventListener('animationstart', this.#boundAnimationStartHandler, true);
+            document.addEventListener('transitionstart', this.#boundTransitionStartHandler, true);
         }
     }
     
@@ -569,17 +584,18 @@ class ForumCoreObserver {
     }
     
     #setupThemeListener() {
-        window.addEventListener('themechange', (e) => {
+        this.#boundThemeHandler = (e) => {
             const { theme } = e.detail || { theme: 'light' };
             this.#log('Theme change detected: ' + theme);
             this.#pageState = this.#detectPageState();
             this.#notifyThemeDependentCallbacks(theme);
             this.#rescanThemeSensitiveElements(theme);
             this.#updateThemeAttributes(theme);
-        }, { passive: true });
+        };
+        window.addEventListener('themechange', this.#boundThemeHandler, { passive: true });
         
         if (window.matchMedia) {
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            this.#boundColorSchemeHandler = (e) => {
                 if (!localStorage.getItem('forum-theme')) {
                     const newTheme = e.matches ? 'dark' : 'light';
                     queueMicrotask(() => {
@@ -587,7 +603,8 @@ class ForumCoreObserver {
                         this.#rescanThemeSensitiveElements('auto');
                     });
                 }
-            });
+            };
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', this.#boundColorSchemeHandler);
         }
     }
     
@@ -772,7 +789,6 @@ class ForumCoreObserver {
             return false;
         }
     
-        // Always process style/class changes – we'll check visibility later asynchronously
         if (mutation.type === 'attributes' && 
             (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
             return true;
@@ -792,7 +808,6 @@ class ForumCoreObserver {
         }
     
         if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-            // Throttle style-only mutations that don’t affect layout
             const now = Date.now();
             if (now - this.#lastStyleMutation < ForumCoreObserver.#CONFIG.performance.styleMutationThrottle) {
                 return false;
@@ -1286,7 +1301,6 @@ class ForumCoreObserver {
                         if (node && !this.#isInEditor(node) && !this.#processedNodes.has(node)) {
                             this.#processNode(node);
                             
-                            // Also check for shadow root and observe it
                             if (node.shadowRoot && !this.#shadowObservers?.has(node)) {
                                 this.#observeShadowRoot(node.shadowRoot, node);
                             }
@@ -1298,7 +1312,6 @@ class ForumCoreObserver {
             }
         }
         
-        // Scan iframes
         if (document.querySelectorAll) {
             document.querySelectorAll('iframe').forEach(iframe => {
                 if (iframe) {
@@ -1429,7 +1442,6 @@ class ForumCoreObserver {
             });
         }
         
-        // Re-check existing shadow DOM
         if (document.querySelectorAll) {
             document.querySelectorAll('*').forEach(host => {
                 if (host?.shadowRoot && !this.#shadowObservers?.has(host)) {
@@ -1683,12 +1695,24 @@ class ForumCoreObserver {
             this.#resizeObserver.disconnect();
         }
         
-        // Remove event listeners that were added in #init()
+        // Remove all stored event listeners
         if (this.#boundVisibilityHandler) {
             document.removeEventListener('visibilitychange', this.#boundVisibilityHandler, { capture: true });
         }
         if (this.#boundLoadHandler) {
             document.removeEventListener('load', this.#boundLoadHandler, true);
+        }
+        if (this.#boundThemeHandler) {
+            window.removeEventListener('themechange', this.#boundThemeHandler);
+        }
+        if (this.#boundColorSchemeHandler && window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', this.#boundColorSchemeHandler);
+        }
+        if (this.#boundAnimationStartHandler) {
+            document.removeEventListener('animationstart', this.#boundAnimationStartHandler, true);
+        }
+        if (this.#boundTransitionStartHandler) {
+            document.removeEventListener('transitionstart', this.#boundTransitionStartHandler, true);
         }
         
         this.#callbacks.clear();
@@ -1756,7 +1780,7 @@ if (!globalThis.forumObserver) {
                 stats: () => globalThis.forumObserver?.getStats(),
                 reprocess: (selector) => globalThis.forumObserver?.forceReprocess(selector)
             };
-            console.log('🔧 ForumObserver debug mode enabled. Use forumObserverDebug object.');
+            console.log('\ud83d\udd27 ForumObserver debug mode enabled. Use forumObserverDebug object.');
         }
         
         globalThis.addEventListener('pagehide', function() {
@@ -1766,7 +1790,7 @@ if (!globalThis.forumObserver) {
             }
         }, { once: true });
         
-        console.log('🚀 ForumCoreObserver ready (ENHANCED GLOBAL MODE) with editor skipping and style reprocessing');
+        console.log('\ud83d\ude80 ForumCoreObserver ready (ENHANCED GLOBAL MODE) with editor skipping and style reprocessing');
         
     } catch (error) {
         console.error('Failed to initialize ForumCoreObserver:', error);
