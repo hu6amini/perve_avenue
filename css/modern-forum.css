@@ -1678,6 +1678,11 @@ body#msg .slick_carousel a {
     visibility: hidden;
 }
 
+body#msg form {
+    display: flex;
+    flex-direction: column;
+}
+
 /* ----- 1. Base messenger container – card style ----- */
 body#msg .cp.send {
     background: var(--surface-color);
@@ -1686,6 +1691,7 @@ body#msg .cp.send {
     box-shadow: var(--shadow-md);
     margin: var(--space-lg) auto;
     overflow: hidden;
+    order: 2;
 }
 
 /* ----- 2. Modern tabs (consistent with posts module) ----- */
@@ -2187,6 +2193,8 @@ body#msg #loading:not(.nascosta) {
     box-shadow: var(--shadow);
     margin-bottom: var(--space-lg);
     overflow: hidden;
+    order: 2;
+    margin-top: var(--space-md);
 }
 
 body#msg #ajaxObject > b:first-of-type {
