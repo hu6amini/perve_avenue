@@ -2192,11 +2192,10 @@ body#msg #loading:not(.nascosta) {
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    margin-bottom: var(--space-lg);
     overflow: hidden;
     order: 2;
-    margin: var(--space-md); auto 0 auto;
-    max-widht: 1200px;
+    margin: var(--space-md) auto 0 auto;
+    max-width: 1200px;
     width:100%;
 }
 
