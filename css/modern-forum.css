@@ -2124,7 +2124,7 @@ body#msg #smilies img:hover {
 
 /* ==========================================================================
    Replace default smilies with Twemoji (CSS only)
-   Preserves custom emojis like :kekw:
+   Custom emoji :kekw: is preserved
    ========================================================================== */
 
 /* Base rule for all smilies images: hide original, show Twemoji background */
@@ -2148,7 +2148,7 @@ body#msg #smilies img[src*="kekw.png"] {
     height: auto !important;
 }
 
-/* ---- Standard emoji replacements (based on your JS mapping) ---- */
+/* ---- Standard emoji replacements (corrected) ---- */
 body#msg #smilies img[src*="huh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f928.svg") !important; }
 body#msg #smilies img[src*="happy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60a.svg") !important; }
 body#msg #smilies img[src*="ohmy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f62f.svg") !important; }
@@ -2161,18 +2161,26 @@ body#msg #smilies img[src*="rolleyes.gif"] { background-image: url("https://twem
 body#msg #smilies img[src*="sleep.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f634.svg") !important; }
 body#msg #smilies img[src*="dry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f612.svg") !important; }
 body#msg #smilies img[src*="smile.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f642.svg") !important; }
-body#msg #smilies img[src*="wub.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60b.svg") !important; }
+
+/* Corrected wub.gif → heart eyes (😍) instead of face savoring food */
+body#msg #smilies img[src*="wub.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60d.svg") !important; }
+
 body#msg #smilies img[src*="mad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f620.svg") !important; }
 body#msg #smilies img[src*="sad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f641.svg") !important; }
 body#msg #smilies img[src*="unsure.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f615.svg") !important; }
 body#msg #smilies img[src*="wacko.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f92a.svg") !important; }
 body#msg #smilies img[src*="blink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f440.svg") !important; }
-body#msg #smilies img[src*="ph34r.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f977.svg") !important; }
+
+/* Corrected ph34r.gif → fearful face (😨) instead of ninja */
+body#msg #smilies img[src*="ph34r.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f628.svg") !important; }
+
 body#msg #smilies img[src*="alien.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f47d.svg") !important; }
 body#msg #smilies img[src*="cry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f622.svg") !important; }
 body#msg #smilies img[src*="sick.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f922.svg") !important; }
 body#msg #smilies img[src*="shifty.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f608.svg") !important; }
-body#msg #smilies img[src*="w00t.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f92f.svg") !important; }
+
+/* Corrected w00t.gif → grinning face with big eyes (😁) instead of exploding head */
+body#msg #smilies img[src*="w00t.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f603.svg") !important; }
 
 /* File attachment input */
 body#msg #attach input[type="file"] {
