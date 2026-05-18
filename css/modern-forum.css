@@ -1863,13 +1863,6 @@ body#msg .top-editor {
     font-size: 0;
 }
 
-body#msg .top-editor .left.Sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    font-size: 0;
-}
-
 /* All editor buttons */
 body#msg .top-editor .left.Sub button,
 body#msg .top-editor .left.Sub input[type="button"] {
@@ -1926,7 +1919,7 @@ body#msg .bottom-editor .right-bottom-icons #emoticons2 {
 }
 
 /* Right‑side icons container – move ImgBB to main row, hide others */
-body#msg .right-top-icons {
+body#msg .right-top-icons, body#msg .top-editor .left.Sub, body#msg .top-editor .left.Sub > div:last-of-type {
     display: contents;
 }
 
