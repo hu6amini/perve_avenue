@@ -1730,6 +1730,7 @@ body#msg .cp.send .tabs li.current h2 a {
     color: var(--text-secondary);
     text-decoration: none;
     transition: all 0.2s ease;
+    text-align: left;
     border-bottom: 2px solid transparent;
 }
 
