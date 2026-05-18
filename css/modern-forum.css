@@ -1698,7 +1698,7 @@ body#msg .cp.send {
 /* ----- 2. Modern tabs (consistent with posts module) ----- */
 body#msg .cp.send .tabs {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
     gap: 0;
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
