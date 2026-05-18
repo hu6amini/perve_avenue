@@ -2197,6 +2197,7 @@ body#msg #loading:not(.nascosta) {
     order: 2;
     margin: var(--space-md); 0 0 0;
     max-widht: 1200px;
+    width:100%;
 }
 
 body#msg #ajaxObject > b:first-of-type {
