@@ -2122,6 +2122,58 @@ body#msg #smilies img:hover {
     transform: scale(1.1);
 }
 
+/* ==========================================================================
+   Replace default smilies with Twemoji (CSS only)
+   Preserves custom emojis like :kekw:
+   ========================================================================== */
+
+/* Base rule for all smilies images: hide original, show Twemoji background */
+body#msg #smilies img {
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
+    width: 32px !important;
+    height: 32px !important;
+    margin: 0 auto !important;
+    display: inline-block !important;
+}
+
+/* Exclude custom emojis (keep original) */
+body#msg #smilies img[alt=":kekw:"],
+body#msg #smilies img[src*="kekw.png"] {
+    content: none !important;
+    background-image: none !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+/* ---- Standard emoji replacements (based on your JS mapping) ---- */
+body#msg #smilies img[src*="huh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f928.svg") !important; }
+body#msg #smilies img[src*="happy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60a.svg") !important; }
+body#msg #smilies img[src*="ohmy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f62f.svg") !important; }
+body#msg #smilies img[src*="wink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f609.svg") !important; }
+body#msg #smilies img[src*="tongue.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f61b.svg") !important; }
+body#msg #smilies img[src*="biggrin.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f600.svg") !important; }
+body#msg #smilies img[src*="laugh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f606.svg") !important; }
+body#msg #smilies img[src*="cool.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60e.svg") !important; }
+body#msg #smilies img[src*="rolleyes.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f644.svg") !important; }
+body#msg #smilies img[src*="sleep.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f634.svg") !important; }
+body#msg #smilies img[src*="dry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f612.svg") !important; }
+body#msg #smilies img[src*="smile.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f642.svg") !important; }
+body#msg #smilies img[src*="wub.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60b.svg") !important; }
+body#msg #smilies img[src*="mad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f620.svg") !important; }
+body#msg #smilies img[src*="sad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f641.svg") !important; }
+body#msg #smilies img[src*="unsure.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f615.svg") !important; }
+body#msg #smilies img[src*="wacko.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f92a.svg") !important; }
+body#msg #smilies img[src*="blink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f440.svg") !important; }
+body#msg #smilies img[src*="ph34r.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f977.svg") !important; }
+body#msg #smilies img[src*="alien.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f47d.svg") !important; }
+body#msg #smilies img[src*="cry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f622.svg") !important; }
+body#msg #smilies img[src*="sick.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f922.svg") !important; }
+body#msg #smilies img[src*="shifty.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f608.svg") !important; }
+body#msg #smilies img[src*="w00t.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f92f.svg") !important; }
+
 /* File attachment input */
 body#msg #attach input[type="file"] {
     background: var(--bg-color);
