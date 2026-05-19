@@ -37,10 +37,24 @@ div, table {
     margin: unset;
 }
 
+/* Default style (fallback for all browsers) */
 [rows].textinput {
-    field-sizing: content;
-    min-height: 100px;
+    width: 100%;
+    height: 100px;       
+    resize: vertical;
+    min-height: 100px;    
     max-height: 500px;
+}
+
+/* Enhanced style (applied only to browsers that support it) */
+@supports (field-sizing: content) {
+    [rows].textinput {
+        field-sizing: content;
+        resize: none;
+        height: auto;
+        min-height: 100px;
+        max-height: 500px;
+    }
 }
 
 /* Hide original platform menu on user/msg pages */
