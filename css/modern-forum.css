@@ -2036,9 +2036,18 @@ body#msg .bottom-editor {
     width: 100%;
 }
 
+body#msg .bottom-editor p {
+    align-items:center;
+    display:flex;
+    gap: var(--space-xs);
+    font-size: 0;
+}
+
 body#msg .bottom-editor .left.Sub {
     display: flex;
     flex-direction: row;
+    gap: var(--space-xs);
+    font-size: 0;
 }
 
 body#msg .bottom-editor .left.Sub label {
