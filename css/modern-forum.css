@@ -1913,7 +1913,9 @@ body#msg .top-editor .left.Sub select[onchange*="[font="],
 body#msg .top-editor .left.Sub select[onchange*="[size="],
 body#msg .top-editor .left.Sub select[onchange*="[color="],
 body#msg .bottom-editor .right-bottom-icons #emoticons2,
-body#msg .top-editor .left.Sub button[title^="Create a list"] img {
+body#msg .top-editor .left.Sub button[title^="Create a list"] img,
+body#msg #attach b,
+body#msg #attach b + br {
     display: none !important;
 }
 
