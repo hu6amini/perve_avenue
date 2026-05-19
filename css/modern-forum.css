@@ -2041,9 +2041,11 @@ body#msg .bottom-editor p {
     display:flex;
     gap: var(--space-xs);
     font-size: 0;
+    margin: 0 !important;
 }
 
 body#msg .bottom-editor .left.Sub {
+    align-items:center;
     display: flex;
     flex-direction: row;
     gap: var(--space-xs);
