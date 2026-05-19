@@ -2125,8 +2125,7 @@ body#msg #attach:not(.nascosta) {
 body#msg #smilies .sunbar,
 body#msg #attach .sunbar {
     background: var(--bg-color);
-    padding: var(--pad-3) var(--pad-5);
-    font-size: var(--text-sm);
+    padding: var(--pad-3) var(--pad-5) !important;
 }
 
 body#msg #smilies table {
