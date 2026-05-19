@@ -2205,9 +2205,45 @@ body#msg #attach input[type="file"] {
     padding: var(--pad-2);
     color: var(--text-primary);
     font-size: var(--text-sm);
-    width: 90%;
-    margin: var(--space-sm) auto;
-    display: block;
+    width: auto;
+    max-width: 100%;
+    display: inline-block;
+    cursor: pointer;
+    margin: 0;
+    order: 1;
+}
+
+/* Style the "Choose file" button (modern browsers) */
+body#msg #attach input[type="file"]::file-selector-button {
+    background: var(--surface-light);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--pad-2) var(--pad-4);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-right: var(--space-sm);
+}
+
+body#msg #attach input[type="file"]::file-selector-button:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    transform: translateY(-1px);
+}
+
+body#msg #attach .list {
+    margin: 0 !important;
+    padding: var(--space-md) !important;
+}
+
+body#msg #attach .list li.Item {
+    text-align: center !important;
+    line-height: 1.618 !important;
+    padding: var(--space-md) !important;
+    background: transparent;
 }
 
 /* ----- 10. Action buttons (Send / Preview) ----- */
