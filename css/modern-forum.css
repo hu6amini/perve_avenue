@@ -2038,7 +2038,7 @@ body#msg .bottom-editor {
 
 body#msg .bottom-editor .left.Sub {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
 }
 
 body#msg .bottom-editor .left.Sub label {
