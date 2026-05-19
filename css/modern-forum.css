@@ -2036,21 +2036,9 @@ body#msg .bottom-editor {
     width: 100%;
 }
 
-/* disable inline margin */
-body#msg .bottom-editor p {
-    align-items:center;
-    display:flex;
-    gap: var(--space-xs);
-    font-size: 0;
-    margin: 0 !important;
-}
-
 body#msg .bottom-editor .left.Sub {
-    align-items:center;
     display: flex;
-    flex-direction: row;
-    gap: var(--space-xs);
-    font-size: 0;
+    flex-direction: column;
 }
 
 body#msg .bottom-editor .left.Sub label {
