@@ -2036,6 +2036,7 @@ body#msg .bottom-editor {
     width: 100%;
 }
 
+/* disable inline margin */
 body#msg .bottom-editor p {
     align-items:center;
     display:flex;
