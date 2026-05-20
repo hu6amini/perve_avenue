@@ -2410,3 +2410,55 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
         animation-duration: 0.01ms !important;
     }
 }
+
+
+
+body#msg #loading.nascosta,
+body#msg #smilies.nascosta,
+body#msg #attach.nascosta {
+    visibility: hidden;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    border: none;
+    transition:
+        visibility 0s 0.25s,          /* delay hiding until animation finishes */
+        opacity 0.25s ease,
+        max-height 0.25s ease,
+        padding 0.25s ease,
+        margin 0.25s ease,
+        border 0.25s ease;
+}
+
+body#msg #loading:not(.nascosta),
+body#msg #smilies:not(.nascosta),
+body#msg #attach:not(.nascosta) {
+    visibility: visible;
+    opacity: 1;
+    max-height: 2000px;                /* large enough to contain any real content */
+    overflow: hidden;
+    padding: var(--space-md);          /* keep your existing padding */
+    margin: var(--space-md);
+    border: 1px solid var(--border-color); /* dashed for preview, solid for others */
+    transition:
+        opacity 0.25s ease,
+        max-height 0.25s ease,
+        padding 0.25s ease,
+        margin 0.25s ease,
+        border 0.25s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body#msg #loading.nascosta,
+    body#msg #loading:not(.nascosta),
+    body#msg #smilies.nascosta,
+    body#msg #smilies:not(.nascosta),
+    body#msg #attach.nascosta,
+    body#msg #attach:not(.nascosta) {
+        transition: none !important;
+    }
+}
