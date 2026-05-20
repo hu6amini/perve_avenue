@@ -2179,11 +2179,25 @@ body#msg #smilies img {
     content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
-    background-size: contain !important;
-    width: 32px !important;
-    height: 32px !important;
+    background-size: auto 24px !important;
+    width: 36px !important;
+    height: 36px !important;
     margin: 0 auto !important;
     display: inline-block !important;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+}
+
+body#msg #smilies .Item td:hover {
+    background: var(--hover-color);        /* subtle highlight */
+    transform: scale(1.08);
+}
+
+body#msg #smilies .Item td:hover img { 
+    border-color: var(--primary-color) !important}
+
+body#msg #smilies .Item td:active {
+    transform: scale(0.95);
 }
 
 /* Exclude custom emojis (keep original) */
