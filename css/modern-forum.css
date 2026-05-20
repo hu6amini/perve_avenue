@@ -1695,16 +1695,16 @@ body#msg form {
     display: flex;
     flex-direction: column;
     max-width: 1200px;
-}
-
-/* ----- 1. Base messenger container – card style ----- */
-body#msg .cp.send {
     background: var(--surface-color);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
     margin: var(--space-lg) 0 0 0;
     overflow: hidden;
+}
+
+/* ----- 1. Base messenger container – card style ----- */
+body#msg .cp.send {
     order: 1;
 }
 
@@ -2311,15 +2311,12 @@ body#msg button[name="preview"]:hover {
 
 /* ----- 11. AJAX Preview area – modern card style ----- */
 body#msg #loading:not(.nascosta) {
-    background-color: var(--surface-color);
-    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    border: 1px dashed var(--border-color);
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
+    box-shadow: none;
     order: 2;
-    margin: var(--space-md) auto 0 auto;
-    max-width: 1200px;
-    width:100%;
+    margin: 0 var(--space-md) var(--space-lg) var(--space-md);
 }
 
 body#msg #ajaxObject > b:first-of-type {
