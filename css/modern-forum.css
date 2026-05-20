@@ -2317,6 +2317,7 @@ body#msg #loading:not(.nascosta) {
     box-shadow: none;
     order: 2;
     margin: 0 var(--space-md) var(--space-lg) var(--space-md);
+    overflow: hidden;
 }
 
 body#msg #ajaxObject > b:first-of-type {
