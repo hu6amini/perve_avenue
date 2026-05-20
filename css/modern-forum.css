@@ -2175,6 +2175,10 @@ body#msg #smilies img[src*="kekw.png"] {
     height: auto !important;
 }
 
+#smilies table, #smilies tbody, #smilies tr {
+    display: contents;
+}
+
 /* ---- Standard emoji replacements (corrected) ---- */
 body#msg #smilies img[src*="huh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f928.svg") !important; }
 body#msg #smilies img[src*="happy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60a.svg") !important; }
