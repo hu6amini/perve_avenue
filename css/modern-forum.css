@@ -2123,10 +2123,30 @@ body#msg #attach:not(.nascosta) {
     overflow: hidden;
 }
 
+#attach h3.sunbar::before {
+    content: '\f0c6';
+    font-size: 1rem;
+    color: var(--primary-color);
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    margin-right: var(--space-xs);
+    display: inline-block;
+}
+
+#smilies h3.sunbar::before {
+    content: '\f118';
+    font-size: 1rem;
+    color: var(--primary-color);
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    margin-right: var(--space-xs);
+    display: inline-block;
+}
+
 body#msg #smilies .sunbar,
 body#msg #attach .sunbar {
     background: var(--bg-color);
-    padding: var(--pad-3) var(--pad-5) !important;
+    padding: var(--pad-4) var(--pad-6) !important;
 }
 
 body#msg #smilies table {
