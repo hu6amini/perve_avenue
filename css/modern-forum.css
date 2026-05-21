@@ -2279,7 +2279,7 @@ body#msg #attach input[type="file"]::file-selector-button:hover {
 
 body#msg #attach .list {
     margin: 0 !important;
-    padding: var(--space-md) !important;
+    padding: var(--space-sm) var(--space-md);
 }
 
 body#msg #attach .list li.Item {
@@ -2400,7 +2400,7 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     margin: 0 !important;
 }
 
-#msg .Item.top-addons {
+#msg .Item.top-addons, #msg .Item.bottom-addons {
     padding: 0 !important;
 }
 
