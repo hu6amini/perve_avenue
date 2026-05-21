@@ -2157,14 +2157,8 @@ body#msg #smilies table {
     background: transparent;
 }
 
-body#msg #smilies td {
-    padding: var(--pad-2);
-    text-align: center;
-}
-
 body#msg #smilies img {
     cursor: pointer;
-    max-width: 32px;
 }
 
 /* ==========================================================================
