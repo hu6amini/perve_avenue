@@ -2143,6 +2143,10 @@ body#msg #attach:not(.nascosta) {
     display: inline-block;
 }
 
+#smilies .Item {
+ background-color: var(--bg-color);
+}
+
 body#msg #smilies .sunbar,
 body#msg #attach .sunbar {
     background: var(--bg-color);
