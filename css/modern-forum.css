@@ -2400,7 +2400,7 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     margin: 0 !important;
 }
 
-#msg .Item:not(.darkbar, #smilies .Item) {
+#msg .Item.top-addons {
     padding: 0 !important;
 }
 
