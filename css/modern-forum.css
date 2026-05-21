@@ -2401,7 +2401,7 @@ body#msg .Item[style*="margin-bottom: 0.5em"] {
     margin: 0 !important;
 }
 
-#msg .Item.top-addons, #msg .Item.bottom-addons {
+#msg .Item.top-addons, #msg .Item.bottom-addons, #ajaxObject {
     padding: 0 !important;
 }
 
