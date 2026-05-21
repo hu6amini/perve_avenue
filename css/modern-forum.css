@@ -2150,6 +2150,7 @@ body#msg #smilies .sunbar,
 body#msg #attach .sunbar {
     background: var(--bg-color);
     padding: var(--pad-4) var(--pad-6) !important;
+    border-bottom: 1px solid var(--border-color);
 }
 
 body#msg #smilies table {
