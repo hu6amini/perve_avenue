@@ -1797,7 +1797,6 @@ body#msg #smilies:not(.nascosta) {
 
 /* Recipient & title rows – modern flex layout */
 body#msg .cp.send .list > li {
-    background: transparent;
     padding: var(--space-sm) var(--space-md);
     display: flex;
     flex-wrap: wrap;
