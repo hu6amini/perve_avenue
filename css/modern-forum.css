@@ -2164,12 +2164,7 @@ body#msg #smilies td {
 
 body#msg #smilies img {
     cursor: pointer;
-    transition: transform 0.1s ease;
     max-width: 32px;
-}
-
-body#msg #smilies img:hover {
-    transform: scale(1.1);
 }
 
 /* ==========================================================================
