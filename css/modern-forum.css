@@ -2169,16 +2169,14 @@ body#msg #smilies img {
 
 /* Base rule for all smilies images: hide original, show Twemoji background */
 body#msg #smilies img {
-    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
-    background-repeat: no-repeat !important;
-    background-position: center !important;
-    background-size: auto 20px !important;
     width: 36px !important;
     height: 36px !important;
     margin: 0 auto !important;
     display: inline-block !important;
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
+    object-fit: contain;               /* prevents distortion for custom images */
+    background-color: var(--bg-color); /* fallback for transparent images */
 }
 
 body#msg #smilies .Item td { 
@@ -2195,6 +2193,14 @@ body#msg #smilies .Item td:hover img {
 
 body#msg #smilies .Item td:active {
     transform: scale(0.95);
+}
+
+/* Replace ONLY standard forum emojis (those from /emoticons/ folder) */
+body#msg #smilies img[src*="/emoticons/"] {
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: auto 20px !important;
 }
 
 /* Exclude custom emojis (keep original) */
