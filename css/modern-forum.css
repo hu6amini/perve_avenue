@@ -2203,15 +2203,6 @@ body#msg #smilies img[src*="/emoticons/"] {
     background-size: auto 20px !important;
 }
 
-/* Exclude custom emojis (keep original) */
-body#msg #smilies img[alt=":kekw:"],
-body#msg #smilies img[src*="kekw.png"] {
-    content: none !important;
-    background-image: none !important;
-    width: auto !important;
-    height: auto !important;
-}
-
 #smilies table, #smilies tbody, #smilies tr {
     display: contents;
 }
