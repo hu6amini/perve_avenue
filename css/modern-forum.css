@@ -2181,6 +2181,10 @@ body#msg #smilies img {
     border-radius: var(--radius);
 }
 
+body#msg #smilies .Item td { 
+    border-radius: var(--radius);
+}
+
 body#msg #smilies .Item td:hover {
     background: var(--hover-color);        /* subtle highlight */
     transform: scale(1.08);
