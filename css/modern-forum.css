@@ -1882,7 +1882,7 @@ body#msg .top-editor .left.Sub button,
 body#msg .top-editor .left.Sub input[type="button"] {
     background: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius);
     font-size: 0;
     padding: 0;
     margin: 0 var(--space-micro);
@@ -1907,7 +1907,7 @@ body#msg .top-editor .left.Sub input[type="button"]:hover {
 body#msg .top-editor .left.Sub select.codebuttons {
     background: var(--bg-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius);
     padding: var(--pad-2) var(--pad-3);
     color: var(--text-primary);
     font-size: var(--text-xs);
@@ -1991,7 +1991,7 @@ body#msg #imgbb-icon {
     background-position: center !important;
     background-color: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius);
     margin: 0 var(--space-micro);
     padding: 0;
     cursor: pointer;
@@ -2058,7 +2058,7 @@ body#msg .bottom-editor .right-bottom-icons img {
     background-position: center !important;
     background-color: transparent !important;
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius);
     margin: 0 var(--space-micro);
     padding: 0;
     cursor: pointer;
