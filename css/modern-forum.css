@@ -2171,7 +2171,7 @@ body#msg #smilies img {
     content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
     background-repeat: no-repeat !important;
     background-position: center !important;
-    background-size: auto 24px !important;
+    background-size: auto 20px !important;
     width: 36px !important;
     height: 36px !important;
     margin: 0 auto !important;
