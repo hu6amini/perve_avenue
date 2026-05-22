@@ -1801,7 +1801,6 @@ body#msg .cp.send .list > li {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-md);
 }
 
 body#msg .cp.send .list .Item.top-addons + .Item {
@@ -2120,6 +2119,10 @@ body#msg #attach:not(.nascosta) {
     margin: var(--space-md);
     border: 1px solid var(--border-color);
     overflow: hidden;
+}
+
+body#msg #smilies .Item {
+    gap: var(--space-xs);
 }
 
 #attach h3.sunbar::before {
