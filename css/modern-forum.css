@@ -2195,18 +2195,20 @@ body#msg #smilies .Item td:active {
     transform: scale(0.95);
 }
 
-/* Replace ONLY standard forum emojis (those from /emoticons/ folder) */
+/* Make the original image invisible but keep its clickable area */
 body#msg #smilies img[src*="/emoticons/"] {
-    opacity: 0 !important;                    /* hide original GIF */
-    background-repeat: no-repeat !important;
-    background-position: center !important;
-    background-size: contain !important;      /* fits 36×36 box */
+    /* Hide the image itself by making it completely transparent and tiny */
+    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
     width: 36px !important;
     height: 36px !important;
     display: inline-block !important;
+    /* The background image will be visible because the content is a transparent 1×1 pixel */
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: contain !important;
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    cursor: pointer;
+    background-color: transparent !important;
 }
 
 #smilies table, #smilies tbody, #smilies tr {
