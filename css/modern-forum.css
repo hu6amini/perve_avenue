@@ -2217,6 +2217,7 @@ body#msg #smilies img:not([src*="/emoticons/"]) {
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     background: var(--bg-color);
+    padding: 0.5rem; 
 }
 
 #smilies table, #smilies tbody, #smilies tr {
