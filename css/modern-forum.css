@@ -2224,38 +2224,38 @@ body#msg #smilies img:not([src*="/emoticons/"]) {
 }
 
 /* ---- Standard emoji replacements (corrected) ---- */
-body#msg #smilies img[src*="huh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f928.svg") !important; }
-body#msg #smilies img[src*="happy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60a.svg") !important; }
-body#msg #smilies img[src*="ohmy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f62f.svg") !important; }
-body#msg #smilies img[src*="wink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f609.svg") !important; }
-body#msg #smilies img[src*="tongue.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f61b.svg") !important; }
-body#msg #smilies img[src*="biggrin.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f600.svg") !important; }
-body#msg #smilies img[src*="laugh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f606.svg") !important; }
-body#msg #smilies img[src*="cool.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60e.svg") !important; }
-body#msg #smilies img[src*="rolleyes.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f644.svg") !important; }
-body#msg #smilies img[src*="sleep.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f634.svg") !important; }
-body#msg #smilies img[src*="dry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f612.svg") !important; }
-body#msg #smilies img[src*="smile.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f642.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/huh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f928.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/happy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60a.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/ohmy.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f62f.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/wink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f609.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/tongue.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f61b.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/biggrin.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f600.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/laugh.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f606.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/cool.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60e.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/rolleyes.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f644.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/sleep.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f634.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/dry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f612.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/smile.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f642.svg") !important; }
 
 /* Corrected wub.gif → heart eyes (😍) instead of face savoring food */
-body#msg #smilies img[src*="wub.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60d.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/wub.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f60d.svg") !important; }
 
-body#msg #smilies img[src*="mad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f620.svg") !important; }
-body#msg #smilies img[src*="sad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f641.svg") !important; }
-body#msg #smilies img[src*="unsure.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f615.svg") !important; }
-body#msg #smilies img[src*="wacko.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f92a.svg") !important; }
-body#msg #smilies img[src*="blink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f440.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/mad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f620.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/sad.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f641.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/unsure.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f615.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/wacko.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f92a.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/blink.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f440.svg") !important; }
 
 /* Corrected ph34r.gif → fearful face (😨) instead of ninja */
-body#msg #smilies img[src*="ph34r.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f628.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/ph34r.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f628.svg") !important; }
 
-body#msg #smilies img[src*="alien.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f47d.svg") !important; }
-body#msg #smilies img[src*="cry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f622.svg") !important; }
-body#msg #smilies img[src*="sick.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f922.svg") !important; }
-body#msg #smilies img[src*="shifty.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f608.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/alien.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f47d.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/cry.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f622.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/sick.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f922.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/shifty.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f608.svg") !important; }
 
 /* Corrected w00t.gif → grinning face with big eyes (😁) instead of exploding head */
-body#msg #smilies img[src*="w00t.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f603.svg") !important; }
+body#msg #smilies img[src="https://img.forumfree.net/html/emoticons/new/w00t.gif"] { background-image: url("https://twemoji.maxcdn.com/v/latest/svg/1f603.svg") !important; }
 
 /* File attachment input */
 body#msg #attach input[type="file"] {
