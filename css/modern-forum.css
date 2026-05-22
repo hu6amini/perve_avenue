@@ -2197,10 +2197,16 @@ body#msg #smilies .Item td:active {
 
 /* Replace ONLY standard forum emojis (those from /emoticons/ folder) */
 body#msg #smilies img[src*="/emoticons/"] {
-    content: url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7") !important;
+    opacity: 0 !important;                    /* hide original GIF */
     background-repeat: no-repeat !important;
     background-position: center !important;
-    background-size: auto 20px !important;
+    background-size: contain !important;      /* fits 36×36 box */
+    width: 36px !important;
+    height: 36px !important;
+    display: inline-block !important;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    cursor: pointer;
 }
 
 #smilies table, #smilies tbody, #smilies tr {
