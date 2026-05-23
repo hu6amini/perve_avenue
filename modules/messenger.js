@@ -252,7 +252,7 @@ var buttons = [
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
-        smileBtn.innerHTML = '<i class="fas fa-smile"></i>';
+        smileBtn.innerHTML = '<i class="far fa-smile"></i>';
         smileBtn.title = 'Insert smiley';
         smileBtn.onclick = function() {
             var smiliesDiv = document.getElementById('smilies');
@@ -305,7 +305,7 @@ var buttons = [
         var attachRow = document.createElement('div');
         attachRow.className = 'modern-attach';
         attachRow.innerHTML = ''
-            + '<label class="modern-file-label"><i class="fas fa-paperclip"></i> Attach file'
+            + '<label class="modern-file-label"><i class="far fa-paperclip"></i> Attach file'
             + '<input type="file" id="modern-file-upload" style="display:none"></label>'
             + '<span id="modern-file-name">No file chosen</span>';
         var fileInput = attachRow.querySelector('#modern-file-upload');
