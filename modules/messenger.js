@@ -140,7 +140,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER (places UI inside modern wrapper, hides legacy)
+    // CORE BUILDER (places UI inside modern wrapper, after carousel, hides legacy)
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
         // ----- Extract original elements -----
@@ -160,14 +160,14 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (!originalTextarea) throw new Error('Textarea #Post not found');
 
-        // ----- Find or create the modern wrapper (same as posts) -----
+        // ----- Find or create the main wrapper -----
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) {
-            wrapper = document.createElement('div');
+            wrapper = document.createElement('main');
             wrapper.id = 'modern-forum-wrapper';
             wrapper.className = 'modern-forum-wrapper';
-            // Insert after carousel or at beginning of body
-            var carousel = document.querySelector('.carousel-wrapper');
+            // Insert after the carousel (if any) or at the beginning of body
+            var carousel = document.querySelector('.carousel-wrapper, .slick_carousel');
             if (carousel && carousel.parentNode) {
                 carousel.parentNode.insertBefore(wrapper, carousel.nextSibling);
             } else {
@@ -175,13 +175,21 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         }
 
-        // ----- Create container for messenger inside wrapper -----
+        // ----- Locate the carousel inside the wrapper -----
+        var carousel = wrapper.querySelector('.carousel-wrapper, .slick_carousel');
         var messengerContainer = document.createElement('div');
         messengerContainer.id = 'modern-messenger-container';
         messengerContainer.className = 'modern-messenger-container';
-        wrapper.appendChild(messengerContainer);
 
-        // ----- Build modern UI elements (same as before) -----
+        if (carousel) {
+            // Insert messenger container right after the carousel
+            carousel.parentNode.insertBefore(messengerContainer, carousel.nextSibling);
+        } else {
+            // Fallback: append at the end of wrapper
+            wrapper.appendChild(messengerContainer);
+        }
+
+        // ----- Build modern UI inside messengerContainer -----
         var container = document.createElement('div');
         container.id = 'modern-messenger';
         container.className = 'modern-messenger';
@@ -210,6 +218,7 @@ var MessengerModule = (function(Utils, EventBus) {
         // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
+
         var buttons = [
             { title: 'Bold', icon: 'fas fa-bold', cmd: function() { applyFormat('bold'); } },
             { title: 'Italic', icon: 'fas fa-italic', cmd: function() { applyFormat('italic'); } },
@@ -223,6 +232,7 @@ var MessengerModule = (function(Utils, EventBus) {
             { title: 'Code', icon: 'fas fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
             { title: 'Spoiler', icon: 'fas fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
         ];
+
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
             var button = document.createElement('button');
@@ -230,10 +240,13 @@ var MessengerModule = (function(Utils, EventBus) {
             button.className = 'modern-editor-btn';
             button.innerHTML = '<i class="' + btn.icon + '"></i>';
             button.title = btn.title;
-            button.onclick = (function(cmd) { return function() { cmd(); focusWysiwyg(); }; })(btn.cmd);
+            button.onclick = (function(cmd) {
+                return function() { cmd(); focusWysiwyg(); };
+            })(btn.cmd);
             toolbar.appendChild(button);
         }
-        // ImgBB button
+
+        // ImgBB upload button
         var imgbbBtn = document.createElement('button');
         imgbbBtn.type = 'button';
         imgbbBtn.className = 'modern-editor-btn';
@@ -252,7 +265,8 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         };
         toolbar.appendChild(imgbbBtn);
-        // Smiley button
+
+        // Smiley button (toggles the original smilies panel)
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
@@ -286,12 +300,17 @@ var MessengerModule = (function(Utils, EventBus) {
         wysiwygDiv.style.lineHeight = '1.618';
         wysiwygDiv.style.overflowY = 'auto';
         wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
+
+        function focusWysiwyg() {
+            wysiwygDiv.focus();
+        }
+
+        // Sync back to original textarea on any input
         wysiwygDiv.addEventListener('input', function() {
             originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
         });
-        function focusWysiwyg() { wysiwygDiv.focus(); }
 
-        // Options row
+        // Options row (checkboxes)
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -320,21 +339,21 @@ var MessengerModule = (function(Utils, EventBus) {
         var fileLabel = attachRow.querySelector('.modern-file-label');
         if (fileLabel) fileLabel.onclick = function() { fileInput.click(); };
 
-        // Action buttons
+        // Action buttons (Send / Preview)
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary">Preview</button>'
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary">Send Message</button>';
 
-        // Preview area
+        // Preview area (hidden initially)
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
 
-        // Assemble container
+        // Assemble main container
         container.appendChild(tabsHtml);
         container.appendChild(recipientRow);
         container.appendChild(toolbar);
@@ -348,7 +367,7 @@ var MessengerModule = (function(Utils, EventBus) {
         // ----- Hide the legacy form -----
         legacyForm.style.display = 'none';
 
-        // ----- Data binding for recipient, title, checkboxes -----
+        // ----- Data binding (sync modern ↔ legacy) -----
         var modernRecipient = document.getElementById('modern-recipient');
         var modernContact = document.getElementById('modern-contact');
         var modernTitle = document.getElementById('modern-title');
@@ -362,6 +381,7 @@ var MessengerModule = (function(Utils, EventBus) {
             if (addSentCheckbox && modernAddSent) addSentCheckbox.checked = modernAddSent.checked;
             if (addTrackingCheckbox && modernAddTracking) addTrackingCheckbox.checked = modernAddTracking.checked;
         }
+
         function syncFromOriginal() {
             if (recipientInput && modernRecipient) modernRecipient.value = recipientInput.value;
             if (contactSelect && modernContact) modernContact.value = contactSelect.value;
@@ -369,6 +389,7 @@ var MessengerModule = (function(Utils, EventBus) {
             if (addSentCheckbox && modernAddSent) modernAddSent.checked = addSentCheckbox.checked;
             if (addTrackingCheckbox && modernAddTracking) modernAddTracking.checked = addTrackingCheckbox.checked;
         }
+
         if (modernRecipient) modernRecipient.addEventListener('input', syncToOriginal);
         if (modernContact) modernContact.addEventListener('change', syncToOriginal);
         if (modernTitle) modernTitle.addEventListener('input', syncToOriginal);
@@ -376,7 +397,7 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // Preview button
+        // ----- Preview button -----
         var modernPreviewBtn = document.getElementById('modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
@@ -404,7 +425,7 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Submit button
+        // ----- Submit button -----
         var modernSubmitBtn = document.getElementById('modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
@@ -422,9 +443,9 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Optional: hide carousel if needed
-        var carousel = document.querySelector('.carousel-wrapper');
-        if (carousel && carousel.style.display !== 'none') carousel.style.display = 'none';
+        // Optional: hide any extra carousel outside wrapper
+        var extraCarousel = document.querySelector('.carousel-wrapper');
+        if (extraCarousel && extraCarousel !== carousel) extraCarousel.style.display = 'none';
     }
 
     function escapeHtml(str) {
@@ -437,6 +458,9 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
+    // ------------------------------------------------------------------------
+    // EXPOSED PUBLIC METHODS
+    // ------------------------------------------------------------------------
     return {
         initialize: initialize,
         reset: reset
