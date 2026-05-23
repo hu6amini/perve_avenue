@@ -217,6 +217,8 @@
 .fa-paperclip::before { content: "\f0c6"; }
 .fa-cloud-arrow-up::before { content: "\f0ee"; }
 .fa-list::before { content: "\f03a"; }
+.fa-address-book::before { content: "\f2b9"; }
+
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
