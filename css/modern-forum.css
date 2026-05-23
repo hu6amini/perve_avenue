@@ -2094,10 +2094,16 @@ body#msg #Post {
     padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     line-height: 1.618;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100% !important;
+}
+
+/* Placeholder text color for the message textarea */
+body#msg #Post::placeholder {
+    color: var(--text-tertiary);
+    opacity: 1;
 }
 
 body#msg #Post:focus {
