@@ -1,4 +1,4 @@
-// Messenger Module – WYSIWYG modern UI for private messages (placed inside wrapper)
+// Messenger Module – WYSIWYG modern UI for private messages
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -83,7 +83,6 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gi, '<span style="font-size:$1px">$2</span>');
         html = html.replace(/\[color=([^\]]+)\](.*?)\[\/color\]/gi, '<span style="color:$1">$2</span>');
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
-        // Legacy HTML tags (keep as is)
         return html;
     }
 
@@ -137,6 +136,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     function applyFormat(command, value) {
         document.execCommand(command, false, value);
+        focusWysiwyg();
     }
 
     function applyCustomBBCode(openTag, closeTag) {
@@ -150,13 +150,20 @@ var MessengerModule = (function(Utils, EventBus) {
         var fragment = range.createContextualFragment(html);
         range.insertNode(fragment);
         selection.collapseToEnd();
+        focusWysiwyg();
+    }
+
+    var wysiwygDiv = null;
+
+    function focusWysiwyg() {
+        if (wysiwygDiv) wysiwygDiv.focus();
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER (with wrapper placement)
+    // CORE BUILDER
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
-        // ----- Extract original elements (required for sync) -----
+        // Extract original elements
         var legacyForm = document.querySelector('.cp.send');
         if (!legacyForm) throw new Error('.cp.send not found');
 
@@ -173,21 +180,53 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (!originalTextarea) throw new Error('Textarea #Post not found');
 
-        // ----- Create modern messenger container -----
+        // Create modern messenger container
         var messengerContainer = document.createElement('div');
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
 
-        // ----- Tabs (clone original) -----
-        var tabsHtml = document.querySelector('.cp.send .tabs');
-        if (tabsHtml) {
-            tabsHtml = tabsHtml.cloneNode(true);
-            tabsHtml.classList.add('modern-tabs');
-        } else {
-            tabsHtml = document.createElement('div');
+        // ----- Tabs (rebuild with actual icons) -----
+        var tabsHtml = document.createElement('ul');
+        tabsHtml.className = 'modern-tabs';
+
+        var tabItems = [
+            { text: 'Send message', icon: 'fa-regular fa-paper-plane', href: '/?act=Msg&CODE=04&c=660892' },
+            { text: 'Messages', icon: 'fa-regular fa-envelope', href: '/?act=Msg&CODE=01&c=660892' },
+            { text: 'Notification centre', icon: 'fa-regular fa-bell', href: '/?act=Msg&CODE=16&c=660892' },
+            { text: 'Folders', icon: 'fa-regular fa-folder', href: '/?act=Msg&CODE=07&c=660892' },
+            { text: 'Contacts', icon: 'fa-regular fa-address-book', href: '/?act=Msg&CODE=02&c=660892' },
+            { text: 'Notepad', icon: 'fa-regular fa-pen', href: '/?act=UserCP&CODE=00&c=660892' }
+        ];
+
+        var originalTabs = document.querySelectorAll('.cp.send .tabs li');
+
+        for (var i = 0; i < tabItems.length; i++) {
+            var tab = tabItems[i];
+            var li = document.createElement('li');
+            var isCurrent = false;
+
+            if (originalTabs[i] && originalTabs[i].classList.contains('current')) {
+                isCurrent = true;
+            }
+
+            li.className = isCurrent ? 'Sub current' : 'Sub';
+
+            var h2 = document.createElement('h2');
+            var a = document.createElement('a');
+            a.href = tab.href;
+
+            var icon = document.createElement('i');
+            icon.className = tab.icon;
+            icon.setAttribute('aria-hidden', 'true');
+            a.appendChild(icon);
+            a.appendChild(document.createTextNode(' ' + tab.text));
+
+            h2.appendChild(a);
+            li.appendChild(h2);
+            tabsHtml.appendChild(li);
         }
 
-        // ----- Recipient & Title row -----
+        // Recipient & Title row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -199,22 +238,22 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<div class="modern-field"><label>Message title</label>'
             + '<input type="text" id="modern-title" class="modern-input" value="' + escapeHtml(titleInput ? titleInput.value : '') + '" placeholder="Subject"></div>';
 
-        // ----- WYSIWYG toolbar -----
+        // WYSIWYG toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
 
-var buttons = [
-    { title: 'Bold', icon: 'fa-regular fa-bold', cmd: function() { applyFormat('bold'); } },
-    { title: 'Italic', icon: 'fa-regular fa-italic', cmd: function() { applyFormat('italic'); } },
-    { title: 'Underline', icon: 'fa-regular fa-underline', cmd: function() { applyFormat('underline'); } },
-    { title: 'Strikethrough', icon: 'fa-regular fa-strikethrough', cmd: function() { applyFormat('strikeThrough'); } },
-    { title: 'List UL', icon: 'fa-regular fa-list', cmd: function() { applyFormat('insertUnorderedList'); } },
-    { title: 'Link', icon: 'fa-regular fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
-    { title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
-    { title: 'Quote', icon: 'fa-regular fa-quote-left', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
-    { title: 'Code', icon: 'fa-regular fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
-    { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
-];
+        var buttons = [
+            { title: 'Bold', icon: 'fa-regular fa-bold', cmd: function() { applyFormat('bold'); } },
+            { title: 'Italic', icon: 'fa-regular fa-italic', cmd: function() { applyFormat('italic'); } },
+            { title: 'Underline', icon: 'fa-regular fa-underline', cmd: function() { applyFormat('underline'); } },
+            { title: 'Strikethrough', icon: 'fa-regular fa-strikethrough', cmd: function() { applyFormat('strikeThrough'); } },
+            { title: 'List UL', icon: 'fa-regular fa-list', cmd: function() { applyFormat('insertUnorderedList'); } },
+            { title: 'Link', icon: 'fa-regular fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
+            { title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
+            { title: 'Quote', icon: 'fa-regular fa-quote-left', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
+            { title: 'Code', icon: 'fa-regular fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
+            { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
+        ];
 
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
@@ -223,7 +262,9 @@ var buttons = [
             button.className = 'modern-editor-btn';
             button.innerHTML = '<i class="' + btn.icon + '"></i>';
             button.title = btn.title;
-            button.onclick = (function(cmd) { return function() { cmd(); focusWysiwyg(); }; })(btn.cmd);
+            button.onclick = (function(cmd) {
+                return function() { cmd(); };
+            })(btn.cmd);
             toolbar.appendChild(button);
         }
 
@@ -247,7 +288,7 @@ var buttons = [
         };
         toolbar.appendChild(imgbbBtn);
 
-        // Smiley button (toggle original smilies panel)
+        // Smiley button
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
@@ -264,14 +305,14 @@ var buttons = [
         };
         toolbar.insertBefore(smileBtn, imgbbBtn);
 
-        // ----- WYSIWYG contenteditable div -----
-        var wysiwygDiv = document.createElement('div');
+        // WYSIWYG contenteditable div
+        wysiwygDiv = document.createElement('div');
         wysiwygDiv.id = 'modern-wysiwyg';
         wysiwygDiv.className = 'modern-wysiwyg';
         wysiwygDiv.contentEditable = 'true';
         wysiwygDiv.setAttribute('role', 'textbox');
         wysiwygDiv.setAttribute('aria-multiline', 'true');
-        wysiwygDiv.style.minHeight = '200px';
+        wysiwygDiv.style.minHeight = '250px';
         wysiwygDiv.style.padding = 'var(--pad-4)';
         wysiwygDiv.style.backgroundColor = 'var(--bg-color)';
         wysiwygDiv.style.border = '1px solid var(--border-color)';
@@ -281,30 +322,26 @@ var buttons = [
         wysiwygDiv.style.lineHeight = '1.618';
         wysiwygDiv.style.overflowY = 'auto';
 
-        // Initial sync from legacy textarea
+        // Initial sync
         wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
 
-        // Sync back to original textarea on any input
+        // Live sync back to original textarea
         wysiwygDiv.addEventListener('input', function() {
             originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
         });
 
-        function focusWysiwyg() {
-            wysiwygDiv.focus();
-        }
-
-        // ----- Options row -----
+        // Options row
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" ' + (addSentCheckbox && addSentCheckbox.checked ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
 
-        // ----- File attachment row -----
+        // File attachment row
         var attachRow = document.createElement('div');
         attachRow.className = 'modern-attach';
         attachRow.innerHTML = ''
-            + '<label class="modern-file-label"><i class="far fa-paperclip"></i> Attach file'
+            + '<label class="modern-file-label"><i class="fa-regular fa-paperclip"></i> Attach file'
             + '<input type="file" id="modern-file-upload" style="display:none"></label>'
             + '<span id="modern-file-name">No file chosen</span>';
         var fileInput = attachRow.querySelector('#modern-file-upload');
@@ -322,21 +359,21 @@ var buttons = [
         var fileLabel = attachRow.querySelector('.modern-file-label');
         if (fileLabel) fileLabel.onclick = function() { fileInput.click(); };
 
-        // ----- Action buttons -----
+        // Action buttons
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary">Preview</button>'
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary">Send Message</button>';
 
-        // ----- Preview area -----
+        // Preview area
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
 
-        // ----- Assemble modern messenger container -----
+        // Assemble
         messengerContainer.appendChild(tabsHtml);
         messengerContainer.appendChild(recipientRow);
         messengerContainer.appendChild(toolbar);
@@ -346,10 +383,9 @@ var buttons = [
         messengerContainer.appendChild(actions);
         messengerContainer.appendChild(previewArea);
 
-        // ----- PLACEMENT inside modern wrapper after carousel -----
+        // Placement inside wrapper after carousel
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (wrapper) {
-            // Find carousel wrapper (if exists) to insert after it
             var carousel = wrapper.querySelector('.carousel-wrapper');
             if (carousel) {
                 carousel.insertAdjacentElement('afterend', messengerContainer);
@@ -357,11 +393,10 @@ var buttons = [
                 wrapper.appendChild(messengerContainer);
             }
         } else {
-            // Fallback: insert before legacy form (keep legacy visible)
             legacyForm.parentNode.insertBefore(messengerContainer, legacyForm);
         }
 
-        // ----- Data binding for recipient, title, checkboxes -----
+        // Data binding
         var modernRecipient = document.getElementById('modern-recipient');
         var modernContact = document.getElementById('modern-contact');
         var modernTitle = document.getElementById('modern-title');
@@ -391,7 +426,7 @@ var buttons = [
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // ----- Preview button -----
+        // Preview button
         var modernPreviewBtn = document.getElementById('modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
@@ -419,7 +454,7 @@ var buttons = [
             };
         }
 
-        // ----- Submit button -----
+        // Submit button
         var modernSubmitBtn = document.getElementById('modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
@@ -436,8 +471,6 @@ var buttons = [
                 }
             };
         }
-
-        // Carousel is NOT hidden – it stays visible above the modern messenger
     }
 
     function escapeHtml(str) {
@@ -450,9 +483,6 @@ var buttons = [
         });
     }
 
-    // ------------------------------------------------------------------------
-    // EXPOSED PUBLIC METHODS
-    // ------------------------------------------------------------------------
     return {
         initialize: initialize,
         reset: reset
