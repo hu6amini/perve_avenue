@@ -212,7 +212,7 @@ var buttons = [
     { title: 'List OL', icon: 'far fa-list-ol', cmd: function() { applyFormat('insertOrderedList'); } },
     { title: 'Link', icon: 'far fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
     { title: 'Image URL', icon: 'far fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
-    { title: 'Quote', icon: 'far fa-quote-right', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
+    { title: 'Quote', icon: 'far fa-quote-left', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
     { title: 'Code', icon: 'far fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
     { title: 'Spoiler', icon: 'far fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
 ];
