@@ -1848,8 +1848,8 @@ input[type="radio"]:checked::before {
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* Placeholder for empty WYSIWYG editor */
-.modern-wysiwyg:empty:before {
+/* Placeholder for empty WYSIWYG editor – uses class instead of :empty */
+.modern-wysiwyg.empty:before {
     content: "💬 Write your message...";
     color: var(--text-tertiary);
     pointer-events: none;
