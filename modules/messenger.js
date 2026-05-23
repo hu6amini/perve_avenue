@@ -203,19 +203,19 @@ var MessengerModule = (function(Utils, EventBus) {
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
 
-        var buttons = [
-            { title: 'Bold', icon: 'fas fa-bold', cmd: function() { applyFormat('bold'); } },
-            { title: 'Italic', icon: 'fas fa-italic', cmd: function() { applyFormat('italic'); } },
-            { title: 'Underline', icon: 'fas fa-underline', cmd: function() { applyFormat('underline'); } },
-            { title: 'Strikethrough', icon: 'fas fa-strikethrough', cmd: function() { applyFormat('strikeThrough'); } },
-            { title: 'List UL', icon: 'fas fa-list-ul', cmd: function() { applyFormat('insertUnorderedList'); } },
-            { title: 'List OL', icon: 'fas fa-list-ol', cmd: function() { applyFormat('insertOrderedList'); } },
-            { title: 'Link', icon: 'fas fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
-            { title: 'Image URL', icon: 'fas fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
-            { title: 'Quote', icon: 'fas fa-quote-right', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
-            { title: 'Code', icon: 'fas fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
-            { title: 'Spoiler', icon: 'fas fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
-        ];
+var buttons = [
+    { title: 'Bold', icon: 'far fa-bold', cmd: function() { applyFormat('bold'); } },
+    { title: 'Italic', icon: 'far fa-italic', cmd: function() { applyFormat('italic'); } },
+    { title: 'Underline', icon: 'far fa-underline', cmd: function() { applyFormat('underline'); } },
+    { title: 'Strikethrough', icon: 'far fa-strikethrough', cmd: function() { applyFormat('strikeThrough'); } },
+    { title: 'List UL', icon: 'far fa-list-ul', cmd: function() { applyFormat('insertUnorderedList'); } },
+    { title: 'List OL', icon: 'far fa-list-ol', cmd: function() { applyFormat('insertOrderedList'); } },
+    { title: 'Link', icon: 'far fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
+    { title: 'Image URL', icon: 'far fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
+    { title: 'Quote', icon: 'far fa-quote-right', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
+    { title: 'Code', icon: 'far fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
+    { title: 'Spoiler', icon: 'far fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
+];
 
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
