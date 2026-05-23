@@ -223,7 +223,7 @@ async function bootSystem() {
         // IDLE LOAD: Forum enhancer (additional UI improvements)
         // ============================================================
         const loadEnhancer = () => {
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@3bb60f894525b563f9e7f8da8980e1eb90d6fce0/core/forum-enhancer.min.js")
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4e776799f5136a9f1dafb4b48c31b8bde73ccf4f/core/forum-enhancer.min.js")
                 .then(() => console.log('[Boot] System Fully Enhanced'))
                 .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
         };
