@@ -146,6 +146,39 @@ var MessengerModule = (function(Utils, EventBus) {
         if (wysiwygDiv) wysiwygDiv.focus();
     }
 
+            // Function to check if wysiwyg is effectively empty
+        function isWysiwygEmpty() {
+            var content = wysiwygDiv.innerHTML;
+            return content === '' || 
+                   content === '<br>' || 
+                   content === '<br _moz_dirty="">' ||
+                   content === '<div><br></div>' ||
+                   content.trim() === '';
+        }
+
+        // Update placeholder class
+        function updatePlaceholder() {
+            if (isWysiwygEmpty()) {
+                wysiwygDiv.classList.add('empty');
+            } else {
+                wysiwygDiv.classList.remove('empty');
+            }
+        }
+
+        // Live sync back to original textarea
+        wysiwygDiv.addEventListener('input', function() {
+            originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
+            updatePlaceholder();
+        });
+
+        // Additional events to catch all deletion scenarios
+        wysiwygDiv.addEventListener('focus', updatePlaceholder);
+        wysiwygDiv.addEventListener('blur', updatePlaceholder);
+        wysiwygDiv.addEventListener('keyup', updatePlaceholder);
+
+        // Initial check
+        updatePlaceholder();
+
     // ------------------------------------------------------------------------
     // CORE BUILDER
     // ------------------------------------------------------------------------
