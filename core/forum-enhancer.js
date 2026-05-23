@@ -25,6 +25,7 @@
             twemoji: true,
             posts: true,
             modals: true,
+            messenger: true,
             'slick-carousel': true,       // NEW – hero carousel module
             navigation: false,
             sidebar: false,
