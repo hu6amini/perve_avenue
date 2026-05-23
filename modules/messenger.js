@@ -1,4 +1,4 @@
-// Messenger Module – WYSIWYG modern UI for private messages (placed inside wrapper)
+// Messenger Module – WYSIWYG modern UI for private messages (legacy compatible)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -72,18 +72,19 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[s\](.*?)\[\/s\]/gi, '<s>$1</s>');
         html = html.replace(/\[list\](.*?)\[\/list\]/gis, '<ul>$1</ul>');
         html = html.replace(/\[\*\](.*?)(?=\n|$)/gi, '<li>$1</li>');
-        html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
         html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
+        // Font, size, color (simple)
         html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gi, '<span style="font-family:$1">$2</span>');
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gi, '<span style="font-size:$1px">$2</span>');
         html = html.replace(/\[color=([^\]]+)\](.*?)\[\/color\]/gi, '<span style="color:$1">$2</span>');
+        // Email
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
-        // Legacy HTML tags (keep as is)
+        // Legacy HTML tags (already present but ensure they are kept)
         return html;
     }
 
@@ -91,8 +92,9 @@ var MessengerModule = (function(Utils, EventBus) {
         if (!html) return '';
         var div = document.createElement('div');
         div.innerHTML = html;
-        var legacy = div.innerHTML;
         // Convert HTML back to legacy mixed format
+        var legacy = div.innerHTML;
+        // Basic inline styles
         legacy = legacy.replace(/<strong>(.*?)<\/strong>/gi, '<b>$1</b>')
                        .replace(/<em>(.*?)<\/em>/gi, '<i>$1</i>')
                        .replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>')
@@ -125,7 +127,7 @@ var MessengerModule = (function(Utils, EventBus) {
         legacy = legacy.replace(/<span style="color:([^"]+)">(.*?)<\/span>/gi, '[color=$1]$2[/color]');
         // Email
         legacy = legacy.replace(/<a href="mailto:([^"]+)"[^>]*>(.*?)<\/a>/gi, '[EMAIL]$1[/EMAIL]');
-        // Remove leftover divs and paragraphs (keep line breaks)
+        // Remove any remaining divs, paragraphs, etc. (keep line breaks)
         legacy = legacy.replace(/<div>/gi, '').replace(/<\/div>/gi, '');
         legacy = legacy.replace(/<p>/gi, '').replace(/<\/p>/gi, '');
         legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
@@ -133,7 +135,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // WYSIWYG formatting helpers
+    // WYSIWYG formatting helpers (using execCommand + custom for unsupported)
     // ------------------------------------------------------------------------
     function applyFormat(command, value) {
         document.execCommand(command, false, value);
@@ -153,10 +155,10 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER (with wrapper placement)
+    // CORE BUILDER (WYSIWYG version with legacy compatibility)
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
-        // ----- Extract original elements (required for sync) -----
+        // ----- Extract original elements -----
         var legacyForm = document.querySelector('.cp.send');
         if (!legacyForm) throw new Error('.cp.send not found');
 
@@ -173,10 +175,10 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (!originalTextarea) throw new Error('Textarea #Post not found');
 
-        // ----- Create modern messenger container -----
-        var messengerContainer = document.createElement('div');
-        messengerContainer.id = 'modern-messenger';
-        messengerContainer.className = 'modern-messenger';
+        // ----- Create modern container -----
+        var container = document.createElement('div');
+        container.id = 'modern-messenger';
+        container.className = 'modern-messenger';
 
         // ----- Tabs (clone original) -----
         var tabsHtml = document.querySelector('.cp.send .tabs');
@@ -337,30 +339,18 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
 
-        // ----- Assemble modern messenger container -----
-        messengerContainer.appendChild(tabsHtml);
-        messengerContainer.appendChild(recipientRow);
-        messengerContainer.appendChild(toolbar);
-        messengerContainer.appendChild(wysiwygDiv);
-        messengerContainer.appendChild(optionsRow);
-        messengerContainer.appendChild(attachRow);
-        messengerContainer.appendChild(actions);
-        messengerContainer.appendChild(previewArea);
+        // ----- Assemble container -----
+        container.appendChild(tabsHtml);
+        container.appendChild(recipientRow);
+        container.appendChild(toolbar);
+        container.appendChild(wysiwygDiv);
+        container.appendChild(optionsRow);
+        container.appendChild(attachRow);
+        container.appendChild(actions);
+        container.appendChild(previewArea);
 
-        // ----- PLACEMENT inside modern wrapper after carousel -----
-        var wrapper = document.getElementById('modern-forum-wrapper');
-        if (wrapper) {
-            // Find carousel wrapper (if exists) to insert after it
-            var carousel = wrapper.querySelector('.carousel-wrapper');
-            if (carousel) {
-                carousel.insertAdjacentElement('afterend', messengerContainer);
-            } else {
-                wrapper.appendChild(messengerContainer);
-            }
-        } else {
-            // Fallback: insert before legacy form (keep legacy visible)
-            legacyForm.parentNode.insertBefore(messengerContainer, legacyForm);
-        }
+        // Insert modern container before legacy form (legacy remains visible)
+        legacyForm.parentNode.insertBefore(container, legacyForm);
 
         // ----- Data binding for recipient, title, checkboxes -----
         var modernRecipient = document.getElementById('modern-recipient');
@@ -397,6 +387,7 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
+                // Ensure textarea has latest legacy content
                 originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
                 if (typeof ajaxRequest === 'function') {
                     ajaxRequest();
@@ -438,7 +429,9 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Carousel is NOT hidden – it stays visible above the modern messenger
+        // Optional: hide carousel (if any)
+        var carousel = document.querySelector('.carousel-wrapper');
+        if (carousel) carousel.style.display = 'none';
     }
 
     function escapeHtml(str) {
