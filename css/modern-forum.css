@@ -1671,25 +1671,6 @@ input[type="radio"]:checked::before {
    MODERN MESSENGER OVERHAUL (CSS only)
    ========================================================================== */
 
-/* ----- Messenger carousel (frozen) – replace with background ----- */
-body#msg .slick_carousel {
-    position: relative;
-    background-image: url('https://images2.imgbox.com/fb/66/qdVgVGMN_o.png') !important;
-    background-size: cover !important;
-    background-position: center !important;
-    background-repeat: no-repeat !important;
-    background-color: var(--surface-color) !important;
-    min-height: 100px;
-}
-
-body#msg .slick_carousel * {
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
-body#msg .slick_carousel a {
-    visibility: hidden;
-}
 
 body#msg form {
     display: flex;
