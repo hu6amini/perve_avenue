@@ -1818,8 +1818,7 @@ input[type="radio"]:checked::before {
 
 /* ----- WYSIWYG contenteditable area ----- */
 .modern-wysiwyg {
-    margin: var(--space-md);
-    width: calc(100% - 2 * var(--space-md));
+    margin: var(--pad-6);
     min-height: 100px;
     padding: var(--pad-4);
     background: var(--bg-color);
