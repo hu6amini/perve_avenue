@@ -204,17 +204,16 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.className = 'modern-editor-toolbar';
 
 var buttons = [
-    { title: 'Bold', icon: 'far fa-bold', cmd: function() { applyFormat('bold'); } },
-    { title: 'Italic', icon: 'far fa-italic', cmd: function() { applyFormat('italic'); } },
-    { title: 'Underline', icon: 'far fa-underline', cmd: function() { applyFormat('underline'); } },
-    { title: 'Strikethrough', icon: 'far fa-strikethrough', cmd: function() { applyFormat('strikeThrough'); } },
-    { title: 'List UL', icon: 'far fa-list-ul', cmd: function() { applyFormat('insertUnorderedList'); } },
-    { title: 'List OL', icon: 'far fa-list-ol', cmd: function() { applyFormat('insertOrderedList'); } },
-    { title: 'Link', icon: 'far fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
-    { title: 'Image URL', icon: 'far fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
-    { title: 'Quote', icon: 'far fa-quote-left', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
-    { title: 'Code', icon: 'far fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
-    { title: 'Spoiler', icon: 'far fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
+    { title: 'Bold', icon: 'fa-regular fa-bold', cmd: function() { applyFormat('bold'); } },
+    { title: 'Italic', icon: 'fa-regular fa-italic', cmd: function() { applyFormat('italic'); } },
+    { title: 'Underline', icon: 'fa-regular fa-underline', cmd: function() { applyFormat('underline'); } },
+    { title: 'Strikethrough', icon: 'fa-regular fa-strikethrough', cmd: function() { applyFormat('strikeThrough'); } },
+    { title: 'List UL', icon: 'fa-regular fa-list', cmd: function() { applyFormat('insertUnorderedList'); } },
+    { title: 'Link', icon: 'fa-regular fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
+    { title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
+    { title: 'Quote', icon: 'fa-regular fa-quote-left', cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
+    { title: 'Code', icon: 'fa-regular fa-code', cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
+    { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
 ];
 
         for (var i = 0; i < buttons.length; i++) {
@@ -232,7 +231,7 @@ var buttons = [
         var imgbbBtn = document.createElement('button');
         imgbbBtn.type = 'button';
         imgbbBtn.className = 'modern-editor-btn';
-        imgbbBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i>';
+        imgbbBtn.innerHTML = '<i class="fa-regular fa-cloud-arrow-up"></i>';
         imgbbBtn.title = 'Upload image (ImgBB)';
         imgbbBtn.onclick = function() {
             if (typeof ibb_ff === 'undefined') {
@@ -252,7 +251,7 @@ var buttons = [
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
-        smileBtn.innerHTML = '<i class="far fa-smile"></i>';
+        smileBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
         smileBtn.title = 'Insert smiley';
         smileBtn.onclick = function() {
             var smiliesDiv = document.getElementById('smilies');
