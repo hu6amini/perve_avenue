@@ -1737,7 +1737,10 @@ input[type="radio"]:checked::before {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-lg);
-    padding: var(--space-md) var(--space-md) 0 var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius);
+    margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
+    border: 1px solid var(--border-color);
 }
 
 .modern-field {
