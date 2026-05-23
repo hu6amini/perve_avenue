@@ -1,4 +1,4 @@
-// Messenger Module – WYSIWYG modern UI for private messages
+// Messenger Module – WYSIWYG modern UI for private messages (legacy compatible)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -60,56 +60,82 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // HTML ↔ BBCode conversion (simplified but functional)
+    // CONVERTERS (Legacy mixed ↔ HTML)
     // ------------------------------------------------------------------------
-    function htmlToBBCode(html) {
-        if (!html) return '';
-        var div = document.createElement('div');
-        div.innerHTML = html;
-        // Basic replacements – you can extend this as needed
-        var bb = div.innerHTML
-            .replace(/<strong>|<b>/gi, '[b]')
-            .replace(/<\/strong>|<\/b>/gi, '[/b]')
-            .replace(/<em>|<i>/gi, '[i]')
-            .replace(/<\/em>|<\/i>/gi, '[/i]')
-            .replace(/<u>/gi, '[u]')
-            .replace(/<\/u>/gi, '[/u]')
-            .replace(/<s>|<del>/gi, '[s]')
-            .replace(/<\/s>|<\/del>/gi, '[/s]')
-            .replace(/<ul>/gi, '[list]')
-            .replace(/<\/ul>/gi, '[/list]')
-            .replace(/<li>/gi, '[*]')
-            .replace(/<\/li>/gi, '')
-            .replace(/<a href="([^"]+)">([^<]+)<\/a>/gi, '[url=$1]$2[/url]')
-            .replace(/<img src="([^"]+)"[^>]*>/gi, '[img]$1[/img]')
-            .replace(/<blockquote>/gi, '[quote]')
-            .replace(/<\/blockquote>/gi, '[/quote]')
-            .replace(/<pre><code>([\s\S]+?)<\/code><\/pre>/gi, '[code]$1[/code]')
-            .replace(/<div class="spoiler">([\s\S]+?)<\/div>/gi, '[spoiler]$1[/spoiler]')
-            .replace(/<br\s*\/?>/gi, '\n');
-        return bb;
-    }
-
-    function bbcodeToHTML(bb) {
-        if (!bb) return '';
-        var html = bb
-            .replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>')
-            .replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>')
-            .replace(/\[u\](.*?)\[\/u\]/gi, '<u>$1</u>')
-            .replace(/\[s\](.*?)\[\/s\]/gi, '<s>$1</s>')
-            .replace(/\[list\](.*?)\[\/list\]/gis, '<ul>$1</ul>')
-            .replace(/\[\*\](.*?)(?=\n|$)/gi, '<li>$1</li>')
-            .replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>')
-            .replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">')
-            .replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>')
-            .replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>')
-            .replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>')
-            .replace(/\n/g, '<br>');
+    function legacyToHtml(legacy) {
+        if (!legacy) return '';
+        var html = legacy;
+        // BBCode → HTML (common ones)
+        html = html.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>');
+        html = html.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>');
+        html = html.replace(/\[u\](.*?)\[\/u\]/gi, '<u>$1</u>');
+        html = html.replace(/\[s\](.*?)\[\/s\]/gi, '<s>$1</s>');
+        html = html.replace(/\[list\](.*?)\[\/list\]/gis, '<ul>$1</ul>');
+        html = html.replace(/\[\*\](.*?)(?=\n|$)/gi, '<li>$1</li>');
+        html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
+        html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
+        html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
+        html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
+        html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
+        html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
+        // Font, size, color (simple)
+        html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gi, '<span style="font-family:$1">$2</span>');
+        html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gi, '<span style="font-size:$1px">$2</span>');
+        html = html.replace(/\[color=([^\]]+)\](.*?)\[\/color\]/gi, '<span style="color:$1">$2</span>');
+        // Email
+        html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
+        // Legacy HTML tags (already present but ensure they are kept)
         return html;
     }
 
+    function htmlToLegacy(html) {
+        if (!html) return '';
+        var div = document.createElement('div');
+        div.innerHTML = html;
+        // Convert HTML back to legacy mixed format
+        var legacy = div.innerHTML;
+        // Basic inline styles
+        legacy = legacy.replace(/<strong>(.*?)<\/strong>/gi, '<b>$1</b>')
+                       .replace(/<em>(.*?)<\/em>/gi, '<i>$1</i>')
+                       .replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>')
+                       .replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>')
+                       .replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
+        // Lists
+        legacy = legacy.replace(/<ul>(.*?)<\/ul>/gis, function(match, content) {
+            var items = content.replace(/<li>(.*?)<\/li>/gi, '[*]$1');
+            return '[list]' + items + '[/list]';
+        });
+        legacy = legacy.replace(/<ol>(.*?)<\/ol>/gis, function(match, content) {
+            var items = content.replace(/<li>(.*?)<\/li>/gi, '[*]$1');
+            return '[list=1]' + items + '[/list]';
+        });
+        // Links
+        legacy = legacy.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[url=$1]$2[/url]');
+        // Images
+        legacy = legacy.replace(/<img src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
+        // Blockquote
+        legacy = legacy.replace(/<blockquote>(.*?)<\/blockquote>/gis, '[quote]$1[/quote]');
+        // Code
+        legacy = legacy.replace(/<pre><code>(.*?)<\/code><\/pre>/gis, '[code]$1[/code]');
+        // Spoiler
+        legacy = legacy.replace(/<div class="spoiler">(.*?)<\/div>/gis, '[spoiler]$1[/spoiler]');
+        // Center
+        legacy = legacy.replace(/<div style="text-align:center">(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]');
+        // Font, size, color spans
+        legacy = legacy.replace(/<span style="font-family:([^"]+)">(.*?)<\/span>/gi, '[font=$1]$2[/font]');
+        legacy = legacy.replace(/<span style="font-size:([0-9]+)px">(.*?)<\/span>/gi, '[size=$1]$2[/size]');
+        legacy = legacy.replace(/<span style="color:([^"]+)">(.*?)<\/span>/gi, '[color=$1]$2[/color]');
+        // Email
+        legacy = legacy.replace(/<a href="mailto:([^"]+)"[^>]*>(.*?)<\/a>/gi, '[EMAIL]$1[/EMAIL]');
+        // Remove any remaining divs, paragraphs, etc. (keep line breaks)
+        legacy = legacy.replace(/<div>/gi, '').replace(/<\/div>/gi, '');
+        legacy = legacy.replace(/<p>/gi, '').replace(/<\/p>/gi, '');
+        legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
+        return legacy.trim();
+    }
+
     // ------------------------------------------------------------------------
-    // WYSIWYG formatting helpers
+    // WYSIWYG formatting helpers (using execCommand + custom for unsupported)
     // ------------------------------------------------------------------------
     function applyFormat(command, value) {
         document.execCommand(command, false, value);
@@ -129,7 +155,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER (WYSIWYG version)
+    // CORE BUILDER (WYSIWYG version with legacy compatibility)
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
         // ----- Extract original elements -----
@@ -200,7 +226,7 @@ var MessengerModule = (function(Utils, EventBus) {
             button.className = 'modern-editor-btn';
             button.innerHTML = '<i class="' + btn.icon + '"></i>';
             button.title = btn.title;
-            button.onclick = function(cmd) { return function() { cmd(); focusWysiwyg(); }; }(btn.cmd);
+            button.onclick = (function(cmd) { return function() { cmd(); focusWysiwyg(); }; })(btn.cmd);
             toolbar.appendChild(button);
         }
 
@@ -258,12 +284,12 @@ var MessengerModule = (function(Utils, EventBus) {
         wysiwygDiv.style.lineHeight = '1.618';
         wysiwygDiv.style.overflowY = 'auto';
 
-        // Sync initial content from original textarea (BBCode -> HTML)
-        wysiwygDiv.innerHTML = bbcodeToHTML(originalTextarea.value);
+        // Initial sync from legacy textarea
+        wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
 
         // Sync back to original textarea on any input
         wysiwygDiv.addEventListener('input', function() {
-            originalTextarea.value = htmlToBBCode(wysiwygDiv.innerHTML);
+            originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
         });
 
         function focusWysiwyg() {
@@ -323,7 +349,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(actions);
         container.appendChild(previewArea);
 
-        // Insert modern container before legacy form (but leave legacy visible)
+        // Insert modern container before legacy form (legacy remains visible)
         legacyForm.parentNode.insertBefore(container, legacyForm);
 
         // ----- Data binding for recipient, title, checkboxes -----
@@ -339,7 +365,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (titleInput && modernTitle) titleInput.value = modernTitle.value;
             if (addSentCheckbox && modernAddSent) addSentCheckbox.checked = modernAddSent.checked;
             if (addTrackingCheckbox && modernAddTracking) addTrackingCheckbox.checked = modernAddTracking.checked;
-            // Textarea already synced via wysiwyg input event
         }
 
         function syncFromOriginal() {
@@ -362,9 +387,8 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                // Sync WYSIWYG content to original textarea (BBCode)
-                originalTextarea.value = htmlToBBCode(wysiwygDiv.innerHTML);
-                // Trigger original preview
+                // Ensure textarea has latest legacy content
+                originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
                 if (typeof ajaxRequest === 'function') {
                     ajaxRequest();
                 } else if (previewButton && previewButton.onclick) {
@@ -393,8 +417,7 @@ var MessengerModule = (function(Utils, EventBus) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
-                // Ensure textarea has latest BBCode
-                originalTextarea.value = htmlToBBCode(wysiwygDiv.innerHTML);
+                originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
                 if (originalForm && typeof originalForm.submit === 'function') {
                     if (typeof ValidateForm === 'function') {
                         if (!ValidateForm(1)) return;
