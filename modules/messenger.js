@@ -213,17 +213,18 @@ var MessengerModule = (function(Utils, EventBus) {
             tabsHtml.appendChild(li);
         }
 
-        // Recipient & Title row
+        // Recipient & Title row (no labels)
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
-            + '<div class="modern-field"><label>Recipient</label>'
+            + '<div class="modern-field">'
             + '<div class="modern-recipient-controls">'
-            + '<input type="text" id="modern-recipient" class="modern-input" placeholder="Username or MID" value="' + escapeHtml(recipientInput ? recipientInput.value : '') + '">'
+            + '<input type="text" id="modern-recipient" class="modern-input" placeholder="Recipient" value="' + escapeHtml(recipientInput ? recipientInput.value : '') + '">'
             + '<select id="modern-contact" class="modern-select">' + (contactSelect ? contactSelect.innerHTML : '') + '</select>'
             + '</div></div>'
-            + '<div class="modern-field"><label>Message title</label>'
-            + '<input type="text" id="modern-title" class="modern-input" value="' + escapeHtml(titleInput ? titleInput.value : '') + '" placeholder="Subject"></div>';
+            + '<div class="modern-field">'
+            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
+            + '</div>';
 
         // WYSIWYG toolbar
         var toolbar = document.createElement('div');
