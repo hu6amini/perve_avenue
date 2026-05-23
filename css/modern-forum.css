@@ -1828,7 +1828,7 @@ input[type="radio"]:checked::before {
 .modern-wysiwyg {
     margin: var(--space-md);
     width: calc(100% - 2 * var(--space-md));
-    min-height: 250px;
+    min-height: 100px;
     padding: var(--pad-4);
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -1839,12 +1839,22 @@ input[type="radio"]:checked::before {
     line-height: 1.618;
     overflow-y: auto;
     transition: all 0.2s ease;
+    text-align: left;
 }
 
 .modern-wysiwyg:focus {
     border-color: var(--primary-color);
     outline: none;
     box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* Placeholder for empty WYSIWYG editor */
+.modern-wysiwyg:empty:before {
+    content: "💬 Write your message...";
+    color: var(--text-tertiary);
+    pointer-events: none;
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
 }
 
 /* WYSIWYG content styling */
