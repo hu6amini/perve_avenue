@@ -3,6 +3,7 @@ var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
+    var wysiwygDiv = null;
 
     // ------------------------------------------------------------------------
     // PUBLIC API
@@ -65,7 +66,6 @@ var MessengerModule = (function(Utils, EventBus) {
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
-        // BBCode → HTML (common ones)
         html = html.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>');
         html = html.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>');
         html = html.replace(/\[u\](.*?)\[\/u\]/gi, '<u>$1</u>');
@@ -91,13 +91,11 @@ var MessengerModule = (function(Utils, EventBus) {
         var div = document.createElement('div');
         div.innerHTML = html;
         var legacy = div.innerHTML;
-        // Convert HTML back to legacy mixed format
         legacy = legacy.replace(/<strong>(.*?)<\/strong>/gi, '<b>$1</b>')
                        .replace(/<em>(.*?)<\/em>/gi, '<i>$1</i>')
                        .replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>')
                        .replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>')
                        .replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
-        // Lists
         legacy = legacy.replace(/<ul>(.*?)<\/ul>/gis, function(match, content) {
             var items = content.replace(/<li>(.*?)<\/li>/gi, '[*]$1');
             return '[list]' + items + '[/list]';
@@ -106,25 +104,16 @@ var MessengerModule = (function(Utils, EventBus) {
             var items = content.replace(/<li>(.*?)<\/li>/gi, '[*]$1');
             return '[list=1]' + items + '[/list]';
         });
-        // Links
         legacy = legacy.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[url=$1]$2[/url]');
-        // Images
         legacy = legacy.replace(/<img src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
-        // Blockquote
         legacy = legacy.replace(/<blockquote>(.*?)<\/blockquote>/gis, '[quote]$1[/quote]');
-        // Code
         legacy = legacy.replace(/<pre><code>(.*?)<\/code><\/pre>/gis, '[code]$1[/code]');
-        // Spoiler
         legacy = legacy.replace(/<div class="spoiler">(.*?)<\/div>/gis, '[spoiler]$1[/spoiler]');
-        // Center
         legacy = legacy.replace(/<div style="text-align:center">(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]');
-        // Font, size, color spans
         legacy = legacy.replace(/<span style="font-family:([^"]+)">(.*?)<\/span>/gi, '[font=$1]$2[/font]');
         legacy = legacy.replace(/<span style="font-size:([0-9]+)px">(.*?)<\/span>/gi, '[size=$1]$2[/size]');
         legacy = legacy.replace(/<span style="color:([^"]+)">(.*?)<\/span>/gi, '[color=$1]$2[/color]');
-        // Email
         legacy = legacy.replace(/<a href="mailto:([^"]+)"[^>]*>(.*?)<\/a>/gi, '[EMAIL]$1[/EMAIL]');
-        // Remove leftover divs and paragraphs (keep line breaks)
         legacy = legacy.replace(/<div>/gi, '').replace(/<\/div>/gi, '');
         legacy = legacy.replace(/<p>/gi, '').replace(/<\/p>/gi, '');
         legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
@@ -152,8 +141,6 @@ var MessengerModule = (function(Utils, EventBus) {
         selection.collapseToEnd();
         focusWysiwyg();
     }
-
-    var wysiwygDiv = null;
 
     function focusWysiwyg() {
         if (wysiwygDiv) wysiwygDiv.focus();
@@ -305,22 +292,13 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.insertBefore(smileBtn, imgbbBtn);
 
-        // WYSIWYG contenteditable div
+        // WYSIWYG contenteditable div (all styles moved to CSS)
         wysiwygDiv = document.createElement('div');
         wysiwygDiv.id = 'modern-wysiwyg';
         wysiwygDiv.className = 'modern-wysiwyg';
         wysiwygDiv.contentEditable = 'true';
         wysiwygDiv.setAttribute('role', 'textbox');
         wysiwygDiv.setAttribute('aria-multiline', 'true');
-        wysiwygDiv.style.minHeight = '250px';
-        wysiwygDiv.style.padding = 'var(--pad-4)';
-        wysiwygDiv.style.backgroundColor = 'var(--bg-color)';
-        wysiwygDiv.style.border = '1px solid var(--border-color)';
-        wysiwygDiv.style.borderRadius = 'var(--radius)';
-        wysiwygDiv.style.fontFamily = 'var(--font-primary)';
-        wysiwygDiv.style.fontSize = 'var(--text-sm)';
-        wysiwygDiv.style.lineHeight = '1.618';
-        wysiwygDiv.style.overflowY = 'auto';
 
         // Initial sync
         wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
