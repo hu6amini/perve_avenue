@@ -1745,14 +1745,6 @@ input[type="radio"]:checked::before {
     min-width: 200px;
 }
 
-.modern-field label {
-    display: block;
-    margin-bottom: var(--space-xs);
-    color: var(--text-secondary);
-    font-size: var(--text-sm);
-    font-weight: 500;
-}
-
 .modern-recipient-controls {
     display: flex;
     gap: var(--space-sm);
