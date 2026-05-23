@@ -246,46 +246,50 @@
     // ============================================================================
     // REGISTER MODULES (all modules now exposed globally)
     // ============================================================================
-    function registerAllModules() {
-        if (typeof MediaDimensionsModule !== 'undefined') {
-            registerModule('media-dimensions', MediaDimensionsModule, ['forumObserver']);
-        } else {
-            log('MediaDimensionsModule not found, media dimensions disabled', 'warn');
-            if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
-                ENHANCER_CONFIG.modules['media-dimensions'] = false;
-            }
-        }
-
-        if (typeof TwemojiModule !== 'undefined') {
-            registerModule('twemoji', TwemojiModule, ['twemojiLib', 'forumObserver']);
-        } else {
-            log('TwemojiModule not found, emoji replacement disabled', 'warn');
-            ENHANCER_CONFIG.modules.twemoji = false;
-        }
-
-        if (typeof ForumPostsModule !== 'undefined') {
-            registerModule('posts', ForumPostsModule, ['domUtils', 'eventBus']);
-        } else {
-            log('ForumPostsModule not found, posts enhancement disabled', 'warn');
-            ENHANCER_CONFIG.modules.posts = false;
-        }
-
-        if (typeof ModalsModule !== 'undefined') {
-            registerModule('modals', ModalsModule, ['forumObserver']);
-        } else {
-            log('ModalsModule not found, modern modals disabled', 'warn');
-            if (ENHANCER_CONFIG && ENHANCER_CONFIG.modules) {
-                ENHANCER_CONFIG.modules.modals = false;
-            }
-        }
-
-        // NEW: Slick Carousel module registration
-        if (typeof SlickCarouselModule !== 'undefined') {
-            registerModule('slick-carousel', SlickCarouselModule, ['forumObserver']);
-        } else {
-            log('SlickCarouselModule not found, carousels will not be active', 'warn');
-        }
+function registerAllModules() {
+    if (typeof MediaDimensionsModule !== 'undefined') {
+        registerModule('media-dimensions', MediaDimensionsModule, ['forumObserver']);
+    } else {
+        log('MediaDimensionsModule not found, media dimensions disabled', 'warn');
+        ENHANCER_CONFIG.modules['media-dimensions'] = false;
     }
+
+    if (typeof TwemojiModule !== 'undefined') {
+        registerModule('twemoji', TwemojiModule, ['twemojiLib', 'forumObserver']);
+    } else {
+        log('TwemojiModule not found, emoji replacement disabled', 'warn');
+        ENHANCER_CONFIG.modules.twemoji = false;
+    }
+
+    if (typeof ForumPostsModule !== 'undefined') {
+        registerModule('posts', ForumPostsModule, ['domUtils', 'eventBus']);
+    } else {
+        log('ForumPostsModule not found, posts enhancement disabled', 'warn');
+        ENHANCER_CONFIG.modules.posts = false;
+    }
+
+    if (typeof ModalsModule !== 'undefined') {
+        registerModule('modals', ModalsModule, ['forumObserver']);
+    } else {
+        log('ModalsModule not found, modern modals disabled', 'warn');
+        ENHANCER_CONFIG.modules.modals = false;
+    }
+
+    // --- MESSENGER MODULE (ADD THIS) ---
+    if (typeof MessengerModule !== 'undefined') {
+        registerModule('messenger', MessengerModule, ['domUtils', 'eventBus']);
+    } else {
+        log('MessengerModule not found, messenger enhancement disabled', 'warn');
+        ENHANCER_CONFIG.modules.messenger = false;
+    }
+
+    // Slick Carousel module registration
+    if (typeof SlickCarouselModule !== 'undefined') {
+        registerModule('slick-carousel', SlickCarouselModule, ['forumObserver']);
+    } else {
+        log('SlickCarouselModule not found, carousels will not be active', 'warn');
+    }
+}
     
     // ============================================================================
     // PUBLIC API
