@@ -218,7 +218,9 @@
 .fa-cloud-arrow-up::before { content: "\f0ee"; }
 .fa-list::before { content: "\f03a"; }
 .fa-address-book::before { content: "\f2b9"; }
-
+.fa-do-not-enter::before { content: "\f5ec"; }
+.fa-ban::before { content: "\f05e"; }
+.fa-floppy-disk::before { content: "\f0c7"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
@@ -229,7 +231,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@286f1de1df74ec91d01c74b4a46aa43e32448258/fonts/fa-regular-400-subset.woff2") format("woff2");
+  src: url("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@dd9e73fc71cad725684ab61c227c4648f95a7e65/fonts/fa-regular-400-subset.woff2") format("woff2");
 }
 
 .far,
