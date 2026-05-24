@@ -498,13 +498,25 @@ var MessengerModule = (function(Utils, EventBus) {
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
 
+    function buildModernMessenger() {
+        var legacyComposeForm = document.querySelector('.cp.send');
+        if (!legacyComposeForm) return;
+
+        // Create modern messenger container
+        var messengerContainer = document.createElement('div');
+        messengerContainer.id = 'modern-messenger';
+        messengerContainer.className = 'modern-messenger';
+
+        // ----- Navigation (real URLs) -----
+        var navContainer = document.createElement('nav');
+        navContainer.className = 'modern-messenger-nav';
+
         var navItems = [
-            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', section: 'compose-section', id: 'compose' },
-            { text: 'Messages', icon: 'fa-regular fa-envelope', section: 'messages-section', id: 'inbox' },
-            { text: 'Contacts', icon: 'fa-regular fa-address-book', section: 'contacts-section', id: 'contacts' }
+            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', url: '/?act=Msg&CODE=04&c=660892', section: 'compose-section' },
+            { text: 'Messages', icon: 'fa-regular fa-envelope', url: '/?act=Msg&CODE=01&c=660892', section: 'messages-section' },
+            { text: 'Contacts', icon: 'fa-regular fa-address-book', url: '/?act=Msg&CODE=02&c=660892', section: 'contacts-section' }
         ];
 
-        // Determine current section based on URL
         var currentUrl = window.location.href;
         var currentSection = 'compose-section';
         if (currentUrl.indexOf('CODE=01') !== -1) {
@@ -516,9 +528,8 @@ var MessengerModule = (function(Utils, EventBus) {
         for (var i = 0; i < navItems.length; i++) {
             var item = navItems[i];
             var link = document.createElement('a');
-            link.href = '#';
+            link.href = item.url;
             link.className = 'modern-nav-link';
-            link.setAttribute('data-section', item.section);
             
             if (item.section === currentSection) {
                 link.classList.add('current');
@@ -534,26 +545,37 @@ var MessengerModule = (function(Utils, EventBus) {
             span.textContent = item.text;
             link.appendChild(span);
 
-            link.addEventListener('click', (function(sectionName) {
-                return function(e) {
-                    e.preventDefault();
-                    var targetSection = e.currentTarget.getAttribute('data-section');
-                    // Update active state on nav links
-                    document.querySelectorAll('.modern-nav-link').forEach(function(navLink) {
-                        navLink.classList.remove('current');
-                    });
-                    e.currentTarget.classList.add('current');
-                    // Show selected section, hide others
-                    document.querySelectorAll('.modern-messenger-section').forEach(function(section) {
-                        section.style.display = 'none';
-                    });
-                    var activeSection = document.getElementById(targetSection);
-                    if (activeSection) activeSection.style.display = 'block';
-                };
-            })(item.section));
-
             navContainer.appendChild(link);
         }
+
+        // Build only the current section (not all three)
+        var mainContent = document.createElement('div');
+        mainContent.className = 'modern-messenger-main';
+
+        if (currentSection === 'compose-section') {
+            mainContent.appendChild(buildComposeSection());
+        } else if (currentSection === 'messages-section') {
+            mainContent.appendChild(buildMessagesSection());
+        } else {
+            mainContent.appendChild(buildContactsSection());
+        }
+
+        messengerContainer.appendChild(navContainer);
+        messengerContainer.appendChild(mainContent);
+
+        // Placement
+        var wrapper = document.getElementById('modern-forum-wrapper');
+        if (wrapper) {
+            var carousel = wrapper.querySelector('.carousel-wrapper');
+            if (carousel) {
+                carousel.insertAdjacentElement('afterend', messengerContainer);
+            } else {
+                wrapper.appendChild(messengerContainer);
+            }
+        } else {
+            legacyComposeForm.parentNode.insertBefore(messengerContainer, legacyComposeForm);
+        }
+    }
 
         // Build all sections
         var composeSection = buildComposeSection();
