@@ -180,6 +180,32 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
+    function waitForElement(selector, maxMs) {
+        maxMs = maxMs || 3000;
+        return new Promise(function(resolve) {
+            var el = document.querySelector(selector);
+            if (el) { resolve(el); return; }
+            var elapsed = 0;
+            var interval = 50;
+            var timer = setInterval(function() {
+                el = document.querySelector(selector);
+                elapsed += interval;
+                if (el || elapsed >= maxMs) {
+                    clearInterval(timer);
+                    resolve(el || null);
+                }
+            }, interval);
+        });
+    }
+
+    function findAncestor(el, selector) {
+        while (el && el !== document.body) {
+            if (el.matches && el.matches(selector)) return el;
+            el = el.parentElement;
+        }
+        return null;
+    }
+
     // ------------------------------------------------------------------------
     // CONVERTERS (Legacy BBCode ↔ HTML) – for compose only
     // ------------------------------------------------------------------------
@@ -265,8 +291,6 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     // MODERN SECTION BUILDERS
     // ------------------------------------------------------------------------
-
-    // ----- COMPOSE SECTION (unchanged, fully modern) -----
     function buildComposeSection() {
         var recipientInput = document.querySelector('input[name="entered_name"]');
         var contactSelect = document.querySelector('select[name="from_contact"]');
@@ -296,7 +320,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
-
         var buttons = [
             { title: 'Bold',          icon: 'fa-regular fa-bold',         cmd: function() { applyFormat('bold'); } },
             { title: 'Italic',        icon: 'fa-regular fa-italic',       cmd: function() { applyFormat('italic'); } },
@@ -309,7 +332,6 @@ var MessengerModule = (function(Utils, EventBus) {
             { title: 'Code',          icon: 'fa-regular fa-code',         cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
             { title: 'Spoiler',       icon: 'fa-regular fa-eye-slash',    cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
         ];
-
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
             var button = document.createElement('button');
@@ -468,202 +490,224 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ----- MODERN MESSAGES SECTION (transformed from legacy data) -----
+    // ----- MODERN MESSAGES SECTION (fully rebuilt) -----
     function buildModernMessagesSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
 
-        // Extract folder selector and message list from legacy DOM
-        var folderSelect = document.querySelector('select[name="VID"]');
-        var messageRows = document.querySelectorAll('.big_list .row-mp');
-        var totalMessages = document.querySelector('.main_list dl dd') ? document.querySelector('.main_list dl dd').innerText : '0';
-        var spaceLeft = document.querySelectorAll('.main_list dl dd')[1] ? document.querySelectorAll('.main_list dl dd')[1].innerText : '0';
+        try {
+            var folderSelect = document.querySelector('select[name="VID"]');
+            var messageRows = document.querySelectorAll('.big_list .row-mp');
+            var dlItems = document.querySelectorAll('.main_list dl dd');
+            var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
+            var spaceLeft = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
 
-        // Create folder header
-        var folderRow = document.createElement('div');
-        folderRow.className = 'messages-folder-row';
-        folderRow.innerHTML = ''
-            + '<div class="messages-stats">'
-            + '<span><i class="fa-regular fa-envelope"></i> Total messages: ' + escapeHtml(totalMessages) + '</span>'
-            + '<span><i class="fa-regular fa-database"></i> Space left: ' + escapeHtml(spaceLeft) + '</span>'
-            + '</div>'
-            + '<div class="messages-folder-selector">'
-            + '<label>Folder:</label> '
-            + '<select id="modern-folder-select" class="modern-select">' + (folderSelect ? folderSelect.innerHTML : '<option value="in">Inbox</option><option value="sent">Sent</option>') + '</select>'
-            + '</div>';
-        container.appendChild(folderRow);
+            // Folder header with stats
+            var folderRow = document.createElement('div');
+            folderRow.className = 'messages-folder-row';
+            folderRow.innerHTML = ''
+                + '<div class="messages-stats">'
+                + '<span><i class="fa-regular fa-envelope"></i> Total messages: ' + escapeHtml(totalMessages) + '</span>'
+                + '<span><i class="fa-regular fa-database"></i> Space left: ' + escapeHtml(spaceLeft) + '</span>'
+                + '</div>'
+                + '<div class="messages-folder-selector">'
+                + '<label>Folder:</label> '
+                + '<select id="modern-folder-select" class="modern-select">' + (folderSelect ? folderSelect.innerHTML : '<option value="in">Inbox</option><option value="sent">Sent Items</option>') + '</select>'
+                + '</div>';
+            container.appendChild(folderRow);
 
-        // Message list header
-        var listHeader = document.createElement('div');
-        listHeader.className = 'messages-list-header';
-        listHeader.innerHTML = ''
-            + '<div class="msg-status"></div>'
-            + '<div class="msg-title">Message title</div>'
-            + '<div class="msg-sender">Sender</div>'
-            + '<div class="msg-date">Date</div>'
-            + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
-        container.appendChild(listHeader);
+            // List header
+            var listHeader = document.createElement('div');
+            listHeader.className = 'messages-list-header';
+            listHeader.innerHTML = ''
+                + '<div class="msg-status"></div>'
+                + '<div class="msg-title">Message Title</div>'
+                + '<div class="msg-sender">Sender</div>'
+                + '<div class="msg-date">Date</div>'
+                + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
+            container.appendChild(listHeader);
 
-        // Message list
-        var listContainer = document.createElement('div');
-        listContainer.className = 'messages-list';
+            // Message rows
+            var listContainer = document.createElement('div');
+            listContainer.className = 'messages-list';
 
-        for (var i = 0; i < messageRows.length; i++) {
-            var row = messageRows[i];
-            var isRead = row.classList.contains('off') ? false : true;
-            var iconClass = isRead ? 'fa-envelope-open' : 'fa-envelope';
-            var titleLink = row.querySelector('.bb h4 a');
-            var title = titleLink ? titleLink.textContent.trim() : '';
-            var titleHref = titleLink ? titleLink.getAttribute('href') : '#';
-            var senderLink = row.querySelector('.xx a');
-            var senderName = senderLink ? senderLink.textContent.trim() : 'Unknown';
-            var senderHref = senderLink ? senderLink.getAttribute('href') : '#';
-            var dateSpan = row.querySelector('.zz .when');
-            var date = dateSpan ? dateSpan.getAttribute('title') || dateSpan.textContent : '';
-            var dateFormatted = formatDate(date);
-            var checkboxId = 'msg-' + i;
-            var msgId = row.id ? row.id.replace('msg', '') : i;
+            for (var i = 0; i < messageRows.length; i++) {
+                var row = messageRows[i];
+                var isRead = row.classList.contains('off') ? false : true;
+                var iconClass = isRead ? 'fa-envelope-open' : 'fa-envelope';
+                var titleLink = row.querySelector('.bb h4 a');
+                var title = titleLink ? titleLink.textContent.trim() : '(no title)';
+                var titleHref = titleLink ? titleLink.getAttribute('href') : '#';
+                var senderLink = row.querySelector('.xx a');
+                var senderName = senderLink ? senderLink.textContent.trim() : 'Unknown';
+                var senderHref = senderLink ? senderLink.getAttribute('href') : '#';
+                var dateSpan = row.querySelector('.zz .when');
+                var date = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
+                var dateFormatted = formatDate(date);
+                var checkboxId = 'msg-' + i;
+                var msgId = row.id ? row.id.replace('msg', '') : i;
 
-            var msgRow = document.createElement('div');
-            msgRow.className = 'message-row' + (isRead ? ' read' : ' unread');
-            msgRow.innerHTML = ''
-                + '<div class="msg-status"><i class="fa-regular ' + iconClass + '"></i></div>'
-                + '<div class="msg-title"><a href="' + escapeHtml(titleHref) + '">' + escapeHtml(title) + '</a></div>'
-                + '<div class="msg-sender"><a href="' + escapeHtml(senderHref) + '">' + escapeHtml(senderName) + '</a></div>'
-                + '<div class="msg-date">' + escapeHtml(dateFormatted) + '</div>'
-                + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" data-msgid="' + escapeHtml(msgId) + '" id="' + checkboxId + '"></div>';
-            listContainer.appendChild(msgRow);
-        }
+                var msgRow = document.createElement('div');
+                msgRow.className = 'message-row' + (isRead ? ' read' : ' unread');
+                msgRow.innerHTML = ''
+                    + '<div class="msg-status"><i class="fa-regular ' + iconClass + '"></i></div>'
+                    + '<div class="msg-title"><a href="' + escapeHtml(titleHref) + '">' + escapeHtml(title) + '</a></div>'
+                    + '<div class="msg-sender"><a href="' + escapeHtml(senderHref) + '">' + escapeHtml(senderName) + '</a></div>'
+                    + '<div class="msg-date">' + escapeHtml(dateFormatted) + '</div>'
+                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" data-msgid="' + escapeHtml(msgId) + '" id="' + checkboxId + '"></div>';
+                listContainer.appendChild(msgRow);
+            }
+            container.appendChild(listContainer);
 
-        container.appendChild(listContainer);
+            // Action bar
+            var actionBar = document.createElement('div');
+            actionBar.className = 'messages-action-bar';
+            actionBar.innerHTML = ''
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary" id="export-messages"><i class="fa-regular fa-download"></i> Export as</button> '
+                + '<select id="export-format" class="modern-select-sm"><option value="html">HTML</option><option value="xls">Excel</option></select>'
+                + '</div>'
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
+                + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
+                + '</div>'
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
+                + '</div>';
+            container.appendChild(actionBar);
 
-        // Action bar (export, move, delete)
-        var actionBar = document.createElement('div');
-        actionBar.className = 'messages-action-bar';
-        actionBar.innerHTML = ''
-            + '<div class="action-group">'
-            + '<button class="modern-btn modern-btn-secondary" id="export-messages"><i class="fa-regular fa-download"></i> Export as</button> '
-            + '<select id="export-format" class="modern-select-sm"><option value="html">HTML</option><option value="xls">Excel</option></select>'
-            + '</div>'
-            + '<div class="action-group">'
-            + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
-            + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent</option></select>'
-            + '</div>'
-            + '<div class="action-group">'
-            + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
-            + '</div>';
-        container.appendChild(actionBar);
+            // Attach event listeners
+            var folderSelector = document.querySelector('select[name="VID"]');
+            var folderForm = folderSelector ? folderSelector.form : null;
+            var inboxForm = document.querySelector('form[name="inbox"]');
 
-        // Attach event listeners for actions (submit original forms)
-        var folderSelectModern = container.querySelector('#modern-folder-select');
-        if (folderSelectModern && folderSelect) {
-            folderSelectModern.addEventListener('change', function() {
-                folderSelect.value = this.value;
-                folderSelect.form.submit();
-            });
-        }
+            var modernFolderSelect = container.querySelector('#modern-folder-select');
+            if (modernFolderSelect && folderSelector && folderForm) {
+                modernFolderSelect.addEventListener('change', function() {
+                    folderSelector.value = this.value;
+                    folderForm.submit();
+                });
+            }
 
-        var selectAllCheckbox = container.querySelector('#select-all-msgs');
-        if (selectAllCheckbox) {
-            selectAllCheckbox.addEventListener('change', function() {
-                var checkboxes = container.querySelectorAll('.message-row .modern-checkbox-input');
-                for (var j = 0; j < checkboxes.length; j++) {
-                    checkboxes[j].checked = this.checked;
-                }
-            });
-        }
-
-        var exportBtn = container.querySelector('#export-messages');
-        var exportFormat = container.querySelector('#export-format');
-        if (exportBtn && originalForm) {
-            exportBtn.addEventListener('click', function() {
-                var form = document.querySelector('form[name="inbox"]');
-                if (form) {
-                    var archiveInput = form.querySelector('input[name="archive"]');
-                    if (archiveInput) archiveInput.click();
-                    else if (form.submit) form.submit();
-                }
-            });
-        }
-
-        var deleteBtn = container.querySelector('#delete-messages');
-        if (deleteBtn && originalForm) {
-            deleteBtn.addEventListener('click', function() {
-                if (confirm('Delete selected messages?')) {
-                    var form = document.querySelector('form[name="inbox"]');
-                    if (form) {
-                        var deleteInput = form.querySelector('input[name="delete"]');
-                        if (deleteInput) deleteInput.click();
-                        else if (form.submit) form.submit();
+            var selectAll = container.querySelector('#select-all-msgs');
+            if (selectAll) {
+                selectAll.addEventListener('change', function() {
+                    var checkboxes = container.querySelectorAll('.message-row .modern-checkbox-input');
+                    for (var j = 0; j < checkboxes.length; j++) {
+                        checkboxes[j].checked = this.checked;
                     }
-                }
-            });
+                });
+            }
+
+            var exportBtn = container.querySelector('#export-messages');
+            if (exportBtn && inboxForm) {
+                exportBtn.addEventListener('click', function() {
+                    var archiveInput = inboxForm.querySelector('input[name="archive"]');
+                    if (archiveInput) archiveInput.click();
+                    else inboxForm.submit();
+                });
+            }
+
+            var deleteBtn = container.querySelector('#delete-messages');
+            if (deleteBtn && inboxForm) {
+                deleteBtn.addEventListener('click', function() {
+                    if (confirm('Delete selected messages?')) {
+                        var deleteInput = inboxForm.querySelector('input[name="delete"]');
+                        if (deleteInput) deleteInput.click();
+                        else inboxForm.submit();
+                    }
+                });
+            }
+
+        } catch (err) {
+            console.error('[MessengerModule] Error building messages section:', err);
+            // Fallback: clone original
+            var originalMessages = document.querySelector('.cp:has(.big_list .row-mp)') || document.querySelector('.cp');
+            if (originalMessages) {
+                var fallbackClone = originalMessages.cloneNode(true);
+                var tabsClone = fallbackClone.querySelector('.tabs');
+                if (tabsClone) tabsClone.remove();
+                container.appendChild(fallbackClone);
+            } else {
+                container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>Unable to load messages</p></div>';
+            }
         }
 
         return container;
     }
 
-    // ----- MODERN CONTACTS SECTION (transformed from legacy data) -----
+    // ----- MODERN CONTACTS SECTION (fully rebuilt) -----
     function buildModernContactsSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
 
-        // Extract data from legacy form
-        var friendsTextarea = document.querySelector('textarea[name="can_contact"]');
-        var blockedTextarea = document.querySelector('textarea[name="cannot_contact"]');
-        var privacySelect = document.querySelector('select[name="nobody_can_contact"]');
-        var updateButton = document.querySelector('input[value="Update Contact list"]');
+        try {
+            var friendsTextarea = document.querySelector('textarea[name="can_contact"]');
+            var blockedTextarea = document.querySelector('textarea[name="cannot_contact"]');
+            var privacySelect = document.querySelector('select[name="nobody_can_contact"]');
+            var updateButton = document.querySelector('input[value="Update Contact list"]');
 
-        var friendsList = friendsTextarea ? friendsTextarea.value : '';
-        var blockedList = blockedTextarea ? blockedTextarea.value : '';
-        var privacyValue = privacySelect ? privacySelect.value : '0';
+            var friendsList = friendsTextarea ? friendsTextarea.value : '';
+            var blockedList = blockedTextarea ? blockedTextarea.value : '';
+            var privacyValue = privacySelect ? privacySelect.value : '0';
 
-        var friendsCard = document.createElement('div');
-        friendsCard.className = 'contacts-card';
-        friendsCard.innerHTML = ''
-            + '<h3 class="contacts-card-title"><i class="fa-regular fa-user-group"></i> Friends list</h3>'
-            + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsList) + '</textarea>'
-            + '<p class="contacts-help">Users you allow to message you (if privacy setting is enabled).</p>';
+            var friendsCard = document.createElement('div');
+            friendsCard.className = 'contacts-card';
+            friendsCard.innerHTML = ''
+                + '<h3 class="contacts-card-title"><i class="fa-regular fa-user-group"></i> Friends list</h3>'
+                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsList) + '</textarea>'
+                + '<p class="contacts-help">Users you allow to message you (if privacy setting is enabled).</p>';
+            container.appendChild(friendsCard);
 
-        var blockedCard = document.createElement('div');
-        blockedCard.className = 'contacts-card';
-        blockedCard.innerHTML = ''
-            + '<h3 class="contacts-card-title"><i class="fa-regular fa-ban"></i> Blocked users</h3>'
-            + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedList) + '</textarea>'
-            + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
+            var blockedCard = document.createElement('div');
+            blockedCard.className = 'contacts-card';
+            blockedCard.innerHTML = ''
+                + '<h3 class="contacts-card-title"><i class="fa-regular fa-ban"></i> Blocked users</h3>'
+                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedList) + '</textarea>'
+                + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
+            container.appendChild(blockedCard);
 
-        var privacyCard = document.createElement('div');
-        privacyCard.className = 'contacts-card';
-        privacyCard.innerHTML = ''
-            + '<h3 class="contacts-card-title"><i class="fa-regular fa-shield"></i> Privacy settings</h3>'
-            + '<div class="privacy-option">'
-            + '<label class="modern-radio"><input type="radio" name="privacy" value="1" ' + (privacyValue === '1' ? 'checked' : '') + '> <span>Yes, only friends can message me</span></label>'
-            + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyValue === '0' ? 'checked' : '') + '> <span>No, everyone can message me (except blocked)</span></label>'
-            + '</div>';
+            var privacyCard = document.createElement('div');
+            privacyCard.className = 'contacts-card';
+            privacyCard.innerHTML = ''
+                + '<h3 class="contacts-card-title"><i class="fa-regular fa-shield"></i> Privacy settings</h3>'
+                + '<div class="privacy-option">'
+                + '<label class="modern-radio"><input type="radio" name="privacy" value="1" ' + (privacyValue === '1' ? 'checked' : '') + '> <span>Yes, only friends can message me</span></label>'
+                + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyValue === '0' ? 'checked' : '') + '> <span>No, everyone can message me (except blocked)</span></label>'
+                + '</div>';
+            container.appendChild(privacyCard);
 
-        var actionsDiv = document.createElement('div');
-        actionsDiv.className = 'contacts-actions';
-        actionsDiv.innerHTML = '<button class="modern-btn modern-btn-primary" id="update-contacts"><i class="fa-regular fa-floppy-disk"></i> Update contact list</button>';
+            var actionsDiv = document.createElement('div');
+            actionsDiv.className = 'contacts-actions';
+            actionsDiv.innerHTML = '<button class="modern-btn modern-btn-primary" id="update-contacts"><i class="fa-regular fa-floppy-disk"></i> Update contact list</button>';
+            container.appendChild(actionsDiv);
 
-        container.appendChild(friendsCard);
-        container.appendChild(blockedCard);
-        container.appendChild(privacyCard);
-        container.appendChild(actionsDiv);
+            var updateContactsBtn = container.querySelector('#update-contacts');
+            if (updateContactsBtn && updateButton) {
+                updateContactsBtn.addEventListener('click', function() {
+                    var newFriends = container.querySelector('#modern-friends-list').value;
+                    var newBlocked = container.querySelector('#modern-blocked-list').value;
+                    var newPrivacy = container.querySelector('input[name="privacy"]:checked').value;
+                    if (friendsTextarea) friendsTextarea.value = newFriends;
+                    if (blockedTextarea) blockedTextarea.value = newBlocked;
+                    if (privacySelect) privacySelect.value = newPrivacy;
+                    updateButton.click();
+                });
+            }
 
-        // Sync data to original form and submit
-        var updateContactsBtn = container.querySelector('#update-contacts');
-        if (updateContactsBtn && updateButton) {
-            updateContactsBtn.addEventListener('click', function() {
-                var newFriends = container.querySelector('#modern-friends-list').value;
-                var newBlocked = container.querySelector('#modern-blocked-list').value;
-                var newPrivacy = container.querySelector('input[name="privacy"]:checked').value;
-                if (friendsTextarea) friendsTextarea.value = newFriends;
-                if (blockedTextarea) blockedTextarea.value = newBlocked;
-                if (privacySelect) privacySelect.value = newPrivacy;
-                updateButton.click();
-            });
+        } catch (err) {
+            console.error('[MessengerModule] Error building contacts section:', err);
+            var originalContacts = document.querySelector('.cp:has(textarea[name="can_contact"])') || document.querySelector('.cp');
+            if (originalContacts) {
+                var fallbackClone = originalContacts.cloneNode(true);
+                var tabsClone = fallbackClone.querySelector('.tabs');
+                if (tabsClone) tabsClone.remove();
+                container.appendChild(fallbackClone);
+            } else {
+                container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-address-book"></i><p>Unable to load contacts</p></div>';
+            }
         }
 
         return container;
@@ -718,19 +762,36 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (currentSection === 'compose') {
             mainContent.appendChild(buildComposeSection());
+            finalize();
         } else if (currentSection === 'messages') {
-            mainContent.appendChild(buildModernMessagesSection());
+            waitForElement('.big_list .row-mp', 3000).then(function() {
+                mainContent.appendChild(buildModernMessagesSection());
+                finalize();
+            }).catch(function() {
+                mainContent.appendChild(buildModernMessagesSection()); // fallback
+                finalize();
+            });
+            return;
         } else {
-            mainContent.appendChild(buildModernContactsSection());
+            waitForElement('textarea[name="can_contact"]', 3000).then(function() {
+                mainContent.appendChild(buildModernContactsSection());
+                finalize();
+            }).catch(function() {
+                mainContent.appendChild(buildModernContactsSection());
+                finalize();
+            });
+            return;
         }
 
-        messengerContainer.appendChild(navContainer);
-        messengerContainer.appendChild(mainContent);
+        function finalize() {
+            messengerContainer.appendChild(navContainer);
+            messengerContainer.appendChild(mainContent);
 
-        if (carousel) {
-            carousel.insertAdjacentElement('afterend', messengerContainer);
-        } else {
-            wrapper.appendChild(messengerContainer);
+            if (carousel) {
+                carousel.insertAdjacentElement('afterend', messengerContainer);
+            } else {
+                wrapper.appendChild(messengerContainer);
+            }
         }
     }
 
