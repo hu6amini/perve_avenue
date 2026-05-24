@@ -1544,6 +1544,7 @@ input[type="radio"]:checked::before {
 
 /* ==========================================================================
    MODERN MESSENGER (WYSIWYG) – Emerald Theme Integration
+   Sidebar + Bottom Navigation layout
    ========================================================================== */
 
 /* ----- Modern messenger container (inside wrapper) ----- */
@@ -1556,55 +1557,56 @@ input[type="radio"]:checked::before {
     overflow: hidden;
 }
 
-/* ----- Modern tabs (with actual icons) ----- */
-#modern-messenger .modern-tabs {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-    gap: 0;
+/* ----- Sidebar + Main layout (desktop) ----- */
+#modern-messenger {
+    display: flex;
+    flex-direction: row;
+}
+
+/* ----- Navigation sidebar (desktop) ----- */
+.modern-messenger-nav {
+    width: 180px;
     background: var(--bg-color);
-    border-bottom: 1px solid var(--border-color);
-    padding: 0;
-    margin: 0;
-    list-style: none;
+    border-right: 1px solid var(--border-color);
+    padding: var(--space-md) 0;
+    flex-shrink: 0;
 }
 
-#modern-messenger .modern-tabs li {
-    margin: 0;
-    border: none;
-    text-align: center;
-}
-
-#modern-messenger .modern-tabs li a {
+.modern-nav-link {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 100%;
-    padding: var(--pad-4) var(--pad-6);
-    font-family: var(--font-primary);
-    font-weight: 600;
-    font-size: var(--text-sm);
+    gap: var(--space-sm);
+    padding: var(--pad-3) var(--pad-6);
     color: var(--text-secondary);
     text-decoration: none;
+    font-family: var(--font-primary);
+    font-weight: 500;
+    font-size: var(--text-sm);
     transition: all 0.2s ease;
-    border-bottom: 2px solid transparent;
-    box-sizing: border-box;
-    gap: var(--space-xs);
+    border-left: 3px solid transparent;
 }
 
-#modern-messenger .modern-tabs li.current a {
-    color: var(--primary-light);
-    border-bottom-color: var(--primary-light);
-    background: transparent;
-}
-
-#modern-messenger .modern-tabs li a i {
+.modern-nav-link i {
     width: 1.25rem;
     text-align: center;
 }
 
-#modern-messenger .modern-tabs li a:hover {
-    color: var(--text-primary);
+.modern-nav-link:hover {
     background: var(--hover-color);
+    color: var(--text-primary);
+}
+
+.modern-nav-link.current {
+    background: var(--hover-color);
+    border-left-color: var(--primary-color);
+    color: var(--primary-light);
+}
+
+/* ----- Main content area (compose form) ----- */
+.modern-messenger-main {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface-color);
 }
 
 /* ----- Recipient & Title row ----- */
@@ -1697,7 +1699,7 @@ input[type="radio"]:checked::before {
 /* ----- WYSIWYG contenteditable area ----- */
 .modern-wysiwyg {
     margin: var(--pad-6);
-    min-height: 100px;
+    min-height: 200px;
     padding: var(--pad-4);
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -1717,7 +1719,7 @@ input[type="radio"]:checked::before {
     box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* Placeholder for empty WYSIWYG editor – uses class instead of :empty */
+/* Placeholder for empty WYSIWYG editor */
 .modern-wysiwyg.empty:before {
     content: "💬 Write your message...";
     color: var(--text-tertiary);
@@ -1798,41 +1800,6 @@ input[type="radio"]:checked::before {
     cursor: pointer;
 }
 
-/* ----- File attachment row ----- */
-.modern-attach {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--pad-4) var(--pad-6);
-    border-top: 1px solid var(--border-color);
-    background: var(--bg-color);
-}
-
-.modern-file-label {
-    background: var(--surface-light);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: var(--pad-2) var(--pad-4);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    transition: all 0.2s ease;
-}
-
-.modern-file-label:hover {
-    background: var(--hover-color);
-    border-color: var(--primary-color);
-    transform: translateY(-1px);
-}
-
-#modern-file-name {
-    color: var(--text-tertiary);
-    font-size: var(--text-sm);
-}
-
 /* ----- Action buttons ----- */
 .modern-actions {
     display: flex;
@@ -1852,6 +1819,10 @@ input[type="radio"]:checked::before {
     font-size: var(--text-sm);
     cursor: pointer;
     transition: all 0.2s ease;
+}
+
+.modern-btn i {
+    margin-right: var(--space-xs);
 }
 
 .modern-btn-primary {
@@ -1892,11 +1863,50 @@ input[type="radio"]:checked::before {
     line-height: 1.618;
 }
 
-/* ----- Responsive adjustments ----- */
+/* ===== MOBILE: Bottom navigation (≤680px) ===== */
 @media (max-width: 680px) {
+    #modern-messenger {
+        flex-direction: column;
+    }
+
+    .modern-messenger-nav {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-around;
+        padding: var(--space-xs) 0;
+        order: 2;
+    }
+
+    .modern-nav-link {
+        flex-direction: column;
+        justify-content: center;
+        padding: var(--pad-2) var(--pad-3);
+        gap: var(--space-xs);
+        border-left: none;
+        border-bottom: 2px solid transparent;
+        font-size: var(--text-xs);
+    }
+
+    .modern-nav-link i {
+        width: auto;
+        font-size: 1.25rem;
+    }
+
+    .modern-nav-link.current {
+        border-left-color: transparent;
+        border-bottom-color: var(--primary-color);
+    }
+
+    .modern-messenger-main {
+        order: 1;
+    }
+
     .modern-recipient-row {
         flex-direction: column;
         gap: var(--space-md);
+        margin: var(--space-sm);
     }
 
     .modern-editor-toolbar {
@@ -1908,15 +1918,14 @@ input[type="radio"]:checked::before {
         gap: var(--space-sm);
     }
 
-    .modern-attach {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
     .modern-actions {
         justify-content: center;
     }
- 
+
+    .modern-wysiwyg {
+        min-height: 150px;
+        margin: var(--space-sm);
+    }
 }
 
 /* ----- Reduced motion ----- */
