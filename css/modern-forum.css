@@ -2159,6 +2159,255 @@ input[type="radio"]:checked::before {
     }
 }
 
+/* ===== MODERN MESSAGES SECTION ===== */
+.messages-folder-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-md) 0 var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.messages-stats {
+    display: flex;
+    gap: var(--space-lg);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+.messages-stats i {
+    margin-right: var(--space-xs);
+    color: var(--primary-light);
+}
+
+.messages-folder-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.messages-folder-selector label {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.messages-list-header,
+.message-row {
+    display: flex;
+    align-items: center;
+    padding: var(--pad-3) var(--pad-4);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.messages-list-header {
+    background: var(--bg-color);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.message-row {
+    transition: background 0.2s;
+}
+
+.message-row:hover {
+    background: var(--hover-color);
+}
+
+.message-row.unread {
+    background: rgba(5, 150, 105, 0.05);
+}
+
+.msg-status {
+    width: 30px;
+    text-align: center;
+    color: var(--text-tertiary);
+}
+
+.msg-title {
+    flex: 2;
+    font-size: var(--text-sm);
+}
+
+.msg-title a {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.msg-title a:hover {
+    color: var(--primary-light);
+}
+
+.msg-sender {
+    flex: 1;
+    font-size: var(--text-xs);
+}
+
+.msg-sender a {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+.msg-sender a:hover {
+    color: var(--primary-light);
+}
+
+.msg-date {
+    width: 120px;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.msg-select {
+    width: 40px;
+    text-align: center;
+}
+
+.messages-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--pad-4);
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-color);
+    margin-top: var(--space-sm);
+}
+
+.action-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.modern-select-sm {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--pad-2) var(--pad-3);
+    font-size: var(--text-xs);
+    color: var(--text-primary);
+}
+
+.modern-btn.danger {
+    background: transparent;
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+.modern-btn.danger:hover {
+    background: rgba(220, 38, 38, 0.1);
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+/* ===== MODERN CONTACTS SECTION ===== */
+.contacts-card {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    margin: var(--space-md);
+    padding: var(--space-md);
+}
+
+.contacts-card-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    margin: 0 0 var(--space-sm) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-primary);
+}
+
+.modern-textarea-contacts {
+    width: 100%;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: var(--pad-3);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    resize: vertical;
+}
+
+.contacts-help {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    margin: var(--space-xs) 0 0 0;
+}
+
+.privacy-option {
+    display: flex;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    margin-top: var(--space-sm);
+}
+
+.modern-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.modern-radio input {
+    accent-color: var(--primary-color);
+    width: 1rem;
+    height: 1rem;
+}
+
+.contacts-actions {
+    padding: var(--space-md);
+    text-align: right;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Responsive adjustments */
+@media (max-width: 680px) {
+    .messages-list-header {
+        display: none;
+    }
+    .message-row {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+    }
+    .msg-title {
+        flex-basis: 100%;
+        order: 1;
+    }
+    .msg-sender {
+        flex-basis: auto;
+        order: 2;
+    }
+    .msg-date {
+        flex-basis: auto;
+        order: 3;
+    }
+    .msg-status {
+        order: 4;
+    }
+    .msg-select {
+        order: 5;
+    }
+    .messages-action-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .action-group {
+        justify-content: space-between;
+    }
+    .privacy-option {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+}
+
 /* ==========================================================================
    MODERN MESSENGER OVERHAUL (CSS only)
    ========================================================================== */
