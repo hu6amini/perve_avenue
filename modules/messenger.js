@@ -146,27 +146,35 @@ waitForEnhancer().then(function() {
     // FIX: Only poll for compose-page globals (tag / ajaxRequest) when we are
     // actually on the compose page.  On messages / contacts those functions are
     // never injected, so the old unconditional poll wasted ~5 seconds every time.
-    function waitForGlobalFunctions() {
-        if (currentSection !== 'compose') {
-            return Promise.resolve();
-        }
-
-        return new Promise(function(resolve) {
-            var maxAttempts = 50;
-            var attempt = 0;
-            function check() {
-                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                    resolve();
-                } else if (++attempt >= maxAttempts) {
-                    console.warn('[MessengerModule] Global functions not found, continuing anyway');
-                    resolve();
-                } else {
-                    setTimeout(check, 100);
-                }
-            }
-            check();
-        });
+function waitForGlobalFunctions() {
+    if (currentSection !== 'compose') {
+        console.log('[MessengerModule] Not compose, skipping wait for global functions');
+        return Promise.resolve();
     }
+
+    console.log('[MessengerModule] Compose: waiting for tag and ajaxRequest...');
+    return new Promise(function(resolve) {
+        var maxAttempts = 100;
+        var attempt = 0;
+        function check() {
+            var tagOk = typeof tag !== 'undefined';
+            var ajaxOk = typeof ajaxRequest !== 'undefined';
+            if (tagOk && ajaxOk) {
+                console.log('[MessengerModule] Global functions found after', attempt, 'attempts');
+                resolve();
+            } else if (++attempt >= maxAttempts) {
+                console.warn('[MessengerModule] Global functions not found after', maxAttempts, 'attempts, continuing anyway');
+                resolve();
+            } else {
+                if (attempt % 10 === 0) {
+                    console.log('[MessengerModule] Still waiting for tag/ ajaxRequest (attempt', attempt, ')');
+                }
+                setTimeout(check, 100);
+            }
+        }
+        check();
+    });
+}
 
     // ------------------------------------------------------------------------
     // HELPERS
