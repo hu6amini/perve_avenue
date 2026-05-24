@@ -14,7 +14,7 @@ const STYLESHEETS = Object.freeze([
 
 const IDLE_TIMEOUT_SLICK = 500;
 const IDLE_TIMEOUT_ENHANCEMENTS = 800;
-const IDLE_TIMEOUT_ENHANCER = 1200;
+// No separate IDLE_TIMEOUT_ENHANCER needed – enhancer is loaded after enhancements
 
 // ============================================================================
 // 1. STYLESHEETS (global – no lightgallery)
@@ -195,11 +195,11 @@ async function bootSystem() {
                 console.debug('[Boot] Slick carousel initialized');
             }
         };
-
         scheduleWork(initSlick, IDLE_TIMEOUT_SLICK);
 
         // ============================================================
         // IDLE LOAD: Non‑critical modules that enhance the UI
+        // After they finish, load the Forum Enhancer (which registers them)
         // ============================================================
         const loadEnhancements = () => {
             const enhStart = performance.now();
@@ -215,26 +215,18 @@ async function bootSystem() {
                     console.warn('[Boot] Enhancement load had failures:', failed);
                 }
                 console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
+                
+                // Now that all enhancement modules are loaded, load the Forum Enhancer
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d8425539db17a67f32a4d4990fb23d50369fcd52/core/forum-enhancer.min.js")
+                    .then(() => console.log('[Boot] System Fully Enhanced'))
+                    .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
             });
         };
-
         scheduleWork(loadEnhancements, IDLE_TIMEOUT_ENHANCEMENTS);
-
-        // ============================================================
-        // IDLE LOAD: Forum enhancer (additional UI improvements)
-        // ============================================================
-        const loadEnhancer = () => {
-            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d8425539db17a67f32a4d4990fb23d50369fcd52/core/forum-enhancer.min.js")
-                .then(() => console.log('[Boot] System Fully Enhanced'))
-                .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
-        };
-
-        scheduleWork(loadEnhancer, IDLE_TIMEOUT_ENHANCER);
 
         // ============================================================
         // LAZY LOAD: Social widgets (Twitter/Instagram) only when needed
         // ============================================================
-        // Twitter – only when a tweet/timeline element exists and is near the viewport
         const tweetEl = document.querySelector('.twitter-tweet, .twitter-timeline, [data-twitter]');
         if (tweetEl) {
             const tweetObserver = new IntersectionObserver((entries) => {
@@ -252,7 +244,6 @@ async function bootSystem() {
             tweetObserver.observe(tweetEl);
         }
 
-        // Instagram – only if an embed is present (now also uses IntersectionObserver)
         const instagramEl = document.querySelector('.instagram-media, .instagram-embed, [data-instagram]');
         if (instagramEl) {
             const instagramObserver = new IntersectionObserver((entries) => {
@@ -277,7 +268,6 @@ async function bootSystem() {
                 loadLightGallery().catch(err => console.error('[Boot] LightGallery failed:', err));
             }
         };
-
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', checkAndLoadLightGallery, { once: true });
         } else {
