@@ -1,5 +1,4 @@
 // Messenger Module – Complete modern UI for all messenger sections
-// Uses ForumCoreObserver for DOM monitoring (no custom MutationObservers)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -21,7 +20,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         return new Promise(function(resolve, reject) {
-            function ready() {
+            function doBuild() {
                 waitForGlobalFunctions().then(function() {
                     try {
                         buildModernMessenger();
@@ -30,14 +29,20 @@ var MessengerModule = (function(Utils, EventBus) {
                         resolve();
                     } catch (err) {
                         console.error('[MessengerModule] Build failed:', err);
-                        reject(err);
+                        // Try again after a short delay if it's a DOM-related error
+                        if (err.message && err.message.indexOf('not found') !== -1) {
+                            setTimeout(doBuild, 500);
+                        } else {
+                            reject(err);
+                        }
                     }
                 }).catch(reject);
             }
+
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', ready);
+                document.addEventListener('DOMContentLoaded', doBuild);
             } else {
-                ready();
+                setTimeout(doBuild, 100);
             }
         });
     }
@@ -54,13 +59,13 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function waitForGlobalFunctions() {
         return new Promise(function(resolve) {
-            var maxAttempts = 30;
+            var maxAttempts = 50;
             var attempt = 0;
             function check() {
                 if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
                     resolve();
                 } else if (++attempt >= maxAttempts) {
-                    console.warn('[MessengerModule] Global functions not found, continuing');
+                    console.warn('[MessengerModule] Global functions not found, continuing anyway');
                     resolve();
                 } else {
                     setTimeout(check, 100);
@@ -264,7 +269,6 @@ var MessengerModule = (function(Utils, EventBus) {
         // Initial sync
         wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
 
-        // Placeholder logic
         function isWysiwygEmpty() {
             var content = wysiwygDiv.innerHTML;
             return content === '' || 
@@ -313,7 +317,6 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
 
-        // Assemble
         container.appendChild(recipientRow);
         container.appendChild(toolbar);
         container.appendChild(wysiwygDiv);
@@ -351,7 +354,6 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // Preview button
         var modernPreviewBtn = document.getElementById('modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
@@ -379,7 +381,6 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Submit button
         var modernSubmitBtn = document.getElementById('modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
@@ -405,17 +406,12 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
 
-        // Find the messages container - look for .cp that contains .big_list with message rows
+        // Find the messages container
         var originalMessages = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
-            var bigList = cpElements[i].querySelector('.big_list');
-            if (bigList && bigList.querySelectorAll('.row-mp').length > 0) {
-                originalMessages = cpElements[i];
-                break;
-            }
-            var mainbgForm = cpElements[i].querySelector('.mainbg form');
-            if (mainbgForm && mainbgForm.querySelector('input[name="action"]')) {
+            // Look for the messages container (has .big_list with .row-mp)
+            if (cpElements[i].querySelector('.big_list .row-mp')) {
                 originalMessages = cpElements[i];
                 break;
             }
@@ -423,17 +419,12 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (originalMessages) {
             var messagesClone = originalMessages.cloneNode(true);
+            // Remove tabs
             var tabsClone = messagesClone.querySelector('.tabs');
             if (tabsClone) tabsClone.remove();
+            // Remove notification centre link
             var notificationLink = messagesClone.querySelector('.notification-link');
             if (notificationLink) notificationLink.remove();
-            var forms = messagesClone.querySelectorAll('form');
-            for (var f = 0; f < forms.length; f++) {
-                var form = forms[f];
-                if (form.getAttribute('action') === '/' || form.getAttribute('action') === '') {
-                    form.setAttribute('action', window.location.origin + '/');
-                }
-            }
             container.appendChild(messagesClone);
         } else {
             container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>No messages</p></div>';
@@ -447,6 +438,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
 
+        // Find the contacts container
         var originalContacts = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
@@ -473,29 +465,36 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
         var legacyComposeForm = document.querySelector('.cp.send');
-        if (!legacyComposeForm) return;
+        if (!legacyComposeForm) {
+            console.warn('[MessengerModule] .cp.send not found, retrying...');
+            return;
+        }
 
-        // Create modern messenger container
+        // Check if modern messenger already exists
+        if (document.getElementById('modern-messenger')) {
+            return;
+        }
+
         var messengerContainer = document.createElement('div');
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
 
-        // ----- Navigation (real URLs) -----
+        // Navigation
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
 
         var navItems = [
-            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', url: '/?act=Msg&CODE=04&c=660892', section: 'compose-section' },
-            { text: 'Messages', icon: 'fa-regular fa-envelope', url: '/?act=Msg&CODE=01&c=660892', section: 'messages-section' },
-            { text: 'Contacts', icon: 'fa-regular fa-address-book', url: '/?act=Msg&CODE=02&c=660892', section: 'contacts-section' }
+            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', url: '/?act=Msg&CODE=04&c=660892', section: 'compose' },
+            { text: 'Messages', icon: 'fa-regular fa-envelope', url: '/?act=Msg&CODE=01&c=660892', section: 'messages' },
+            { text: 'Contacts', icon: 'fa-regular fa-address-book', url: '/?act=Msg&CODE=02&c=660892', section: 'contacts' }
         ];
 
         var currentUrl = window.location.href;
-        var currentSection = 'compose-section';
+        var currentSection = 'compose';
         if (currentUrl.indexOf('CODE=01') !== -1) {
-            currentSection = 'messages-section';
+            currentSection = 'messages';
         } else if (currentUrl.indexOf('CODE=02') !== -1) {
-            currentSection = 'contacts-section';
+            currentSection = 'contacts';
         }
 
         for (var i = 0; i < navItems.length; i++) {
@@ -503,31 +502,26 @@ var MessengerModule = (function(Utils, EventBus) {
             var link = document.createElement('a');
             link.href = item.url;
             link.className = 'modern-nav-link';
-            
             if (item.section === currentSection) {
                 link.classList.add('current');
             }
-
             var icon = document.createElement('i');
             icon.className = item.icon;
             icon.setAttribute('aria-hidden', 'true');
             link.appendChild(icon);
-
             var span = document.createElement('span');
             span.className = 'modern-nav-text';
             span.textContent = item.text;
             link.appendChild(span);
-
             navContainer.appendChild(link);
         }
 
-        // Build ONLY the current section (not all three)
         var mainContent = document.createElement('div');
         mainContent.className = 'modern-messenger-main';
 
-        if (currentSection === 'compose-section') {
+        if (currentSection === 'compose') {
             mainContent.appendChild(buildComposeSection());
-        } else if (currentSection === 'messages-section') {
+        } else if (currentSection === 'messages') {
             mainContent.appendChild(buildMessagesSection());
         } else {
             mainContent.appendChild(buildContactsSection());
@@ -536,27 +530,7 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.appendChild(navContainer);
         messengerContainer.appendChild(mainContent);
 
-        // Register with ForumCoreObserver for future DOM updates
-        if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-            var composeObserverId = globalThis.forumObserver.register({
-                id: 'messenger-compose',
-                selector: '#modern-recipient, #modern-contact, #modern-title, .modern-wysiwyg',
-                priority: 'normal',
-                callback: function(node) {
-                    if (node.id === 'modern-recipient' || node.id === 'modern-contact' || node.id === 'modern-title') {
-                        var recipientInput = document.querySelector('input[name="entered_name"]');
-                        var contactSelect = document.querySelector('select[name="from_contact"]');
-                        var titleInput = document.querySelector('input[name="msg_title"]');
-                        if (recipientInput && node.id === 'modern-recipient') recipientInput.value = node.value;
-                        if (contactSelect && node.id === 'modern-contact') contactSelect.value = node.value;
-                        if (titleInput && node.id === 'modern-title') titleInput.value = node.value;
-                    }
-                }
-            });
-            if (composeObserverId) observerCallbacks.push(composeObserverId);
-        }
-
-        // Placement inside wrapper after carousel
+        // Placement
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (wrapper) {
             var carousel = wrapper.querySelector('.carousel-wrapper');
@@ -568,6 +542,8 @@ var MessengerModule = (function(Utils, EventBus) {
         } else {
             legacyComposeForm.parentNode.insertBefore(messengerContainer, legacyComposeForm);
         }
+
+        console.log('[MessengerModule] Built successfully for section: ' + currentSection);
     }
 
     function escapeHtml(str) {
