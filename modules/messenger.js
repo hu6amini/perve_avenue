@@ -407,11 +407,19 @@ var MessengerModule = (function(Utils, EventBus) {
         container.id = 'messages-section';
         container.style.display = 'none';
 
-        // Find the original messages container
+        // Find the messages container - look for .cp that contains .big_list with message rows
         var originalMessages = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
-            if (cpElements[i].querySelector('.big_list') || cpElements[i].querySelector('.main_list .big_list')) {
+            // Check if this cp contains the messages list (has .big_list with li items)
+            var bigList = cpElements[i].querySelector('.big_list');
+            if (bigList && bigList.querySelectorAll('.row-mp').length > 0) {
+                originalMessages = cpElements[i];
+                break;
+            }
+            // Also check for .main_list > li > .list > .mainbg form
+            var mainbgForm = cpElements[i].querySelector('.mainbg form');
+            if (mainbgForm && mainbgForm.querySelector('input[name="action"]')) {
                 originalMessages = cpElements[i];
                 break;
             }
@@ -423,14 +431,17 @@ var MessengerModule = (function(Utils, EventBus) {
             var tabsClone = messagesClone.querySelector('.tabs');
             if (tabsClone) tabsClone.remove();
             
-            // Clean up notification centre link
+            // Remove notification centre link
             var notificationLink = messagesClone.querySelector('.notification-link');
             if (notificationLink) notificationLink.remove();
             
-            // Update form action to keep the same domain
-            var form = messagesClone.querySelector('form');
-            if (form && form.getAttribute('action') === '/') {
-                form.setAttribute('action', window.location.origin + '/');
+            // Fix form actions to keep relative paths
+            var forms = messagesClone.querySelectorAll('form');
+            for (var f = 0; f < forms.length; f++) {
+                var form = forms[f];
+                if (form.getAttribute('action') === '/' || form.getAttribute('action') === '') {
+                    form.setAttribute('action', window.location.origin + '/');
+                }
             }
             
             container.appendChild(messagesClone);
@@ -447,7 +458,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.id = 'contacts-section';
         container.style.display = 'none';
 
-        // Find the original contacts container
+        // Find the contacts container - look for .cp that contains textarea[name="can_contact"]
         var originalContacts = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
