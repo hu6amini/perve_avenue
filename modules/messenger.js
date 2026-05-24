@@ -60,49 +60,76 @@ function initialize() {
             });
         }
 
-        waitForEnhancer().then(function() {
-            // now wrapper exists
-            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                var targetSelector = '';
-                if (currentSection === 'messages') {
-                    targetSelector = '.big_list .row-mp';
-                } else if (currentSection === 'contacts') {
-                    targetSelector = 'textarea[name="can_contact"]';
-                } else {
-                    targetSelector = '.cp.send, #Post';
-                }
+waitForEnhancer().then(function() {
+    if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+        var targetSelector = '';
+        if (currentSection === 'messages') {
+            targetSelector = '.big_list .row-mp';
+        } else if (currentSection === 'contacts') {
+            targetSelector = 'textarea[name="can_contact"]';
+        } else {
+            targetSelector = '.cp.send, #Post';
+        }
 
-                var observerId = globalThis.forumObserver.register({
-                    id: 'messenger-init',
-                    selector: targetSelector,
-                    priority: 'critical',
-                    callback: function(node) {
-                        if (!isInitialized && !document.getElementById('modern-messenger')) {
-                            globalThis.forumObserver.unregister(observerId);
-                            setTimeout(doBuild, currentSection === 'compose' ? 50 : 0);
-                        }
-                    }
-                });
-
-                if (document.querySelector(targetSelector)) {
+        var observerId = globalThis.forumObserver.register({
+            id: 'messenger-init',
+            selector: targetSelector,
+            priority: 'critical',
+            callback: function(node) {
+                if (!isInitialized && !document.getElementById('modern-messenger')) {
                     globalThis.forumObserver.unregister(observerId);
-                    setTimeout(doBuild, 0);
-                }
-
-                setTimeout(function() {
-                    if (!isInitialized && !document.getElementById('modern-messenger')) {
-                        if (observerId) globalThis.forumObserver.unregister(observerId);
-                        doBuild();
+                    if (currentSection === 'compose') {
+                        // Wait for the load event to ensure tag/ajaxRequest are ready
+                        if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                            setTimeout(doBuild, 0);
+                        } else {
+                            window.addEventListener('load', doBuild, { once: true });
+                        }
+                    } else {
+                        setTimeout(doBuild, 0);
                     }
-                }, 1500);
+                }
+            }
+        });
+
+        // Check if elements already exist
+        if (document.querySelector(targetSelector)) {
+            globalThis.forumObserver.unregister(observerId);
+            if (currentSection === 'compose') {
+                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                    setTimeout(doBuild, 0);
+                } else {
+                    window.addEventListener('load', doBuild, { once: true });
+                }
             } else {
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', doBuild);
+                setTimeout(doBuild, 0);
+            }
+        }
+
+        // Fallback timeout
+        setTimeout(function() {
+            if (!isInitialized && !document.getElementById('modern-messenger')) {
+                if (observerId) globalThis.forumObserver.unregister(observerId);
+                if (currentSection === 'compose') {
+                    if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                        doBuild();
+                    } else {
+                        window.addEventListener('load', doBuild, { once: true });
+                    }
                 } else {
                     doBuild();
                 }
             }
-        });
+        }, 1500);
+    } else {
+        // fallback (same as before)
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', doBuild);
+        } else {
+            doBuild();
+        }
+    }
+});
     });
 }
 
