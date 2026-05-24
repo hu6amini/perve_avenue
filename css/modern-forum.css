@@ -18,7 +18,7 @@ img:not(.slick_carousel img) {
 }
 
 /* Hide original posts */
-#topic .topic, #topic .topic .mainbg, #topic .post, #send .post, #search .post, #blog .post, .summary, blockquote.twitter-tweet, .slick_carousel:not(.slick-initialized) > *:not(:first-child) {
+#topic .topic, #topic .topic .mainbg, #topic .post, #send .post, #search .post, #blog .post, .summary, blockquote.twitter-tweet {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
