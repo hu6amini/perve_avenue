@@ -18,43 +18,52 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
-    function initialize() {
-        if (isInitialized) return Promise.resolve();
+function initialize() {
+    if (isInitialized) return Promise.resolve();
+    if (document.body.id !== 'msg') return Promise.resolve();
+    if (document.getElementById('modern-messenger')) {
+        isInitialized = true;
+        return Promise.resolve();
+    }
 
-        if (document.body.id !== 'msg') return Promise.resolve();
+    return new Promise(function(resolve, reject) {
+        var buildStarted = false;
 
-        if (document.getElementById('modern-messenger')) {
-            isInitialized = true;
-            return Promise.resolve();
+        function doBuild() {
+            if (buildStarted) return;
+            buildStarted = true;
+            waitForGlobalFunctions().then(function() {
+                try {
+                    buildModernMessenger();
+                    isInitialized = true;
+                    if (EventBus) EventBus.trigger('messenger:ready');
+                    resolve();
+                } catch (err) {
+                    console.error('[MessengerModule] Build failed:', err);
+                    reject(err);
+                }
+            }).catch(reject);
         }
 
-        return new Promise(function(resolve, reject) {
-            var buildStarted = false;
+        function waitForEnhancer() {
+            return new Promise(function(res) {
+                if (document.getElementById('modern-forum-wrapper')) {
+                    res();
+                    return;
+                }
+                function onReady() {
+                    window.removeEventListener('forum:enhancer:ready', onReady);
+                    res();
+                }
+                window.addEventListener('forum:enhancer:ready', onReady);
+                setTimeout(res, 2000); // safety
+            });
+        }
 
-            function doBuild() {
-                if (buildStarted) return;
-                buildStarted = true;
-
-                // FIX: only wait for compose-page globals when on the compose page.
-                // On messages/contacts pages tag() and ajaxRequest are never defined,
-                // so the old code burned 5 seconds (50 × 100 ms) before giving up.
-                waitForGlobalFunctions().then(function() {
-                    try {
-                        buildModernMessenger();
-                        isInitialized = true;
-                        if (EventBus) EventBus.trigger('messenger:ready');
-                        resolve();
-                    } catch (err) {
-                        console.error('[MessengerModule] Build failed:', err);
-                        reject(err);
-                    }
-                }).catch(reject);
-            }
-
-            // Use ForumCoreObserver for instant detection
+        waitForEnhancer().then(function() {
+            // now wrapper exists
             if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
                 var targetSelector = '';
-
                 if (currentSection === 'messages') {
                     targetSelector = '.big_list .row-mp';
                 } else if (currentSection === 'contacts') {
@@ -70,22 +79,16 @@ var MessengerModule = (function(Utils, EventBus) {
                     callback: function(node) {
                         if (!isInitialized && !document.getElementById('modern-messenger')) {
                             globalThis.forumObserver.unregister(observerId);
-                            // FIX: For messages/contacts we only need the first matching
-                            // element to exist; the rest of the list is server-rendered
-                            // alongside it so no extra delay is required.
                             setTimeout(doBuild, currentSection === 'compose' ? 50 : 0);
                         }
                     }
                 });
 
-                // Check if elements already exist right now
                 if (document.querySelector(targetSelector)) {
                     globalThis.forumObserver.unregister(observerId);
                     setTimeout(doBuild, 0);
                 }
 
-                // Fallback timeout (reduced from 1500 ms — by then DOMContentLoaded
-                // has long fired on any normal page load)
                 setTimeout(function() {
                     if (!isInitialized && !document.getElementById('modern-messenger')) {
                         if (observerId) globalThis.forumObserver.unregister(observerId);
@@ -93,7 +96,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }, 1500);
             } else {
-                // Simple fallback — DOM is either already parsed or we wait for it
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', doBuild);
                 } else {
@@ -101,7 +103,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             }
         });
-    }
+    });
+}
 
     function reset() {
         isInitialized = false;
