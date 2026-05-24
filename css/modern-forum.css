@@ -1735,7 +1735,6 @@ input[type="radio"]:checked::before {
 }
 
 body#msg input::placeholder {
-   font-size: var(--text-base);
    color: var(--text-tertiary);
 }
 
