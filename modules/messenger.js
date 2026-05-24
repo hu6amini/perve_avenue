@@ -20,7 +20,12 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         return new Promise(function(resolve, reject) {
+            var buildStarted = false;
+            
             function doBuild() {
+                if (buildStarted) return;
+                buildStarted = true;
+                
                 waitForGlobalFunctions().then(function() {
                     try {
                         buildModernMessenger();
@@ -29,17 +34,64 @@ var MessengerModule = (function(Utils, EventBus) {
                         resolve();
                     } catch (err) {
                         console.error('[MessengerModule] Build failed:', err);
-                        setTimeout(doBuild, 500);
+                        reject(err);
                     }
                 }).catch(reject);
             }
 
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function() {
-                    setTimeout(doBuild, 200);
+            // Use ForumCoreObserver for instant detection (high priority)
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+                var selectors = [];
+                var currentUrl = window.location.href;
+                
+                if (currentUrl.indexOf('CODE=01') !== -1) {
+                    selectors = ['.big_list .row-mp', '.mainbg form'];
+                } else if (currentUrl.indexOf('CODE=02') !== -1) {
+                    selectors = ['textarea[name="can_contact"]'];
+                } else {
+                    selectors = ['.cp.send', '#Post'];
+                }
+                
+                var observerId = globalThis.forumObserver.register({
+                    id: 'messenger-init',
+                    selector: selectors.join(', '),
+                    priority: 'critical',
+                    callback: function(node) {
+                        if (!isInitialized && !document.getElementById('modern-messenger')) {
+                            globalThis.forumObserver.unregister(observerId);
+                            // Small delay to ensure other DOM elements are ready
+                            setTimeout(doBuild, 50);
+                        }
+                    }
                 });
+                
+                // Also check immediately in case elements already exist
+                var existingCheck = false;
+                for (var i = 0; i < selectors.length; i++) {
+                    if (document.querySelector(selectors[i])) {
+                        existingCheck = true;
+                        break;
+                    }
+                }
+                if (existingCheck) {
+                    globalThis.forumObserver.unregister(observerId);
+                    setTimeout(doBuild, 50);
+                }
+                
+                // Fallback timeout (in case observer never triggers)
+                setTimeout(function() {
+                    if (!isInitialized && !document.getElementById('modern-messenger')) {
+                        if (observerId) globalThis.forumObserver.unregister(observerId);
+                        doBuild();
+                    }
+                }, 1500);
             } else {
-                setTimeout(doBuild, 200);
+                // Fallback for when ForumObserver isn't available
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', doBuild);
+                } else {
+                    doBuild();
+                }
             }
         });
     }
