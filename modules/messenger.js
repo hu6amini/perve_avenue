@@ -172,48 +172,49 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
 
-        // ----- Tabs (rebuild with actual icons) -----
-        var tabsHtml = document.createElement('ul');
-        tabsHtml.className = 'modern-tabs';
+        // ----- Navigation (Sidebar on desktop, Bottom on mobile) -----
+        var navContainer = document.createElement('nav');
+        navContainer.className = 'modern-messenger-nav';
 
-        var tabItems = [
-            { text: 'Send message', icon: 'fa-regular fa-paper-plane', href: '/?act=Msg&CODE=04&c=660892' },
-            { text: 'Messages', icon: 'fa-regular fa-envelope', href: '/?act=Msg&CODE=01&c=660892' },
-            { text: 'Notification centre', icon: 'fa-regular fa-bell', href: '/?act=Msg&CODE=16&c=660892' },
-            { text: 'Folders', icon: 'fa-regular fa-folder', href: '/?act=Msg&CODE=07&c=660892' },
-            { text: 'Contacts', icon: 'fa-regular fa-address-book', href: '/?act=Msg&CODE=02&c=660892' },
-            { text: 'Notepad', icon: 'fa-regular fa-pen', href: '/?act=UserCP&CODE=00&c=660892' }
+        var navItems = [
+            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', href: '/?act=Msg&CODE=04&c=660892', id: 'compose' },
+            { text: 'Messages', icon: 'fa-regular fa-envelope', href: '/?act=Msg&CODE=01&c=660892', id: 'inbox' },
+            { text: 'Contacts', icon: 'fa-regular fa-address-book', href: '/?act=Msg&CODE=02&c=660892', id: 'contacts' }
         ];
 
         var originalTabs = document.querySelectorAll('.cp.send .tabs li');
+        var currentHref = window.location.href;
 
-        for (var i = 0; i < tabItems.length; i++) {
-            var tab = tabItems[i];
-            var li = document.createElement('li');
-            var isCurrent = false;
+        for (var i = 0; i < navItems.length; i++) {
+            var item = navItems[i];
+            var link = document.createElement('a');
+            link.href = item.href;
+            link.className = 'modern-nav-link';
+            link.setAttribute('data-nav', item.id);
 
+            // Check if this is the current page
             if (originalTabs[i] && originalTabs[i].classList.contains('current')) {
-                isCurrent = true;
+                link.classList.add('current');
             }
 
-            li.className = isCurrent ? 'Sub current' : 'Sub';
-
-            var h2 = document.createElement('h2');
-            var a = document.createElement('a');
-            a.href = tab.href;
-
             var icon = document.createElement('i');
-            icon.className = tab.icon;
+            icon.className = item.icon;
             icon.setAttribute('aria-hidden', 'true');
-            a.appendChild(icon);
-            a.appendChild(document.createTextNode(' ' + tab.text));
+            link.appendChild(icon);
 
-            h2.appendChild(a);
-            li.appendChild(h2);
-            tabsHtml.appendChild(li);
+            var span = document.createElement('span');
+            span.className = 'modern-nav-text';
+            span.textContent = item.text;
+            link.appendChild(span);
+
+            navContainer.appendChild(link);
         }
 
-        // Recipient & Title row (no labels)
+        // ----- Main content area (only shown on Compose) -----
+        var mainContent = document.createElement('div');
+        mainContent.className = 'modern-messenger-main';
+
+        // Recipient & Title row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -293,7 +294,7 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.insertBefore(smileBtn, imgbbBtn);
 
-        // WYSIWYG contenteditable div (all styles moved to CSS)
+        // WYSIWYG contenteditable div
         wysiwygDiv = document.createElement('div');
         wysiwygDiv.id = 'modern-wysiwyg';
         wysiwygDiv.className = 'modern-wysiwyg';
@@ -304,8 +305,7 @@ var MessengerModule = (function(Utils, EventBus) {
         // Initial sync
         wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
 
-        // ========== PLACEHOLDER LOGIC ==========
-        // Function to check if wysiwyg is effectively empty
+        // Placeholder logic
         function isWysiwygEmpty() {
             var content = wysiwygDiv.innerHTML;
             return content === '' || 
@@ -315,7 +315,6 @@ var MessengerModule = (function(Utils, EventBus) {
                    content.trim() === '';
         }
 
-        // Update placeholder class
         function updatePlaceholder() {
             if (isWysiwygEmpty()) {
                 wysiwygDiv.classList.add('empty');
@@ -324,20 +323,15 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         }
 
-        // Live sync back to original textarea (with placeholder update)
         wysiwygDiv.addEventListener('input', function() {
             originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
             updatePlaceholder();
         });
 
-        // Additional events to catch all deletion scenarios
         wysiwygDiv.addEventListener('focus', updatePlaceholder);
         wysiwygDiv.addEventListener('blur', updatePlaceholder);
         wysiwygDiv.addEventListener('keyup', updatePlaceholder);
-
-        // Initial check
         updatePlaceholder();
-        // ========== END PLACEHOLDER LOGIC ==========
 
         // Options row
         var optionsRow = document.createElement('div');
@@ -345,28 +339,6 @@ var MessengerModule = (function(Utils, EventBus) {
         optionsRow.innerHTML = ''
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" ' + (addSentCheckbox && addSentCheckbox.checked ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
-
-        // File attachment row
-        var attachRow = document.createElement('div');
-        attachRow.className = 'modern-attach';
-        attachRow.innerHTML = ''
-            + '<label class="modern-file-label"><i class="fa-regular fa-paperclip"></i> Attach file'
-            + '<input type="file" id="modern-file-upload" style="display:none"></label>'
-            + '<span id="modern-file-name">No file chosen</span>';
-        var fileInput = attachRow.querySelector('#modern-file-upload');
-        if (fileUploadInput) {
-            fileInput.onchange = function() {
-                var fileName = fileInput.files[0] ? fileInput.files[0].name : 'No file chosen';
-                var fileNameSpan = document.getElementById('modern-file-name');
-                if (fileNameSpan) fileNameSpan.innerText = fileName;
-                var dataTransfer = new DataTransfer();
-                dataTransfer.items.add(fileInput.files[0]);
-                fileUploadInput.files = dataTransfer.files;
-            };
-            fileUploadInput.style.display = 'none';
-        }
-        var fileLabel = attachRow.querySelector('.modern-file-label');
-        if (fileLabel) fileLabel.onclick = function() { fileInput.click(); };
 
         // Action buttons
         var actions = document.createElement('div');
@@ -382,15 +354,17 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
 
-        // Assemble
-        messengerContainer.appendChild(tabsHtml);
-        messengerContainer.appendChild(recipientRow);
-        messengerContainer.appendChild(toolbar);
-        messengerContainer.appendChild(wysiwygDiv);
-        messengerContainer.appendChild(optionsRow);
-        messengerContainer.appendChild(attachRow);
-        messengerContainer.appendChild(actions);
-        messengerContainer.appendChild(previewArea);
+        // Assemble main content
+        mainContent.appendChild(recipientRow);
+        mainContent.appendChild(toolbar);
+        mainContent.appendChild(wysiwygDiv);
+        mainContent.appendChild(optionsRow);
+        mainContent.appendChild(actions);
+        mainContent.appendChild(previewArea);
+
+        // Assemble full messenger
+        messengerContainer.appendChild(navContainer);
+        messengerContainer.appendChild(mainContent);
 
         // Placement inside wrapper after carousel
         var wrapper = document.getElementById('modern-forum-wrapper');
