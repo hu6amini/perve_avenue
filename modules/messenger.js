@@ -534,8 +534,9 @@ var MessengerModule = (function(Utils, EventBus) {
 
             for (var i = 0; i < messageRows.length; i++) {
                 var row = messageRows[i];
-                var isRead = row.classList.contains('off') ? false : true;
-                var iconClass = isRead ? 'fa-envelope-open' : 'fa-envelope';
+                // CORRECTED: 'on' = unread, 'off' = read
+                var isUnread = row.classList.contains('on');
+                var iconClass = isUnread ? 'fa-envelope' : 'fa-envelope-open';
                 var titleLink = row.querySelector('.bb h4 a');
                 var title = titleLink ? titleLink.textContent.trim() : '(no title)';
                 var titleHref = titleLink ? titleLink.getAttribute('href') : '#';
@@ -549,7 +550,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 var msgId = row.id ? row.id.replace('msg', '') : i;
 
                 var msgRow = document.createElement('div');
-                msgRow.className = 'message-row' + (isRead ? ' read' : ' unread');
+                msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
                 msgRow.innerHTML = ''
                     + '<div class="msg-status"><i class="fa-regular ' + iconClass + '"></i></div>'
                     + '<div class="msg-title"><a href="' + escapeHtml(titleHref) + '">' + escapeHtml(title) + '</a></div>'
@@ -636,7 +637,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         return container;
     }
-
+    
     // ----- MODERN CONTACTS SECTION (fully rebuilt) -----
     function buildModernContactsSection() {
         var container = document.createElement('div');
