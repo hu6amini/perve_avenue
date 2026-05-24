@@ -1,9 +1,11 @@
 // Messenger Module – Complete modern UI for all messenger sections
+// Uses ForumCoreObserver for DOM monitoring (no custom MutationObservers)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
     var wysiwygDiv = null;
+    var observerCallbacks = [];
 
     // ------------------------------------------------------------------------
     // PUBLIC API
@@ -40,7 +42,16 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    function reset() { isInitialized = false; }
+    function reset() { 
+        isInitialized = false;
+        // Unregister observer callbacks
+        observerCallbacks.forEach(function(id) {
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.unregister === 'function') {
+                globalThis.forumObserver.unregister(id);
+            }
+        });
+        observerCallbacks = [];
+    }
 
     function waitForGlobalFunctions() {
         return new Promise(function(resolve) {
@@ -396,15 +407,13 @@ var MessengerModule = (function(Utils, EventBus) {
         container.id = 'messages-section';
         container.style.display = 'none';
 
-        // Clone the original messages content
-        var originalMessages = document.querySelector('.cp:has(.main_list .big_list)');
-        if (!originalMessages) {
-            var cpElements = document.querySelectorAll('.cp');
-            for (var i = 0; i < cpElements.length; i++) {
-                if (cpElements[i].querySelector('.big_list')) {
-                    originalMessages = cpElements[i];
-                    break;
-                }
+        // Find the original messages container
+        var originalMessages = null;
+        var cpElements = document.querySelectorAll('.cp');
+        for (var i = 0; i < cpElements.length; i++) {
+            if (cpElements[i].querySelector('.big_list') || cpElements[i].querySelector('.main_list .big_list')) {
+                originalMessages = cpElements[i];
+                break;
             }
         }
 
@@ -414,9 +423,15 @@ var MessengerModule = (function(Utils, EventBus) {
             var tabsClone = messagesClone.querySelector('.tabs');
             if (tabsClone) tabsClone.remove();
             
-            // Clean up any unwanted elements
+            // Clean up notification centre link
             var notificationLink = messagesClone.querySelector('.notification-link');
             if (notificationLink) notificationLink.remove();
+            
+            // Update form action to keep the same domain
+            var form = messagesClone.querySelector('form');
+            if (form && form.getAttribute('action') === '/') {
+                form.setAttribute('action', window.location.origin + '/');
+            }
             
             container.appendChild(messagesClone);
         } else {
@@ -432,15 +447,13 @@ var MessengerModule = (function(Utils, EventBus) {
         container.id = 'contacts-section';
         container.style.display = 'none';
 
-        // Clone the original contacts content
-        var originalContacts = document.querySelector('.cp:has(.main_list textarea[name="can_contact"])');
-        if (!originalContacts) {
-            var cpElements = document.querySelectorAll('.cp');
-            for (var i = 0; i < cpElements.length; i++) {
-                if (cpElements[i].querySelector('textarea[name="can_contact"]')) {
-                    originalContacts = cpElements[i];
-                    break;
-                }
+        // Find the original contacts container
+        var originalContacts = null;
+        var cpElements = document.querySelectorAll('.cp');
+        for (var i = 0; i < cpElements.length; i++) {
+            if (cpElements[i].querySelector('textarea[name="can_contact"]')) {
+                originalContacts = cpElements[i];
+                break;
             }
         }
 
@@ -463,7 +476,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
         var legacyComposeForm = document.querySelector('.cp.send');
-        if (!legacyComposeForm) throw new Error('.cp.send not found');
+        if (!legacyComposeForm) return;
 
         // Create modern messenger container
         var messengerContainer = document.createElement('div');
@@ -510,7 +523,7 @@ var MessengerModule = (function(Utils, EventBus) {
             span.textContent = item.text;
             link.appendChild(span);
 
-            link.addEventListener('click', function(e, sectionName) {
+            link.addEventListener('click', (function(sectionName) {
                 return function(e) {
                     e.preventDefault();
                     var targetSection = e.currentTarget.getAttribute('data-section');
@@ -526,7 +539,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     var activeSection = document.getElementById(targetSection);
                     if (activeSection) activeSection.style.display = 'block';
                 };
-            }(item));
+            })(item.section));
 
             navContainer.appendChild(link);
         }
@@ -554,10 +567,26 @@ var MessengerModule = (function(Utils, EventBus) {
             messagesSection.style.display = 'none';
         }
 
-        // Hide all legacy containers
-        var allCpContainers = document.querySelectorAll('.cp');
-        for (var i = 0; i < allCpContainers.length; i++) {
-            allCpContainers[i].style.display = 'none';
+        // Register with ForumCoreObserver for future DOM updates
+        if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+            // Register for compose section updates
+            var composeObserverId = globalThis.forumObserver.register({
+                id: 'messenger-compose',
+                selector: '#modern-recipient, #modern-contact, #modern-title, .modern-wysiwyg',
+                priority: 'normal',
+                callback: function(node) {
+                    // Sync any dynamic changes if needed
+                    if (node.id === 'modern-recipient' || node.id === 'modern-contact' || node.id === 'modern-title') {
+                        var recipientInput = document.querySelector('input[name="entered_name"]');
+                        var contactSelect = document.querySelector('select[name="from_contact"]');
+                        var titleInput = document.querySelector('input[name="msg_title"]');
+                        if (recipientInput && node.id === 'modern-recipient') recipientInput.value = node.value;
+                        if (contactSelect && node.id === 'modern-contact') contactSelect.value = node.value;
+                        if (titleInput && node.id === 'modern-title') titleInput.value = node.value;
+                    }
+                }
+            });
+            if (composeObserverId) observerCallbacks.push(composeObserverId);
         }
 
         // Placement inside wrapper after carousel
@@ -570,7 +599,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 wrapper.appendChild(messengerContainer);
             }
         } else {
-            document.body.insertBefore(messengerContainer, document.body.firstChild);
+            legacyComposeForm.parentNode.insertBefore(messengerContainer, legacyComposeForm);
         }
     }
 
