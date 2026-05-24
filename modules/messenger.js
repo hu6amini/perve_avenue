@@ -39,46 +39,38 @@ var MessengerModule = (function(Utils, EventBus) {
                 }).catch(reject);
             }
 
-            // Use ForumCoreObserver for instant detection (high priority)
+            // Use ForumCoreObserver for instant detection
             if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                var selectors = [];
                 var currentUrl = window.location.href;
+                var targetSelector = '';
                 
                 if (currentUrl.indexOf('CODE=01') !== -1) {
-                    selectors = ['.big_list .row-mp', '.mainbg form'];
+                    targetSelector = '.big_list .row-mp';
                 } else if (currentUrl.indexOf('CODE=02') !== -1) {
-                    selectors = ['textarea[name="can_contact"]'];
+                    targetSelector = 'textarea[name="can_contact"]';
                 } else {
-                    selectors = ['.cp.send', '#Post'];
+                    targetSelector = '.cp.send, #Post';
                 }
                 
                 var observerId = globalThis.forumObserver.register({
                     id: 'messenger-init',
-                    selector: selectors.join(', '),
+                    selector: targetSelector,
                     priority: 'critical',
                     callback: function(node) {
                         if (!isInitialized && !document.getElementById('modern-messenger')) {
                             globalThis.forumObserver.unregister(observerId);
-                            // Small delay to ensure other DOM elements are ready
                             setTimeout(doBuild, 50);
                         }
                     }
                 });
                 
-                // Also check immediately in case elements already exist
-                var existingCheck = false;
-                for (var i = 0; i < selectors.length; i++) {
-                    if (document.querySelector(selectors[i])) {
-                        existingCheck = true;
-                        break;
-                    }
-                }
-                if (existingCheck) {
+                // Check if elements already exist
+                if (document.querySelector(targetSelector)) {
                     globalThis.forumObserver.unregister(observerId);
                     setTimeout(doBuild, 50);
                 }
                 
-                // Fallback timeout (in case observer never triggers)
+                // Fallback timeout
                 setTimeout(function() {
                     if (!isInitialized && !document.getElementById('modern-messenger')) {
                         if (observerId) globalThis.forumObserver.unregister(observerId);
@@ -86,7 +78,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }, 1500);
             } else {
-                // Fallback for when ForumObserver isn't available
+                // Fallback
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', doBuild);
                 } else {
@@ -228,7 +220,6 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Recipient & Title row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -241,7 +232,6 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
             + '</div>';
 
-        // WYSIWYG toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
 
@@ -271,7 +261,6 @@ var MessengerModule = (function(Utils, EventBus) {
             toolbar.appendChild(button);
         }
 
-        // ImgBB upload button
         var imgbbBtn = document.createElement('button');
         imgbbBtn.type = 'button';
         imgbbBtn.className = 'modern-editor-btn';
@@ -291,7 +280,6 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(imgbbBtn);
 
-        // Smiley button
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
@@ -308,7 +296,6 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.insertBefore(smileBtn, imgbbBtn);
 
-        // WYSIWYG contenteditable div
         wysiwygDiv = document.createElement('div');
         wysiwygDiv.className = 'modern-wysiwyg';
         wysiwygDiv.contentEditable = 'true';
@@ -506,40 +493,17 @@ var MessengerModule = (function(Utils, EventBus) {
             currentSection = 'contacts';
         }
 
-        var insertionPoint = null;
-        
-        if (currentSection === 'compose') {
-            insertionPoint = document.querySelector('.cp.send');
-            if (!insertionPoint) {
-                console.warn('[MessengerModule] .cp.send not found for compose section, retrying...');
-                return;
-            }
-        } else if (currentSection === 'messages') {
-            var cpElements = document.querySelectorAll('.cp');
-            for (var i = 0; i < cpElements.length; i++) {
-                if (cpElements[i].querySelector('.big_list .row-mp')) {
-                    insertionPoint = cpElements[i];
-                    break;
-                }
-            }
-            if (!insertionPoint) {
-                console.warn('[MessengerModule] Messages container not found, retrying...');
-                return;
-            }
-        } else if (currentSection === 'contacts') {
-            var cpElements = document.querySelectorAll('.cp');
-            for (var i = 0; i < cpElements.length; i++) {
-                if (cpElements[i].querySelector('textarea[name="can_contact"]')) {
-                    insertionPoint = cpElements[i];
-                    break;
-                }
-            }
-            if (!insertionPoint) {
-                console.warn('[MessengerModule] Contacts container not found, retrying...');
-                return;
-            }
+        // Wait for wrapper to exist (created by forum-enhancer)
+        var wrapper = document.getElementById('modern-forum-wrapper');
+        if (!wrapper) {
+            console.warn('[MessengerModule] Wrapper not found, will retry');
+            setTimeout(function() { buildModernMessenger(); }, 100);
+            return;
         }
 
+        // Find carousel to insert after
+        var carousel = wrapper.querySelector('.carousel-wrapper');
+        
         if (document.getElementById('modern-messenger')) {
             return;
         }
@@ -548,6 +512,7 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
 
+        // Navigation
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
 
@@ -590,7 +555,12 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.appendChild(navContainer);
         messengerContainer.appendChild(mainContent);
 
-        insertionPoint.parentNode.insertBefore(messengerContainer, insertionPoint);
+        // Insert into wrapper below carousel
+        if (carousel) {
+            carousel.insertAdjacentElement('afterend', messengerContainer);
+        } else {
+            wrapper.appendChild(messengerContainer);
+        }
 
         console.log('[MessengerModule] Built successfully for section: ' + currentSection);
     }
