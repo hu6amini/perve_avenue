@@ -18,120 +18,118 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
-function initialize() {
-    if (isInitialized) return Promise.resolve();
-    if (document.body.id !== 'msg') return Promise.resolve();
-    if (document.getElementById('modern-messenger')) {
-        isInitialized = true;
-        return Promise.resolve();
-    }
-
-    return new Promise(function(resolve, reject) {
-        var buildStarted = false;
-
-        function doBuild() {
-            if (buildStarted) return;
-            buildStarted = true;
-            waitForGlobalFunctions().then(function() {
-                try {
-                    buildModernMessenger();
-                    isInitialized = true;
-                    if (EventBus) EventBus.trigger('messenger:ready');
-                    resolve();
-                } catch (err) {
-                    console.error('[MessengerModule] Build failed:', err);
-                    reject(err);
-                }
-            }).catch(reject);
+    function initialize() {
+        if (isInitialized) return Promise.resolve();
+        if (document.body.id !== 'msg') return Promise.resolve();
+        if (document.getElementById('modern-messenger')) {
+            isInitialized = true;
+            return Promise.resolve();
         }
 
-        function waitForEnhancer() {
-            return new Promise(function(res) {
-                if (document.getElementById('modern-forum-wrapper')) {
-                    res();
-                    return;
-                }
-                function onReady() {
-                    window.removeEventListener('forum:enhancer:ready', onReady);
-                    res();
-                }
-                window.addEventListener('forum:enhancer:ready', onReady);
-                setTimeout(res, 2000); // safety
-            });
-        }
+        return new Promise(function(resolve, reject) {
+            var buildStarted = false;
 
-waitForEnhancer().then(function() {
-    if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-        var targetSelector = '';
-        if (currentSection === 'messages') {
-            targetSelector = '.big_list .row-mp';
-        } else if (currentSection === 'contacts') {
-            targetSelector = 'textarea[name="can_contact"]';
-        } else {
-            targetSelector = '.cp.send, #Post';
-        }
+            function doBuild() {
+                if (buildStarted) return;
+                buildStarted = true;
+                waitForGlobalFunctions().then(function() {
+                    try {
+                        buildModernMessenger();
+                        isInitialized = true;
+                        if (EventBus) EventBus.trigger('messenger:ready');
+                        resolve();
+                    } catch (err) {
+                        console.error('[MessengerModule] Build failed:', err);
+                        reject(err);
+                    }
+                }).catch(reject);
+            }
 
-        var observerId = globalThis.forumObserver.register({
-            id: 'messenger-init',
-            selector: targetSelector,
-            priority: 'critical',
-            callback: function(node) {
-                if (!isInitialized && !document.getElementById('modern-messenger')) {
-                    globalThis.forumObserver.unregister(observerId);
-                    if (currentSection === 'compose') {
-                        // Wait for the load event to ensure tag/ajaxRequest are ready
-                        if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                            setTimeout(doBuild, 0);
-                        } else {
-                            window.addEventListener('load', doBuild, { once: true });
+            function waitForEnhancer() {
+                return new Promise(function(res) {
+                    if (document.getElementById('modern-forum-wrapper')) {
+                        res();
+                        return;
+                    }
+                    function onReady() {
+                        window.removeEventListener('forum:enhancer:ready', onReady);
+                        res();
+                    }
+                    window.addEventListener('forum:enhancer:ready', onReady);
+                    setTimeout(res, 2000);
+                });
+            }
+
+            waitForEnhancer().then(function() {
+                if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+                    var targetSelector = '';
+                    if (currentSection === 'messages') {
+                        targetSelector = '.big_list .row-mp';
+                    } else if (currentSection === 'contacts') {
+                        targetSelector = 'textarea[name="can_contact"]';
+                    } else {
+                        targetSelector = '.cp.send, #Post';
+                    }
+
+                    var observerId = globalThis.forumObserver.register({
+                        id: 'messenger-init',
+                        selector: targetSelector,
+                        priority: 'critical',
+                        callback: function(node) {
+                            if (!isInitialized && !document.getElementById('modern-messenger')) {
+                                globalThis.forumObserver.unregister(observerId);
+                                if (currentSection === 'compose') {
+                                    if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                                        setTimeout(doBuild, 0);
+                                    } else {
+                                        window.addEventListener('load', doBuild, { once: true });
+                                    }
+                                } else {
+                                    setTimeout(doBuild, 0);
+                                }
+                            }
                         }
-                    } else {
-                        setTimeout(doBuild, 0);
+                    });
+
+                    // Check if elements already exist
+                    if (document.querySelector(targetSelector)) {
+                        globalThis.forumObserver.unregister(observerId);
+                        if (currentSection === 'compose') {
+                            if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                                setTimeout(doBuild, 0);
+                            } else {
+                                window.addEventListener('load', doBuild, { once: true });
+                            }
+                        } else {
+                            setTimeout(doBuild, 0);
+                        }
                     }
-                }
-            }
-        });
 
-        // Check if elements already exist
-        if (document.querySelector(targetSelector)) {
-            globalThis.forumObserver.unregister(observerId);
-            if (currentSection === 'compose') {
-                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                    setTimeout(doBuild, 0);
+                    // Fallback timeout
+                    setTimeout(function() {
+                        if (!isInitialized && !document.getElementById('modern-messenger')) {
+                            if (observerId) globalThis.forumObserver.unregister(observerId);
+                            if (currentSection === 'compose') {
+                                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                                    doBuild();
+                                } else {
+                                    window.addEventListener('load', doBuild, { once: true });
+                                }
+                            } else {
+                                doBuild();
+                            }
+                        }
+                    }, 1500);
                 } else {
-                    window.addEventListener('load', doBuild, { once: true });
-                }
-            } else {
-                setTimeout(doBuild, 0);
-            }
-        }
-
-        // Fallback timeout
-        setTimeout(function() {
-            if (!isInitialized && !document.getElementById('modern-messenger')) {
-                if (observerId) globalThis.forumObserver.unregister(observerId);
-                if (currentSection === 'compose') {
-                    if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', doBuild);
+                    } else {
                         doBuild();
-                    } else {
-                        window.addEventListener('load', doBuild, { once: true });
                     }
-                } else {
-                    doBuild();
                 }
-            }
-        }, 1500);
-    } else {
-        // fallback (same as before)
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', doBuild);
-        } else {
-            doBuild();
-        }
+            });
+        });
     }
-});
-    });
-}
 
     function reset() {
         isInitialized = false;
@@ -143,46 +141,30 @@ waitForEnhancer().then(function() {
         observerCallbacks = [];
     }
 
-    // FIX: Only poll for compose-page globals (tag / ajaxRequest) when we are
-    // actually on the compose page.  On messages / contacts those functions are
-    // never injected, so the old unconditional poll wasted ~5 seconds every time.
-function waitForGlobalFunctions() {
-    if (currentSection !== 'compose') {
-        console.log('[MessengerModule] Not compose, skipping wait for global functions');
-        return Promise.resolve();
-    }
-
-    console.log('[MessengerModule] Compose: waiting for tag and ajaxRequest...');
-    return new Promise(function(resolve) {
-        var maxAttempts = 100;
-        var attempt = 0;
-        function check() {
-            var tagOk = typeof tag !== 'undefined';
-            var ajaxOk = typeof ajaxRequest !== 'undefined';
-            if (tagOk && ajaxOk) {
-                console.log('[MessengerModule] Global functions found after', attempt, 'attempts');
-                resolve();
-            } else if (++attempt >= maxAttempts) {
-                console.warn('[MessengerModule] Global functions not found after', maxAttempts, 'attempts, continuing anyway');
-                resolve();
-            } else {
-                if (attempt % 10 === 0) {
-                    console.log('[MessengerModule] Still waiting for tag/ ajaxRequest (attempt', attempt, ')');
-                }
-                setTimeout(check, 100);
-            }
+    function waitForGlobalFunctions() {
+        if (currentSection !== 'compose') {
+            return Promise.resolve();
         }
-        check();
-    });
-}
+
+        return new Promise(function(resolve) {
+            var maxAttempts = 100;
+            var attempt = 0;
+            function check() {
+                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                    resolve();
+                } else if (++attempt >= maxAttempts) {
+                    resolve();
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        });
+    }
 
     // ------------------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------------------
-
-    // FIX: Wait until a CSS selector matches something in the DOM, with retries.
-    // Used by buildMessagesSection / buildContactsSection so they don't silently
-    // fall back to the empty-state when called a few milliseconds too early.
     function waitForElement(selector, maxMs) {
         maxMs = maxMs || 3000;
         return new Promise(function(resolve) {
@@ -438,7 +420,6 @@ function waitForGlobalFunctions() {
         container.appendChild(actions);
         container.appendChild(previewArea);
 
-        // Wire up sync after appending so getElementById works
         var modernRecipient    = container.querySelector('#modern-recipient');
         var modernContact      = container.querySelector('#modern-contact');
         var modernTitle        = container.querySelector('#modern-title');
@@ -515,7 +496,6 @@ function waitForGlobalFunctions() {
         return container;
     }
 
-    // FIX: Accept the already-resolved element so no second querySelector is needed.
     function buildMessagesSection(cpElement) {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -535,7 +515,6 @@ function waitForGlobalFunctions() {
         return container;
     }
 
-    // FIX: Same — accept the pre-resolved element.
     function buildContactsSection(cpElement) {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -559,7 +538,6 @@ function waitForGlobalFunctions() {
     function buildModernMessenger() {
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) {
-            console.warn('[MessengerModule] Wrapper not found, will retry');
             setTimeout(function() { buildModernMessenger(); }, 100);
             return;
         }
@@ -606,16 +584,13 @@ function waitForGlobalFunctions() {
             mainContent.appendChild(buildComposeSection());
             finalize();
         } else if (currentSection === 'messages') {
-            // FIX: Use waitForElement so we don't clone before the list is painted.
             waitForElement('.big_list .row-mp').then(function(rowEl) {
-                // The .cp ancestor contains the full inbox — walk up to it.
                 var cpEl = rowEl ? findAncestor(rowEl, '.cp') : null;
                 mainContent.appendChild(buildMessagesSection(cpEl));
                 finalize();
             });
-            return; // finalize() called asynchronously
+            return;
         } else {
-            // FIX: Same pattern for contacts.
             waitForElement('textarea[name="can_contact"]').then(function(ta) {
                 var cpEl = ta ? findAncestor(ta, '.cp') : null;
                 mainContent.appendChild(buildContactsSection(cpEl));
@@ -633,12 +608,9 @@ function waitForGlobalFunctions() {
             } else {
                 wrapper.appendChild(messengerContainer);
             }
-
-            console.log('[MessengerModule] Built successfully for section: ' + currentSection);
         }
     }
 
-    // Walk up the DOM to find the nearest ancestor matching a CSS selector.
     function findAncestor(el, selector) {
         while (el && el !== document.body) {
             if (el.matches && el.matches(selector)) return el;
