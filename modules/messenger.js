@@ -372,8 +372,8 @@ var MessengerModule = (function(Utils, EventBus) {
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
-            + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary">Preview</button>'
-            + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary">Send Message</button>';
+            + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
+            + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary"><i class="fa-regular fa-paper-plane"></i> Send Message</button>';
 
         // Preview area
         var previewArea = document.createElement('div');
