@@ -1422,19 +1422,6 @@ img,
         margin-left: 0;
         align-self: flex-end;
     }
-    .slick-prev {
-        left: var(--space-sm);
-    }
-    .slick-next {
-        right: var(--space-sm);
-    }
-    .slick-dots {
-        bottom: var(--space-xs);
-    }
-    .slick-dots li button {
-        width: 0.5rem;
-        height: 0.5rem;
-    }
 }
 
 /*--------------------------------------------
