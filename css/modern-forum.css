@@ -1544,7 +1544,7 @@ input[type="radio"]:checked::before {
 
 /* ==========================================================================
    MODERN MESSENGER (WYSIWYG) – Emerald Theme Integration
-   Sidebar + Bottom Navigation layout
+   Sidebar + Bottom Navigation layout – Complete all sections
    ========================================================================== */
 
 /* ----- Modern messenger container (inside wrapper) ----- */
@@ -1584,6 +1584,7 @@ input[type="radio"]:checked::before {
     font-size: var(--text-sm);
     transition: all 0.2s ease;
     border-left: 3px solid transparent;
+    cursor: pointer;
 }
 
 .modern-nav-link i {
@@ -1602,14 +1603,14 @@ input[type="radio"]:checked::before {
     color: var(--primary-light);
 }
 
-/* ----- Main content area (compose form) ----- */
-.modern-messenger-main {
+/* ----- Sections container ----- */
+.modern-messenger-section {
     flex: 1;
     min-width: 0;
     background: var(--surface-color);
 }
 
-/* ----- Recipient & Title row ----- */
+/* ----- Compose section styles ----- */
 .modern-recipient-row {
     display: flex;
     flex-wrap: wrap;
@@ -1863,6 +1864,175 @@ input[type="radio"]:checked::before {
     line-height: 1.618;
 }
 
+/* ----- Messages section (inbox) styles ----- */
+#messages-section .skin_tbl {
+    padding: var(--space-md);
+}
+
+#messages-section .main_list > li {
+    background: var(--surface-color);
+    border-radius: var(--radius);
+    margin-bottom: var(--space-lg);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+#messages-section .title.top {
+    display: flex;
+    align-items: center;
+    padding: var(--pad-3) var(--pad-4);
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+}
+
+#messages-section .big_list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+#messages-section .row-mp {
+    display: flex;
+    align-items: center;
+    padding: var(--pad-3) var(--pad-4);
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s ease;
+}
+
+#messages-section .row-mp:hover {
+    background: var(--hover-color);
+}
+
+#messages-section .aa {
+    width: 30px;
+    text-align: center;
+    color: var(--text-tertiary);
+}
+
+#messages-section .bb {
+    flex: 2;
+}
+
+#messages-section .bb h4 {
+    margin: 0;
+    font-size: var(--text-sm);
+}
+
+#messages-section .bb h4 a {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+#messages-section .bb h4 a:hover {
+    color: var(--primary-light);
+}
+
+#messages-section .xx {
+    flex: 1;
+    font-size: var(--text-xs);
+}
+
+#messages-section .xx a {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+
+#messages-section .xx a:hover {
+    color: var(--primary-light);
+}
+
+#messages-section .yy {
+    width: 40px;
+    text-align: center;
+}
+
+#messages-section .zz {
+    width: 120px;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+#messages-section .Sub.Item {
+    width: 30px;
+    text-align: center;
+}
+
+#messages-section .title.bottom.Item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--pad-3) var(--pad-4);
+    background: var(--bg-color);
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+#messages-section select.forminput,
+#messages-section input.forminput {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--pad-2) var(--pad-3);
+    color: var(--text-primary);
+    font-size: var(--text-xs);
+    cursor: pointer;
+}
+
+/* ----- Contacts section styles ----- */
+#contacts-section .main_list > li {
+    background: var(--surface-color);
+    border-radius: var(--radius);
+    margin: var(--space-md);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+#contacts-section .sunbar {
+    background: var(--bg-color);
+    padding: var(--pad-3) var(--pad-5);
+    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+}
+
+#contacts-section .list > li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md);
+}
+
+#contacts-section textarea {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: var(--pad-3);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    width: 100%;
+}
+
+#contacts-section .darkbar.Item {
+    padding: var(--pad-4);
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+}
+
+/* ----- Empty state ----- */
+.modern-empty-state {
+    text-align: center;
+    padding: var(--space-xxl);
+    color: var(--text-tertiary);
+}
+
+.modern-empty-state i {
+    font-size: 3rem;
+    margin-bottom: var(--space-md);
+    display: block;
+}
+
 /* ===== MOBILE: Bottom navigation (≤680px) ===== */
 @media (max-width: 680px) {
     #modern-messenger {
@@ -1899,7 +2069,7 @@ input[type="radio"]:checked::before {
         border-bottom-color: var(--primary-color);
     }
 
-    .modern-messenger-main {
+    .modern-messenger-section {
         order: 1;
     }
 
@@ -1925,6 +2095,39 @@ input[type="radio"]:checked::before {
     .modern-wysiwyg {
         min-height: 150px;
         margin: var(--space-sm);
+    }
+
+    /* Messages section mobile */
+    #messages-section .row-mp {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+    }
+
+    #messages-section .bb {
+        flex-basis: 100%;
+        order: 1;
+    }
+
+    #messages-section .xx {
+        flex-basis: auto;
+        order: 2;
+    }
+
+    #messages-section .zz {
+        flex-basis: auto;
+        order: 3;
+    }
+
+    #messages-section .yy {
+        order: 4;
+    }
+
+    #messages-section .aa {
+        order: 5;
+    }
+
+    #messages-section .Sub.Item {
+        order: 6;
     }
 }
 
