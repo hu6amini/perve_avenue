@@ -2035,10 +2035,7 @@ input[type="radio"]:checked::before {
     .modern-actions {
         justify-content: center;
     }
-
-    .modern-wysiwyg {
-        min-height: 180px;
-    }
+ 
 }
 
 /* ----- Reduced motion ----- */
