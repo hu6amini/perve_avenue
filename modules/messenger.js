@@ -44,7 +44,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function reset() { 
         isInitialized = false;
-        // Unregister observer callbacks
         observerCallbacks.forEach(function(id) {
             if (globalThis.forumObserver && typeof globalThis.forumObserver.unregister === 'function') {
                 globalThis.forumObserver.unregister(id);
@@ -405,19 +404,16 @@ var MessengerModule = (function(Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
-        container.style.display = 'none';
 
         // Find the messages container - look for .cp that contains .big_list with message rows
         var originalMessages = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
-            // Check if this cp contains the messages list (has .big_list with li items)
             var bigList = cpElements[i].querySelector('.big_list');
             if (bigList && bigList.querySelectorAll('.row-mp').length > 0) {
                 originalMessages = cpElements[i];
                 break;
             }
-            // Also check for .main_list > li > .list > .mainbg form
             var mainbgForm = cpElements[i].querySelector('.mainbg form');
             if (mainbgForm && mainbgForm.querySelector('input[name="action"]')) {
                 originalMessages = cpElements[i];
@@ -427,15 +423,10 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (originalMessages) {
             var messagesClone = originalMessages.cloneNode(true);
-            // Remove tabs from clone
             var tabsClone = messagesClone.querySelector('.tabs');
             if (tabsClone) tabsClone.remove();
-            
-            // Remove notification centre link
             var notificationLink = messagesClone.querySelector('.notification-link');
             if (notificationLink) notificationLink.remove();
-            
-            // Fix form actions to keep relative paths
             var forms = messagesClone.querySelectorAll('form');
             for (var f = 0; f < forms.length; f++) {
                 var form = forms[f];
@@ -443,7 +434,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     form.setAttribute('action', window.location.origin + '/');
                 }
             }
-            
             container.appendChild(messagesClone);
         } else {
             container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>No messages</p></div>';
@@ -456,9 +446,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
-        container.style.display = 'none';
 
-        // Find the contacts container - look for .cp that contains textarea[name="can_contact"]
         var originalContacts = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
@@ -470,10 +458,8 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (originalContacts) {
             var contactsClone = originalContacts.cloneNode(true);
-            // Remove tabs from clone
             var tabsClone = contactsClone.querySelector('.tabs');
             if (tabsClone) tabsClone.remove();
-            
             container.appendChild(contactsClone);
         } else {
             container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-address-book"></i><p>Contacts list</p></div>';
@@ -485,19 +471,6 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     // CORE BUILDER
     // ------------------------------------------------------------------------
-    function buildModernMessenger() {
-        var legacyComposeForm = document.querySelector('.cp.send');
-        if (!legacyComposeForm) return;
-
-        // Create modern messenger container
-        var messengerContainer = document.createElement('div');
-        messengerContainer.id = 'modern-messenger';
-        messengerContainer.className = 'modern-messenger';
-
-        // ----- Navigation (Sidebar on desktop, Bottom on mobile) -----
-        var navContainer = document.createElement('nav');
-        navContainer.className = 'modern-messenger-nav';
-
     function buildModernMessenger() {
         var legacyComposeForm = document.querySelector('.cp.send');
         if (!legacyComposeForm) return;
@@ -548,7 +521,7 @@ var MessengerModule = (function(Utils, EventBus) {
             navContainer.appendChild(link);
         }
 
-        // Build only the current section (not all three)
+        // Build ONLY the current section (not all three)
         var mainContent = document.createElement('div');
         mainContent.className = 'modern-messenger-main';
 
@@ -563,52 +536,13 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.appendChild(navContainer);
         messengerContainer.appendChild(mainContent);
 
-        // Placement
-        var wrapper = document.getElementById('modern-forum-wrapper');
-        if (wrapper) {
-            var carousel = wrapper.querySelector('.carousel-wrapper');
-            if (carousel) {
-                carousel.insertAdjacentElement('afterend', messengerContainer);
-            } else {
-                wrapper.appendChild(messengerContainer);
-            }
-        } else {
-            legacyComposeForm.parentNode.insertBefore(messengerContainer, legacyComposeForm);
-        }
-    }
-
-        // Build all sections
-        var composeSection = buildComposeSection();
-        var messagesSection = buildMessagesSection();
-        var contactsSection = buildContactsSection();
-
-        // Assemble
-        messengerContainer.appendChild(navContainer);
-        messengerContainer.appendChild(composeSection);
-        messengerContainer.appendChild(messagesSection);
-        messengerContainer.appendChild(contactsSection);
-
-        // Hide all sections except the current one
-        if (currentSection === 'compose-section') {
-            messagesSection.style.display = 'none';
-            contactsSection.style.display = 'none';
-        } else if (currentSection === 'messages-section') {
-            composeSection.style.display = 'none';
-            contactsSection.style.display = 'none';
-        } else {
-            composeSection.style.display = 'none';
-            messagesSection.style.display = 'none';
-        }
-
         // Register with ForumCoreObserver for future DOM updates
         if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-            // Register for compose section updates
             var composeObserverId = globalThis.forumObserver.register({
                 id: 'messenger-compose',
                 selector: '#modern-recipient, #modern-contact, #modern-title, .modern-wysiwyg',
                 priority: 'normal',
                 callback: function(node) {
-                    // Sync any dynamic changes if needed
                     if (node.id === 'modern-recipient' || node.id === 'modern-contact' || node.id === 'modern-title') {
                         var recipientInput = document.querySelector('input[name="entered_name"]');
                         var contactSelect = document.querySelector('select[name="from_contact"]');
