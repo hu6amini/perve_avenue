@@ -1,4 +1,4 @@
-// Messenger Module – WYSIWYG modern UI for private messages
+// Messenger Module – Complete modern UI for all messenger sections
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -147,72 +147,22 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER
+    // SECTION BUILDERS
     // ------------------------------------------------------------------------
-    function buildModernMessenger() {
-        // Extract original elements
-        var legacyForm = document.querySelector('.cp.send');
-        if (!legacyForm) throw new Error('.cp.send not found');
-
+    function buildComposeSection() {
         var recipientInput = document.querySelector('input[name="entered_name"]');
         var contactSelect = document.querySelector('select[name="from_contact"]');
         var titleInput = document.querySelector('input[name="msg_title"]');
         var originalTextarea = document.getElementById('Post');
         var addSentCheckbox = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
-        var fileUploadInput = document.querySelector('input[name="FILE_UPLOAD"]');
         var submitButton = document.querySelector('input[name="sub_mit"]');
         var previewButton = document.querySelector('button[name="preview"]');
         var originalForm = window.REPLIER;
 
-        if (!originalTextarea) throw new Error('Textarea #Post not found');
-
-        // Create modern messenger container
-        var messengerContainer = document.createElement('div');
-        messengerContainer.id = 'modern-messenger';
-        messengerContainer.className = 'modern-messenger';
-
-        // ----- Navigation (Sidebar on desktop, Bottom on mobile) -----
-        var navContainer = document.createElement('nav');
-        navContainer.className = 'modern-messenger-nav';
-
-        var navItems = [
-            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', href: '/?act=Msg&CODE=04&c=660892', id: 'compose' },
-            { text: 'Messages', icon: 'fa-regular fa-envelope', href: '/?act=Msg&CODE=01&c=660892', id: 'inbox' },
-            { text: 'Contacts', icon: 'fa-regular fa-address-book', href: '/?act=Msg&CODE=02&c=660892', id: 'contacts' }
-        ];
-
-        var originalTabs = document.querySelectorAll('.cp.send .tabs li');
-        var currentHref = window.location.href;
-
-        for (var i = 0; i < navItems.length; i++) {
-            var item = navItems[i];
-            var link = document.createElement('a');
-            link.href = item.href;
-            link.className = 'modern-nav-link';
-            link.setAttribute('data-nav', item.id);
-
-            // Check if this is the current page
-            if (originalTabs[i] && originalTabs[i].classList.contains('current')) {
-                link.classList.add('current');
-            }
-
-            var icon = document.createElement('i');
-            icon.className = item.icon;
-            icon.setAttribute('aria-hidden', 'true');
-            link.appendChild(icon);
-
-            var span = document.createElement('span');
-            span.className = 'modern-nav-text';
-            span.textContent = item.text;
-            link.appendChild(span);
-
-            navContainer.appendChild(link);
-        }
-
-        // ----- Main content area (only shown on Compose) -----
-        var mainContent = document.createElement('div');
-        mainContent.className = 'modern-messenger-main';
+        var container = document.createElement('div');
+        container.className = 'modern-messenger-section';
+        container.id = 'compose-section';
 
         // Recipient & Title row
         var recipientRow = document.createElement('div');
@@ -296,7 +246,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         // WYSIWYG contenteditable div
         wysiwygDiv = document.createElement('div');
-        wysiwygDiv.id = 'modern-wysiwyg';
         wysiwygDiv.className = 'modern-wysiwyg';
         wysiwygDiv.contentEditable = 'true';
         wysiwygDiv.setAttribute('role', 'textbox');
@@ -354,30 +303,13 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
 
-        // Assemble main content
-        mainContent.appendChild(recipientRow);
-        mainContent.appendChild(toolbar);
-        mainContent.appendChild(wysiwygDiv);
-        mainContent.appendChild(optionsRow);
-        mainContent.appendChild(actions);
-        mainContent.appendChild(previewArea);
-
-        // Assemble full messenger
-        messengerContainer.appendChild(navContainer);
-        messengerContainer.appendChild(mainContent);
-
-        // Placement inside wrapper after carousel
-        var wrapper = document.getElementById('modern-forum-wrapper');
-        if (wrapper) {
-            var carousel = wrapper.querySelector('.carousel-wrapper');
-            if (carousel) {
-                carousel.insertAdjacentElement('afterend', messengerContainer);
-            } else {
-                wrapper.appendChild(messengerContainer);
-            }
-        } else {
-            legacyForm.parentNode.insertBefore(messengerContainer, legacyForm);
-        }
+        // Assemble
+        container.appendChild(recipientRow);
+        container.appendChild(toolbar);
+        container.appendChild(wysiwygDiv);
+        container.appendChild(optionsRow);
+        container.appendChild(actions);
+        container.appendChild(previewArea);
 
         // Data binding
         var modernRecipient = document.getElementById('modern-recipient');
@@ -453,6 +385,192 @@ var MessengerModule = (function(Utils, EventBus) {
                     submitButton.click();
                 }
             };
+        }
+
+        return container;
+    }
+
+    function buildMessagesSection() {
+        var container = document.createElement('div');
+        container.className = 'modern-messenger-section';
+        container.id = 'messages-section';
+        container.style.display = 'none';
+
+        // Clone the original messages content
+        var originalMessages = document.querySelector('.cp:has(.main_list .big_list)');
+        if (!originalMessages) {
+            var cpElements = document.querySelectorAll('.cp');
+            for (var i = 0; i < cpElements.length; i++) {
+                if (cpElements[i].querySelector('.big_list')) {
+                    originalMessages = cpElements[i];
+                    break;
+                }
+            }
+        }
+
+        if (originalMessages) {
+            var messagesClone = originalMessages.cloneNode(true);
+            // Remove tabs from clone
+            var tabsClone = messagesClone.querySelector('.tabs');
+            if (tabsClone) tabsClone.remove();
+            
+            // Clean up any unwanted elements
+            var notificationLink = messagesClone.querySelector('.notification-link');
+            if (notificationLink) notificationLink.remove();
+            
+            container.appendChild(messagesClone);
+        } else {
+            container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>No messages</p></div>';
+        }
+
+        return container;
+    }
+
+    function buildContactsSection() {
+        var container = document.createElement('div');
+        container.className = 'modern-messenger-section';
+        container.id = 'contacts-section';
+        container.style.display = 'none';
+
+        // Clone the original contacts content
+        var originalContacts = document.querySelector('.cp:has(.main_list textarea[name="can_contact"])');
+        if (!originalContacts) {
+            var cpElements = document.querySelectorAll('.cp');
+            for (var i = 0; i < cpElements.length; i++) {
+                if (cpElements[i].querySelector('textarea[name="can_contact"]')) {
+                    originalContacts = cpElements[i];
+                    break;
+                }
+            }
+        }
+
+        if (originalContacts) {
+            var contactsClone = originalContacts.cloneNode(true);
+            // Remove tabs from clone
+            var tabsClone = contactsClone.querySelector('.tabs');
+            if (tabsClone) tabsClone.remove();
+            
+            container.appendChild(contactsClone);
+        } else {
+            container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-address-book"></i><p>Contacts list</p></div>';
+        }
+
+        return container;
+    }
+
+    // ------------------------------------------------------------------------
+    // CORE BUILDER
+    // ------------------------------------------------------------------------
+    function buildModernMessenger() {
+        var legacyComposeForm = document.querySelector('.cp.send');
+        if (!legacyComposeForm) throw new Error('.cp.send not found');
+
+        // Create modern messenger container
+        var messengerContainer = document.createElement('div');
+        messengerContainer.id = 'modern-messenger';
+        messengerContainer.className = 'modern-messenger';
+
+        // ----- Navigation (Sidebar on desktop, Bottom on mobile) -----
+        var navContainer = document.createElement('nav');
+        navContainer.className = 'modern-messenger-nav';
+
+        var navItems = [
+            { text: 'Compose', icon: 'fa-regular fa-pen-to-square', section: 'compose-section', id: 'compose' },
+            { text: 'Messages', icon: 'fa-regular fa-envelope', section: 'messages-section', id: 'inbox' },
+            { text: 'Contacts', icon: 'fa-regular fa-address-book', section: 'contacts-section', id: 'contacts' }
+        ];
+
+        // Determine current section based on URL
+        var currentUrl = window.location.href;
+        var currentSection = 'compose-section';
+        if (currentUrl.indexOf('CODE=01') !== -1) {
+            currentSection = 'messages-section';
+        } else if (currentUrl.indexOf('CODE=02') !== -1) {
+            currentSection = 'contacts-section';
+        }
+
+        for (var i = 0; i < navItems.length; i++) {
+            var item = navItems[i];
+            var link = document.createElement('a');
+            link.href = '#';
+            link.className = 'modern-nav-link';
+            link.setAttribute('data-section', item.section);
+            
+            if (item.section === currentSection) {
+                link.classList.add('current');
+            }
+
+            var icon = document.createElement('i');
+            icon.className = item.icon;
+            icon.setAttribute('aria-hidden', 'true');
+            link.appendChild(icon);
+
+            var span = document.createElement('span');
+            span.className = 'modern-nav-text';
+            span.textContent = item.text;
+            link.appendChild(span);
+
+            link.addEventListener('click', function(e, sectionName) {
+                return function(e) {
+                    e.preventDefault();
+                    var targetSection = e.currentTarget.getAttribute('data-section');
+                    // Update active state on nav links
+                    document.querySelectorAll('.modern-nav-link').forEach(function(navLink) {
+                        navLink.classList.remove('current');
+                    });
+                    e.currentTarget.classList.add('current');
+                    // Show selected section, hide others
+                    document.querySelectorAll('.modern-messenger-section').forEach(function(section) {
+                        section.style.display = 'none';
+                    });
+                    var activeSection = document.getElementById(targetSection);
+                    if (activeSection) activeSection.style.display = 'block';
+                };
+            }(item));
+
+            navContainer.appendChild(link);
+        }
+
+        // Build all sections
+        var composeSection = buildComposeSection();
+        var messagesSection = buildMessagesSection();
+        var contactsSection = buildContactsSection();
+
+        // Assemble
+        messengerContainer.appendChild(navContainer);
+        messengerContainer.appendChild(composeSection);
+        messengerContainer.appendChild(messagesSection);
+        messengerContainer.appendChild(contactsSection);
+
+        // Hide all sections except the current one
+        if (currentSection === 'compose-section') {
+            messagesSection.style.display = 'none';
+            contactsSection.style.display = 'none';
+        } else if (currentSection === 'messages-section') {
+            composeSection.style.display = 'none';
+            contactsSection.style.display = 'none';
+        } else {
+            composeSection.style.display = 'none';
+            messagesSection.style.display = 'none';
+        }
+
+        // Hide all legacy containers
+        var allCpContainers = document.querySelectorAll('.cp');
+        for (var i = 0; i < allCpContainers.length; i++) {
+            allCpContainers[i].style.display = 'none';
+        }
+
+        // Placement inside wrapper after carousel
+        var wrapper = document.getElementById('modern-forum-wrapper');
+        if (wrapper) {
+            var carousel = wrapper.querySelector('.carousel-wrapper');
+            if (carousel) {
+                carousel.insertAdjacentElement('afterend', messengerContainer);
+            } else {
+                wrapper.appendChild(messengerContainer);
+            }
+        } else {
+            document.body.insertBefore(messengerContainer, document.body.firstChild);
         }
     }
 
