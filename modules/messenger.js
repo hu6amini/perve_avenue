@@ -29,20 +29,17 @@ var MessengerModule = (function(Utils, EventBus) {
                         resolve();
                     } catch (err) {
                         console.error('[MessengerModule] Build failed:', err);
-                        // Try again after a short delay if it's a DOM-related error
-                        if (err.message && err.message.indexOf('not found') !== -1) {
-                            setTimeout(doBuild, 500);
-                        } else {
-                            reject(err);
-                        }
+                        setTimeout(doBuild, 500);
                     }
                 }).catch(reject);
             }
 
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', doBuild);
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(doBuild, 200);
+                });
             } else {
-                setTimeout(doBuild, 100);
+                setTimeout(doBuild, 200);
             }
         });
     }
@@ -266,16 +263,11 @@ var MessengerModule = (function(Utils, EventBus) {
         wysiwygDiv.setAttribute('role', 'textbox');
         wysiwygDiv.setAttribute('aria-multiline', 'true');
 
-        // Initial sync
         wysiwygDiv.innerHTML = legacyToHtml(originalTextarea.value);
 
         function isWysiwygEmpty() {
             var content = wysiwygDiv.innerHTML;
-            return content === '' || 
-                   content === '<br>' || 
-                   content === '<br _moz_dirty="">' ||
-                   content === '<div><br></div>' ||
-                   content.trim() === '';
+            return content === '' || content === '<br>' || content === '<br _moz_dirty="">' || content === '<div><br></div>' || content.trim() === '';
         }
 
         function updatePlaceholder() {
@@ -290,27 +282,23 @@ var MessengerModule = (function(Utils, EventBus) {
             originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
             updatePlaceholder();
         });
-
         wysiwygDiv.addEventListener('focus', updatePlaceholder);
         wysiwygDiv.addEventListener('blur', updatePlaceholder);
         wysiwygDiv.addEventListener('keyup', updatePlaceholder);
         updatePlaceholder();
 
-        // Options row
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" ' + (addSentCheckbox && addSentCheckbox.checked ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
 
-        // Action buttons
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
 
-        // Preview area
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
@@ -324,7 +312,6 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(actions);
         container.appendChild(previewArea);
 
-        // Data binding
         var modernRecipient = document.getElementById('modern-recipient');
         var modernContact = document.getElementById('modern-contact');
         var modernTitle = document.getElementById('modern-title');
@@ -406,11 +393,9 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
 
-        // Find the messages container
         var originalMessages = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
-            // Look for the messages container (has .big_list with .row-mp)
             if (cpElements[i].querySelector('.big_list .row-mp')) {
                 originalMessages = cpElements[i];
                 break;
@@ -419,10 +404,8 @@ var MessengerModule = (function(Utils, EventBus) {
 
         if (originalMessages) {
             var messagesClone = originalMessages.cloneNode(true);
-            // Remove tabs
             var tabsClone = messagesClone.querySelector('.tabs');
             if (tabsClone) tabsClone.remove();
-            // Remove notification centre link
             var notificationLink = messagesClone.querySelector('.notification-link');
             if (notificationLink) notificationLink.remove();
             container.appendChild(messagesClone);
@@ -438,7 +421,6 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
 
-        // Find the contacts container
         var originalContacts = null;
         var cpElements = document.querySelectorAll('.cp');
         for (var i = 0; i < cpElements.length; i++) {
@@ -464,13 +446,48 @@ var MessengerModule = (function(Utils, EventBus) {
     // CORE BUILDER
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
-        var legacyComposeForm = document.querySelector('.cp.send');
-        if (!legacyComposeForm) {
-            console.warn('[MessengerModule] .cp.send not found, retrying...');
-            return;
+        var currentUrl = window.location.href;
+        var currentSection = 'compose';
+        if (currentUrl.indexOf('CODE=01') !== -1) {
+            currentSection = 'messages';
+        } else if (currentUrl.indexOf('CODE=02') !== -1) {
+            currentSection = 'contacts';
         }
 
-        // Check if modern messenger already exists
+        var insertionPoint = null;
+        
+        if (currentSection === 'compose') {
+            insertionPoint = document.querySelector('.cp.send');
+            if (!insertionPoint) {
+                console.warn('[MessengerModule] .cp.send not found for compose section, retrying...');
+                return;
+            }
+        } else if (currentSection === 'messages') {
+            var cpElements = document.querySelectorAll('.cp');
+            for (var i = 0; i < cpElements.length; i++) {
+                if (cpElements[i].querySelector('.big_list .row-mp')) {
+                    insertionPoint = cpElements[i];
+                    break;
+                }
+            }
+            if (!insertionPoint) {
+                console.warn('[MessengerModule] Messages container not found, retrying...');
+                return;
+            }
+        } else if (currentSection === 'contacts') {
+            var cpElements = document.querySelectorAll('.cp');
+            for (var i = 0; i < cpElements.length; i++) {
+                if (cpElements[i].querySelector('textarea[name="can_contact"]')) {
+                    insertionPoint = cpElements[i];
+                    break;
+                }
+            }
+            if (!insertionPoint) {
+                console.warn('[MessengerModule] Contacts container not found, retrying...');
+                return;
+            }
+        }
+
         if (document.getElementById('modern-messenger')) {
             return;
         }
@@ -479,7 +496,6 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
 
-        // Navigation
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
 
@@ -488,14 +504,6 @@ var MessengerModule = (function(Utils, EventBus) {
             { text: 'Messages', icon: 'fa-regular fa-envelope', url: '/?act=Msg&CODE=01&c=660892', section: 'messages' },
             { text: 'Contacts', icon: 'fa-regular fa-address-book', url: '/?act=Msg&CODE=02&c=660892', section: 'contacts' }
         ];
-
-        var currentUrl = window.location.href;
-        var currentSection = 'compose';
-        if (currentUrl.indexOf('CODE=01') !== -1) {
-            currentSection = 'messages';
-        } else if (currentUrl.indexOf('CODE=02') !== -1) {
-            currentSection = 'contacts';
-        }
 
         for (var i = 0; i < navItems.length; i++) {
             var item = navItems[i];
@@ -530,18 +538,7 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.appendChild(navContainer);
         messengerContainer.appendChild(mainContent);
 
-        // Placement
-        var wrapper = document.getElementById('modern-forum-wrapper');
-        if (wrapper) {
-            var carousel = wrapper.querySelector('.carousel-wrapper');
-            if (carousel) {
-                carousel.insertAdjacentElement('afterend', messengerContainer);
-            } else {
-                wrapper.appendChild(messengerContainer);
-            }
-        } else {
-            legacyComposeForm.parentNode.insertBefore(messengerContainer, legacyComposeForm);
-        }
+        insertionPoint.parentNode.insertBefore(messengerContainer, insertionPoint);
 
         console.log('[MessengerModule] Built successfully for section: ' + currentSection);
     }
