@@ -56,12 +56,6 @@ div, table {
     }
 }
 
-/* Hide original platform menu on user/msg pages */
-body#user .menuwrap,
-body#msg .menuwrap {
-    display: none !important;
-}
-
 /*===================== Custom Navigation =====================*/
 .custom-nav {
     position: relative;
