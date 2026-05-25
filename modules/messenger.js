@@ -546,6 +546,51 @@ var MessengerModule = (function(Utils, EventBus) {
             placeholder: '💬 Write your message...',
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
+
+        // --- Custom Spoiler Blot (makes [SPOILER] into a clickable details element) ---
+const Inline = Quill.import('blots/inline');
+
+class SpoilerBlot extends Inline {
+    static create(value) {
+        const node = super.create();
+        node.setAttribute('class', 'custom-spoiler');
+        // Store the original content? Not needed; Quill handles children.
+        return node;
+    }
+    static formats(node) {
+        // Return a value to indicate the format is active
+        return true;
+    }
+}
+SpoilerBlot.blotName = 'spoiler';
+SpoilerBlot.tagName = 'details';
+SpoilerBlot.className = 'custom-spoiler';
+
+// Register the blot
+Quill.register(SpoilerBlot);
+
+// Then modify the spoiler button's command:
+// Replace the existing spoiler button creation with this:
+
+var spoilerBtn = document.createElement('button');
+spoilerBtn.type = 'button';
+spoilerBtn.className = 'modern-editor-btn';
+spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+spoilerBtn.title = 'Spoiler';
+spoilerBtn.onclick = function() {
+    var range = quill.getSelection();
+    if (range && range.length > 0) {
+        // Wrap selected text in a spoiler element
+        quill.format('spoiler', true);
+    } else {
+        // Insert an empty spoiler placeholder
+        quill.insertText(range.index, ' ', 'user');
+        quill.formatText(range.index, 1, 'spoiler', true);
+        quill.setSelection(range.index + 1);
+    }
+    quill.focus();
+};
+toolbar.appendChild(spoilerBtn);
         
         // --- Active state for toolbar buttons (insert here) ---
         function updateToolbarActiveStates() {
