@@ -233,7 +233,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         // Links and images
         legacy = legacy.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[url=$1]$2[/url]');
-        legacy = legacy.replace(/<img[^>]+src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
 
         // Block elements — Quill emits <pre class="ql-syntax"> for code blocks
         legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
