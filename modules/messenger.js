@@ -1,11 +1,11 @@
 // Messenger Module – Complete modern UI for all messenger sections
-// Compose editor powered by Quill (enhanced with history, keyboard shortcuts, custom modals, dropdown)
+// Uses ForumCoreObserver exclusively for DOM detection (no polling, no custom MutationObservers)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
     var observerCallbacks = [];
-    var _originalEmoticon = null; // saved so reset() can restore it
+    var _originalEmoticon = null;
 
     // Detect current section once, module-wide
     var currentUrl = window.location.href;
@@ -28,85 +28,87 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         return new Promise(function(resolve, reject) {
-            var buildStarted = false;
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+                var wrapperReady = false;
+                var targetReady = false;
 
-            function doBuild() {
-                if (buildStarted) return;
-                buildStarted = true;
-                // Quill is already loaded globally (assumed in <head>)
-                waitForGlobalFunctions()
-                    .then(function() {
-                        try {
+                function tryBuild() {
+                    if (wrapperReady && targetReady && !isInitialized && !document.getElementById('modern-messenger')) {
+                        waitForGlobalFunctions()
+                            .then(function() {
+                                try {
+                                    buildModernMessenger();
+                                    isInitialized = true;
+                                    if (EventBus) EventBus.trigger('messenger:ready');
+                                    resolve();
+                                } catch (err) {
+                                    console.error('[MessengerModule] Build failed:', err);
+                                    reject(err);
+                                }
+                            })
+                            .catch(reject);
+                    }
+                }
+
+                // Observer for wrapper (#modern-forum-wrapper)
+                var wrapperObserverId = globalThis.forumObserver.register({
+                    id: 'messenger-wrapper',
+                    selector: '#modern-forum-wrapper',
+                    priority: 'critical',
+                    callback: function() {
+                        wrapperReady = true;
+                        if (wrapperObserverId) globalThis.forumObserver.unregister(wrapperObserverId);
+                        tryBuild();
+                    }
+                });
+
+                // Observer for the current section’s target element(s)
+                var targetSelector = '';
+                if (currentSection === 'messages') {
+                    targetSelector = '.big_list .row-mp';
+                } else if (currentSection === 'contacts') {
+                    targetSelector = 'textarea[name="can_contact"]';
+                } else {
+                    targetSelector = '.cp.send, #Post';
+                }
+
+                var targetObserverId = globalThis.forumObserver.register({
+                    id: 'messenger-target',
+                    selector: targetSelector,
+                    priority: 'critical',
+                    callback: function() {
+                        targetReady = true;
+                        if (targetObserverId) globalThis.forumObserver.unregister(targetObserverId);
+                        tryBuild();
+                    }
+                });
+
+                // Very short safety fallback (in case observer never fires)
+                setTimeout(function() {
+                    if (!wrapperReady) wrapperReady = true;
+                    if (!targetReady) targetReady = true;
+                    tryBuild();
+                }, 1000);
+            } else {
+                // Fallback when ForumObserver is not available (should not happen on your forum)
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        waitForGlobalFunctions().then(function() {
                             buildModernMessenger();
                             isInitialized = true;
                             if (EventBus) EventBus.trigger('messenger:ready');
                             resolve();
-                        } catch (err) {
-                            console.error('[MessengerModule] Build failed:', err);
-                            reject(err);
-                        }
-                    })
-                    .catch(reject);
-            }
-
-            function waitForEnhancer() {
-                return new Promise(function(res) {
-                    if (document.getElementById('modern-forum-wrapper')) { res(); return; }
-                    function onReady() { window.removeEventListener('forum:enhancer:ready', onReady); res(); }
-                    window.addEventListener('forum:enhancer:ready', onReady);
-                    setTimeout(res, 2000);
-                });
-            }
-
-            waitForEnhancer().then(function() {
-                if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                    var targetSelector = currentSection === 'messages' ? '.big_list .row-mp'
-                                       : currentSection === 'contacts' ? 'textarea[name="can_contact"]'
-                                       : '.cp.send, #Post';
-
-                    var observerId = globalThis.forumObserver.register({
-                        id: 'messenger-init',
-                        selector: targetSelector,
-                        priority: 'critical',
-                        callback: function() {
-                            if (!isInitialized && !document.getElementById('modern-messenger')) {
-                                globalThis.forumObserver.unregister(observerId);
-                                triggerBuild();
-                            }
-                        }
+                        }).catch(reject);
                     });
-
-                    if (document.querySelector(targetSelector)) {
-                        globalThis.forumObserver.unregister(observerId);
-                        triggerBuild();
-                    }
-
-                    setTimeout(function() {
-                        if (!isInitialized && !document.getElementById('modern-messenger')) {
-                            if (observerId) globalThis.forumObserver.unregister(observerId);
-                            triggerBuild();
-                        }
-                    }, 1500);
                 } else {
-                    if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', doBuild);
-                    } else {
-                        doBuild();
-                    }
+                    waitForGlobalFunctions().then(function() {
+                        buildModernMessenger();
+                        isInitialized = true;
+                        if (EventBus) EventBus.trigger('messenger:ready');
+                        resolve();
+                    }).catch(reject);
                 }
-
-                function triggerBuild() {
-                    if (currentSection === 'compose') {
-                        if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                            setTimeout(doBuild, 0);
-                        } else {
-                            window.addEventListener('load', doBuild, { once: true });
-                        }
-                    } else {
-                        setTimeout(doBuild, 0);
-                    }
-                }
-            });
+            }
         });
     }
 
@@ -124,21 +126,15 @@ var MessengerModule = (function(Utils, EventBus) {
         observerCallbacks = [];
     }
 
+    // Only check for compose‑page globals; for other sections resolve immediately
     function waitForGlobalFunctions() {
         if (currentSection !== 'compose') return Promise.resolve();
         return new Promise(function(resolve) {
-            var maxAttempts = 100;
-            var attempt = 0;
-            function check() {
-                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                    resolve();
-                } else if (++attempt >= maxAttempts) {
-                    resolve(); // give up gracefully
-                } else {
-                    setTimeout(check, 100);
-                }
+            if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                resolve();
+            } else {
+                setTimeout(resolve, 300);
             }
-            check();
         });
     }
 
@@ -159,20 +155,6 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
-    function waitForElement(selector, maxMs) {
-        maxMs = maxMs || 3000;
-        return new Promise(function(resolve) {
-            var el = document.querySelector(selector);
-            if (el) { resolve(el); return; }
-            var elapsed = 0;
-            var timer = setInterval(function() {
-                el = document.querySelector(selector);
-                elapsed += 50;
-                if (el || elapsed >= maxMs) { clearInterval(timer); resolve(el || null); }
-            }, 50);
-        });
-    }
-
     function findAncestor(el, selector) {
         while (el && el !== document.body) {
             if (el.matches && el.matches(selector)) return el;
@@ -182,7 +164,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode / forum HTML ↔ HTML)
+    // CONVERTERS (Legacy BBCode ↔ HTML)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -212,32 +194,21 @@ var MessengerModule = (function(Utils, EventBus) {
         var div = document.createElement('div');
         div.innerHTML = html;
         var legacy = div.innerHTML;
-
-        // Inline formatting
         legacy = legacy.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<b>$1</b>');
         legacy = legacy.replace(/<em[^>]*>(.*?)<\/em>/gi, '<i>$1</i>');
         legacy = legacy.replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>');
         legacy = legacy.replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>');
         legacy = legacy.replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
-
-        // Block elements — Quill emits <pre class="ql-syntax"> for code blocks
         legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
         legacy = legacy.replace(/<details[^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/gi, '[SPOILER]$1[/SPOILER]');
-
-        // Text alignment / font / size / color
         legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
-
-        // Paragraph handling — Quill wraps each line in <p>; treat as newline separator
         legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
         legacy = legacy.replace(/<\/p>/gi, '\n');
         legacy = legacy.replace(/<p[^>]*>/gi, '');
-
-        // Remaining structural tags
         legacy = legacy.replace(/<div[^>]*>/gi, '').replace(/<\/div>/gi, '');
         legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
-
         return legacy.trim();
     }
 
@@ -325,44 +296,142 @@ var MessengerModule = (function(Utils, EventBus) {
             quill.focus();
         }
 
-        // Helper: custom modal for link / image URL
-        function showInputModal(title, placeholder, callback) {
-            var modalOverlay = document.createElement('div');
-            modalOverlay.className = 'modern-modal-overlay';
-            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-
-            var modalBox = document.createElement('div');
-            modalBox.className = 'modern-modal-box';
-            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
-
-            modalBox.innerHTML = ''
-                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
-                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
-                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
-                + '</div>';
-
-            modalOverlay.appendChild(modalBox);
-            document.body.appendChild(modalOverlay);
-
-            var input = modalBox.querySelector('#modal-input');
-            input.focus();
-
-            function close() {
-                modalOverlay.remove();
-            }
-
-            modalBox.querySelector('#modal-cancel').onclick = close;
-            modalBox.querySelector('#modal-submit').onclick = function() {
-                var val = input.value.trim();
-                if (val) callback(val);
-                close();
-            };
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
-            });
+        function addSeparator() {
+            var sep = document.createElement('span');
+            sep.className = 'toolbar-separator';
+            sep.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);display:inline-block;vertical-align:middle;';
+            toolbar.appendChild(sep);
         }
+
+        // Group 1: Text formatting
+        var group1 = [
+            { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { qFormat('bold'); } },
+            { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { qFormat('italic'); } },
+            { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { qFormat('underline'); } },
+            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } }
+        ];
+        for (var i = 0; i < group1.length; i++) {
+            var btn = group1[i];
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'modern-editor-btn';
+            button.innerHTML = '<i class="' + btn.icon + '"></i>';
+            button.title = btn.title;
+            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
+            toolbar.appendChild(button);
+        }
+        addSeparator();
+
+        // Group 2: Lists (dropdown) + Blockquote + Code
+        var listDropdownContainer = document.createElement('div');
+        listDropdownContainer.className = 'modern-dropdown';
+        listDropdownContainer.style.position = 'relative';
+        listDropdownContainer.style.display = 'inline-block';
+
+        var listDropdownBtn = document.createElement('button');
+        listDropdownBtn.type = 'button';
+        listDropdownBtn.className = 'modern-editor-btn';
+        listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        listDropdownBtn.title = 'Insert list';
+
+        var listDropdownMenu = document.createElement('div');
+        listDropdownMenu.className = 'modern-dropdown-menu';
+        listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        listDropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
+            + '<button class="modern-dropdown-item" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
+
+        listDropdownContainer.appendChild(listDropdownBtn);
+        listDropdownContainer.appendChild(listDropdownMenu);
+        toolbar.appendChild(listDropdownContainer);
+
+        listDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isVisible = listDropdownMenu.style.display === 'block';
+            listDropdownMenu.style.display = isVisible ? 'none' : 'block';
+        };
+        document.addEventListener('click', function() {
+            listDropdownMenu.style.display = 'none';
+        });
+        listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+
+        listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
+            qFormat('list', 'bullet');
+            listDropdownMenu.style.display = 'none';
+        };
+        listDropdownMenu.querySelector('#ordered-list-option').onclick = function() {
+            qFormat('list', 'ordered');
+            listDropdownMenu.style.display = 'none';
+        };
+
+        var blockquoteBtn = document.createElement('button');
+        blockquoteBtn.type = 'button';
+        blockquoteBtn.className = 'modern-editor-btn';
+        blockquoteBtn.innerHTML = '<i class="fa-regular fa-quote-left"></i>';
+        blockquoteBtn.title = 'Blockquote';
+        blockquoteBtn.onclick = function() { qFormat('blockquote'); };
+        toolbar.appendChild(blockquoteBtn);
+
+        var codeBtn = document.createElement('button');
+        codeBtn.type = 'button';
+        codeBtn.className = 'modern-editor-btn';
+        codeBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
+        codeBtn.title = 'Code block';
+        codeBtn.onclick = function() { qFormat('code-block'); };
+        toolbar.appendChild(codeBtn);
+        addSeparator();
+
+        // Group 3: Link + Image (dropdown)
+        var linkBtn = document.createElement('button');
+        linkBtn.type = 'button';
+        linkBtn.className = 'modern-editor-btn';
+        linkBtn.innerHTML = '<i class="fa-regular fa-link"></i>';
+        linkBtn.title = 'Insert link';
+        linkBtn.onclick = function() {
+            if (!quill) return;
+            var range = quill.getSelection();
+            var selectedText = range && range.length > 0 ? quill.getText(range.index, range.length) : '';
+            showInputModal('Insert link', 'https://example.com', function(url) {
+                if (range && range.length > 0) {
+                    quill.format('link', url);
+                } else {
+                    quill.insertText(range.index, url, 'link', url);
+                    quill.setSelection(range.index + url.length);
+                }
+                quill.focus();
+            });
+        };
+        toolbar.appendChild(linkBtn);
+
+        var imageDropdownContainer = document.createElement('div');
+        imageDropdownContainer.className = 'modern-dropdown';
+        imageDropdownContainer.style.position = 'relative';
+        imageDropdownContainer.style.display = 'inline-block';
+
+        var imageDropdownBtn = document.createElement('button');
+        imageDropdownBtn.type = 'button';
+        imageDropdownBtn.className = 'modern-editor-btn';
+        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        imageDropdownBtn.title = 'Insert image';
+
+        var imageDropdownMenu = document.createElement('div');
+        imageDropdownMenu.className = 'modern-dropdown-menu';
+        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        imageDropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
+            + '<button class="modern-dropdown-item" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
+
+        imageDropdownContainer.appendChild(imageDropdownBtn);
+        imageDropdownContainer.appendChild(imageDropdownMenu);
+        toolbar.appendChild(imageDropdownContainer);
+
+        imageDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isVisible = imageDropdownMenu.style.display === 'block';
+            imageDropdownMenu.style.display = isVisible ? 'none' : 'block';
+        };
+        document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
+        imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         // Helper: upload image to Cloudflare Worker
         function uploadImageToWorker(file, quillEditor) {
@@ -401,149 +470,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        function addSeparator() {
-            var sep = document.createElement('span');
-            sep.className = 'toolbar-separator';
-            sep.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);display:inline-block;vertical-align:middle;';
-            toolbar.appendChild(sep);
-        }
-
-        // ---------- Group 1: Text formatting ----------
-        var group1 = [
-            { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { qFormat('bold'); } },
-            { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { qFormat('italic'); } },
-            { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { qFormat('underline'); } },
-            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } }
-        ];
-        for (var i = 0; i < group1.length; i++) {
-            var btn = group1[i];
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'modern-editor-btn';
-            button.innerHTML = '<i class="' + btn.icon + '"></i>';
-            button.title = btn.title;
-            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
-            toolbar.appendChild(button);
-        }
-        addSeparator();
-
-        // ---------- Group 2: Lists (dropdown) + Blockquote + Code ----------
-        // List dropdown (Bullet / Ordered)
-        var listDropdownContainer = document.createElement('div');
-        listDropdownContainer.className = 'modern-dropdown';
-        listDropdownContainer.style.position = 'relative';
-        listDropdownContainer.style.display = 'inline-block';
-
-        var listDropdownBtn = document.createElement('button');
-        listDropdownBtn.type = 'button';
-        listDropdownBtn.className = 'modern-editor-btn';
-        listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
-        listDropdownBtn.title = 'Insert list';
-
-        var listDropdownMenu = document.createElement('div');
-        listDropdownMenu.className = 'modern-dropdown-menu';
-        listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
-        listDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list-ul"></i> Bullet list</button>'
-            + '<button class="modern-dropdown-item" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
-
-        listDropdownContainer.appendChild(listDropdownBtn);
-        listDropdownContainer.appendChild(listDropdownMenu);
-        toolbar.appendChild(listDropdownContainer);
-
-        listDropdownBtn.onclick = function(e) {
-            e.stopPropagation();
-            var isVisible = listDropdownMenu.style.display === 'block';
-            listDropdownMenu.style.display = isVisible ? 'none' : 'block';
-        };
-        document.addEventListener('click', function() {
-            listDropdownMenu.style.display = 'none';
-        });
-        listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
-
-        listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
-            qFormat('list', 'bullet');
-            listDropdownMenu.style.display = 'none';
-        };
-        listDropdownMenu.querySelector('#ordered-list-option').onclick = function() {
-            qFormat('list', 'ordered');
-            listDropdownMenu.style.display = 'none';
-        };
-
-        // Blockquote
-        var blockquoteBtn = document.createElement('button');
-        blockquoteBtn.type = 'button';
-        blockquoteBtn.className = 'modern-editor-btn';
-        blockquoteBtn.innerHTML = '<i class="fa-regular fa-quote-left"></i>';
-        blockquoteBtn.title = 'Blockquote';
-        blockquoteBtn.onclick = function() { qFormat('blockquote'); };
-        toolbar.appendChild(blockquoteBtn);
-
-        // Code block
-        var codeBtn = document.createElement('button');
-        codeBtn.type = 'button';
-        codeBtn.className = 'modern-editor-btn';
-        codeBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
-        codeBtn.title = 'Code block';
-        codeBtn.onclick = function() { qFormat('code-block'); };
-        toolbar.appendChild(codeBtn);
-
-        addSeparator();
-
-        // ---------- Group 3: Link + Image (dropdown) ----------
-        // Link button
-        var linkBtn = document.createElement('button');
-        linkBtn.type = 'button';
-        linkBtn.className = 'modern-editor-btn';
-        linkBtn.innerHTML = '<i class="fa-regular fa-link"></i>';
-        linkBtn.title = 'Insert link';
-        linkBtn.onclick = function() {
-            if (!quill) return;
-            var range = quill.getSelection();
-            var selectedText = range && range.length > 0 ? quill.getText(range.index, range.length) : '';
-            showInputModal('Insert link', 'https://example.com', function(url) {
-                if (range && range.length > 0) {
-                    quill.format('link', url);
-                } else {
-                    quill.insertText(range.index, url, 'link', url);
-                    quill.setSelection(range.index + url.length);
-                }
-                quill.focus();
-            });
-        };
-        toolbar.appendChild(linkBtn);
-
-        // Image dropdown
-        var imageDropdownContainer = document.createElement('div');
-        imageDropdownContainer.className = 'modern-dropdown';
-        imageDropdownContainer.style.position = 'relative';
-        imageDropdownContainer.style.display = 'inline-block';
-
-        var imageDropdownBtn = document.createElement('button');
-        imageDropdownBtn.type = 'button';
-        imageDropdownBtn.className = 'modern-editor-btn';
-        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
-        imageDropdownBtn.title = 'Insert image';
-
-        var imageDropdownMenu = document.createElement('div');
-        imageDropdownMenu.className = 'modern-dropdown-menu';
-        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
-        imageDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
-            + '<button class="modern-dropdown-item" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
-
-        imageDropdownContainer.appendChild(imageDropdownBtn);
-        imageDropdownContainer.appendChild(imageDropdownMenu);
-        toolbar.appendChild(imageDropdownContainer);
-
-        imageDropdownBtn.onclick = function(e) {
-            e.stopPropagation();
-            var isVisible = imageDropdownMenu.style.display === 'block';
-            imageDropdownMenu.style.display = isVisible ? 'none' : 'block';
-        };
-        document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
-        imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
-
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
             showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                 var range = quill.getSelection(true);
@@ -567,10 +493,9 @@ var MessengerModule = (function(Utils, EventBus) {
             input.click();
             imageDropdownMenu.style.display = 'none';
         };
-
         addSeparator();
 
-        // ---------- Group 4: Spoiler + Smiley ----------
+        // Group 4: Spoiler + Smiley
         var spoilerBtn = document.createElement('button');
         spoilerBtn.type = 'button';
         spoilerBtn.className = 'modern-editor-btn';
@@ -608,7 +533,7 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // ---- Initialise Quill ----
+        // Initialise Quill
         quill = new window.Quill(editorElement, {
             modules: {
                 toolbar: false,
@@ -622,7 +547,7 @@ var MessengerModule = (function(Utils, EventBus) {
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
 
-        // ---- Drag & Drop support ----
+        // Drag & Drop support
         var editorRoot = quill.root;
         editorRoot.setAttribute('dropzone', 'copy');
         editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -844,6 +769,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
             container.appendChild(listContainer);
 
+            // Bulk action bar
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -860,6 +786,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(actionBar);
 
+            // Wire folder selector to legacy form
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
@@ -871,6 +798,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
             }
 
+            // Select all
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
@@ -1012,14 +940,11 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER
+    // CORE BUILDER – uses only the wrapper and current section
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
         var wrapper = document.getElementById('modern-forum-wrapper');
-        if (!wrapper) {
-            setTimeout(function() { buildModernMessenger(); }, 100);
-            return;
-        }
+        if (!wrapper) return;
 
         if (document.getElementById('modern-messenger')) return;
 
@@ -1051,31 +976,24 @@ var MessengerModule = (function(Utils, EventBus) {
         var mainContent = document.createElement('div');
         mainContent.className = 'modern-messenger-main';
 
-        function finalize() {
-            messengerContainer.appendChild(navContainer);
-            messengerContainer.appendChild(mainContent);
-            if (carousel) {
-                carousel.insertAdjacentElement('afterend', messengerContainer);
-            } else {
-                wrapper.appendChild(messengerContainer);
-            }
-            console.log('[MessengerModule] Built for section: ' + currentSection);
-        }
-
         if (currentSection === 'compose') {
             mainContent.appendChild(buildComposeSection());
-            finalize();
         } else if (currentSection === 'messages') {
-            waitForElement('.big_list .row-mp', 3000).then(function() {
-                mainContent.appendChild(buildModernMessagesSection());
-                finalize();
-            });
+            mainContent.appendChild(buildModernMessagesSection());
         } else {
-            waitForElement('textarea[name="can_contact"]', 3000).then(function() {
-                mainContent.appendChild(buildModernContactsSection());
-                finalize();
-            });
+            mainContent.appendChild(buildModernContactsSection());
         }
+
+        messengerContainer.appendChild(navContainer);
+        messengerContainer.appendChild(mainContent);
+
+        if (carousel) {
+            carousel.insertAdjacentElement('afterend', messengerContainer);
+        } else {
+            wrapper.appendChild(messengerContainer);
+        }
+
+        console.log('[MessengerModule] Built for section: ' + currentSection);
     }
 
     return {
