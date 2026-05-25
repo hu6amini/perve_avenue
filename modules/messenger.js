@@ -1,9 +1,9 @@
 // Messenger Module – Complete modern UI for all messenger sections
+// Compose editor powered by TipTap (WYSIWYG), Messages and Contacts transformed
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
-    var wysiwygDiv = null;
     var observerCallbacks = [];
 
     // Detect current section once, module-wide
@@ -32,17 +32,20 @@ var MessengerModule = (function(Utils, EventBus) {
             function doBuild() {
                 if (buildStarted) return;
                 buildStarted = true;
-                waitForGlobalFunctions().then(function() {
-                    try {
-                        buildModernMessenger();
-                        isInitialized = true;
-                        if (EventBus) EventBus.trigger('messenger:ready');
-                        resolve();
-                    } catch (err) {
-                        console.error('[MessengerModule] Build failed:', err);
-                        reject(err);
-                    }
-                }).catch(reject);
+                waitForGlobalFunctions()
+                    .then(waitForTiptap)
+                    .then(function() {
+                        try {
+                            buildModernMessenger();
+                            isInitialized = true;
+                            if (EventBus) EventBus.trigger('messenger:ready');
+                            resolve();
+                        } catch (err) {
+                            console.error('[MessengerModule] Build failed:', err);
+                            reject(err);
+                        }
+                    })
+                    .catch(reject);
             }
 
             function waitForEnhancer() {
@@ -75,7 +78,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         id: 'messenger-init',
                         selector: targetSelector,
                         priority: 'critical',
-                        callback: function(node) {
+                        callback: function() {
                             if (!isInitialized && !document.getElementById('modern-messenger')) {
                                 globalThis.forumObserver.unregister(observerId);
                                 if (currentSection === 'compose') {
@@ -156,6 +159,22 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             }
             check();
+        });
+    }
+
+    function waitForTiptap() {
+        return new Promise(function(resolve) {
+            if (window.Tiptap && window.Tiptap.Editor) {
+                resolve();
+                return;
+            }
+            var interval = setInterval(function() {
+                if (window.Tiptap && window.Tiptap.Editor) {
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, 50);
+            setTimeout(function() { clearInterval(interval); resolve(); }, 5000);
         });
     }
 
@@ -267,30 +286,10 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // WYSIWYG formatting helpers (compose only)
-    // ------------------------------------------------------------------------
-    function applyFormat(command, value) {
-        document.execCommand(command, false, value);
-        if (wysiwygDiv) wysiwygDiv.focus();
-    }
-
-    function applyCustomBBCode(openTag, closeTag) {
-        var selection = window.getSelection();
-        if (!selection.rangeCount) return;
-        var range = selection.getRangeAt(0);
-        var selectedText = range.toString();
-        if (!selectedText) return;
-        var html = openTag + selectedText + closeTag;
-        range.deleteContents();
-        var fragment = range.createContextualFragment(html);
-        range.insertNode(fragment);
-        selection.collapseToEnd();
-        if (wysiwygDiv) wysiwygDiv.focus();
-    }
-
-    // ------------------------------------------------------------------------
     // MODERN SECTION BUILDERS
     // ------------------------------------------------------------------------
+
+    // ----- COMPOSE SECTION (TipTap based) -----
     function buildComposeSection() {
         var recipientInput = document.querySelector('input[name="entered_name"]');
         var contactSelect = document.querySelector('select[name="from_contact"]');
@@ -306,6 +305,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
+        // Recipient & Title row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -317,21 +317,48 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<div class="modern-field">'
             + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
             + '</div>';
+        container.appendChild(recipientRow);
 
+        // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
+
+        var editor = null;
+
+        function exec(cmd) {
+            if (!editor) return;
+            cmd();
+            editor.commands.focus();
+        }
+
         var buttons = [
-            { title: 'Bold',          icon: 'fa-regular fa-bold',         cmd: function() { applyFormat('bold'); } },
-            { title: 'Italic',        icon: 'fa-regular fa-italic',       cmd: function() { applyFormat('italic'); } },
-            { title: 'Underline',     icon: 'fa-regular fa-underline',    cmd: function() { applyFormat('underline'); } },
-            { title: 'Strikethrough', icon: 'fa-regular fa-strikethrough',cmd: function() { applyFormat('strikeThrough'); } },
-            { title: 'List UL',       icon: 'fa-regular fa-list',         cmd: function() { applyFormat('insertUnorderedList'); } },
-            { title: 'Link',          icon: 'fa-regular fa-link',         cmd: function() { var url = prompt('Enter URL:'); if (url) applyFormat('createLink', url); } },
-            { title: 'Image URL',     icon: 'fa-regular fa-image',        cmd: function() { var url = prompt('Enter image URL:'); if (url) applyFormat('insertImage', url); } },
-            { title: 'Quote',         icon: 'fa-regular fa-quote-left',   cmd: function() { applyCustomBBCode('<blockquote>', '</blockquote>'); } },
-            { title: 'Code',          icon: 'fa-regular fa-code',         cmd: function() { applyCustomBBCode('<pre><code>', '</code></pre>'); } },
-            { title: 'Spoiler',       icon: 'fa-regular fa-eye-slash',    cmd: function() { applyCustomBBCode('<div class="spoiler">', '</div>'); } }
+            { title: 'Bold', icon: 'fa-regular fa-bold', cmd: function() { exec(function() { editor.chain().focus().toggleBold().run(); }); } },
+            { title: 'Italic', icon: 'fa-regular fa-italic', cmd: function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); } },
+            { title: 'Underline', icon: 'fa-regular fa-underline', cmd: function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); } },
+            { title: 'Strikethrough', icon: 'fa-regular fa-strikethrough', cmd: function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); } },
+            { title: 'List UL', icon: 'fa-regular fa-list', cmd: function() { exec(function() { editor.chain().focus().toggleBulletList().run(); }); } },
+            { title: 'List OL', icon: 'fa-regular fa-list-ol', cmd: function() { exec(function() { editor.chain().focus().toggleOrderedList().run(); }); } },
+            { title: 'Link', icon: 'fa-regular fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) exec(function() { editor.chain().focus().setLink({ href: url }).run(); }); } },
+            { title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) exec(function() { editor.chain().focus().setImage({ src: url }).run(); }); } },
+            { title: 'Quote', icon: 'fa-regular fa-quote-left', cmd: function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); } },
+            { title: 'Code', icon: 'fa-regular fa-code', cmd: function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); } },
+            { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() {
+                // Simple spoiler: wrap selected text in <div class="spoiler">
+                var selection = window.getSelection();
+                if (!selection.rangeCount) return;
+                var range = selection.getRangeAt(0);
+                var selectedText = range.toString();
+                if (!selectedText) return;
+                var wrapper = document.createElement('div');
+                wrapper.className = 'spoiler';
+                wrapper.textContent = selectedText;
+                range.deleteContents();
+                range.insertNode(wrapper);
+                editor.commands.focus();
+            } }
         ];
+
+        var buttonElements = [];
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
             var button = document.createElement('button');
@@ -339,10 +366,12 @@ var MessengerModule = (function(Utils, EventBus) {
             button.className = 'modern-editor-btn';
             button.innerHTML = '<i class="' + btn.icon + '"></i>';
             button.title = btn.title;
-            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
+            button.onclick = btn.cmd;
             toolbar.appendChild(button);
+            buttonElements.push(button);
         }
 
+        // Smiley button (unchanged)
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
@@ -354,6 +383,7 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(smileBtn);
 
+        // ImgBB button (unchanged)
         var imgbbBtn = document.createElement('button');
         imgbbBtn.type = 'button';
         imgbbBtn.className = 'modern-editor-btn';
@@ -373,62 +403,74 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(imgbbBtn);
 
-        wysiwygDiv = document.createElement('div');
-        wysiwygDiv.className = 'modern-wysiwyg';
-        wysiwygDiv.contentEditable = 'true';
-        wysiwygDiv.setAttribute('role', 'textbox');
-        wysiwygDiv.setAttribute('aria-multiline', 'true');
-        wysiwygDiv.innerHTML = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+        container.appendChild(toolbar);
 
-        function isWysiwygEmpty() {
-            var content = wysiwygDiv.innerHTML;
-            return content === '' || content === '<br>' || content === '<br _moz_dirty="">' || content === '<div><br></div>' || content.trim() === '';
-        }
-        function updatePlaceholder() {
-            if (isWysiwygEmpty()) wysiwygDiv.classList.add('empty');
-            else wysiwygDiv.classList.remove('empty');
-        }
-        if (originalTextarea) {
-            wysiwygDiv.addEventListener('input', function() {
-                originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
-                updatePlaceholder();
-            });
-        }
-        wysiwygDiv.addEventListener('focus', updatePlaceholder);
-        wysiwygDiv.addEventListener('blur', updatePlaceholder);
-        wysiwygDiv.addEventListener('keyup', updatePlaceholder);
-        updatePlaceholder();
+        // Editor container
+        var editorElement = document.createElement('div');
+        editorElement.id = 'tiptap-editor';
+        editorElement.className = 'modern-wysiwyg';
+        container.appendChild(editorElement);
 
+        // Options row and actions (unchanged)
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" ' + (addSentCheckbox && addSentCheckbox.checked ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
+        container.appendChild(optionsRow);
 
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
+        container.appendChild(actions);
 
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<div class="preview-content"></div>';
-
-        container.appendChild(recipientRow);
-        container.appendChild(toolbar);
-        container.appendChild(wysiwygDiv);
-        container.appendChild(optionsRow);
-        container.appendChild(actions);
         container.appendChild(previewArea);
 
-        var modernRecipient    = container.querySelector('#modern-recipient');
-        var modernContact      = container.querySelector('#modern-contact');
-        var modernTitle        = container.querySelector('#modern-title');
-        var modernAddSent      = container.querySelector('#modern-add-sent');
-        var modernAddTracking  = container.querySelector('#modern-add-tracking');
+        // Initialise TipTap
+        var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+
+        editor = new window.Tiptap.Editor({
+            element: editorElement,
+            extensions: [
+                window.TiptapStarterKit.StarterKit,
+                window.TiptapPlaceholder.Placeholder.configure({
+                    placeholder: '💬 Write your message...',
+                }),
+                window.Tiptap.Extension.create({
+                    name: 'underline',
+                    addCommands() {
+                        return {
+                            toggleUnderline: () => ({ commands }) => commands.toggleMark('underline'),
+                        };
+                    },
+                    addKeyboardShortcuts() {
+                        return { 'Mod-u': () => this.editor.commands.toggleUnderline() };
+                    },
+                }),
+            ],
+            content: initialHtml,
+            editorProps: {
+                attributes: { class: 'modern-wysiwyg-content' },
+            },
+            onUpdate: function({ editor }) {
+                var html = editor.getHTML();
+                originalTextarea.value = htmlToLegacy(html);
+            },
+        });
+
+        // Data binding for recipient, title, checkboxes
+        var modernRecipient = container.querySelector('#modern-recipient');
+        var modernContact = container.querySelector('#modern-contact');
+        var modernTitle = container.querySelector('#modern-title');
+        var modernAddSent = container.querySelector('#modern-add-sent');
+        var modernAddTracking = container.querySelector('#modern-add-tracking');
 
         function syncToOriginal() {
             if (recipientInput && modernRecipient) recipientInput.value = modernRecipient.value;
@@ -444,18 +486,19 @@ var MessengerModule = (function(Utils, EventBus) {
             if (addSentCheckbox && modernAddSent) modernAddSent.checked = addSentCheckbox.checked;
             if (addTrackingCheckbox && modernAddTracking) modernAddTracking.checked = addTrackingCheckbox.checked;
         }
-        if (modernRecipient)   modernRecipient.addEventListener('input', syncToOriginal);
-        if (modernContact)     modernContact.addEventListener('change', syncToOriginal);
-        if (modernTitle)       modernTitle.addEventListener('input', syncToOriginal);
-        if (modernAddSent)     modernAddSent.addEventListener('change', syncToOriginal);
+        if (modernRecipient) modernRecipient.addEventListener('input', syncToOriginal);
+        if (modernContact) modernContact.addEventListener('change', syncToOriginal);
+        if (modernTitle) modernTitle.addEventListener('input', syncToOriginal);
+        if (modernAddSent) modernAddSent.addEventListener('change', syncToOriginal);
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
+        // Preview button
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                if (originalTextarea) originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
+                originalTextarea.value = htmlToLegacy(editor.getHTML());
                 if (typeof ajaxRequest === 'function') ajaxRequest();
                 else if (previewButton) previewButton.click();
                 var loadingDiv = document.getElementById('loading');
@@ -475,18 +518,20 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
+        // Submit button
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
-                if (originalTextarea) originalTextarea.value = htmlToLegacy(wysiwygDiv.innerHTML);
+                originalTextarea.value = htmlToLegacy(editor.getHTML());
                 if (originalForm && typeof originalForm.submit === 'function') {
                     if (typeof ValidateForm === 'function') if (!ValidateForm(1)) return;
                     originalForm.submit();
                 } else if (submitButton) submitButton.click();
             };
         }
+
         return container;
     }
 
@@ -503,7 +548,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
             var spaceLeft = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
 
-            // Folder header with stats
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
@@ -517,7 +561,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(folderRow);
 
-            // List header
             var listHeader = document.createElement('div');
             listHeader.className = 'messages-list-header';
             listHeader.innerHTML = ''
@@ -528,13 +571,11 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
             container.appendChild(listHeader);
 
-            // Message rows
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
 
             for (var i = 0; i < messageRows.length; i++) {
                 var row = messageRows[i];
-                // CORRECTED: 'on' = unread, 'off' = read
                 var isUnread = row.classList.contains('on');
                 var iconClass = isUnread ? 'fa-envelope' : 'fa-envelope-open';
                 var titleLink = row.querySelector('.bb h4 a');
@@ -561,7 +602,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
             container.appendChild(listContainer);
 
-            // Action bar
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -578,7 +618,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(actionBar);
 
-            // Attach event listeners
             var folderSelector = document.querySelector('select[name="VID"]');
             var folderForm = folderSelector ? folderSelector.form : null;
             var inboxForm = document.querySelector('form[name="inbox"]');
@@ -623,7 +662,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         } catch (err) {
             console.error('[MessengerModule] Error building messages section:', err);
-            // Fallback: clone original
             var originalMessages = document.querySelector('.cp:has(.big_list .row-mp)') || document.querySelector('.cp');
             if (originalMessages) {
                 var fallbackClone = originalMessages.cloneNode(true);
@@ -637,7 +675,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         return container;
     }
-    
+
     // ----- MODERN CONTACTS SECTION (fully rebuilt) -----
     function buildModernContactsSection() {
         var container = document.createElement('div');
@@ -769,7 +807,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 mainContent.appendChild(buildModernMessagesSection());
                 finalize();
             }).catch(function() {
-                mainContent.appendChild(buildModernMessagesSection()); // fallback
+                mainContent.appendChild(buildModernMessagesSection());
                 finalize();
             });
             return;
