@@ -1,5 +1,5 @@
 // Messenger Module – Complete modern UI for all messenger sections
-// Compose editor powered by Quill (enhanced with history, keyboard shortcuts, paste cleaning)
+// Compose editor powered by Quill (enhanced with history, keyboard shortcuts, custom modals, dropdown)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -97,7 +97,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 function triggerBuild() {
                     if (currentSection === 'compose') {
-                        // For compose, wait until the forum's inline globals are ready
                         if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
                             setTimeout(doBuild, 0);
                         } else {
@@ -113,7 +112,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function reset() {
         isInitialized = false;
-        // Restore original emoticon handler if we overrode it
         if (_originalEmoticon !== null) {
             window.emoticon = _originalEmoticon;
             _originalEmoticon = null;
@@ -126,7 +124,6 @@ var MessengerModule = (function(Utils, EventBus) {
         observerCallbacks = [];
     }
 
-    // Only poll for compose-page globals on the compose page — they don't exist on other pages
     function waitForGlobalFunctions() {
         if (currentSection !== 'compose') return Promise.resolve();
         return new Promise(function(resolve) {
@@ -245,10 +242,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION (Quill-based, fully enhanced)
-    // ------------------------------------------------------------------------
-    // ------------------------------------------------------------------------
-    // COMPOSE SECTION (Quill-based, with worker upload & drag‑and‑drop)
+    // COMPOSE SECTION (Quill-based, with custom modal & dropdown)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -279,6 +273,45 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(recipientRow);
 
+        // Helper: custom modal with input
+        function showInputModal(title, placeholder, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
+
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
+                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
+                + '</div>';
+
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+
+            var input = modalBox.querySelector('#modal-input');
+            input.focus();
+
+            function close() {
+                modalOverlay.remove();
+            }
+
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var val = input.value.trim();
+                if (val) callback(val);
+                close();
+            };
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
+            });
+        }
+
         // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
@@ -292,47 +325,14 @@ var MessengerModule = (function(Utils, EventBus) {
             quill.focus();
         }
 
+        // Basic formatting buttons
         var buttons = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { qFormat('bold'); } },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { qFormat('italic'); } },
             { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { qFormat('underline'); } },
             { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } },
-            { title: 'Bullet list',    icon: 'fa-regular fa-list',          cmd: function() {
-                if (!quill) return;
-                var f = quill.getFormat();
-                quill.format('list', f.list === 'bullet' ? false : 'bullet');
-                quill.focus();
-            }},
-            { title: 'Ordered list',   icon: 'fa-regular fa-list-ol',       cmd: function() {
-                if (!quill) return;
-                var f = quill.getFormat();
-                quill.format('list', f.list === 'ordered' ? false : 'ordered');
-                quill.focus();
-            }},
-            { title: 'Link',           icon: 'fa-regular fa-link',          cmd: function() {
-                if (!quill) return;
-                var url = prompt('Enter URL:');
-                if (!url) return;
-                var range = quill.getSelection();
-                if (range && range.length > 0) {
-                    quill.format('link', url);
-                } else {
-                    var idx = range ? range.index : quill.getLength();
-                    quill.insertText(idx, url, 'link', url);
-                    quill.setSelection(idx + url.length);
-                }
-                quill.focus();
-            }},
-            { title: 'Image URL',      icon: 'fa-regular fa-image',         cmd: function() {
-                if (!quill) return;
-                var url = prompt('Enter image URL:');
-                if (!url) return;
-                var range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', url, 'user');
-                quill.insertText(range.index + 1, '\u200B', 'user');
-                quill.setSelection(range.index + 2);
-                quill.focus();
-            }},
+            { title: 'Bullet list',    icon: 'fa-regular fa-list',          cmd: function() { qFormat('list', 'bullet'); } },
+            { title: 'Ordered list',   icon: 'fa-regular fa-list-ol',       cmd: function() { qFormat('list', 'ordered'); } },
             { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
             { title: 'Code block',     icon: 'fa-regular fa-code',          cmd: function() { qFormat('code-block'); } },
             { title: 'Spoiler',        icon: 'fa-regular fa-eye-slash',     cmd: function() {
@@ -359,64 +359,68 @@ var MessengerModule = (function(Utils, EventBus) {
             toolbar.appendChild(button);
         }
 
-        // Smiley button
-        var smileBtn = document.createElement('button');
-        smileBtn.type = 'button';
-        smileBtn.className = 'modern-editor-btn';
-        smileBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-        smileBtn.title = 'Insert smiley';
-        smileBtn.onclick = function() {
-            var smiliesDiv = document.getElementById('smilies');
-            if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
-        };
-        toolbar.appendChild(smileBtn);
-
-        // Upload button (replaces old ImgBB popup)
-        var uploadBtn = document.createElement('button');
-        uploadBtn.type = 'button';
-        uploadBtn.className = 'modern-editor-btn';
-        uploadBtn.innerHTML = '<i class="fa-regular fa-cloud-arrow-up"></i>';
-        uploadBtn.title = 'Upload image (ImgBB via Worker)';
-        uploadBtn.onclick = function() {
-            var input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = function() {
-                if (input.files && input.files[0]) {
-                    uploadImageToWorker(input.files[0], quill);
+        // Link button (custom modal)
+        var linkBtn = document.createElement('button');
+        linkBtn.type = 'button';
+        linkBtn.className = 'modern-editor-btn';
+        linkBtn.innerHTML = '<i class="fa-regular fa-link"></i>';
+        linkBtn.title = 'Insert link';
+        linkBtn.onclick = function() {
+            if (!quill) return;
+            var range = quill.getSelection();
+            var selectedText = range && range.length > 0 ? quill.getText(range.index, range.length) : '';
+            showInputModal('Insert link', 'https://example.com', function(url) {
+                if (range && range.length > 0) {
+                    quill.format('link', url);
+                } else {
+                    quill.insertText(range.index, url, 'link', url);
+                    quill.setSelection(range.index + url.length);
                 }
-            };
-            input.click();
+                quill.focus();
+            });
         };
-        toolbar.appendChild(uploadBtn);
+        toolbar.appendChild(linkBtn);
 
-        container.appendChild(toolbar);
+        // Image dropdown (URL + upload)
+        var imageDropdownContainer = document.createElement('div');
+        imageDropdownContainer.className = 'modern-dropdown';
+        imageDropdownContainer.style.position = 'relative';
+        imageDropdownContainer.style.display = 'inline-block';
 
-        // Editor element
-        var editorElement = document.createElement('div');
-        editorElement.id = 'quill-editor';
-        editorElement.className = 'modern-wysiwyg';
-        container.appendChild(editorElement);
+        var imageDropdownBtn = document.createElement('button');
+        imageDropdownBtn.type = 'button';
+        imageDropdownBtn.className = 'modern-editor-btn';
+        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        imageDropdownBtn.title = 'Insert image';
 
-        // ---- Initialise Quill ----
-        quill = new window.Quill(editorElement, {
-            modules: {
-                toolbar: false,
-                history: {
-                    delay: 1000,
-                    maxStack: 100,
-                    userOnly: true
-                }
-            },
-            placeholder: '💬 Write your message...',
-            formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
+        var dropdownMenu = document.createElement('div');
+        dropdownMenu.className = 'modern-dropdown-menu';
+        dropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        dropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
+            + '<button class="modern-dropdown-item" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
+
+        imageDropdownContainer.appendChild(imageDropdownBtn);
+        imageDropdownContainer.appendChild(dropdownMenu);
+        toolbar.appendChild(imageDropdownContainer);
+
+        // Toggle dropdown
+        imageDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isVisible = dropdownMenu.style.display === 'block';
+            dropdownMenu.style.display = isVisible ? 'none' : 'block';
+        };
+        document.addEventListener('click', function() {
+            dropdownMenu.style.display = 'none';
+        });
+        dropdownMenu.addEventListener('click', function(e) {
+            e.stopPropagation();
         });
 
-        // Helper: upload image to Cloudflare Worker and insert into Quill
+        // Helper: upload image to Cloudflare Worker and insert
         function uploadImageToWorker(file, quillEditor) {
             var formData = new FormData();
             formData.append('image', file);
-
             var range = quillEditor.getSelection(true);
             var loadingId = 'img-loading-' + Date.now();
             quillEditor.insertEmbed(range.index, 'html', '<div id="' + loadingId + '" style="display:inline-block;">⬆️ Uploading...</div>', 'user');
@@ -427,7 +431,6 @@ var MessengerModule = (function(Utils, EventBus) {
             })
             .then(response => response.json())
             .then(data => {
-                // Remove loading indicator
                 var delta = quillEditor.getContents(range.index, 1);
                 if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
                     quillEditor.deleteText(range.index, 1);
@@ -450,6 +453,66 @@ var MessengerModule = (function(Utils, EventBus) {
                 quillEditor.focus();
             });
         }
+
+        // Image URL option
+        dropdownMenu.querySelector('#image-url-option').onclick = function() {
+            showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
+                var range = quill.getSelection(true);
+                quill.insertEmbed(range.index, 'image', url, 'user');
+                quill.insertText(range.index + 1, '\u200B', 'user');
+                quill.setSelection(range.index + 2);
+                quill.focus();
+            });
+            dropdownMenu.style.display = 'none';
+        };
+
+        // Upload option
+        dropdownMenu.querySelector('#image-upload-option').onclick = function() {
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = function() {
+                if (input.files && input.files[0]) {
+                    uploadImageToWorker(input.files[0], quill);
+                }
+            };
+            input.click();
+            dropdownMenu.style.display = 'none';
+        };
+
+        // Smiley button
+        var smileBtn = document.createElement('button');
+        smileBtn.type = 'button';
+        smileBtn.className = 'modern-editor-btn';
+        smileBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
+        smileBtn.title = 'Insert smiley';
+        smileBtn.onclick = function() {
+            var smiliesDiv = document.getElementById('smilies');
+            if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
+        };
+        toolbar.appendChild(smileBtn);
+
+        container.appendChild(toolbar);
+
+        // Editor element
+        var editorElement = document.createElement('div');
+        editorElement.id = 'quill-editor';
+        editorElement.className = 'modern-wysiwyg';
+        container.appendChild(editorElement);
+
+        // ---- Initialise Quill ----
+        quill = new window.Quill(editorElement, {
+            modules: {
+                toolbar: false,
+                history: {
+                    delay: 1000,
+                    maxStack: 100,
+                    userOnly: true
+                }
+            },
+            placeholder: '💬 Write your message...',
+            formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
+        });
 
         // ---- Drag & Drop support ----
         var editorRoot = quill.root;
@@ -658,7 +721,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var dateSpan   = row.querySelector('.zz .when');
                 var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
 
-                // Extract the original checkbox's name so we keep form compatibility
                 var origCheckbox = row.querySelector('input[type="checkbox"]');
                 var msgName = origCheckbox ? origCheckbox.name : '';
 
@@ -674,7 +736,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
             container.appendChild(listContainer);
 
-            // Bulk action bar
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -691,7 +752,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(actionBar);
 
-            // Wire folder selector to legacy form
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
@@ -703,7 +763,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
             }
 
-            // Select all
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
@@ -713,7 +772,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
             }
 
-            // Sync checkboxes back to hidden form before bulk actions
             function syncCheckboxesToForm() {
                 if (!inboxForm) return;
                 container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
@@ -758,7 +816,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         } catch (err) {
             console.error('[MessengerModule] Error building messages section:', err);
-            // Graceful fallback: clone the original .cp element
             var cpEl = document.querySelector('.cp');
             if (cpEl) {
                 var clone = cpEl.cloneNode(true);
