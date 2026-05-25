@@ -202,7 +202,8 @@ var MessengerModule = (function(Utils, EventBus) {
         legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
-        legacy = legacy.replace(/<div class="spoiler-block"[^>]*>[\s\S]*?<p>(.*?)<\/p>[\s\S]*?<\/div>/gi, '[spoiler]$1[/spoiler]');
+        legacy = legacy.replace(/<details[^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/gi, '[SPOILER]$1[/SPOILER]');
+        legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
         legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
         legacy = legacy.replace(/<\/p>/gi, '\n');
         legacy = legacy.replace(/<p[^>]*>/gi, '');
@@ -495,7 +496,6 @@ var MessengerModule = (function(Utils, EventBus) {
         addSeparator();
 
         // Group 4: Spoiler + Smiley
-        // Spoiler button – inserts a visual spoiler block
         var spoilerBtn = document.createElement('button');
         spoilerBtn.type = 'button';
         spoilerBtn.className = 'modern-editor-btn';
@@ -504,16 +504,11 @@ var MessengerModule = (function(Utils, EventBus) {
         spoilerBtn.onclick = function() {
             if (!quill) return;
             var range = quill.getSelection();
-            var selectedText = (range && range.length > 0) ? quill.getText(range.index, range.length) : 'Hidden content';
-            // Create the visual spoiler block
-            var wrapper = document.createElement('div');
-            wrapper.className = 'spoiler-block';
-            wrapper.setAttribute('data-type', 'spoiler');
-            wrapper.innerHTML = '<p>' + escapeHtml(selectedText) + '</p>';
-            var html = wrapper.outerHTML;
-            quill.clipboard.dangerouslyPasteHTML(range ? range.index : quill.getLength(), html);
-            if (range) {
-                quill.setSelection(range.index + html.length);
+            if (range && range.length > 0) {
+                var text = quill.getText(range.index, range.length);
+                quill.deleteText(range.index, range.length);
+                quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
+                quill.setSelection(range.index + text.length + 18);
             }
             quill.focus();
         };
