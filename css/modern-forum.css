@@ -882,6 +882,28 @@ body.modal-open {
     padding-right: var(--scrollbar-width, 0px);
 }
 
+.modern-dropdown-menu {
+    display: none;
+}
+
+.modern-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--pad-2) var(--pad-4);
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.modern-dropdown-item:hover {
+    background: var(--hover-color);
+}
+
 .modern-modal-overlay,
 .modern-report-overlay,
 .modern-report-notify-overlay {
