@@ -444,7 +444,7 @@ var MessengerModule = (function(Utils, EventBus) {
         listDropdownMenu.className = 'modern-dropdown-menu';
         listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
         listDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
+            + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list-ul"></i> Bullet list</button>'
             + '<button class="modern-dropdown-item" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
 
         listDropdownContainer.appendChild(listDropdownBtn);
