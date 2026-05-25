@@ -1706,6 +1706,7 @@ input[type="radio"]:checked::before {
 .modern-wysiwyg {
     margin: var(--pad-6);
     min-height: 72px;
+    max-height: 500px;
     padding: var(--pad-4);
     background: var(--bg-color);
     border: 1px solid var(--border-color);
