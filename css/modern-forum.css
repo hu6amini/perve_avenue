@@ -1666,135 +1666,48 @@ input[type="radio"]:checked::before {
     padding-right: var(--space-lg);
 }
 
-/* ----- WYSIWYG toolbar ----- */
-.modern-editor-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-    padding: var(--pad-4) var(--pad-6);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-color);
-}
-
-.modern-editor-btn {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    width: 2rem;
-    height: 2rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    transition: all 0.2s ease;
-}
-
-.modern-editor-btn i {
-    pointer-events: none;
-}
-
-.modern-editor-btn:hover {
-    background: var(--hover-color);
-    border-color: var(--primary-color);
-    color: var(--text-primary);
-    transform: translateY(-1px);
-}
-
-/* ----- WYSIWYG contenteditable area ----- */
-.modern-wysiwyg {
-    margin: var(--pad-6);
+/* TipTap editor base */
+.ProseMirror {
+    outline: none;
     min-height: 100px;
     max-height: 500px;
-    padding: var(--pad-4);
     background: var(--bg-color);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius);
     color: var(--text-primary);
     font-family: var(--font-primary);
-    font-size: var(--text-base);
+    font-size: var(--text-sm);
     line-height: 1.618;
-    overflow-y: auto;
-    transition: all 0.2s ease;
-    text-align: left;
-    caret-color: auto;
-    position: relative;
 }
 
-.modern-wysiwyg:focus {
-    border-color: var(--primary-color);
-    outline: none;
-    box-shadow: 0 0 0 2px var(--focus-ring);
-}
-
-/* Placeholder for empty WYSIWYG editor */
-.modern-wysiwyg.empty::before {
-    content: "💬 Write your message...";
+.ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
     color: var(--text-tertiary);
     pointer-events: none;
-    font-family: var(--font-primary);
-    font-size: var(--text-base);
-    position: absolute; 
-    top: var(--pad-4); 
-    left: var(--pad-4);
+    height: 0;
 }
 
-.modern-wysiwyg:focus:empty::before {
-    display: none;
-}
-
-body#msg input::placeholder {
-   color: var(--text-tertiary);
-}
-
-/* WYSIWYG content styling */
-.modern-wysiwyg strong { font-weight: bold; }
-.modern-wysiwyg em { font-style: italic; }
-.modern-wysiwyg u { text-decoration: underline; }
-.modern-wysiwyg s, .modern-wysiwyg del { text-decoration: line-through; }
-
-.modern-wysiwyg ul,
-.modern-wysiwyg ol {
-    margin: var(--space-sm) 0;
+.ProseMirror ul, .ProseMirror ol {
     padding-left: var(--space-lg);
 }
 
-.modern-wysiwyg blockquote {
+.ProseMirror blockquote {
     border-left: 3px solid var(--primary-color);
     margin: var(--space-sm) 0;
     padding-left: var(--space-md);
     color: var(--text-secondary);
 }
 
-.modern-wysiwyg pre {
+.ProseMirror pre {
     background: var(--bg-color);
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
 }
 
-.modern-wysiwyg .spoiler {
-    background: var(--surface-light);
-    padding: var(--space-sm);
-    border-radius: var(--radius);
-    cursor: pointer;
-}
-
-.modern-wysiwyg .spoiler::before {
-    content: 'Spoiler (click to reveal)';
-    display: block;
-    font-weight: bold;
-    margin-bottom: var(--space-xs);
-    color: var(--text-tertiary);
-}
-
-.modern-wysiwyg img {
-    max-width: 100%;
-    height: auto;
-    border-radius: var(--radius-sm);
+body#msg input::placeholder {
+   color: var(--text-tertiary);
 }
 
 /* ----- Options row (checkboxes) ----- */
