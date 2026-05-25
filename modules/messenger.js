@@ -247,6 +247,9 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     // COMPOSE SECTION (Quill-based, fully enhanced)
     // ------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // COMPOSE SECTION (Quill-based, with worker upload & drag‑and‑drop)
+    // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
         var contactSelect    = document.querySelector('select[name="from_contact"]');
@@ -276,11 +279,10 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(recipientRow);
 
-        // Toolbar (defined before quill so closures capture the var reference)
+        // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
 
-        // quill is set below after the editor element exists
         var quill = null;
 
         function qFormat(format, value) {
@@ -327,7 +329,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (!url) return;
                 var range = quill.getSelection(true);
                 quill.insertEmbed(range.index, 'image', url, 'user');
-                // Insert a zero‑width space to make caret visible after image
                 quill.insertText(range.index + 1, '\u200B', 'user');
                 quill.setSelection(range.index + 2);
                 quill.focus();
@@ -335,7 +336,6 @@ var MessengerModule = (function(Utils, EventBus) {
             { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
             { title: 'Code block',     icon: 'fa-regular fa-code',          cmd: function() { qFormat('code-block'); } },
             { title: 'Spoiler',        icon: 'fa-regular fa-eye-slash',     cmd: function() {
-                // Quill has no native spoiler; insert BBCode text directly
                 if (!quill) return;
                 var range = quill.getSelection();
                 if (range && range.length > 0) {
@@ -371,51 +371,99 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(smileBtn);
 
-        // ImgBB upload button
-        var imgbbBtn = document.createElement('button');
-        imgbbBtn.type = 'button';
-        imgbbBtn.className = 'modern-editor-btn';
-        imgbbBtn.innerHTML = '<i class="fa-regular fa-cloud-arrow-up"></i>';
-        imgbbBtn.title = 'Upload image (ImgBB)';
-        imgbbBtn.onclick = function() {
-            if (typeof ibb_ff === 'undefined') {
-                var script = document.createElement('script');
-                script.src = 'https://imgbb.com/upload.js';
-                script.setAttribute('data-palette', 'blue');
-                script.setAttribute('data-sibling-pos', 'before');
-                script.setAttribute('data-auto-insert', 'bbcode-embed-medium');
-                document.body.appendChild(script);
-            } else if (window.FFUpload_widget && typeof window.FFUpload_widget.toggle === 'function') {
-                window.FFUpload_widget.toggle();
-            }
+        // Upload button (replaces old ImgBB popup)
+        var uploadBtn = document.createElement('button');
+        uploadBtn.type = 'button';
+        uploadBtn.className = 'modern-editor-btn';
+        uploadBtn.innerHTML = '<i class="fa-regular fa-cloud-arrow-up"></i>';
+        uploadBtn.title = 'Upload image (ImgBB via Worker)';
+        uploadBtn.onclick = function() {
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = function() {
+                if (input.files && input.files[0]) {
+                    uploadImageToWorker(input.files[0], quill);
+                }
+            };
+            input.click();
         };
-        toolbar.appendChild(imgbbBtn);
+        toolbar.appendChild(uploadBtn);
 
         container.appendChild(toolbar);
 
-        // Editor element — Quill mounts into this div
+        // Editor element
         var editorElement = document.createElement('div');
         editorElement.id = 'quill-editor';
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // ---- Initialise Quill with enhanced modules ----
-        // ---- Initialise Quill with essential modules ----
+        // ---- Initialise Quill ----
         quill = new window.Quill(editorElement, {
             modules: {
-                toolbar: false,          // we drive formatting from our own toolbar
+                toolbar: false,
                 history: {
                     delay: 1000,
                     maxStack: 100,
                     userOnly: true
                 }
-                // clipboard: removed custom matcher to avoid errors
             },
             placeholder: '💬 Write your message...',
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
 
-        // Add custom keyboard shortcut for spoiler (Ctrl+Shift+S)
+        // Helper: upload image to Cloudflare Worker and insert into Quill
+        function uploadImageToWorker(file, quillEditor) {
+            var formData = new FormData();
+            formData.append('image', file);
+
+            var range = quillEditor.getSelection(true);
+            var loadingId = 'img-loading-' + Date.now();
+            quillEditor.insertEmbed(range.index, 'html', '<div id="' + loadingId + '" style="display:inline-block;">⬆️ Uploading...</div>', 'user');
+
+            fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading indicator
+                var delta = quillEditor.getContents(range.index, 1);
+                if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
+                    quillEditor.deleteText(range.index, 1);
+                }
+                if (data.url) {
+                    quillEditor.insertEmbed(range.index, 'image', data.url, 'user');
+                    quillEditor.insertText(range.index + 1, '\u200B', 'user');
+                    quillEditor.setSelection(range.index + 2);
+                } else {
+                    console.error('Upload failed:', data);
+                }
+                quillEditor.focus();
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                var delta = quillEditor.getContents(range.index, 1);
+                if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
+                    quillEditor.deleteText(range.index, 1);
+                }
+                quillEditor.focus();
+            });
+        }
+
+        // ---- Drag & Drop support ----
+        var editorRoot = quill.root;
+        editorRoot.setAttribute('dropzone', 'copy');
+        editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
+        editorRoot.addEventListener('drop', function(e) {
+            e.preventDefault();
+            var file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                uploadImageToWorker(file, quill);
+            }
+        });
+
+        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
         if (quill.keyboard) {
             quill.keyboard.addBinding({
                 key: 'S',
@@ -434,20 +482,20 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // Load any pre-existing content (e.g. when replying to a message)
+        // Load pre-existing content
         var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
         if (initialHtml) {
             quill.clipboard.dangerouslyPasteHTML(initialHtml);
         }
 
-        // Keep the hidden legacy textarea in sync
+        // Sync back to original textarea
         quill.on('text-change', function() {
             if (originalTextarea) {
                 originalTextarea.value = htmlToLegacy(quill.root.innerHTML);
             }
         });
 
-        // Redirect smiley clicks into Quill (forum calls window.emoticon on each click)
+        // Redirect smiley clicks into Quill
         _originalEmoticon = window.emoticon;
         window.emoticon = function(x) {
             if (quill) {
@@ -468,7 +516,7 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
         container.appendChild(optionsRow);
 
-        // Action buttons
+        // Action buttons (Preview / Send)
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
@@ -483,7 +531,7 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.innerHTML = '<div class="preview-content"></div>';
         container.appendChild(previewArea);
 
-        // ---- Data binding ----
+        // Data binding (recipient, title, checkboxes)
         var modernRecipient   = container.querySelector('#modern-recipient');
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
@@ -512,7 +560,7 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // ---- Preview ----
+        // Preview button
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
@@ -537,7 +585,7 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // ---- Submit ----
+        // Submit button
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
