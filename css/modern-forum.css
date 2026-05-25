@@ -1705,7 +1705,7 @@ input[type="radio"]:checked::before {
 /* ----- WYSIWYG contenteditable area ----- */
 .modern-wysiwyg {
     margin: var(--pad-6);
-    min-height: 100px;
+    min-height: 72px;
     padding: var(--pad-4);
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -2118,11 +2118,6 @@ body#msg input::placeholder {
 
     .modern-actions {
         justify-content: center;
-    }
-
-    .modern-wysiwyg {
-        min-height: 150px;
-        margin: var(--space-sm);
     }
 
     /* Messages section mobile */
