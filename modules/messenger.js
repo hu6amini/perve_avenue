@@ -546,32 +546,6 @@ var MessengerModule = (function(Utils, EventBus) {
             placeholder: '💬 Write your message...',
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
-
-        // --- Custom Enter behaviour for blockquotes (INSERT THIS BLOCK) ---
-        if (quill.keyboard) {
-            quill.keyboard.addBinding({
-                key: 'Enter',
-                handler: function(range, context) {
-                    if (context.format.blockquote) {
-                        const [line, offset] = quill.getLine(range.index);
-                        const lineText = line.domNode.textContent;
-                        const isLineEmpty = lineText.trim() === '';
-
-                        if (isLineEmpty) {
-                            quill.format('blockquote', false);
-                            quill.insertText(range.index, '\n', 'user');
-                            quill.setSelection(range.index + 1);
-                        } else {
-                            quill.insertText(range.index, '\n', 'user');
-                            quill.setSelection(range.index + 1);
-                            quill.format('blockquote', true);
-                        }
-                        return false;
-                    }
-                    return true;
-                }
-            });
-        }
         
         // --- Active state for toolbar buttons (insert here) ---
         function updateToolbarActiveStates() {
