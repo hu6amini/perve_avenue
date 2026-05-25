@@ -336,17 +336,33 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
                 quill.focus();
             }},
-            { title: 'Image URL',      icon: 'fa-regular fa-image',         cmd: function() {
-                if (!quill) return;
-                var url = prompt('Enter image URL:');
-                if (!url) return;
-                var range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', url, 'user');
-                // Insert a zero‑width space to make caret visible after image
-                quill.insertText(range.index + 1, '\u200B', 'user');
-                quill.setSelection(range.index + 2);
-                quill.focus();
-            }},
+{ title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() {
+    if (!quill) return;
+    var url = prompt('Enter image URL:');
+    if (!url) return;
+    
+    // Create a temporary image to get dimensions
+    var tempImg = new Image();
+    tempImg.onload = function() {
+        var width = this.naturalWidth;
+        var height = this.naturalHeight;
+        var range = quill.getSelection(true);
+        // Insert a custom HTML element with attributes
+        var imgHtml = '<img src="' + escapeHtml(url) + '" width="' + width + '" height="' + height + '" loading="lazy" decoding="async" alt="">';
+        quill.clipboard.dangerouslyPasteHTML(range.index, imgHtml);
+        quill.setSelection(range.index + 1);
+        quill.focus();
+    };
+    tempImg.onerror = function() {
+        // Fallback: insert without dimensions
+        var range = quill.getSelection(true);
+        var imgHtml = '<img src="' + escapeHtml(url) + '" loading="lazy" decoding="async" alt="">';
+        quill.clipboard.dangerouslyPasteHTML(range.index, imgHtml);
+        quill.setSelection(range.index + 1);
+        quill.focus();
+    };
+    tempImg.src = url;
+} },
             { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
             { title: 'Code block',     icon: 'fa-regular fa-code',          cmd: function() { qFormat('code-block'); } },
             { title: 'Spoiler',        icon: 'fa-regular fa-eye-slash',     cmd: function() {
