@@ -1543,11 +1543,11 @@ input[type="radio"]:checked::before {
 }
 
 /* ==========================================================================
-   MODERN MESSENGER (WYSIWYG) – Emerald Theme Integration
-   Sidebar + Bottom Navigation layout – Complete all sections
+   MODERN MESSENGER – Emerald Theme Integration
+   Quill WYSIWYG, Messages, Contacts
    ========================================================================== */
 
-/* ----- Modern messenger container (inside wrapper) ----- */
+/* ----- Modern messenger container ----- */
 #modern-messenger {
     background: var(--surface-color);
     border-radius: var(--radius-lg);
@@ -1561,10 +1561,6 @@ input[type="radio"]:checked::before {
 #modern-messenger {
     display: flex;
     flex-direction: row;
-}
-
-.modern-messenger-main {
-    width: 100%; 
 }
 
 /* ----- Navigation sidebar (desktop) ----- */
@@ -1608,14 +1604,14 @@ input[type="radio"]:checked::before {
     color: var(--primary-light);
 }
 
-/* ----- Sections container ----- */
-.modern-messenger-section {
+/* ----- Main content area ----- */
+.modern-messenger-main {
     flex: 1;
     min-width: 0;
     background: var(--surface-color);
 }
 
-/* ----- Compose section styles ----- */
+/* ----- Compose section ----- */
 .modern-recipient-row {
     display: flex;
     flex-wrap: wrap;
@@ -1624,6 +1620,7 @@ input[type="radio"]:checked::before {
     border-radius: var(--radius);
     margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
+    background: var(--bg-color);
 }
 
 .modern-field {
@@ -1666,34 +1663,86 @@ input[type="radio"]:checked::before {
     padding-right: var(--space-lg);
 }
 
-/* Quill editor base */
-.ql-editor {
-    outline: none;
-    min-height: 100px;
-    max-height: 500px;
+/* ----- WYSIWYG toolbar (custom, above Quill) ----- */
+.modern-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    padding: var(--pad-4) var(--pad-6);
+    border-bottom: 1px solid var(--border-color);
     background: var(--bg-color);
+}
+
+.modern-editor-btn {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.modern-editor-btn i {
+    pointer-events: none;
+}
+
+.modern-editor-btn:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+/* ----- Quill editor styling (overrides) ----- */
+#quill-editor {
+    margin: var(--space-md);
+    width: calc(100% - 2 * var(--space-md));
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius);
+    transition: all 0.2s ease;
+}
+
+#quill-editor:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.ql-editor {
+    min-height: 200px;
+    padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
-    /* Quill adds its own padding; reset it to match your design */
-    padding: var(--space-sm) var(--space-md);
-    overflow-y: auto;
+    outline: none;
 }
 
-/* Placeholder — Quill uses data-placeholder on .ql-editor itself */
+/* Quill placeholder (blank state) */
 .ql-editor.ql-blank::before {
     content: attr(data-placeholder);
-    float: left;
     color: var(--text-tertiary);
-    pointer-events: none;
-    height: 0;
-    font-style: normal; /* Quill italicises it by default; override if needed */
+    font-style: normal;
+    left: var(--pad-4);
+    right: auto;
+    font-weight: normal;
 }
+
+/* Quill content styles (matching our legacy converter) */
+.ql-editor strong { font-weight: bold; }
+.ql-editor em { font-style: italic; }
+.ql-editor u { text-decoration: underline; }
+.ql-editor s, .ql-editor del { text-decoration: line-through; }
 
 .ql-editor ul,
 .ql-editor ol {
+    margin: var(--space-sm) 0;
     padding-left: var(--space-lg);
 }
 
@@ -1704,17 +1753,31 @@ input[type="radio"]:checked::before {
     color: var(--text-secondary);
 }
 
-/* Quill wraps code blocks in <pre class="ql-syntax"> */
 .ql-editor pre.ql-syntax {
     background: var(--bg-color);
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
     overflow-x: auto;
     font-family: var(--font-mono);
+    font-size: var(--text-xs);
 }
 
-body#msg input::placeholder {
-   color: var(--text-tertiary);
+.ql-editor details {
+    background: var(--surface-light);
+    padding: var(--space-sm);
+    border-radius: var(--radius);
+    cursor: pointer;
+    margin: var(--space-sm) 0;
+}
+.ql-editor details summary {
+    font-weight: bold;
+    margin-bottom: var(--space-xs);
+    color: var(--text-tertiary);
+}
+.ql-editor img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-sm);
 }
 
 /* ----- Options row (checkboxes) ----- */
@@ -1724,6 +1787,7 @@ body#msg input::placeholder {
     gap: var(--space-lg);
     padding: var(--pad-4) var(--pad-6);
     border-top: 1px solid var(--border-color);
+    background: var(--bg-color);
 }
 
 .modern-checkbox {
@@ -1739,7 +1803,7 @@ body#msg input::placeholder {
     cursor: pointer;
 }
 
-/* ----- Action buttons ----- */
+/* ----- Action buttons (Preview / Send) ----- */
 .modern-actions {
     display: flex;
     justify-content: flex-end;
@@ -1800,294 +1864,6 @@ body#msg input::placeholder {
     color: var(--text-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
-}
-
-/* ----- Messages section (inbox) styles ----- */
-#messages-section .skin_tbl {
-    padding: var(--space-md);
-}
-
-#messages-section .main_list > li {
-    background: var(--surface-color);
-    border-radius: var(--radius);
-    margin-bottom: var(--space-lg);
-    border: 1px solid var(--border-color);
-    overflow: hidden;
-}
-
-#messages-section .title.top {
-    display: flex;
-    align-items: center;
-    padding: var(--pad-3) var(--pad-4);
-    background: var(--bg-color);
-    border-bottom: 1px solid var(--border-color);
-    font-weight: 600;
-}
-
-#messages-section .big_list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-#messages-section .row-mp {
-    display: flex;
-    align-items: center;
-    padding: var(--pad-3) var(--pad-4);
-    border-bottom: 1px solid var(--border-color);
-    transition: background 0.2s ease;
-}
-
-#messages-section .row-mp:hover {
-    background: var(--hover-color);
-}
-
-#messages-section .aa {
-    width: 35px;
-    text-align: center;
-    color: var(--text-tertiary);
-}
-
-#messages-section .bb {
-    flex: 2;
-}
-
-#messages-section .bb h4 {
-    margin: 0;
-    font-size: var(--text-sm);
-}
-
-#messages-section .bb h4 a {
-    color: var(--text-primary);
-    text-decoration: none;
-}
-
-#messages-section .bb h4 a:hover {
-    color: var(--primary-light);
-}
-
-#messages-section .xx {
-    flex: 1;
-    font-size: var(--text-xs);
-}
-
-#messages-section .xx a {
-    color: var(--text-secondary);
-    text-decoration: none;
-}
-
-#messages-section .xx a:hover {
-    color: var(--primary-light);
-}
-
-#messages-section .yy {
-    width: 50px;
-    text-align: center;
-}
-
-#messages-section .yy img,
-#messages-section .yy .default-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin: 0 auto;
-}
-
-#messages-section .zz {
-    width: 130px;
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
-}
-
-#messages-section .Sub.Item {
-    width: 40px;
-    text-align: center;
-}
-
-#messages-section .title.bottom.Item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--pad-3) var(--pad-4);
-    background: var(--bg-color);
-    border-top: 1px solid var(--border-color);
-    flex-wrap: wrap;
-}
-
-#messages-section select.forminput,
-#messages-section input.forminput {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: var(--pad-2) var(--pad-3);
-    color: var(--text-primary);
-    font-size: var(--text-base);
-    cursor: pointer;
-}
-
-/* ----- Contacts section styles ----- */
-#contacts-section .main_list > li {
-    background: var(--surface-color);
-    border-radius: var(--radius);
-    margin: var(--space-md);
-    border: 1px solid var(--border-color);
-    overflow: hidden;
-}
-
-#contacts-section .sunbar {
-    background: var(--bg-color);
-    padding: var(--pad-3) var(--pad-5);
-    border-bottom: 1px solid var(--border-color);
-    font-family: var(--font-heading);
-    font-size: var(--text-md);
-    font-weight: 500;
-}
-
-#contacts-section .list > li {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-md);
-    padding: var(--space-md);
-}
-
-#contacts-section textarea {
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: var(--pad-3);
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    width: 100%;
-    min-height: 200px;
-}
-
-#contacts-section .darkbar.Item {
-    padding: var(--pad-4);
-    text-align: center;
-    border-top: 1px solid var(--border-color);
-}
-
-/* ----- Empty state ----- */
-.modern-empty-state {
-    text-align: center;
-    padding: var(--space-xxl);
-    color: var(--text-tertiary);
-}
-
-.modern-empty-state i {
-    font-size: 3rem;
-    margin-bottom: var(--space-md);
-    display: block;
-}
-
-/* ===== MOBILE: Bottom navigation (≤680px) ===== */
-@media (max-width: 680px) {
-    #modern-messenger {
-        flex-direction: column;
-    }
-
-    .modern-messenger-nav {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--border-color);
-        display: flex;
-        justify-content: space-around;
-        padding: var(--space-xs) 0;
-        order: 2;
-    }
-
-    .modern-nav-link {
-        flex-direction: column;
-        justify-content: center;
-        padding: var(--pad-2) var(--pad-3);
-        gap: var(--space-xs);
-        border-left: none;
-        border-bottom: 2px solid transparent;
-        font-size: var(--text-xs);
-    }
-
-    .modern-nav-link i {
-        width: auto;
-        font-size: 1.25rem;
-    }
-
-    .modern-nav-link.current {
-        border-left-color: transparent;
-        border-bottom-color: var(--primary-color);
-    }
-
-    .modern-messenger-section {
-        order: 1;
-    }
-
-    .modern-recipient-row {
-        flex-direction: column;
-        gap: var(--space-md);
-        margin: var(--space-sm);
-    }
-
-    .modern-editor-toolbar {
-        justify-content: center;
-    }
-
-    .modern-options {
-        flex-direction: column;
-        gap: var(--space-sm);
-    }
-
-    .modern-actions {
-        justify-content: center;
-    }
-
-    /* Messages section mobile */
-    #messages-section .row-mp {
-        flex-wrap: wrap;
-        gap: var(--space-xs);
-    }
-
-    #messages-section .bb {
-        flex-basis: 100%;
-        order: 1;
-    }
-
-    #messages-section .xx {
-        flex-basis: auto;
-        order: 2;
-    }
-
-    #messages-section .zz {
-        flex-basis: auto;
-        order: 3;
-    }
-
-    #messages-section .yy {
-        order: 4;
-    }
-
-    #messages-section .aa {
-        order: 5;
-    }
-
-    #messages-section .Sub.Item {
-        order: 6;
-    }
-
-    /* Contacts section mobile */
-    #contacts-section .list > li {
-        flex-direction: column;
-    }
-}
-
-/* ----- Reduced motion ----- */
-@media (prefers-reduced-motion: reduce) {
-    #modern-messenger *,
-    #modern-messenger *::before,
-    #modern-messenger *::after {
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-    }
 }
 
 /* ===== MODERN MESSAGES SECTION ===== */
@@ -2168,7 +1944,6 @@ body#msg input::placeholder {
     color: var(--text-primary);
     text-decoration: none;
 }
-
 .msg-title a:hover {
     color: var(--primary-light);
 }
@@ -2177,12 +1952,10 @@ body#msg input::placeholder {
     flex: 1;
     font-size: var(--text-xs);
 }
-
 .msg-sender a {
     color: var(--text-secondary);
     text-decoration: none;
 }
-
 .msg-sender a:hover {
     color: var(--primary-light);
 }
@@ -2228,7 +2001,6 @@ body#msg input::placeholder {
     border-color: var(--danger-color);
     color: var(--danger-color);
 }
-
 .modern-btn.danger:hover {
     background: rgba(220, 38, 38, 0.1);
     border-color: var(--danger-color);
@@ -2237,6 +2009,7 @@ body#msg input::placeholder {
 
 /* ===== MODERN CONTACTS SECTION ===== */
 .contacts-card {
+    background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     margin: var(--space-md);
@@ -2285,7 +2058,6 @@ body#msg input::placeholder {
     cursor: pointer;
     color: var(--text-secondary);
 }
-
 .modern-radio input {
     accent-color: var(--primary-color);
     width: 1rem;
@@ -2298,8 +2070,62 @@ body#msg input::placeholder {
     border-top: 1px solid var(--border-color);
 }
 
-/* Responsive adjustments */
+/* ===== RESPONSIVE (≤680px) ===== */
 @media (max-width: 680px) {
+    #modern-messenger {
+        flex-direction: column;
+    }
+    .modern-messenger-nav {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-around;
+        padding: var(--space-xs) 0;
+        order: 2;
+    }
+    .modern-nav-link {
+        flex-direction: column;
+        justify-content: center;
+        padding: var(--pad-2) var(--pad-3);
+        gap: var(--space-xs);
+        border-left: none;
+        border-bottom: 2px solid transparent;
+        font-size: var(--text-xs);
+    }
+    .modern-nav-link i {
+        width: auto;
+        font-size: 1.25rem;
+    }
+    .modern-nav-link.current {
+        border-left-color: transparent;
+        border-bottom-color: var(--primary-color);
+    }
+    .modern-messenger-main {
+        order: 1;
+    }
+
+    .modern-recipient-row {
+        flex-direction: column;
+        gap: var(--space-md);
+        margin: var(--space-sm);
+    }
+    .modern-editor-toolbar {
+        justify-content: center;
+    }
+    .modern-options {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+    .modern-actions {
+        justify-content: center;
+    }
+
+    .ql-editor {
+        min-height: 150px;
+    }
+
+    /* Messages mobile */
     .messages-list-header {
         display: none;
     }
@@ -2332,9 +2158,21 @@ body#msg input::placeholder {
     .action-group {
         justify-content: space-between;
     }
+
+    /* Contacts mobile */
     .privacy-option {
         flex-direction: column;
         gap: var(--space-sm);
+    }
+}
+
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+    #modern-messenger *,
+    #modern-messenger *::before,
+    #modern-messenger *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
     }
 }
 
