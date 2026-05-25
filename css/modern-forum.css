@@ -1620,7 +1620,6 @@ input[type="radio"]:checked::before {
     border-radius: var(--radius);
     margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
-    background: var(--bg-color);
 }
 
 .modern-field {
@@ -1715,7 +1714,7 @@ input[type="radio"]:checked::before {
 }
 
 .ql-editor {
-    min-height: 200px;
+    min-height: 100px;
     padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-primary);
@@ -1787,7 +1786,6 @@ input[type="radio"]:checked::before {
     gap: var(--space-lg);
     padding: var(--pad-4) var(--pad-6);
     border-top: 1px solid var(--border-color);
-    background: var(--bg-color);
 }
 
 .modern-checkbox {
@@ -2009,7 +2007,6 @@ input[type="radio"]:checked::before {
 
 /* ===== MODERN CONTACTS SECTION ===== */
 .contacts-card {
-    background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     margin: var(--space-md);
@@ -2028,7 +2025,7 @@ input[type="radio"]:checked::before {
 
 .modern-textarea-contacts {
     width: 100%;
-    background: var(--surface-color);
+    background: var(--bg-color);;
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     padding: var(--pad-3);
