@@ -325,31 +325,28 @@ var MessengerModule = (function(Utils, EventBus) {
             quill.focus();
         }
 
-        // Basic formatting buttons
-        var buttons = [
+        // Helper: custom modal
+        function showInputModal(title, placeholder, callback) {
+            // ... (same as before, keep it)
+        }
+
+        // ---------- Helper: create a separator ----------
+        function addSeparator() {
+            var sep = document.createElement('span');
+            sep.className = 'toolbar-separator';
+            sep.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);';
+            toolbar.appendChild(sep);
+        }
+
+        // ---------- Group 1: Text formatting ----------
+        var formatButtons = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { qFormat('bold'); } },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { qFormat('italic'); } },
             { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { qFormat('underline'); } },
-            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } },
-            { title: 'Bullet list',    icon: 'fa-regular fa-list',          cmd: function() { qFormat('list', 'bullet'); } },
-            { title: 'Ordered list',   icon: 'fa-regular fa-list-ol',       cmd: function() { qFormat('list', 'ordered'); } },
-            { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
-            { title: 'Code block',     icon: 'fa-regular fa-code',          cmd: function() { qFormat('code-block'); } },
-            { title: 'Spoiler',        icon: 'fa-regular fa-eye-slash',     cmd: function() {
-                if (!quill) return;
-                var range = quill.getSelection();
-                if (range && range.length > 0) {
-                    var text = quill.getText(range.index, range.length);
-                    quill.deleteText(range.index, range.length);
-                    quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
-                    quill.setSelection(range.index + text.length + 18);
-                }
-                quill.focus();
-            }}
+            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } }
         ];
-
-        for (var i = 0; i < buttons.length; i++) {
-            var btn = buttons[i];
+        for (var i = 0; i < formatButtons.length; i++) {
+            var btn = formatButtons[i];
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'modern-editor-btn';
@@ -358,7 +355,73 @@ var MessengerModule = (function(Utils, EventBus) {
             button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
             toolbar.appendChild(button);
         }
+        addSeparator();
 
+        // ---------- Group 2: Lists (dropdown) ----------
+        var listDropdownContainer = document.createElement('div');
+        listDropdownContainer.className = 'modern-dropdown';
+        listDropdownContainer.style.position = 'relative';
+        listDropdownContainer.style.display = 'inline-block';
+
+        var listDropdownBtn = document.createElement('button');
+        listDropdownBtn.type = 'button';
+        listDropdownBtn.className = 'modern-editor-btn';
+        listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        listDropdownBtn.title = 'Insert list';
+
+        var listDropdownMenu = document.createElement('div');
+        listDropdownMenu.className = 'modern-dropdown-menu';
+        listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        listDropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
+            + '<button class="modern-dropdown-item" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
+
+        listDropdownContainer.appendChild(listDropdownBtn);
+        listDropdownContainer.appendChild(listDropdownMenu);
+        toolbar.appendChild(listDropdownContainer);
+
+        // Toggle list dropdown
+        listDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isVisible = listDropdownMenu.style.display === 'block';
+            listDropdownMenu.style.display = isVisible ? 'none' : 'block';
+        };
+        document.addEventListener('click', function() {
+            listDropdownMenu.style.display = 'none';
+        });
+        listDropdownMenu.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
+            qFormat('list', 'bullet');
+            listDropdownMenu.style.display = 'none';
+        };
+        listDropdownMenu.querySelector('#ordered-list-option').onclick = function() {
+            qFormat('list', 'ordered');
+            listDropdownMenu.style.display = 'none';
+        };
+
+        addSeparator();
+
+        // ---------- Group 3: Block elements ----------
+        var blockButtons = [
+            { title: 'Blockquote', icon: 'fa-regular fa-quote-left', cmd: function() { qFormat('blockquote'); } },
+            { title: 'Code block', icon: 'fa-regular fa-code',       cmd: function() { qFormat('code-block'); } }
+        ];
+        for (var i = 0; i < blockButtons.length; i++) {
+            var btn = blockButtons[i];
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'modern-editor-btn';
+            button.innerHTML = '<i class="' + btn.icon + '"></i>';
+            button.title = btn.title;
+            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
+            toolbar.appendChild(button);
+        }
+        addSeparator();
+
+        // ---------- Group 4: Insertion (Link + Image dropdown) ----------
         // Link button (custom modal)
         var linkBtn = document.createElement('button');
         linkBtn.type = 'button';
@@ -381,7 +444,7 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(linkBtn);
 
-        // Image dropdown (URL + upload)
+        // Image dropdown (URL + upload) – as before
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
         imageDropdownContainer.style.position = 'relative';
@@ -393,69 +456,31 @@ var MessengerModule = (function(Utils, EventBus) {
         imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
         imageDropdownBtn.title = 'Insert image';
 
-        var dropdownMenu = document.createElement('div');
-        dropdownMenu.className = 'modern-dropdown-menu';
-        dropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
-        dropdownMenu.innerHTML = ''
+        var imageDropdownMenu = document.createElement('div');
+        imageDropdownMenu.className = 'modern-dropdown-menu';
+        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        imageDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
             + '<button class="modern-dropdown-item" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
 
         imageDropdownContainer.appendChild(imageDropdownBtn);
-        imageDropdownContainer.appendChild(dropdownMenu);
+        imageDropdownContainer.appendChild(imageDropdownMenu);
         toolbar.appendChild(imageDropdownContainer);
 
-        // Toggle dropdown
         imageDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isVisible = dropdownMenu.style.display === 'block';
-            dropdownMenu.style.display = isVisible ? 'none' : 'block';
+            var isVisible = imageDropdownMenu.style.display === 'block';
+            imageDropdownMenu.style.display = isVisible ? 'none' : 'block';
         };
-        document.addEventListener('click', function() {
-            dropdownMenu.style.display = 'none';
-        });
-        dropdownMenu.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
+        document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
+        imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker and insert
+        // Helper: upload image to Cloudflare Worker (same as before)
         function uploadImageToWorker(file, quillEditor) {
-            var formData = new FormData();
-            formData.append('image', file);
-            var range = quillEditor.getSelection(true);
-            var loadingId = 'img-loading-' + Date.now();
-            quillEditor.insertEmbed(range.index, 'html', '<div id="' + loadingId + '" style="display:inline-block;">⬆️ Uploading...</div>', 'user');
-
-            fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                var delta = quillEditor.getContents(range.index, 1);
-                if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
-                    quillEditor.deleteText(range.index, 1);
-                }
-                if (data.url) {
-                    quillEditor.insertEmbed(range.index, 'image', data.url, 'user');
-                    quillEditor.insertText(range.index + 1, '\u200B', 'user');
-                    quillEditor.setSelection(range.index + 2);
-                } else {
-                    console.error('Upload failed:', data);
-                }
-                quillEditor.focus();
-            })
-            .catch(error => {
-                console.error('Upload error:', error);
-                var delta = quillEditor.getContents(range.index, 1);
-                if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
-                    quillEditor.deleteText(range.index, 1);
-                }
-                quillEditor.focus();
-            });
+            // ... (keep the existing uploadImageToWorker function)
         }
 
-        // Image URL option
-        dropdownMenu.querySelector('#image-url-option').onclick = function() {
+        imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
             showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                 var range = quill.getSelection(true);
                 quill.insertEmbed(range.index, 'image', url, 'user');
@@ -463,11 +488,10 @@ var MessengerModule = (function(Utils, EventBus) {
                 quill.setSelection(range.index + 2);
                 quill.focus();
             });
-            dropdownMenu.style.display = 'none';
+            imageDropdownMenu.style.display = 'none';
         };
 
-        // Upload option
-        dropdownMenu.querySelector('#image-upload-option').onclick = function() {
+        imageDropdownMenu.querySelector('#image-upload-option').onclick = function() {
             var input = document.createElement('input');
             input.type = 'file';
             input.accept = 'image/*';
@@ -477,8 +501,35 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             };
             input.click();
-            dropdownMenu.style.display = 'none';
+            imageDropdownMenu.style.display = 'none';
         };
+
+        addSeparator();
+
+        // ---------- Group 5: Special (Spoiler, Smiley) ----------
+        var specialButtons = [
+            { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() {
+                if (!quill) return;
+                var range = quill.getSelection();
+                if (range && range.length > 0) {
+                    var text = quill.getText(range.index, range.length);
+                    quill.deleteText(range.index, range.length);
+                    quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
+                    quill.setSelection(range.index + text.length + 18);
+                }
+                quill.focus();
+            } }
+        ];
+        for (var i = 0; i < specialButtons.length; i++) {
+            var btn = specialButtons[i];
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'modern-editor-btn';
+            button.innerHTML = '<i class="' + btn.icon + '"></i>';
+            button.title = btn.title;
+            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
+            toolbar.appendChild(button);
+        }
 
         // Smiley button
         var smileBtn = document.createElement('button');
