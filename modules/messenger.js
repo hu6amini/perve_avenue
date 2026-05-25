@@ -223,17 +223,6 @@ var MessengerModule = (function(Utils, EventBus) {
         legacy = legacy.replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>');
         legacy = legacy.replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
 
-        // Lists (handle before block tags)
-        legacy = legacy.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, function(match, content) {
-            return '[list]' + content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1') + '[/list]';
-        });
-        legacy = legacy.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, function(match, content) {
-            return '[list=1]' + content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1') + '[/list]';
-        });
-
-        // Links and images
-        legacy = legacy.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[url=$1]$2[/url]');
-
         // Block elements — Quill emits <pre class="ql-syntax"> for code blocks
         legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
@@ -242,9 +231,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         // Text alignment / font / size / color
         legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
-        legacy = legacy.replace(/<span style="font-family:([^"]+)"[^>]*>(.*?)<\/span>/gi, '[font=$1]$2[/font]');
-        legacy = legacy.replace(/<span style="font-size:([0-9]+)px"[^>]*>(.*?)<\/span>/gi, '[size=$1]$2[/size]');
-        legacy = legacy.replace(/<span style="color:([^"]+)"[^>]*>(.*?)<\/span>/gi, '[color=$1]$2[/color]');
 
         // Paragraph handling — Quill wraps each line in <p>; treat as newline separator
         legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
