@@ -1,5 +1,5 @@
 // Messenger Module – Complete modern UI for all messenger sections
-// Compose editor powered by Quill (replaces TipTap which requires a bundler for UMD use)
+// Compose editor powered by Quill (enhanced with history, keyboard shortcuts, paste cleaning)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -33,7 +33,7 @@ var MessengerModule = (function(Utils, EventBus) {
             function doBuild() {
                 if (buildStarted) return;
                 buildStarted = true;
-                // No TipTap loading — Quill is a single static script already in <head>
+                // Quill is already loaded globally (assumed in <head>)
                 waitForGlobalFunctions()
                     .then(function() {
                         try {
@@ -260,7 +260,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION (Quill-based)
+    // COMPOSE SECTION (Quill-based, fully enhanced)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -342,7 +342,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (!url) return;
                 var range = quill.getSelection(true);
                 quill.insertEmbed(range.index, 'image', url, 'user');
-                quill.setSelection(range.index + 1);
+                // Insert a zero‑width space to make caret visible after image
+                quill.insertText(range.index + 1, '\u200B', 'user');
+                quill.setSelection(range.index + 2);
                 quill.focus();
             }},
             { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
@@ -412,15 +414,55 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // ---- Initialise Quill ----
+        // ---- Initialise Quill with enhanced modules ----
         quill = new window.Quill(editorElement, {
             modules: {
                 toolbar: false,          // we drive formatting from our own toolbar
-                keyboard: { bindings: {} }
+                history: {
+                    delay: 1000,
+                    maxStack: 100,
+                    userOnly: true
+                },
+                clipboard: {
+                    // Custom matcher to clean pasted content
+                    matchers: [
+                        function(node, delta) {
+                            // Remove unwanted formats on paste
+                            delta.ops.forEach(function(op) {
+                                if (op.attributes) {
+                                    delete op.attributes.font;
+                                    delete op.attributes.size;
+                                    delete op.attributes.color;
+                                    delete op.attributes.background;
+                                }
+                            });
+                            return delta;
+                        }
+                    ]
+                }
             },
             placeholder: '💬 Write your message...',
-            // No theme — keeps the DOM minimal; we supply our own CSS
+            formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
+
+        // Add custom keyboard shortcut for spoiler (Ctrl+Shift+S)
+        if (quill.keyboard) {
+            quill.keyboard.addBinding({
+                key: 'S',
+                shortKey: true,
+                shiftKey: true
+            }, function() {
+                var range = quill.getSelection();
+                if (range && range.length > 0) {
+                    var text = quill.getText(range.index, range.length);
+                    quill.deleteText(range.index, range.length);
+                    quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
+                    quill.setSelection(range.index + text.length + 18);
+                }
+                quill.focus();
+                return false;
+            });
+        }
 
         // Load any pre-existing content (e.g. when replying to a message)
         var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
@@ -636,7 +678,7 @@ var MessengerModule = (function(Utils, EventBus) {
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
 
-            if (modernFolder && folderSelector && folderForm) {
+            if (modernFolder && folderSelect && folderForm) {
                 modernFolder.addEventListener('change', function() {
                     folderSelect.value = this.value;
                     folderForm.submit();
