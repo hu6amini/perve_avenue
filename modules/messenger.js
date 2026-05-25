@@ -33,7 +33,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (buildStarted) return;
                 buildStarted = true;
                 waitForGlobalFunctions()
-                    .then(waitForTiptap)
+                    .then(loadTiptap)
                     .then(function() {
                         try {
                             buildModernMessenger();
@@ -162,19 +162,35 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    function waitForTiptap() {
-        return new Promise(function(resolve) {
-            if (window.Tiptap && window.Tiptap.Editor) {
+    function loadTiptap() {
+        return new Promise(function(resolve, reject) {
+            if (window.Tiptap && window.Tiptap.Editor && window.TiptapStarterKit && window.TiptapPlaceholder) {
                 resolve();
                 return;
             }
-            var interval = setInterval(function() {
-                if (window.Tiptap && window.Tiptap.Editor) {
-                    clearInterval(interval);
-                    resolve();
+
+            var scripts = [
+                'https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js',
+                'https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js',
+                'https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js'
+            ];
+
+            var loaded = 0;
+            function onLoad() {
+                loaded++;
+                if (loaded === scripts.length) {
+                    // Small delay to ensure globals are attached
+                    setTimeout(resolve, 50);
                 }
-            }, 50);
-            setTimeout(function() { clearInterval(interval); resolve(); }, 5000);
+            }
+
+            for (var i = 0; i < scripts.length; i++) {
+                var script = document.createElement('script');
+                script.src = scripts[i];
+                script.onload = onLoad;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            }
         });
     }
 
