@@ -1666,8 +1666,8 @@ input[type="radio"]:checked::before {
     padding-right: var(--space-lg);
 }
 
-/* TipTap editor base */
-.ProseMirror {
+/* Quill editor base */
+.ql-editor {
     outline: none;
     min-height: 100px;
     max-height: 500px;
@@ -1677,28 +1677,35 @@ input[type="radio"]:checked::before {
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
+    /* Quill adds its own padding; reset it to match your design */
+    padding: var(--space-sm) var(--space-md);
+    overflow-y: auto;
 }
 
-.ProseMirror p.is-editor-empty:first-child::before {
+/* Placeholder — Quill uses data-placeholder on .ql-editor itself */
+.ql-editor.ql-blank::before {
     content: attr(data-placeholder);
     float: left;
     color: var(--text-tertiary);
     pointer-events: none;
     height: 0;
+    font-style: normal; /* Quill italicises it by default; override if needed */
 }
 
-.ProseMirror ul, .ProseMirror ol {
+.ql-editor ul,
+.ql-editor ol {
     padding-left: var(--space-lg);
 }
 
-.ProseMirror blockquote {
+.ql-editor blockquote {
     border-left: 3px solid var(--primary-color);
     margin: var(--space-sm) 0;
     padding-left: var(--space-md);
     color: var(--text-secondary);
 }
 
-.ProseMirror pre {
+/* Quill wraps code blocks in <pre class="ql-syntax"> */
+.ql-editor pre.ql-syntax {
     background: var(--bg-color);
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
