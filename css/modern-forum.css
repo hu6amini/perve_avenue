@@ -882,6 +882,10 @@ body.modal-open {
     padding-right: var(--scrollbar-width, 0px);
 }
 
+.modern-dropdown {
+    vertical-align: middle;
+}
+
 .modern-dropdown-menu {
     display: none;
 }
@@ -1692,6 +1696,16 @@ input[type="radio"]:checked::before {
     padding: var(--pad-4) var(--pad-6);
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-color);
+    align-items: center; 
+}
+
+.toolbar-separator {
+    display: inline-block;
+    width: 1px;
+    height: 1.5rem;
+    background: var(--border-color);
+    margin: 0 var(--space-sm);
+    vertical-align: middle;
 }
 
 .modern-editor-btn {
