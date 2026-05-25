@@ -547,8 +547,15 @@ var MessengerModule = (function(Utils, EventBus) {
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
 
-                // --- Active state for toolbar buttons (insert here) ---
+        // --- Active state for toolbar buttons (insert here) ---
         function updateToolbarActiveStates() {
+            var range = quill.getSelection();
+            if (!range) {
+                // No selection – clear all active states
+                var btns = document.querySelectorAll('#compose-section .modern-editor-btn');
+                btns.forEach(function(btn) { btn.classList.remove('active'); });
+                return;
+            }
             var formats = quill.getFormat();
             var buttons = document.querySelectorAll('#compose-section .modern-editor-btn');
 
