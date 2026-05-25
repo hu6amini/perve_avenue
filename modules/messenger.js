@@ -547,6 +547,37 @@ var MessengerModule = (function(Utils, EventBus) {
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
         });
 
+                // --- Active state for toolbar buttons (insert here) ---
+        function updateToolbarActiveStates() {
+            var formats = quill.getFormat();
+            var buttons = document.querySelectorAll('#compose-section .modern-editor-btn');
+
+            buttons.forEach(function(btn) {
+                var title = btn.getAttribute('title');
+                var active = false;
+
+                if (title === 'Bold') active = !!formats.bold;
+                else if (title === 'Italic') active = !!formats.italic;
+                else if (title === 'Underline') active = !!formats.underline;
+                else if (title === 'Strikethrough') active = !!formats.strike;
+                else if (title === 'Blockquote') active = !!formats.blockquote;
+                else if (title === 'Code block') active = !!formats['code-block'];
+                else if (title === 'Bullet list') active = (formats.list === 'bullet');
+                else if (title === 'Ordered list') active = (formats.list === 'ordered');
+
+                if (active) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        quill.on('selection-change', updateToolbarActiveStates);
+        quill.on('text-change', updateToolbarActiveStates);
+        updateToolbarActiveStates();  // initial state
+        
+
         // Drag & Drop support
         var editorRoot = quill.root;
         editorRoot.setAttribute('dropzone', 'copy');
