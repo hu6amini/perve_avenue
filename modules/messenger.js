@@ -325,28 +325,98 @@ var MessengerModule = (function(Utils, EventBus) {
             quill.focus();
         }
 
-        // Helper: custom modal
+        // Helper: custom modal for link / image URL
         function showInputModal(title, placeholder, callback) {
-            // ... (same as before, keep it)
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
+
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
+                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
+                + '</div>';
+
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+
+            var input = modalBox.querySelector('#modal-input');
+            input.focus();
+
+            function close() {
+                modalOverlay.remove();
+            }
+
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var val = input.value.trim();
+                if (val) callback(val);
+                close();
+            };
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
+            });
         }
 
-        // ---------- Helper: create a separator ----------
+        // Helper: upload image to Cloudflare Worker
+        function uploadImageToWorker(file, quillEditor) {
+            var formData = new FormData();
+            formData.append('image', file);
+            var range = quillEditor.getSelection(true);
+            var loadingId = 'img-loading-' + Date.now();
+            quillEditor.insertEmbed(range.index, 'html', '<div id="' + loadingId + '" style="display:inline-block;">⬆️ Uploading...</div>', 'user');
+
+            fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                var delta = quillEditor.getContents(range.index, 1);
+                if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
+                    quillEditor.deleteText(range.index, 1);
+                }
+                if (data.url) {
+                    quillEditor.insertEmbed(range.index, 'image', data.url, 'user');
+                    quillEditor.insertText(range.index + 1, '\u200B', 'user');
+                    quillEditor.setSelection(range.index + 2);
+                } else {
+                    console.error('Upload failed:', data);
+                }
+                quillEditor.focus();
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                var delta = quillEditor.getContents(range.index, 1);
+                if (delta && delta.ops[0] && delta.ops[0].insert.html && delta.ops[0].insert.html.includes(loadingId)) {
+                    quillEditor.deleteText(range.index, 1);
+                }
+                quillEditor.focus();
+            });
+        }
+
         function addSeparator() {
             var sep = document.createElement('span');
             sep.className = 'toolbar-separator';
-            sep.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);';
+            sep.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);display:inline-block;vertical-align:middle;';
             toolbar.appendChild(sep);
         }
 
         // ---------- Group 1: Text formatting ----------
-        var formatButtons = [
+        var group1 = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { qFormat('bold'); } },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { qFormat('italic'); } },
             { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { qFormat('underline'); } },
             { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } }
         ];
-        for (var i = 0; i < formatButtons.length; i++) {
-            var btn = formatButtons[i];
+        for (var i = 0; i < group1.length; i++) {
+            var btn = group1[i];
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'modern-editor-btn';
@@ -357,7 +427,8 @@ var MessengerModule = (function(Utils, EventBus) {
         }
         addSeparator();
 
-        // ---------- Group 2: Lists (dropdown) ----------
+        // ---------- Group 2: Lists (dropdown) + Blockquote + Code ----------
+        // List dropdown (Bullet / Ordered)
         var listDropdownContainer = document.createElement('div');
         listDropdownContainer.className = 'modern-dropdown';
         listDropdownContainer.style.position = 'relative';
@@ -380,7 +451,6 @@ var MessengerModule = (function(Utils, EventBus) {
         listDropdownContainer.appendChild(listDropdownMenu);
         toolbar.appendChild(listDropdownContainer);
 
-        // Toggle list dropdown
         listDropdownBtn.onclick = function(e) {
             e.stopPropagation();
             var isVisible = listDropdownMenu.style.display === 'block';
@@ -389,9 +459,7 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() {
             listDropdownMenu.style.display = 'none';
         });
-        listDropdownMenu.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
+        listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
             qFormat('list', 'bullet');
@@ -402,27 +470,28 @@ var MessengerModule = (function(Utils, EventBus) {
             listDropdownMenu.style.display = 'none';
         };
 
+        // Blockquote
+        var blockquoteBtn = document.createElement('button');
+        blockquoteBtn.type = 'button';
+        blockquoteBtn.className = 'modern-editor-btn';
+        blockquoteBtn.innerHTML = '<i class="fa-regular fa-quote-left"></i>';
+        blockquoteBtn.title = 'Blockquote';
+        blockquoteBtn.onclick = function() { qFormat('blockquote'); };
+        toolbar.appendChild(blockquoteBtn);
+
+        // Code block
+        var codeBtn = document.createElement('button');
+        codeBtn.type = 'button';
+        codeBtn.className = 'modern-editor-btn';
+        codeBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
+        codeBtn.title = 'Code block';
+        codeBtn.onclick = function() { qFormat('code-block'); };
+        toolbar.appendChild(codeBtn);
+
         addSeparator();
 
-        // ---------- Group 3: Block elements ----------
-        var blockButtons = [
-            { title: 'Blockquote', icon: 'fa-regular fa-quote-left', cmd: function() { qFormat('blockquote'); } },
-            { title: 'Code block', icon: 'fa-regular fa-code',       cmd: function() { qFormat('code-block'); } }
-        ];
-        for (var i = 0; i < blockButtons.length; i++) {
-            var btn = blockButtons[i];
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'modern-editor-btn';
-            button.innerHTML = '<i class="' + btn.icon + '"></i>';
-            button.title = btn.title;
-            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
-            toolbar.appendChild(button);
-        }
-        addSeparator();
-
-        // ---------- Group 4: Insertion (Link + Image dropdown) ----------
-        // Link button (custom modal)
+        // ---------- Group 3: Link + Image (dropdown) ----------
+        // Link button
         var linkBtn = document.createElement('button');
         linkBtn.type = 'button';
         linkBtn.className = 'modern-editor-btn';
@@ -444,7 +513,7 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(linkBtn);
 
-        // Image dropdown (URL + upload) – as before
+        // Image dropdown
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
         imageDropdownContainer.style.position = 'relative';
@@ -475,11 +544,6 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker (same as before)
-        function uploadImageToWorker(file, quillEditor) {
-            // ... (keep the existing uploadImageToWorker function)
-        }
-
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
             showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                 var range = quill.getSelection(true);
@@ -506,32 +570,25 @@ var MessengerModule = (function(Utils, EventBus) {
 
         addSeparator();
 
-        // ---------- Group 5: Special (Spoiler, Smiley) ----------
-        var specialButtons = [
-            { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() {
-                if (!quill) return;
-                var range = quill.getSelection();
-                if (range && range.length > 0) {
-                    var text = quill.getText(range.index, range.length);
-                    quill.deleteText(range.index, range.length);
-                    quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
-                    quill.setSelection(range.index + text.length + 18);
-                }
-                quill.focus();
-            } }
-        ];
-        for (var i = 0; i < specialButtons.length; i++) {
-            var btn = specialButtons[i];
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'modern-editor-btn';
-            button.innerHTML = '<i class="' + btn.icon + '"></i>';
-            button.title = btn.title;
-            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
-            toolbar.appendChild(button);
-        }
+        // ---------- Group 4: Spoiler + Smiley ----------
+        var spoilerBtn = document.createElement('button');
+        spoilerBtn.type = 'button';
+        spoilerBtn.className = 'modern-editor-btn';
+        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+        spoilerBtn.title = 'Spoiler';
+        spoilerBtn.onclick = function() {
+            if (!quill) return;
+            var range = quill.getSelection();
+            if (range && range.length > 0) {
+                var text = quill.getText(range.index, range.length);
+                quill.deleteText(range.index, range.length);
+                quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
+                quill.setSelection(range.index + text.length + 18);
+            }
+            quill.focus();
+        };
+        toolbar.appendChild(spoilerBtn);
 
-        // Smiley button
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
