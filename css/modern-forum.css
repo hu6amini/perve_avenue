@@ -1736,14 +1736,9 @@ input[type="radio"]:checked::before {
 
 /* Active state for toggle buttons */
 .modern-editor-btn.active {
-    background: var(--primary-color);
+    background: var(--surface-color);
     border-color: var(--primary-color);
-    color: white;
-}
-
-/* Ensure the icon inside also becomes white */
-.modern-editor-btn.active i {
-    color: white;
+    color: var(--primary-color);
 }
 
 /* ----- Quill editor styling (overrides) ----- */
