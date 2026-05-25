@@ -414,7 +414,7 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // ---- Initialise Quill with enhanced modules ----
+        // ---- Initialise Quill with essential modules ----
         quill = new window.Quill(editorElement, {
             modules: {
                 toolbar: false,          // we drive formatting from our own toolbar
@@ -422,24 +422,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     delay: 1000,
                     maxStack: 100,
                     userOnly: true
-                },
-                clipboard: {
-                    // Custom matcher to clean pasted content
-                    matchers: [
-                        function(node, delta) {
-                            // Remove unwanted formats on paste
-                            delta.ops.forEach(function(op) {
-                                if (op.attributes) {
-                                    delete op.attributes.font;
-                                    delete op.attributes.size;
-                                    delete op.attributes.color;
-                                    delete op.attributes.background;
-                                }
-                            });
-                            return delta;
-                        }
-                    ]
                 }
+                // clipboard: removed custom matcher to avoid errors
             },
             placeholder: '💬 Write your message...',
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
