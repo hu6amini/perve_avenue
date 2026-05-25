@@ -336,37 +336,33 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
                 quill.focus();
             }},
-{ title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() {
-    if (!quill) return;
-    var url = prompt('Enter image URL:');
-    if (!url) return;
-    
-    // Create a temporary image to get dimensions
-    var tempImg = new Image();
-    tempImg.onload = function() {
-        var width = this.naturalWidth;
-        var height = this.naturalHeight;
-        var range = quill.getSelection(true);
-        // Insert a custom HTML element with attributes
-        var imgHtml = '<img src="' + escapeHtml(url) + '" width="' + width + '" height="' + height + '" loading="lazy" decoding="async" alt="">';
-        quill.clipboard.dangerouslyPasteHTML(range.index, imgHtml);
-        quill.setSelection(range.index + 1);
-        quill.focus();
-    };
-    tempImg.onerror = function() {
-        // Fallback: insert without dimensions
-        var range = quill.getSelection(true);
-        var imgHtml = '<img src="' + escapeHtml(url) + '" loading="lazy" decoding="async" alt="">';
-        quill.clipboard.dangerouslyPasteHTML(range.index, imgHtml);
-        quill.setSelection(range.index + 1);
-        quill.focus();
-    };
-    tempImg.src = url;
-} },
+            { title: 'Image URL',      icon: 'fa-regular fa-image',         cmd: function() {
+                if (!quill) return;
+                var url = prompt('Enter image URL:');
+                if (!url) return;
+                var range = quill.getSelection(true);
+                // Insert image with dimensions and lazy loading
+                var tempImg = new Image();
+                tempImg.onload = function() {
+                    var width = this.naturalWidth;
+                    var height = this.naturalHeight;
+                    var imgHtml = '<img src="' + escapeHtml(url) + '" width="' + width + '" height="' + height + '" loading="lazy" decoding="async" alt="">';
+                    quill.clipboard.dangerouslyPasteHTML(range.index, imgHtml);
+                    quill.setSelection(range.index + 1);
+                    quill.focus();
+                };
+                tempImg.onerror = function() {
+                    // Fallback: insert without dimensions
+                    var imgHtml = '<img src="' + escapeHtml(url) + '" loading="lazy" decoding="async" alt="">';
+                    quill.clipboard.dangerouslyPasteHTML(range.index, imgHtml);
+                    quill.setSelection(range.index + 1);
+                    quill.focus();
+                };
+                tempImg.src = url;
+            }},
             { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
             { title: 'Code block',     icon: 'fa-regular fa-code',          cmd: function() { qFormat('code-block'); } },
             { title: 'Spoiler',        icon: 'fa-regular fa-eye-slash',     cmd: function() {
-                // Quill has no native spoiler; insert BBCode text directly
                 if (!quill) return;
                 var range = quill.getSelection();
                 if (range && range.length > 0) {
@@ -439,7 +435,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     maxStack: 100,
                     userOnly: true
                 }
-                // clipboard: removed custom matcher to avoid errors
             },
             placeholder: '💬 Write your message...',
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
@@ -463,6 +458,23 @@ var MessengerModule = (function(Utils, EventBus) {
                 return false;
             });
         }
+
+        // Post‑process any images added by paste/drag (lazy loading + decoding)
+        var imageObserver = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                mutation.addedNodes.forEach(function(node) {
+                    if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'IMG') {
+                        node.setAttribute('loading', 'lazy');
+                        node.setAttribute('decoding', 'async');
+                        if (!node.getAttribute('width') && node.complete && node.naturalWidth) {
+                            node.setAttribute('width', node.naturalWidth);
+                            node.setAttribute('height', node.naturalHeight);
+                        }
+                    }
+                });
+            });
+        });
+        imageObserver.observe(quill.root, { childList: true, subtree: true });
 
         // Load any pre-existing content (e.g. when replying to a message)
         var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
