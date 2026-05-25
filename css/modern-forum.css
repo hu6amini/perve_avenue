@@ -1718,6 +1718,7 @@ input[type="radio"]:checked::before {
     transition: all 0.2s ease;
     text-align: left;
     caret-color: auto;
+    position: relative;
 }
 
 .modern-wysiwyg:focus {
@@ -1733,11 +1734,13 @@ input[type="radio"]:checked::before {
     pointer-events: none;
     font-family: var(--font-primary);
     font-size: var(--text-base);
-    display: block;
+    position: absolute; 
+    top: var(--pad-4); 
+    left: var(--pad-4);
 }
 
 .modern-wysiwyg:focus:empty::before {
-    content: ""; 
+    display: none;
 }
 
 body#msg input::placeholder {
