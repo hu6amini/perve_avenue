@@ -1,10 +1,11 @@
 // Messenger Module – Complete modern UI for all messenger sections
-// Compose editor powered by TipTap (WYSIWYG), Messages and Contacts transformed
+// Compose editor powered by Quill (replaces TipTap which requires a bundler for UMD use)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
     var observerCallbacks = [];
+    var _originalEmoticon = null; // saved so reset() can restore it
 
     // Detect current section once, module-wide
     var currentUrl = window.location.href;
@@ -32,8 +33,8 @@ var MessengerModule = (function(Utils, EventBus) {
             function doBuild() {
                 if (buildStarted) return;
                 buildStarted = true;
+                // No TipTap loading — Quill is a single static script already in <head>
                 waitForGlobalFunctions()
-                    .then(loadTiptap)
                     .then(function() {
                         try {
                             buildModernMessenger();
@@ -50,14 +51,8 @@ var MessengerModule = (function(Utils, EventBus) {
 
             function waitForEnhancer() {
                 return new Promise(function(res) {
-                    if (document.getElementById('modern-forum-wrapper')) {
-                        res();
-                        return;
-                    }
-                    function onReady() {
-                        window.removeEventListener('forum:enhancer:ready', onReady);
-                        res();
-                    }
+                    if (document.getElementById('modern-forum-wrapper')) { res(); return; }
+                    function onReady() { window.removeEventListener('forum:enhancer:ready', onReady); res(); }
                     window.addEventListener('forum:enhancer:ready', onReady);
                     setTimeout(res, 2000);
                 });
@@ -65,14 +60,9 @@ var MessengerModule = (function(Utils, EventBus) {
 
             waitForEnhancer().then(function() {
                 if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                    var targetSelector = '';
-                    if (currentSection === 'messages') {
-                        targetSelector = '.big_list .row-mp';
-                    } else if (currentSection === 'contacts') {
-                        targetSelector = 'textarea[name="can_contact"]';
-                    } else {
-                        targetSelector = '.cp.send, #Post';
-                    }
+                    var targetSelector = currentSection === 'messages' ? '.big_list .row-mp'
+                                       : currentSection === 'contacts' ? 'textarea[name="can_contact"]'
+                                       : '.cp.send, #Post';
 
                     var observerId = globalThis.forumObserver.register({
                         id: 'messenger-init',
@@ -81,44 +71,20 @@ var MessengerModule = (function(Utils, EventBus) {
                         callback: function() {
                             if (!isInitialized && !document.getElementById('modern-messenger')) {
                                 globalThis.forumObserver.unregister(observerId);
-                                if (currentSection === 'compose') {
-                                    if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                                        setTimeout(doBuild, 0);
-                                    } else {
-                                        window.addEventListener('load', doBuild, { once: true });
-                                    }
-                                } else {
-                                    setTimeout(doBuild, 0);
-                                }
+                                triggerBuild();
                             }
                         }
                     });
 
                     if (document.querySelector(targetSelector)) {
                         globalThis.forumObserver.unregister(observerId);
-                        if (currentSection === 'compose') {
-                            if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                                setTimeout(doBuild, 0);
-                            } else {
-                                window.addEventListener('load', doBuild, { once: true });
-                            }
-                        } else {
-                            setTimeout(doBuild, 0);
-                        }
+                        triggerBuild();
                     }
 
                     setTimeout(function() {
                         if (!isInitialized && !document.getElementById('modern-messenger')) {
                             if (observerId) globalThis.forumObserver.unregister(observerId);
-                            if (currentSection === 'compose') {
-                                if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                                    doBuild();
-                                } else {
-                                    window.addEventListener('load', doBuild, { once: true });
-                                }
-                            } else {
-                                doBuild();
-                            }
+                            triggerBuild();
                         }
                     }, 1500);
                 } else {
@@ -128,12 +94,30 @@ var MessengerModule = (function(Utils, EventBus) {
                         doBuild();
                     }
                 }
+
+                function triggerBuild() {
+                    if (currentSection === 'compose') {
+                        // For compose, wait until the forum's inline globals are ready
+                        if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
+                            setTimeout(doBuild, 0);
+                        } else {
+                            window.addEventListener('load', doBuild, { once: true });
+                        }
+                    } else {
+                        setTimeout(doBuild, 0);
+                    }
+                }
             });
         });
     }
 
     function reset() {
         isInitialized = false;
+        // Restore original emoticon handler if we overrode it
+        if (_originalEmoticon !== null) {
+            window.emoticon = _originalEmoticon;
+            _originalEmoticon = null;
+        }
         observerCallbacks.forEach(function(id) {
             if (globalThis.forumObserver && typeof globalThis.forumObserver.unregister === 'function') {
                 globalThis.forumObserver.unregister(id);
@@ -142,10 +126,9 @@ var MessengerModule = (function(Utils, EventBus) {
         observerCallbacks = [];
     }
 
+    // Only poll for compose-page globals on the compose page — they don't exist on other pages
     function waitForGlobalFunctions() {
-        if (currentSection !== 'compose') {
-            return Promise.resolve();
-        }
+        if (currentSection !== 'compose') return Promise.resolve();
         return new Promise(function(resolve) {
             var maxAttempts = 100;
             var attempt = 0;
@@ -153,7 +136,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
                     resolve();
                 } else if (++attempt >= maxAttempts) {
-                    resolve();
+                    resolve(); // give up gracefully
                 } else {
                     setTimeout(check, 100);
                 }
@@ -162,56 +145,20 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    function loadTiptap() {
-        return new Promise(function(resolve, reject) {
-            if (window.Tiptap && window.Tiptap.Editor && window.TiptapStarterKit && window.TiptapPlaceholder) {
-                resolve();
-                return;
-            }
-
-            var scripts = [
-                'https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js',
-                'https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js',
-                'https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js'
-            ];
-
-            var loaded = 0;
-            function onLoad() {
-                loaded++;
-                if (loaded === scripts.length) {
-                    // Small delay to ensure globals are attached
-                    setTimeout(resolve, 50);
-                }
-            }
-
-            for (var i = 0; i < scripts.length; i++) {
-                var script = document.createElement('script');
-                script.src = scripts[i];
-                script.onload = onLoad;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            }
-        });
-    }
-
     // ------------------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------------------
     function escapeHtml(str) {
         if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
+        return str.replace(/[&<>"']/g, function(m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
         });
     }
 
     function formatDate(dateStr) {
-        if (!dateStr) return 'Unknown';
+        if (!dateStr) return '';
         try {
-            var date = new Date(dateStr);
-            return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+            return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
         } catch(e) { return dateStr; }
     }
 
@@ -221,15 +168,11 @@ var MessengerModule = (function(Utils, EventBus) {
             var el = document.querySelector(selector);
             if (el) { resolve(el); return; }
             var elapsed = 0;
-            var interval = 50;
             var timer = setInterval(function() {
                 el = document.querySelector(selector);
-                elapsed += interval;
-                if (el || elapsed >= maxMs) {
-                    clearInterval(timer);
-                    resolve(el || null);
-                }
-            }, interval);
+                elapsed += 50;
+                if (el || elapsed >= maxMs) { clearInterval(timer); resolve(el || null); }
+            }, 50);
         });
     }
 
@@ -242,7 +185,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML) – for compose only
+    // CONVERTERS (Legacy BBCode / forum HTML ↔ HTML)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -258,7 +201,7 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
         html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
-        html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
+        html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<details><summary>Spoiler</summary>$1</details>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
         html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gi, '<span style="font-family:$1">$2</span>');
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gi, '<span style="font-size:$1px">$2</span>');
@@ -272,56 +215,69 @@ var MessengerModule = (function(Utils, EventBus) {
         var div = document.createElement('div');
         div.innerHTML = html;
         var legacy = div.innerHTML;
-        legacy = legacy.replace(/<strong>(.*?)<\/strong>/gi, '<b>$1</b>')
-                       .replace(/<em>(.*?)<\/em>/gi, '<i>$1</i>')
-                       .replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>')
-                       .replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>')
-                       .replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
-        legacy = legacy.replace(/<ul>(.*?)<\/ul>/gis, function(match, content) {
-            var items = content.replace(/<li>(.*?)<\/li>/gi, '[*]$1');
-            return '[list]' + items + '[/list]';
+
+        // Inline formatting
+        legacy = legacy.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<b>$1</b>');
+        legacy = legacy.replace(/<em[^>]*>(.*?)<\/em>/gi, '<i>$1</i>');
+        legacy = legacy.replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>');
+        legacy = legacy.replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>');
+        legacy = legacy.replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
+
+        // Lists (handle before block tags)
+        legacy = legacy.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, function(match, content) {
+            return '[list]' + content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1') + '[/list]';
         });
-        legacy = legacy.replace(/<ol>(.*?)<\/ol>/gis, function(match, content) {
-            var items = content.replace(/<li>(.*?)<\/li>/gi, '[*]$1');
-            return '[list=1]' + items + '[/list]';
+        legacy = legacy.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, function(match, content) {
+            return '[list=1]' + content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '[*]$1') + '[/list]';
         });
+
+        // Links and images
         legacy = legacy.replace(/<a href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[url=$1]$2[/url]');
-        legacy = legacy.replace(/<img src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
-        legacy = legacy.replace(/<blockquote>(.*?)<\/blockquote>/gis, '[quote]$1[/quote]');
-        legacy = legacy.replace(/<pre><code>(.*?)<\/code><\/pre>/gis, '[code]$1[/code]');
-        legacy = legacy.replace(/<div class="spoiler">(.*?)<\/div>/gis, '[spoiler]$1[/spoiler]');
-        legacy = legacy.replace(/<div style="text-align:center">(.*?)<\/div>/gis, '[CENTER]$1[/CENTER]');
-        legacy = legacy.replace(/<span style="font-family:([^"]+)">(.*?)<\/span>/gi, '[font=$1]$2[/font]');
-        legacy = legacy.replace(/<span style="font-size:([0-9]+)px">(.*?)<\/span>/gi, '[size=$1]$2[/size]');
-        legacy = legacy.replace(/<span style="color:([^"]+)">(.*?)<\/span>/gi, '[color=$1]$2[/color]');
-        legacy = legacy.replace(/<a href="mailto:([^"]+)"[^>]*>(.*?)<\/a>/gi, '[EMAIL]$1[/EMAIL]');
-        legacy = legacy.replace(/<div>/gi, '').replace(/<\/div>/gi, '');
-        legacy = legacy.replace(/<p>/gi, '').replace(/<\/p>/gi, '');
+        legacy = legacy.replace(/<img[^>]+src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
+
+        // Block elements — Quill emits <pre class="ql-syntax"> for code blocks
+        legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
+        legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
+        legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
+        legacy = legacy.replace(/<details[^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/gi, '[SPOILER]$1[/SPOILER]');
+
+        // Text alignment / font / size / color
+        legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
+        legacy = legacy.replace(/<span style="font-family:([^"]+)"[^>]*>(.*?)<\/span>/gi, '[font=$1]$2[/font]');
+        legacy = legacy.replace(/<span style="font-size:([0-9]+)px"[^>]*>(.*?)<\/span>/gi, '[size=$1]$2[/size]');
+        legacy = legacy.replace(/<span style="color:([^"]+)"[^>]*>(.*?)<\/span>/gi, '[color=$1]$2[/color]');
+
+        // Paragraph handling — Quill wraps each line in <p>; treat as newline separator
+        legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
+        legacy = legacy.replace(/<\/p>/gi, '\n');
+        legacy = legacy.replace(/<p[^>]*>/gi, '');
+
+        // Remaining structural tags
+        legacy = legacy.replace(/<div[^>]*>/gi, '').replace(/<\/div>/gi, '');
         legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
+
         return legacy.trim();
     }
 
     // ------------------------------------------------------------------------
-    // MODERN SECTION BUILDERS
+    // COMPOSE SECTION (Quill-based)
     // ------------------------------------------------------------------------
-
-    // ----- COMPOSE SECTION (TipTap based) -----
     function buildComposeSection() {
-        var recipientInput = document.querySelector('input[name="entered_name"]');
-        var contactSelect = document.querySelector('select[name="from_contact"]');
-        var titleInput = document.querySelector('input[name="msg_title"]');
+        var recipientInput   = document.querySelector('input[name="entered_name"]');
+        var contactSelect    = document.querySelector('select[name="from_contact"]');
+        var titleInput       = document.querySelector('input[name="msg_title"]');
         var originalTextarea = document.getElementById('Post');
-        var addSentCheckbox = document.getElementById('add_sent');
+        var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
-        var submitButton = document.querySelector('input[name="sub_mit"]');
+        var submitButton  = document.querySelector('input[name="sub_mit"]');
         var previewButton = document.querySelector('button[name="preview"]');
-        var originalForm = window.REPLIER;
+        var originalForm  = window.REPLIER;
 
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Recipient & Title row
+        // Recipient + Subject row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -335,46 +291,76 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(recipientRow);
 
-        // Toolbar
+        // Toolbar (defined before quill so closures capture the var reference)
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
 
-        var editor = null;
+        // quill is set below after the editor element exists
+        var quill = null;
 
-        function exec(cmd) {
-            if (!editor) return;
-            cmd();
-            editor.commands.focus();
+        function qFormat(format, value) {
+            if (!quill) return;
+            var cur = quill.getFormat();
+            quill.format(format, value !== undefined ? value : !cur[format]);
+            quill.focus();
         }
 
         var buttons = [
-            { title: 'Bold', icon: 'fa-regular fa-bold', cmd: function() { exec(function() { editor.chain().focus().toggleBold().run(); }); } },
-            { title: 'Italic', icon: 'fa-regular fa-italic', cmd: function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); } },
-            { title: 'Underline', icon: 'fa-regular fa-underline', cmd: function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); } },
-            { title: 'Strikethrough', icon: 'fa-regular fa-strikethrough', cmd: function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); } },
-            { title: 'List UL', icon: 'fa-regular fa-list', cmd: function() { exec(function() { editor.chain().focus().toggleBulletList().run(); }); } },
-            { title: 'List OL', icon: 'fa-regular fa-list-ol', cmd: function() { exec(function() { editor.chain().focus().toggleOrderedList().run(); }); } },
-            { title: 'Link', icon: 'fa-regular fa-link', cmd: function() { var url = prompt('Enter URL:'); if (url) exec(function() { editor.chain().focus().setLink({ href: url }).run(); }); } },
-            { title: 'Image URL', icon: 'fa-regular fa-image', cmd: function() { var url = prompt('Enter image URL:'); if (url) exec(function() { editor.chain().focus().setImage({ src: url }).run(); }); } },
-            { title: 'Quote', icon: 'fa-regular fa-quote-left', cmd: function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); } },
-            { title: 'Code', icon: 'fa-regular fa-code', cmd: function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); } },
-            { title: 'Spoiler', icon: 'fa-regular fa-eye-slash', cmd: function() {
-                // Simple spoiler: wrap selected text in <div class="spoiler">
-                var selection = window.getSelection();
-                if (!selection.rangeCount) return;
-                var range = selection.getRangeAt(0);
-                var selectedText = range.toString();
-                if (!selectedText) return;
-                var wrapper = document.createElement('div');
-                wrapper.className = 'spoiler';
-                wrapper.textContent = selectedText;
-                range.deleteContents();
-                range.insertNode(wrapper);
-                editor.commands.focus();
-            } }
+            { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { qFormat('bold'); } },
+            { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { qFormat('italic'); } },
+            { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { qFormat('underline'); } },
+            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { qFormat('strike'); } },
+            { title: 'Bullet list',    icon: 'fa-regular fa-list',          cmd: function() {
+                if (!quill) return;
+                var f = quill.getFormat();
+                quill.format('list', f.list === 'bullet' ? false : 'bullet');
+                quill.focus();
+            }},
+            { title: 'Ordered list',   icon: 'fa-regular fa-list-ol',       cmd: function() {
+                if (!quill) return;
+                var f = quill.getFormat();
+                quill.format('list', f.list === 'ordered' ? false : 'ordered');
+                quill.focus();
+            }},
+            { title: 'Link',           icon: 'fa-regular fa-link',          cmd: function() {
+                if (!quill) return;
+                var url = prompt('Enter URL:');
+                if (!url) return;
+                var range = quill.getSelection();
+                if (range && range.length > 0) {
+                    quill.format('link', url);
+                } else {
+                    var idx = range ? range.index : quill.getLength();
+                    quill.insertText(idx, url, 'link', url);
+                    quill.setSelection(idx + url.length);
+                }
+                quill.focus();
+            }},
+            { title: 'Image URL',      icon: 'fa-regular fa-image',         cmd: function() {
+                if (!quill) return;
+                var url = prompt('Enter image URL:');
+                if (!url) return;
+                var range = quill.getSelection(true);
+                quill.insertEmbed(range.index, 'image', url, 'user');
+                quill.setSelection(range.index + 1);
+                quill.focus();
+            }},
+            { title: 'Blockquote',     icon: 'fa-regular fa-quote-left',    cmd: function() { qFormat('blockquote'); } },
+            { title: 'Code block',     icon: 'fa-regular fa-code',          cmd: function() { qFormat('code-block'); } },
+            { title: 'Spoiler',        icon: 'fa-regular fa-eye-slash',     cmd: function() {
+                // Quill has no native spoiler; insert BBCode text directly
+                if (!quill) return;
+                var range = quill.getSelection();
+                if (range && range.length > 0) {
+                    var text = quill.getText(range.index, range.length);
+                    quill.deleteText(range.index, range.length);
+                    quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
+                    quill.setSelection(range.index + text.length + 18);
+                }
+                quill.focus();
+            }}
         ];
 
-        var buttonElements = [];
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
             var button = document.createElement('button');
@@ -382,12 +368,11 @@ var MessengerModule = (function(Utils, EventBus) {
             button.className = 'modern-editor-btn';
             button.innerHTML = '<i class="' + btn.icon + '"></i>';
             button.title = btn.title;
-            button.onclick = btn.cmd;
+            button.onclick = (function(cmd) { return function() { cmd(); }; })(btn.cmd);
             toolbar.appendChild(button);
-            buttonElements.push(button);
         }
 
-        // Smiley button (unchanged)
+        // Smiley button
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
         smileBtn.className = 'modern-editor-btn';
@@ -399,7 +384,7 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         toolbar.appendChild(smileBtn);
 
-        // ImgBB button (unchanged)
+        // ImgBB upload button
         var imgbbBtn = document.createElement('button');
         imgbbBtn.type = 'button';
         imgbbBtn.className = 'modern-editor-btn';
@@ -421,25 +406,62 @@ var MessengerModule = (function(Utils, EventBus) {
 
         container.appendChild(toolbar);
 
-        // Editor container
+        // Editor element — Quill mounts into this div
         var editorElement = document.createElement('div');
-        editorElement.id = 'tiptap-editor';
+        editorElement.id = 'quill-editor';
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // Options row and actions (unchanged)
+        // ---- Initialise Quill ----
+        quill = new window.Quill(editorElement, {
+            modules: {
+                toolbar: false,          // we drive formatting from our own toolbar
+                keyboard: { bindings: {} }
+            },
+            placeholder: '💬 Write your message...',
+            // No theme — keeps the DOM minimal; we supply our own CSS
+        });
+
+        // Load any pre-existing content (e.g. when replying to a message)
+        var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+        if (initialHtml) {
+            quill.clipboard.dangerouslyPasteHTML(initialHtml);
+        }
+
+        // Keep the hidden legacy textarea in sync
+        quill.on('text-change', function() {
+            if (originalTextarea) {
+                originalTextarea.value = htmlToLegacy(quill.root.innerHTML);
+            }
+        });
+
+        // Redirect smiley clicks into Quill (forum calls window.emoticon on each click)
+        _originalEmoticon = window.emoticon;
+        window.emoticon = function(x) {
+            if (quill) {
+                var range = quill.getSelection() || { index: quill.getLength() - 1 };
+                quill.insertText(range.index, ' ' + x + ' ', 'user');
+                quill.setSelection(range.index + x.length + 2);
+                quill.focus();
+            } else if (_originalEmoticon) {
+                _originalEmoticon(x);
+            }
+        };
+
+        // Options row
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
-            + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" ' + (addSentCheckbox && addSentCheckbox.checked ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
+            + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" '     + (addSentCheckbox     && addSentCheckbox.checked     ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
         container.appendChild(optionsRow);
 
+        // Action buttons
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
-            + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
+            + '<button type="button" id="modern-submit"  class="modern-btn modern-btn-primary"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
         container.appendChild(actions);
 
         var previewArea = document.createElement('div');
@@ -449,72 +471,41 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.innerHTML = '<div class="preview-content"></div>';
         container.appendChild(previewArea);
 
-        // Initialise TipTap
-        var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
-
-        editor = new window.Tiptap.Editor({
-            element: editorElement,
-            extensions: [
-                window.TiptapStarterKit.StarterKit,
-                window.TiptapPlaceholder.Placeholder.configure({
-                    placeholder: '💬 Write your message...',
-                }),
-                window.Tiptap.Extension.create({
-                    name: 'underline',
-                    addCommands() {
-                        return {
-                            toggleUnderline: () => ({ commands }) => commands.toggleMark('underline'),
-                        };
-                    },
-                    addKeyboardShortcuts() {
-                        return { 'Mod-u': () => this.editor.commands.toggleUnderline() };
-                    },
-                }),
-            ],
-            content: initialHtml,
-            editorProps: {
-                attributes: { class: 'modern-wysiwyg-content' },
-            },
-            onUpdate: function({ editor }) {
-                var html = editor.getHTML();
-                originalTextarea.value = htmlToLegacy(html);
-            },
-        });
-
-        // Data binding for recipient, title, checkboxes
-        var modernRecipient = container.querySelector('#modern-recipient');
-        var modernContact = container.querySelector('#modern-contact');
-        var modernTitle = container.querySelector('#modern-title');
-        var modernAddSent = container.querySelector('#modern-add-sent');
+        // ---- Data binding ----
+        var modernRecipient   = container.querySelector('#modern-recipient');
+        var modernContact     = container.querySelector('#modern-contact');
+        var modernTitle       = container.querySelector('#modern-title');
+        var modernAddSent     = container.querySelector('#modern-add-sent');
         var modernAddTracking = container.querySelector('#modern-add-tracking');
 
         function syncToOriginal() {
-            if (recipientInput && modernRecipient) recipientInput.value = modernRecipient.value;
-            if (contactSelect && modernContact) contactSelect.value = modernContact.value;
-            if (titleInput && modernTitle) titleInput.value = modernTitle.value;
-            if (addSentCheckbox && modernAddSent) addSentCheckbox.checked = modernAddSent.checked;
-            if (addTrackingCheckbox && modernAddTracking) addTrackingCheckbox.checked = modernAddTracking.checked;
+            if (recipientInput   && modernRecipient)   recipientInput.value        = modernRecipient.value;
+            if (contactSelect    && modernContact)     contactSelect.value         = modernContact.value;
+            if (titleInput       && modernTitle)       titleInput.value            = modernTitle.value;
+            if (addSentCheckbox     && modernAddSent)      addSentCheckbox.checked      = modernAddSent.checked;
+            if (addTrackingCheckbox && modernAddTracking)  addTrackingCheckbox.checked  = modernAddTracking.checked;
         }
         function syncFromOriginal() {
-            if (recipientInput && modernRecipient) modernRecipient.value = recipientInput.value;
-            if (contactSelect && modernContact) modernContact.value = contactSelect.value;
-            if (titleInput && modernTitle) modernTitle.value = titleInput.value;
-            if (addSentCheckbox && modernAddSent) modernAddSent.checked = addSentCheckbox.checked;
-            if (addTrackingCheckbox && modernAddTracking) modernAddTracking.checked = addTrackingCheckbox.checked;
+            if (recipientInput   && modernRecipient)   modernRecipient.value       = recipientInput.value;
+            if (contactSelect    && modernContact)     modernContact.value         = contactSelect.value;
+            if (titleInput       && modernTitle)       modernTitle.value           = titleInput.value;
+            if (addSentCheckbox     && modernAddSent)      modernAddSent.checked       = addSentCheckbox.checked;
+            if (addTrackingCheckbox && modernAddTracking)  modernAddTracking.checked   = addTrackingCheckbox.checked;
         }
-        if (modernRecipient) modernRecipient.addEventListener('input', syncToOriginal);
-        if (modernContact) modernContact.addEventListener('change', syncToOriginal);
-        if (modernTitle) modernTitle.addEventListener('input', syncToOriginal);
-        if (modernAddSent) modernAddSent.addEventListener('change', syncToOriginal);
+
+        if (modernRecipient)   modernRecipient.addEventListener('input',   syncToOriginal);
+        if (modernContact)     modernContact.addEventListener('change',    syncToOriginal);
+        if (modernTitle)       modernTitle.addEventListener('input',       syncToOriginal);
+        if (modernAddSent)     modernAddSent.addEventListener('change',    syncToOriginal);
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // Preview button
+        // ---- Preview ----
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                originalTextarea.value = htmlToLegacy(editor.getHTML());
+                if (originalTextarea) originalTextarea.value = htmlToLegacy(quill.root.innerHTML);
                 if (typeof ajaxRequest === 'function') ajaxRequest();
                 else if (previewButton) previewButton.click();
                 var loadingDiv = document.getElementById('loading');
@@ -524,8 +515,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     var observer = new MutationObserver(function() {
                         var ajaxObj = document.getElementById('ajaxObject');
                         if (ajaxObj && ajaxObj.innerHTML) {
-                            var previewContent = previewArea.querySelector('.preview-content');
-                            if (previewContent) previewContent.innerHTML = ajaxObj.innerHTML;
+                            var pc = previewArea.querySelector('.preview-content');
+                            if (pc) pc.innerHTML = ajaxObj.innerHTML;
                             observer.disconnect();
                         }
                     });
@@ -534,49 +525,57 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Submit button
+        // ---- Submit ----
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
-                originalTextarea.value = htmlToLegacy(editor.getHTML());
+                if (originalTextarea) originalTextarea.value = htmlToLegacy(quill.root.innerHTML);
                 if (originalForm && typeof originalForm.submit === 'function') {
-                    if (typeof ValidateForm === 'function') if (!ValidateForm(1)) return;
+                    if (typeof ValidateForm === 'function' && !ValidateForm(1)) return;
                     originalForm.submit();
-                } else if (submitButton) submitButton.click();
+                } else if (submitButton) {
+                    submitButton.click();
+                }
             };
         }
 
         return container;
     }
 
-    // ----- MODERN MESSAGES SECTION (fully rebuilt) -----
+    // ------------------------------------------------------------------------
+    // MESSAGES SECTION (fully rebuilt)
+    // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
 
         try {
-            var folderSelect = document.querySelector('select[name="VID"]');
-            var messageRows = document.querySelectorAll('.big_list .row-mp');
-            var dlItems = document.querySelectorAll('.main_list dl dd');
+            var folderSelect  = document.querySelector('select[name="VID"]');
+            var messageRows   = document.querySelectorAll('.big_list .row-mp');
+            var dlItems       = document.querySelectorAll('.main_list dl dd');
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
-            var spaceLeft = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
+            var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
 
+            // Stats + folder selector
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
                 + '<div class="messages-stats">'
-                + '<span><i class="fa-regular fa-envelope"></i> Total messages: ' + escapeHtml(totalMessages) + '</span>'
+                + '<span><i class="fa-regular fa-envelope"></i> Total: ' + escapeHtml(totalMessages) + '</span>'
                 + '<span><i class="fa-regular fa-database"></i> Space left: ' + escapeHtml(spaceLeft) + '</span>'
                 + '</div>'
                 + '<div class="messages-folder-selector">'
                 + '<label>Folder:</label> '
-                + '<select id="modern-folder-select" class="modern-select">' + (folderSelect ? folderSelect.innerHTML : '<option value="in">Inbox</option><option value="sent">Sent Items</option>') + '</select>'
+                + '<select id="modern-folder-select" class="modern-select">'
+                + (folderSelect ? folderSelect.innerHTML : '<option value="in">Inbox</option><option value="sent">Sent Items</option>')
+                + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
 
+            // Column headers
             var listHeader = document.createElement('div');
             listHeader.className = 'messages-list-header';
             listHeader.innerHTML = ''
@@ -587,37 +586,35 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
             container.appendChild(listHeader);
 
+            // Message rows
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
 
             for (var i = 0; i < messageRows.length; i++) {
                 var row = messageRows[i];
-                var isUnread = row.classList.contains('on');
-                var iconClass = isUnread ? 'fa-envelope' : 'fa-envelope-open';
-                var titleLink = row.querySelector('.bb h4 a');
-                var title = titleLink ? titleLink.textContent.trim() : '(no title)';
-                var titleHref = titleLink ? titleLink.getAttribute('href') : '#';
+                var isUnread   = row.classList.contains('on');
+                var titleLink  = row.querySelector('.bb h4 a');
                 var senderLink = row.querySelector('.xx a');
-                var senderName = senderLink ? senderLink.textContent.trim() : 'Unknown';
-                var senderHref = senderLink ? senderLink.getAttribute('href') : '#';
-                var dateSpan = row.querySelector('.zz .when');
-                var date = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
-                var dateFormatted = formatDate(date);
-                var checkboxId = 'msg-' + i;
-                var msgId = row.id ? row.id.replace('msg', '') : i;
+                var dateSpan   = row.querySelector('.zz .when');
+                var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
+
+                // Extract the original checkbox's name so we keep form compatibility
+                var origCheckbox = row.querySelector('input[type="checkbox"]');
+                var msgName = origCheckbox ? origCheckbox.name : '';
 
                 var msgRow = document.createElement('div');
                 msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
                 msgRow.innerHTML = ''
-                    + '<div class="msg-status"><i class="fa-regular ' + iconClass + '"></i></div>'
-                    + '<div class="msg-title"><a href="' + escapeHtml(titleHref) + '">' + escapeHtml(title) + '</a></div>'
-                    + '<div class="msg-sender"><a href="' + escapeHtml(senderHref) + '">' + escapeHtml(senderName) + '</a></div>'
-                    + '<div class="msg-date">' + escapeHtml(dateFormatted) + '</div>'
-                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" data-msgid="' + escapeHtml(msgId) + '" id="' + checkboxId + '"></div>';
+                    + '<div class="msg-status"><i class="fa-regular ' + (isUnread ? 'fa-envelope' : 'fa-envelope-open') + '"></i></div>'
+                    + '<div class="msg-title"><a href="' + escapeHtml(titleLink ? titleLink.getAttribute('href') : '#') + '">' + escapeHtml(titleLink ? titleLink.textContent.trim() : '(no title)') + '</a></div>'
+                    + '<div class="msg-sender"><a href="' + escapeHtml(senderLink ? senderLink.getAttribute('href') : '#') + '">' + escapeHtml(senderLink ? senderLink.textContent.trim() : 'Unknown') + '</a></div>'
+                    + '<div class="msg-date">' + escapeHtml(formatDate(date)) + '</div>'
+                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '"></div>';
                 listContainer.appendChild(msgRow);
             }
             container.appendChild(listContainer);
 
+            // Bulk action bar
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -634,56 +631,80 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(actionBar);
 
-            var folderSelector = document.querySelector('select[name="VID"]');
-            var folderForm = folderSelector ? folderSelector.form : null;
-            var inboxForm = document.querySelector('form[name="inbox"]');
+            // Wire folder selector to legacy form
+            var folderForm   = folderSelect ? folderSelect.form : null;
+            var inboxForm    = document.querySelector('form[name="inbox"]');
+            var modernFolder = container.querySelector('#modern-folder-select');
 
-            var modernFolderSelect = container.querySelector('#modern-folder-select');
-            if (modernFolderSelect && folderSelector && folderForm) {
-                modernFolderSelect.addEventListener('change', function() {
-                    folderSelector.value = this.value;
+            if (modernFolder && folderSelector && folderForm) {
+                modernFolder.addEventListener('change', function() {
+                    folderSelect.value = this.value;
                     folderForm.submit();
                 });
             }
 
+            // Select all
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
-                    var checkboxes = container.querySelectorAll('.message-row .modern-checkbox-input');
-                    for (var j = 0; j < checkboxes.length; j++) {
-                        checkboxes[j].checked = this.checked;
-                    }
+                    container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
+                        cb.checked = selectAll.checked;
+                    });
+                });
+            }
+
+            // Sync checkboxes back to hidden form before bulk actions
+            function syncCheckboxesToForm() {
+                if (!inboxForm) return;
+                container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
+                    var hidden = inboxForm.querySelector('input[name="' + cb.name + '"]');
+                    if (hidden) hidden.checked = cb.checked;
                 });
             }
 
             var exportBtn = container.querySelector('#export-messages');
             if (exportBtn && inboxForm) {
                 exportBtn.addEventListener('click', function() {
-                    var archiveInput = inboxForm.querySelector('input[name="archive"]');
-                    if (archiveInput) archiveInput.click();
-                    else inboxForm.submit();
+                    syncCheckboxesToForm();
+                    var fmt = container.querySelector('#export-format');
+                    var typeSelect = inboxForm.querySelector('select[name="type"]');
+                    if (fmt && typeSelect) typeSelect.value = fmt.value;
+                    var archiveBtn = inboxForm.querySelector('input[name="archive"]');
+                    if (archiveBtn) archiveBtn.click(); else inboxForm.submit();
                 });
             }
 
             var deleteBtn = container.querySelector('#delete-messages');
             if (deleteBtn && inboxForm) {
                 deleteBtn.addEventListener('click', function() {
-                    if (confirm('Delete selected messages?')) {
-                        var deleteInput = inboxForm.querySelector('input[name="delete"]');
-                        if (deleteInput) deleteInput.click();
-                        else inboxForm.submit();
-                    }
+                    if (!confirm('Delete selected messages?')) return;
+                    syncCheckboxesToForm();
+                    var delBtn = inboxForm.querySelector('input[name="delete"]');
+                    if (delBtn) delBtn.click(); else inboxForm.submit();
+                });
+            }
+
+            var moveBtn = container.querySelector('#move-messages');
+            if (moveBtn && inboxForm) {
+                moveBtn.addEventListener('click', function() {
+                    syncCheckboxesToForm();
+                    var dest = container.querySelector('#move-folder');
+                    var vidSelect = inboxForm.querySelector('select[name="VID"]');
+                    if (dest && vidSelect) vidSelect.value = dest.value;
+                    var moveInput = inboxForm.querySelector('input[name="move"]');
+                    if (moveInput) moveInput.click(); else inboxForm.submit();
                 });
             }
 
         } catch (err) {
             console.error('[MessengerModule] Error building messages section:', err);
-            var originalMessages = document.querySelector('.cp:has(.big_list .row-mp)') || document.querySelector('.cp');
-            if (originalMessages) {
-                var fallbackClone = originalMessages.cloneNode(true);
-                var tabsClone = fallbackClone.querySelector('.tabs');
-                if (tabsClone) tabsClone.remove();
-                container.appendChild(fallbackClone);
+            // Graceful fallback: clone the original .cp element
+            var cpEl = document.querySelector('.cp');
+            if (cpEl) {
+                var clone = cpEl.cloneNode(true);
+                var tabs = clone.querySelector('.tabs');
+                if (tabs) tabs.remove();
+                container.appendChild(clone);
             } else {
                 container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>Unable to load messages</p></div>';
             }
@@ -692,7 +713,9 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ----- MODERN CONTACTS SECTION (fully rebuilt) -----
+    // ------------------------------------------------------------------------
+    // CONTACTS SECTION (fully rebuilt)
+    // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -701,36 +724,33 @@ var MessengerModule = (function(Utils, EventBus) {
         try {
             var friendsTextarea = document.querySelector('textarea[name="can_contact"]');
             var blockedTextarea = document.querySelector('textarea[name="cannot_contact"]');
-            var privacySelect = document.querySelector('select[name="nobody_can_contact"]');
-            var updateButton = document.querySelector('input[value="Update Contact list"]');
-
-            var friendsList = friendsTextarea ? friendsTextarea.value : '';
-            var blockedList = blockedTextarea ? blockedTextarea.value : '';
-            var privacyValue = privacySelect ? privacySelect.value : '0';
+            var privacySelect   = document.querySelector('select[name="nobody_can_contact"]');
+            var updateButton    = document.querySelector('input[value="Update Contact list"]');
 
             var friendsCard = document.createElement('div');
             friendsCard.className = 'contacts-card';
             friendsCard.innerHTML = ''
                 + '<h3 class="contacts-card-title"><i class="fa-regular fa-user-group"></i> Friends list</h3>'
-                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsList) + '</textarea>'
-                + '<p class="contacts-help">Users you allow to message you (if privacy setting is enabled).</p>';
+                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsTextarea ? friendsTextarea.value : '') + '</textarea>'
+                + '<p class="contacts-help">Users you allow to message you when privacy mode is on.</p>';
             container.appendChild(friendsCard);
 
             var blockedCard = document.createElement('div');
             blockedCard.className = 'contacts-card';
             blockedCard.innerHTML = ''
                 + '<h3 class="contacts-card-title"><i class="fa-regular fa-ban"></i> Blocked users</h3>'
-                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedList) + '</textarea>'
+                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedTextarea ? blockedTextarea.value : '') + '</textarea>'
                 + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
             container.appendChild(blockedCard);
 
+            var privacyVal = privacySelect ? privacySelect.value : '0';
             var privacyCard = document.createElement('div');
             privacyCard.className = 'contacts-card';
             privacyCard.innerHTML = ''
                 + '<h3 class="contacts-card-title"><i class="fa-regular fa-shield"></i> Privacy settings</h3>'
                 + '<div class="privacy-option">'
-                + '<label class="modern-radio"><input type="radio" name="privacy" value="1" ' + (privacyValue === '1' ? 'checked' : '') + '> <span>Yes, only friends can message me</span></label>'
-                + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyValue === '0' ? 'checked' : '') + '> <span>No, everyone can message me (except blocked)</span></label>'
+                + '<label class="modern-radio"><input type="radio" name="privacy" value="1" ' + (privacyVal === '1' ? 'checked' : '') + '> <span>Yes — only friends can message me</span></label>'
+                + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyVal === '0' ? 'checked' : '') + '> <span>No — everyone can message me (except blocked users)</span></label>'
                 + '</div>';
             container.appendChild(privacyCard);
 
@@ -742,24 +762,22 @@ var MessengerModule = (function(Utils, EventBus) {
             var updateContactsBtn = container.querySelector('#update-contacts');
             if (updateContactsBtn && updateButton) {
                 updateContactsBtn.addEventListener('click', function() {
-                    var newFriends = container.querySelector('#modern-friends-list').value;
-                    var newBlocked = container.querySelector('#modern-blocked-list').value;
-                    var newPrivacy = container.querySelector('input[name="privacy"]:checked').value;
-                    if (friendsTextarea) friendsTextarea.value = newFriends;
-                    if (blockedTextarea) blockedTextarea.value = newBlocked;
-                    if (privacySelect) privacySelect.value = newPrivacy;
+                    if (friendsTextarea) friendsTextarea.value = container.querySelector('#modern-friends-list').value;
+                    if (blockedTextarea) blockedTextarea.value = container.querySelector('#modern-blocked-list').value;
+                    var checkedPrivacy = container.querySelector('input[name="privacy"]:checked');
+                    if (privacySelect && checkedPrivacy) privacySelect.value = checkedPrivacy.value;
                     updateButton.click();
                 });
             }
 
         } catch (err) {
             console.error('[MessengerModule] Error building contacts section:', err);
-            var originalContacts = document.querySelector('.cp:has(textarea[name="can_contact"])') || document.querySelector('.cp');
-            if (originalContacts) {
-                var fallbackClone = originalContacts.cloneNode(true);
-                var tabsClone = fallbackClone.querySelector('.tabs');
-                if (tabsClone) tabsClone.remove();
-                container.appendChild(fallbackClone);
+            var cpEl = document.querySelector('.cp');
+            if (cpEl) {
+                var clone = cpEl.cloneNode(true);
+                var tabs = clone.querySelector('.tabs');
+                if (tabs) tabs.remove();
+                container.appendChild(clone);
             } else {
                 container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-address-book"></i><p>Unable to load contacts</p></div>';
             }
@@ -778,8 +796,9 @@ var MessengerModule = (function(Utils, EventBus) {
             return;
         }
 
-        var carousel = wrapper.querySelector('.carousel-wrapper');
         if (document.getElementById('modern-messenger')) return;
+
+        var carousel = wrapper.querySelector('.carousel-wrapper');
 
         var messengerContainer = document.createElement('div');
         messengerContainer.id = 'modern-messenger';
@@ -799,21 +818,24 @@ var MessengerModule = (function(Utils, EventBus) {
             var item = navItems[i];
             var link = document.createElement('a');
             link.href = item.url;
-            link.className = 'modern-nav-link';
-            if (item.section === currentSection) link.classList.add('current');
-            var icon = document.createElement('i');
-            icon.className = item.icon;
-            icon.setAttribute('aria-hidden', 'true');
-            link.appendChild(icon);
-            var span = document.createElement('span');
-            span.className = 'modern-nav-text';
-            span.textContent = item.text;
-            link.appendChild(span);
+            link.className = 'modern-nav-link' + (item.section === currentSection ? ' current' : '');
+            link.innerHTML = '<i class="' + item.icon + '" aria-hidden="true"></i><span class="modern-nav-text">' + item.text + '</span>';
             navContainer.appendChild(link);
         }
 
         var mainContent = document.createElement('div');
         mainContent.className = 'modern-messenger-main';
+
+        function finalize() {
+            messengerContainer.appendChild(navContainer);
+            messengerContainer.appendChild(mainContent);
+            if (carousel) {
+                carousel.insertAdjacentElement('afterend', messengerContainer);
+            } else {
+                wrapper.appendChild(messengerContainer);
+            }
+            console.log('[MessengerModule] Built for section: ' + currentSection);
+        }
 
         if (currentSection === 'compose') {
             mainContent.appendChild(buildComposeSection());
@@ -822,31 +844,12 @@ var MessengerModule = (function(Utils, EventBus) {
             waitForElement('.big_list .row-mp', 3000).then(function() {
                 mainContent.appendChild(buildModernMessagesSection());
                 finalize();
-            }).catch(function() {
-                mainContent.appendChild(buildModernMessagesSection());
-                finalize();
             });
-            return;
         } else {
             waitForElement('textarea[name="can_contact"]', 3000).then(function() {
                 mainContent.appendChild(buildModernContactsSection());
                 finalize();
-            }).catch(function() {
-                mainContent.appendChild(buildModernContactsSection());
-                finalize();
             });
-            return;
-        }
-
-        function finalize() {
-            messengerContainer.appendChild(navContainer);
-            messengerContainer.appendChild(mainContent);
-
-            if (carousel) {
-                carousel.insertAdjacentElement('afterend', messengerContainer);
-            } else {
-                wrapper.appendChild(messengerContainer);
-            }
         }
     }
 
