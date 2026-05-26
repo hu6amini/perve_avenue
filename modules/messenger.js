@@ -180,7 +180,7 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
         html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
-        html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<details><summary>Spoiler</summary>$1</details>');
+        html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
         html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gi, '<span style="font-family:$1">$2</span>');
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gi, '<span style="font-size:$1px">$2</span>');
@@ -202,7 +202,7 @@ var MessengerModule = (function(Utils, EventBus) {
         legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
         legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
-        legacy = legacy.replace(/<details[^>]*>[\s\S]*?<summary[^>]*>[\s\S]*?<\/summary>([\s\S]*?)<\/details>/gi, '[SPOILER]$1[/SPOILER]');
+        legacy = legacy.replace(/<div class="spoiler">([\s\S]*?)<\/div>/gi, '[SPOILER]$1[/SPOILER]');
         legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
         legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
         legacy = legacy.replace(/<\/p>/gi, '\n');
@@ -282,6 +282,24 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
             });
         }
+
+        // ========== CUSTOM SPOILER BLOT (static, non‑collapsible) ==========
+        // Must be defined and registered BEFORE Quill initialisation
+        var Quill = window.Quill;
+        var Block = Quill.import('blots/block');
+
+        class SpoilerBlot extends Block {
+            static blotName = 'spoiler';
+            static tagName = 'div';
+            static className = 'spoiler';
+
+            // Prevent Quill from merging or splitting spoiler blocks
+            optimize(context) {
+                // Intentionally empty to keep the blot intact
+            }
+        }
+        Quill.register(SpoilerBlot);
+        // ===================================================================
 
         // Toolbar
         var toolbar = document.createElement('div');
@@ -505,10 +523,11 @@ var MessengerModule = (function(Utils, EventBus) {
             if (!quill) return;
             var range = quill.getSelection();
             if (range && range.length > 0) {
-                var text = quill.getText(range.index, range.length);
-                quill.deleteText(range.index, range.length);
-                quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
-                quill.setSelection(range.index + text.length + 18);
+                // If there is selected text, apply the spoiler format to it
+                quill.format('spoiler', true);
+            } else if (range) {
+                // Insert a blank spoiler block at the cursor
+                quill.insertEmbed(range.index, 'spoiler', true);
             }
             quill.focus();
         };
@@ -544,15 +563,13 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             },
             placeholder: '💬 Write your message...',
-            formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block']
+            formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block', 'spoiler']
         });
 
-        
-        // --- Active state for toolbar buttons (insert here) ---
+        // --- Active state for toolbar buttons ---
         function updateToolbarActiveStates() {
             var range = quill.getSelection();
             if (!range) {
-                // No selection – clear all active states
                 var btns = document.querySelectorAll('#compose-section .modern-editor-btn');
                 btns.forEach(function(btn) { btn.classList.remove('active'); });
                 return;
@@ -572,6 +589,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 else if (title === 'Code block') active = !!formats['code-block'];
                 else if (title === 'Bullet list') active = (formats.list === 'bullet');
                 else if (title === 'Ordered list') active = (formats.list === 'ordered');
+                else if (title === 'Spoiler') active = !!formats.spoiler;
 
                 if (active) {
                     btn.classList.add('active');
@@ -583,8 +601,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         quill.on('selection-change', updateToolbarActiveStates);
         quill.on('text-change', updateToolbarActiveStates);
-        updateToolbarActiveStates();  // initial state
-        
+        updateToolbarActiveStates();
 
         // Drag & Drop support
         var editorRoot = quill.root;
@@ -607,10 +624,9 @@ var MessengerModule = (function(Utils, EventBus) {
             }, function() {
                 var range = quill.getSelection();
                 if (range && range.length > 0) {
-                    var text = quill.getText(range.index, range.length);
-                    quill.deleteText(range.index, range.length);
-                    quill.insertText(range.index, '[SPOILER]' + text + '[/SPOILER]');
-                    quill.setSelection(range.index + text.length + 18);
+                    quill.format('spoiler', true);
+                } else if (range) {
+                    quill.insertEmbed(range.index, 'spoiler', true);
                 }
                 quill.focus();
                 return false;
