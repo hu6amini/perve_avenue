@@ -547,20 +547,27 @@ var MessengerModule = (function(Utils, EventBus) {
         addSeparator();
 
         // Group 4: Spoiler + Smiley
-        var spoilerBtn = document.createElement('button');
-        spoilerBtn.type = 'button';
-        spoilerBtn.className = 'modern-editor-btn';
-        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
-        spoilerBtn.title = 'Spoiler';
-        spoilerBtn.onclick = function() {
-            if (!quill) return;
-            var range = quill.getSelection();
-            if (!range) { quill.focus(); return; }
-            var formats = quill.getFormat(range);
-            quill.format('spoiler', !formats.spoiler, 'user');
-            quill.focus();
-        };
-        toolbar.appendChild(spoilerBtn);
+        // Spoiler button – toggle the custom format with focus and selection check
+var spoilerBtn = document.createElement('button');
+spoilerBtn.type = 'button';
+spoilerBtn.className = 'modern-editor-btn';
+spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+spoilerBtn.title = 'Spoiler';
+spoilerBtn.onclick = function() {
+    if (!quill) return;
+    quill.focus();
+    var range = quill.getSelection();
+    if (!range) {
+        // If no selection, insert a blank line and apply spoiler to it
+        quill.insertText(quill.getLength(), '\n', 'user');
+        quill.setSelection(quill.getLength() - 1, 0);
+        range = quill.getSelection();
+    }
+    var formats = quill.getFormat(range);
+    quill.format('spoiler', !formats.spoiler, 'user');
+    quill.focus();
+};
+toolbar.appendChild(spoilerBtn);
 
         var smileBtn = document.createElement('button');
         smileBtn.type = 'button';
