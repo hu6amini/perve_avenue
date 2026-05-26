@@ -606,7 +606,7 @@ spoilerBtn.onclick = function() {
                 }
             },
             placeholder: '💬 Write your message...',
-            formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block', 'spoiler']
+formats: ['bold', 'italic', 'underline', 'strike', 'list', 'link', 'image', 'blockquote', 'code-block', 'spoiler']
         });
 
         // --- Active state for toolbar buttons ---
