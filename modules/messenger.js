@@ -555,14 +555,12 @@ var MessengerModule = (function(Utils, EventBus) {
         spoilerBtn.className = 'modern-editor-btn';
         spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
         spoilerBtn.title = 'Spoiler';
-        spoilerBtn.onclick = function() {
-            if (!quill) return;
-            quill.focus();                     // ensure editor is focused
-            var range = quill.getSelection();
-            if (!range) return;
-            var formats = quill.getFormat(range);
-            quill.format('spoiler', !formats.spoiler, 'user');
-        };
+spoilerBtn.onclick = function() {
+    if (!quill) return;
+    var formats = quill.getFormat();   // calls getSelection(true) internally — focuses + reads
+    quill.format('spoiler', !formats.spoiler);
+    quill.focus();
+};
         toolbar.appendChild(spoilerBtn);
 
         var smileBtn = document.createElement('button');
