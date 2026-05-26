@@ -1,5 +1,5 @@
 // Messenger Module – Complete modern UI for all messenger sections
-// Uses ForumCoreObserver exclusively for DOM detection (no polling, no custom MutationObservers)
+
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
