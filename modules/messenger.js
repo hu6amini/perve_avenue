@@ -566,6 +566,34 @@ var MessengerModule = (function(Utils, EventBus) {
             formats: ['bold', 'italic', 'underline', 'strike', 'list', 'ordered', 'link', 'image', 'blockquote', 'code-block', 'spoiler']
         });
 
+        // --- Custom Enter behaviour for spoiler: stay inside same spoiler, exit on empty line ---
+        if (quill.keyboard) {
+            quill.keyboard.addBinding({
+                key: 'Enter',
+                format: ['spoiler'],
+                handler: function(range, context) {
+                    const [line, offset] = quill.getLine(range.index);
+                    const lineText = line.domNode.textContent;
+                    const isLineEmpty = lineText.trim() === '';
+
+                    if (isLineEmpty) {
+                        // Exit spoiler: remove spoiler format from this line
+                        quill.format('spoiler', false);
+                        // Insert a new paragraph after it
+                        quill.insertText(range.index, '\n', 'user');
+                        quill.setSelection(range.index + 1);
+                    } else {
+                        // Stay inside spoiler: insert a newline and ensure it's also inside spoiler
+                        quill.insertText(range.index, '\n', 'user');
+                        quill.setSelection(range.index + 1);
+                        // Apply spoiler format to the new line (it might inherit, but ensure)
+                        quill.format('spoiler', true);
+                    }
+                    return false;
+                }
+            });
+        }
+
         // --- Active state for toolbar buttons ---
         function updateToolbarActiveStates() {
             var range = quill.getSelection();
@@ -759,6 +787,9 @@ var MessengerModule = (function(Utils, EventBus) {
     // MESSAGES SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
+        // ... (same as previous version, unchanged)
+        // For brevity, it's identical to the earlier working version.
+        // I will keep the existing implementation as it does not require changes.
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
@@ -770,7 +801,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
             var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
 
-            // Stats + folder selector
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
@@ -786,7 +816,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(folderRow);
 
-            // Column headers
             var listHeader = document.createElement('div');
             listHeader.className = 'messages-list-header';
             listHeader.innerHTML = ''
@@ -797,7 +826,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
             container.appendChild(listHeader);
 
-            // Message rows
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
 
@@ -808,10 +836,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 var senderLink = row.querySelector('.xx a');
                 var dateSpan   = row.querySelector('.zz .when');
                 var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
-
                 var origCheckbox = row.querySelector('input[type="checkbox"]');
                 var msgName = origCheckbox ? origCheckbox.name : '';
-
                 var msgRow = document.createElement('div');
                 msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
                 msgRow.innerHTML = ''
@@ -824,7 +850,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
             container.appendChild(listContainer);
 
-            // Bulk action bar
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -841,7 +866,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(actionBar);
 
-            // Wire folder selector to legacy form
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
@@ -853,7 +877,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
             }
 
-            // Select all
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
@@ -925,6 +948,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // CONTACTS SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
+        // ... (same as previous version, unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
