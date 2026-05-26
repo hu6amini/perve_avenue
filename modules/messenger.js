@@ -183,64 +183,28 @@ var MessengerModule = (function(Utils, EventBus) {
         return html;
     }
 
-function htmlToLegacy(html) {
-    if (!html) return '';
-    var div = document.createElement('div');
-    div.innerHTML = html;
-    var legacy = div.innerHTML;
-
-    // Inline formatting (unchanged)
-    legacy = legacy.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<b>$1</b>');
-    legacy = legacy.replace(/<em[^>]*>(.*?)<\/em>/gi, '<i>$1</i>');
-    legacy = legacy.replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>');
-    legacy = legacy.replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>');
-    legacy = legacy.replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
-
-    // Code blocks, blockquotes, spoilers (unchanged)
-    legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
-    legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
-    legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
-    legacy = legacy.replace(/<div class="spoiler">([\s\S]*?)<\/div>/gi, '[SPOILER]$1[/SPOILER]');
-
-    // Text alignment (unchanged)
-    legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
-
-    // --- UPDATED: Convert image tags, preserving original URL and attributes ---
-    legacy = legacy.replace(/<img[^>]*>/gi, function(match) {
-        // Extract original URL from data-original (preferred) or fallback to src
-        var srcMatch = match.match(/data-original="([^"]+)"/);
-        var src = srcMatch ? srcMatch[1] : (match.match(/src="([^"]+)"/) || [])[1];
-        if (!src) return match; // no src, leave unchanged
-
-        // Extract optional attributes
-        var altMatch = match.match(/alt="([^"]+)"/);
-        var widthMatch = match.match(/width="([^"]+)"/);
-        var heightMatch = match.match(/height="([^"]+)"/);
-        var loadingMatch = match.match(/loading="([^"]+)"/);
-        var decodingMatch = match.match(/decoding="([^"]+)"/);
-
-        var imgTag = '<img src="' + src + '"';
-        if (altMatch) imgTag += ' alt="' + altMatch[1] + '"';
-        if (widthMatch) imgTag += ' width="' + widthMatch[1] + '"';
-        if (heightMatch) imgTag += ' height="' + heightMatch[1] + '"';
-        if (loadingMatch) imgTag += ' loading="' + loadingMatch[1] + '"';
-        if (decodingMatch) imgTag += ' decoding="' + decodingMatch[1] + '"';
-        imgTag += '>';
-
-        return imgTag;
-    });
-
-    // Paragraph handling (unchanged)
-    legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
-    legacy = legacy.replace(/<\/p>/gi, '\n');
-    legacy = legacy.replace(/<p[^>]*>/gi, '');
-
-    // Cleanup leftover tags
-    legacy = legacy.replace(/<div[^>]*>/gi, '').replace(/<\/div>/gi, '');
-    legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
-
-    return legacy.trim();
-}
+    function htmlToLegacy(html) {
+        if (!html) return '';
+        var div = document.createElement('div');
+        div.innerHTML = html;
+        var legacy = div.innerHTML;
+        legacy = legacy.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<b>$1</b>');
+        legacy = legacy.replace(/<em[^>]*>(.*?)<\/em>/gi, '<i>$1</i>');
+        legacy = legacy.replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>');
+        legacy = legacy.replace(/<s>(.*?)<\/s>/gi, '<del>$1</del>');
+        legacy = legacy.replace(/<del>(.*?)<\/del>/gi, '<del>$1</del>');
+        legacy = legacy.replace(/<pre class="ql-syntax"[^>]*>([\s\S]*?)<\/pre>/gi, '[code]$1[/code]');
+        legacy = legacy.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, '[code]$1[/code]');
+        legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
+        legacy = legacy.replace(/<div class="spoiler">([\s\S]*?)<\/div>/gi, '[SPOILER]$1[/SPOILER]');
+        legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
+        legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
+        legacy = legacy.replace(/<\/p>/gi, '\n');
+        legacy = legacy.replace(/<p[^>]*>/gi, '');
+        legacy = legacy.replace(/<div[^>]*>/gi, '').replace(/<\/div>/gi, '');
+        legacy = legacy.replace(/<br\s*\/?>/gi, '\n');
+        return legacy.trim();
+    }
 
     // ------------------------------------------------------------------------
     // COMPOSE SECTION – TipTap based
