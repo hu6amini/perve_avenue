@@ -1688,42 +1688,283 @@ input[type="radio"]:checked::before {
     padding-right: var(--space-lg);
 }
 
-/* ----- WYSIWYG toolbar (custom, above Quill) ----- */
-/* TipTap editor base */
+/* ==========================================================================
+   MODERN MESSENGER – TipTap WYSIWYG (Emerald Theme)
+   ========================================================================== */
+
+/* ----- Modern messenger container (inside wrapper) ----- */
+#modern-messenger {
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    margin: var(--space-lg) 0;
+    overflow: hidden;
+}
+
+/* ----- Sidebar + Main layout (desktop) ----- */
+#modern-messenger {
+    display: flex;
+    flex-direction: row;
+}
+
+/* ----- Navigation sidebar (desktop) ----- */
+.modern-messenger-nav {
+    width: 200px;
+    background: var(--bg-color);
+    border-right: 1px solid var(--border-color);
+    padding: var(--space-md) 0;
+    flex-shrink: 0;
+}
+
+.modern-nav-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--pad-3) var(--pad-6);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-family: var(--font-primary);
+    font-weight: 500;
+    font-size: var(--text-sm);
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+}
+
+.modern-nav-link i {
+    width: 1.5rem;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+.modern-nav-link:hover {
+    background: var(--hover-color);
+    color: var(--text-primary);
+}
+
+.modern-nav-link.current {
+    background: var(--hover-color);
+    border-left-color: var(--primary-color);
+    color: var(--primary-light);
+}
+
+/* ----- Main content area ----- */
+.modern-messenger-main {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface-color);
+}
+
+/* ----- Compose section – recipient & subject row ----- */
+.modern-recipient-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius);
+    margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+}
+
+.modern-field {
+    flex: 1;
+    min-width: 200px;
+}
+
+.modern-recipient-controls {
+    display: flex;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.modern-input,
+.modern-select {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: var(--pad-3) var(--pad-4);
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.modern-input:focus,
+.modern-select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.modern-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%236B7280' d='M360.5 217.5l-152 143.1C203.9 365.8 197.9 368 192 368s-11.88-2.188-16.5-6.562L23.5 217.5C13.87 208.3 13.47 193.1 22.56 183.5C31.69 173.8 46.94 173.5 56.5 182.6L192 310.9l135.5-128.4c9.562-9.094 24.75-8.75 33.94 .9375C370.5 193.1 370.1 208.3 360.5 217.5z'/%3E%3C/svg%3E") !important;
+    background-size: auto 1rem;
+    background-repeat: no-repeat;
+    background-position: right var(--pad-3) center;
+    appearance: none;
+    padding-right: var(--space-lg);
+}
+
+/* ----- Toolbar (buttons, dropdowns, separators) ----- */
+.modern-editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    padding: var(--pad-4) var(--pad-6);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-color);
+}
+
+.modern-editor-btn {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.modern-editor-btn i {
+    pointer-events: none;
+}
+
+.modern-editor-btn:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.modern-editor-btn.active {
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: white !important;
+}
+
+.modern-editor-btn.active i {
+    color: white !important;
+}
+
+.toolbar-separator {
+    display: inline-block;
+    width: 1px;
+    height: 1.5rem;
+    background: var(--border-color);
+    margin: 0 var(--space-sm);
+    vertical-align: middle;
+}
+
+/* ----- Dropdown (for lists, image) ----- */
+.modern-dropdown {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.modern-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    z-index: 1000;
+    min-width: 160px;
+    background-color: var(--surface-color);
+}
+
+.modern-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--pad-2) var(--pad-4);
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    text-align: left;
+}
+
+.modern-dropdown-item:hover {
+    background: var(--hover-color);
+}
+
+/* ----- TipTap editor base (replaces Quill) ----- */
+.modern-wysiwyg {
+    margin: var(--space-md);
+    min-height: 250px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.modern-wysiwyg:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
 .ProseMirror {
     outline: none;
     min-height: 200px;
-    background: var(--bg-color);
-    border-radius: var(--radius);
+    padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
-    padding: var(--pad-4);
 }
+
+/* Placeholder for empty editor */
 .ProseMirror p.is-editor-empty:first-child::before {
-    content: attr(data-placeholder);
+    content: "💬 Write your message...";
     float: left;
     color: var(--text-tertiary);
     pointer-events: none;
     height: 0;
 }
-.ProseMirror ul, .ProseMirror ol {
+
+/* ----- TipTap content styling ----- */
+.ProseMirror strong { font-weight: bold; }
+.ProseMirror em { font-style: italic; }
+.ProseMirror u { text-decoration: underline; }
+.ProseMirror s, .ProseMirror del { text-decoration: line-through; }
+
+.ProseMirror ul,
+.ProseMirror ol {
+    margin: var(--space-sm) 0;
     padding-left: var(--space-lg);
 }
+
 .ProseMirror blockquote {
     border-left: 3px solid var(--primary-color);
     margin: var(--space-sm) 0;
     padding-left: var(--space-md);
     color: var(--text-secondary);
 }
+
 .ProseMirror pre {
     background: var(--bg-color);
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
     overflow-x: auto;
     font-family: var(--font-mono);
+    font-size: var(--text-xs);
 }
+
+/* Spoiler style (static, no toggle) */
 .ProseMirror .spoiler {
     background: var(--surface-light);
     padding: var(--space-sm);
@@ -1731,12 +1972,176 @@ input[type="radio"]:checked::before {
     margin: var(--space-sm) 0;
     border: 1px solid var(--border-color);
 }
+
 .ProseMirror .spoiler::before {
     content: "Spoiler";
     display: block;
     font-weight: bold;
     margin-bottom: var(--space-xs);
     color: var(--text-tertiary);
+}
+
+.ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-sm);
+}
+
+/* ----- Options row (checkboxes) ----- */
+.modern-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-lg);
+    padding: var(--pad-4) var(--pad-6);
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-color);
+}
+
+.modern-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+}
+
+.modern-checkbox input {
+    cursor: pointer;
+}
+
+/* ----- Action buttons (Preview / Send) ----- */
+.modern-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    padding: var(--pad-5);
+    border-top: 1px solid var(--border-color);
+    background: var(--surface-color);
+}
+
+.modern-btn {
+    border: none;
+    border-radius: var(--radius);
+    padding: var(--pad-3) var(--pad-6);
+    font-family: var(--font-primary);
+    font-weight: 500;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modern-btn i {
+    margin-right: var(--space-xs);
+}
+
+.modern-btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.modern-btn-primary:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.modern-btn-secondary {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.modern-btn-secondary:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+/* ----- Preview area ----- */
+.modern-preview {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    margin: var(--space-md);
+    padding: var(--space-md);
+}
+
+.modern-preview .preview-content {
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    line-height: 1.618;
+}
+
+/* ===== Responsive (≤680px) ===== */
+@media (max-width: 680px) {
+    #modern-messenger {
+        flex-direction: column;
+    }
+    .modern-messenger-nav {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-around;
+        padding: var(--space-xs) 0;
+        order: 2;
+    }
+    .modern-nav-link {
+        flex-direction: column;
+        justify-content: center;
+        padding: var(--pad-2) var(--pad-3);
+        gap: var(--space-xs);
+        border-left: none;
+        border-bottom: 2px solid transparent;
+        font-size: var(--text-xs);
+    }
+    .modern-nav-link i {
+        width: auto;
+        font-size: 1.25rem;
+    }
+    .modern-nav-link.current {
+        border-left-color: transparent;
+        border-bottom-color: var(--primary-color);
+    }
+    .modern-messenger-main {
+        order: 1;
+    }
+
+    .modern-recipient-row {
+        flex-direction: column;
+        gap: var(--space-md);
+        margin: var(--space-sm);
+    }
+    .modern-editor-toolbar {
+        justify-content: center;
+    }
+    .modern-options {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+    .modern-actions {
+        justify-content: center;
+    }
+
+    .ProseMirror {
+        min-height: 150px;
+    }
+
+    /* Messages section mobile (already handled in separate CSS) */
+    .modern-wysiwyg {
+        margin: var(--space-sm);
+    }
+}
+
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+    #modern-messenger *,
+    #modern-messenger *::before,
+    #modern-messenger *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
 }
 
 /* ----- Options row (checkboxes) ----- */
