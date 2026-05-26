@@ -303,6 +303,7 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(recipientRow);
 
+        // Helper: custom modal with input
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -548,8 +549,7 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         addSeparator();
 
-        // Group 4: Spoiler + Smiley
-        // Spoiler button – uses the custom blot to toggle format
+        // ----- SPOILER BUTTON (custom blot) -----
         var spoilerBtn = document.createElement('button');
         spoilerBtn.type = 'button';
         spoilerBtn.className = 'modern-editor-btn';
@@ -557,11 +557,11 @@ var MessengerModule = (function(Utils, EventBus) {
         spoilerBtn.title = 'Spoiler';
         spoilerBtn.onclick = function() {
             if (!quill) return;
+            quill.focus();                     // ensure editor is focused
             var range = quill.getSelection();
-            if (!range) { quill.focus(); return; }
+            if (!range) return;
             var formats = quill.getFormat(range);
             quill.format('spoiler', !formats.spoiler, 'user');
-            quill.focus();
         };
         toolbar.appendChild(spoilerBtn);
 
@@ -584,8 +584,18 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // Register the spoiler blot once before Quill initialisation
-        registerSpoilerBlot();
+        // ----- REGISTER SPOILER BLOT (must be before Quill instantiation) -----
+        (function registerSpoilerBlot() {
+            if (!window.Quill) return;
+            var Block = window.Quill.import('blots/block');
+            function SpoilerBlot() { Block.apply(this, arguments); }
+            SpoilerBlot.prototype = Object.create(Block.prototype);
+            SpoilerBlot.prototype.constructor = SpoilerBlot;
+            SpoilerBlot.blotName = 'spoiler';
+            SpoilerBlot.tagName = 'p';
+            SpoilerBlot.className = 'ql-spoiler-line';
+            window.Quill.register(SpoilerBlot, true);
+        })();
 
         // Initialise Quill
         quill = new window.Quill(editorElement, {
@@ -650,13 +660,15 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S) – toggle format
+        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
         if (quill.keyboard) {
             quill.keyboard.addBinding({
                 key: 'S',
                 shortKey: true,
                 shiftKey: true
-            }, function(range) {
+            }, function() {
+                var range = quill.getSelection();
+                if (!range) return true;
                 var formats = quill.getFormat(range);
                 quill.format('spoiler', !formats.spoiler, 'user');
                 return false;
