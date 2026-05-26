@@ -1,5 +1,5 @@
 // Messenger Module – Complete modern UI for all messenger sections
-
+// Uses ForumCoreObserver exclusively for DOM detection (no polling, no custom MutationObservers)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -50,7 +50,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
-                // Observer for wrapper (#modern-forum-wrapper)
                 var wrapperObserverId = globalThis.forumObserver.register({
                     id: 'messenger-wrapper',
                     selector: '#modern-forum-wrapper',
@@ -62,7 +61,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // Observer for the current section’s target element(s)
                 var targetSelector = '';
                 if (currentSection === 'messages') {
                     targetSelector = '.big_list .row-mp';
@@ -83,14 +81,12 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // Very short safety fallback (in case observer never fires)
                 setTimeout(function() {
                     if (!wrapperReady) wrapperReady = true;
                     if (!targetReady) targetReady = true;
                     tryBuild();
                 }, 1000);
             } else {
-                // Fallback when ForumObserver is not available (should not happen on your forum)
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', function() {
                         waitForGlobalFunctions().then(function() {
@@ -126,7 +122,6 @@ var MessengerModule = (function(Utils, EventBus) {
         observerCallbacks = [];
     }
 
-    // Only check for compose‑page globals; for other sections resolve immediately
     function waitForGlobalFunctions() {
         if (currentSection !== 'compose') return Promise.resolve();
         return new Promise(function(resolve) {
@@ -164,7 +159,27 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML)
+    // SPOILER BLOT REGISTRATION (global, once)
+    // ------------------------------------------------------------------------
+    var _spoilerBlotRegistered = false;
+    function registerSpoilerBlot() {
+        if (_spoilerBlotRegistered || !window.Quill) return;
+        _spoilerBlotRegistered = true;
+
+        var Block = window.Quill.import('blots/block');
+        
+        function SpoilerBlot() { Block.apply(this, arguments); }
+        SpoilerBlot.prototype = Object.create(Block.prototype);
+        SpoilerBlot.prototype.constructor = SpoilerBlot;
+        SpoilerBlot.blotName  = 'spoiler';
+        SpoilerBlot.tagName   = 'p';
+        SpoilerBlot.className = 'ql-spoiler-line';
+
+        window.Quill.register(SpoilerBlot, true);
+    }
+
+    // ------------------------------------------------------------------------
+    // CONVERTERS (Legacy BBCode ↔ HTML) with spoiler multi‑line support
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -180,17 +195,20 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
         html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
-        // Spoiler: convert to <p class="ql-spoiler-line">
-        html = html.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, function(_, content) {
-            return content.split(/\n/).map(function(line) {
-                return '<p class="ql-spoiler-line">' + (line || '<br>') + '</p>';
-            }).join('');
-        });
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
         html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gi, '<span style="font-family:$1">$2</span>');
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gi, '<span style="font-size:$1px">$2</span>');
         html = html.replace(/\[color=([^\]]+)\](.*?)\[\/color\]/gi, '<span style="color:$1">$2</span>');
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
+
+        // Spoiler: each line becomes a separate <p class="ql-spoiler-line">
+        html = html.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, function(_, content) {
+            return content.split(/\n/).map(function(line) {
+                line = line || '<br>';
+                return '<p class="ql-spoiler-line">' + line + '</p>';
+            }).join('');
+        });
+
         return html;
     }
 
@@ -198,15 +216,11 @@ var MessengerModule = (function(Utils, EventBus) {
         if (!html) return '';
         var div = document.createElement('div');
         div.innerHTML = html;
-        var legacy = div.innerHTML;
 
-        // ---- Phase 1: group consecutive .ql-spoiler-line elements into a placeholder ----
+        // Phase 1 (DOM): group consecutive .ql-spoiler-line elements
         var processed = new Set();
-        var spoilerGroups = [];
-        var spoilerLines = Array.from(div.querySelectorAll('.ql-spoiler-line'));
-        for (var i = 0; i < spoilerLines.length; i++) {
-            var line = spoilerLines[i];
-            if (processed.has(line)) continue;
+        Array.from(div.querySelectorAll('.ql-spoiler-line')).forEach(function(line) {
+            if (processed.has(line)) return;
             var group = [line];
             var next = line.nextElementSibling;
             while (next && next.classList && next.classList.contains('ql-spoiler-line')) {
@@ -215,19 +229,20 @@ var MessengerModule = (function(Utils, EventBus) {
                 next = next.nextElementSibling;
             }
             processed.add(line);
-            // Create a placeholder div that holds the merged inner HTML
+
             var placeholder = document.createElement('div');
             placeholder.className = 'spoiler-group-placeholder';
             placeholder.innerHTML = group.map(function(l) {
                 return l.innerHTML;
             }).join('\n');
+
             line.parentNode.insertBefore(placeholder, line);
             group.forEach(function(l) { l.parentNode.removeChild(l); });
-            spoilerGroups.push(placeholder);
-        }
+        });
 
-        // ---- Phase 2: regex replacements (standard conversions) ----
-        legacy = div.innerHTML;
+        var legacy = div.innerHTML;
+
+        // Phase 2: standard inline conversions
         legacy = legacy.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '<b>$1</b>');
         legacy = legacy.replace(/<em[^>]*>(.*?)<\/em>/gi, '<i>$1</i>');
         legacy = legacy.replace(/<u>(.*?)<\/u>/gi, '<u>$1</u>');
@@ -240,13 +255,13 @@ var MessengerModule = (function(Utils, EventBus) {
         legacy = legacy.replace(/<img[^>]+src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
         legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
 
-        // ---- Phase 3: wrap spoiler groups with BBCode tags ----
+        // Phase 3: spoiler placeholder → BBCode
         legacy = legacy.replace(
             /<div class="spoiler-group-placeholder">([\s\S]*?)<\/div>/gi,
             '[SPOILER]$1[/SPOILER]'
         );
 
-        // ---- Phase 4: clean up leftover tags ----
+        // Cleanup remaining tags
         legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
         legacy = legacy.replace(/<\/p>/gi, '\n');
         legacy = legacy.replace(/<p[^>]*>/gi, '');
@@ -257,25 +272,9 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION (Quill-based, with custom spoiler blot)
+    // COMPOSE SECTION (Quill-based, with custom modal & dropdown)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
-        // ---- Register custom spoiler blot (once) ----
-        var _spoilerBlotRegistered = false;
-        function registerSpoilerBlot() {
-            if (_spoilerBlotRegistered || !window.Quill) return;
-            _spoilerBlotRegistered = true;
-            var Block = window.Quill.import('blots/block');
-            function SpoilerBlot() { Block.apply(this, arguments); }
-            SpoilerBlot.prototype = Object.create(Block.prototype);
-            SpoilerBlot.prototype.constructor = SpoilerBlot;
-            SpoilerBlot.blotName  = 'spoiler';
-            SpoilerBlot.tagName   = 'p';
-            SpoilerBlot.className = 'ql-spoiler-line';
-            window.Quill.register(SpoilerBlot, true);
-        }
-        registerSpoilerBlot();
-
         var recipientInput   = document.querySelector('input[name="entered_name"]');
         var contactSelect    = document.querySelector('select[name="from_contact"]');
         var titleInput       = document.querySelector('input[name="msg_title"]');
@@ -304,7 +303,6 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(recipientRow);
 
-        // Helper: custom modal with input
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -410,9 +408,7 @@ var MessengerModule = (function(Utils, EventBus) {
             var isVisible = listDropdownMenu.style.display === 'block';
             listDropdownMenu.style.display = isVisible ? 'none' : 'block';
         };
-        document.addEventListener('click', function() {
-            listDropdownMenu.style.display = 'none';
-        });
+        document.addEventListener('click', function() { listDropdownMenu.style.display = 'none'; });
         listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
@@ -493,7 +489,6 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker
         function uploadImageToWorker(file, quillEditor) {
             var formData = new FormData();
             formData.append('image', file);
@@ -515,8 +510,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     quillEditor.insertEmbed(range.index, 'image', data.url, 'user');
                     quillEditor.insertText(range.index + 1, '\u200B', 'user');
                     quillEditor.setSelection(range.index + 2);
-                } else {
-                    console.error('Upload failed:', data);
                 }
                 quillEditor.focus();
             })
@@ -556,7 +549,7 @@ var MessengerModule = (function(Utils, EventBus) {
         addSeparator();
 
         // Group 4: Spoiler + Smiley
-        // Spoiler button toggles the custom "spoiler" format
+        // Spoiler button – uses the custom blot to toggle format
         var spoilerBtn = document.createElement('button');
         spoilerBtn.type = 'button';
         spoilerBtn.className = 'modern-editor-btn';
@@ -590,6 +583,9 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.id = 'quill-editor';
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
+
+        // Register the spoiler blot once before Quill initialisation
+        registerSpoilerBlot();
 
         // Initialise Quill
         quill = new window.Quill(editorElement, {
@@ -640,7 +636,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         quill.on('selection-change', updateToolbarActiveStates);
         quill.on('text-change', updateToolbarActiveStates);
-        updateToolbarActiveStates();  // initial state
+        updateToolbarActiveStates();
 
         // Drag & Drop support
         var editorRoot = quill.root;
@@ -654,19 +650,16 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
+        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S) – toggle format
         if (quill.keyboard) {
             quill.keyboard.addBinding({
                 key: 'S',
                 shortKey: true,
-                shiftKey: true,
-                handler: function() {
-                    var range = quill.getSelection();
-                    if (!range) return;
-                    var formats = quill.getFormat(range);
-                    quill.format('spoiler', !formats.spoiler, 'user');
-                    return false;
-                }
+                shiftKey: true
+            }, function(range) {
+                var formats = quill.getFormat(range);
+                quill.format('spoiler', !formats.spoiler, 'user');
+                return false;
             });
         }
 
@@ -704,7 +697,7 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
         container.appendChild(optionsRow);
 
-        // Action buttons (Preview / Send)
+        // Action buttons
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
@@ -719,7 +712,7 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.innerHTML = '<div class="preview-content"></div>';
         container.appendChild(previewArea);
 
-        // Data binding (recipient, title, checkboxes)
+        // Data binding
         var modernRecipient   = container.querySelector('#modern-recipient');
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
@@ -807,7 +800,6 @@ var MessengerModule = (function(Utils, EventBus) {
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
             var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
 
-            // Stats + folder selector
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
@@ -823,7 +815,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(folderRow);
 
-            // Column headers
             var listHeader = document.createElement('div');
             listHeader.className = 'messages-list-header';
             listHeader.innerHTML = ''
@@ -834,7 +825,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
             container.appendChild(listHeader);
 
-            // Message rows
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
 
@@ -845,7 +835,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var senderLink = row.querySelector('.xx a');
                 var dateSpan   = row.querySelector('.zz .when');
                 var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
-
                 var origCheckbox = row.querySelector('input[type="checkbox"]');
                 var msgName = origCheckbox ? origCheckbox.name : '';
 
@@ -861,7 +850,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
             container.appendChild(listContainer);
 
-            // Bulk action bar
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -878,7 +866,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</div>';
             container.appendChild(actionBar);
 
-            // Wire folder selector to legacy form
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
@@ -890,7 +877,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
             }
 
-            // Select all
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
@@ -1032,7 +1018,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CORE BUILDER – uses only the wrapper and current section
+    // CORE BUILDER
     // ------------------------------------------------------------------------
     function buildModernMessenger() {
         var wrapper = document.getElementById('modern-forum-wrapper');
@@ -1046,7 +1032,6 @@ var MessengerModule = (function(Utils, EventBus) {
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
 
-        // Navigation
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
 
