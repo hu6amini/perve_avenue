@@ -2161,10 +2161,6 @@ input[type="radio"]:checked::before {
         justify-content: center;
     }
 
-    .ql-editor {
-        min-height: 150px;
-    }
-
     /* Messages mobile */
     .messages-list-header {
         display: none;
