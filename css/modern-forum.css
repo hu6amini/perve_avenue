@@ -1904,7 +1904,7 @@ input[type="radio"]:checked::before {
 /* ----- TipTap editor base (replaces Quill) ----- */
 .modern-wysiwyg {
     margin: var(--space-md);
-    min-height: 250px;
+    min-height: 100px;
     background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
@@ -1919,12 +1919,13 @@ input[type="radio"]:checked::before {
 
 .ProseMirror {
     outline: none;
-    min-height: 200px;
+    min-height: 100px;
     padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
+    text-align: left;
 }
 
 /* Placeholder for empty editor */
