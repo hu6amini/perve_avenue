@@ -498,39 +498,22 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
-        // ---- Load TipTap and extensions ----
-        // We assume TipTap and its extensions are available globally (loaded via CDN)
-        // The dynamic loader already includes them? We'll add a load check.
-        function loadTipTap() {
-            return new Promise(function(resolve, reject) {
-                if (window.TiptapCore && window.TiptapStarterKit && window.TiptapPlaceholder && window.TiptapUnderline) {
-                    resolve();
-                    return;
-                }
-                var scripts = [
-                    'https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js',
-                    'https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js',
-                    'https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js',
-                    'https://unpkg.com/@tiptap/extension-underline@2.5.2/dist/index.umd.js'
-                ];
-                var loaded = 0;
-                function onLoad() {
-                    loaded++;
-                    if (loaded === scripts.length) setTimeout(resolve, 100);
-                }
-                for (var i = 0; i < scripts.length; i++) {
-                    var script = document.createElement('script');
-                    script.src = scripts[i];
-                    script.onload = onLoad;
-                    script.onerror = reject;
-                    document.head.appendChild(script);
-                }
-            });
+        // -----------------------------------------------------------------
+        // Load TipTap as ES modules (dynamic import)
+        // -----------------------------------------------------------------
+        async function loadTipTap() {
+            const [core, starterKit, placeholder, underline] = await Promise.all([
+                import('https://esm.sh/@tiptap/core@2.5.2'),
+                import('https://esm.sh/@tiptap/starter-kit@2.5.2'),
+                import('https://esm.sh/@tiptap/extension-placeholder@2.5.2'),
+                import('https://esm.sh/@tiptap/extension-underline@2.5.2')
+            ]);
+            return { core, starterKit, placeholder, underline };
         }
 
-        // Custom Spoiler Extension (block node, behaves like blockquote)
-        function createSpoilerExtension() {
-            return window.TiptapCore.Node.create({
+        // Custom Spoiler Extension (block node)
+        function createSpoilerExtension(core) {
+            return core.Node.create({
                 name: 'spoiler',
                 group: 'block',
                 content: 'block+',
@@ -540,32 +523,20 @@ var MessengerModule = (function(Utils, EventBus) {
                 },
                 renderHTML: function() {
                     return ['div', { class: 'spoiler' }, 0];
-                },
-                addKeyboardShortcuts: function() {
-                    return {
-                        Enter: function() {
-                            // Default behaviour is to insert a new paragraph inside the spoiler
-                            return this.editor.commands.splitBlock();
-                        },
-                        'Shift-Enter': function() {
-                            return this.editor.commands.insertHardBreak();
-                        }
-                    };
                 }
             });
         }
 
-        loadTipTap().then(function() {
-            var TiptapCore = window.TiptapCore;
-            var StarterKit = window.TiptapStarterKit.StarterKit;
-            var Placeholder = window.TiptapPlaceholder.Placeholder;
-            var Underline = window.TiptapUnderline.Underline;
+        loadTipTap().then(function(modules) {
+            const { Editor } = modules.core;
+            const { StarterKit } = modules.starterKit;
+            const { Placeholder } = modules.placeholder;
+            const { Underline } = modules.underline;
+            const Spoiler = createSpoilerExtension(modules.core);
 
-            var Spoiler = createSpoilerExtension();
+            const initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
 
-            var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
-
-            editor = new TiptapCore.Editor({
+            editor = new Editor({
                 element: editorElement,
                 extensions: [
                     StarterKit,
