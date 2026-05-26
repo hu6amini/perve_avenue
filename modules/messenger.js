@@ -283,28 +283,19 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // ========== CUSTOM SPOILER BLOT (ContainerBlot – allows multiple lines) ==========
+        // ========== CUSTOM SPOILER BLOT (static, non‑collapsible) ==========
+        // Must be defined and registered BEFORE Quill initialisation
         var Quill = window.Quill;
         var Block = Quill.import('blots/block');
-        var ContainerBlot = Quill.import('blots/container');
 
-        class SpoilerBlot extends ContainerBlot {
+        class SpoilerBlot extends Block {
             static blotName = 'spoiler';
             static tagName = 'div';
             static className = 'spoiler';
 
-            static create() {
-                const node = super.create();
-                node.setAttribute('class', this.className);
-                return node;
-            }
-
-            // Optional: define allowed children (any inline or block)
-            static allowedChildren = [Block];
-
-            // Prevent Quill from merging spoilers with adjacent spoilers
+            // Prevent Quill from merging or splitting spoiler blocks
             optimize(context) {
-                // Keep empty spoilers (they can be removed manually)
+                // Intentionally empty to keep the blot intact
             }
         }
         Quill.register(SpoilerBlot);
