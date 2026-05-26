@@ -424,42 +424,42 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker and replace placeholder
+        // Helper: upload image to Cloudflare Worker
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
             
-            var placeholderId = 'img-upload-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-            editorInstance.chain().focus().insertContent('<span id="' + placeholderId + '" class="upload-placeholder">⬆️ Uploading...</span>').run();
+            // Store the current cursor position
+            var currentPos = editorInstance.state.selection.from;
             
-            // Give the DOM a moment to update
-            setTimeout(function() {
-                var placeholderEl = document.getElementById(placeholderId);
-                if (!placeholderEl) return;
+            // Insert a plain text placeholder
+            editorInstance.chain().focus().insertContent('⬆️ Uploading...').run();
+            
+            // The placeholder will be inserted starting at currentPos
+            var placeholderStart = currentPos;
+            var placeholderEnd = currentPos + '⬆️ Uploading...'.length;
+            
+            fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Delete the placeholder
+                editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
                 
-                var view = editorInstance.view;
-                var pos = view.posAtDOM(placeholderEl, 0);
-                var endPos = pos + placeholderEl.textContent.length;
-                
-                fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    editorInstance.chain().focus().deleteRange({ from: pos, to: endPos }).run();
-                    if (data.url) {
-                        editorInstance.chain().focus().insertContent('<img src="' + data.url + '">').run();
-                    } else {
-                        editorInstance.chain().focus().insertContent('[Upload failed]').run();
-                    }
-                })
-                .catch(error => {
-                    console.error('Upload error:', error);
-                    editorInstance.chain().focus().deleteRange({ from: pos, to: endPos }).run();
-                    editorInstance.chain().focus().insertContent('[Upload error]').run();
-                });
-            }, 10);
+                if (data.url) {
+                    // Insert the image at the same position
+                    editorInstance.chain().focus().insertContent('<img src="' + data.url + '">').run();
+                } else {
+                    editorInstance.chain().focus().insertContent('[Upload failed]').run();
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                editorInstance.chain().focus().insertContent('[Upload error]').run();
+            });
         }
 
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
