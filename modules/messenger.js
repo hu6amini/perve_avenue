@@ -429,13 +429,8 @@ var MessengerModule = (function(Utils, EventBus) {
             var formData = new FormData();
             formData.append('image', file);
             
-            // Store the current cursor position
             var currentPos = editorInstance.state.selection.from;
-            
-            // Insert a plain text placeholder
             editorInstance.chain().focus().insertContent('⬆️ Uploading...').run();
-            
-            // The placeholder will be inserted starting at currentPos
             var placeholderStart = currentPos;
             var placeholderEnd = currentPos + '⬆️ Uploading...'.length;
             
@@ -445,12 +440,13 @@ var MessengerModule = (function(Utils, EventBus) {
             })
             .then(response => response.json())
             .then(data => {
-                // Delete the placeholder
                 editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
-                
                 if (data.url) {
-                    // Insert the image at the same position
-                    editorInstance.chain().focus().insertContent('<img src="' + data.url + '">').run();
+                    // Insert image as a node (not HTML string)
+                    editorInstance.chain().focus().insertContent({
+                        type: 'image',
+                        attrs: { src: data.url, alt: 'Uploaded image' }
+                    }).run();
                 } else {
                     editorInstance.chain().focus().insertContent('[Upload failed]').run();
                 }
