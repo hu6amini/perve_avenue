@@ -429,41 +429,37 @@ var MessengerModule = (function(Utils, EventBus) {
             var formData = new FormData();
             formData.append('image', file);
             
-            // Generate a unique ID for the placeholder
             var placeholderId = 'img-upload-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-            
-            // Insert a temporary placeholder span
             editorInstance.chain().focus().insertContent('<span id="' + placeholderId + '" class="upload-placeholder">⬆️ Uploading...</span>').run();
             
-            fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                var placeholder = document.getElementById(placeholderId);
-                if (!placeholder) return;
+            // Give the DOM a moment to update
+            setTimeout(function() {
+                var placeholderEl = document.getElementById(placeholderId);
+                if (!placeholderEl) return;
                 
-                if (data.url) {
-                    // Replace the placeholder with an image element
-                    var img = document.createElement('img');
-                    img.src = data.url;
-                    img.alt = 'Uploaded image';
-                    placeholder.parentNode.replaceChild(img, placeholder);
-                    // Focus the editor again
-                    editorInstance.commands.focus();
-                } else {
-                    // Upload failed – remove placeholder and show error
-                    placeholder.remove();
-                    alert('Image upload failed. Please try again.');
-                }
-            })
-            .catch(error => {
-                console.error('Upload error:', error);
-                var placeholder = document.getElementById(placeholderId);
-                if (placeholder) placeholder.remove();
-                alert('Upload error. Check console for details.');
-            });
+                var view = editorInstance.view;
+                var pos = view.posAtDOM(placeholderEl, 0);
+                var endPos = pos + placeholderEl.textContent.length;
+                
+                fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    editorInstance.chain().focus().deleteRange({ from: pos, to: endPos }).run();
+                    if (data.url) {
+                        editorInstance.chain().focus().insertContent('<img src="' + data.url + '">').run();
+                    } else {
+                        editorInstance.chain().focus().insertContent('[Upload failed]').run();
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    editorInstance.chain().focus().deleteRange({ from: pos, to: endPos }).run();
+                    editorInstance.chain().focus().insertContent('[Upload error]').run();
+                });
+            }, 10);
         }
 
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
