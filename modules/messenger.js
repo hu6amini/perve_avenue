@@ -133,7 +133,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // HELPERS (escapeHtml, formatDate, etc.)
+    // HELPERS
     // ------------------------------------------------------------------------
     function escapeHtml(str) {
         if (!str) return '';
@@ -158,7 +158,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML) – unchanged
+    // CONVERTERS (Legacy BBCode ↔ HTML)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -224,7 +224,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Recipient + Subject row (unchanged)
+        // Recipient + Subject row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -238,7 +238,7 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(recipientRow);
 
-        // Toolbar (same structure as before)
+        // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
 
@@ -252,7 +252,6 @@ var MessengerModule = (function(Utils, EventBus) {
             toolbar.appendChild(sep);
         }
 
-        // Helper to execute editor commands
         function exec(cmd) {
             if (!editor) return;
             cmd();
@@ -279,7 +278,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }
         addSeparator();
 
-        // ----- Group 2: List dropdown + Blockquote + Code (blockquote will be a single container) -----
+        // ----- Group 2: List dropdown + Blockquote + Code -----
         var listDropdownContainer = document.createElement('div');
         listDropdownContainer.className = 'modern-dropdown';
         listDropdownContainer.style.position = 'relative';
@@ -319,7 +318,6 @@ var MessengerModule = (function(Utils, EventBus) {
             listDropdownMenu.style.display = 'none';
         };
 
-        // Blockquote (single container)
         var blockquoteBtn = document.createElement('button');
         blockquoteBtn.type = 'button';
         blockquoteBtn.className = 'modern-editor-btn';
@@ -329,7 +327,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(blockquoteBtn);
         activeButtonElements.push(blockquoteBtn);
 
-        // Code block
         var codeBtn = document.createElement('button');
         codeBtn.type = 'button';
         codeBtn.className = 'modern-editor-btn';
@@ -341,7 +338,6 @@ var MessengerModule = (function(Utils, EventBus) {
         addSeparator();
 
         // ----- Group 3: Link + Image (dropdown) -----
-        // Link button with modal
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -393,7 +389,7 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(linkBtn);
         activeButtonElements.push(linkBtn);
 
-        // Image dropdown (URL + Upload)
+        // Image dropdown
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
         imageDropdownContainer.style.position = 'relative';
@@ -428,12 +424,11 @@ var MessengerModule = (function(Utils, EventBus) {
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
-            
             var currentPos = editorInstance.state.selection.from;
             editorInstance.chain().focus().insertContent('⬆️ Uploading...').run();
             var placeholderStart = currentPos;
             var placeholderEnd = currentPos + '⬆️ Uploading...'.length;
-            
+
             fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
                 method: 'POST',
                 body: formData
@@ -442,7 +437,6 @@ var MessengerModule = (function(Utils, EventBus) {
             .then(data => {
                 editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
                 if (data.url) {
-                    // Insert image as a node (not HTML string)
                     editorInstance.chain().focus().insertContent({
                         type: 'image',
                         attrs: { src: data.url, alt: 'Uploaded image' }
@@ -509,16 +503,17 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(editorElement);
 
         // -----------------------------------------------------------------
-        // Load TipTap as ES modules (dynamic import)
+        // Load TipTap as ES modules (dynamic import) – includes Image extension
         // -----------------------------------------------------------------
         async function loadTipTap() {
-            const [core, starterKit, placeholder, underline] = await Promise.all([
+            const [core, starterKit, placeholder, underline, image] = await Promise.all([
                 import('https://esm.sh/@tiptap/core@2.5.2'),
                 import('https://esm.sh/@tiptap/starter-kit@2.5.2'),
                 import('https://esm.sh/@tiptap/extension-placeholder@2.5.2'),
-                import('https://esm.sh/@tiptap/extension-underline@2.5.2')
+                import('https://esm.sh/@tiptap/extension-underline@2.5.2'),
+                import('https://esm.sh/@tiptap/extension-image@2.5.2')
             ]);
-            return { core, starterKit, placeholder, underline };
+            return { core, starterKit, placeholder, underline, image };
         }
 
         // Custom Spoiler Extension (block node)
@@ -542,6 +537,7 @@ var MessengerModule = (function(Utils, EventBus) {
             const { StarterKit } = modules.starterKit;
             const { Placeholder } = modules.placeholder;
             const { Underline } = modules.underline;
+            const { Image } = modules.image;
             const Spoiler = createSpoilerExtension(modules.core);
 
             const initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
@@ -550,17 +546,14 @@ var MessengerModule = (function(Utils, EventBus) {
                 element: editorElement,
                 extensions: [
                     StarterKit,
-                    Placeholder.configure({
-                        placeholder: '💬 Write your message...',
-                    }),
+                    Placeholder.configure({ placeholder: '💬 Write your message...' }),
                     Underline,
+                    Image,      // Image extension added
                     Spoiler
                 ],
                 content: initialHtml,
                 editorProps: {
-                    attributes: {
-                        class: 'modern-wysiwyg-content'
-                    }
+                    attributes: { class: 'modern-wysiwyg-content' }
                 },
                 onUpdate: function({ editor }) {
                     if (originalTextarea) {
@@ -569,7 +562,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             });
 
-            // Update active states for toolbar buttons
+            // Update active states
             function updateActiveStates() {
                 var isActive = {
                     bold: editor.isActive('bold'),
@@ -632,7 +625,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             });
 
-            // Redirect smiley clicks into editor
+            // Redirect smiley clicks
             _originalEmoticon = window.emoticon;
             window.emoticon = function(x) {
                 if (editor) {
@@ -645,7 +638,7 @@ var MessengerModule = (function(Utils, EventBus) {
             console.error('[MessengerModule] TipTap failed to load:', err);
         });
 
-        // Options row, action buttons, data binding (unchanged from Quill version)
+        // Options row, action buttons, data binding (unchanged)
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -695,7 +688,6 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // Preview button
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
@@ -720,7 +712,6 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Submit button
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
@@ -740,10 +731,10 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (fully rebuilt) – unchanged from Quill version
+    // MESSAGES SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
-        // ... (same as before, no changes)
+        // (same as before – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
@@ -900,9 +891,10 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (fully rebuilt) – unchanged
+    // CONTACTS SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
+        // (same as before – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
