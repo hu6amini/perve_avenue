@@ -424,28 +424,46 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker
+        // Helper: upload image to Cloudflare Worker and replace placeholder
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
-            var loadingId = 'img-loading-' + Date.now();
-            editorInstance.chain().focus().insertContent('<div id="' + loadingId + '" style="display:inline-block;">⬆️ Uploading...</div>').run();
-
+            
+            // Generate a unique ID for the placeholder
+            var placeholderId = 'img-upload-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+            
+            // Insert a temporary placeholder span
+            editorInstance.chain().focus().insertContent('<span id="' + placeholderId + '" class="upload-placeholder">⬆️ Uploading...</span>').run();
+            
             fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
                 method: 'POST',
                 body: formData
             })
             .then(response => response.json())
             .then(data => {
-                // Remove loading indicator
-                editorInstance.chain().focus().deleteRange({ from: editorInstance.state.selection.from - 1, to: editorInstance.state.selection.to }).run();
+                var placeholder = document.getElementById(placeholderId);
+                if (!placeholder) return;
+                
                 if (data.url) {
-                    editorInstance.chain().focus().insertContent('<img src="' + data.url + '">').run();
+                    // Replace the placeholder with an image element
+                    var img = document.createElement('img');
+                    img.src = data.url;
+                    img.alt = 'Uploaded image';
+                    placeholder.parentNode.replaceChild(img, placeholder);
+                    // Focus the editor again
+                    editorInstance.commands.focus();
                 } else {
-                    console.error('Upload failed:', data);
+                    // Upload failed – remove placeholder and show error
+                    placeholder.remove();
+                    alert('Image upload failed. Please try again.');
                 }
             })
-            .catch(error => console.error('Upload error:', error));
+            .catch(error => {
+                console.error('Upload error:', error);
+                var placeholder = document.getElementById(placeholderId);
+                if (placeholder) placeholder.remove();
+                alert('Upload error. Check console for details.');
+            });
         }
 
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
