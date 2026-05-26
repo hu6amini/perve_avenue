@@ -660,17 +660,11 @@ formats: ['bold', 'italic', 'underline', 'strike', 'list', 'link', 'image', 'blo
 
         // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
         if (quill.keyboard) {
-            quill.keyboard.addBinding({
-                key: 'S',
-                shortKey: true,
-                shiftKey: true
-            }, function() {
-                var range = quill.getSelection();
-                if (!range) return true;
-                var formats = quill.getFormat(range);
-                quill.format('spoiler', !formats.spoiler, 'user');
-                return false;
-            });
+quill.keyboard.addBinding({ key: 'S', shortKey: true, shiftKey: true }, function() {
+    var formats = quill.getFormat();
+    quill.format('spoiler', !formats.spoiler);
+    return false;
+});
         }
 
         // Load pre-existing content
