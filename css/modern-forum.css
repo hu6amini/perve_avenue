@@ -1689,137 +1689,54 @@ input[type="radio"]:checked::before {
 }
 
 /* ----- WYSIWYG toolbar (custom, above Quill) ----- */
-.modern-editor-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-xs);
-    padding: var(--pad-4) var(--pad-6);
-    border-bottom: 1px solid var(--border-color);
+/* TipTap editor base */
+.ProseMirror {
+    outline: none;
+    min-height: 200px;
     background: var(--bg-color);
-    align-items: center; 
-}
-
-.toolbar-separator {
-    display: inline-block;
-    width: 1px;
-    height: 1.5rem;
-    background: var(--border-color);
-    margin: 0 var(--space-sm);
-    vertical-align: middle;
-}
-
-.modern-editor-btn {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    width: 2rem;
-    height: 2rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    transition: all 0.2s ease;
-}
-
-.modern-editor-btn i {
-    pointer-events: none;
-}
-
-.modern-editor-btn:hover {
-    background: var(--hover-color);
-    border-color: var(--primary-color);
-    color: var(--text-primary);
-    transform: translateY(-1px);
-}
-
-/* Active state for toggle buttons */
-.modern-editor-btn.active {
-    background: var(--surface-color);
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-}
-
-/* ----- Quill editor styling (overrides) ----- */
-#quill-editor {
-    margin: var(--space-md);
-    width: calc(100% - 2 * var(--space-md));
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    transition: all 0.2s ease;
-}
-
-#quill-editor:focus-within {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--focus-ring);
-}
-
-.ql-editor {
-    min-height: 100px;
-    padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
-    outline: none;
+    padding: var(--pad-4);
 }
-
-/* Quill placeholder (blank state) */
-.ql-editor.ql-blank::before {
+.ProseMirror p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
+    float: left;
     color: var(--text-tertiary);
-    font-style: normal;
-    left: var(--pad-4);
-    right: auto;
-    font-weight: normal;
+    pointer-events: none;
+    height: 0;
 }
-
-/* Quill content styles (matching our legacy converter) */
-.ql-editor strong { font-weight: bold; }
-.ql-editor em { font-style: italic; }
-.ql-editor u { text-decoration: underline; }
-.ql-editor s, .ql-editor del { text-decoration: line-through; }
-
-.ql-editor ul,
-.ql-editor ol {
-    margin: var(--space-sm) 0;
+.ProseMirror ul, .ProseMirror ol {
     padding-left: var(--space-lg);
 }
-
-.ql-editor blockquote {
+.ProseMirror blockquote {
     border-left: 3px solid var(--primary-color);
     margin: var(--space-sm) 0;
     padding-left: var(--space-md);
     color: var(--text-secondary);
 }
-
-.ql-editor pre.ql-syntax {
+.ProseMirror pre {
     background: var(--bg-color);
     padding: var(--space-sm);
     border-radius: var(--radius-sm);
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
 }
-
-.ql-editor details {
+.ProseMirror .spoiler {
     background: var(--surface-light);
     padding: var(--space-sm);
     border-radius: var(--radius);
-    cursor: pointer;
     margin: var(--space-sm) 0;
+    border: 1px solid var(--border-color);
 }
-.ql-editor details summary {
+.ProseMirror .spoiler::before {
+    content: "Spoiler";
+    display: block;
     font-weight: bold;
     margin-bottom: var(--space-xs);
     color: var(--text-tertiary);
-}
-.ql-editor img {
-    max-width: 100%;
-    height: auto;
-    border-radius: var(--radius-sm);
 }
 
 /* ----- Options row (checkboxes) ----- */
