@@ -14,7 +14,6 @@ const STYLESHEETS = Object.freeze([
 
 const IDLE_TIMEOUT_SLICK = 500;
 const IDLE_TIMEOUT_ENHANCEMENTS = 800;
-// No separate IDLE_TIMEOUT_ENHANCER needed – enhancer is loaded after enhancements
 
 // ============================================================================
 // 1. STYLESHEETS (global – no lightgallery)
@@ -29,7 +28,7 @@ STYLESHEETS.forEach(url => {
 });
 
 // ============================================================================
-// 2. SCRIPT LOADER ENGINE
+// 2. SCRIPT LOADER ENGINE (with optional force sequential)
 // ============================================================================
 function loadScript(src, isModule = false) {
     return new Promise((resolve, reject) => {
@@ -51,6 +50,13 @@ function loadScript(src, isModule = false) {
         script.onerror = () => reject(new Error(`Failed: ${src}`));
         document.head.appendChild(script);
     });
+}
+
+// Sequential loader for dependencies
+async function loadScriptsSequentially(sources) {
+    for (const src of sources) {
+        await loadScript(src);
+    }
 }
 
 // ============================================================================
@@ -132,7 +138,20 @@ async function loadLightGallery() {
 }
 
 // ============================================================================
-// 6. PHASED EXECUTION LOGIC (heavily optimized)
+// 6. TIPTAP UMD LOADER (sequential, before messenger)
+// ============================================================================
+async function loadTipTapUMD() {
+    // Core must be first
+    await loadScript("https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js");
+    // Extensions that depend on core
+    await loadScript("https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js");
+    await loadScript("https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js");
+    await loadScript("https://unpkg.com/@tiptap/extension-underline@2.5.2/dist/index.umd.js");
+    await loadScript("https://unpkg.com/@tiptap/extension-image@2.5.2/dist/index.umd.js");
+}
+
+// ============================================================================
+// 7. PHASED EXECUTION LOGIC (heavily optimized)
 // ============================================================================
 async function bootSystem() {
     try {
@@ -198,30 +217,35 @@ async function bootSystem() {
         scheduleWork(initSlick, IDLE_TIMEOUT_SLICK);
 
         // ============================================================
-        // IDLE LOAD: Non‑critical modules that enhance the UI
-        // After they finish, load the Forum Enhancer (which registers them)
+        // IDLE LOAD: TipTap first, then other enhancement modules, then Forum Enhancer
         // ============================================================
-        const loadEnhancements = () => {
+        const loadEnhancements = async () => {
             const enhStart = performance.now();
-            Promise.allSettled([
+            
+            // 1. Load TipTap UMD (core + extensions) sequentially
+            await loadTipTapUMD();
+            
+            // 2. Load all other enhancement modules (including messenger)
+            const results = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c1066340cbf311e771dcbb89968413bd5cb646d2/modules/media-dimensions.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@166baf94c99ec634efacda7561f171ab86ef0b23/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1275148cb90b926aba27d633c61782250f4006bc/modules/messenger.js")
-            ]).then(results => {
-                const failed = results.filter(r => r.status === 'rejected');
-                if (failed.length > 0) {
-                    console.warn('[Boot] Enhancement load had failures:', failed);
-                }
-                console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
-                
-                // Now that all enhancement modules are loaded, load the Forum Enhancer
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d8425539db17a67f32a4d4990fb23d50369fcd52/core/forum-enhancer.min.js")
-                    .then(() => console.log('[Boot] System Fully Enhanced'))
-                    .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
-            });
+            ]);
+            
+            const failed = results.filter(r => r.status === 'rejected');
+            if (failed.length > 0) {
+                console.warn('[Boot] Enhancement load had failures:', failed);
+            }
+            console.debug(`[Boot] Enhancements loaded in ${(performance.now() - enhStart).toFixed(2)}ms`);
+            
+            // 3. Finally, load the Forum Enhancer which registers everything
+            loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d8425539db17a67f32a4d4990fb23d50369fcd52/core/forum-enhancer.min.js")
+                .then(() => console.log('[Boot] System Fully Enhanced'))
+                .catch(err => console.warn('[Boot] Forum enhancer failed to load:', err));
         };
+        
         scheduleWork(loadEnhancements, IDLE_TIMEOUT_ENHANCEMENTS);
 
         // ============================================================
