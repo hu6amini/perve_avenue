@@ -1569,8 +1569,7 @@ input[type="radio"]:checked::before {
 }
 
 /* ==========================================================================
-   MODERN MESSENGER – Emerald Theme Integration
-   Quill WYSIWYG, Messages, Contacts
+   MODERN MESSENGER – TipTap WYSIWYG + Messages & Contacts (Emerald Theme)
    ========================================================================== */
 
 /* ----- Modern messenger container ----- */
@@ -1581,129 +1580,6 @@ input[type="radio"]:checked::before {
     box-shadow: var(--shadow-md);
     margin: var(--space-lg) 0;
     overflow: hidden;
-}
-
-/* ----- Sidebar + Main layout (desktop) ----- */
-#modern-messenger {
-    display: flex;
-    flex-direction: row;
-}
-
-/* ----- Navigation sidebar (desktop) ----- */
-.modern-messenger-nav {
-    width: 200px;
-    background: var(--bg-color);
-    border-right: 1px solid var(--border-color);
-    padding: var(--space-md) 0;
-    flex-shrink: 0;
-}
-
-.modern-nav-link {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--pad-3) var(--pad-6);
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-family: var(--font-primary);
-    font-weight: 500;
-    font-size: var(--text-sm);
-    transition: all 0.2s ease;
-    border-left: 3px solid transparent;
-    cursor: pointer;
-}
-
-.modern-nav-link i {
-    width: 1.5rem;
-    text-align: center;
-    font-size: 1.1rem;
-}
-
-.modern-nav-link:hover {
-    background: var(--hover-color);
-    color: var(--text-primary);
-}
-
-.modern-nav-link.current {
-    background: var(--hover-color);
-    border-left-color: var(--primary-color);
-    color: var(--primary-light);
-}
-
-/* ----- Main content area ----- */
-.modern-messenger-main {
-    flex: 1;
-    min-width: 0;
-    background: var(--surface-color);
-}
-
-/* ----- Compose section ----- */
-.modern-recipient-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-lg);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius);
-    margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
-    border: 1px solid var(--border-color);
-}
-
-.modern-field {
-    flex: 1;
-    min-width: 200px;
-}
-
-.modern-recipient-controls {
-    display: flex;
-    gap: var(--space-sm);
-    flex-wrap: wrap;
-}
-
-.modern-input,
-.modern-select {
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: var(--pad-3) var(--pad-4);
-    color: var(--text-primary);
-    font-family: var(--font-primary);
-    font-size: var(--text-sm);
-    transition: all 0.2s ease;
-    width: 100%;
-}
-
-.modern-input:focus,
-.modern-select:focus {
-    border-color: var(--primary-color);
-    outline: none;
-    box-shadow: 0 0 0 2px var(--focus-ring);
-}
-
-.modern-select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%236B7280' d='M360.5 217.5l-152 143.1C203.9 365.8 197.9 368 192 368s-11.88-2.188-16.5-6.562L23.5 217.5C13.87 208.3 13.47 193.1 22.56 183.5C31.69 173.8 46.94 173.5 56.5 182.6L192 310.9l135.5-128.4c9.562-9.094 24.75-8.75 33.94 .9375C370.5 193.1 370.1 208.3 360.5 217.5z'/%3E%3C/svg%3E") !important;
-    background-size: auto 1rem;
-    background-repeat: no-repeat;
-    background-position: right var(--pad-3) center;
-    appearance: none;
-    padding-right: var(--space-lg);
-}
-
-/* ==========================================================================
-   MODERN MESSENGER – TipTap WYSIWYG (Emerald Theme)
-   ========================================================================== */
-
-/* ----- Modern messenger container (inside wrapper) ----- */
-#modern-messenger {
-    background: var(--surface-color);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-md);
-    margin: var(--space-lg) 0;
-    overflow: hidden;
-}
-
-/* ----- Sidebar + Main layout (desktop) ----- */
-#modern-messenger {
     display: flex;
     flex-direction: row;
 }
@@ -1901,7 +1777,7 @@ input[type="radio"]:checked::before {
     background: var(--hover-color);
 }
 
-/* ----- TipTap editor base (replaces Quill) ----- */
+/* ----- TipTap editor base ----- */
 .modern-wysiwyg {
     margin: var(--space-md);
     min-height: 100px;
@@ -1937,7 +1813,7 @@ input[type="radio"]:checked::before {
     height: 0;
 }
 
-/* ----- TipTap content styling ----- */
+/* TipTap content styling */
 .ProseMirror strong { font-weight: bold; }
 .ProseMirror em { font-style: italic; }
 .ProseMirror u { text-decoration: underline; }
@@ -2040,7 +1916,6 @@ input[type="radio"]:checked::before {
     background: var(--primary-color);
     color: white;
 }
-
 .modern-btn-primary:hover {
     background: var(--primary-dark);
     transform: translateY(-1px);
@@ -2051,163 +1926,6 @@ input[type="radio"]:checked::before {
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
 }
-
-.modern-btn-secondary:hover {
-    background: var(--hover-color);
-    border-color: var(--primary-color);
-    color: var(--text-primary);
-    transform: translateY(-1px);
-}
-
-/* ----- Preview area ----- */
-.modern-preview {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    margin: var(--space-md);
-    padding: var(--space-md);
-}
-
-.modern-preview .preview-content {
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    line-height: 1.618;
-}
-
-/* ===== Responsive (≤680px) ===== */
-@media (max-width: 680px) {
-    #modern-messenger {
-        flex-direction: column;
-    }
-    .modern-messenger-nav {
-        width: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--border-color);
-        display: flex;
-        justify-content: space-around;
-        padding: var(--space-xs) 0;
-        order: 2;
-    }
-    .modern-nav-link {
-        flex-direction: column;
-        justify-content: center;
-        padding: var(--pad-2) var(--pad-3);
-        gap: var(--space-xs);
-        border-left: none;
-        border-bottom: 2px solid transparent;
-        font-size: var(--text-xs);
-    }
-    .modern-nav-link i {
-        width: auto;
-        font-size: 1.25rem;
-    }
-    .modern-nav-link.current {
-        border-left-color: transparent;
-        border-bottom-color: var(--primary-color);
-    }
-    .modern-messenger-main {
-        order: 1;
-    }
-
-    .modern-recipient-row {
-        flex-direction: column;
-        gap: var(--space-md);
-        margin: var(--space-sm);
-    }
-    .modern-editor-toolbar {
-        justify-content: center;
-    }
-    .modern-options {
-        flex-direction: column;
-        gap: var(--space-sm);
-    }
-    .modern-actions {
-        justify-content: center;
-    }
-
-    .ProseMirror {
-        min-height: 150px;
-    }
-
-    /* Messages section mobile (already handled in separate CSS) */
-    .modern-wysiwyg {
-        margin: var(--space-sm);
-    }
-}
-
-/* ===== Reduced motion ===== */
-@media (prefers-reduced-motion: reduce) {
-    #modern-messenger *,
-    #modern-messenger *::before,
-    #modern-messenger *::after {
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-    }
-}
-
-/* ----- Options row (checkboxes) ----- */
-.modern-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-lg);
-    padding: var(--pad-4) var(--pad-6);
-    border-top: 1px solid var(--border-color);
-}
-
-.modern-checkbox {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-xs);
-    cursor: pointer;
-    color: var(--text-secondary);
-    font-size: var(--text-sm);
-}
-
-.modern-checkbox input {
-    cursor: pointer;
-}
-
-/* ----- Action buttons (Preview / Send) ----- */
-.modern-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-md);
-    padding: var(--pad-5);
-    border-top: 1px solid var(--border-color);
-    background: var(--surface-color);
-}
-
-.modern-btn {
-    border: none;
-    border-radius: var(--radius);
-    padding: var(--pad-3) var(--pad-6);
-    font-family: var(--font-primary);
-    font-weight: 500;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.modern-btn i {
-    margin-right: var(--space-xs);
-}
-
-.modern-btn-primary {
-    background: var(--primary-color);
-    color: white;
-}
-
-.modern-btn-primary:hover {
-    background: var(--primary-dark);
-    transform: translateY(-1px);
-}
-
-.modern-btn-secondary {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-}
-
 .modern-btn-secondary:hover {
     background: var(--hover-color);
     border-color: var(--primary-color);
@@ -2284,11 +2002,9 @@ input[type="radio"]:checked::before {
 .message-row {
     transition: background 0.2s;
 }
-
 .message-row:hover {
     background: var(--hover-color);
 }
-
 .message-row.unread {
     background: rgba(5, 150, 105, 0.05);
 }
@@ -2303,7 +2019,6 @@ input[type="radio"]:checked::before {
     flex: 2;
     font-size: var(--text-sm);
 }
-
 .msg-title a {
     color: var(--text-primary);
     text-decoration: none;
@@ -2391,7 +2106,7 @@ input[type="radio"]:checked::before {
 
 .modern-textarea-contacts {
     width: 100%;
-    background: var(--bg-color);;
+    background: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
     padding: var(--pad-3);
@@ -2482,6 +2197,12 @@ input[type="radio"]:checked::before {
     }
     .modern-actions {
         justify-content: center;
+    }
+    .ProseMirror {
+        min-height: 150px;
+    }
+    .modern-wysiwyg {
+        margin: var(--space-sm);
     }
 
     /* Messages mobile */
