@@ -1,5 +1,4 @@
 // Messenger Module – TipTap based, full control over block behaviours
-// Extended with image optimizer: dimensions, lazy loading, async decoding, alt text
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -159,6 +158,101 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // IMAGE ENHANCEMENT HELPERS
+    // ------------------------------------------------------------------------
+    function getImageDimensions(src) {
+        return new Promise(function(resolve, reject) {
+            var img = new Image();
+            img.onload = function() {
+                resolve({ width: img.naturalWidth, height: img.naturalHeight });
+            };
+            img.onerror = function() {
+                reject(new Error('Failed to load image dimensions for ' + src));
+            };
+            img.src = src;
+        });
+    }
+
+    function insertEnhancedImage(editor, src, altText) {
+        if (!editor) return;
+        // First insert a placeholder to indicate loading
+        var placeholderPos = editor.state.selection.from;
+        editor.chain().focus().insertContent('🖼️ Loading image...').run();
+        var placeholderStart = placeholderPos;
+        var placeholderEnd = placeholderStart + '🖼️ Loading image...'.length;
+
+        getImageDimensions(src)
+            .then(function(dims) {
+                // Remove placeholder
+                editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                var alt = (altText && altText.trim()) ? altText : 'Image';
+                editor.chain().focus().setImage({
+                    src: src,
+                    alt: alt,
+                    title: alt,
+                    width: dims.width,
+                    height: dims.height,
+                    loading: 'lazy',
+                    decoding: 'async'
+                }).run();
+            })
+            .catch(function(err) {
+                console.warn('Could not load dimensions for image:', src, err);
+                // Remove placeholder and insert basic image
+                editor.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                var alt = (altText && altText.trim()) ? altText : 'Image';
+                editor.chain().focus().setImage({
+                    src: src,
+                    alt: alt,
+                    title: alt,
+                    loading: 'lazy',
+                    decoding: 'async'
+                }).run();
+            });
+    }
+
+    function enhanceExistingImages(editor) {
+        if (!editor) return;
+        var images = editor.state.doc.descendants(function(node, pos) {
+            if (node.type.name === 'image') {
+                var attrs = node.attrs;
+                var needsUpdate = false;
+                var newAttrs = {};
+
+                // Copy existing attrs
+                for (var k in attrs) {
+                    newAttrs[k] = attrs[k];
+                }
+
+                // Add missing attributes
+                if (!attrs.loading) {
+                    newAttrs.loading = 'lazy';
+                    needsUpdate = true;
+                }
+                if (!attrs.decoding) {
+                    newAttrs.decoding = 'async';
+                    needsUpdate = true;
+                }
+                if (!attrs.alt || attrs.alt === '') {
+                    newAttrs.alt = 'Image';
+                    needsUpdate = true;
+                }
+                // Optionally, if width/height missing, fetch them (async)
+                // For simplicity, we only set missing attributes; dimensions can be added later if needed
+
+                if (needsUpdate) {
+                    editor.commands.command(function(ref) {
+                        var tr = ref.tr;
+                        tr.setNodeMarkup(pos, null, newAttrs);
+                        return true;
+                    });
+                }
+            }
+            return true;
+        });
+    }
+
+    // ------------------------------------------------------------------------
     // CONVERTERS (Legacy BBCode ↔ HTML)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
@@ -184,8 +278,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return html;
     }
 
-    // NOTE: htmlToLegacy is kept but no longer used for storing content.
-    // We store raw HTML in the textarea to preserve image attributes.
     function htmlToLegacy(html) {
         if (!html) return '';
         var div = document.createElement('div');
@@ -210,7 +302,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap based with Image Optimizer
+    // COMPOSE SECTION – TipTap based
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -223,121 +315,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var previewButton = document.querySelector('button[name="preview"]');
         var originalForm  = window.REPLIER;
 
-        // ----- Image Optimizer (dimensions, lazy, async, alt) -----
-        var imageCache = new Map(); // src -> { width, height }
-        var debounceTimer = null;
-        var parser = new DOMParser();
-
-        function generateAltFromSrc(src) {
-            try {
-                var filename = src.split('/').pop().split('#')[0].split('?')[0];
-                var name = filename.replace(/\.[^/.]+$/, '');
-                return name.replace(/[_-]+/g, ' ').trim() || 'image';
-            } catch(e) {
-                return 'image';
-            }
-        }
-
-        function loadImageDimensions(src) {
-            return new Promise(function(resolve) {
-                if (imageCache.has(src)) {
-                    resolve(imageCache.get(src));
-                    return;
-                }
-                var img = new Image();
-                img.onload = function() {
-                    var dims = { width: img.naturalWidth, height: img.naturalHeight };
-                    imageCache.set(src, dims);
-                    resolve(dims);
-                };
-                img.onerror = function() {
-                    imageCache.set(src, { width: 0, height: 0 });
-                    resolve({ width: 0, height: 0 });
-                };
-                img.src = src;
-            });
-        }
-
-        function extractAndCacheImageUrls(html) {
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            var imgs = tempDiv.querySelectorAll('img');
-            var promises = [];
-            for (var i = 0; i < imgs.length; i++) {
-                var src = imgs[i].getAttribute('src');
-                if (src && !imageCache.has(src)) {
-                    promises.push(loadImageDimensions(src));
-                }
-            }
-            if (promises.length) {
-                Promise.allSettled(promises).catch(function(e) { console.warn(e); });
-            }
-        }
-
-        function enhanceHtmlWithAttributes(html) {
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
-            // Enhance images
-            var imgs = tempDiv.querySelectorAll('img');
-            for (var i = 0; i < imgs.length; i++) {
-                var img = imgs[i];
-                var src = img.getAttribute('src');
-                if (!src) continue;
-                // loading lazy
-                if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
-                // decoding async
-                if (!img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
-                // alt text from filename if missing/empty
-                var alt = img.getAttribute('alt');
-                if (!alt || alt.trim() === '') {
-                    img.setAttribute('alt', generateAltFromSrc(src));
-                }
-                // width/height from cache
-                if (imageCache.has(src)) {
-                    var dims = imageCache.get(src);
-                    if (dims.width && dims.height) {
-                        if (!img.hasAttribute('width')) img.setAttribute('width', dims.width);
-                        if (!img.hasAttribute('height')) img.setAttribute('height', dims.height);
-                    }
-                }
-            }
-            // Enhance iframes (lazy loading)
-            var iframes = tempDiv.querySelectorAll('iframe');
-            for (var j = 0; j < iframes.length; j++) {
-                var ifr = iframes[j];
-                if (!ifr.hasAttribute('loading')) ifr.setAttribute('loading', 'lazy');
-            }
-            // Enhance videos (preload metadata, lazy, disable PiP)
-            var videos = tempDiv.querySelectorAll('video');
-            for (var k = 0; k < videos.length; k++) {
-                var vid = videos[k];
-                if (!vid.hasAttribute('preload')) vid.setAttribute('preload', 'metadata');
-                if (!vid.hasAttribute('loading')) vid.setAttribute('loading', 'lazy');
-                vid.setAttribute('disablepictureinpicture', '');
-                vid.setAttribute('disableremoteplayback', '');
-                if (!vid.hasAttribute('aria-label')) vid.setAttribute('aria-label', 'Video content');
-            }
-            return tempDiv.innerHTML;
-        }
-
-        function prepareAndSetTextarea(editorInstance) {
-            var currentHtml = editorInstance.getHTML();
-            var enhancedHtml = enhanceHtmlWithAttributes(currentHtml);
-            if (originalTextarea) originalTextarea.value = enhancedHtml;
-            return enhancedHtml;
-        }
-
-        // Debounced cache update on editor changes
-        function scheduleCacheUpdate(html) {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(function() {
-                extractAndCacheImageUrls(html);
-            }, 500);
-        }
-
-        // -----------------------------------------------------------------
-        // Build UI
-        // -----------------------------------------------------------------
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
@@ -538,7 +515,7 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker
+        // Helper: upload image to Cloudflare Worker and insert with dimensions
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
@@ -555,12 +532,8 @@ var MessengerModule = (function(Utils, EventBus) {
             .then(data => {
                 editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
                 if (data.url) {
-                    editorInstance.chain().focus().insertContent({
-                        type: 'image',
-                        attrs: { src: data.url, alt: 'Uploaded image' }
-                    }).run();
-                    // After insertion, schedule cache update for the new image
-                    scheduleCacheUpdate(editorInstance.getHTML());
+                    var altText = file.name ? file.name.split('.').slice(0, -1).join('.') : 'Uploaded image';
+                    insertEnhancedImage(editorInstance, data.url, altText);
                 } else {
                     editorInstance.chain().focus().insertContent('[Upload failed]').run();
                 }
@@ -574,8 +547,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
             showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
-                editor.chain().focus().insertContent('<img src="' + url + '">').run();
-                scheduleCacheUpdate(editor.getHTML());
+                insertEnhancedImage(editor, url, 'Image from URL');
             });
             imageDropdownMenu.style.display = 'none';
         };
@@ -624,7 +596,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(editorElement);
 
         // -----------------------------------------------------------------
-        // Load TipTap as ES modules (dynamic import)
+        // Load TipTap as ES modules (dynamic import) – includes Image extension
         // -----------------------------------------------------------------
         async function loadTipTap() {
             const [core, starterKit, placeholder, underline, image] = await Promise.all([
@@ -677,15 +649,20 @@ var MessengerModule = (function(Utils, EventBus) {
                     attributes: { class: 'modern-wysiwyg-content' }
                 },
                 onUpdate: function({ editor }) {
-                    // Store raw HTML (not BBCode) to preserve attributes
-                    var currentHtml = editor.getHTML();
                     if (originalTextarea) {
-                        originalTextarea.value = currentHtml;
+                        originalTextarea.value = htmlToLegacy(editor.getHTML());
                     }
-                    // Trigger background dimension caching
-                    scheduleCacheUpdate(currentHtml);
                 }
             });
+
+            // Enhance existing images after content is loaded
+            setTimeout(function() {
+                enhanceExistingImages(editor);
+                // Force a re-sync to textarea after enhancement
+                if (originalTextarea) {
+                    originalTextarea.value = htmlToLegacy(editor.getHTML());
+                }
+            }, 100);
 
             // Update active states
             function updateActiveStates() {
@@ -720,7 +697,7 @@ var MessengerModule = (function(Utils, EventBus) {
             editor.on('transaction', updateActiveStates);
             updateActiveStates();
 
-            // Drag & Drop support
+            // Drag & Drop support with enhanced image insertion
             var editorRoot = editorElement.querySelector('.ProseMirror');
             if (editorRoot) {
                 editorRoot.setAttribute('dropzone', 'copy');
@@ -763,7 +740,7 @@ var MessengerModule = (function(Utils, EventBus) {
             console.error('[MessengerModule] TipTap failed to load:', err);
         });
 
-        // Options row, action buttons, data binding
+        // Options row, action buttons, data binding (unchanged)
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -813,16 +790,11 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
-        // Enhanced preview: apply image attributes before preview
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                if (editor && originalTextarea) {
-                    // Enhance current editor HTML with attributes and store in textarea
-                    var enhanced = prepareAndSetTextarea(editor);
-                    // Also update editor content temporarily? Not necessary, preview uses textarea.
-                }
+                if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
                 if (typeof ajaxRequest === 'function') ajaxRequest();
                 else if (previewButton) previewButton.click();
                 var loadingDiv = document.getElementById('loading');
@@ -842,15 +814,12 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // Enhanced submit: apply image attributes before submission
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
-                if (editor && originalTextarea) {
-                    prepareAndSetTextarea(editor);
-                }
+                if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
                 if (originalForm && typeof originalForm.submit === 'function') {
                     if (typeof ValidateForm === 'function' && !ValidateForm(1)) return;
                     originalForm.submit();
@@ -864,7 +833,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (fully rebuilt – unchanged)
+    // MESSAGES SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
         var container = document.createElement('div');
@@ -1023,7 +992,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (fully rebuilt – unchanged)
+    // CONTACTS SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
