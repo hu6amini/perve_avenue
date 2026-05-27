@@ -199,7 +199,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules (fixed import)
+    // COMPOSE SECTION – TipTap ES modules (FIXED)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -430,30 +430,32 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules and initialise editor (FIXED)
+        // Load TipTap ES modules and initialise editor (FIXED for Node)
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
-                // Import modules and extract constructors safely
-                const coreModule = await import('https://esm.sh/@tiptap/core@2.5.2');
+                // Import core and extract Editor and Node
+                const core = await import('https://esm.sh/@tiptap/core@2.5.2');
+                const Editor = core.Editor || (core.default && core.default.Editor);
+                const Node = core.Node || (core.default && core.default.Node);
+                
+                if (!Editor || !Node) {
+                    throw new Error('Editor or Node not found in @tiptap/core');
+                }
+
+                // Import extensions
                 const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
 
-                // Get the Editor constructor (works with both named and default exports)
-                const Editor = coreModule.Editor || (coreModule.default && coreModule.default.Editor);
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
                 const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
                 const Image = imageModule.Image || (imageModule.default && imageModule.default.Image);
 
-                if (!Editor) {
-                    throw new Error('Editor constructor not found in @tiptap/core');
-                }
-
-                // Custom Spoiler extension using Editor.Node
-                const Spoiler = Editor.Node.create({
+                // Create spoiler extension using Node
+                const Spoiler = Node.create({
                     name: 'spoiler',
                     group: 'block',
                     content: 'block+',
@@ -611,7 +613,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
-        // Options row, action buttons, data binding
+        // Options row, action buttons, data binding (unchanged)
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -704,20 +706,22 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (fully rebuilt – same as before)
+    // MESSAGES SECTION (unchanged)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
+        // ... (same as before – omitted for brevity, but include your working code)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
-
+        // ... (full implementation from previous version)
+        // For completeness, copy the full working messages section from earlier.
+        // I will include it here to ensure completeness.
         try {
             var folderSelect  = document.querySelector('select[name="VID"]');
             var messageRows   = document.querySelectorAll('.big_list .row-mp');
             var dlItems       = document.querySelectorAll('.main_list dl dd');
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
             var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
-
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
@@ -732,7 +736,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
-
             var listHeader = document.createElement('div');
             listHeader.className = 'messages-list-header';
             listHeader.innerHTML = ''
@@ -742,10 +745,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<div class="msg-date">Date</div>'
                 + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
             container.appendChild(listHeader);
-
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
-
             for (var i = 0; i < messageRows.length; i++) {
                 var row = messageRows[i];
                 var isUnread   = row.classList.contains('on');
@@ -753,10 +754,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 var senderLink = row.querySelector('.xx a');
                 var dateSpan   = row.querySelector('.zz .when');
                 var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
-
                 var origCheckbox = row.querySelector('input[type="checkbox"]');
                 var msgName = origCheckbox ? origCheckbox.name : '';
-
                 var msgRow = document.createElement('div');
                 msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
                 msgRow.innerHTML = ''
@@ -768,7 +767,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 listContainer.appendChild(msgRow);
             }
             container.appendChild(listContainer);
-
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
@@ -784,18 +782,15 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
                 + '</div>';
             container.appendChild(actionBar);
-
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
             var modernFolder = container.querySelector('#modern-folder-select');
-
             if (modernFolder && folderSelect && folderForm) {
                 modernFolder.addEventListener('change', function() {
                     folderSelect.value = this.value;
                     folderForm.submit();
                 });
             }
-
             var selectAll = container.querySelector('#select-all-msgs');
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
@@ -804,7 +799,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 });
             }
-
             function syncCheckboxesToForm() {
                 if (!inboxForm) return;
                 container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
@@ -812,7 +806,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (hidden) hidden.checked = cb.checked;
                 });
             }
-
             var exportBtn = container.querySelector('#export-messages');
             if (exportBtn && inboxForm) {
                 exportBtn.addEventListener('click', function() {
@@ -824,7 +817,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (archiveBtn) archiveBtn.click(); else inboxForm.submit();
                 });
             }
-
             var deleteBtn = container.querySelector('#delete-messages');
             if (deleteBtn && inboxForm) {
                 deleteBtn.addEventListener('click', function() {
@@ -834,7 +826,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (delBtn) delBtn.click(); else inboxForm.submit();
                 });
             }
-
             var moveBtn = container.querySelector('#move-messages');
             if (moveBtn && inboxForm) {
                 moveBtn.addEventListener('click', function() {
@@ -858,24 +849,21 @@ var MessengerModule = (function(Utils, EventBus) {
                 container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>Unable to load messages</p></div>';
             }
         }
-
         return container;
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (fully rebuilt – same as before)
+    // CONTACTS SECTION (unchanged)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
-
         try {
             var friendsTextarea = document.querySelector('textarea[name="can_contact"]');
             var blockedTextarea = document.querySelector('textarea[name="cannot_contact"]');
             var privacySelect   = document.querySelector('select[name="nobody_can_contact"]');
             var updateButton    = document.querySelector('input[value="Update Contact list"]');
-
             var friendsCard = document.createElement('div');
             friendsCard.className = 'contacts-card';
             friendsCard.innerHTML = ''
@@ -883,7 +871,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsTextarea ? friendsTextarea.value : '') + '</textarea>'
                 + '<p class="contacts-help">Users you allow to message you when privacy mode is on.</p>';
             container.appendChild(friendsCard);
-
             var blockedCard = document.createElement('div');
             blockedCard.className = 'contacts-card';
             blockedCard.innerHTML = ''
@@ -891,7 +878,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedTextarea ? blockedTextarea.value : '') + '</textarea>'
                 + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
             container.appendChild(blockedCard);
-
             var privacyVal = privacySelect ? privacySelect.value : '0';
             var privacyCard = document.createElement('div');
             privacyCard.className = 'contacts-card';
@@ -902,12 +888,10 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyVal === '0' ? 'checked' : '') + '> <span>No — everyone can message me (except blocked users)</span></label>'
                 + '</div>';
             container.appendChild(privacyCard);
-
             var actionsDiv = document.createElement('div');
             actionsDiv.className = 'contacts-actions';
             actionsDiv.innerHTML = '<button class="modern-btn modern-btn-primary" id="update-contacts"><i class="fa-regular fa-floppy-disk"></i> Update contact list</button>';
             container.appendChild(actionsDiv);
-
             var updateContactsBtn = container.querySelector('#update-contacts');
             if (updateContactsBtn && updateButton) {
                 updateContactsBtn.addEventListener('click', function() {
@@ -930,7 +914,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-address-book"></i><p>Unable to load contacts</p></div>';
             }
         }
-
         return container;
     }
 
@@ -940,25 +923,18 @@ var MessengerModule = (function(Utils, EventBus) {
     function buildModernMessenger() {
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) return;
-
         if (document.getElementById('modern-messenger')) return;
-
         var carousel = wrapper.querySelector('.carousel-wrapper');
-
         var messengerContainer = document.createElement('div');
         messengerContainer.id = 'modern-messenger';
         messengerContainer.className = 'modern-messenger';
-
-        // Navigation
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
-
         var navItems = [
             { text: 'Compose',  icon: 'fa-regular fa-pen-to-square', url: '/?act=Msg&CODE=04&c=660892', section: 'compose' },
             { text: 'Messages', icon: 'fa-regular fa-envelope',       url: '/?act=Msg&CODE=01&c=660892', section: 'messages' },
             { text: 'Contacts', icon: 'fa-regular fa-address-book',   url: '/?act=Msg&CODE=02&c=660892', section: 'contacts' }
         ];
-
         for (var i = 0; i < navItems.length; i++) {
             var item = navItems[i];
             var link = document.createElement('a');
@@ -967,10 +943,8 @@ var MessengerModule = (function(Utils, EventBus) {
             link.innerHTML = '<i class="' + item.icon + '" aria-hidden="true"></i><span class="modern-nav-text">' + item.text + '</span>';
             navContainer.appendChild(link);
         }
-
         var mainContent = document.createElement('div');
         mainContent.className = 'modern-messenger-main';
-
         if (currentSection === 'compose') {
             mainContent.appendChild(buildComposeSection());
         } else if (currentSection === 'messages') {
@@ -978,16 +952,13 @@ var MessengerModule = (function(Utils, EventBus) {
         } else {
             mainContent.appendChild(buildModernContactsSection());
         }
-
         messengerContainer.appendChild(navContainer);
         messengerContainer.appendChild(mainContent);
-
         if (carousel) {
             carousel.insertAdjacentElement('afterend', messengerContainer);
         } else {
             wrapper.appendChild(messengerContainer);
         }
-
         console.log('[MessengerModule] Built for section: ' + currentSection);
     }
 
