@@ -1641,7 +1641,6 @@ input[type="radio"]:checked::before {
     border-radius: var(--radius);
     margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
     border: 1px solid var(--border-color);
-    background: var(--bg-color);
 }
 
 .modern-field {
@@ -1779,7 +1778,7 @@ input[type="radio"]:checked::before {
 
 /* ----- TipTap editor base ----- */
 .modern-wysiwyg {
-    margin: var(--space-md);
+    margin: var(--pad-6);
     min-height: 100px;
     background: var(--bg-color);
     border: 1px solid var(--border-color);
@@ -1871,7 +1870,6 @@ input[type="radio"]:checked::before {
     gap: var(--space-lg);
     padding: var(--pad-4) var(--pad-6);
     border-top: 1px solid var(--border-color);
-    background: var(--bg-color);
 }
 
 .modern-checkbox {
