@@ -149,14 +149,6 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
-    function findAncestor(el, selector) {
-        while (el && el !== document.body) {
-            if (el.matches && el.matches(selector)) return el;
-            el = el.parentElement;
-        }
-        return null;
-    }
-
     // ------------------------------------------------------------------------
     // CONVERTERS (Legacy BBCode ↔ HTML)
     // ------------------------------------------------------------------------
@@ -207,7 +199,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap based (using pre‑loaded UMD globals)
+    // COMPOSE SECTION – TipTap ES modules
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -241,6 +233,13 @@ var MessengerModule = (function(Utils, EventBus) {
         // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
+        container.appendChild(toolbar);
+
+        // Editor element
+        var editorElement = document.createElement('div');
+        editorElement.id = 'tiptap-editor';
+        editorElement.className = 'modern-wysiwyg';
+        container.appendChild(editorElement);
 
         var editor = null;
         var activeButtonElements = [];
@@ -258,72 +257,57 @@ var MessengerModule = (function(Utils, EventBus) {
             editor.commands.focus();
         }
 
-        // ----- Group 1: Text formatting -----
+        // ----- Build toolbar UI (buttons without actions yet) -----
+        // Group 1: Text formatting
         var group1 = [
-            { title: 'Bold',           icon: 'fa-regular fa-bold',          cmd: function() { exec(function() { editor.chain().focus().toggleBold().run(); }); } },
-            { title: 'Italic',         icon: 'fa-regular fa-italic',        cmd: function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); } },
-            { title: 'Underline',      icon: 'fa-regular fa-underline',     cmd: function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); } },
-            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', cmd: function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); } }
+            { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
+            { title: 'Italic',         icon: 'fa-regular fa-italic',        btn: null },
+            { title: 'Underline',      icon: 'fa-regular fa-underline',     btn: null },
+            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', btn: null }
         ];
         for (var i = 0; i < group1.length; i++) {
-            var btn = group1[i];
+            var g = group1[i];
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'modern-editor-btn';
-            button.innerHTML = '<i class="' + btn.icon + '"></i>';
-            button.title = btn.title;
-            button.onclick = btn.cmd;
+            button.innerHTML = '<i class="' + g.icon + '"></i>';
+            button.title = g.title;
             toolbar.appendChild(button);
+            g.btn = button;
             activeButtonElements.push(button);
         }
         addSeparator();
 
-        // ----- Group 2: List dropdown + Blockquote + Code -----
+        // List dropdown
         var listDropdownContainer = document.createElement('div');
         listDropdownContainer.className = 'modern-dropdown';
-        listDropdownContainer.style.position = 'relative';
-        listDropdownContainer.style.display = 'inline-block';
-
+        listDropdownContainer.style.cssText = 'position:relative;display:inline-block';
         var listDropdownBtn = document.createElement('button');
         listDropdownBtn.type = 'button';
         listDropdownBtn.className = 'modern-editor-btn';
         listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
         listDropdownBtn.title = 'Insert list';
-
         var listDropdownMenu = document.createElement('div');
         listDropdownMenu.className = 'modern-dropdown-menu';
         listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
         listDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
             + '<button class="modern-dropdown-item" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
-
         listDropdownContainer.appendChild(listDropdownBtn);
         listDropdownContainer.appendChild(listDropdownMenu);
         toolbar.appendChild(listDropdownContainer);
-
         listDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isVisible = listDropdownMenu.style.display === 'block';
-            listDropdownMenu.style.display = isVisible ? 'none' : 'block';
+            listDropdownMenu.style.display = listDropdownMenu.style.display === 'block' ? 'none' : 'block';
         };
         document.addEventListener('click', function() { listDropdownMenu.style.display = 'none'; });
         listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
-
-        listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
-            exec(function() { editor.chain().focus().toggleBulletList().run(); });
-            listDropdownMenu.style.display = 'none';
-        };
-        listDropdownMenu.querySelector('#ordered-list-option').onclick = function() {
-            exec(function() { editor.chain().focus().toggleOrderedList().run(); });
-            listDropdownMenu.style.display = 'none';
-        };
 
         var blockquoteBtn = document.createElement('button');
         blockquoteBtn.type = 'button';
         blockquoteBtn.className = 'modern-editor-btn';
         blockquoteBtn.innerHTML = '<i class="fa-regular fa-quote-left"></i>';
         blockquoteBtn.title = 'Blockquote';
-        blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
         toolbar.appendChild(blockquoteBtn);
         activeButtonElements.push(blockquoteBtn);
 
@@ -332,93 +316,60 @@ var MessengerModule = (function(Utils, EventBus) {
         codeBtn.className = 'modern-editor-btn';
         codeBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
         codeBtn.title = 'Code block';
-        codeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
         toolbar.appendChild(codeBtn);
         activeButtonElements.push(codeBtn);
         addSeparator();
 
-        // ----- Group 3: Link + Image (dropdown) -----
-        function showInputModal(title, placeholder, callback) {
-            var modalOverlay = document.createElement('div');
-            modalOverlay.className = 'modern-modal-overlay';
-            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-            var modalBox = document.createElement('div');
-            modalBox.className = 'modern-modal-box';
-            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
-            modalBox.innerHTML = ''
-                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
-                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
-                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
-                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
-                + '</div>';
-            modalOverlay.appendChild(modalBox);
-            document.body.appendChild(modalOverlay);
-            var input = modalBox.querySelector('#modal-input');
-            input.focus();
-            function close() { modalOverlay.remove(); }
-            modalBox.querySelector('#modal-cancel').onclick = close;
-            modalBox.querySelector('#modal-submit').onclick = function() {
-                var val = input.value.trim();
-                if (val) callback(val);
-                close();
-            };
-            input.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
-            });
-        }
-
+        // Link button
         var linkBtn = document.createElement('button');
         linkBtn.type = 'button';
         linkBtn.className = 'modern-editor-btn';
         linkBtn.innerHTML = '<i class="fa-regular fa-link"></i>';
         linkBtn.title = 'Insert link';
-        linkBtn.onclick = function() {
-            if (!editor) return;
-            var from = editor.state.selection.from;
-            var to = editor.state.selection.to;
-            var selectedText = editor.state.doc.textBetween(from, to, '');
-            showInputModal('Insert link', 'https://example.com', function(url) {
-                if (selectedText) {
-                    editor.chain().focus().setLink({ href: url }).run();
-                } else {
-                    editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
-                }
-            });
-        };
         toolbar.appendChild(linkBtn);
         activeButtonElements.push(linkBtn);
 
         // Image dropdown
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
-        imageDropdownContainer.style.position = 'relative';
-        imageDropdownContainer.style.display = 'inline-block';
-
+        imageDropdownContainer.style.cssText = 'position:relative;display:inline-block';
         var imageDropdownBtn = document.createElement('button');
         imageDropdownBtn.type = 'button';
         imageDropdownBtn.className = 'modern-editor-btn';
         imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
         imageDropdownBtn.title = 'Insert image';
-
         var imageDropdownMenu = document.createElement('div');
         imageDropdownMenu.className = 'modern-dropdown-menu';
         imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
         imageDropdownMenu.innerHTML = ''
             + '<button class="modern-dropdown-item" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
             + '<button class="modern-dropdown-item" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
-
         imageDropdownContainer.appendChild(imageDropdownBtn);
         imageDropdownContainer.appendChild(imageDropdownMenu);
         toolbar.appendChild(imageDropdownContainer);
-
         imageDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            var isVisible = imageDropdownMenu.style.display === 'block';
-            imageDropdownMenu.style.display = isVisible ? 'none' : 'block';
+            imageDropdownMenu.style.display = imageDropdownMenu.style.display === 'block' ? 'none' : 'block';
         };
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+        addSeparator();
+
+        // Spoiler and smiley
+        var spoilerBtn = document.createElement('button');
+        spoilerBtn.type = 'button';
+        spoilerBtn.className = 'modern-editor-btn';
+        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+        spoilerBtn.title = 'Spoiler';
+        toolbar.appendChild(spoilerBtn);
+        activeButtonElements.push(spoilerBtn);
+
+        var smileBtn = document.createElement('button');
+        smileBtn.type = 'button';
+        smileBtn.className = 'modern-editor-btn';
+        smileBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
+        smileBtn.title = 'Insert smiley';
+        toolbar.appendChild(smileBtn);
 
         // Helper: upload image to Cloudflare Worker
         function uploadImageToWorker(file, editorInstance) {
@@ -452,180 +403,212 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
-            showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
-                editor.chain().focus().insertContent('<img src="' + url + '">').run();
-            });
-            imageDropdownMenu.style.display = 'none';
-        };
-
-        imageDropdownMenu.querySelector('#image-upload-option').onclick = function() {
-            var input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = function() {
-                if (input.files && input.files[0]) {
-                    uploadImageToWorker(input.files[0], editor);
-                }
+        function showInputModal(title, placeholder, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:340px;max-width:90%;box-shadow:var(--shadow-lg);';
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-md) 0;">' + escapeHtml(title) + '</h3>'
+                + '<input type="text" id="modal-input" class="modern-input" placeholder="' + escapeHtml(placeholder) + '" style="width:100%;">'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-input');
+            input.focus();
+            function close() { modalOverlay.remove(); }
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var val = input.value.trim();
+                if (val) callback(val);
+                close();
             };
-            input.click();
-            imageDropdownMenu.style.display = 'none';
-        };
-        addSeparator();
-
-        // ----- Group 4: Spoiler + Smiley -----
-        var spoilerBtn = document.createElement('button');
-        spoilerBtn.type = 'button';
-        spoilerBtn.className = 'modern-editor-btn';
-        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
-        spoilerBtn.title = 'Spoiler';
-        spoilerBtn.onclick = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
-        toolbar.appendChild(spoilerBtn);
-        activeButtonElements.push(spoilerBtn);
-
-        var smileBtn = document.createElement('button');
-        smileBtn.type = 'button';
-        smileBtn.className = 'modern-editor-btn';
-        smileBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-        smileBtn.title = 'Insert smiley';
-        smileBtn.onclick = function() {
-            var smiliesDiv = document.getElementById('smilies');
-            if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
-        };
-        toolbar.appendChild(smileBtn);
-
-        container.appendChild(toolbar);
-
-        // Editor element
-        var editorElement = document.createElement('div');
-        editorElement.id = 'tiptap-editor';
-        editorElement.className = 'modern-wysiwyg';
-        container.appendChild(editorElement);
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click();
+            });
+        }
 
         // -----------------------------------------------------------------
-        // Use globally loaded TipTap UMD modules (from boot loader)
+        // Load TipTap ES modules and initialise editor
         // -----------------------------------------------------------------
-        // Check if TipTap globals exist (should be loaded by boot script)
-        if (!window.Tiptap || !window.Tiptap.Editor) {
-            console.error('[MessengerModule] TipTap not loaded. Make sure boot loader loads TipTap UMD first.');
-            // Fallback: show an error message in the editor area
-            editorElement.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. Please refresh the page.</div>';
-            return container;
-        }
+        (async function initTipTap() {
+            try {
+                const [coreModule, starterKitModule, placeholderModule, underlineModule, imageModule] = await Promise.all([
+                    import('https://esm.sh/@tiptap/core@2.5.2'),
+                    import('https://esm.sh/@tiptap/starter-kit@2.5.2'),
+                    import('https://esm.sh/@tiptap/extension-placeholder@2.5.2'),
+                    import('https://esm.sh/@tiptap/extension-underline@2.5.2'),
+                    import('https://esm.sh/@tiptap/extension-image@2.5.2')
+                ]);
+                const { Editor } = coreModule;
+                const { StarterKit } = starterKitModule;
+                const { Placeholder } = placeholderModule;
+                const { Underline } = underlineModule;
+                const { Image } = imageModule;
 
-        var Editor = window.Tiptap.Editor;
-        var StarterKit = window.TiptapStarterKit.StarterKit;
-        var Placeholder = window.TiptapExtensionPlaceholder.Placeholder;
-        var Underline = window.TiptapExtensionUnderline.Underline;
-        var Image = window.TiptapExtensionImage.Image;
-        var Node = window.Tiptap.Node;
-
-        // Custom Spoiler Extension
-        var Spoiler = Node.create({
-            name: 'spoiler',
-            group: 'block',
-            content: 'block+',
-            defining: true,
-            parseHTML: function() {
-                return [{ tag: 'div.spoiler' }];
-            },
-            renderHTML: function() {
-                return ['div', { class: 'spoiler' }, 0];
-            }
-        });
-
-        var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
-
-        editor = new Editor({
-            element: editorElement,
-            extensions: [
-                StarterKit,
-                Placeholder.configure({ placeholder: '💬 Write your message...' }),
-                Underline,
-                Image,
-                Spoiler
-            ],
-            content: initialHtml,
-            editorProps: {
-                attributes: { class: 'modern-wysiwyg-content' }
-            },
-            onUpdate: function({ editor }) {
-                if (originalTextarea) {
-                    originalTextarea.value = htmlToLegacy(editor.getHTML());
-                }
-            }
-        });
-
-        // Update active states
-        function updateActiveStates() {
-            var isActive = {
-                bold: editor.isActive('bold'),
-                italic: editor.isActive('italic'),
-                underline: editor.isActive('underline'),
-                strike: editor.isActive('strike'),
-                bulletList: editor.isActive('bulletList'),
-                orderedList: editor.isActive('orderedList'),
-                blockquote: editor.isActive('blockquote'),
-                codeBlock: editor.isActive('codeBlock'),
-                spoiler: editor.isActive('spoiler')
-            };
-            activeButtonElements.forEach(function(btn) {
-                var title = btn.getAttribute('title');
-                var active = false;
-                if (title === 'Bold') active = isActive.bold;
-                else if (title === 'Italic') active = isActive.italic;
-                else if (title === 'Underline') active = isActive.underline;
-                else if (title === 'Strikethrough') active = isActive.strike;
-                else if (title === 'Blockquote') active = isActive.blockquote;
-                else if (title === 'Code block') active = isActive.codeBlock;
-                else if (title === 'Spoiler') active = isActive.spoiler;
-                if (active) btn.classList.add('active');
-                else btn.classList.remove('active');
-            });
-        }
-        editor.on('selectionUpdate', updateActiveStates);
-        editor.on('transaction', updateActiveStates);
-        updateActiveStates();
-
-        // Drag & Drop support
-        var editorRoot = editorElement.querySelector('.ProseMirror');
-        if (editorRoot) {
-            editorRoot.setAttribute('dropzone', 'copy');
-            editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
-            editorRoot.addEventListener('drop', function(e) {
-                e.preventDefault();
-                var file = e.dataTransfer.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    uploadImageToWorker(file, editor);
-                }
-            });
-        }
-
-        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
-        editor.setOptions({
-            editorProps: {
-                handleDOMEvents: {
-                    keydown: function(view, event) {
-                        if (event.ctrlKey && event.shiftKey && event.key === 'S') {
-                            event.preventDefault();
-                            editor.chain().focus().toggleSpoiler().run();
-                            return true;
-                        }
-                        return false;
+                // Custom Spoiler extension (block node)
+                const Spoiler = Editor.Node.create({
+                    name: 'spoiler',
+                    group: 'block',
+                    content: 'block+',
+                    defining: true,
+                    parseHTML: function() {
+                        return [{ tag: 'div.spoiler' }];
+                    },
+                    renderHTML: function() {
+                        return ['div', { class: 'spoiler' }, 0];
                     }
-                }
-            }
-        });
+                });
 
-        // Redirect smiley clicks
-        _originalEmoticon = window.emoticon;
-        window.emoticon = function(x) {
-            if (editor) {
-                editor.chain().focus().insertContent(' ' + x + ' ').run();
-            } else if (_originalEmoticon) {
-                _originalEmoticon(x);
+                var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+                editor = new Editor({
+                    element: editorElement,
+                    extensions: [
+                        StarterKit,
+                        Placeholder.configure({ placeholder: '💬 Write your message...' }),
+                        Underline,
+                        Image,
+                        Spoiler
+                    ],
+                    content: initialHtml,
+                    editorProps: {
+                        attributes: { class: 'modern-wysiwyg-content' }
+                    },
+                    onUpdate: function({ editor }) {
+                        if (originalTextarea) {
+                            originalTextarea.value = htmlToLegacy(editor.getHTML());
+                        }
+                    }
+                });
+
+                // Assign actions to buttons
+                group1[0].btn.onclick = () => exec(() => editor.chain().focus().toggleBold().run());
+                group1[1].btn.onclick = () => exec(() => editor.chain().focus().toggleItalic().run());
+                group1[2].btn.onclick = () => exec(() => editor.chain().focus().toggleUnderline().run());
+                group1[3].btn.onclick = () => exec(() => editor.chain().focus().toggleStrike().run());
+
+                listDropdownMenu.querySelector('#bullet-list-option').onclick = () => {
+                    exec(() => editor.chain().focus().toggleBulletList().run());
+                    listDropdownMenu.style.display = 'none';
+                };
+                listDropdownMenu.querySelector('#ordered-list-option').onclick = () => {
+                    exec(() => editor.chain().focus().toggleOrderedList().run());
+                    listDropdownMenu.style.display = 'none';
+                };
+                blockquoteBtn.onclick = () => exec(() => editor.chain().focus().toggleBlockquote().run());
+                codeBtn.onclick = () => exec(() => editor.chain().focus().toggleCodeBlock().run());
+
+                linkBtn.onclick = function() {
+                    if (!editor) return;
+                    var from = editor.state.selection.from;
+                    var to = editor.state.selection.to;
+                    var selectedText = editor.state.doc.textBetween(from, to, '');
+                    showInputModal('Insert link', 'https://example.com', function(url) {
+                        if (selectedText) {
+                            editor.chain().focus().setLink({ href: url }).run();
+                        } else {
+                            editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
+                        }
+                    });
+                };
+                imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
+                    showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
+                        editor.chain().focus().insertContent('<img src="' + url + '">').run();
+                    });
+                    imageDropdownMenu.style.display = 'none';
+                };
+                imageDropdownMenu.querySelector('#image-upload-option').onclick = function() {
+                    var input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = function() {
+                        if (input.files && input.files[0]) {
+                            uploadImageToWorker(input.files[0], editor);
+                        }
+                    };
+                    input.click();
+                    imageDropdownMenu.style.display = 'none';
+                };
+                spoilerBtn.onclick = () => exec(() => editor.chain().focus().toggleSpoiler().run());
+                smileBtn.onclick = function() {
+                    var smiliesDiv = document.getElementById('smilies');
+                    if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
+                };
+
+                // Update active states for buttons
+                function updateActiveStates() {
+                    var isActive = {
+                        bold: editor.isActive('bold'),
+                        italic: editor.isActive('italic'),
+                        underline: editor.isActive('underline'),
+                        strike: editor.isActive('strike'),
+                        bulletList: editor.isActive('bulletList'),
+                        orderedList: editor.isActive('orderedList'),
+                        blockquote: editor.isActive('blockquote'),
+                        codeBlock: editor.isActive('codeBlock'),
+                        spoiler: editor.isActive('spoiler')
+                    };
+                    group1[0].btn.classList.toggle('active', isActive.bold);
+                    group1[1].btn.classList.toggle('active', isActive.italic);
+                    group1[2].btn.classList.toggle('active', isActive.underline);
+                    group1[3].btn.classList.toggle('active', isActive.strike);
+                    blockquoteBtn.classList.toggle('active', isActive.blockquote);
+                    codeBtn.classList.toggle('active', isActive.codeBlock);
+                    spoilerBtn.classList.toggle('active', isActive.spoiler);
+                }
+                editor.on('selectionUpdate', updateActiveStates);
+                editor.on('transaction', updateActiveStates);
+                updateActiveStates();
+
+                // Drag & Drop support
+                var editorRoot = editorElement.querySelector('.ProseMirror');
+                if (editorRoot) {
+                    editorRoot.setAttribute('dropzone', 'copy');
+                    editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
+                    editorRoot.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        var file = e.dataTransfer.files[0];
+                        if (file && file.type.startsWith('image/')) {
+                            uploadImageToWorker(file, editor);
+                        }
+                    });
+                }
+
+                // Keyboard shortcut: Ctrl+Shift+S for spoiler
+                editor.setOptions({
+                    editorProps: {
+                        handleDOMEvents: {
+                            keydown: function(view, event) {
+                                if (event.ctrlKey && event.shiftKey && event.key === 'S') {
+                                    event.preventDefault();
+                                    editor.chain().focus().toggleSpoiler().run();
+                                    return true;
+                                }
+                                return false;
+                            }
+                        }
+                    }
+                });
+
+                // Override smiley function
+                _originalEmoticon = window.emoticon;
+                window.emoticon = function(x) {
+                    if (editor) {
+                        editor.chain().focus().insertContent(' ' + x + ' ').run();
+                    } else if (_originalEmoticon) {
+                        _originalEmoticon(x);
+                    }
+                };
+            } catch (err) {
+                console.error('[MessengerModule] TipTap failed to load:', err);
+                editorElement.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. Please refresh the page.</div>';
             }
-        };
+        })();
 
         // Options row, action buttons, data binding
         var optionsRow = document.createElement('div');
