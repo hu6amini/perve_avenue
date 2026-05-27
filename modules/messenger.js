@@ -207,7 +207,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap based
+    // COMPOSE SECTION – TipTap based (FIXED: UMD global imports)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -503,22 +503,58 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(editorElement);
 
         // -----------------------------------------------------------------
-        // Load TipTap as ES modules (dynamic import) – includes Image extension
+        // FIXED: Load TipTap from UMD bundles (global constructors)
         // -----------------------------------------------------------------
-        async function loadTipTap() {
-            const [core, starterKit, placeholder, underline, image] = await Promise.all([
-                import('https://esm.sh/@tiptap/core@2.5.2'),
-                import('https://esm.sh/@tiptap/starter-kit@2.5.2'),
-                import('https://esm.sh/@tiptap/extension-placeholder@2.5.2'),
-                import('https://esm.sh/@tiptap/extension-underline@2.5.2'),
-                import('https://esm.sh/@tiptap/extension-image@2.5.2')
-            ]);
-            return { core, starterKit, placeholder, underline, image };
+        function loadTipTapUMD() {
+            return new Promise(function(resolve, reject) {
+                // If already loaded, resolve immediately
+                if (window.TiptapCore && window.TiptapStarterKit && window.TiptapExtensionPlaceholder && window.TiptapExtensionUnderline && window.TiptapExtensionImage) {
+                    resolve({
+                        Editor: window.TiptapCore.Editor,
+                        StarterKit: window.TiptapStarterKit.StarterKit,
+                        Placeholder: window.TiptapExtensionPlaceholder.Placeholder,
+                        Underline: window.TiptapExtensionUnderline.Underline,
+                        Image: window.TiptapExtensionImage.Image
+                    });
+                    return;
+                }
+
+                var scripts = [
+                    { url: 'https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js', global: 'TiptapCore' },
+                    { url: 'https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js', global: 'TiptapStarterKit' },
+                    { url: 'https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js', global: 'TiptapExtensionPlaceholder' },
+                    { url: 'https://unpkg.com/@tiptap/extension-underline@2.5.2/dist/index.umd.js', global: 'TiptapExtensionUnderline' },
+                    { url: 'https://unpkg.com/@tiptap/extension-image@2.5.2/dist/index.umd.js', global: 'TiptapExtensionImage' }
+                ];
+
+                var loaded = 0;
+                function onLoad() {
+                    loaded++;
+                    if (loaded === scripts.length) {
+                        resolve({
+                            Editor: window.TiptapCore.Editor,
+                            StarterKit: window.TiptapStarterKit.StarterKit,
+                            Placeholder: window.TiptapExtensionPlaceholder.Placeholder,
+                            Underline: window.TiptapExtensionUnderline.Underline,
+                            Image: window.TiptapExtensionImage.Image
+                        });
+                    }
+                }
+
+                scripts.forEach(function(script) {
+                    var tag = document.createElement('script');
+                    tag.src = script.url;
+                    tag.onload = onLoad;
+                    tag.onerror = function() { reject(new Error('Failed to load ' + script.url)); };
+                    document.head.appendChild(tag);
+                });
+            });
         }
 
-        // Custom Spoiler Extension (block node)
-        function createSpoilerExtension(core) {
-            return core.Node.create({
+        // Custom Spoiler Extension (uses Node from the loaded core)
+        function createSpoilerExtension(coreModule) {
+            // coreModule is the TiptapCore object (window.TiptapCore)
+            return coreModule.Node.create({
                 name: 'spoiler',
                 group: 'block',
                 content: 'block+',
@@ -532,111 +568,108 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        loadTipTap().then(function(modules) {
-            const { Editor } = modules.core;
-            const { StarterKit } = modules.starterKit;
-            const { Placeholder } = modules.placeholder;
-            const { Underline } = modules.underline;
-            const { Image } = modules.image;
-            const Spoiler = createSpoilerExtension(modules.core);
+        // Load UMD modules and initialise editor
+        loadTipTapUMD()
+            .then(function(modules) {
+                const { Editor, StarterKit, Placeholder, Underline, Image } = modules;
+                const Spoiler = createSpoilerExtension(window.TiptapCore);
 
-            const initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+                const initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
 
-            editor = new Editor({
-                element: editorElement,
-                extensions: [
-                    StarterKit,
-                    Placeholder.configure({ placeholder: '💬 Write your message...' }),
-                    Underline,
-                    Image,      // Image extension added
-                    Spoiler
-                ],
-                content: initialHtml,
-                editorProps: {
-                    attributes: { class: 'modern-wysiwyg-content' }
-                },
-                onUpdate: function({ editor }) {
-                    if (originalTextarea) {
-                        originalTextarea.value = htmlToLegacy(editor.getHTML());
-                    }
-                }
-            });
-
-            // Update active states
-            function updateActiveStates() {
-                var isActive = {
-                    bold: editor.isActive('bold'),
-                    italic: editor.isActive('italic'),
-                    underline: editor.isActive('underline'),
-                    strike: editor.isActive('strike'),
-                    bulletList: editor.isActive('bulletList'),
-                    orderedList: editor.isActive('orderedList'),
-                    blockquote: editor.isActive('blockquote'),
-                    codeBlock: editor.isActive('codeBlock'),
-                    spoiler: editor.isActive('spoiler')
-                };
-                activeButtonElements.forEach(function(btn) {
-                    var title = btn.getAttribute('title');
-                    var active = false;
-                    if (title === 'Bold') active = isActive.bold;
-                    else if (title === 'Italic') active = isActive.italic;
-                    else if (title === 'Underline') active = isActive.underline;
-                    else if (title === 'Strikethrough') active = isActive.strike;
-                    else if (title === 'Blockquote') active = isActive.blockquote;
-                    else if (title === 'Code block') active = isActive.codeBlock;
-                    else if (title === 'Bullet list') active = isActive.bulletList;
-                    else if (title === 'Ordered list') active = isActive.orderedList;
-                    else if (title === 'Spoiler') active = isActive.spoiler;
-                    if (active) btn.classList.add('active');
-                    else btn.classList.remove('active');
-                });
-            }
-            editor.on('selectionUpdate', updateActiveStates);
-            editor.on('transaction', updateActiveStates);
-            updateActiveStates();
-
-            // Drag & Drop support
-            var editorRoot = editorElement.querySelector('.ProseMirror');
-            if (editorRoot) {
-                editorRoot.setAttribute('dropzone', 'copy');
-                editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
-                editorRoot.addEventListener('drop', function(e) {
-                    e.preventDefault();
-                    var file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('image/')) {
-                        uploadImageToWorker(file, editor);
-                    }
-                });
-            }
-
-            // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
-            editor.setOptions({
-                editorProps: {
-                    handleDOMEvents: {
-                        keydown: function(view, event) {
-                            if (event.ctrlKey && event.shiftKey && event.key === 'S') {
-                                event.preventDefault();
-                                editor.chain().focus().toggleSpoiler().run();
-                                return true;
-                            }
-                            return false;
+                editor = new Editor({
+                    element: editorElement,
+                    extensions: [
+                        StarterKit,
+                        Placeholder.configure({ placeholder: '💬 Write your message...' }),
+                        Underline,
+                        Image,
+                        Spoiler
+                    ],
+                    content: initialHtml,
+                    editorProps: {
+                        attributes: { class: 'modern-wysiwyg-content' }
+                    },
+                    onUpdate: function({ editor }) {
+                        if (originalTextarea) {
+                            originalTextarea.value = htmlToLegacy(editor.getHTML());
                         }
                     }
-                }
-            });
+                });
 
-            // Redirect smiley clicks
-            _originalEmoticon = window.emoticon;
-            window.emoticon = function(x) {
-                if (editor) {
-                    editor.chain().focus().insertContent(' ' + x + ' ').run();
-                } else if (_originalEmoticon) {
-                    _originalEmoticon(x);
+                // Update active states
+                function updateActiveStates() {
+                    var isActive = {
+                        bold: editor.isActive('bold'),
+                        italic: editor.isActive('italic'),
+                        underline: editor.isActive('underline'),
+                        strike: editor.isActive('strike'),
+                        bulletList: editor.isActive('bulletList'),
+                        orderedList: editor.isActive('orderedList'),
+                        blockquote: editor.isActive('blockquote'),
+                        codeBlock: editor.isActive('codeBlock'),
+                        spoiler: editor.isActive('spoiler')
+                    };
+                    activeButtonElements.forEach(function(btn) {
+                        var title = btn.getAttribute('title');
+                        var active = false;
+                        if (title === 'Bold') active = isActive.bold;
+                        else if (title === 'Italic') active = isActive.italic;
+                        else if (title === 'Underline') active = isActive.underline;
+                        else if (title === 'Strikethrough') active = isActive.strike;
+                        else if (title === 'Blockquote') active = isActive.blockquote;
+                        else if (title === 'Code block') active = isActive.codeBlock;
+                        else if (title === 'Spoiler') active = isActive.spoiler;
+                        if (active) btn.classList.add('active');
+                        else btn.classList.remove('active');
+                    });
                 }
-            };
-        }).catch(function(err) {
-            console.error('[MessengerModule] TipTap failed to load:', err);
-        });
+                editor.on('selectionUpdate', updateActiveStates);
+                editor.on('transaction', updateActiveStates);
+                updateActiveStates();
+
+                // Drag & Drop support
+                var editorRoot = editorElement.querySelector('.ProseMirror');
+                if (editorRoot) {
+                    editorRoot.setAttribute('dropzone', 'copy');
+                    editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
+                    editorRoot.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        var file = e.dataTransfer.files[0];
+                        if (file && file.type.startsWith('image/')) {
+                            uploadImageToWorker(file, editor);
+                        }
+                    });
+                }
+
+                // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
+                editor.setOptions({
+                    editorProps: {
+                        handleDOMEvents: {
+                            keydown: function(view, event) {
+                                if (event.ctrlKey && event.shiftKey && event.key === 'S') {
+                                    event.preventDefault();
+                                    editor.chain().focus().toggleSpoiler().run();
+                                    return true;
+                                }
+                                return false;
+                            }
+                        }
+                    }
+                });
+
+                // Redirect smiley clicks
+                _originalEmoticon = window.emoticon;
+                window.emoticon = function(x) {
+                    if (editor) {
+                        editor.chain().focus().insertContent(' ' + x + ' ').run();
+                    } else if (_originalEmoticon) {
+                        _originalEmoticon(x);
+                    }
+                };
+            })
+            .catch(function(err) {
+                console.error('[MessengerModule] TipTap failed to load:', err);
+            });
 
         // Options row, action buttons, data binding (unchanged)
         var optionsRow = document.createElement('div');
@@ -734,7 +767,6 @@ var MessengerModule = (function(Utils, EventBus) {
     // MESSAGES SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
-        // (same as before – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
@@ -894,7 +926,6 @@ var MessengerModule = (function(Utils, EventBus) {
     // CONTACTS SECTION (fully rebuilt)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
-        // (same as before – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
