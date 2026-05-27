@@ -199,7 +199,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules
+    // COMPOSE SECTION – TipTap ES modules (fixed import)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -258,7 +258,6 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // ----- Build toolbar UI (buttons without actions yet) -----
-        // Group 1: Text formatting
         var group1 = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        btn: null },
@@ -320,7 +319,6 @@ var MessengerModule = (function(Utils, EventBus) {
         activeButtonElements.push(codeBtn);
         addSeparator();
 
-        // Link button
         var linkBtn = document.createElement('button');
         linkBtn.type = 'button';
         linkBtn.className = 'modern-editor-btn';
@@ -329,7 +327,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(linkBtn);
         activeButtonElements.push(linkBtn);
 
-        // Image dropdown
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
         imageDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -355,7 +352,6 @@ var MessengerModule = (function(Utils, EventBus) {
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
         addSeparator();
 
-        // Spoiler and smiley
         var spoilerBtn = document.createElement('button');
         spoilerBtn.type = 'button';
         spoilerBtn.className = 'modern-editor-btn';
@@ -434,24 +430,29 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules and initialise editor
+        // Load TipTap ES modules and initialise editor (FIXED)
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
-                const [coreModule, starterKitModule, placeholderModule, underlineModule, imageModule] = await Promise.all([
-                    import('https://esm.sh/@tiptap/core@2.5.2'),
-                    import('https://esm.sh/@tiptap/starter-kit@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-placeholder@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-underline@2.5.2'),
-                    import('https://esm.sh/@tiptap/extension-image@2.5.2')
-                ]);
-                const { Editor } = coreModule;
-                const { StarterKit } = starterKitModule;
-                const { Placeholder } = placeholderModule;
-                const { Underline } = underlineModule;
-                const { Image } = imageModule;
+                // Import modules and extract constructors safely
+                const coreModule = await import('https://esm.sh/@tiptap/core@2.5.2');
+                const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
+                const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
+                const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
+                const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
 
-                // Custom Spoiler extension (block node)
+                // Get the Editor constructor (works with both named and default exports)
+                const Editor = coreModule.Editor || (coreModule.default && coreModule.default.Editor);
+                const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
+                const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
+                const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
+                const Image = imageModule.Image || (imageModule.default && imageModule.default.Image);
+
+                if (!Editor) {
+                    throw new Error('Editor constructor not found in @tiptap/core');
+                }
+
+                // Custom Spoiler extension using Editor.Node
                 const Spoiler = Editor.Node.create({
                     name: 'spoiler',
                     group: 'block',
@@ -540,7 +541,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
                 };
 
-                // Update active states for buttons
+                // Update active states
                 function updateActiveStates() {
                     var isActive = {
                         bold: editor.isActive('bold'),
@@ -606,7 +607,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 };
             } catch (err) {
                 console.error('[MessengerModule] TipTap failed to load:', err);
-                editorElement.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. Please refresh the page.</div>';
+                editorElement.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. Please refresh the page.<br>' + escapeHtml(err.message) + '</div>';
             }
         })();
 
@@ -703,7 +704,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (fully rebuilt)
+    // MESSAGES SECTION (fully rebuilt – same as before)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
         var container = document.createElement('div');
@@ -862,7 +863,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (fully rebuilt)
+    // CONTACTS SECTION (fully rebuilt – same as before)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
