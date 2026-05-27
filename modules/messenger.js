@@ -158,7 +158,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML) – images stay as HTML
+    // CONVERTERS (Legacy BBCode ↔ HTML)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -171,8 +171,7 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[\*\](.*?)(?=\n|$)/gi, '<li>$1</li>');
         html = html.replace(/\[list=1\](.*?)\[\/list\]/gis, '<ol>$1</ol>');
         html = html.replace(/\[url=([^\]]+)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank">$2</a>');
-        // Keep image as HTML – do NOT convert to [img] BBCode
-        // html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
+        html = html.replace(/\[img\](.*?)\[\/img\]/gi, '<img src="$1" alt="image">');
         html = html.replace(/\[quote\](.*?)\[\/quote\]/gis, '<blockquote>$1</blockquote>');
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
@@ -199,8 +198,6 @@ var MessengerModule = (function(Utils, EventBus) {
         legacy = legacy.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
         legacy = legacy.replace(/<div class="spoiler">([\s\S]*?)<\/div>/gi, '[SPOILER]$1[/SPOILER]');
         legacy = legacy.replace(/<div style="text-align:center"[^>]*>([\s\S]*?)<\/div>/gi, '[CENTER]$1[/CENTER]');
-        // Keep image as HTML – do NOT convert <img> to [img]
-        // legacy = legacy.replace(/<img[^>]+src="([^"]+)"[^>]*>/gi, '[img]$1[/img]');
         legacy = legacy.replace(/<p><br\s*\/?><\/p>/gi, '\n');
         legacy = legacy.replace(/<\/p>/gi, '\n');
         legacy = legacy.replace(/<p[^>]*>/gi, '');
@@ -392,34 +389,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(linkBtn);
         activeButtonElements.push(linkBtn);
 
-        // Helper: insert image with width, height, alt, loading, decoding
-        function insertOptimisedImage(url, altText, editorInstance, position) {
-            var img = new Image();
-            img.onload = function() {
-                var width = img.naturalWidth;
-                var height = img.naturalHeight;
-                var finalAlt = altText && altText.trim() !== '' ? altText : (url.split('/').pop().split('.')[0].replace(/[_-]+/g, ' ') || 'Image');
-                var imgHtml = '<img src="' + url + '" alt="' + escapeHtml(finalAlt) + '" width="' + width + '" height="' + height + '" loading="lazy" decoding="async">';
-                if (typeof position !== 'undefined' && position !== null) {
-                    editorInstance.chain().focus().deleteRange({ from: position, to: position + 1 }).run();
-                    editorInstance.chain().focus().insertContent(imgHtml).run();
-                } else {
-                    editorInstance.chain().focus().insertContent(imgHtml).run();
-                }
-            };
-            img.onerror = function() {
-                var finalAlt = altText && altText.trim() !== '' ? altText : 'Image';
-                var imgHtml = '<img src="' + url + '" alt="' + escapeHtml(finalAlt) + '" loading="lazy" decoding="async">';
-                if (typeof position !== 'undefined' && position !== null) {
-                    editorInstance.chain().focus().deleteRange({ from: position, to: position + 1 }).run();
-                    editorInstance.chain().focus().insertContent(imgHtml).run();
-                } else {
-                    editorInstance.chain().focus().insertContent(imgHtml).run();
-                }
-            };
-            img.src = url;
-        }
-
         // Image dropdown
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
@@ -451,7 +420,7 @@ var MessengerModule = (function(Utils, EventBus) {
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        // Helper: upload image to Cloudflare Worker and insert with optimisation
+        // Helper: upload image to Cloudflare Worker
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
@@ -468,8 +437,10 @@ var MessengerModule = (function(Utils, EventBus) {
             .then(data => {
                 editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
                 if (data.url) {
-                    var altText = file.name ? file.name.split('.')[0].replace(/[_-]+/g, ' ') : 'Uploaded image';
-                    insertOptimisedImage(data.url, altText, editorInstance, placeholderStart);
+                    editorInstance.chain().focus().insertContent({
+                        type: 'image',
+                        attrs: { src: data.url, alt: 'Uploaded image' }
+                    }).run();
                 } else {
                     editorInstance.chain().focus().insertContent('[Upload failed]').run();
                 }
@@ -483,9 +454,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
             showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
-                var altText = prompt('Enter alt text for the image (optional):', 'Image');
-                if (altText === null) altText = '';
-                insertOptimisedImage(url, altText, editor);
+                editor.chain().focus().insertContent('<img src="' + url + '">').run();
             });
             imageDropdownMenu.style.display = 'none';
         };
@@ -579,7 +548,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     StarterKit,
                     Placeholder.configure({ placeholder: '💬 Write your message...' }),
                     Underline,
-                    Image,
+                    Image,      // Image extension added
                     Spoiler
                 ],
                 content: initialHtml,
