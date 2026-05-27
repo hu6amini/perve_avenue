@@ -28,7 +28,7 @@ STYLESHEETS.forEach(url => {
 });
 
 // ============================================================================
-// 2. SCRIPT LOADER ENGINE (with optional force sequential)
+// 2. SCRIPT LOADER ENGINE
 // ============================================================================
 function loadScript(src, isModule = false) {
     return new Promise((resolve, reject) => {
@@ -52,7 +52,19 @@ function loadScript(src, isModule = false) {
     });
 }
 
-// Sequential loader for dependencies
+// Synchronous loader for TipTap (no defer, no async)
+function loadScriptSync(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = false;
+        script.defer = false;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(script);
+    });
+}
+
 async function loadScriptsSequentially(sources) {
     for (const src of sources) {
         await loadScript(src);
@@ -138,20 +150,18 @@ async function loadLightGallery() {
 }
 
 // ============================================================================
-// 6. TIPTAP UMD LOADER (sequential, before messenger)
+// 6. TIPTAP UMD LOADER (SYNCHRONOUS – NO DEFER/ASYNC)
 // ============================================================================
 async function loadTipTapUMD() {
-    // Core must be first
-    await loadScript("https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js");
-    // Extensions that depend on core
-    await loadScript("https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js");
-    await loadScript("https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js");
-    await loadScript("https://unpkg.com/@tiptap/extension-underline@2.5.2/dist/index.umd.js");
-    await loadScript("https://unpkg.com/@tiptap/extension-image@2.5.2/dist/index.umd.js");
+    await loadScriptSync("https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js");
+    await loadScriptSync("https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js");
+    await loadScriptSync("https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js");
+    await loadScriptSync("https://unpkg.com/@tiptap/extension-underline@2.5.2/dist/index.umd.js");
+    await loadScriptSync("https://unpkg.com/@tiptap/extension-image@2.5.2/dist/index.umd.js");
 }
 
 // ============================================================================
-// 7. PHASED EXECUTION LOGIC (heavily optimized)
+// 7. PHASED EXECUTION LOGIC
 // ============================================================================
 async function bootSystem() {
     try {
@@ -217,13 +227,14 @@ async function bootSystem() {
         scheduleWork(initSlick, IDLE_TIMEOUT_SLICK);
 
         // ============================================================
-        // IDLE LOAD: TipTap first, then other enhancement modules, then Forum Enhancer
+        // IDLE LOAD: TipTap first (synchronously), then other enhancements, then Forum Enhancer
         // ============================================================
         const loadEnhancements = async () => {
             const enhStart = performance.now();
             
-            // 1. Load TipTap UMD (core + extensions) sequentially
+            // 1. Load TipTap UMD (synchronously, no defer)
             await loadTipTapUMD();
+            console.debug('[Boot] TipTap UMD loaded');
             
             // 2. Load all other enhancement modules (including messenger)
             const results = await Promise.allSettled([
@@ -231,7 +242,7 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@166baf94c99ec634efacda7561f171ab86ef0b23/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@4ea4e64eb2c5859ebd5ffc793d783358522c2d04/modules/messenger.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@1275148cb90b926aba27d633c61782250f4006bc/modules/messenger.js")
             ]);
             
             const failed = results.filter(r => r.status === 'rejected');
