@@ -207,7 +207,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap based (FIXED: UMD global imports)
+    // COMPOSE SECTION – TipTap based (using pre‑loaded UMD globals)
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -503,175 +503,131 @@ var MessengerModule = (function(Utils, EventBus) {
         container.appendChild(editorElement);
 
         // -----------------------------------------------------------------
-        // FIXED: Load TipTap from UMD bundles (global constructors)
+        // Use globally loaded TipTap UMD modules (from boot loader)
         // -----------------------------------------------------------------
-        function loadTipTapUMD() {
-            return new Promise(function(resolve, reject) {
-                // If already loaded, resolve immediately
-                if (window.TiptapCore && window.TiptapStarterKit && window.TiptapExtensionPlaceholder && window.TiptapExtensionUnderline && window.TiptapExtensionImage) {
-                    resolve({
-                        Editor: window.TiptapCore.Editor,
-                        StarterKit: window.TiptapStarterKit.StarterKit,
-                        Placeholder: window.TiptapExtensionPlaceholder.Placeholder,
-                        Underline: window.TiptapExtensionUnderline.Underline,
-                        Image: window.TiptapExtensionImage.Image
-                    });
-                    return;
+        // Check if TipTap globals exist (should be loaded by boot script)
+        if (!window.Tiptap || !window.Tiptap.Editor) {
+            console.error('[MessengerModule] TipTap not loaded. Make sure boot loader loads TipTap UMD first.');
+            // Fallback: show an error message in the editor area
+            editorElement.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. Please refresh the page.</div>';
+            return container;
+        }
+
+        var Editor = window.Tiptap.Editor;
+        var StarterKit = window.TiptapStarterKit.StarterKit;
+        var Placeholder = window.TiptapExtensionPlaceholder.Placeholder;
+        var Underline = window.TiptapExtensionUnderline.Underline;
+        var Image = window.TiptapExtensionImage.Image;
+        var Node = window.Tiptap.Node;
+
+        // Custom Spoiler Extension
+        var Spoiler = Node.create({
+            name: 'spoiler',
+            group: 'block',
+            content: 'block+',
+            defining: true,
+            parseHTML: function() {
+                return [{ tag: 'div.spoiler' }];
+            },
+            renderHTML: function() {
+                return ['div', { class: 'spoiler' }, 0];
+            }
+        });
+
+        var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+
+        editor = new Editor({
+            element: editorElement,
+            extensions: [
+                StarterKit,
+                Placeholder.configure({ placeholder: '💬 Write your message...' }),
+                Underline,
+                Image,
+                Spoiler
+            ],
+            content: initialHtml,
+            editorProps: {
+                attributes: { class: 'modern-wysiwyg-content' }
+            },
+            onUpdate: function({ editor }) {
+                if (originalTextarea) {
+                    originalTextarea.value = htmlToLegacy(editor.getHTML());
                 }
+            }
+        });
 
-                var scripts = [
-                    { url: 'https://unpkg.com/@tiptap/core@2.5.2/dist/index.umd.js', global: 'TiptapCore' },
-                    { url: 'https://unpkg.com/@tiptap/starter-kit@2.5.2/dist/index.umd.js', global: 'TiptapStarterKit' },
-                    { url: 'https://unpkg.com/@tiptap/extension-placeholder@2.5.2/dist/index.umd.js', global: 'TiptapExtensionPlaceholder' },
-                    { url: 'https://unpkg.com/@tiptap/extension-underline@2.5.2/dist/index.umd.js', global: 'TiptapExtensionUnderline' },
-                    { url: 'https://unpkg.com/@tiptap/extension-image@2.5.2/dist/index.umd.js', global: 'TiptapExtensionImage' }
-                ];
+        // Update active states
+        function updateActiveStates() {
+            var isActive = {
+                bold: editor.isActive('bold'),
+                italic: editor.isActive('italic'),
+                underline: editor.isActive('underline'),
+                strike: editor.isActive('strike'),
+                bulletList: editor.isActive('bulletList'),
+                orderedList: editor.isActive('orderedList'),
+                blockquote: editor.isActive('blockquote'),
+                codeBlock: editor.isActive('codeBlock'),
+                spoiler: editor.isActive('spoiler')
+            };
+            activeButtonElements.forEach(function(btn) {
+                var title = btn.getAttribute('title');
+                var active = false;
+                if (title === 'Bold') active = isActive.bold;
+                else if (title === 'Italic') active = isActive.italic;
+                else if (title === 'Underline') active = isActive.underline;
+                else if (title === 'Strikethrough') active = isActive.strike;
+                else if (title === 'Blockquote') active = isActive.blockquote;
+                else if (title === 'Code block') active = isActive.codeBlock;
+                else if (title === 'Spoiler') active = isActive.spoiler;
+                if (active) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+        }
+        editor.on('selectionUpdate', updateActiveStates);
+        editor.on('transaction', updateActiveStates);
+        updateActiveStates();
 
-                var loaded = 0;
-                function onLoad() {
-                    loaded++;
-                    if (loaded === scripts.length) {
-                        resolve({
-                            Editor: window.TiptapCore.Editor,
-                            StarterKit: window.TiptapStarterKit.StarterKit,
-                            Placeholder: window.TiptapExtensionPlaceholder.Placeholder,
-                            Underline: window.TiptapExtensionUnderline.Underline,
-                            Image: window.TiptapExtensionImage.Image
-                        });
-                    }
+        // Drag & Drop support
+        var editorRoot = editorElement.querySelector('.ProseMirror');
+        if (editorRoot) {
+            editorRoot.setAttribute('dropzone', 'copy');
+            editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
+            editorRoot.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    uploadImageToWorker(file, editor);
                 }
-
-                scripts.forEach(function(script) {
-                    var tag = document.createElement('script');
-                    tag.src = script.url;
-                    tag.onload = onLoad;
-                    tag.onerror = function() { reject(new Error('Failed to load ' + script.url)); };
-                    document.head.appendChild(tag);
-                });
             });
         }
 
-        // Custom Spoiler Extension (uses Node from the loaded core)
-        function createSpoilerExtension(coreModule) {
-            // coreModule is the TiptapCore object (window.TiptapCore)
-            return coreModule.Node.create({
-                name: 'spoiler',
-                group: 'block',
-                content: 'block+',
-                defining: true,
-                parseHTML: function() {
-                    return [{ tag: 'div.spoiler' }];
-                },
-                renderHTML: function() {
-                    return ['div', { class: 'spoiler' }, 0];
-                }
-            });
-        }
-
-        // Load UMD modules and initialise editor
-        loadTipTapUMD()
-            .then(function(modules) {
-                const { Editor, StarterKit, Placeholder, Underline, Image } = modules;
-                const Spoiler = createSpoilerExtension(window.TiptapCore);
-
-                const initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
-
-                editor = new Editor({
-                    element: editorElement,
-                    extensions: [
-                        StarterKit,
-                        Placeholder.configure({ placeholder: '💬 Write your message...' }),
-                        Underline,
-                        Image,
-                        Spoiler
-                    ],
-                    content: initialHtml,
-                    editorProps: {
-                        attributes: { class: 'modern-wysiwyg-content' }
-                    },
-                    onUpdate: function({ editor }) {
-                        if (originalTextarea) {
-                            originalTextarea.value = htmlToLegacy(editor.getHTML());
+        // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
+        editor.setOptions({
+            editorProps: {
+                handleDOMEvents: {
+                    keydown: function(view, event) {
+                        if (event.ctrlKey && event.shiftKey && event.key === 'S') {
+                            event.preventDefault();
+                            editor.chain().focus().toggleSpoiler().run();
+                            return true;
                         }
+                        return false;
                     }
-                });
-
-                // Update active states
-                function updateActiveStates() {
-                    var isActive = {
-                        bold: editor.isActive('bold'),
-                        italic: editor.isActive('italic'),
-                        underline: editor.isActive('underline'),
-                        strike: editor.isActive('strike'),
-                        bulletList: editor.isActive('bulletList'),
-                        orderedList: editor.isActive('orderedList'),
-                        blockquote: editor.isActive('blockquote'),
-                        codeBlock: editor.isActive('codeBlock'),
-                        spoiler: editor.isActive('spoiler')
-                    };
-                    activeButtonElements.forEach(function(btn) {
-                        var title = btn.getAttribute('title');
-                        var active = false;
-                        if (title === 'Bold') active = isActive.bold;
-                        else if (title === 'Italic') active = isActive.italic;
-                        else if (title === 'Underline') active = isActive.underline;
-                        else if (title === 'Strikethrough') active = isActive.strike;
-                        else if (title === 'Blockquote') active = isActive.blockquote;
-                        else if (title === 'Code block') active = isActive.codeBlock;
-                        else if (title === 'Spoiler') active = isActive.spoiler;
-                        if (active) btn.classList.add('active');
-                        else btn.classList.remove('active');
-                    });
                 }
-                editor.on('selectionUpdate', updateActiveStates);
-                editor.on('transaction', updateActiveStates);
-                updateActiveStates();
+            }
+        });
 
-                // Drag & Drop support
-                var editorRoot = editorElement.querySelector('.ProseMirror');
-                if (editorRoot) {
-                    editorRoot.setAttribute('dropzone', 'copy');
-                    editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
-                    editorRoot.addEventListener('drop', function(e) {
-                        e.preventDefault();
-                        var file = e.dataTransfer.files[0];
-                        if (file && file.type.startsWith('image/')) {
-                            uploadImageToWorker(file, editor);
-                        }
-                    });
-                }
+        // Redirect smiley clicks
+        _originalEmoticon = window.emoticon;
+        window.emoticon = function(x) {
+            if (editor) {
+                editor.chain().focus().insertContent(' ' + x + ' ').run();
+            } else if (_originalEmoticon) {
+                _originalEmoticon(x);
+            }
+        };
 
-                // Custom keyboard shortcut for spoiler (Ctrl+Shift+S)
-                editor.setOptions({
-                    editorProps: {
-                        handleDOMEvents: {
-                            keydown: function(view, event) {
-                                if (event.ctrlKey && event.shiftKey && event.key === 'S') {
-                                    event.preventDefault();
-                                    editor.chain().focus().toggleSpoiler().run();
-                                    return true;
-                                }
-                                return false;
-                            }
-                        }
-                    }
-                });
-
-                // Redirect smiley clicks
-                _originalEmoticon = window.emoticon;
-                window.emoticon = function(x) {
-                    if (editor) {
-                        editor.chain().focus().insertContent(' ' + x + ' ').run();
-                    } else if (_originalEmoticon) {
-                        _originalEmoticon(x);
-                    }
-                };
-            })
-            .catch(function(err) {
-                console.error('[MessengerModule] TipTap failed to load:', err);
-            });
-
-        // Options row, action buttons, data binding (unchanged)
+        // Options row, action buttons, data binding
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
