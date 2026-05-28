@@ -1803,19 +1803,19 @@ input[type="radio"]:checked::before {
     text-align: left;
 }
 
-/* Gap cursor – no extra height, pure border */
+/* Gap cursor – visible, no layout shift */
 .ProseMirror-gapcursor {
     display: inline-block;
     width: 0;
-    border-left: 2px solid currentColor;
-    margin: 0;
+    border-left: 2px solid var(--text-primary, #000);
+    margin: 0 -2px 0 -2px;  /* negative margin to avoid extra width */
     vertical-align: middle;
     pointer-events: none;
     position: relative;
     animation: blink 1s step-end infinite;
 }
 
-/* Ensure the cursor doesn't affect line height */
+/* Ensures the cursor inherits line height without adding extra space */
 .ProseMirror-gapcursor:after {
     content: '';
     display: inline;
