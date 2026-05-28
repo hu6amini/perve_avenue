@@ -1803,35 +1803,6 @@ input[type="radio"]:checked::before {
     text-align: left;
 }
 
-/* Ensure the gap cursor is a vertical bar */
-.ProseMirror-gapcursor {
-    display: inline-block !important;
-    width: 1px !important;
-    background-color: currentColor !important;
-    height: 1.618em !important; /* match text height, not full image height */
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-    position: relative !important;
-    vertical-align: middle !important;
-    animation: blink 1s step-end infinite;
-}
-
-/* Remove any block‑level behaviour */
-.ProseMirror-gapcursor:before,
-.ProseMirror-gapcursor:after {
-    display: none !important;
-    content: none !important;
-}
-
-/* Blink animation */
-@keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-}
-
 /* Placeholder for empty editor */
 .ProseMirror p.is-editor-empty:first-child::before {
     content: "💬 Write your message...";
