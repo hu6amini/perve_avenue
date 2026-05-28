@@ -1863,6 +1863,7 @@ input[type="radio"]:checked::before {
     border-radius: var(--radius-sm);
     display: inline-block;
     max-width:calc(100% - (2* 5px));
+    user-select:all;
 }
 
 /* ----- Options row (checkboxes) ----- */
