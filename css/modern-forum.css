@@ -1803,24 +1803,33 @@ input[type="radio"]:checked::before {
     text-align: left;
 }
 
+/* Ensure the gap cursor is a vertical bar */
 .ProseMirror-gapcursor {
-    display: inline-block;
-    width: 2px;
-    background-color: var(--text-primary, #000);
+    display: inline-block !important;
+    width: 2px !important;
+    background-color: currentColor !important;
+    height: 1.2em !important; /* match text height, not full image height */
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    position: relative !important;
+    vertical-align: middle !important;
     animation: blink 1s step-end infinite;
-    pointer-events: none;
-    position: relative;
 }
+
+/* Remove any block‑level behaviour */
+.ProseMirror-gapcursor:before,
+.ProseMirror-gapcursor:after {
+    display: none !important;
+    content: none !important;
+}
+
+/* Blink animation */
 @keyframes blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
-}
-
-/* Ensure it appears above content */
-.ProseMirror-gapcursor:after {
-    content: '';
-    display: block;
-    height: 100%;
 }
 
 /* Placeholder for empty editor */
