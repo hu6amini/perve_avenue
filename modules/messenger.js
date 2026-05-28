@@ -442,6 +442,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 // Custom Image extension with lazy loading, async decoding, width/height
                 // -----------------------------------------------------------------
                 const CustomImage = BaseImage.extend({
+                    inline: true,
+                    group: 'inline',
+                    
                     addAttributes() {
                         return {
                             ...this.parent?.(),
