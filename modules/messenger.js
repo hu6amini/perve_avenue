@@ -432,6 +432,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
+                // Import Gapcursor module (add this line after importing imageModule)
+                const gapcursorModule = await import('https://esm.sh/@tiptap/extension-gapcursor@2.5.2');
+                const Gapcursor = gapcursorModule.Gapcursor || (gapcursorModule.default && gapcursorModule.default.Gapcursor);
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -486,7 +489,8 @@ var MessengerModule = (function(Utils, EventBus) {
                         Placeholder.configure({ placeholder: '💬 Write your message...' }),
                         Underline,
                         CustomImage,
-                        Spoiler
+                        Spoiler,
+                        Gapcursor
                     ],
                     content: initialHtml,
                     editorProps: {
