@@ -1803,8 +1803,24 @@ input[type="radio"]:checked::before {
     text-align: left;
 }
 
-.ProseMirror-hideselection * {
-    caret-color: var(--text-primary) !important;
+.ProseMirror-gapcursor {
+    display: inline-block;
+    width: 2px;
+    background-color: var(--text-primary, #000);
+    animation: blink 1s step-end infinite;
+    pointer-events: none;
+    position: relative;
+}
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* Ensure it appears above content */
+.ProseMirror-gapcursor:after {
+    content: '';
+    display: block;
+    height: 100%;
 }
 
 /* Placeholder for empty editor */
