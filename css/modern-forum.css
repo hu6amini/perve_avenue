@@ -1803,6 +1803,10 @@ input[type="radio"]:checked::before {
     text-align: left;
 }
 
+.ProseMirror-hideselection * {
+    caret-color: var(--text-primary);
+}
+
 /* Placeholder for empty editor */
 .ProseMirror p.is-editor-empty:first-child::before {
     content: "💬 Write your message...";
@@ -1862,8 +1866,8 @@ input[type="radio"]:checked::before {
     height: auto;
     border-radius: var(--radius-sm);
     display: inline-block;
-    max-width:calc(100% - (2* 5px));
     user-select:all;
+    padding: 3px;
 }
 
 /* ----- Options row (checkboxes) ----- */
