@@ -1795,12 +1795,15 @@ input[type="radio"]:checked::before {
 .ProseMirror {
     outline: none;
     min-height: 100px;
-    padding: var(--pad-4);
     color: var(--text-primary);
     font-family: var(--font-primary);
     font-size: var(--text-sm);
     line-height: 1.618;
     text-align: left;
+}
+
+.ProseMirror>[contenteditable=true] {
+    padding: var(--pad-4);
 }
 
 /* Placeholder for empty editor */
