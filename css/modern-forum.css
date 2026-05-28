@@ -1864,6 +1864,7 @@ input[type="radio"]:checked::before {
     display: inline-block;
     user-select:all;
     padding: 3px;
+    caret-color: var(--text-primary);
 }
 
 /* ----- Options row (checkboxes) ----- */
