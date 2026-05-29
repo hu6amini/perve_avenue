@@ -502,7 +502,7 @@ const VideoEmbed = Node.create({
             },
         }];
     },
-    // Live editor view: create the iframe
+    // Live editor view – creates the interactive iframe
     addNodeView() {
         return ({ node }) => {
             const dom = document.createElement('div');
@@ -534,7 +534,7 @@ const VideoEmbed = Node.create({
             return { dom };
         };
     },
-    // Serialization: output the same iframe structure (no innerHTML)
+    // HTML serialization – output for storage
     renderHTML({ node }) {
         if (node.attrs.service === 'youtube') {
             return [
@@ -561,7 +561,7 @@ const VideoEmbed = Node.create({
                 ],
             ];
         } else {
-            // vimeo
+            // Vimeo
             return [
                 'div',
                 {
@@ -609,14 +609,19 @@ const LinkCard = Node.create({
         return [{ tag: 'div[data-type="link-card"]' }];
     },
     renderHTML({ node }) {
-        const contentChildren = [];
+        // Build the content array – never add empty strings
+        const contentItems = [];
+
+        // Add image wrapper only if image exists
         if (node.attrs.image) {
-            contentChildren.push(
-                ['div', { class: 'link-card-image-wrapper' },
-                    ['img', { src: node.attrs.image, class: 'link-card-image', loading: 'lazy' }]
-                ]
-            );
+            contentItems.push([
+                'div',
+                { class: 'link-card-image-wrapper' },
+                ['img', { src: node.attrs.image, class: 'link-card-image', loading: 'lazy' }]
+            ]);
         }
+
+        // Build the text block
         const textChildren = [
             ['strong', { class: 'link-card-title' }, node.attrs.title || node.attrs.url]
         ];
@@ -624,14 +629,22 @@ const LinkCard = Node.create({
             textChildren.push(['p', { class: 'link-card-description' }, node.attrs.description]);
         }
         textChildren.push(['span', { class: 'link-card-url' }, node.attrs.url]);
-        contentChildren.push(['div', { class: 'link-card-text' }, textChildren]);
+
+        contentItems.push(['div', { class: 'link-card-text' }, textChildren]);
+
+        // Return the full structure: div > a > div.content
         return [
             'div',
             { 'data-type': 'link-card', class: 'link-card' },
             [
                 'a',
-                { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer', class: 'link-card-link' },
-                ['div', { class: 'link-card-content' }, contentChildren]
+                {
+                    href: node.attrs.url,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                    class: 'link-card-link'
+                },
+                ['div', { class: 'link-card-content' }, contentItems]
             ]
         ];
     },
