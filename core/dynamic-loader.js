@@ -5,7 +5,7 @@ document.documentElement.lang = "en";
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']);
+const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog', 'msg', 'user']);
 
 const STYLESHEETS = Object.freeze([
     "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
