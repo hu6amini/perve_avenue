@@ -475,38 +475,63 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
                 // VideoEmbed node (YouTube/Vimeo)
                 // -----------------------------------------------------------------
-                const VideoEmbed = Node.create({
-                    name: 'videoEmbed',
-                    group: 'block',
-                    atom: true,
-                    selectable: true,
-                    draggable: true,
-                    addAttributes() {
-                        return {
-                            html: { default: '' },
-                            title: { default: '' },
-                            url: { default: '' },
-                        };
-                    },
-                    parseHTML() {
-                        return [{ tag: 'div[data-type="video-embed"]' }];
-                    },
-                    renderHTML({ node }) {
-                        return [
-                            'div',
-                            { 'data-type': 'video-embed', class: 'video-embed-wrapper', 'data-url': node.attrs.url },
-                            [
-                                'div',
-                                { class: 'video-embed-container', style: 'position:relative;padding-bottom:56.25%;height:0;overflow:hidden;' },
-                                [
-                                    'div',
-                                    { style: 'position:absolute;top:0;left:0;width:100%;height:100%;' },
-                                    ['div', { dangerouslySetInnerHTML: { __html: node.attrs.html } }]
-                                ]
-                            ]
-                        ];
-                    },
-                });
+const VideoEmbed = Node.create({
+    name: 'videoEmbed',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+    addAttributes() {
+        return {
+            html: { default: '' },
+            title: { default: '' },
+            url: { default: '' },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'div[data-type="video-embed"]' }];
+    },
+    // Remove the old renderHTML method and add addNodeView
+    addNodeView() {
+        return ({ node, HTMLAttributes }) => {
+            const dom = document.createElement('div');
+            dom.classList.add('video-embed-wrapper');
+            dom.setAttribute('data-type', 'video-embed');
+            dom.setAttribute('data-url', node.attrs.url);
+            Object.entries(HTMLAttributes).forEach(([key, value]) => {
+                dom.setAttribute(key, value);
+            });
+
+            // Create the responsive container
+            const container = document.createElement('div');
+            container.classList.add('video-embed-container');
+            container.style.position = 'relative';
+            container.style.paddingBottom = '56.25%';
+            container.style.height = '0';
+            container.style.overflow = 'hidden';
+
+            // Create the absolute-positioned div for the iframe
+            const innerDiv = document.createElement('div');
+            innerDiv.style.position = 'absolute';
+            innerDiv.style.top = '0';
+            innerDiv.style.left = '0';
+            innerDiv.style.width = '100%';
+            innerDiv.style.height = '100%';
+
+            // Insert the HTML string into the innerDiv.
+            // Using innerHTML here is a deliberate choice for inserting the embed code.
+            innerDiv.innerHTML = node.attrs.html;
+
+            container.appendChild(innerDiv);
+            dom.appendChild(container);
+
+            return {
+                dom,
+                // We don't need a contentDOM for an atom node
+            };
+        };
+    },
+});
 
                 // -----------------------------------------------------------------
                 // LinkCard node (rich preview for normal websites)
