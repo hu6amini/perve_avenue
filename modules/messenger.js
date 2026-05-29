@@ -620,7 +620,11 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        StarterKit,
+                        StarterKit.configure({
+            link: {
+                linkOnPaste: false, // Disable automatic link conversion on paste
+            },
+        }),
                         Gapcursor,
                         Placeholder.configure({ placeholder: '💬 Write your message...' }),
                         Underline,
