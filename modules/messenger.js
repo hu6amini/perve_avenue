@@ -483,71 +483,111 @@ const VideoEmbed = Node.create({
     draggable: true,
     addAttributes() {
         return {
-            html: { default: '' },
-            title: { default: '' },
+            service: { default: 'youtube' },
+            id: { default: '' },
             url: { default: '' },
+            title: { default: '' },
         };
     },
     parseHTML() {
-        return [{ tag: 'div[data-type="video-embed"]' }];
+        return [{
+            tag: 'div[data-type="video-embed"]',
+            getAttrs: (dom) => {
+                return {
+                    service: dom.getAttribute('data-service'),
+                    id: dom.getAttribute('data-id'),
+                    url: dom.getAttribute('data-url'),
+                    title: dom.getAttribute('data-title'),
+                };
+            },
+        }];
     },
-    // For live editor – creates interactive DOM element
+    // Live editor view: create the iframe
     addNodeView() {
-        return ({ node, HTMLAttributes }) => {
+        return ({ node }) => {
             const dom = document.createElement('div');
             dom.classList.add('video-embed-wrapper');
             dom.setAttribute('data-type', 'video-embed');
+            dom.setAttribute('data-service', node.attrs.service);
+            dom.setAttribute('data-id', node.attrs.id);
             dom.setAttribute('data-url', node.attrs.url);
-            Object.entries(HTMLAttributes).forEach(([key, value]) => {
-                dom.setAttribute(key, value);
-            });
+            dom.setAttribute('data-title', node.attrs.title);
 
-            const container = document.createElement('div');
-            container.classList.add('video-embed-container');
-            container.style.position = 'relative';
-            container.style.paddingBottom = '56.25%';
-            container.style.height = '0';
-            container.style.overflow = 'hidden';
-
-            const innerDiv = document.createElement('div');
-            innerDiv.style.position = 'absolute';
-            innerDiv.style.top = '0';
-            innerDiv.style.left = '0';
-            innerDiv.style.width = '100%';
-            innerDiv.style.height = '100%';
-            innerDiv.innerHTML = node.attrs.html;
-
-            container.appendChild(innerDiv);
-            dom.appendChild(container);
-
+            const iframe = document.createElement('iframe');
+            if (node.attrs.service === 'youtube') {
+                iframe.src = 'https://www.youtube-nocookie.com/embed/' + node.attrs.id;
+                iframe.width = '560';
+                iframe.height = '315';
+                iframe.frameborder = '0';
+                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+                iframe.allowfullscreen = true;
+                iframe.referrerpolicy = 'strict-origin-when-cross-origin';
+            } else if (node.attrs.service === 'vimeo') {
+                iframe.src = 'https://player.vimeo.com/video/' + node.attrs.id;
+                iframe.width = '640';
+                iframe.height = '360';
+                iframe.frameborder = '0';
+                iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+                iframe.allowfullscreen = true;
+            }
+            dom.appendChild(iframe);
             return { dom };
         };
     },
-    // For HTML serialization (when calling editor.getHTML())
+    // Serialization: output the same iframe structure (no innerHTML)
     renderHTML({ node }) {
-        return [
-            'div',
-            {
-                'data-type': 'video-embed',
-                class: 'video-embed-wrapper',
-                'data-url': node.attrs.url,
-            },
-            [
+        if (node.attrs.service === 'youtube') {
+            return [
                 'div',
                 {
-                    class: 'video-embed-container',
-                    style: 'position:relative;padding-bottom:56.25%;height:0;overflow:hidden;',
+                    'data-type': 'video-embed',
+                    'data-service': 'youtube',
+                    'data-id': node.attrs.id,
+                    'data-url': node.attrs.url,
+                    'data-title': node.attrs.title,
+                    class: 'video-embed-wrapper',
                 },
                 [
-                    'div',
-                    { style: 'position:absolute;top:0;left:0;width:100%;height:100%;' },
-                    ['div', { innerHTML: node.attrs.html }]
-                ]
-            ]
-        ];
+                    'iframe',
+                    {
+                        width: '560',
+                        height: '315',
+                        src: 'https://www.youtube-nocookie.com/embed/' + node.attrs.id,
+                        frameborder: '0',
+                        allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+                        allowfullscreen: '',
+                        referrerpolicy: 'strict-origin-when-cross-origin',
+                    },
+                ],
+            ];
+        } else {
+            // vimeo
+            return [
+                'div',
+                {
+                    'data-type': 'video-embed',
+                    'data-service': 'vimeo',
+                    'data-id': node.attrs.id,
+                    'data-url': node.attrs.url,
+                    'data-title': node.attrs.title,
+                    class: 'video-embed-wrapper',
+                },
+                [
+                    'iframe',
+                    {
+                        width: '640',
+                        height: '360',
+                        src: 'https://player.vimeo.com/video/' + node.attrs.id,
+                        frameborder: '0',
+                        allow: 'autoplay; fullscreen; picture-in-picture',
+                        allowfullscreen: '',
+                    },
+                ],
+            ];
+        }
     },
 });
-
+                
 // -----------------------------------------------------------------
 // LinkCard node (rich preview for normal websites)
 // -----------------------------------------------------------------
