@@ -1848,12 +1848,13 @@ input[type="radio"]:checked::before {
 .ProseMirror img {
     max-width: 100%;
     height: auto;
-    border-radius: var(--radius-sm);
     display: inline-block;
     user-select:all;
     padding: 3px;
     caret-color: var(--text-primary);
-    max-width: calc(100% - (2 * 0.618rem));
+    max-width: calc(100% - 0.618rem);
+    border-left: var(--space-micro) solid transparent;
+    border-right: var(--space-micro) solid transparent;
 }
 
 /* ----- Options row (checkboxes) ----- */
