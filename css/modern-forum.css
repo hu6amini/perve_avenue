@@ -1486,18 +1486,6 @@ img,
     }
 }
 
-/*--------------------------------------------
- 14. WYSIWYG IMAGES OVERRIDE
---------------------------------------------*/
-.ve-content.color img:not(img[alt="fav"],
-    img[src^="https://img.forumfree.net/html/emoticons/new/"],
-    [class*="e1a-"],
-    img[alt$=":"],
-    .res_tmb img,
-    .emojione) {
-    max-width: calc(100% - (2 * 5px)) !important;
-}
-
 /*============================================
  checkboxes & radios - harmonized
 ============================================*/
@@ -1865,6 +1853,7 @@ input[type="radio"]:checked::before {
     user-select:all;
     padding: 3px;
     caret-color: var(--text-primary);
+    max-width: calc(100% - (2 * 0.618rem));
 }
 
 /* ----- Options row (checkboxes) ----- */
