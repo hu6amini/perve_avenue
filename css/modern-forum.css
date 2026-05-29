@@ -2190,10 +2190,6 @@ input[type="radio"]:checked::before {
     .modern-actions {
         justify-content: center;
     }
-    
-    .modern-wysiwyg {
-        margin: var(--space-sm);
-    }
 
     /* Messages mobile */
     .messages-list-header {
