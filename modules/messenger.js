@@ -475,6 +475,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
                 // VideoEmbed node (YouTube/Vimeo)
                 // -----------------------------------------------------------------
+// -----------------------------------------------------------------
+// VideoEmbed node using a Node View (for iframe support)
+// -----------------------------------------------------------------
 const VideoEmbed = Node.create({
     name: 'videoEmbed',
     group: 'block',
@@ -491,9 +494,10 @@ const VideoEmbed = Node.create({
     parseHTML() {
         return [{ tag: 'div[data-type="video-embed"]' }];
     },
-    // Remove the old renderHTML method and add addNodeView
+    // Use addNodeView to create the iframe wrapper
     addNodeView() {
         return ({ node, HTMLAttributes }) => {
+            // Create the main wrapper div
             const dom = document.createElement('div');
             dom.classList.add('video-embed-wrapper');
             dom.setAttribute('data-type', 'video-embed');
@@ -518,8 +522,7 @@ const VideoEmbed = Node.create({
             innerDiv.style.width = '100%';
             innerDiv.style.height = '100%';
 
-            // Insert the HTML string into the innerDiv.
-            // Using innerHTML here is a deliberate choice for inserting the embed code.
+            // Insert the iframe HTML
             innerDiv.innerHTML = node.attrs.html;
 
             container.appendChild(innerDiv);
@@ -527,7 +530,6 @@ const VideoEmbed = Node.create({
 
             return {
                 dom,
-                // We don't need a contentDOM for an atom node
             };
         };
     },
