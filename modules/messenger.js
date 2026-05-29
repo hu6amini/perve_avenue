@@ -609,10 +609,7 @@ const LinkCard = Node.create({
         return [{ tag: 'div[data-type="link-card"]' }];
     },
     renderHTML({ node }) {
-        // Build the content array without empty placeholders
         const contentChildren = [];
-        
-        // Image wrapper (only if image exists)
         if (node.attrs.image) {
             contentChildren.push(
                 ['div', { class: 'link-card-image-wrapper' },
@@ -620,8 +617,6 @@ const LinkCard = Node.create({
                 ]
             );
         }
-        
-        // Text block
         const textChildren = [
             ['strong', { class: 'link-card-title' }, node.attrs.title || node.attrs.url]
         ];
@@ -629,10 +624,7 @@ const LinkCard = Node.create({
             textChildren.push(['p', { class: 'link-card-description' }, node.attrs.description]);
         }
         textChildren.push(['span', { class: 'link-card-url' }, node.attrs.url]);
-        
         contentChildren.push(['div', { class: 'link-card-text' }, textChildren]);
-        
-        // Return the full structure
         return [
             'div',
             { 'data-type': 'link-card', class: 'link-card' },
@@ -681,11 +673,16 @@ const LinkCard = Node.create({
                                             .then(res => res.json())
                                             .then(data => {
                                                 if (data.type === 'youtube' || data.type === 'vimeo') {
-                                                    self.editor.commands.insertContent({
-                                                        type: 'videoEmbed',
-                                                        attrs: { html: data.html, title: data.title, url: url },
-                                                    });
-                                                } else if (data.type === 'link') {
+    self.editor.commands.insertContent({
+        type: 'videoEmbed',
+        attrs: {
+            service: data.service,
+            id: data.id,
+            url: url,
+            title: data.title,
+        },
+    });
+} else if (data.type === 'link') {
                                                     self.editor.commands.insertContent({
                                                         type: 'linkCard',
                                                         attrs: { url: url, title: data.title || url, description: data.description || '', image: data.image || '' },
