@@ -472,11 +472,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // -----------------------------------------------------------------
-                // VideoEmbed node (YouTube/Vimeo)
-                // -----------------------------------------------------------------
 // -----------------------------------------------------------------
-// VideoEmbed node using a Node View (for iframe support)
+// VideoEmbed node (YouTube/Vimeo) with both Node View and renderHTML
 // -----------------------------------------------------------------
 const VideoEmbed = Node.create({
     name: 'videoEmbed',
@@ -494,10 +491,9 @@ const VideoEmbed = Node.create({
     parseHTML() {
         return [{ tag: 'div[data-type="video-embed"]' }];
     },
-    // Use addNodeView to create the iframe wrapper
+    // For live editor – creates interactive DOM element
     addNodeView() {
         return ({ node, HTMLAttributes }) => {
-            // Create the main wrapper div
             const dom = document.createElement('div');
             dom.classList.add('video-embed-wrapper');
             dom.setAttribute('data-type', 'video-embed');
@@ -506,7 +502,6 @@ const VideoEmbed = Node.create({
                 dom.setAttribute(key, value);
             });
 
-            // Create the responsive container
             const container = document.createElement('div');
             container.classList.add('video-embed-container');
             container.style.position = 'relative';
@@ -514,24 +509,42 @@ const VideoEmbed = Node.create({
             container.style.height = '0';
             container.style.overflow = 'hidden';
 
-            // Create the absolute-positioned div for the iframe
             const innerDiv = document.createElement('div');
             innerDiv.style.position = 'absolute';
             innerDiv.style.top = '0';
             innerDiv.style.left = '0';
             innerDiv.style.width = '100%';
             innerDiv.style.height = '100%';
-
-            // Insert the iframe HTML
             innerDiv.innerHTML = node.attrs.html;
 
             container.appendChild(innerDiv);
             dom.appendChild(container);
 
-            return {
-                dom,
-            };
+            return { dom };
         };
+    },
+    // For HTML serialization (when calling editor.getHTML())
+    renderHTML({ node }) {
+        return [
+            'div',
+            {
+                'data-type': 'video-embed',
+                class: 'video-embed-wrapper',
+                'data-url': node.attrs.url,
+            },
+            [
+                'div',
+                {
+                    class: 'video-embed-container',
+                    style: 'position:relative;padding-bottom:56.25%;height:0;overflow:hidden;',
+                },
+                [
+                    'div',
+                    { style: 'position:absolute;top:0;left:0;width:100%;height:100%;' },
+                    ['div', { innerHTML: node.attrs.html }]
+                ]
+            ]
+        ];
     },
 });
 
@@ -556,42 +569,38 @@ const LinkCard = Node.create({
         return [{ tag: 'div[data-type="link-card"]' }];
     },
     renderHTML({ node }) {
-        // Create the HTML structure for the link card
-        const attrs = {
-            'data-type': 'link-card',
-            class: 'link-card',
-        };
-
-        // The content is a link that wraps the entire card
-        const linkAttrs = {
-            href: node.attrs.url,
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            class: 'link-card-link',
-        };
-
-        const cardContent = [
-            'div',
-            { class: 'link-card-content' },
-            node.attrs.image ? [
-                'div',
-                { class: 'link-card-image-wrapper' },
-                ['img', { src: node.attrs.image, class: 'link-card-image', loading: 'lazy' }]
-            ] : '',
-            [
-                'div',
-                { class: 'link-card-text' },
-                ['strong', { class: 'link-card-title' }, node.attrs.title],
-                node.attrs.description ? ['p', { class: 'link-card-description' }, node.attrs.description] : '',
-                ['span', { class: 'link-card-url' }, node.attrs.url]
-            ]
+        // Build the content array without empty placeholders
+        const contentChildren = [];
+        
+        // Image wrapper (only if image exists)
+        if (node.attrs.image) {
+            contentChildren.push(
+                ['div', { class: 'link-card-image-wrapper' },
+                    ['img', { src: node.attrs.image, class: 'link-card-image', loading: 'lazy' }]
+                ]
+            );
+        }
+        
+        // Text block
+        const textChildren = [
+            ['strong', { class: 'link-card-title' }, node.attrs.title || node.attrs.url]
         ];
-
-        // Return the full structure as an array
+        if (node.attrs.description) {
+            textChildren.push(['p', { class: 'link-card-description' }, node.attrs.description]);
+        }
+        textChildren.push(['span', { class: 'link-card-url' }, node.attrs.url]);
+        
+        contentChildren.push(['div', { class: 'link-card-text' }, textChildren]);
+        
+        // Return the full structure
         return [
             'div',
-            attrs,
-            ['a', linkAttrs, cardContent]
+            { 'data-type': 'link-card', class: 'link-card' },
+            [
+                'a',
+                { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer', class: 'link-card-link' },
+                ['div', { class: 'link-card-content' }, contentChildren]
+            ]
         ];
     },
 });
