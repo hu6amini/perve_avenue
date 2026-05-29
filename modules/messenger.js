@@ -533,51 +533,67 @@ const VideoEmbed = Node.create({
     },
 });
 
-                // -----------------------------------------------------------------
-                // LinkCard node (rich preview for normal websites)
-                // -----------------------------------------------------------------
-                const LinkCard = Node.create({
-                    name: 'linkCard',
-                    group: 'block',
-                    atom: true,
-                    selectable: true,
-                    draggable: true,
-                    addAttributes() {
-                        return {
-                            url: { default: '' },
-                            title: { default: '' },
-                            description: { default: '' },
-                            image: { default: '' },
-                        };
-                    },
-                    parseHTML() {
-                        return [{ tag: 'div[data-type="link-card"]' }];
-                    },
-                    renderHTML({ node }) {
-                        var imageHtml = node.attrs.image ? '<img src="' + escapeHtml(node.attrs.image) + '" class="link-card-image" loading="lazy">' : '';
-                        return [
-                            'div',
-                            { 'data-type': 'link-card', class: 'link-card' },
-                            [
-                                'a',
-                                { href: node.attrs.url, target: '_blank', rel: 'noopener noreferrer', class: 'link-card-link' },
-                                [
-                                    'div',
-                                    { class: 'link-card-content' },
-                                    imageHtml ? ['div', { class: 'link-card-image-wrapper' }, imageHtml] : '',
-                                    [
-                                        'div',
-                                        { class: 'link-card-text' },
-                                        ['strong', { class: 'link-card-title' }, node.attrs.title],
-                                        node.attrs.description ? ['p', { class: 'link-card-description' }, node.attrs.description] : '',
-                                        ['span', { class: 'link-card-url' }, node.attrs.url]
-                                    ]
-                                ]
-                            ]
-                        ];
-                    },
-                });
+// -----------------------------------------------------------------
+// LinkCard node (rich preview for normal websites)
+// -----------------------------------------------------------------
+const LinkCard = Node.create({
+    name: 'linkCard',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: true,
+    addAttributes() {
+        return {
+            url: { default: '' },
+            title: { default: '' },
+            description: { default: '' },
+            image: { default: '' },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'div[data-type="link-card"]' }];
+    },
+    renderHTML({ node }) {
+        // Create the HTML structure for the link card
+        const attrs = {
+            'data-type': 'link-card',
+            class: 'link-card',
+        };
 
+        // The content is a link that wraps the entire card
+        const linkAttrs = {
+            href: node.attrs.url,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            class: 'link-card-link',
+        };
+
+        const cardContent = [
+            'div',
+            { class: 'link-card-content' },
+            node.attrs.image ? [
+                'div',
+                { class: 'link-card-image-wrapper' },
+                ['img', { src: node.attrs.image, class: 'link-card-image', loading: 'lazy' }]
+            ] : '',
+            [
+                'div',
+                { class: 'link-card-text' },
+                ['strong', { class: 'link-card-title' }, node.attrs.title],
+                node.attrs.description ? ['p', { class: 'link-card-description' }, node.attrs.description] : '',
+                ['span', { class: 'link-card-url' }, node.attrs.url]
+            ]
+        ];
+
+        // Return the full structure as an array
+        return [
+            'div',
+            attrs,
+            ['a', linkAttrs, cardContent]
+        ];
+    },
+});
+                
                 // -----------------------------------------------------------------
                 // Spoiler node (unchanged)
                 // -----------------------------------------------------------------
