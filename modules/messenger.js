@@ -419,20 +419,19 @@ var MessengerModule = (function(Utils, EventBus) {
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
+                // Import all modules synchronously (including prosemirror-state)
                 const core = await import('https://esm.sh/@tiptap/core@2.5.2');
-                const Editor = core.Editor || (core.default && core.default.Editor);
-                const Node = core.Node || (core.default && core.default.Node);
-                const Extension = core.Extension || (core.default && core.default.Extension);
-                
-                if (!Editor || !Node || !Extension) {
-                    throw new Error('Editor, Node or Extension not found in @tiptap/core');
-                }
-
+                const pmState = await import('https://esm.sh/prosemirror-state@1.4.3');
                 const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
                 const gapcursorModule = await import('https://esm.sh/@tiptap/extension-gapcursor@2.5.2');
+
+                const Editor = core.Editor || (core.default && core.default.Editor);
+                const Node = core.Node || (core.default && core.default.Node);
+                const Extension = core.Extension || (core.default && core.default.Extension);
+                const { Plugin, PluginKey } = pmState;
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -567,69 +566,52 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -----------------------------------------------------------------
-                // Smart Paste Extension: intercepts pasted URLs and calls your worker
+                // Smart Paste Extension – uses Plugin and PluginKey (synchronous)
                 // -----------------------------------------------------------------
                 const SmartPaste = Extension.create({
                     name: 'smartPaste',
                     addProseMirrorPlugins() {
-                        var self = this;
-                        var plugin;
-                        // We'll create the plugin using the imported Plugin class (dynamic import to avoid global)
+                        const self = this;
                         return [
-                            (async function() {
-                                const pmState = await import('https://esm.sh/prosemirror-state@1.4.3');
-                                const Plugin = pmState.Plugin;
-                                const PluginKey = pmState.PluginKey;
-                                return new Plugin({
-                                    key: new PluginKey('smartPaste'),
-                                    props: {
-                                        handlePaste: (view, event) => {
-                                            var text = event.clipboardData && event.clipboardData.getData('text/plain');
-                                            if (!text) return false;
-                                            var trimmed = text.trim();
-                                            var urlRegex = /^(https?:\/\/[^\s]+)$/;
-                                            if (!urlRegex.test(trimmed)) return false;
-                                            var url = trimmed;
-                                            event.preventDefault();
-                                            var workerUrl = 'https://forum-embed-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url);
-                                            fetch(workerUrl)
-                                                .then(res => res.json())
-                                                .then(data => {
-                                                    if (data.type === 'youtube' || data.type === 'vimeo') {
-                                                        self.editor.commands.insertContent({
-                                                            type: 'videoEmbed',
-                                                            attrs: {
-                                                                html: data.html,
-                                                                title: data.title,
-                                                                url: url,
-                                                            },
-                                                        });
-                                                    } else if (data.type === 'link') {
-                                                        self.editor.commands.insertContent({
-                                                            type: 'linkCard',
-                                                            attrs: {
-                                                                url: url,
-                                                                title: data.title || url,
-                                                                description: data.description || '',
-                                                                image: data.image || '',
-                                                            },
-                                                        });
-                                                    } else {
-                                                        // fallback plain link
-                                                        self.editor.commands.insertContent('<a href="' + url + '">' + url + '</a>');
-                                                    }
-                                                    self.editor.commands.focus();
-                                                })
-                                                .catch(err => {
-                                                    console.error('SmartPaste error:', err);
+                            new Plugin({
+                                key: new PluginKey('smartPaste'),
+                                props: {
+                                    handlePaste: (view, event) => {
+                                        const text = event.clipboardData && event.clipboardData.getData('text/plain');
+                                        if (!text) return false;
+                                        const trimmed = text.trim();
+                                        const urlRegex = /^(https?:\/\/[^\s]+)$/;
+                                        if (!urlRegex.test(trimmed)) return false;
+                                        const url = trimmed;
+                                        event.preventDefault();
+                                        const workerUrl = 'https://forum-embed-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url);
+                                        fetch(workerUrl)
+                                            .then(res => res.json())
+                                            .then(data => {
+                                                if (data.type === 'youtube' || data.type === 'vimeo') {
+                                                    self.editor.commands.insertContent({
+                                                        type: 'videoEmbed',
+                                                        attrs: { html: data.html, title: data.title, url: url },
+                                                    });
+                                                } else if (data.type === 'link') {
+                                                    self.editor.commands.insertContent({
+                                                        type: 'linkCard',
+                                                        attrs: { url: url, title: data.title || url, description: data.description || '', image: data.image || '' },
+                                                    });
+                                                } else {
                                                     self.editor.commands.insertContent('<a href="' + url + '">' + url + '</a>');
-                                                    self.editor.commands.focus();
-                                                });
-                                            return true;
-                                        },
+                                                }
+                                                self.editor.commands.focus();
+                                            })
+                                            .catch(err => {
+                                                console.error('SmartPaste error:', err);
+                                                self.editor.commands.insertContent('<a href="' + url + '">' + url + '</a>');
+                                                self.editor.commands.focus();
+                                            });
+                                        return true;
                                     },
-                                });
-                            })()
+                                },
+                            }),
                         ];
                     },
                 });
