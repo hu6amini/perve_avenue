@@ -888,15 +888,12 @@ body#msg .textinput {
 .link-preview-content {
     display: flex;
     gap: 1rem;
-    padding: 0.75rem;
-    align-items: center;
+    align-items: stretch;
 }
 .embedded-link-image {
     flex-shrink: 0;
-    width: 80px;
-    height: 80px;
+    width: 100%;
     overflow: hidden;
-    border-radius: 0.25rem;
     background: var(--bg-color);
 }
 .link-preview-image {
@@ -908,11 +905,11 @@ body#msg .textinput {
 .link-preview-text {
     flex: 1;
     overflow: hidden;
+    padding: 0.75rem;
 }
 .link-preview-title {
     margin: 0 0 0.25rem 0;
     font-size: 1rem;
-    font-weight: 600;
     color: var(--text-primary, #1A202C);
     line-height: 1.4;
 }
