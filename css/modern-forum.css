@@ -867,6 +867,81 @@ body#msg .textinput {
 }
 
 /*--------------------------------------------
+ 7b. RICH LINK PREVIEW CARDS (TipTap extension)
+--------------------------------------------*/
+.link-preview-card {
+    margin: 0.5rem 0;
+    border: 1px solid var(--border-color, #E2E8F0);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--surface-color, #FFF);
+    transition: box-shadow 0.2s;
+}
+
+.link-preview-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.link-preview-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.link-preview-content {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem;
+    align-items: center;
+}
+
+.link-preview-image {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 0.25rem;
+    flex-shrink: 0;
+}
+
+.link-preview-text {
+    flex: 1;
+    overflow: hidden;
+}
+
+.link-preview-title {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary, #1A202C);
+}
+
+.link-preview-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #4A5568);
+    margin: 0.25rem 0;
+    line-height: 1.4;
+}
+
+.link-preview-url {
+    font-size: 0.75rem;
+    color: var(--text-muted, #718096);
+    word-break: break-all;
+}
+
+/* Mobile: stack image on top, text below */
+@media (max-width: 640px) {
+    .link-preview-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .link-preview-image {
+        width: 100%;
+        height: auto;
+        max-height: 160px;
+    }
+}
+
+/*--------------------------------------------
  8. MODERN LIKES MODAL (Accessibility Enhanced)
 --------------------------------------------*/
 .modal-scrollbar-measure {
