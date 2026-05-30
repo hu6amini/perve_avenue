@@ -878,6 +878,11 @@ body#msg .textinput {
     background: var(--surface-color, #FFF);
     transition: box-shadow 0.2s;
     vertical-align: middle;  /* aligns nicely with surrounding text */
+    caret-color: var(--text-primary);
+    max-width: calc(100% - 0.618rem);
+    border-left: var(--space-micro) solid transparent;
+    border-right: var(--space-micro) solid transparent;
+    overflow: hidden;
 }
 .link-preview-card:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -888,19 +893,12 @@ body#msg .textinput {
     display: inline-flex;    /* change from block to inline-flex */
     align-items: stretch;
     width: 100%;
-}
-.link-preview-content {
-    display: inline-flex;
     gap: 0.75rem;
-    padding: 0.5rem;
-    align-items: stretch;
-    width: 100%;
 }
 .embedded-link-image {
     flex-shrink: 0;
-    width: 80px;
+    width: 100%;
     overflow: hidden;
-    border-radius: 0.25rem;
     background: var(--bg-color);
 }
 .link-preview-image {
