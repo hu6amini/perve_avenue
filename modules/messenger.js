@@ -487,8 +487,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
 const LinkPreview = Node.create({
     name: 'linkPreview',
-    group: 'block',
-    atom: true,
+    inline: true,           // makes it inline (like an image)
+    group: 'inline',        // allows it inside paragraphs
+    atom: true,             // treated as a single unit
     draggable: true,
     selectable: true,
     addAttributes() {
@@ -500,11 +501,11 @@ const LinkPreview = Node.create({
         };
     },
     parseHTML() {
-        return [{ tag: 'div[data-type="link-preview"]' }];
+        return [{ tag: 'span[data-type="link-preview"]' }];
     },
     renderHTML({ node, HTMLAttributes }) {
         const { href, title, description, imageSrc } = node.attrs;
-        // Extract hostname from href for display (e.g., "https://bbc.com/news" -> "bbc.com")
+        // Extract hostname for favicon and display
         let hostname = '';
         try {
             const url = new URL(href);
@@ -514,32 +515,28 @@ const LinkPreview = Node.create({
         }
         const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
 
+        // All elements must be inline or inline-block to keep the node inline
         return [
-            'div',
+            'span',
             { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
             [
                 'a',
                 { href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+                imageSrc ? [
+                    'span',
+                    { class: 'embedded-link-image' },
+                    ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                ] : '',
                 [
-                    'div',
-                    { class: 'link-preview-content' },
-                    // Image wrapped in .embedded-link-image
-                    imageSrc ? [
-                        'div',
-                        { class: 'embedded-link-image' },
-                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
-                    ] : '',
+                    'span',
+                    { class: 'link-preview-text' },
+                    ['span', { class: 'link-preview-title' }, title || href],
+                    description ? ['span', { class: 'link-preview-description' }, description] : '',
                     [
-                        'div',
-                        { class: 'link-preview-text' },
-                        ['h3', { class: 'link-preview-title' }, title || href],
-                        description ? ['p', { class: 'link-preview-description' }, description] : '',
-                        [
-                            'div',
-                            { class: 'link-preview-url-wrapper' },
-                            ['img', { src: faviconUrl, class: 'link-preview-favicon', loading: 'lazy', alt: '' }],
-                            ['span', { class: 'link-preview-hostname' }, hostname]
-                        ]
+                        'span',
+                        { class: 'link-preview-url-wrapper' },
+                        ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
+                        ['span', { class: 'link-preview-hostname' }, hostname]
                     ]
                 ]
             ]
