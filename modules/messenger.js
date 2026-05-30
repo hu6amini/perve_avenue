@@ -1,4 +1,5 @@
 // Messenger Module – TipTap based, with lazy/async images & raw HTML output
+// Refactored: no dependency on legacy globals (ajaxRequest, tag, REPLIER)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -32,19 +33,15 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 function tryBuild() {
                     if (wrapperReady && targetReady && !isInitialized && !document.getElementById('modern-messenger')) {
-                        waitForGlobalFunctions()
-                            .then(function() {
-                                try {
-                                    buildModernMessenger();
-                                    isInitialized = true;
-                                    if (EventBus) EventBus.trigger('messenger:ready');
-                                    resolve();
-                                } catch (err) {
-                                    console.error('[MessengerModule] Build failed:', err);
-                                    reject(err);
-                                }
-                            })
-                            .catch(reject);
+                        try {
+                            buildModernMessenger();
+                            isInitialized = true;
+                            if (EventBus) EventBus.trigger('messenger:ready');
+                            resolve();
+                        } catch (err) {
+                            console.error('[MessengerModule] Build failed:', err);
+                            reject(err);
+                        }
                     }
                 }
 
@@ -87,20 +84,16 @@ var MessengerModule = (function(Utils, EventBus) {
             } else {
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', function() {
-                        waitForGlobalFunctions().then(function() {
-                            buildModernMessenger();
-                            isInitialized = true;
-                            if (EventBus) EventBus.trigger('messenger:ready');
-                            resolve();
-                        }).catch(reject);
-                    });
-                } else {
-                    waitForGlobalFunctions().then(function() {
                         buildModernMessenger();
                         isInitialized = true;
                         if (EventBus) EventBus.trigger('messenger:ready');
                         resolve();
-                    }).catch(reject);
+                    });
+                } else {
+                    buildModernMessenger();
+                    isInitialized = true;
+                    if (EventBus) EventBus.trigger('messenger:ready');
+                    resolve();
                 }
             }
         });
@@ -118,17 +111,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
         observerCallbacks = [];
-    }
-
-    function waitForGlobalFunctions() {
-        if (currentSection !== 'compose') return Promise.resolve();
-        return new Promise(function(resolve) {
-            if (typeof tag !== 'undefined' && typeof ajaxRequest !== 'undefined') {
-                resolve();
-            } else {
-                setTimeout(resolve, 300);
-            }
-        });
     }
 
     // ------------------------------------------------------------------------
@@ -174,8 +156,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return html;
     }
 
-    // No htmlToLegacy – we keep HTML in the textarea
-
     // ------------------------------------------------------------------------
     // COMPOSE SECTION – TipTap ES modules with custom Image extension
     // ------------------------------------------------------------------------
@@ -186,15 +166,16 @@ var MessengerModule = (function(Utils, EventBus) {
         var originalTextarea = document.getElementById('Post');
         var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
-        var submitButton  = document.querySelector('input[name="sub_mit"]');
-        var previewButton = document.querySelector('button[name="preview"]');
-        var originalForm  = window.REPLIER;
+        var originalForm  = document.querySelector('form[action*="act=Msg"]') || 
+                            (originalTextarea ? originalTextarea.closest('form') : null);
+        var submitButton  = originalForm ? originalForm.querySelector('input[name="sub_mit"]') : null;
+        var previewButton = originalForm ? originalForm.querySelector('button[name="preview"]') : null;
 
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Recipient + Subject row (same as before)
+        // Recipient + Subject row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -234,7 +215,7 @@ var MessengerModule = (function(Utils, EventBus) {
             editor.commands.focus();
         }
 
-        // ----- Build toolbar UI (identical to your current) -----
+        // ----- Build toolbar UI (unchanged) -----
         var group1 = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        btn: null },
@@ -362,7 +343,6 @@ var MessengerModule = (function(Utils, EventBus) {
             .then(data => {
                 editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
                 if (data.url) {
-                    // Insert image with attributes from worker (width/height) + lazy/async
                     editorInstance.chain().focus().insertContent({
                         type: 'image',
                         attrs: {
@@ -416,7 +396,117 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules with custom Image extension
+        // PREVIEW & SUBMIT using fetch (no global dependencies)
+        // -----------------------------------------------------------------
+        function getFormDataObject() {
+            var formData = new FormData();
+            if (originalForm) {
+                // Copy all fields from the original form
+                var formElements = originalForm.elements;
+                for (var i = 0; i < formElements.length; i++) {
+                    var el = formElements[i];
+                    if (el.name && el.name !== 'sub_mit' && el.name !== 'preview') {
+                        if (el.type === 'checkbox' || el.type === 'radio') {
+                            if (el.checked) formData.append(el.name, el.value);
+                        } else {
+                            formData.append(el.name, el.value);
+                        }
+                    }
+                }
+            }
+            // Override with modern values
+            var modernRecipient = container.querySelector('#modern-recipient');
+            var modernContact = container.querySelector('#modern-contact');
+            var modernTitle = container.querySelector('#modern-title');
+            var modernAddSent = container.querySelector('#modern-add-sent');
+            var modernAddTracking = container.querySelector('#modern-add-tracking');
+            if (modernRecipient) formData.set('entered_name', modernRecipient.value);
+            if (modernContact) formData.set('from_contact', modernContact.value);
+            if (modernTitle) formData.set('msg_title', modernTitle.value);
+            if (modernAddSent) formData.set('add_sent', modernAddSent.checked ? '1' : '0');
+            if (modernAddTracking) formData.set('add_tracking', modernAddTracking.checked ? '1' : '0');
+            if (originalTextarea && editor) formData.set('Post', editor.getHTML());
+            return formData;
+        }
+
+        async function previewMessage() {
+            if (!originalForm) {
+                console.warn('[Messenger] No original form found for preview');
+                return;
+            }
+            var formData = getFormDataObject();
+            // Add preview flag (original preview button usually sets a parameter)
+            formData.set('preview', '1');
+            var actionUrl = originalForm.action || window.location.href;
+            try {
+                var response = await fetch(actionUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                var html = await response.text();
+                // Extract preview content (the original forum returns a complete page; we need the preview part)
+                var tempDiv = document.createElement('div');
+                tempDiv.innerHTML = html;
+                var previewContent = tempDiv.querySelector('#ajaxObject, .preview, .Item.preview, #preview');
+                var previewArea = container.querySelector('#modern-preview-area');
+                var contentDiv = previewArea ? previewArea.querySelector('.preview-content') : null;
+                if (previewArea && contentDiv) {
+                    if (previewContent) {
+                        contentDiv.innerHTML = previewContent.innerHTML;
+                        previewArea.style.display = 'block';
+                    } else {
+                        contentDiv.innerHTML = '<div class="preview-error">Preview not available. Please submit the message to see it.</div>';
+                        previewArea.style.display = 'block';
+                    }
+                }
+            } catch (err) {
+                console.error('[Messenger] Preview fetch failed:', err);
+                var previewArea = container.querySelector('#modern-preview-area');
+                if (previewArea) {
+                    var contentDiv = previewArea.querySelector('.preview-content');
+                    if (contentDiv) contentDiv.innerHTML = '<div class="preview-error">Preview failed. Please check your connection and try again.</div>';
+                    previewArea.style.display = 'block';
+                }
+            }
+        }
+
+        async function sendMessage() {
+            if (!originalForm) {
+                console.warn('[Messenger] No original form found for submission');
+                return;
+            }
+            var formData = getFormDataObject();
+            // Add submit flag
+            formData.set('sub_mit', 'Send Message');
+            var actionUrl = originalForm.action || window.location.href;
+            try {
+                // Disable submit button to prevent double submission
+                var submitBtn = container.querySelector('#modern-submit');
+                if (submitBtn) submitBtn.disabled = true;
+                var response = await fetch(actionUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+                // If successful, the forum will redirect. We follow the redirect.
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else {
+                    // Otherwise, replace current page with response
+                    var html = await response.text();
+                    document.open();
+                    document.write(html);
+                    document.close();
+                }
+            } catch (err) {
+                console.error('[Messenger] Submit failed:', err);
+                if (submitBtn) submitBtn.disabled = false;
+                alert('Failed to send message. Please try again.');
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Load TipTap ES modules
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
@@ -438,13 +528,10 @@ var MessengerModule = (function(Utils, EventBus) {
                 const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
                 const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
 
-                // -----------------------------------------------------------------
-                // Custom Image extension with lazy loading, async decoding, width/height
-                // -----------------------------------------------------------------
+                // Custom Image extension with lazy loading
                 const CustomImage = BaseImage.extend({
                     inline: true,
                     group: 'inline',
-                    
                     addAttributes() {
                         return {
                             ...this.parent?.(),
@@ -497,13 +584,12 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                     onUpdate: function({ editor }) {
                         if (originalTextarea) {
-                            // Store RAW HTML (not BBCode)
                             originalTextarea.value = editor.getHTML();
                         }
                     }
                 });
 
-                // Assign button actions (same as before)
+                // Assign button actions
                 group1[0].btn.onclick = () => exec(() => editor.chain().focus().toggleBold().run());
                 group1[1].btn.onclick = () => exec(() => editor.chain().focus().toggleItalic().run());
                 group1[2].btn.onclick = () => exec(() => editor.chain().focus().toggleUnderline().run());
@@ -534,7 +620,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 };
 
-                // URL image insertion – load image to get dimensions
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                         const img = new Image();
@@ -552,7 +637,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             }).run();
                         };
                         img.onerror = function() {
-                            // Fallback: insert without dimensions
                             editor.chain().focus().insertContent({
                                 type: 'image',
                                 attrs: { src: url, alt: 'image', loading: 'lazy', decoding: 'async' }
@@ -648,7 +732,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
-        // Options row, action buttons, data binding (with raw HTML output)
+        // Options row, action buttons
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -700,26 +784,11 @@ var MessengerModule = (function(Utils, EventBus) {
 
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
-            modernPreviewBtn.onclick = function() {
+            modernPreviewBtn.onclick = function(e) {
+                e.preventDefault();
                 syncToOriginal();
-                // Use raw HTML, not BBCode
                 if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
-                if (typeof ajaxRequest === 'function') ajaxRequest();
-                else if (previewButton) previewButton.click();
-                var loadingDiv = document.getElementById('loading');
-                if (loadingDiv) {
-                    loadingDiv.style.display = 'block';
-                    previewArea.style.display = 'block';
-                    var observer = new MutationObserver(function() {
-                        var ajaxObj = document.getElementById('ajaxObject');
-                        if (ajaxObj && ajaxObj.innerHTML) {
-                            var pc = previewArea.querySelector('.preview-content');
-                            if (pc) pc.innerHTML = ajaxObj.innerHTML;
-                            observer.disconnect();
-                        }
-                    });
-                    observer.observe(loadingDiv, { childList: true, subtree: true });
-                }
+                previewMessage();
             };
         }
 
@@ -729,12 +798,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 e.preventDefault();
                 syncToOriginal();
                 if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
-                if (originalForm && typeof originalForm.submit === 'function') {
-                    if (typeof ValidateForm === 'function' && !ValidateForm(1)) return;
-                    originalForm.submit();
-                } else if (submitButton) {
-                    submitButton.click();
-                }
+                sendMessage();
             };
         }
 
@@ -745,13 +809,10 @@ var MessengerModule = (function(Utils, EventBus) {
     // MESSAGES SECTION (unchanged – keep your existing)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
-        // Copy your existing working messages section here (unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
         try {
-            // ... (your full messages code)
-            // For brevity, use the same you had before
             var folderSelect  = document.querySelector('select[name="VID"]');
             var messageRows   = document.querySelectorAll('.big_list .row-mp');
             var dlItems       = document.querySelectorAll('.main_list dl dd');
@@ -771,8 +832,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
-            // ... (rest of your messages section, unchanged)
-            // I trust you have the full working code here.
+            // ... (rest of your messages section – unchanged, omitted for brevity)
+            // You can keep your existing working code for messages and contacts sections.
         } catch(err) {
             console.error('[MessengerModule] Error building messages section:', err);
             container.innerHTML = '<div class="modern-empty-state">Error loading messages</div>';
@@ -788,7 +849,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
         try {
-            // ... (your full contacts code)
+            // Your existing contacts code
         } catch(err) {
             console.error('[MessengerModule] Error building contacts section:', err);
             container.innerHTML = '<div class="modern-empty-state">Error loading contacts</div>';
