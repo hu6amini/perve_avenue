@@ -882,6 +882,7 @@ body#msg .textinput {
     border-left: var(--space-micro) solid transparent;
     border-right: var(--space-micro) solid transparent;
     overflow: hidden;
+    width: 100%;
 }
 .link-preview-card:hover {
     box-shadow: var(--shadow);
