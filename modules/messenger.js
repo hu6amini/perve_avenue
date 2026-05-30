@@ -474,92 +474,91 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -----------------------------------------------------------------
-                // Link Preview Node (rich card)
+                // Link Preview Node (rich card) – with fallback to simple inline link
                 // -----------------------------------------------------------------
-const LinkPreview = Node.create({
-    name: 'linkPreview',
-    inline: true,
-    group: 'inline',
-    atom: true,
-    draggable: true,
-    selectable: true,
-    addAttributes() {
-        return {
-            href: { default: '' },
-            title: { default: '' },
-            description: { default: '' },
-            imageSrc: { default: '' },
-        };
-    },
-    parseHTML() {
-        return [{ tag: 'span[data-type="link-preview"]' }];
-    },
-    renderHTML({ node, HTMLAttributes }) {
-        const { href, title, description, imageSrc } = node.attrs;
-        // Extract hostname for favicon and display
-        let hostname = '';
-        try {
-            const url = new URL(href);
-            hostname = url.hostname.replace(/^www\./, '');
-        } catch (e) {
-            hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
-        }
-        const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+                const LinkPreview = Node.create({
+                    name: 'linkPreview',
+                    inline: true,
+                    group: 'inline',
+                    atom: true,
+                    draggable: true,
+                    selectable: true,
+                    addAttributes() {
+                        return {
+                            href: { default: '' },
+                            title: { default: '' },
+                            description: { default: '' },
+                            imageSrc: { default: '' },
+                        };
+                    },
+                    parseHTML() {
+                        return [{ tag: 'span[data-type="link-preview"]' }];
+                    },
+                    renderHTML({ node, HTMLAttributes }) {
+                        var href = node.attrs.href;
+                        var title = node.attrs.title;
+                        var description = node.attrs.description;
+                        var imageSrc = node.attrs.imageSrc;
 
-        // -----------------------------------------------------------------
-        // FALLBACK: if no image and title is just the URL (or empty), render a simple inline link with favicon
-        // -----------------------------------------------------------------
-        const isRich = imageSrc && imageSrc.trim() !== '';
+                        // Extract hostname for favicon and display
+                        var hostname = '';
+                        try {
+                            var urlObj = new URL(href);
+                            hostname = urlObj.hostname.replace(/^www\./, '');
+                        } catch (e) {
+                            hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+                        }
+                        var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
 
-        if (!isRich) {
-            // Simple inline link with favicon (no card layout)
-            return [
-                'span',
-                { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
-                [
-                    'a',
-                    { href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
-                    ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
-                    ['span', { class: 'simple-hostname' }, hostname],
-                    ['span', { class: 'simple-title' }, title !== href ? ` – ${title}` : '']
-                ]
-            ];
-        }
+                        var isRich = imageSrc && imageSrc.trim() !== '';
 
-        // -----------------------------------------------------------------
-        // Rich card layout (original)
-        // -----------------------------------------------------------------
-        return [
-            'span',
-            { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
-            [
-                'a',
-                { href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
-                [
-                    'span',
-                    { class: 'link-preview-content' },
-                    [
-                        'span',
-                        { class: 'embedded-link-image' },
-                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
-                    ],
-                    [
-                        'span',
-                        { class: 'link-preview-text' },
-                        ['span', { class: 'link-preview-title' }, title || href],
-                        description ? ['span', { class: 'link-preview-description' }, description] : '',
-                        [
+                        if (!isRich) {
+                            // Simple inline link with favicon
+                            return [
+                                'span',
+                                { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+                                [
+                                    'a',
+                                    { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+                                    ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+                                    ['span', { class: 'simple-hostname' }, hostname],
+                                    ['span', { class: 'simple-title' }, title !== href ? (' – ' + title) : '']
+                                ]
+                            ];
+                        }
+
+                        // Rich card layout
+                        return [
                             'span',
-                            { class: 'link-preview-url-wrapper' },
-                            ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
-                            ['span', { class: 'link-preview-hostname' }, hostname]
-                        ]
-                    ]
-                ]
-            ]
-        ];
-    },
-});
+                            { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
+                            [
+                                'a',
+                                { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+                                [
+                                    'span',
+                                    { class: 'link-preview-content' },
+                                    [
+                                        'span',
+                                        { class: 'embedded-link-image' },
+                                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                                    ],
+                                    [
+                                        'span',
+                                        { class: 'link-preview-text' },
+                                        ['span', { class: 'link-preview-title' }, title || href],
+                                        description ? ['span', { class: 'link-preview-description' }, description] : '',
+                                        [
+                                            'span',
+                                            { class: 'link-preview-url-wrapper' },
+                                            ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
+                                            ['span', { class: 'link-preview-hostname' }, hostname]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ];
+                    },
+                });
 
                 // -----------------------------------------------------------------
                 // Spoiler extension (block)
@@ -580,25 +579,37 @@ const LinkPreview = Node.create({
                     key: new PluginKey('linkPreview'),
                     props: {
                         handlePaste: (view, event) => {
-                            const text = event.clipboardData?.getData('text/plain');
+                            var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                             if (!text) return false;
                             
-                            // Simple URL regex
-                            const urlRegex = /(https?:\/\/[^\s]+)/g;
-                            const match = urlRegex.exec(text);
+                            var urlRegex = /(https?:\/\/[^\s]+)/g;
+                            var match = urlRegex.exec(text);
                             if (!match) return false;
                             
-                            const url = match[0];
+                            var url = match[0];
                             
-                            // Fetch metadata from your Cloudflare Worker
-                            fetch(`https://og-worker.nhristakiev.workers.dev/?url=${encodeURIComponent(url)}`)
-                                .then(res => res.json())
-                                .then(data => {
-                                    if (data.error) throw new Error(data.error);
-                                    const { title, description, imageSrc, href } = data;
-                                    const { state, dispatch } = view;
-                                    const { from, to } = state.selection;
-                                    const tr = state.tr.replaceWith(
+                            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
+                                .then(function(res) { return res.json(); })
+                                .then(function(data) {
+                                    if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
+                                        // Fallback: insert a plain text link (no card)
+                                        var state = view.state;
+                                        var dispatch = view.dispatch;
+                                        var from = state.selection.from;
+                                        var to = state.selection.to;
+                                        var tr = state.tr.replaceWith(from, to, state.schema.text(url));
+                                        dispatch(tr);
+                                        return;
+                                    }
+                                    var title = data.title;
+                                    var description = data.description;
+                                    var imageSrc = data.imageSrc;
+                                    var href = data.href;
+                                    var state = view.state;
+                                    var dispatch = view.dispatch;
+                                    var from = state.selection.from;
+                                    var to = state.selection.to;
+                                    var tr = state.tr.replaceWith(
                                         from, to,
                                         state.schema.nodes.linkPreview.create({
                                             href: href || url,
@@ -609,7 +620,15 @@ const LinkPreview = Node.create({
                                     );
                                     dispatch(tr);
                                 })
-                                .catch(err => console.error('Link preview error:', err));
+                                .catch(function(err) {
+                                    console.error('Link preview error:', err);
+                                    var state = view.state;
+                                    var dispatch = view.dispatch;
+                                    var from = state.selection.from;
+                                    var to = state.selection.to;
+                                    var tr = state.tr.replaceWith(from, to, state.schema.text(url));
+                                    dispatch(tr);
+                                });
                             
                             return true; // Prevent default paste
                         },
@@ -628,7 +647,7 @@ const LinkPreview = Node.create({
                         Underline,
                         CustomImage,
                         Spoiler,
-                        LinkPreview,   // rich link cards
+                        LinkPreview,
                     ],
                     content: initialHtml,
                     editorProps: {
@@ -645,23 +664,22 @@ const LinkPreview = Node.create({
                 // -----------------------------------------------------------------
                 // Assign toolbar actions
                 // -----------------------------------------------------------------
-                group1[0].btn.onclick = () => exec(() => editor.chain().focus().toggleBold().run());
-                group1[1].btn.onclick = () => exec(() => editor.chain().focus().toggleItalic().run());
-                group1[2].btn.onclick = () => exec(() => editor.chain().focus().toggleUnderline().run());
-                group1[3].btn.onclick = () => exec(() => editor.chain().focus().toggleStrike().run());
+                group1[0].btn.onclick = function() { exec(function() { editor.chain().focus().toggleBold().run(); }); };
+                group1[1].btn.onclick = function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); };
+                group1[2].btn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
+                group1[3].btn.onclick = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
 
-                listDropdownMenu.querySelector('#bullet-list-option').onclick = () => {
-                    exec(() => editor.chain().focus().toggleBulletList().run());
+                listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
+                    exec(function() { editor.chain().focus().toggleBulletList().run(); });
                     listDropdownMenu.style.display = 'none';
                 };
-                listDropdownMenu.querySelector('#ordered-list-option').onclick = () => {
-                    exec(() => editor.chain().focus().toggleOrderedList().run());
+                listDropdownMenu.querySelector('#ordered-list-option').onclick = function() {
+                    exec(function() { editor.chain().focus().toggleOrderedList().run(); });
                     listDropdownMenu.style.display = 'none';
                 };
-                blockquoteBtn.onclick = () => exec(() => editor.chain().focus().toggleBlockquote().run());
-                codeBtn.onclick = () => exec(() => editor.chain().focus().toggleCodeBlock().run());
+                blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
+                codeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
 
-                // Simple hyperlink button (standard link)
                 linkBtn.onclick = function() {
                     if (!editor) return;
                     var from = editor.state.selection.from;
@@ -676,10 +694,9 @@ const LinkPreview = Node.create({
                     });
                 };
 
-                // URL image insertion – load image to get dimensions
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
-                        const img = new Image();
+                        var img = new Image();
                         img.onload = function() {
                             editor.chain().focus().insertContent({
                                 type: 'image',
@@ -717,13 +734,12 @@ const LinkPreview = Node.create({
                     imageDropdownMenu.style.display = 'none';
                 };
 
-                spoilerBtn.onclick = () => exec(() => editor.chain().focus().toggleSpoiler().run());
+                spoilerBtn.onclick = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
                 smileBtn.onclick = function() {
                     var smiliesDiv = document.getElementById('smilies');
                     if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
                 };
 
-                // Update active states for formatting buttons
                 function updateActiveStates() {
                     var isActive = {
                         bold: editor.isActive('bold'),
@@ -748,7 +764,6 @@ const LinkPreview = Node.create({
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
-                // Drag & drop support (images only)
                 var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
@@ -762,7 +777,6 @@ const LinkPreview = Node.create({
                     });
                 }
 
-                // Keyboard shortcut: Ctrl+Shift+S for spoiler
                 editor.setOptions({
                     editorProps: {
                         handleDOMEvents: {
@@ -778,7 +792,6 @@ const LinkPreview = Node.create({
                     }
                 });
 
-                // Override smiley function
                 _originalEmoticon = window.emoticon;
                 window.emoticon = function(x) {
                     if (editor) {
@@ -889,7 +902,6 @@ const LinkPreview = Node.create({
     // MESSAGES SECTION (unchanged – keep your existing)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
-        // ... (your full messages code – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
