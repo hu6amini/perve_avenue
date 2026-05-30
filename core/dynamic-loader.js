@@ -5,7 +5,7 @@ document.documentElement.lang = "en";
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog']);
+const CONTENT_PAGE_IDS = Object.freeze(['topic', 'send', 'search', 'blog', 'msg', 'user']);
 
 const STYLESHEETS = Object.freeze([
     "https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.9.0/slick.min.css",
@@ -217,7 +217,7 @@ async function bootSystem() {
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@166baf94c99ec634efacda7561f171ab86ef0b23/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@bfa61a521ab7ab954453bfbaf7ecb8c9390f2415/modules/messenger.js")
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@cb8d2363cb4e89a38b0334fce481042024060bdc/modules/messenger.js")
             ]);
 
             const failed = results.filter(r => r.status === 'rejected');
