@@ -148,6 +148,29 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
+    // Helper to check if a URL belongs to a blacklisted domain
+    function isBlacklistedDomain(url) {
+        if (!url) return false;
+        try {
+            var hostname = new URL(url).hostname;
+            // List of domains to blacklist (exact match or subdomain)
+            var blacklist = [
+                'forumcommunity.net',
+                'forumfree.net',
+                'forumfree.it',
+                'blogfree.net'
+            ];
+            for (var i = 0; i < blacklist.length; i++) {
+                if (hostname === blacklist[i] || hostname.endsWith('.' + blacklist[i])) {
+                    return true;
+                }
+            }
+            return false;
+        } catch(e) {
+            return false;
+        }
+    }
+
     // ------------------------------------------------------------------------
     // CONVERTERS (Legacy BBCode ↔ HTML) – keep for loading existing messages
     // ------------------------------------------------------------------------
@@ -474,7 +497,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -----------------------------------------------------------------
-                // Link Preview Node (rich card) – with fallback to simple inline link
+                // Link Preview Node (rich card) – with fallback to simple inline link and blacklist
                 // -----------------------------------------------------------------
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
@@ -500,6 +523,15 @@ var MessengerModule = (function(Utils, EventBus) {
                         var description = node.attrs.description;
                         var imageSrc = node.attrs.imageSrc;
 
+                        // If the domain is blacklisted, render a plain <a> element (no extra styling)
+                        if (isBlacklistedDomain(href)) {
+                            return [
+                                'a',
+                                { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'blacklisted-link' },
+                                title || href
+                            ];
+                        }
+
                         // Extract hostname for favicon and display
                         var hostname = '';
                         try {
@@ -513,27 +545,27 @@ var MessengerModule = (function(Utils, EventBus) {
                         var isRich = imageSrc && imageSrc.trim() !== '';
 
                         if (!isRich) {
-    // Helper to detect generic challenge titles
-    function isGenericTitle(t, h) {
-        if (!t || t === h) return true;
-        var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
-        var lower = t.toLowerCase();
-        return generic.some(function(term) { return lower.indexOf(term) !== -1; });
-    }
-    var showTitle = !isGenericTitle(title, href);
-    var titlePart = showTitle ? (' – ' + title) : '';
-    return [
-        'span',
-        { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
-        [
-            'a',
-            { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
-            ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
-            ['span', { class: 'simple-hostname' }, hostname],
-            ['span', { class: 'simple-title' }, titlePart]
-        ]
-    ];
-}
+                            // Helper to detect generic challenge titles
+                            function isGenericTitle(t, h) {
+                                if (!t || t === h) return true;
+                                var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
+                                var lower = t.toLowerCase();
+                                return generic.some(function(term) { return lower.indexOf(term) !== -1; });
+                            }
+                            var showTitle = !isGenericTitle(title, href);
+                            var titlePart = showTitle ? (' – ' + title) : '';
+                            return [
+                                'span',
+                                { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+                                [
+                                    'a',
+                                    { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+                                    ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+                                    ['span', { class: 'simple-hostname' }, hostname],
+                                    ['span', { class: 'simple-title' }, titlePart]
+                                ]
+                            ];
+                        }
 
                         // Rich card layout
                         return [
@@ -595,6 +627,17 @@ var MessengerModule = (function(Utils, EventBus) {
                             if (!match) return false;
                             
                             var url = match[0];
+                            
+                            // If the domain is blacklisted, insert plain text link immediately
+                            if (isBlacklistedDomain(url)) {
+                                var state = view.state;
+                                var dispatch = view.dispatch;
+                                var from = state.selection.from;
+                                var to = state.selection.to;
+                                var tr = state.tr.replaceWith(from, to, state.schema.text(url));
+                                dispatch(tr);
+                                return true;
+                            }
                             
                             fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
                                 .then(function(res) { return res.json(); })
