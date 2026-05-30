@@ -1934,7 +1934,7 @@ input[type="radio"]:checked::before {
     color: var(--text-tertiary);
 }
 
-.ProseMirror img {
+.ProseMirror img:not(.link-preview-image) {
     max-width: 100%;
     height: auto;
     display: inline-block;
