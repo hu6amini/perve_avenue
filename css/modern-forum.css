@@ -2035,7 +2035,7 @@ input[type="radio"]:checked::before {
 .modern-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--space-md);
+    gap: var(--space-sm);
     padding: var(--pad-5);
     border-top: 1px solid var(--border-color);
     background: var(--surface-color);
