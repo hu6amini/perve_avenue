@@ -630,14 +630,16 @@ var MessengerModule = (function(Utils, EventBus) {
                             
                             // If the domain is blacklisted, insert plain text link immediately
                             if (isBlacklistedDomain(url)) {
-                                var state = view.state;
-                                var dispatch = view.dispatch;
-                                var from = state.selection.from;
-                                var to = state.selection.to;
-                                var tr = state.tr.replaceWith(from, to, state.schema.text(url));
-                                dispatch(tr);
-                                return true;
-                            }
+    var state = view.state;
+    var dispatch = view.dispatch;
+    var from = state.selection.from;
+    var to = state.selection.to;
+    var linkMark = state.schema.marks.link.create({ href: url });
+    var textNode = state.schema.text(url, [linkMark]);
+    var tr = state.tr.replaceWith(from, to, textNode);
+    dispatch(tr);
+    return true;
+}
                             
                             fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
                                 .then(function(res) { return res.json(); })
