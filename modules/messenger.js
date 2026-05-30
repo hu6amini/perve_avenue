@@ -499,82 +499,106 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
                 // Link Preview Node (rich card) – with fallback to simple inline link and blacklist
                 // -----------------------------------------------------------------
-const linkPreviewPlugin = new Plugin({
-    key: new PluginKey('linkPreview'),
-    props: {
-        handlePaste: (view, event) => {
-            var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
-            if (!text) return false;
-            
-            var urlRegex = /(https?:\/\/[^\s]+)/g;
-            var match = urlRegex.exec(text);
-            if (!match) return false;
-            
-            var url = match[0];
-            
-            // If the domain is blacklisted, insert a proper <a> link
-            if (isBlacklistedDomain(url)) {
-                var state = view.state;
-                var dispatch = view.dispatch;
-                var from = state.selection.from;
-                var to = state.selection.to;
-                var linkMark = state.schema.marks.link.create({ href: url });
-                var textNode = state.schema.text(url, [linkMark]);
-                var tr = state.tr.replaceWith(from, to, textNode);
-                dispatch(tr);
-                return true;
-            }
-            
-            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
-                        // Fallback: insert plain link (with mark)
-                        var state = view.state;
-                        var dispatch = view.dispatch;
-                        var from = state.selection.from;
-                        var to = state.selection.to;
-                        var linkMark = state.schema.marks.link.create({ href: url });
-                        var textNode = state.schema.text(url, [linkMark]);
-                        var tr = state.tr.replaceWith(from, to, textNode);
-                        dispatch(tr);
-                        return;
-                    }
-                    var title = data.title;
-                    var description = data.description;
-                    var imageSrc = data.imageSrc;
-                    var href = data.href;
-                    var state = view.state;
-                    var dispatch = view.dispatch;
-                    var from = state.selection.from;
-                    var to = state.selection.to;
-                    var tr = state.tr.replaceWith(
-                        from, to,
-                        state.schema.nodes.linkPreview.create({
-                            href: href || url,
-                            title: title || url,
-                            description: description || '',
-                            imageSrc: imageSrc || '',
-                        })
-                    );
-                    dispatch(tr);
-                })
-                .catch(function(err) {
-                    console.error('Link preview error:', err);
-                    var state = view.state;
-                    var dispatch = view.dispatch;
-                    var from = state.selection.from;
-                    var to = state.selection.to;
-                    var linkMark = state.schema.marks.link.create({ href: url });
-                    var textNode = state.schema.text(url, [linkMark]);
-                    var tr = state.tr.replaceWith(from, to, textNode);
-                    dispatch(tr);
+                const LinkPreview = Node.create({
+                    name: 'linkPreview',
+                    inline: true,
+                    group: 'inline',
+                    atom: true,
+                    draggable: true,
+                    selectable: true,
+                    addAttributes() {
+                        return {
+                            href: { default: '' },
+                            title: { default: '' },
+                            description: { default: '' },
+                            imageSrc: { default: '' },
+                        };
+                    },
+                    parseHTML() {
+                        return [{ tag: 'span[data-type="link-preview"]' }];
+                    },
+                    renderHTML({ node, HTMLAttributes }) {
+                        var href = node.attrs.href;
+                        var title = node.attrs.title;
+                        var description = node.attrs.description;
+                        var imageSrc = node.attrs.imageSrc;
+
+                        // If the domain is blacklisted, render a plain <a> element (no extra styling)
+                        if (isBlacklistedDomain(href)) {
+                            return [
+                                'a',
+                                { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'blacklisted-link' },
+                                title || href
+                            ];
+                        }
+
+                        // Extract hostname for favicon and display
+                        var hostname = '';
+                        try {
+                            var urlObj = new URL(href);
+                            hostname = urlObj.hostname.replace(/^www\./, '');
+                        } catch (e) {
+                            hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+                        }
+                        var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
+
+                        var isRich = imageSrc && imageSrc.trim() !== '';
+
+                        if (!isRich) {
+                            // Helper to detect generic challenge titles
+                            function isGenericTitle(t, h) {
+                                if (!t || t === h) return true;
+                                var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
+                                var lower = t.toLowerCase();
+                                return generic.some(function(term) { return lower.indexOf(term) !== -1; });
+                            }
+                            var showTitle = !isGenericTitle(title, href);
+                            var titlePart = showTitle ? (' – ' + title) : '';
+                            return [
+                                'span',
+                                { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+                                [
+                                    'a',
+                                    { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+                                    ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+                                    ['span', { class: 'simple-hostname' }, hostname],
+                                    ['span', { class: 'simple-title' }, titlePart]
+                                ]
+                            ];
+                        }
+
+                        // Rich card layout
+                        return [
+                            'span',
+                            { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
+                            [
+                                'a',
+                                { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+                                [
+                                    'span',
+                                    { class: 'link-preview-content' },
+                                    [
+                                        'span',
+                                        { class: 'embedded-link-image' },
+                                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                                    ],
+                                    [
+                                        'span',
+                                        { class: 'link-preview-text' },
+                                        ['span', { class: 'link-preview-title' }, title || href],
+                                        description ? ['span', { class: 'link-preview-description' }, description] : '',
+                                        [
+                                            'span',
+                                            { class: 'link-preview-url-wrapper' },
+                                            ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
+                                            ['span', { class: 'link-preview-hostname' }, hostname]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ];
+                    },
                 });
-            
-            return true;
-        },
-    },
-});
 
                 // -----------------------------------------------------------------
                 // Spoiler extension (block)
