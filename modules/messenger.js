@@ -513,19 +513,27 @@ var MessengerModule = (function(Utils, EventBus) {
                         var isRich = imageSrc && imageSrc.trim() !== '';
 
                         if (!isRich) {
-                            // Simple inline link with favicon
-                            return [
-                                'span',
-                                { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
-                                [
-                                    'a',
-                                    { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
-                                    ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
-                                    ['span', { class: 'simple-hostname' }, hostname],
-                                    ['span', { class: 'simple-title' }, title !== href ? (' – ' + title) : '']
-                                ]
-                            ];
-                        }
+    // Helper to detect generic challenge titles
+    function isGenericTitle(t, h) {
+        if (!t || t === h) return true;
+        var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
+        var lower = t.toLowerCase();
+        return generic.some(function(term) { return lower.indexOf(term) !== -1; });
+    }
+    var showTitle = !isGenericTitle(title, href);
+    var titlePart = showTitle ? (' – ' + title) : '';
+    return [
+        'span',
+        { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+        [
+            'a',
+            { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+            ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+            ['span', { class: 'simple-hostname' }, hostname],
+            ['span', { class: 'simple-title' }, titlePart]
+        ]
+    ];
+}
 
                         // Rich card layout
                         return [
