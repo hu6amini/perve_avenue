@@ -303,15 +303,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(linkBtn);
         activeButtonElements.push(linkBtn);
 
-        // "Convert to card" button (optional)
-        var convertToCardBtn = document.createElement('button');
-        convertToCardBtn.type = 'button';
-        convertToCardBtn.className = 'modern-editor-btn';
-        convertToCardBtn.innerHTML = '<i class="fa-regular fa-rectangle-ad"></i>';
-        convertToCardBtn.title = 'Convert link to preview card';
-        toolbar.appendChild(convertToCardBtn);
-        activeButtonElements.push(convertToCardBtn);
-
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
         imageDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -657,32 +648,6 @@ const LinkPreview = Node.create({
                             editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
                         }
                     });
-                };
-
-                // Convert selected text/URL to rich link preview card
-                convertToCardBtn.onclick = async function() {
-                    const { state, commands } = editor;
-                    const { from, to } = state.selection;
-                    const selectedText = state.doc.textBetween(from, to, '');
-                    const urlMatch = selectedText.match(/(https?:\/\/[^\s]+)/);
-                    if (!urlMatch) return;
-                    const url = urlMatch[0];
-                    try {
-                        const res = await fetch(`https://og-worker.nhristakiev.workers.dev/?url=${encodeURIComponent(url)}`);
-                        const data = await res.json();
-                        if (data.error) throw new Error(data.error);
-                        commands.insertContent({
-                            type: 'linkPreview',
-                            attrs: {
-                                href: data.href || url,
-                                title: data.title || url,
-                                description: data.description || '',
-                                imageSrc: data.imageSrc || '',
-                            }
-                        });
-                    } catch (err) {
-                        console.error('Failed to create card:', err);
-                    }
                 };
 
                 // URL image insertion – load image to get dimensions
