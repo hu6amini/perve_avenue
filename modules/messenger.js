@@ -423,19 +423,6 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-function decodeHtmlEntities(str) {
-    if (!str) return '';
-    return str.replace(/&#([0-9]+);/g, function(match, dec) {
-        return String.fromCharCode(dec);
-    }).replace(/&([a-z]+);/gi, function(match, entity) {
-        const entities = {
-            amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
-            // add more if needed
-        };
-        return entities[entity] || match;
-    });
-}
-        
         // -----------------------------------------------------------------
         // Load TipTap ES modules with custom Image and LinkPreview
         // -----------------------------------------------------------------
