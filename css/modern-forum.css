@@ -1997,7 +1997,7 @@ input[type="radio"]:checked::before {
 }
 
 /* Regular images inside the editor (excluding link preview images) */
-.ProseMirror img:not(.link-preview-image, .link-preview-favicon) {
+.ProseMirror img:not(.link-preview-image, .link-preview-favicon, .simple-favicon) {
     max-width: 100%;
     height: auto;
     display: inline-block;
