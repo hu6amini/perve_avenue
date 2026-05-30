@@ -946,6 +946,44 @@ body#msg .textinput {
     font-size: var(--text-xs);
     color: var(--primary-color);
 }
+
+/* Simple inline link with favicon (fallback) */
+.link-preview-simple {
+    display: inline-block;
+    margin: 0 0.1rem;
+    vertical-align: middle;
+}
+.simple-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    text-decoration: none;
+    color: var(--primary-color);
+    background: var(--surface-light);
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    transition: background 0.2s;
+}
+.simple-link:hover {
+    background: var(--hover-color);
+    text-decoration: none;
+}
+.simple-favicon {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+}
+.simple-hostname {
+    font-weight: 500;
+}
+.simple-title {
+    color: var(--text-secondary);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 /* Mobile: make card full width but still inline-block */
 @media (max-width: 640px) {
     .link-preview-card {
