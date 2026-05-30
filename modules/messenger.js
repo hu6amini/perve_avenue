@@ -1,5 +1,5 @@
 // Messenger Module – TipTap based, with lazy/async images & raw HTML output
-// Refactored: no dependency on legacy globals (ajaxRequest, tag, REPLIER)
+// Relies solely on ForumCoreObserver for DOM detection.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -28,11 +28,30 @@ var MessengerModule = (function(Utils, EventBus) {
 
         return new Promise(function(resolve, reject) {
             if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                var wrapperReady = false;
-                var targetReady = false;
+                // Define required selectors for each section
+                var requiredElements = [];
+                if (currentSection === 'compose') {
+                    requiredElements = [
+                        '#modern-forum-wrapper',
+                        'form[action*="act=Msg"], #Post',
+                        'input[name="entered_name"]'
+                    ];
+                } else if (currentSection === 'messages') {
+                    requiredElements = ['#modern-forum-wrapper', '.big_list .row-mp'];
+                } else if (currentSection === 'contacts') {
+                    requiredElements = ['#modern-forum-wrapper', 'textarea[name="can_contact"]'];
+                }
+
+                var foundCount = 0;
+                var observerIds = [];
 
                 function tryBuild() {
-                    if (wrapperReady && targetReady && !isInitialized && !document.getElementById('modern-messenger')) {
+                    foundCount++;
+                    if (foundCount === requiredElements.length && !isInitialized && !document.getElementById('modern-messenger')) {
+                        // Unregister all temporary observers
+                        observerIds.forEach(function(id) {
+                            globalThis.forumObserver.unregister(id);
+                        });
                         try {
                             buildModernMessenger();
                             isInitialized = true;
@@ -45,43 +64,30 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
-                var wrapperObserverId = globalThis.forumObserver.register({
-                    id: 'messenger-wrapper',
-                    selector: '#modern-forum-wrapper',
-                    priority: 'critical',
-                    callback: function() {
-                        wrapperReady = true;
-                        if (wrapperObserverId) globalThis.forumObserver.unregister(wrapperObserverId);
-                        tryBuild();
-                    }
+                // Register one observer per required element
+                requiredElements.forEach(function(selector) {
+                    var id = globalThis.forumObserver.register({
+                        id: 'messenger-wait-' + selector.replace(/[^a-z0-9]/gi, '_'),
+                        selector: selector,
+                        priority: 'critical',
+                        callback: tryBuild
+                    });
+                    observerIds.push(id);
                 });
 
-                var targetSelector = '';
-                if (currentSection === 'messages') {
-                    targetSelector = '.big_list .row-mp';
-                } else if (currentSection === 'contacts') {
-                    targetSelector = 'textarea[name="can_contact"]';
-                } else {
-                    targetSelector = '.cp.send, #Post';
-                }
-
-                var targetObserverId = globalThis.forumObserver.register({
-                    id: 'messenger-target',
-                    selector: targetSelector,
-                    priority: 'critical',
-                    callback: function() {
-                        targetReady = true;
-                        if (targetObserverId) globalThis.forumObserver.unregister(targetObserverId);
-                        tryBuild();
-                    }
-                });
-
+                // Safety timeout (3 seconds) – in case observer never fires
                 setTimeout(function() {
-                    if (!wrapperReady) wrapperReady = true;
-                    if (!targetReady) targetReady = true;
-                    tryBuild();
-                }, 1000);
+                    if (foundCount < requiredElements.length && !isInitialized) {
+                        console.warn('[Messenger] Timeout waiting for some elements, forcing build');
+                        if (document.getElementById('modern-forum-wrapper')) {
+                            // Force enough calls to reach required length
+                            var needed = requiredElements.length - foundCount;
+                            for (var i = 0; i < needed; i++) tryBuild();
+                        }
+                    }
+                }, 3000);
             } else {
+                // Fallback when observer is not available
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', function() {
                         buildModernMessenger();
@@ -131,7 +137,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML) – keep for loading existing messages
+    // LEGACY BBCode → HTML (for initial content)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -157,9 +163,10 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules with custom Image extension
+    // COMPOSE SECTION – TipTap based, fetch preview/submit
     // ------------------------------------------------------------------------
     function buildComposeSection() {
+        // Get original elements (they should now exist because of observer waiting)
         var recipientInput   = document.querySelector('input[name="entered_name"]');
         var contactSelect    = document.querySelector('select[name="from_contact"]');
         var titleInput       = document.querySelector('input[name="msg_title"]');
@@ -168,14 +175,20 @@ var MessengerModule = (function(Utils, EventBus) {
         var addTrackingCheckbox = document.getElementById('add_tracking');
         var originalForm  = document.querySelector('form[action*="act=Msg"]') || 
                             (originalTextarea ? originalTextarea.closest('form') : null);
-        var submitButton  = originalForm ? originalForm.querySelector('input[name="sub_mit"]') : null;
-        var previewButton = originalForm ? originalForm.querySelector('button[name="preview"]') : null;
+
+        if (!originalTextarea || !originalForm) {
+            console.error('[Messenger] Missing critical compose elements');
+            var errorDiv = document.createElement('div');
+            errorDiv.className = 'modern-empty-state';
+            errorDiv.innerText = 'Messenger could not be loaded. Please refresh the page.';
+            return errorDiv;
+        }
 
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Recipient + Subject row
+        // Recipient row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -215,7 +228,7 @@ var MessengerModule = (function(Utils, EventBus) {
             editor.commands.focus();
         }
 
-        // ----- Build toolbar UI (unchanged) -----
+        // ----- Toolbar buttons -----
         var group1 = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        btn: null },
@@ -324,9 +337,7 @@ var MessengerModule = (function(Utils, EventBus) {
         smileBtn.title = 'Insert smiley';
         toolbar.appendChild(smileBtn);
 
-        // -----------------------------------------------------------------
-        // UPLOAD FUNCTION – uses worker that returns url + width + height
-        // -----------------------------------------------------------------
+        // Image upload (worker)
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
@@ -396,12 +407,11 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // -----------------------------------------------------------------
-        // PREVIEW & SUBMIT using fetch (no global dependencies)
+        // PREVIEW & SUBMIT using fetch (no legacy globals)
         // -----------------------------------------------------------------
         function getFormDataObject() {
             var formData = new FormData();
             if (originalForm) {
-                // Copy all fields from the original form
                 var formElements = originalForm.elements;
                 for (var i = 0; i < formElements.length; i++) {
                     var el = formElements[i];
@@ -414,7 +424,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
             }
-            // Override with modern values
             var modernRecipient = container.querySelector('#modern-recipient');
             var modernContact = container.querySelector('#modern-contact');
             var modernTitle = container.querySelector('#modern-title');
@@ -430,12 +439,8 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         async function previewMessage() {
-            if (!originalForm) {
-                console.warn('[Messenger] No original form found for preview');
-                return;
-            }
+            if (!originalForm) return;
             var formData = getFormDataObject();
-            // Add preview flag (original preview button usually sets a parameter)
             formData.set('preview', '1');
             var actionUrl = originalForm.action || window.location.href;
             try {
@@ -445,7 +450,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
                 var html = await response.text();
-                // Extract preview content (the original forum returns a complete page; we need the preview part)
                 var tempDiv = document.createElement('div');
                 tempDiv.innerHTML = html;
                 var previewContent = tempDiv.querySelector('#ajaxObject, .preview, .Item.preview, #preview');
@@ -456,7 +460,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         contentDiv.innerHTML = previewContent.innerHTML;
                         previewArea.style.display = 'block';
                     } else {
-                        contentDiv.innerHTML = '<div class="preview-error">Preview not available. Please submit the message to see it.</div>';
+                        contentDiv.innerHTML = '<div class="preview-error">Preview not available.</div>';
                         previewArea.style.display = 'block';
                     }
                 }
@@ -465,7 +469,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 var previewArea = container.querySelector('#modern-preview-area');
                 if (previewArea) {
                     var contentDiv = previewArea.querySelector('.preview-content');
-                    if (contentDiv) contentDiv.innerHTML = '<div class="preview-error">Preview failed. Please check your connection and try again.</div>';
+                    if (contentDiv) contentDiv.innerHTML = '<div class="preview-error">Preview failed.</div>';
                     previewArea.style.display = 'block';
                 }
             }
@@ -473,26 +477,22 @@ var MessengerModule = (function(Utils, EventBus) {
 
         async function sendMessage() {
             if (!originalForm) {
-                console.warn('[Messenger] No original form found for submission');
+                alert('Cannot send message: original form not found.');
                 return;
             }
             var formData = getFormDataObject();
-            // Add submit flag
             formData.set('sub_mit', 'Send Message');
             var actionUrl = originalForm.action || window.location.href;
+            var submitBtn = container.querySelector('#modern-submit');
+            if (submitBtn) submitBtn.disabled = true;
             try {
-                // Disable submit button to prevent double submission
-                var submitBtn = container.querySelector('#modern-submit');
-                if (submitBtn) submitBtn.disabled = true;
                 var response = await fetch(actionUrl, {
                     method: 'POST',
                     body: formData
                 });
-                // If successful, the forum will redirect. We follow the redirect.
                 if (response.redirected) {
                     window.location.href = response.url;
                 } else {
-                    // Otherwise, replace current page with response
                     var html = await response.text();
                     document.open();
                     document.write(html);
@@ -589,7 +589,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // Assign button actions
+                // Assign toolbar actions
                 group1[0].btn.onclick = () => exec(() => editor.chain().focus().toggleBold().run());
                 group1[1].btn.onclick = () => exec(() => editor.chain().focus().toggleItalic().run());
                 group1[2].btn.onclick = () => exec(() => editor.chain().focus().toggleUnderline().run());
@@ -732,7 +732,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
-        // Options row, action buttons
+        // Options row
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -754,6 +754,7 @@ var MessengerModule = (function(Utils, EventBus) {
         previewArea.innerHTML = '<div class="preview-content"></div>';
         container.appendChild(previewArea);
 
+        // Data binding
         var modernRecipient   = container.querySelector('#modern-recipient');
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
@@ -806,7 +807,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (unchanged – keep your existing)
+    // MESSAGES SECTION
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
         var container = document.createElement('div');
@@ -814,7 +815,6 @@ var MessengerModule = (function(Utils, EventBus) {
         container.id = 'messages-section';
         try {
             var folderSelect  = document.querySelector('select[name="VID"]');
-            var messageRows   = document.querySelectorAll('.big_list .row-mp');
             var dlItems       = document.querySelectorAll('.main_list dl dd');
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
             var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
@@ -832,8 +832,22 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
-            // ... (rest of your messages section – unchanged, omitted for brevity)
-            // You can keep your existing working code for messages and contacts sections.
+            // Build the messages list (simplified – you can expand with your original code)
+            var messagesList = document.createElement('div');
+            messagesList.className = 'messages-list';
+            var rows = document.querySelectorAll('.big_list .row-mp');
+            rows.forEach(function(row) {
+                var from = row.querySelector('.td1 a') ? row.querySelector('.td1 a').innerText : 'Unknown';
+                var subject = row.querySelector('.td2 a') ? row.querySelector('.td2 a').innerText : '';
+                var date = row.querySelector('.td4') ? row.querySelector('.td4').innerText : '';
+                var msgDiv = document.createElement('div');
+                msgDiv.className = 'message-item';
+                msgDiv.innerHTML = '<div class="message-from"><i class="fa-regular fa-user"></i> ' + escapeHtml(from) + '</div>'
+                                 + '<div class="message-subject">' + escapeHtml(subject) + '</div>'
+                                 + '<div class="message-date">' + escapeHtml(date) + '</div>';
+                messagesList.appendChild(msgDiv);
+            });
+            container.appendChild(messagesList);
         } catch(err) {
             console.error('[MessengerModule] Error building messages section:', err);
             container.innerHTML = '<div class="modern-empty-state">Error loading messages</div>';
@@ -842,14 +856,27 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (unchanged – keep your existing)
+    // CONTACTS SECTION
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
         try {
-            // Your existing contacts code
+            var textarea = document.querySelector('textarea[name="can_contact"]');
+            if (textarea) {
+                var wrapper = document.createElement('div');
+                wrapper.className = 'contacts-editor';
+                wrapper.innerHTML = '<label>Contacts (one per line):</label><textarea class="modern-textarea" rows="10">' + escapeHtml(textarea.value) + '</textarea>';
+                container.appendChild(wrapper);
+                // Sync back
+                var modernTextarea = wrapper.querySelector('textarea');
+                modernTextarea.addEventListener('input', function() {
+                    textarea.value = modernTextarea.value;
+                });
+            } else {
+                container.innerHTML = '<div class="modern-empty-state">No contacts editor found.</div>';
+            }
         } catch(err) {
             console.error('[MessengerModule] Error building contacts section:', err);
             container.innerHTML = '<div class="modern-empty-state">Error loading contacts</div>';
