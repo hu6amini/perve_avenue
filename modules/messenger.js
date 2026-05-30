@@ -478,9 +478,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
 const LinkPreview = Node.create({
     name: 'linkPreview',
-    inline: true,           // makes it inline (like an image)
-    group: 'inline',        // allows it inside paragraphs
-    atom: true,             // treated as a single unit
+    inline: true,
+    group: 'inline',
+    atom: true,
     draggable: true,
     selectable: true,
     addAttributes() {
@@ -506,28 +506,54 @@ const LinkPreview = Node.create({
         }
         const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
 
-        // All elements must be inline or inline-block to keep the node inline
+        // -----------------------------------------------------------------
+        // FALLBACK: if no image and title is just the URL (or empty), render a simple inline link with favicon
+        // -----------------------------------------------------------------
+        const isRich = imageSrc && imageSrc.trim() !== '';
+
+        if (!isRich) {
+            // Simple inline link with favicon (no card layout)
+            return [
+                'span',
+                { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+                [
+                    'a',
+                    { href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+                    ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+                    ['span', { class: 'simple-hostname' }, hostname],
+                    ['span', { class: 'simple-title' }, title !== href ? ` – ${title}` : '']
+                ]
+            ];
+        }
+
+        // -----------------------------------------------------------------
+        // Rich card layout (original)
+        // -----------------------------------------------------------------
         return [
             'span',
             { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
             [
                 'a',
                 { href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
-                imageSrc ? [
-                    'span',
-                    { class: 'embedded-link-image' },
-                    ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
-                ] : '',
                 [
                     'span',
-                    { class: 'link-preview-text' },
-                    ['span', { class: 'link-preview-title' }, title || href],
-                    description ? ['span', { class: 'link-preview-description' }, description] : '',
+                    { class: 'link-preview-content' },
                     [
                         'span',
-                        { class: 'link-preview-url-wrapper' },
-                        ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
-                        ['span', { class: 'link-preview-hostname' }, hostname]
+                        { class: 'embedded-link-image' },
+                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                    ],
+                    [
+                        'span',
+                        { class: 'link-preview-text' },
+                        ['span', { class: 'link-preview-title' }, title || href],
+                        description ? ['span', { class: 'link-preview-description' }, description] : '',
+                        [
+                            'span',
+                            { class: 'link-preview-url-wrapper' },
+                            ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
+                            ['span', { class: 'link-preview-hostname' }, hostname]
+                        ]
                     ]
                 ]
             ]
