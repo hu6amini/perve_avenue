@@ -916,11 +916,11 @@ body#msg .textinput {
 }
 .link-preview-title {
     margin: 0 0 0.25rem 0;
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: clamp(1rem, 2.5vw, var(--text-base));
     color: var(--text-primary, #1A202C);
     line-height: 1.4;
     display: inline-block;
+    font-family: var(--font-heading);
 }
 .link-preview-description {
     font-size: 0.75rem;
@@ -942,7 +942,7 @@ body#msg .textinput {
 }
 .link-preview-hostname {
     font-size: 0.7rem;
-    color: var(--text-muted, #718096);
+    color: var(--primary-color);
 }
 /* Mobile: make card full width but still inline-block */
 @media (max-width: 640px) {
