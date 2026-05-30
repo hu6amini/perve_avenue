@@ -906,6 +906,15 @@ body#msg .textinput {
     object-fit: cover;
     display: block;
 }
+.link-preview-content {
+    flex: 1 1 0%;
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    box-sizing: border-box;
+}
 .link-preview-text {
     flex: 1 1 0%;
     min-width: 0;
