@@ -1,4 +1,4 @@
-// Messenger Module – TipTap based, with lazy/async images & raw HTML output
+// Messenger Module – TipTap based, with lazy/async images, raw HTML output & rich link previews
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -177,7 +177,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // No htmlToLegacy – we keep HTML in the textarea
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules with custom Image extension
+    // COMPOSE SECTION – TipTap ES modules with custom Image and LinkPreview
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -194,7 +194,7 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Recipient + Subject row (same as before)
+        // Recipient + Subject row
         var recipientRow = document.createElement('div');
         recipientRow.className = 'modern-recipient-row';
         recipientRow.innerHTML = ''
@@ -234,7 +234,7 @@ var MessengerModule = (function(Utils, EventBus) {
             editor.commands.focus();
         }
 
-        // ----- Build toolbar UI (identical to your current) -----
+        // ----- Build toolbar UI -----
         var group1 = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
             { title: 'Italic',         icon: 'fa-regular fa-italic',        btn: null },
@@ -303,6 +303,15 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(linkBtn);
         activeButtonElements.push(linkBtn);
 
+        // "Convert to card" button (optional)
+        var convertToCardBtn = document.createElement('button');
+        convertToCardBtn.type = 'button';
+        convertToCardBtn.className = 'modern-editor-btn';
+        convertToCardBtn.innerHTML = '<i class="fa-regular fa-rectangle-ad"></i>';
+        convertToCardBtn.title = 'Convert link to preview card';
+        toolbar.appendChild(convertToCardBtn);
+        activeButtonElements.push(convertToCardBtn);
+
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
         imageDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -362,7 +371,6 @@ var MessengerModule = (function(Utils, EventBus) {
             .then(data => {
                 editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
                 if (data.url) {
-                    // Insert image with attributes from worker (width/height) + lazy/async
                     editorInstance.chain().focus().insertContent({
                         type: 'image',
                         attrs: {
@@ -416,7 +424,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules with custom Image extension
+        // Load TipTap ES modules with custom Image and LinkPreview
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
@@ -427,6 +435,9 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (!Editor || !Node) {
                     throw new Error('Editor or Node not found in @tiptap/core');
                 }
+
+                // Import ProseMirror state for paste plugin
+                const { Plugin, PluginKey } = await import('https://esm.sh/prosemirror-state@1.4.3');
 
                 const starterKitModule = await import('https://esm.sh/@tiptap/starter-kit@2.5.2');
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
@@ -444,7 +455,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 const CustomImage = BaseImage.extend({
                     inline: true,
                     group: 'inline',
-                    
                     addAttributes() {
                         return {
                             ...this.parent?.(),
@@ -472,6 +482,60 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
+                // -----------------------------------------------------------------
+                // Link Preview Node (rich card)
+                // -----------------------------------------------------------------
+                const LinkPreview = Node.create({
+                    name: 'linkPreview',
+                    group: 'block',
+                    atom: true,
+                    draggable: true,
+                    selectable: true,
+                    addAttributes() {
+                        return {
+                            href: { default: '' },
+                            title: { default: '' },
+                            description: { default: '' },
+                            imageSrc: { default: '' },
+                        };
+                    },
+                    parseHTML() {
+                        return [{
+                            tag: 'div[data-type="link-preview"]',
+                        }];
+                    },
+                    renderHTML({ node, HTMLAttributes }) {
+                        const { href, title, description, imageSrc } = node.attrs;
+                        return [
+                            'div',
+                            { 
+                                class: 'link-preview-card',
+                                'data-type': 'link-preview',
+                                ...HTMLAttributes 
+                            },
+                            [
+                                'a',
+                                { href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+                                [
+                                    'div',
+                                    { class: 'link-preview-content' },
+                                    imageSrc ? ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy' }] : '',
+                                    [
+                                        'div',
+                                        { class: 'link-preview-text' },
+                                        ['strong', { class: 'link-preview-title' }, title || href],
+                                        description ? ['p', { class: 'link-preview-description' }, description] : '',
+                                        ['span', { class: 'link-preview-url' }, href.replace(/^https?:\/\//, '')],
+                                    ]
+                                ]
+                            ]
+                        ];
+                    },
+                });
+
+                // -----------------------------------------------------------------
+                // Spoiler extension (block)
+                // -----------------------------------------------------------------
                 const Spoiler = Node.create({
                     name: 'spoiler',
                     group: 'block',
@@ -481,6 +545,52 @@ var MessengerModule = (function(Utils, EventBus) {
                     renderHTML: () => ['div', { class: 'spoiler' }, 0],
                 });
 
+                // -----------------------------------------------------------------
+                // Paste handler plugin – converts pasted URLs to LinkPreview nodes
+                // -----------------------------------------------------------------
+                const linkPreviewPlugin = new Plugin({
+                    key: new PluginKey('linkPreview'),
+                    props: {
+                        handlePaste: (view, event) => {
+                            const text = event.clipboardData?.getData('text/plain');
+                            if (!text) return false;
+                            
+                            // Simple URL regex
+                            const urlRegex = /(https?:\/\/[^\s]+)/g;
+                            const match = urlRegex.exec(text);
+                            if (!match) return false;
+                            
+                            const url = match[0];
+                            
+                            // Fetch metadata from your Cloudflare Worker
+                            fetch(`https://og-worker.nhristakiev.workers.dev/?url=${encodeURIComponent(url)}`)
+                                .then(res => res.json())
+                                .then(data => {
+                                    if (data.error) throw new Error(data.error);
+                                    const { title, description, imageSrc, href } = data;
+                                    const { state, dispatch } = view;
+                                    const { from, to } = state.selection;
+                                    const tr = state.tr.replaceWith(
+                                        from, to,
+                                        state.schema.nodes.linkPreview.create({
+                                            href: href || url,
+                                            title: title || url,
+                                            description: description || '',
+                                            imageSrc: imageSrc || '',
+                                        })
+                                    );
+                                    dispatch(tr);
+                                })
+                                .catch(err => console.error('Link preview error:', err));
+                            
+                            return true; // Prevent default paste
+                        },
+                    },
+                });
+
+                // -----------------------------------------------------------------
+                // Create editor instance
+                // -----------------------------------------------------------------
                 var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
                 editor = new Editor({
                     element: editorElement,
@@ -489,21 +599,24 @@ var MessengerModule = (function(Utils, EventBus) {
                         Placeholder.configure({ placeholder: '💬 Write your message...' }),
                         Underline,
                         CustomImage,
-                        Spoiler
+                        Spoiler,
+                        LinkPreview,   // rich link cards
                     ],
                     content: initialHtml,
                     editorProps: {
-                        attributes: { class: 'modern-wysiwyg-content' }
+                        attributes: { class: 'modern-wysiwyg-content' },
+                        plugins: [linkPreviewPlugin],
                     },
                     onUpdate: function({ editor }) {
                         if (originalTextarea) {
-                            // Store RAW HTML (not BBCode)
                             originalTextarea.value = editor.getHTML();
                         }
                     }
                 });
 
-                // Assign button actions (same as before)
+                // -----------------------------------------------------------------
+                // Assign toolbar actions
+                // -----------------------------------------------------------------
                 group1[0].btn.onclick = () => exec(() => editor.chain().focus().toggleBold().run());
                 group1[1].btn.onclick = () => exec(() => editor.chain().focus().toggleItalic().run());
                 group1[2].btn.onclick = () => exec(() => editor.chain().focus().toggleUnderline().run());
@@ -520,6 +633,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 blockquoteBtn.onclick = () => exec(() => editor.chain().focus().toggleBlockquote().run());
                 codeBtn.onclick = () => exec(() => editor.chain().focus().toggleCodeBlock().run());
 
+                // Simple hyperlink button (standard link)
                 linkBtn.onclick = function() {
                     if (!editor) return;
                     var from = editor.state.selection.from;
@@ -532,6 +646,32 @@ var MessengerModule = (function(Utils, EventBus) {
                             editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
                         }
                     });
+                };
+
+                // Convert selected text/URL to rich link preview card
+                convertToCardBtn.onclick = async function() {
+                    const { state, commands } = editor;
+                    const { from, to } = state.selection;
+                    const selectedText = state.doc.textBetween(from, to, '');
+                    const urlMatch = selectedText.match(/(https?:\/\/[^\s]+)/);
+                    if (!urlMatch) return;
+                    const url = urlMatch[0];
+                    try {
+                        const res = await fetch(`https://og-worker.nhristakiev.workers.dev/?url=${encodeURIComponent(url)}`);
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        commands.insertContent({
+                            type: 'linkPreview',
+                            attrs: {
+                                href: data.href || url,
+                                title: data.title || url,
+                                description: data.description || '',
+                                imageSrc: data.imageSrc || '',
+                            }
+                        });
+                    } catch (err) {
+                        console.error('Failed to create card:', err);
+                    }
                 };
 
                 // URL image insertion – load image to get dimensions
@@ -552,7 +692,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             }).run();
                         };
                         img.onerror = function() {
-                            // Fallback: insert without dimensions
                             editor.chain().focus().insertContent({
                                 type: 'image',
                                 attrs: { src: url, alt: 'image', loading: 'lazy', decoding: 'async' }
@@ -582,6 +721,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
                 };
 
+                // Update active states for formatting buttons
                 function updateActiveStates() {
                     var isActive = {
                         bold: editor.isActive('bold'),
@@ -606,6 +746,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
+                // Drag & drop support (images only)
                 var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
@@ -619,6 +760,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 }
 
+                // Keyboard shortcut: Ctrl+Shift+S for spoiler
                 editor.setOptions({
                     editorProps: {
                         handleDOMEvents: {
@@ -634,6 +776,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
+                // Override smiley function
                 _originalEmoticon = window.emoticon;
                 window.emoticon = function(x) {
                     if (editor) {
@@ -648,7 +791,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
-        // Options row, action buttons, data binding (with raw HTML output)
+        // Options row, action buttons, data binding (raw HTML)
         var optionsRow = document.createElement('div');
         optionsRow.className = 'modern-options';
         optionsRow.innerHTML = ''
@@ -702,7 +845,6 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                // Use raw HTML, not BBCode
                 if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
                 if (typeof ajaxRequest === 'function') ajaxRequest();
                 else if (previewButton) previewButton.click();
@@ -745,13 +887,11 @@ var MessengerModule = (function(Utils, EventBus) {
     // MESSAGES SECTION (unchanged – keep your existing)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
-        // Copy your existing working messages section here (unchanged)
+        // ... (your full messages code – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
         try {
-            // ... (your full messages code)
-            // For brevity, use the same you had before
             var folderSelect  = document.querySelector('select[name="VID"]');
             var messageRows   = document.querySelectorAll('.big_list .row-mp');
             var dlItems       = document.querySelectorAll('.main_list dl dd');
@@ -771,11 +911,118 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
-            // ... (rest of your messages section, unchanged)
-            // I trust you have the full working code here.
-        } catch(err) {
+            var listHeader = document.createElement('div');
+            listHeader.className = 'messages-list-header';
+            listHeader.innerHTML = ''
+                + '<div class="msg-status"></div>'
+                + '<div class="msg-title">Message Title</div>'
+                + '<div class="msg-sender">Sender</div>'
+                + '<div class="msg-date">Date</div>'
+                + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
+            container.appendChild(listHeader);
+            var listContainer = document.createElement('div');
+            listContainer.className = 'messages-list';
+            for (var i = 0; i < messageRows.length; i++) {
+                var row = messageRows[i];
+                var isUnread   = row.classList.contains('on');
+                var titleLink  = row.querySelector('.bb h4 a');
+                var senderLink = row.querySelector('.xx a');
+                var dateSpan   = row.querySelector('.zz .when');
+                var date       = dateSpan ? (dateSpan.getAttribute('title') || dateSpan.textContent) : '';
+                var origCheckbox = row.querySelector('input[type="checkbox"]');
+                var msgName = origCheckbox ? origCheckbox.name : '';
+                var msgRow = document.createElement('div');
+                msgRow.className = 'message-row' + (isUnread ? ' unread' : ' read');
+                msgRow.innerHTML = ''
+                    + '<div class="msg-status"><i class="fa-regular ' + (isUnread ? 'fa-envelope' : 'fa-envelope-open') + '"></i></div>'
+                    + '<div class="msg-title"><a href="' + escapeHtml(titleLink ? titleLink.getAttribute('href') : '#') + '">' + escapeHtml(titleLink ? titleLink.textContent.trim() : '(no title)') + '</a></div>'
+                    + '<div class="msg-sender"><a href="' + escapeHtml(senderLink ? senderLink.getAttribute('href') : '#') + '">' + escapeHtml(senderLink ? senderLink.textContent.trim() : 'Unknown') + '</a></div>'
+                    + '<div class="msg-date">' + escapeHtml(formatDate(date)) + '</div>'
+                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '"></div>';
+                listContainer.appendChild(msgRow);
+            }
+            container.appendChild(listContainer);
+            var actionBar = document.createElement('div');
+            actionBar.className = 'messages-action-bar';
+            actionBar.innerHTML = ''
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary" id="export-messages"><i class="fa-regular fa-download"></i> Export as</button> '
+                + '<select id="export-format" class="modern-select-sm"><option value="html">HTML</option><option value="xls">Excel</option></select>'
+                + '</div>'
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
+                + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
+                + '</div>'
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
+                + '</div>';
+            container.appendChild(actionBar);
+            var folderForm   = folderSelect ? folderSelect.form : null;
+            var inboxForm    = document.querySelector('form[name="inbox"]');
+            var modernFolder = container.querySelector('#modern-folder-select');
+            if (modernFolder && folderSelect && folderForm) {
+                modernFolder.addEventListener('change', function() {
+                    folderSelect.value = this.value;
+                    folderForm.submit();
+                });
+            }
+            var selectAll = container.querySelector('#select-all-msgs');
+            if (selectAll) {
+                selectAll.addEventListener('change', function() {
+                    container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
+                        cb.checked = selectAll.checked;
+                    });
+                });
+            }
+            function syncCheckboxesToForm() {
+                if (!inboxForm) return;
+                container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
+                    var hidden = inboxForm.querySelector('input[name="' + cb.name + '"]');
+                    if (hidden) hidden.checked = cb.checked;
+                });
+            }
+            var exportBtn = container.querySelector('#export-messages');
+            if (exportBtn && inboxForm) {
+                exportBtn.addEventListener('click', function() {
+                    syncCheckboxesToForm();
+                    var fmt = container.querySelector('#export-format');
+                    var typeSelect = inboxForm.querySelector('select[name="type"]');
+                    if (fmt && typeSelect) typeSelect.value = fmt.value;
+                    var archiveBtn = inboxForm.querySelector('input[name="archive"]');
+                    if (archiveBtn) archiveBtn.click(); else inboxForm.submit();
+                });
+            }
+            var deleteBtn = container.querySelector('#delete-messages');
+            if (deleteBtn && inboxForm) {
+                deleteBtn.addEventListener('click', function() {
+                    if (!confirm('Delete selected messages?')) return;
+                    syncCheckboxesToForm();
+                    var delBtn = inboxForm.querySelector('input[name="delete"]');
+                    if (delBtn) delBtn.click(); else inboxForm.submit();
+                });
+            }
+            var moveBtn = container.querySelector('#move-messages');
+            if (moveBtn && inboxForm) {
+                moveBtn.addEventListener('click', function() {
+                    syncCheckboxesToForm();
+                    var dest = container.querySelector('#move-folder');
+                    var vidSelect = inboxForm.querySelector('select[name="VID"]');
+                    if (dest && vidSelect) vidSelect.value = dest.value;
+                    var moveInput = inboxForm.querySelector('input[name="move"]');
+                    if (moveInput) moveInput.click(); else inboxForm.submit();
+                });
+            }
+        } catch (err) {
             console.error('[MessengerModule] Error building messages section:', err);
-            container.innerHTML = '<div class="modern-empty-state">Error loading messages</div>';
+            var cpEl = document.querySelector('.cp');
+            if (cpEl) {
+                var clone = cpEl.cloneNode(true);
+                var tabs = clone.querySelector('.tabs');
+                if (tabs) tabs.remove();
+                container.appendChild(clone);
+            } else {
+                container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-inbox"></i><p>Unable to load messages</p></div>';
+            }
         }
         return container;
     }
@@ -788,10 +1035,59 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
         try {
-            // ... (your full contacts code)
-        } catch(err) {
+            var friendsTextarea = document.querySelector('textarea[name="can_contact"]');
+            var blockedTextarea = document.querySelector('textarea[name="cannot_contact"]');
+            var privacySelect   = document.querySelector('select[name="nobody_can_contact"]');
+            var updateButton    = document.querySelector('input[value="Update Contact list"]');
+            var friendsCard = document.createElement('div');
+            friendsCard.className = 'contacts-card';
+            friendsCard.innerHTML = ''
+                + '<h3 class="contacts-card-title"><i class="fa-regular fa-user-group"></i> Friends list</h3>'
+                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsTextarea ? friendsTextarea.value : '') + '</textarea>'
+                + '<p class="contacts-help">Users you allow to message you when privacy mode is on.</p>';
+            container.appendChild(friendsCard);
+            var blockedCard = document.createElement('div');
+            blockedCard.className = 'contacts-card';
+            blockedCard.innerHTML = ''
+                + '<h3 class="contacts-card-title"><i class="fa-regular fa-ban"></i> Blocked users</h3>'
+                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedTextarea ? blockedTextarea.value : '') + '</textarea>'
+                + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
+            container.appendChild(blockedCard);
+            var privacyVal = privacySelect ? privacySelect.value : '0';
+            var privacyCard = document.createElement('div');
+            privacyCard.className = 'contacts-card';
+            privacyCard.innerHTML = ''
+                + '<h3 class="contacts-card-title"><i class="fa-regular fa-shield"></i> Privacy settings</h3>'
+                + '<div class="privacy-option">'
+                + '<label class="modern-radio"><input type="radio" name="privacy" value="1" ' + (privacyVal === '1' ? 'checked' : '') + '> <span>Yes — only friends can message me</span></label>'
+                + '<label class="modern-radio"><input type="radio" name="privacy" value="0" ' + (privacyVal === '0' ? 'checked' : '') + '> <span>No — everyone can message me (except blocked users)</span></label>'
+                + '</div>';
+            container.appendChild(privacyCard);
+            var actionsDiv = document.createElement('div');
+            actionsDiv.className = 'contacts-actions';
+            actionsDiv.innerHTML = '<button class="modern-btn modern-btn-primary" id="update-contacts"><i class="fa-regular fa-floppy-disk"></i> Update contact list</button>';
+            container.appendChild(actionsDiv);
+            var updateContactsBtn = container.querySelector('#update-contacts');
+            if (updateContactsBtn && updateButton) {
+                updateContactsBtn.addEventListener('click', function() {
+                    if (friendsTextarea) friendsTextarea.value = container.querySelector('#modern-friends-list').value;
+                    if (blockedTextarea) blockedTextarea.value = container.querySelector('#modern-blocked-list').value;
+                    var checkedPrivacy = container.querySelector('input[name="privacy"]:checked');
+                    if (privacySelect && checkedPrivacy) privacySelect.value = checkedPrivacy.value;
+                    updateButton.click();
+                });
+            }
+        } catch (err) {
             console.error('[MessengerModule] Error building contacts section:', err);
-            container.innerHTML = '<div class="modern-empty-state">Error loading contacts</div>';
+            var cpEl = document.querySelector('.cp');
+            if (cpEl) {
+                var clone = cpEl.cloneNode(true);
+                var tabs = clone.querySelector('.tabs');
+                if (tabs) tabs.remove();
+                container.appendChild(clone);
+            } else {
+                container.innerHTML = '<div class="modern-empty-state"><i class="fa-regular fa-address-book"></i><p>Unable to load contacts</p></div>';
+            }
         }
         return container;
     }
