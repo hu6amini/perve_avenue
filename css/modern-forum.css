@@ -671,7 +671,7 @@ body#msg .textinput {
 }
 
 /*--------------------------------------------
- 7. EMBEDDED LINK STYLES
+ 7. EMBEDDED LINK STYLES (legacy)
 --------------------------------------------*/
 .modern-embedded-link {
     background: var(--surface-color);
@@ -870,26 +870,26 @@ body#msg .textinput {
  7b. RICH LINK PREVIEW CARDS (TipTap extension)
 --------------------------------------------*/
 .link-preview-card {
-    display: inline-block;   /* critical: allows caret before/after */
-    margin: 0.25rem 0;
-    border: 1px solid var(--border-color, #E2E8F0);
-    border-radius: 0.5rem;
-    background: var(--surface-color, #FFF);
+    display: inline-block;
+    margin: calc(var(--space-xs) * 0.618) 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--surface-color);
     transition: box-shadow 0.2s;
-    vertical-align: middle;  /* aligns nicely with surrounding text */
+    vertical-align: middle;
     caret-color: var(--text-primary);
-    max-width: calc(100% - 0.618rem);
+    max-width: calc(100% - var(--pad-4));
     border-left: var(--space-micro) solid transparent;
     border-right: var(--space-micro) solid transparent;
     overflow: hidden;
 }
 .link-preview-card:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow);
 }
 .link-preview-link {
     text-decoration: none;
     color: inherit;
-    display: inline-flex;    /* change from block to inline-flex */
+    display: inline-flex;
     align-items: stretch;
     width: 100%;
 }
@@ -909,32 +909,32 @@ body#msg .textinput {
     flex: 1 1 0%;
     min-width: 0;
     width: 100%;
-    padding: var(--pad-5) var(--pad-6);
+    padding: var(--pad-4) var(--pad-5);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     box-sizing: border-box;
 }
 .link-preview-title {
-    margin: 0 0 0.25rem 0;
+    margin: 0 0 var(--space-xs) 0;
     font-size: clamp(1rem, 2.5vw, var(--text-base));
-    color: var(--text-primary, #1A202C);
-    line-height: 1.4;
+    color: var(--text-primary);
+    line-height: var(--phi);
     display: inline-block;
     font-family: var(--font-heading);
 }
 .link-preview-description {
-    font-size: 0.75rem;
-    color: var(--text-secondary, #4A5568);
-    margin: 0.25rem 0;
-    line-height: 1.4;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin: var(--space-xs) 0;
+    line-height: var(--phi);
     display: inline-block;
 }
 .link-preview-url-wrapper {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    margin-top: 0.25rem;
+    gap: var(--space-xs);
+    margin-top: var(--space-xs);
 }
 .link-preview-favicon {
     width: 14px;
@@ -942,13 +942,13 @@ body#msg .textinput {
     display: inline-block;
 }
 .link-preview-hostname {
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     color: var(--primary-color);
 }
 /* Mobile: make card full width but still inline-block */
 @media (max-width: 640px) {
     .link-preview-card {
-        display: block;  /* on mobile, block is fine – caret placement less critical */
+        display: block;
         width: 100%;
     }
     .link-preview-content {
@@ -1029,15 +1029,15 @@ body.modal-open {
 .modern-likes-modal,
 .modern-report-container,
 .modern-report-notify-container {
-    background: var(--surface-color, #1f2937);
-    border-radius: var(--radius-lg, 13px);
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
     max-width: 480px;
     width: 90%;
     max-height: 80vh;
     overflow: hidden;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-xl);
     animation: modalSlideUp 0.3s ease;
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     outline: none;
@@ -1055,8 +1055,8 @@ body.modal-open {
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-    background: var(--surface-color, #1f2937);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-color);
     flex-shrink: 0;
 }
 
@@ -1071,14 +1071,14 @@ body.modal-open {
 .modern-modal-title i,
 .report-modal-title i,
 .notify-modal-title i {
-    color: var(--primary-light, #10b981);
+    color: var(--primary-light);
     font-size: 1rem;
 }
 
 .modern-modal-title h3,
 .report-modal-title h3,
 .notify-modal-title h3 {
-    color: var(--text-primary, #f9fafb);
+    color: var(--text-primary);
     margin: 0;
 }
 
@@ -1088,7 +1088,7 @@ body.modal-open {
     padding: 0.125rem 0.5rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--primary-light, #10b981);
+    color: var(--primary-light);
 }
 
 .modern-modal-close,
@@ -1096,7 +1096,7 @@ body.modal-open {
 .notify-modal-close {
     background: transparent;
     border: none;
-    color: var(--text-tertiary, #6b7280);
+    color: var(--text-tertiary);
     cursor: pointer;
     font-size: 1.25rem;
     padding: 0.25rem;
@@ -1107,15 +1107,15 @@ body.modal-open {
 .modern-modal-close:hover,
 .report-modal-close:hover,
 .notify-modal-close:hover {
-    background: var(--hover-color, rgba(255, 255, 255, 0.05));
-    color: var(--text-primary, #f9fafb);
+    background: var(--hover-color);
+    color: var(--text-primary);
     transform: rotate(90deg);
 }
 
 .modern-likes-list {
     flex: 1;
     overflow-y: auto;
-    background: var(--surface-color, #1f2937);
+    background: var(--surface-color);
 }
 
 .modern-likes-list::-webkit-scrollbar {
@@ -1127,7 +1127,7 @@ body.modal-open {
 }
 
 .modern-likes-list::-webkit-scrollbar-thumb {
-    background: var(--surface-light, #374151);
+    background: var(--surface-light);
     border-radius: 20px;
 }
 
@@ -1148,13 +1148,13 @@ body.modal-open {
     align-items: center;
     gap: 1rem;
     padding: 0.875rem 1.5rem;
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border-bottom: 1px solid var(--border-color);
     transition: background 0.2s;
     cursor: pointer;
 }
 
 .modern-like-item:hover {
-    background: var(--hover-color, rgba(255, 255, 255, 0.05));
+    background: var(--hover-color);
 }
 
 .modern-like-item:focus-visible {
@@ -1175,9 +1175,9 @@ body.modal-open {
     height: 48px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid var(--primary-color, #059669);
+    border: 2px solid var(--primary-color);
     display: block;
-    background: var(--surface-light, #374151);
+    background: var(--surface-light);
 }
 
 .modal-initial-avatar {
@@ -1204,7 +1204,7 @@ body.modal-open {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    border: 2px solid var(--surface-color, #1f2937);
+    border: 2px solid var(--surface-color);
     transition: background 0.2s;
 }
 
@@ -1257,14 +1257,14 @@ body.modal-open {
 
 .modern-like-name {
     font-weight: 600;
-    color: var(--text-primary, #f9fafb);
+    color: var(--text-primary);
     font-size: 0.95rem;
     transition: color 0.2s;
     cursor: pointer;
 }
 
 .modern-like-name:hover {
-    color: var(--primary-light, #10b981);
+    color: var(--primary-light);
     text-decoration: underline;
 }
 
@@ -1328,20 +1328,20 @@ body.modal-open {
     gap: 1rem;
     margin-top: 0.25rem;
     font-size: 0.7rem;
-    color: var(--text-tertiary, #6b7280);
+    color: var(--text-tertiary);
 }
 
 .modern-like-stats i {
     margin-right: 0.25rem;
     width: 12px;
-    color: var(--primary-light, #10b981);
+    color: var(--primary-light);
 }
 
 .modern-loading,
 .modern-empty {
     text-align: center;
     padding: 3rem;
-    color: var(--text-tertiary, #6b7280);
+    color: var(--text-tertiary);
 }
 
 .modern-loading i,
@@ -1355,10 +1355,10 @@ body.modal-open {
 .report-modal-footer,
 .notify-modal-footer {
     padding: 0.75rem 1.5rem;
-    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-    background: var(--bg-color, #111827);
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-color);
     font-size: 0.7rem;
-    color: var(--text-tertiary, #6b7280);
+    color: var(--text-tertiary);
     text-align: center;
     flex-shrink: 0;
 }
@@ -1948,14 +1948,15 @@ input[type="radio"]:checked::before {
     color: var(--text-tertiary);
 }
 
+/* Regular images inside the editor (excluding link preview images) */
 .ProseMirror img:not(.link-preview-image, .link-preview-favicon) {
     max-width: 100%;
     height: auto;
     display: inline-block;
-    user-select:all;
+    user-select: all;
     padding: 3px;
     caret-color: var(--text-primary);
-    max-width: calc(100% - 0.618rem);
+    max-width: calc(100% - var(--pad-4));
     border-left: var(--space-micro) solid transparent;
     border-right: var(--space-micro) solid transparent;
 }
