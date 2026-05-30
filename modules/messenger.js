@@ -485,53 +485,67 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
                 // Link Preview Node (rich card)
                 // -----------------------------------------------------------------
-                const LinkPreview = Node.create({
-                    name: 'linkPreview',
-                    group: 'block',
-                    atom: true,
-                    draggable: true,
-                    selectable: true,
-                    addAttributes() {
-                        return {
-                            href: { default: '' },
-                            title: { default: '' },
-                            description: { default: '' },
-                            imageSrc: { default: '' },
-                        };
-                    },
-                    parseHTML() {
-                        return [{
-                            tag: 'div[data-type="link-preview"]',
-                        }];
-                    },
-                    renderHTML({ node, HTMLAttributes }) {
-                        const { href, title, description, imageSrc } = node.attrs;
-                        return [
+const LinkPreview = Node.create({
+    name: 'linkPreview',
+    group: 'block',
+    atom: true,
+    draggable: true,
+    selectable: true,
+    addAttributes() {
+        return {
+            href: { default: '' },
+            title: { default: '' },
+            description: { default: '' },
+            imageSrc: { default: '' },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'div[data-type="link-preview"]' }];
+    },
+    renderHTML({ node, HTMLAttributes }) {
+        const { href, title, description, imageSrc } = node.attrs;
+        // Extract hostname from href for display (e.g., "https://bbc.com/news" -> "bbc.com")
+        let hostname = '';
+        try {
+            const url = new URL(href);
+            hostname = url.hostname.replace(/^www\./, '');
+        } catch (e) {
+            hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+        }
+        const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+
+        return [
+            'div',
+            { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
+            [
+                'a',
+                { href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+                [
+                    'div',
+                    { class: 'link-preview-content' },
+                    // Image wrapped in .embedded-link-image
+                    imageSrc ? [
+                        'div',
+                        { class: 'embedded-link-image' },
+                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                    ] : '',
+                    [
+                        'div',
+                        { class: 'link-preview-text' },
+                        ['h3', { class: 'link-preview-title' }, title || href],
+                        description ? ['p', { class: 'link-preview-description' }, description] : '',
+                        [
                             'div',
-                            { 
-                                class: 'link-preview-card',
-                                'data-type': 'link-preview',
-                                ...HTMLAttributes 
-                            },
-                            [
-                                'a',
-                                { href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
-                                [
-                                    'div',
-                                    { class: 'link-preview-content' },
-                                    imageSrc ? ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy' }] : '',
-                                    [
-                                        'div',
-                                        { class: 'link-preview-text' },
-                                        ['strong', { class: 'link-preview-title' }, title || href],
-                                        description ? ['p', { class: 'link-preview-description' }, description] : '',
-                                        ['span', { class: 'link-preview-url' }, href.replace(/^https?:\/\//, '')],
-                                    ]
-                                ]
-                            ]
-                        ];
-                    },
-                });
+                            { class: 'link-preview-url-wrapper' },
+                            ['img', { src: faviconUrl, class: 'link-preview-favicon', loading: 'lazy', alt: '' }],
+                            ['span', { class: 'link-preview-hostname' }, hostname]
+                        ]
+                    ]
+                ]
+            ]
+        ];
+    },
+});
 
                 // -----------------------------------------------------------------
                 // Spoiler extension (block)
