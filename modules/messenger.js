@@ -1,5 +1,5 @@
 // Messenger Module – TipTap based, with lazy/async images & raw HTML output
-// Relies solely on ForumCoreObserver for DOM detection.
+// Uses ForumCoreObserver with a reliable fallback. No legacy global dependencies.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -27,81 +27,94 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         return new Promise(function(resolve, reject) {
-            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                // Define required selectors for each section
-                var requiredElements = [];
-                if (currentSection === 'compose') {
-                    requiredElements = [
-                        '#modern-forum-wrapper',
-                        'form[action*="act=Msg"], #Post',
-                        'input[name="entered_name"]'
-                    ];
-                } else if (currentSection === 'messages') {
-                    requiredElements = ['#modern-forum-wrapper', '.big_list .row-mp'];
-                } else if (currentSection === 'contacts') {
-                    requiredElements = ['#modern-forum-wrapper', 'textarea[name="can_contact"]'];
-                }
-
-                var foundCount = 0;
-                var observerIds = [];
-
-                function tryBuild() {
-                    foundCount++;
-                    if (foundCount === requiredElements.length && !isInitialized && !document.getElementById('modern-messenger')) {
-                        // Unregister all temporary observers
-                        observerIds.forEach(function(id) {
-                            globalThis.forumObserver.unregister(id);
-                        });
-                        try {
-                            buildModernMessenger();
-                            isInitialized = true;
-                            if (EventBus) EventBus.trigger('messenger:ready');
-                            resolve();
-                        } catch (err) {
-                            console.error('[MessengerModule] Build failed:', err);
-                            reject(err);
-                        }
-                    }
-                }
-
-                // Register one observer per required element
-                requiredElements.forEach(function(selector) {
-                    var id = globalThis.forumObserver.register({
-                        id: 'messenger-wait-' + selector.replace(/[^a-z0-9]/gi, '_'),
-                        selector: selector,
-                        priority: 'critical',
-                        callback: tryBuild
-                    });
-                    observerIds.push(id);
-                });
-
-                // Safety timeout (3 seconds) – in case observer never fires
-                setTimeout(function() {
-                    if (foundCount < requiredElements.length && !isInitialized) {
-                        console.warn('[Messenger] Timeout waiting for some elements, forcing build');
-                        if (document.getElementById('modern-forum-wrapper')) {
-                            // Force enough calls to reach required length
-                            var needed = requiredElements.length - foundCount;
-                            for (var i = 0; i < needed; i++) tryBuild();
-                        }
-                    }
-                }, 3000);
-            } else {
-                // Fallback when observer is not available
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', function() {
-                        buildModernMessenger();
-                        isInitialized = true;
-                        if (EventBus) EventBus.trigger('messenger:ready');
-                        resolve();
-                    });
-                } else {
+            // Helper to build the messenger (called when all conditions are met)
+            function build() {
+                if (isInitialized || document.getElementById('modern-messenger')) return;
+                try {
                     buildModernMessenger();
                     isInitialized = true;
                     if (EventBus) EventBus.trigger('messenger:ready');
                     resolve();
+                } catch (err) {
+                    console.error('[MessengerModule] Build failed:', err);
+                    reject(err);
                 }
             }
+
+            // Define required elements as a map: selector -> found flag
+            var required = {};
+            if (currentSection === 'compose') {
+                required = {
+                    '#modern-forum-wrapper': false,
+                    'form[action*="act=Msg"], form[action*="CODE=04"], #Post': false,
+                    'input[name="entered_name"]': false
+                };
+            } else if (currentSection === 'messages') {
+                required = {
+                    '#modern-forum-wrapper': false,
+                    '.big_list .row-mp': false
+                };
+            } else if (currentSection === 'contacts') {
+                required = {
+                    '#modern-forum-wrapper': false,
+                    'textarea[name="can_contact"]': false
+                };
+            }
+
+            var requiredSelectors = Object.keys(required);
+            var foundCount = 0;
+
+            function checkAllFound() {
+                if (foundCount === requiredSelectors.length && !isInitialized) {
+                    // Clean up observer registrations
+                    observerCallbacks.forEach(function(id) {
+                        if (globalThis.forumObserver) globalThis.forumObserver.unregister(id);
+                    });
+                    observerCallbacks = [];
+                    build();
+                }
+            }
+
+            // If ForumCoreObserver is available, register callbacks for each required selector
+            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
+                requiredSelectors.forEach(function(selector) {
+                    var id = globalThis.forumObserver.register({
+                        id: 'messenger-wait-' + selector.replace(/[^a-z0-9]/gi, '_'),
+                        selector: selector,
+                        priority: 'critical',
+                        callback: function() {
+                            // Mark this selector as found only once
+                            if (!required[selector]) {
+                                required[selector] = true;
+                                foundCount++;
+                                checkAllFound();
+                            }
+                        }
+                    });
+                    observerCallbacks.push(id);
+                });
+
+                // Also check immediately in case elements already exist (observer might miss them)
+                setTimeout(function() {
+                    requiredSelectors.forEach(function(selector) {
+                        if (!required[selector] && document.querySelector(selector)) {
+                            if (!required[selector]) {
+                                required[selector] = true;
+                                foundCount++;
+                                checkAllFound();
+                            }
+                        }
+                    });
+                }, 100);
+            }
+
+            // Fallback: if after 5 seconds we still haven't built, try to build anyway if wrapper exists
+            setTimeout(function() {
+                if (!isInitialized && document.getElementById('modern-forum-wrapper')) {
+                    console.warn('[Messenger] Observer timeout – forcing build');
+                    build();
+                }
+            }, 5000);
         });
     }
 
@@ -136,9 +149,6 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
-    // ------------------------------------------------------------------------
-    // LEGACY BBCode → HTML (for initial content)
-    // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
@@ -163,17 +173,16 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap based, fetch preview/submit
+    // COMPOSE SECTION – TipTap + fetch preview/submit
     // ------------------------------------------------------------------------
     function buildComposeSection() {
-        // Get original elements (they should now exist because of observer waiting)
         var recipientInput   = document.querySelector('input[name="entered_name"]');
         var contactSelect    = document.querySelector('select[name="from_contact"]');
         var titleInput       = document.querySelector('input[name="msg_title"]');
         var originalTextarea = document.getElementById('Post');
         var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
-        var originalForm  = document.querySelector('form[action*="act=Msg"]') || 
+        var originalForm  = document.querySelector('form[action*="act=Msg"], form[action*="CODE=04"]') || 
                             (originalTextarea ? originalTextarea.closest('form') : null);
 
         if (!originalTextarea || !originalForm) {
@@ -814,10 +823,10 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
         try {
-            var folderSelect  = document.querySelector('select[name="VID"]');
-            var dlItems       = document.querySelectorAll('.main_list dl dd');
+            var folderSelect = document.querySelector('select[name="VID"]');
+            var dlItems = document.querySelectorAll('.main_list dl dd');
             var totalMessages = dlItems.length >= 1 ? dlItems[0].innerText.trim() : '0';
-            var spaceLeft     = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
+            var spaceLeft = dlItems.length >= 2 ? dlItems[1].innerText.trim() : '0';
             var folderRow = document.createElement('div');
             folderRow.className = 'messages-folder-row';
             folderRow.innerHTML = ''
@@ -832,7 +841,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 + '</select>'
                 + '</div>';
             container.appendChild(folderRow);
-            // Build the messages list (simplified – you can expand with your original code)
+
             var messagesList = document.createElement('div');
             messagesList.className = 'messages-list';
             var rows = document.querySelectorAll('.big_list .row-mp');
@@ -869,7 +878,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 wrapper.className = 'contacts-editor';
                 wrapper.innerHTML = '<label>Contacts (one per line):</label><textarea class="modern-textarea" rows="10">' + escapeHtml(textarea.value) + '</textarea>';
                 container.appendChild(wrapper);
-                // Sync back
                 var modernTextarea = wrapper.querySelector('textarea');
                 modernTextarea.addEventListener('input', function() {
                     textarea.value = modernTextarea.value;
