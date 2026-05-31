@@ -1,4 +1,4 @@
-// Messenger Module – TipTap based, with lazy/async images, raw HTML output & rich link previews
+// Messenger Module – TipTap based, modern preview, relies solely on forumObserver
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -25,84 +25,71 @@ var MessengerModule = (function(Utils, EventBus) {
             return Promise.resolve();
         }
 
+        // Rely exclusively on forumObserver – no fallback
+        if (!globalThis.forumObserver || typeof globalThis.forumObserver.register !== 'function') {
+            console.error('[MessengerModule] forumObserver not available – cannot initialize');
+            return Promise.reject(new Error('forumObserver missing'));
+        }
+
         return new Promise(function(resolve, reject) {
-            if (globalThis.forumObserver && typeof globalThis.forumObserver.register === 'function') {
-                var wrapperReady = false;
-                var targetReady = false;
+            var wrapperReady = false;
+            var targetReady = false;
 
-                function tryBuild() {
-                    if (wrapperReady && targetReady && !isInitialized && !document.getElementById('modern-messenger')) {
-                        waitForGlobalFunctions()
-                            .then(function() {
-                                try {
-                                    buildModernMessenger();
-                                    isInitialized = true;
-                                    if (EventBus) EventBus.trigger('messenger:ready');
-                                    resolve();
-                                } catch (err) {
-                                    console.error('[MessengerModule] Build failed:', err);
-                                    reject(err);
-                                }
-                            })
-                            .catch(reject);
-                    }
-                }
-
-                var wrapperObserverId = globalThis.forumObserver.register({
-                    id: 'messenger-wrapper',
-                    selector: '#modern-forum-wrapper',
-                    priority: 'critical',
-                    callback: function() {
-                        wrapperReady = true;
-                        if (wrapperObserverId) globalThis.forumObserver.unregister(wrapperObserverId);
-                        tryBuild();
-                    }
-                });
-
-                var targetSelector = '';
-                if (currentSection === 'messages') {
-                    targetSelector = '.big_list .row-mp';
-                } else if (currentSection === 'contacts') {
-                    targetSelector = 'textarea[name="can_contact"]';
-                } else {
-                    targetSelector = '.cp.send, #Post';
-                }
-
-                var targetObserverId = globalThis.forumObserver.register({
-                    id: 'messenger-target',
-                    selector: targetSelector,
-                    priority: 'critical',
-                    callback: function() {
-                        targetReady = true;
-                        if (targetObserverId) globalThis.forumObserver.unregister(targetObserverId);
-                        tryBuild();
-                    }
-                });
-
-                setTimeout(function() {
-                    if (!wrapperReady) wrapperReady = true;
-                    if (!targetReady) targetReady = true;
-                    tryBuild();
-                }, 1000);
-            } else {
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', function() {
-                        waitForGlobalFunctions().then(function() {
-                            buildModernMessenger();
-                            isInitialized = true;
-                            if (EventBus) EventBus.trigger('messenger:ready');
-                            resolve();
-                        }).catch(reject);
-                    });
-                } else {
-                    waitForGlobalFunctions().then(function() {
-                        buildModernMessenger();
-                        isInitialized = true;
-                        if (EventBus) EventBus.trigger('messenger:ready');
-                        resolve();
-                    }).catch(reject);
+            function tryBuild() {
+                if (wrapperReady && targetReady && !isInitialized && !document.getElementById('modern-messenger')) {
+                    waitForGlobalFunctions()
+                        .then(function() {
+                            try {
+                                buildModernMessenger();
+                                isInitialized = true;
+                                if (EventBus) EventBus.trigger('messenger:ready');
+                                resolve();
+                            } catch (err) {
+                                console.error('[MessengerModule] Build failed:', err);
+                                reject(err);
+                            }
+                        })
+                        .catch(reject);
                 }
             }
+
+            var wrapperObserverId = globalThis.forumObserver.register({
+                id: 'messenger-wrapper',
+                selector: '#modern-forum-wrapper',
+                priority: 'critical',
+                callback: function() {
+                    wrapperReady = true;
+                    if (wrapperObserverId) globalThis.forumObserver.unregister(wrapperObserverId);
+                    tryBuild();
+                }
+            });
+
+            var targetSelector = '';
+            if (currentSection === 'messages') {
+                targetSelector = '.big_list .row-mp';
+            } else if (currentSection === 'contacts') {
+                targetSelector = 'textarea[name="can_contact"]';
+            } else {
+                targetSelector = '.cp.send, #Post';
+            }
+
+            var targetObserverId = globalThis.forumObserver.register({
+                id: 'messenger-target',
+                selector: targetSelector,
+                priority: 'critical',
+                callback: function() {
+                    targetReady = true;
+                    if (targetObserverId) globalThis.forumObserver.unregister(targetObserverId);
+                    tryBuild();
+                }
+            });
+
+            // Timeout fallback (still within observer context)
+            setTimeout(function() {
+                if (!wrapperReady) wrapperReady = true;
+                if (!targetReady) targetReady = true;
+                tryBuild();
+            }, 1000);
         });
     }
 
@@ -177,7 +164,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // No htmlToLegacy – we keep HTML in the textarea
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules with custom Image, LinkPreview, and Heading dropdown
+    // COMPOSE SECTION – TipTap ES modules with modern preview
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -645,62 +632,62 @@ renderHTML({ node, HTMLAttributes }) {
                 // -----------------------------------------------------------------
                 // Paste handler plugin – converts pasted URLs to LinkPreview nodes
                 // -----------------------------------------------------------------
-const linkPreviewPlugin = new Plugin({
-    key: new PluginKey('linkPreview'),
-    props: {
-        handlePaste: (view, event) => {
-            var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
-            if (!text) return false;
-            
-            var urlRegex = /(https?:\/\/[^\s]+)/g;
-            var match = urlRegex.exec(text);
-            if (!match) return false;
-            
-            var url = match[0];
-            
-            // Fetch metadata from your worker
-            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    // Fallback to text link if no meaningful metadata is found
-                    if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
-                        var state = view.state;
-                        var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
-                        view.dispatch(tr);
-                        return;
-                    }
+                const linkPreviewPlugin = new Plugin({
+                    key: new PluginKey('linkPreview'),
+                    props: {
+                        handlePaste: (view, event) => {
+                            var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+                            if (!text) return false;
+                            
+                            var urlRegex = /(https?:\/\/[^\s]+)/g;
+                            var match = urlRegex.exec(text);
+                            if (!match) return false;
+                            
+                            var url = match[0];
+                            
+                            // Fetch metadata from your worker
+                            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
+                                .then(function(res) { return res.json(); })
+                                .then(function(data) {
+                                    // Fallback to text link if no meaningful metadata is found
+                                    if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
+                                        var state = view.state;
+                                        var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
+                                        view.dispatch(tr);
+                                        return;
+                                    }
 
-                    // Extract data variables clearly
-                    const title = data.title || url;
-                    const description = data.description || '';
-                    const imageSrc = data.imageSrc || '';
-                    const href = data.href || url;
+                                    // Extract data variables clearly
+                                    const title = data.title || url;
+                                    const description = data.description || '';
+                                    const imageSrc = data.imageSrc || '';
+                                    const href = data.href || url;
 
-                    // Create the LinkPreview node with the resolved variables
-                    var state = view.state;
-                    var tr = state.tr.replaceWith(
-                        state.selection.from, 
-                        state.selection.to,
-                        state.schema.nodes.linkPreview.create({
-                            href: href,
-                            title: title,
-                            description: description,
-                            imageSrc: imageSrc
-                        })
-                    );
-                    view.dispatch(tr);
-                })
-                .catch(function(err) {
-                    console.error('Link preview error:', err);
-                    var state = view.state;
-                    var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
-                    view.dispatch(tr);
+                                    // Create the LinkPreview node with the resolved variables
+                                    var state = view.state;
+                                    var tr = state.tr.replaceWith(
+                                        state.selection.from, 
+                                        state.selection.to,
+                                        state.schema.nodes.linkPreview.create({
+                                            href: href,
+                                            title: title,
+                                            description: description,
+                                            imageSrc: imageSrc
+                                        })
+                                    );
+                                    view.dispatch(tr);
+                                })
+                                .catch(function(err) {
+                                    console.error('Link preview error:', err);
+                                    var state = view.state;
+                                    var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
+                                    view.dispatch(tr);
+                                });
+                            
+                            return true; // Prevents default browser paste behavior
+                        },
+                    },
                 });
-            
-            return true; // Prevents default browser paste behavior
-        },
-    },
-});
 
                 // -----------------------------------------------------------------
                 // Create editor instance
@@ -908,6 +895,7 @@ const linkPreviewPlugin = new Plugin({
             + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
         container.appendChild(optionsRow);
 
+        // ----- Modern preview area -----
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
@@ -950,26 +938,18 @@ const linkPreviewPlugin = new Plugin({
         if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
+        // -----------------------------------------------------------------
+        // MODERN PREVIEW – uses editor.getHTML() directly, no legacy AJAX
+        // -----------------------------------------------------------------
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
-                if (typeof ajaxRequest === 'function') ajaxRequest();
-                else if (previewButton) previewButton.click();
-                var loadingDiv = document.getElementById('loading');
-                if (loadingDiv) {
-                    loadingDiv.style.display = 'block';
+                if (originalTextarea && editor) {
+                    var previewHtml = editor.getHTML();
+                    var previewContent = previewArea.querySelector('.preview-content');
+                    if (previewContent) previewContent.innerHTML = previewHtml;
                     previewArea.style.display = 'block';
-                    var observer = new MutationObserver(function() {
-                        var ajaxObj = document.getElementById('ajaxObject');
-                        if (ajaxObj && ajaxObj.innerHTML) {
-                            var pc = previewArea.querySelector('.preview-content');
-                            if (pc) pc.innerHTML = ajaxObj.innerHTML;
-                            observer.disconnect();
-                        }
-                    });
-                    observer.observe(loadingDiv, { childList: true, subtree: true });
                 }
             };
         }
