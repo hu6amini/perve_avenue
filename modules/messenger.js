@@ -1,4 +1,5 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
+// Includes Emoji extension with Twemoji rendering in preview
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -164,7 +165,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // No htmlToLegacy – we keep HTML in the textarea
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules with modern preview
+    // COMPOSE SECTION – TipTap ES modules with modern preview and Emoji extension
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -349,20 +350,16 @@ var MessengerModule = (function(Utils, EventBus) {
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
         addSeparator();
 
-        var spoilerBtn = document.createElement('button');
-        spoilerBtn.type = 'button';
-        spoilerBtn.className = 'modern-editor-btn';
-        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
-        spoilerBtn.title = 'Spoiler';
-        toolbar.appendChild(spoilerBtn);
-        activeButtonElements.push(spoilerBtn);
-
-        var smileBtn = document.createElement('button');
-        smileBtn.type = 'button';
-        smileBtn.className = 'modern-editor-btn';
-        smileBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-        smileBtn.title = 'Insert smiley';
-        toolbar.appendChild(smileBtn);
+        // ---- Emoji button (replaces old smiley button) ----
+        var emojiBtn = document.createElement('button');
+        emojiBtn.type = 'button';
+        emojiBtn.className = 'modern-editor-btn';
+        emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
+        emojiBtn.title = 'Insert emoji';
+        toolbar.appendChild(emojiBtn);
+        activeButtonElements.push(emojiBtn);
+        // The smileBtn is removed; we will handle emoji insertion via the Emoji extension's suggestion
+        // and also trigger the suggestion menu on button click
 
         // -----------------------------------------------------------------
         // UPLOAD FUNCTION – uses worker that returns url + width + height
@@ -476,7 +473,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules with custom Image, Link, and LinkPreview
+        // Load TipTap ES modules with custom Image, Link, LinkPreview, and Emoji
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
@@ -496,12 +493,14 @@ var MessengerModule = (function(Utils, EventBus) {
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
                 const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
+                const emojiModule = await import('https://esm.sh/@tiptap/extension-emoji@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
                 const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
                 const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
                 const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
+                const Emoji = emojiModule.Emoji || (emojiModule.default && emojiModule.default.Emoji);
 
                 // Configure Link extension
                 const CustomLink = Link.configure({
@@ -511,6 +510,24 @@ var MessengerModule = (function(Utils, EventBus) {
                     HTMLAttributes: {
                         target: '_blank',
                         rel: 'noopener noreferrer',
+                    },
+                });
+
+                // Configure Emoji extension with suggestion (triggered by ':')
+                const suggestion = {
+                    char: ':',
+                    pluginKey: new PluginKey('emoji'),
+                    command: ({ editor, range, props }) => {
+                        editor.chain().focus().insertText(props.emoji).run();
+                    },
+                };
+                const CustomEmoji = Emoji.configure({
+                    suggestion: {
+                        char: ':',
+                        pluginKey: new PluginKey('emoji'),
+                        command: ({ editor, range, props }) => {
+                            editor.chain().focus().deleteRange(range).insertText(props.emoji).run();
+                        },
                     },
                 });
 
@@ -735,7 +752,8 @@ renderHTML({ node, HTMLAttributes }) {
                         Placeholder.configure({ placeholder: '💬 Write your message...' }),
                         Underline,
                         CustomImage,
-                        CustomLink,  // official Link extension
+                        CustomLink,
+                        CustomEmoji,   // Emoji extension
                         Spoiler,
                         LinkPreview,
                     ],
@@ -747,6 +765,11 @@ renderHTML({ node, HTMLAttributes }) {
                     onUpdate: function({ editor }) {
                         if (originalTextarea) {
                             originalTextarea.value = editor.getHTML();
+                        }
+                        // Apply Twemoji to preview area (if visible)
+                        var previewContent = document.querySelector('#modern-preview-area .preview-content');
+                        if (previewContent && window.twemoji) {
+                            window.twemoji.parse(previewContent, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/' });
                         }
                     }
                 });
@@ -783,7 +806,7 @@ renderHTML({ node, HTMLAttributes }) {
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
                 codeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
 
-                // ----- Link button with official Link extension -----
+                // Link button
                 linkBtn.onclick = function() {
                     if (!editor) return;
                     var from = editor.state.selection.from;
@@ -791,10 +814,8 @@ renderHTML({ node, HTMLAttributes }) {
                     var selectedText = editor.state.doc.textBetween(from, to, '');
                     showLinkModal(function(url, customText) {
                         if (selectedText) {
-                            // Apply link to existing selection
                             editor.chain().focus().setLink({ href: url }).run();
                         } else {
-                            // Insert text then apply link
                             var displayText = customText || url;
                             editor.chain().focus().insertContent(displayText).run();
                             var newPos = editor.state.selection.from;
@@ -808,6 +829,14 @@ renderHTML({ node, HTMLAttributes }) {
                     });
                 };
 
+                // Emoji button: triggers the suggestion menu by inserting ":" at cursor
+                emojiBtn.onclick = function() {
+                    if (!editor) return;
+                    editor.chain().focus().insertContent(':').run();
+                    // The emoji suggestion plugin will automatically pop up after typing ":"
+                };
+
+                // Image insertion
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                         var img = new Image();
@@ -844,11 +873,9 @@ renderHTML({ node, HTMLAttributes }) {
                 };
 
                 spoilerBtn.onclick = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
-                smileBtn.onclick = function() {
-                    var smiliesDiv = document.getElementById('smilies');
-                    if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
-                };
+                // No smileBtn handler – replaced by emojiBtn
 
+                // Update active states (including headings)
                 function updateActiveStates() {
                     var isActive = {
                         bold: editor.isActive('bold'),
@@ -911,6 +938,7 @@ renderHTML({ node, HTMLAttributes }) {
                     }
                 });
 
+                // Override smiley function (legacy) if any
                 _originalEmoticon = window.emoticon;
                 window.emoticon = function(x) {
                     if (editor) {
@@ -986,7 +1014,13 @@ renderHTML({ node, HTMLAttributes }) {
                 if (originalTextarea && editor) {
                     var previewHtml = editor.getHTML();
                     var previewContent = previewArea.querySelector('.preview-content');
-                    if (previewContent) previewContent.innerHTML = previewHtml;
+                    if (previewContent) {
+                        previewContent.innerHTML = previewHtml;
+                        // Apply Twemoji to preview content
+                        if (window.twemoji) {
+                            window.twemoji.parse(previewContent, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/' });
+                        }
+                    }
                     previewArea.style.display = 'block';
                 }
             };
