@@ -436,48 +436,47 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         function showLinkModal(callback) {
-    var modalOverlay = document.createElement('div');
-    modalOverlay.className = 'modern-modal-overlay';
-    modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
-    var modalBox = document.createElement('div');
-    modalBox.className = 'modern-modal-box';
-    modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
-    modalBox.innerHTML = ''
-        + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-link"></i> Insert link</h3>'
-        + '<div style="margin-bottom:var(--space-md);">'
-        + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">Link text (optional)</label>'
-        + '<input type="text" id="modal-link-text" class="modern-input" placeholder="Enter text to display" style="width:100%;">'
-        + '</div>'
-        + '<div style="margin-bottom:var(--space-md);">'
-        + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">URL</label>'
-        + '<input type="url" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;">'
-        + '</div>'
-        + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
-        + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-        + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert link</button>'
-        + '</div>';
-    modalOverlay.appendChild(modalBox);
-    document.body.appendChild(modalOverlay);
-    var textInput = modalBox.querySelector('#modal-link-text');
-    var urlInput = modalBox.querySelector('#modal-link-url');
-    urlInput.focus();
-    function close() { modalOverlay.remove(); }
-    modalBox.querySelector('#modal-cancel').onclick = close;
-    modalBox.querySelector('#modal-submit').onclick = function() {
-        var linkText = textInput.value.trim();
-        var linkUrl = urlInput.value.trim();
-        if (linkUrl) {
-            callback(linkUrl, linkText || null);
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-link"></i> Insert link</h3>'
+                + '<div style="margin-bottom:var(--space-md);">'
+                + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">Link text (optional)</label>'
+                + '<input type="text" id="modal-link-text" class="modern-input" placeholder="Enter text to display" style="width:100%;">'
+                + '</div>'
+                + '<div style="margin-bottom:var(--space-md);">'
+                + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">URL</label>'
+                + '<input type="url" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;">'
+                + '</div>'
+                + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert link</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var textInput = modalBox.querySelector('#modal-link-text');
+            var urlInput = modalBox.querySelector('#modal-link-url');
+            urlInput.focus();
+            function close() { modalOverlay.remove(); }
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var linkText = textInput.value.trim();
+                var linkUrl = urlInput.value.trim();
+                if (linkUrl) {
+                    callback(linkUrl, linkText || null);
+                }
+                close();
+            };
+            textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
+            urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
-        close();
-    };
-    // Allow Enter key in either input
-    textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
-    urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
-}
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules with custom Image and LinkPreview
+        // Load TipTap ES modules with custom Image, Link, and LinkPreview
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
@@ -496,11 +495,24 @@ var MessengerModule = (function(Utils, EventBus) {
                 const placeholderModule = await import('https://esm.sh/@tiptap/extension-placeholder@2.5.2');
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
+                const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
                 const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
                 const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
+                const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
+
+                // Configure Link extension
+                const CustomLink = Link.configure({
+                    openOnClick: true,
+                    autolink: true,
+                    linkOnPaste: true,
+                    HTMLAttributes: {
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                    },
+                });
 
                 // -----------------------------------------------------------------
                 // Custom Image extension with lazy loading, async decoding, width/height
@@ -585,7 +597,6 @@ renderHTML({ node, HTMLAttributes }) {
 
     var isRich = finalImageUrl && finalImageUrl.trim() !== '';
 
-    // Helper to detect generic / challenge titles
     function isGenericTitle(t, h) {
         if (!t || t === h) return true;
         var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge', 'checking your browser'];
@@ -593,7 +604,6 @@ renderHTML({ node, HTMLAttributes }) {
         return generic.some(function(term) { return lower.indexOf(term) !== -1; });
     }
 
-    // Helper to decide which images need a proxy (hotlink‑blocking domains)
     function needsProxy(url) {
         if (!url) return false;
         var blocked = ['discordapp.com', 'cdn.discordapp.com', 'media.discordapp.net', 'github.com', 'raw.githubusercontent.com', 'redd.it', 'reddit.com', 'twimg.com', 'pbs.twimg.com'];
@@ -619,13 +629,11 @@ renderHTML({ node, HTMLAttributes }) {
         ];
     }
 
-    // Conditionally proxy the image
     var proxiedImage = finalImageUrl;
     if (needsProxy(finalImageUrl)) {
         proxiedImage = 'https://images.weserv.nl/?url=' + encodeURIComponent(finalImageUrl) + '&output=webp&q=85';
     }
 
-    // Rich card layout
     return [
         'span',
         { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
@@ -679,41 +687,28 @@ renderHTML({ node, HTMLAttributes }) {
                         handlePaste: (view, event) => {
                             var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                             if (!text) return false;
-                            
                             var urlRegex = /(https?:\/\/[^\s]+)/g;
                             var match = urlRegex.exec(text);
                             if (!match) return false;
-                            
                             var url = match[0];
-                            
-                            // Fetch metadata from your worker
                             fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
                                 .then(function(res) { return res.json(); })
                                 .then(function(data) {
-                                    // Fallback to text link if no meaningful metadata is found
                                     if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
                                         var state = view.state;
                                         var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
                                         view.dispatch(tr);
                                         return;
                                     }
-
-                                    // Extract data variables clearly
-                                    const title = data.title || url;
-                                    const description = data.description || '';
-                                    const imageSrc = data.imageSrc || '';
-                                    const href = data.href || url;
-
-                                    // Create the LinkPreview node with the resolved variables
+                                    var title = data.title || url;
+                                    var description = data.description || '';
+                                    var imageSrc = data.imageSrc || '';
+                                    var href = data.href || url;
                                     var state = view.state;
                                     var tr = state.tr.replaceWith(
-                                        state.selection.from, 
-                                        state.selection.to,
+                                        state.selection.from, state.selection.to,
                                         state.schema.nodes.linkPreview.create({
-                                            href: href,
-                                            title: title,
-                                            description: description,
-                                            imageSrc: imageSrc
+                                            href: href, title: title, description: description, imageSrc: imageSrc
                                         })
                                     );
                                     view.dispatch(tr);
@@ -724,8 +719,7 @@ renderHTML({ node, HTMLAttributes }) {
                                     var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
                                     view.dispatch(tr);
                                 });
-                            
-                            return true; // Prevents default browser paste behavior
+                            return true;
                         },
                     },
                 });
@@ -741,6 +735,7 @@ renderHTML({ node, HTMLAttributes }) {
                         Placeholder.configure({ placeholder: '💬 Write your message...' }),
                         Underline,
                         CustomImage,
+                        CustomLink,  // official Link extension
                         Spoiler,
                         LinkPreview,
                     ],
@@ -764,7 +759,6 @@ renderHTML({ node, HTMLAttributes }) {
                 group1[2].btn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
                 group1[3].btn.onclick = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
 
-                // Heading dropdown actions
                 headingButtons.h1.onclick = function() {
                     exec(function() { editor.chain().focus().toggleHeading({ level: 1 }).run(); });
                     headingDropdownMenu.style.display = 'none';
@@ -778,7 +772,6 @@ renderHTML({ node, HTMLAttributes }) {
                     headingDropdownMenu.style.display = 'none';
                 };
 
-                // List dropdown actions
                 listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
                     exec(function() { editor.chain().focus().toggleBulletList().run(); });
                     listDropdownMenu.style.display = 'none';
@@ -790,31 +783,30 @@ renderHTML({ node, HTMLAttributes }) {
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
                 codeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
 
-linkBtn.onclick = function() {
-    if (!editor) return;
-    var from = editor.state.selection.from;
-    var to = editor.state.selection.to;
-    var selectedText = editor.state.doc.textBetween(from, to, '');
-    showLinkModal(function(url, customText) {
-        if (selectedText) {
-            // Apply link to existing selection
-            editor.chain().focus().setLink({ href: url }).run();
-        } else {
-            // Insert a text node with a link mark using a temporary selection
-            var displayText = customText || url;
-            // Insert the text as plain text first
-            editor.chain().focus().insertContent(displayText).run();
-            // Now select the newly inserted text (from cursor position - length to cursor)
-            var newPos = editor.state.selection.from;
-            var textLength = displayText.length;
-            editor.chain().focus().setTextSelection({ from: newPos - textLength, to: newPos }).run();
-            // Apply the link to the selected text
-            editor.chain().focus().setLink({ href: url }).run();
-            // Move cursor to the end of the link
-            editor.chain().focus().setTextSelection(newPos).run();
-        }
-    });
-};
+                // ----- Link button with official Link extension -----
+                linkBtn.onclick = function() {
+                    if (!editor) return;
+                    var from = editor.state.selection.from;
+                    var to = editor.state.selection.to;
+                    var selectedText = editor.state.doc.textBetween(from, to, '');
+                    showLinkModal(function(url, customText) {
+                        if (selectedText) {
+                            // Apply link to existing selection
+                            editor.chain().focus().setLink({ href: url }).run();
+                        } else {
+                            // Insert text then apply link
+                            var displayText = customText || url;
+                            editor.chain().focus().insertContent(displayText).run();
+                            var newPos = editor.state.selection.from;
+                            var textLength = displayText.length;
+                            editor.chain().focus()
+                                .setTextSelection({ from: newPos - textLength, to: newPos })
+                                .setLink({ href: url })
+                                .setTextSelection(newPos)
+                                .run();
+                        }
+                    });
+                };
 
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
@@ -823,19 +815,14 @@ linkBtn.onclick = function() {
                             editor.chain().focus().insertContent({
                                 type: 'image',
                                 attrs: {
-                                    src: url,
-                                    alt: 'image',
-                                    loading: 'lazy',
-                                    decoding: 'async',
-                                    width: this.width,
-                                    height: this.height
+                                    src: url, alt: 'image', loading: 'lazy', decoding: 'async',
+                                    width: this.width, height: this.height
                                 }
                             }).run();
                         };
                         img.onerror = function() {
                             editor.chain().focus().insertContent({
-                                type: 'image',
-                                attrs: { src: url, alt: 'image', loading: 'lazy', decoding: 'async' }
+                                type: 'image', attrs: { src: url, alt: 'image', loading: 'lazy', decoding: 'async' }
                             }).run();
                         };
                         img.src = url;
@@ -862,7 +849,6 @@ linkBtn.onclick = function() {
                     if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
                 };
 
-                // Update active states (including headings)
                 function updateActiveStates() {
                     var isActive = {
                         bold: editor.isActive('bold'),
@@ -885,7 +871,6 @@ linkBtn.onclick = function() {
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
                     codeBtn.classList.toggle('active', isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
-                    // Optional: change heading dropdown button style when any heading active
                     if (isActive.heading1 || isActive.heading2 || isActive.heading3) {
                         headingDropdownBtn.style.backgroundColor = 'var(--primary-color)';
                         headingDropdownBtn.style.color = 'white';
