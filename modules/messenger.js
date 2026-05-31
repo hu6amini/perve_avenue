@@ -797,16 +797,16 @@ linkBtn.onclick = function() {
     var selectedText = editor.state.doc.textBetween(from, to, '');
     showLinkModal(function(url, customText) {
         if (selectedText) {
-            // There is selected text – apply link to it (customText is ignored because selection defines the display text)
+            // Apply link to existing selection
             editor.chain().focus().setLink({ href: url }).run();
         } else {
-            if (customText) {
-                // Insert a new link with custom display text
-                editor.chain().focus().insertContent('<a href="' + url + '">' + escapeHtml(customText) + '</a>').run();
-            } else {
-                // Insert a link with the URL as display text
-                editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
-            }
+            // Insert new text node with link mark
+            var displayText = customText || url;
+            editor.chain().focus().insertContent({
+                type: 'text',
+                text: displayText,
+                marks: [{ type: 'link', attrs: { href: url } }]
+            }).run();
         }
     });
 };
