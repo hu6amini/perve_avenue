@@ -583,65 +583,62 @@ var MessengerModule = (function(Utils, EventBus) {
                 // -----------------------------------------------------------------
                 // Paste handler plugin – converts pasted URLs to LinkPreview nodes
                 // -----------------------------------------------------------------
-                const linkPreviewPlugin = new Plugin({
-                    key: new PluginKey('linkPreview'),
-                    props: {
-                        handlePaste: (view, event) => {
-                            var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
-                            if (!text) return false;
-                            
-                            var urlRegex = /(https?:\/\/[^\s]+)/g;
-                            var match = urlRegex.exec(text);
-                            if (!match) return false;
-                            
-                            var url = match[0];
-                            
-                            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
-                                .then(function(res) { return res.json(); })
-                                .then(function(data) {
-                                    if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
-                                        // Fallback: insert a plain text link (no card)
-                                        var state = view.state;
-                                        var dispatch = view.dispatch;
-                                        var from = state.selection.from;
-                                        var to = state.selection.to;
-                                        var tr = state.tr.replaceWith(from, to, state.schema.text(url));
-                                        dispatch(tr);
-                                        return;
-                                    }
-                                    var title = data.title;
-                                    var description = data.description;
-                                    var imageSrc = data.imageSrc;
-                                    var href = data.href;
-                                    var state = view.state;
-                                    var dispatch = view.dispatch;
-                                    var from = state.selection.from;
-                                    var to = state.selection.to;
-                                    var tr = state.tr.replaceWith(
-                                        from, to,
-                                        state.schema.nodes.linkPreview.create({
-                                            href: href || url,
-                                            title: title || url,
-                                            description: description || '',
-                                            imageSrc: imageSrc || '',
-                                        })
-                                    );
-                                    dispatch(tr);
-                                })
-                                .catch(function(err) {
-                                    console.error('Link preview error:', err);
-                                    var state = view.state;
-                                    var dispatch = view.dispatch;
-                                    var from = state.selection.from;
-                                    var to = state.selection.to;
-                                    var tr = state.tr.replaceWith(from, to, state.schema.text(url));
-                                    dispatch(tr);
-                                });
-                            
-                            return true; // Prevent default paste
-                        },
-                    },
+const linkPreviewPlugin = new Plugin({
+    key: new PluginKey('linkPreview'),
+    props: {
+        handlePaste: (view, event) => {
+            var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+            if (!text) return false;
+            
+            var urlRegex = /(https?:\/\/[^\s]+)/g;
+            var match = urlRegex.exec(text);
+            if (!match) return false;
+            
+            var url = match[0];
+            
+            // Fetch metadata from your worker
+            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    // Fallback to text link if no meaningful metadata is found
+                    if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
+                        var state = view.state;
+                        var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
+                        view.dispatch(tr);
+                        return;
+                    }
+
+                    // Extract data variables clearly
+                    const title = data.title || url;
+                    const description = data.description || '';
+                    const imageSrc = data.imageSrc || '';
+                    const href = data.href || url;
+
+                    // Create the LinkPreview node with the resolved variables
+                    var state = view.state;
+                    var tr = state.tr.replaceWith(
+                        state.selection.from, 
+                        state.selection.to,
+                        state.schema.nodes.linkPreview.create({
+                            href: href,
+                            title: title,
+                            description: description,
+                            imageSrc: imageSrc
+                        })
+                    );
+                    view.dispatch(tr);
+                })
+                .catch(function(err) {
+                    console.error('Link preview error:', err);
+                    var state = view.state;
+                    var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
+                    view.dispatch(tr);
                 });
+            
+            return true; // Prevents default browser paste behavior
+        },
+    },
+});
 
                 // -----------------------------------------------------------------
                 // Create editor instance
