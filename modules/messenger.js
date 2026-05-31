@@ -177,7 +177,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // No htmlToLegacy – we keep HTML in the textarea
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap ES modules with custom Image and LinkPreview
+    // COMPOSE SECTION – TipTap ES modules with custom Image, LinkPreview, and Heading dropdown
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -254,6 +254,40 @@ var MessengerModule = (function(Utils, EventBus) {
         }
         addSeparator();
 
+        // ========== HEADING DROPDOWN ==========
+        var headingDropdownContainer = document.createElement('div');
+        headingDropdownContainer.className = 'modern-dropdown';
+        headingDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var headingDropdownBtn = document.createElement('button');
+        headingDropdownBtn.type = 'button';
+        headingDropdownBtn.className = 'modern-editor-btn';
+        headingDropdownBtn.innerHTML = '<i class="fa-regular fa-heading"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        headingDropdownBtn.title = 'Heading';
+        var headingDropdownMenu = document.createElement('div');
+        headingDropdownMenu.className = 'modern-dropdown-menu';
+        headingDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        headingDropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" data-level="1">Heading 1</button>'
+            + '<button class="modern-dropdown-item" data-level="2">Heading 2</button>'
+            + '<button class="modern-dropdown-item" data-level="3">Heading 3</button>';
+        headingDropdownContainer.appendChild(headingDropdownBtn);
+        headingDropdownContainer.appendChild(headingDropdownMenu);
+        toolbar.appendChild(headingDropdownContainer);
+        headingDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            headingDropdownMenu.style.display = headingDropdownMenu.style.display === 'block' ? 'none' : 'block';
+        };
+        document.addEventListener('click', function() { headingDropdownMenu.style.display = 'none'; });
+        headingDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+
+        var headingButtons = {
+            h1: headingDropdownMenu.querySelector('[data-level="1"]'),
+            h2: headingDropdownMenu.querySelector('[data-level="2"]'),
+            h3: headingDropdownMenu.querySelector('[data-level="3"]')
+        };
+        // ========== END HEADING DROPDOWN ==========
+
+        // List dropdown
         var listDropdownContainer = document.createElement('div');
         listDropdownContainer.className = 'modern-dropdown';
         listDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -702,6 +736,21 @@ const linkPreviewPlugin = new Plugin({
                 group1[2].btn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
                 group1[3].btn.onclick = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
 
+                // Heading dropdown actions
+                headingButtons.h1.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleHeading({ level: 1 }).run(); });
+                    headingDropdownMenu.style.display = 'none';
+                };
+                headingButtons.h2.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleHeading({ level: 2 }).run(); });
+                    headingDropdownMenu.style.display = 'none';
+                };
+                headingButtons.h3.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleHeading({ level: 3 }).run(); });
+                    headingDropdownMenu.style.display = 'none';
+                };
+
+                // List dropdown actions
                 listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
                     exec(function() { editor.chain().focus().toggleBulletList().run(); });
                     listDropdownMenu.style.display = 'none';
@@ -773,6 +822,7 @@ const linkPreviewPlugin = new Plugin({
                     if (smiliesDiv) smiliesDiv.classList.toggle('nascosta');
                 };
 
+                // Update active states (including headings)
                 function updateActiveStates() {
                     var isActive = {
                         bold: editor.isActive('bold'),
@@ -783,7 +833,10 @@ const linkPreviewPlugin = new Plugin({
                         orderedList: editor.isActive('orderedList'),
                         blockquote: editor.isActive('blockquote'),
                         codeBlock: editor.isActive('codeBlock'),
-                        spoiler: editor.isActive('spoiler')
+                        spoiler: editor.isActive('spoiler'),
+                        heading1: editor.isActive('heading', { level: 1 }),
+                        heading2: editor.isActive('heading', { level: 2 }),
+                        heading3: editor.isActive('heading', { level: 3 })
                     };
                     group1[0].btn.classList.toggle('active', isActive.bold);
                     group1[1].btn.classList.toggle('active', isActive.italic);
@@ -792,6 +845,14 @@ const linkPreviewPlugin = new Plugin({
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
                     codeBtn.classList.toggle('active', isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
+                    // Optional: change heading dropdown button style when any heading active
+                    if (isActive.heading1 || isActive.heading2 || isActive.heading3) {
+                        headingDropdownBtn.style.backgroundColor = 'var(--primary-color)';
+                        headingDropdownBtn.style.color = 'white';
+                    } else {
+                        headingDropdownBtn.style.backgroundColor = '';
+                        headingDropdownBtn.style.color = '';
+                    }
                 }
                 editor.on('selectionUpdate', updateActiveStates);
                 editor.on('transaction', updateActiveStates);
