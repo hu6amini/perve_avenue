@@ -2084,14 +2084,13 @@ input[type="radio"]:checked::before {
     background-color: var(--bg-color);
     border: 1px dashed var(--border-color);
     border-radius: var(--radius);
-    margin: var(--space-md) 0;
+    margin: var(--space-md) var(--space-lg);
     overflow: hidden;
 }
 
 .modern-preview-title {
     font-family: var(--font-heading);
     font-size: var(--text-md);
-    font-weight: 500;
     margin: 0;
     padding: var(--pad-4) var(--pad-6);
     border-bottom: 2px solid var(--primary-color);
@@ -2104,7 +2103,6 @@ input[type="radio"]:checked::before {
 
 .modern-preview-title i {
     color: var(--primary-light);
-    font-size: 1.1em;
 }
 
 .modern-preview .preview-content {
@@ -2114,6 +2112,7 @@ input[type="radio"]:checked::before {
     font-size: var(--text-base);
     line-height: var(--phi);
     overflow-wrap: break-word;
+    text-align: left;
 }
 
 /* Preserve spacing for nested elements inside preview */
