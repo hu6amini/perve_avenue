@@ -500,7 +500,7 @@ renderHTML({ node, HTMLAttributes }) {
     var description = node.attrs.description;
     var imageSrc = node.attrs.imageSrc;
 
-    // --- FIX: Resolve relative image paths ---
+    // Resolve relative image paths
     var finalImageUrl = imageSrc;
     if (imageSrc && imageSrc.startsWith('/')) {
         try {
@@ -511,7 +511,7 @@ renderHTML({ node, HTMLAttributes }) {
         }
     }
 
-    // Extract hostname for favicon and display
+    // Extract hostname for favicon
     var hostname = '';
     try {
         var urlObj = new URL(href);
@@ -522,10 +522,28 @@ renderHTML({ node, HTMLAttributes }) {
     var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
 
     var isRich = finalImageUrl && finalImageUrl.trim() !== '';
-    var proxiedImage = isRich ? 'https://images.weserv.nl/?url=' + encodeURIComponent(finalImageUrl) + '&output=webp&q=85' : '';
+
+    // Helper to detect generic / challenge titles
+    function isGenericTitle(t, h) {
+        if (!t || t === h) return true;
+        var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge', 'checking your browser'];
+        var lower = t.toLowerCase();
+        return generic.some(function(term) { return lower.indexOf(term) !== -1; });
+    }
+
+    // Helper to decide which images need a proxy (hotlink‑blocking domains)
+    function needsProxy(url) {
+        if (!url) return false;
+        var blocked = ['discordapp.com', 'cdn.discordapp.com', 'media.discordapp.net', 'github.com', 'raw.githubusercontent.com', 'redd.it', 'reddit.com', 'twimg.com', 'pbs.twimg.com'];
+        try {
+            var host = new URL(url).hostname;
+            return blocked.some(function(d) { return host.includes(d); });
+        } catch (_) { return false; }
+    }
 
     if (!isRich) {
-        // ... (keep your existing generic title detection logic here)
+        var showTitle = !isGenericTitle(title, href);
+        var titlePart = showTitle ? (' – ' + title) : '';
         return [
             'span',
             { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
@@ -537,6 +555,12 @@ renderHTML({ node, HTMLAttributes }) {
                 ['span', { class: 'simple-title' }, titlePart]
             ]
         ];
+    }
+
+    // Conditionally proxy the image
+    var proxiedImage = finalImageUrl;
+    if (needsProxy(finalImageUrl)) {
+        proxiedImage = 'https://images.weserv.nl/?url=' + encodeURIComponent(finalImageUrl) + '&output=webp&q=85';
     }
 
     // Rich card layout
