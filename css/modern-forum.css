@@ -2077,19 +2077,63 @@ input[type="radio"]:checked::before {
     transform: translateY(-1px);
 }
 
-/* ----- Preview area ----- */
+/*--------------------------------------------
+ Modern Preview Area (TipTap Messenger)
+--------------------------------------------*/
 .modern-preview {
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
+    background-color: var(--bg-color);
+    border: 1px dashed var(--border-color);
     border-radius: var(--radius);
-    margin: var(--space-md);
-    padding: var(--space-md);
+    margin: var(--space-md) 0;
+    overflow: hidden;
+}
+
+.modern-preview-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    font-weight: 500;
+    margin: 0;
+    padding: var(--pad-4) var(--pad-6);
+    border-bottom: 2px solid var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-primary);
+    background: transparent;
+}
+
+.modern-preview-title i {
+    color: var(--primary-light);
+    font-size: 1.1em;
 }
 
 .modern-preview .preview-content {
+    padding: var(--pad-5) var(--pad-6);
     color: var(--text-primary);
-    font-size: var(--text-sm);
-    line-height: 1.618;
+    font-family: var(--font-primary);
+    font-size: var(--text-base);
+    line-height: var(--phi);
+    overflow-wrap: break-word;
+}
+
+/* Preserve spacing for nested elements inside preview */
+.modern-preview .preview-content p,
+.modern-preview .preview-content h1,
+.modern-preview .preview-content h2,
+.modern-preview .preview-content h3,
+.modern-preview .preview-content h4,
+.modern-preview .preview-content h5,
+.modern-preview .preview-content h6,
+.modern-preview .preview-content ul,
+.modern-preview .preview-content ol,
+.modern-preview .preview-content blockquote {
+    margin-bottom: var(--space-sm);
+}
+
+.modern-preview .preview-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-sm);
 }
 
 /* ===== MODERN MESSAGES SECTION ===== */
