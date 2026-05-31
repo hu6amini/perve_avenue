@@ -919,7 +919,7 @@ const linkPreviewPlugin = new Plugin({
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
         previewArea.style.display = 'none';
-        previewArea.innerHTML = '<div class="preview-content"></div>';
+        previewArea.innerHTML = '<h3 class="modern-preview-title"><i class="fa-regular fa-eye"></i> Preview</h3><div class="preview-content"></div>';
         container.appendChild(previewArea);
 
         var modernRecipient   = container.querySelector('#modern-recipient');
