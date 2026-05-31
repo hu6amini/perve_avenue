@@ -435,6 +435,47 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
+        function showLinkModal(callback) {
+    var modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modern-modal-overlay';
+    modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+    var modalBox = document.createElement('div');
+    modalBox.className = 'modern-modal-box';
+    modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+    modalBox.innerHTML = ''
+        + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-link"></i> Insert link</h3>'
+        + '<div style="margin-bottom:var(--space-md);">'
+        + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">Link text (optional)</label>'
+        + '<input type="text" id="modal-link-text" class="modern-input" placeholder="Enter text to display" style="width:100%;">'
+        + '</div>'
+        + '<div style="margin-bottom:var(--space-md);">'
+        + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">URL</label>'
+        + '<input type="url" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;">'
+        + '</div>'
+        + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
+        + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+        + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert link</button>'
+        + '</div>';
+    modalOverlay.appendChild(modalBox);
+    document.body.appendChild(modalOverlay);
+    var textInput = modalBox.querySelector('#modal-link-text');
+    var urlInput = modalBox.querySelector('#modal-link-url');
+    urlInput.focus();
+    function close() { modalOverlay.remove(); }
+    modalBox.querySelector('#modal-cancel').onclick = close;
+    modalBox.querySelector('#modal-submit').onclick = function() {
+        var linkText = textInput.value.trim();
+        var linkUrl = urlInput.value.trim();
+        if (linkUrl) {
+            callback(linkUrl, linkText || null);
+        }
+        close();
+    };
+    // Allow Enter key in either input
+    textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
+    urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
+}
+
         // -----------------------------------------------------------------
         // Load TipTap ES modules with custom Image and LinkPreview
         // -----------------------------------------------------------------
