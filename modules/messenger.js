@@ -493,18 +493,15 @@ var MessengerModule = (function(Utils, EventBus) {
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
                 const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
-                const suggestionModule = await import('https://esm.sh/@tiptap/suggestion@2.5.2');
-                const emojiModule = await import('https://esm.sh/@tiptap/extension-emoji@3.24.0');
+const emojiModule = await import('https://esm.sh/@tiptap/extension-emoji@3.24.0');
 
-                const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
-                const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
-                const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
-                const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
-                const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
-                const Emoji = emojiModule.Emoji || (emojiModule.default && emojiModule.default.Emoji);
-                const Suggestion = suggestionModule.Suggestion || (suggestionModule.default && suggestionModule.default.Suggestion);
-                const Emoji = emojiModule.Emoji || (emojiModule.default && emojiModule.default.Emoji);
-
+const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
+const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
+const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
+const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
+const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
+const Emoji = emojiModule.Emoji || (emojiModule.default && emojiModule.default.Emoji);
+                
                 // Configure Link extension
                 const CustomLink = Link.configure({
                     openOnClick: true,
@@ -530,7 +527,7 @@ const CustomEmoji = Emoji.configure({
         char: ':',
         pluginKey: new PluginKey('emoji'),
         command: ({ editor, range, props }) => {
-            // Insert the selected emoji and delete the trigger text (e.g., ":smile")
+            // Insert the selected emoji and delete the trigger text (":smile")
             editor.chain().focus().deleteRange(range).insertText(props.emoji).run();
         },
     },
