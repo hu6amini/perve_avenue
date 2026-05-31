@@ -790,19 +790,26 @@ renderHTML({ node, HTMLAttributes }) {
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
                 codeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
 
-                linkBtn.onclick = function() {
-                    if (!editor) return;
-                    var from = editor.state.selection.from;
-                    var to = editor.state.selection.to;
-                    var selectedText = editor.state.doc.textBetween(from, to, '');
-                    showInputModal('Insert link', 'https://example.com', function(url) {
-                        if (selectedText) {
-                            editor.chain().focus().setLink({ href: url }).run();
-                        } else {
-                            editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
-                        }
-                    });
-                };
+linkBtn.onclick = function() {
+    if (!editor) return;
+    var from = editor.state.selection.from;
+    var to = editor.state.selection.to;
+    var selectedText = editor.state.doc.textBetween(from, to, '');
+    showLinkModal(function(url, customText) {
+        if (selectedText) {
+            // There is selected text – apply link to it (customText is ignored because selection defines the display text)
+            editor.chain().focus().setLink({ href: url }).run();
+        } else {
+            if (customText) {
+                // Insert a new link with custom display text
+                editor.chain().focus().insertContent('<a href="' + url + '">' + escapeHtml(customText) + '</a>').run();
+            } else {
+                // Insert a link with the URL as display text
+                editor.chain().focus().insertContent('<a href="' + url + '">' + url + '</a>').run();
+            }
+        }
+    });
+};
 
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
