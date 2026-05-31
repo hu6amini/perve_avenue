@@ -2115,20 +2115,6 @@ input[type="radio"]:checked::before {
     text-align: left;
 }
 
-/* Preserve spacing for nested elements inside preview */
-.modern-preview .preview-content p,
-.modern-preview .preview-content h1,
-.modern-preview .preview-content h2,
-.modern-preview .preview-content h3,
-.modern-preview .preview-content h4,
-.modern-preview .preview-content h5,
-.modern-preview .preview-content h6,
-.modern-preview .preview-content ul,
-.modern-preview .preview-content ol,
-.modern-preview .preview-content blockquote {
-    margin-bottom: var(--space-sm);
-}
-
 .modern-preview .preview-content img {
     max-width: 100%;
     height: auto;
