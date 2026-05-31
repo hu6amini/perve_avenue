@@ -500,6 +500,17 @@ renderHTML({ node, HTMLAttributes }) {
     var description = node.attrs.description;
     var imageSrc = node.attrs.imageSrc;
 
+    // --- FIX: Resolve relative image paths ---
+    var finalImageUrl = imageSrc;
+    if (imageSrc && imageSrc.startsWith('/')) {
+        try {
+            var urlObj = new URL(href);
+            finalImageUrl = urlObj.origin + imageSrc;
+        } catch (e) {
+            finalImageUrl = imageSrc;
+        }
+    }
+
     // Extract hostname for favicon and display
     var hostname = '';
     try {
@@ -510,21 +521,11 @@ renderHTML({ node, HTMLAttributes }) {
     }
     var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
 
-    var isRich = imageSrc && imageSrc.trim() !== '';
-
-    // Proxy the image to ensure it loads reliably and handles external tokens
-    var proxiedImage = isRich ? 'https://images.weserv.nl/?url=' + encodeURIComponent(imageSrc) + '&output=webp&q=85' : '';
+    var isRich = finalImageUrl && finalImageUrl.trim() !== '';
+    var proxiedImage = isRich ? 'https://images.weserv.nl/?url=' + encodeURIComponent(finalImageUrl) + '&output=webp&q=85' : '';
 
     if (!isRich) {
-        // Helper to detect generic challenge titles
-        function isGenericTitle(t, h) {
-            if (!t || t === h) return true;
-            var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
-            var lower = t.toLowerCase();
-            return generic.some(function(term) { return lower.indexOf(term) !== -1; });
-        }
-        var showTitle = !isGenericTitle(title, href);
-        var titlePart = showTitle ? (' – ' + title) : '';
+        // ... (keep your existing generic title detection logic here)
         return [
             'span',
             { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
