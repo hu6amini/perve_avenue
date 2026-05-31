@@ -800,13 +800,18 @@ linkBtn.onclick = function() {
             // Apply link to existing selection
             editor.chain().focus().setLink({ href: url }).run();
         } else {
-            // Insert new text node with link mark
+            // Insert a text node with a link mark using a temporary selection
             var displayText = customText || url;
-            editor.chain().focus().insertContent({
-                type: 'text',
-                text: displayText,
-                marks: [{ type: 'link', attrs: { href: url } }]
-            }).run();
+            // Insert the text as plain text first
+            editor.chain().focus().insertContent(displayText).run();
+            // Now select the newly inserted text (from cursor position - length to cursor)
+            var newPos = editor.state.selection.from;
+            var textLength = displayText.length;
+            editor.chain().focus().setTextSelection({ from: newPos - textLength, to: newPos }).run();
+            // Apply the link to the selected text
+            editor.chain().focus().setLink({ href: url }).run();
+            // Move cursor to the end of the link
+            editor.chain().focus().setTextSelection(newPos).run();
         }
     });
 };
