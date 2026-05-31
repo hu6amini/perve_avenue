@@ -494,78 +494,81 @@ var MessengerModule = (function(Utils, EventBus) {
                     parseHTML() {
                         return [{ tag: 'span[data-type="link-preview"]' }];
                     },
-                    renderHTML({ node, HTMLAttributes }) {
-                        var href = node.attrs.href;
-                        var title = node.attrs.title;
-                        var description = node.attrs.description;
-                        var imageSrc = node.attrs.imageSrc;
+renderHTML({ node, HTMLAttributes }) {
+    var href = node.attrs.href;
+    var title = node.attrs.title;
+    var description = node.attrs.description;
+    var imageSrc = node.attrs.imageSrc;
 
-                        // Extract hostname for favicon and display
-                        var hostname = '';
-                        try {
-                            var urlObj = new URL(href);
-                            hostname = urlObj.hostname.replace(/^www\./, '');
-                        } catch (e) {
-                            hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
-                        }
-                        var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
-
-                        var isRich = imageSrc && imageSrc.trim() !== '';
-
-                        if (!isRich) {
-    // Helper to detect generic challenge titles
-    function isGenericTitle(t, h) {
-        if (!t || t === h) return true;
-        var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
-        var lower = t.toLowerCase();
-        return generic.some(function(term) { return lower.indexOf(term) !== -1; });
+    // Extract hostname for favicon and display
+    var hostname = '';
+    try {
+        var urlObj = new URL(href);
+        hostname = urlObj.hostname.replace(/^www\./, '');
+    } catch (e) {
+        hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
     }
-    var showTitle = !isGenericTitle(title, href);
-    var titlePart = showTitle ? (' – ' + title) : '';
+    var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
+
+    var isRich = imageSrc && imageSrc.trim() !== '';
+
+    // Proxy the image to ensure it loads reliably and handles external tokens
+    var proxiedImage = isRich ? 'https://images.weserv.nl/?url=' + encodeURIComponent(imageSrc) + '&output=webp&q=85' : '';
+
+    if (!isRich) {
+        // Helper to detect generic challenge titles
+        function isGenericTitle(t, h) {
+            if (!t || t === h) return true;
+            var generic = ['just a moment', 'access denied', 'verification required', 'please wait', 'captcha', 'challenge'];
+            var lower = t.toLowerCase();
+            return generic.some(function(term) { return lower.indexOf(term) !== -1; });
+        }
+        var showTitle = !isGenericTitle(title, href);
+        var titlePart = showTitle ? (' – ' + title) : '';
+        return [
+            'span',
+            { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+            [
+                'a',
+                { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
+                ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
+                ['span', { class: 'simple-hostname' }, hostname],
+                ['span', { class: 'simple-title' }, titlePart]
+            ]
+        ];
+    }
+
+    // Rich card layout
     return [
         'span',
-        { class: 'link-preview-simple', 'data-type': 'link-preview', ...HTMLAttributes },
+        { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
         [
             'a',
-            { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'simple-link' },
-            ['img', { src: faviconUrl, class: 'simple-favicon', alt: '', loading: 'lazy' }],
-            ['span', { class: 'simple-hostname' }, hostname],
-            ['span', { class: 'simple-title' }, titlePart]
+            { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
+            [
+                'span',
+                { class: 'link-preview-content' },
+                [
+                    'span',
+                    { class: 'embedded-link-image' },
+                    ['img', { src: proxiedImage, class: 'link-preview-image', loading: 'lazy', alt: '' }]
+                ],
+                [
+                    'span',
+                    { class: 'link-preview-text' },
+                    ['span', { class: 'link-preview-title' }, title || href],
+                    description ? ['span', { class: 'link-preview-description' }, description] : '',
+                    [
+                        'span',
+                        { class: 'link-preview-url-wrapper' },
+                        ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
+                        ['span', { class: 'link-preview-hostname' }, hostname]
+                    ]
+                ]
+            ]
         ]
     ];
-}
-
-                        // Rich card layout
-                        return [
-                            'span',
-                            { class: 'link-preview-card', 'data-type': 'link-preview', ...HTMLAttributes },
-                            [
-                                'a',
-                                { href: href, target: '_blank', rel: 'noopener noreferrer', class: 'link-preview-link' },
-                                [
-                                    'span',
-                                    { class: 'link-preview-content' },
-                                    [
-                                        'span',
-                                        { class: 'embedded-link-image' },
-                                        ['img', { src: imageSrc, class: 'link-preview-image', loading: 'lazy', alt: '' }]
-                                    ],
-                                    [
-                                        'span',
-                                        { class: 'link-preview-text' },
-                                        ['span', { class: 'link-preview-title' }, title || href],
-                                        description ? ['span', { class: 'link-preview-description' }, description] : '',
-                                        [
-                                            'span',
-                                            { class: 'link-preview-url-wrapper' },
-                                            ['img', { src: faviconUrl, class: 'link-preview-favicon', alt: '' }],
-                                            ['span', { class: 'link-preview-hostname' }, hostname]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ];
-                    },
+},
                 });
 
                 // -----------------------------------------------------------------
