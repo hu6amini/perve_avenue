@@ -348,7 +348,16 @@ var MessengerModule = (function(Utils, EventBus) {
         };
         document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
-        addSeparator();
+                addSeparator();
+
+        // ---- Spoiler button ----
+        var spoilerBtn = document.createElement('button');
+        spoilerBtn.type = 'button';
+        spoilerBtn.className = 'modern-editor-btn';
+        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+        spoilerBtn.title = 'Spoiler';
+        toolbar.appendChild(spoilerBtn);
+        activeButtonElements.push(spoilerBtn);
 
         // ---- Emoji button (replaces old smiley button) ----
         var emojiBtn = document.createElement('button');
@@ -358,8 +367,6 @@ var MessengerModule = (function(Utils, EventBus) {
         emojiBtn.title = 'Insert emoji';
         toolbar.appendChild(emojiBtn);
         activeButtonElements.push(emojiBtn);
-        // The smileBtn is removed; we will handle emoji insertion via the Emoji extension's suggestion
-        // and also trigger the suggestion menu on button click
 
         // -----------------------------------------------------------------
         // UPLOAD FUNCTION – uses worker that returns url + width + height
