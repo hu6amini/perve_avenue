@@ -1717,7 +1717,6 @@ input[type="radio"]:checked::before {
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
     margin: var(--space-lg) 0;
-    overflow: hidden;
     display: flex;
     flex-direction: row;
 }
@@ -1729,6 +1728,8 @@ input[type="radio"]:checked::before {
     border-right: 1px solid var(--border-color);
     padding: var(--space-md) 0;
     flex-shrink: 0;
+    border-top-left-radius: var(--radius-lg);
+    border-bottom-left-radius: var(--radius-lg);
 }
 
 .modern-nav-link {
@@ -1768,6 +1769,8 @@ input[type="radio"]:checked::before {
     flex: 1;
     min-width: 0;
     background: var(--surface-color);
+    border-top-right-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
 }
 
 /* ----- Compose section – recipient & subject row ----- */
