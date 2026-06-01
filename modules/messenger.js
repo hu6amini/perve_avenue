@@ -358,63 +358,72 @@ var MessengerModule = (function(Utils, EventBus) {
         activeButtonElements.push(spoilerBtn);
 
         // ---- Emoji button & custom picker with Twemoji ----
-        var emojiBtn = document.createElement('button');
-        emojiBtn.type = 'button';
-        emojiBtn.className = 'modern-editor-btn';
-        emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-        emojiBtn.title = 'Insert emoji';
-        toolbar.appendChild(emojiBtn);
-        activeButtonElements.push(emojiBtn);
+        // ---- Emoji button & custom picker (manual Twemoji images) ----
+var emojiBtn = document.createElement('button');
+emojiBtn.type = 'button';
+emojiBtn.className = 'modern-editor-btn';
+emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
+emojiBtn.title = 'Insert emoji';
+toolbar.appendChild(emojiBtn);
+activeButtonElements.push(emojiBtn);
 
-        // Create floating emoji picker panel (hidden initially)
-        var emojiPickerPanel = document.createElement('div');
-        emojiPickerPanel.className = 'modern-emoji-picker';
-        emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
-        
-        // Predefine common emojis (Unicode characters)
-        var commonEmojis = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','🥰','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🤠','🤡','🥳','🥴','🥺','🤥','🤫','🤭','🧐','🤓','😈','👿','👹','👺','💀','👻','👽','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨','🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂','⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','🤺','⛹️','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🏊','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🪕','🎻','🎲','♟️','🎯','🎳','🎮','🎰','🧩','🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🚚','🚛','🚜','🛴','🚲','🛵','🏍️','🛺','🚔','🚍','🚘','🚖','🚡','🚠','🚟','🚃','🚋','🚞','🚝','🚄','🚅','🚈','🚂','🚆','🚇','🚊','🚉','✈️','🛫','🛬','🛩️','💺','🛰️','🚀','🛸','🚁','🛶','⛵','🚤','🛥️','🛳️','⛴️','🚢','⚓','⛽','🚧','🚦','🚥','🚏','🗺️','🗿','🗽','🗼','🏰','🏯','🏟️','🎡','🎢','🎠','⛲','⛱️','🏖️','🏝️','🏜️','🌋','⛰️','🏔️','🗻','🏕️','⛺','🏠','🏡','🏘️','🏚️','🏗️','🏭','🏢','🏬','🏣','🏤','🏥','🏦','🏨','🏪','🏫','🏩','💒','🏛️','⛪','🕌','🕍','🛕','🕋','⛩️','🛤️','🛣️','🗾','🎑','🏞️','🌅','🌄','🌠','🎇','🎆','🌇','🌆','🏙️','🌃','🌌','🌉','🌁','⌚','📱','📲','💻','⌨️','🖥️','🖨️','🖱️','🖲️','🕹️','🗜️','💽','💾','💿','📀','📼','📷','📸','📹','🎥','📽️','🎞️','📞','☎️','📟','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏰','⏲️','⏱️','🕰️','⌛','⏳','📡','🔋','🔌','💡','🔦','🕯️','🪔','🧯','🛢️','💸','💵','💴','💶','💷','💰','💳','💎','⚖️','🔧','🔨','⚒️','🛠️','⛏️','🔩','⚙️','🪛','🔗','⛓️','🧰','🧲','🔫','💣','🧨','🪓','🔪','🗡️','⚔️','🛡️','🚬','⚰️','🪦','⚱️','🏺','🔮','📿','🧿','💈','⚗️','🔭','🔬','🕳️','💊','💉','🩸','🩹','🩺','🧬','🧫','🧪','🌡️','🧹','🧺','🧻','🚽','🚰','🚿','🛁','🛀','🧼','🪒','🧽','🪥','🧴','🛎️','🔑','🗝️','🚪','🪑','🛋️','🛏️','🛌','🧸','🖼️','🪞','🪟','🪠','🔨','🪛','🔧','🔩','🪤','🧲','🧰','⚙️','🛠️','🗜️','🔗','⛓️','🧷','🧴','🧵','🪡','🧶','🪢','🪆','🪀','🪁','🪂','🪐','🌌','🌠','🎇','🎆','🧨','✨','⭐','🌟','💫','⚡','🔥','💥','💧','💨','🌊','❄️','☃️','⛄','🥶','🔥','💨'];
-        
-        // Build grid of emoji buttons
-        commonEmojis.forEach(function(emoji) {
-            var emojiItem = document.createElement('button');
-            emojiItem.type = 'button';
-            emojiItem.className = 'modern-emoji-item';
-            emojiItem.setAttribute('data-emoji', emoji);
-            emojiItem.innerHTML = emoji; // fallback text
-            emojiItem.onclick = function(e) {
-                e.stopPropagation();
-                if (editor) {
-                    var emojiChar = this.getAttribute('data-emoji');
-                    editor.chain().focus().insertContent(emojiChar).run();
-                }
-                emojiPickerPanel.style.display = 'none';
-            };
-            emojiPickerPanel.appendChild(emojiItem);
-        });
-        
-        // Apply Twemoji to the picker panel (convert Unicode to images)
-        if (window.twemoji) {
-            window.twemoji.parse(emojiPickerPanel, { base: 'https://twemoji.maxcdn.com/v/latest/svg/',
-    ext: '.svg' });
+var emojiPickerPanel = document.createElement('div');
+emojiPickerPanel.className = 'modern-emoji-picker';
+emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
+
+// Helper: convert emoji to its hex code point(s) for Twemoji URL
+function emojiToCodePoint(emoji) {
+    return Array.from(emoji).map(ch => ch.codePointAt(0).toString(16)).join('-');
+}
+
+// Your list of common emojis (keep the full array, but I'm showing a short example)
+var commonEmojis = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','🥰','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🤠','🤡','🥳','🥴','🥺','🤥','🤫','🤭','🧐','🤓','😈','👿','👹','👺','💀','👻','👽','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨']; // (use your full list)
+
+commonEmojis.forEach(function(emoji) {
+    var emojiItem = document.createElement('button');
+    emojiItem.type = 'button';
+    emojiItem.className = 'modern-emoji-item';
+    emojiItem.setAttribute('data-emoji', emoji);
+    
+    var codePoint = emojiToCodePoint(emoji);
+    var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
+    var img = document.createElement('img');
+    img.src = imgUrl;
+    img.alt = emoji;
+    img.style.width = '1.5rem';
+    img.style.height = '1.5rem';
+    // Fallback to native emoji if image fails to load
+    img.onerror = function() {
+        emojiItem.innerHTML = emoji;
+        emojiItem.style.fontSize = '1.5rem';
+    };
+    emojiItem.appendChild(img);
+    
+    emojiItem.onclick = function(e) {
+        e.stopPropagation();
+        if (editor) {
+            var emojiChar = this.getAttribute('data-emoji');
+            editor.chain().focus().insertContent(emojiChar).run();
         }
-        
-        // Append panel to toolbar (toolbar needs position:relative)
-        toolbar.style.position = 'relative';
-        toolbar.appendChild(emojiPickerPanel);
-        
-        // Toggle picker on button click
-        emojiBtn.onclick = function(e) {
-            e.stopPropagation();
-            var isVisible = emojiPickerPanel.style.display === 'grid';
-            emojiPickerPanel.style.display = isVisible ? 'none' : 'grid';
-        };
-        
-        // Close picker when clicking outside
-        document.addEventListener('click', function(e) {
-            if (emojiPickerPanel && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn) {
-                emojiPickerPanel.style.display = 'none';
-            }
-        });
+        emojiPickerPanel.style.display = 'none';
+    };
+    emojiPickerPanel.appendChild(emojiItem);
+});
+
+toolbar.style.position = 'relative';
+toolbar.appendChild(emojiPickerPanel);
+
+emojiBtn.onclick = function(e) {
+    e.stopPropagation();
+    var isVisible = emojiPickerPanel.style.display === 'grid';
+    emojiPickerPanel.style.display = isVisible ? 'none' : 'grid';
+};
+
+document.addEventListener('click', function(e) {
+    if (emojiPickerPanel && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn) {
+        emojiPickerPanel.style.display = 'none';
+    }
+});
 
         // -----------------------------------------------------------------
         // UPLOAD FUNCTION – uses worker that returns url + width + height
