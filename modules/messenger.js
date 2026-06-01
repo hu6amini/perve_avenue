@@ -394,7 +394,7 @@ var MessengerModule = (function(Utils, EventBus) {
         
         // Apply Twemoji to the picker panel (convert Unicode to images)
         if (window.twemoji) {
-            window.twemoji.parse(emojiPickerPanel, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/',
+            window.twemoji.parse(emojiPickerPanel, { base: 'https://twemoji.maxcdn.com/v/latest/svg/',
     ext: '.svg' });
         }
         
@@ -782,7 +782,8 @@ renderHTML({ node, HTMLAttributes }) {
                         }
                         var previewContent = document.querySelector('#modern-preview-area .preview-content');
                         if (previewContent && window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/', ext: '.svg' });
+                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/',
+    ext: '.svg' });
                         }
                     }
                 });
