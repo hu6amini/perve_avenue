@@ -380,6 +380,7 @@ function emojiToCodePoint(emoji) {
 var commonEmojis = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','🥰','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🤠','🤡','🥳','🥴','🥺','🤥','🤫','🤭','🧐','🤓','😈','👿','👹','👺','💀','👻','👽','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨']; // (use your full list)
 
 commonEmojis.forEach(function(emoji) {
+commonEmojis.forEach(function(emoji) {
     var emojiItem = document.createElement('button');
     emojiItem.type = 'button';
     emojiItem.className = 'modern-emoji-item';
@@ -392,18 +393,29 @@ commonEmojis.forEach(function(emoji) {
     img.alt = emoji;
     img.style.width = '1.5rem';
     img.style.height = '1.5rem';
-    // Fallback to native emoji if image fails to load
     img.onerror = function() {
         emojiItem.innerHTML = emoji;
         emojiItem.style.fontSize = '1.5rem';
     };
     emojiItem.appendChild(img);
     
+    // Updated click handler: insert an image node, not Unicode text
     emojiItem.onclick = function(e) {
         e.stopPropagation();
         if (editor) {
             var emojiChar = this.getAttribute('data-emoji');
-            editor.chain().focus().insertContent(emojiChar).run();
+            var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
+            editor.chain().focus().insertContent({
+                type: 'image',
+                attrs: {
+                    src: emojiUrl,
+                    alt: emojiChar,
+                    loading: 'lazy',
+                    decoding: 'async',
+                    width: 24,      // adjust as needed (1.5rem ≈ 24px)
+                    height: 24
+                }
+            }).run();
         }
         emojiPickerPanel.style.display = 'none';
     };
