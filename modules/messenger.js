@@ -1,5 +1,5 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
-// Includes custom emoji picker with Twemoji images
+// Includes custom emoji picker with Twemoji images (grouped)
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -163,7 +163,7 @@ var MessengerModule = (function(Utils, EventBus) {
     // No htmlToLegacy – we keep HTML in the textarea
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap with custom emoji picker (Twemoji)
+    // COMPOSE SECTION – TipTap with custom image, link preview, heading dropdown, emoji picker
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -357,78 +357,6 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(spoilerBtn);
         activeButtonElements.push(spoilerBtn);
 
-        // ---- Emoji button & custom picker with Twemoji ----
-        // ---- Emoji button & custom picker (manual Twemoji images) ----
-var emojiBtn = document.createElement('button');
-emojiBtn.type = 'button';
-emojiBtn.className = 'modern-editor-btn';
-emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-emojiBtn.title = 'Insert emoji';
-toolbar.appendChild(emojiBtn);
-activeButtonElements.push(emojiBtn);
-
-var emojiPickerPanel = document.createElement('div');
-emojiPickerPanel.className = 'modern-emoji-picker';
-emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
-
-// Helper: convert emoji to its hex code point(s) for Twemoji URL
-function emojiToCodePoint(emoji) {
-    return Array.from(emoji).map(ch => ch.codePointAt(0).toString(16)).join('-');
-}
-
-// Your list of common emojis (keep the full array, but I'm showing a short example)
-var commonEmojis = ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','🥰','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🤠','🤡','🥳','🥴','🥺','🤥','🤫','🤭','🧐','🤓','😈','👿','👹','👺','💀','👻','👽','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨']; // (use your full list)
-
-commonEmojis.forEach(function(emoji) {
-    var emojiItem = document.createElement('button');
-    emojiItem.type = 'button';
-    emojiItem.className = 'modern-emoji-item';
-    emojiItem.setAttribute('data-emoji', emoji);
-    
-    var codePoint = emojiToCodePoint(emoji);
-    var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
-    var img = document.createElement('img');
-    img.src = imgUrl;
-    img.alt = emoji;
-    img.style.width = '1.5rem';
-    img.style.height = '1.5rem';
-    img.onerror = function() {
-        emojiItem.innerHTML = emoji;
-        emojiItem.style.fontSize = '1.5rem';
-    };
-    emojiItem.appendChild(img);
-    
-    emojiItem.onclick = function(e) {
-        e.stopPropagation();
-        if (editor) {
-            var emojiChar = this.getAttribute('data-emoji');
-            var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
-            editor.chain().focus().insertContent({
-                type: 'image',
-                attrs: {
-                    src: emojiUrl,
-                    alt: emojiChar,
-                    loading: 'lazy',
-// ---- Emoji button & custom picker with group separators ----
-var emojiBtn = document.createElement('button');
-emojiBtn.type = 'button';
-emojiBtn.className = 'modern-editor-btn';
-emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-emojiBtn.title = 'Insert emoji';
-toolbar.appendChild(emojiBtn);
-activeButtonElements.push(emojiBtn);
-
-var emojiPickerPanel = document.createElement('div');
-emojiPickerPanel.className = 'modern-emoji-picker';
-emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
-
-// Helper: convert emoji to its hex code point(s) for Twemoji URL
-function emojiToCodePoint(emoji) {
-    return Array.from(emoji).map(ch => ch.codePointAt(0).toString(16)).join('-');
-}
-
-// Define emoji groups with names and emoji lists
-var emojiGroups = [
         // ---- Emoji button & custom picker with group separators ----
         var emojiBtn = document.createElement('button');
         emojiBtn.type = 'button';
@@ -444,7 +372,7 @@ var emojiGroups = [
 
         // Helper: convert emoji to its hex code point(s) for Twemoji URL
         function emojiToCodePoint(emoji) {
-            return Array.from(emoji).map(ch => ch.codePointAt(0).toString(16)).join('-');
+            return Array.from(emoji).map(function(ch) { return ch.codePointAt(0).toString(16); }).join('-');
         }
 
         // Define emoji groups with names and emoji lists
@@ -453,7 +381,6 @@ var emojiGroups = [
             { name: 'People', emojis: ['🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎'] },
             { name: 'Animals & Nature', emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨'] },
             { name: 'Food & Drink', emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂'] }
-            // Add more groups as needed
         ];
 
         // Build the picker panel
@@ -640,7 +567,7 @@ var emojiGroups = [
         }
 
         // -----------------------------------------------------------------
-        // Load TipTap ES modules with custom Image and LinkPreview (no emoji extension)
+        // Load TipTap ES modules
         // -----------------------------------------------------------------
         (async function initTipTap() {
             try {
@@ -894,8 +821,7 @@ renderHTML({ node, HTMLAttributes }) {
                         }
                         var previewContent = document.querySelector('#modern-preview-area .preview-content');
                         if (previewContent && window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/',
-    ext: '.svg' });
+                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
                         }
                     }
                 });
@@ -954,7 +880,6 @@ renderHTML({ node, HTMLAttributes }) {
                     });
                 };
 
-                // Emoji button is already handled by the custom picker, no need for suggestion
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                         var img = new Image();
@@ -1132,8 +1057,7 @@ renderHTML({ node, HTMLAttributes }) {
                     if (previewContent) {
                         previewContent.innerHTML = previewHtml;
                         if (window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/',
-    ext: '.svg' });
+                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
                         }
                     }
                     previewArea.style.display = 'block';
@@ -1163,7 +1087,6 @@ renderHTML({ node, HTMLAttributes }) {
     // MESSAGES SECTION (unchanged – keep your existing)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
-        // ... (your full messages code – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
@@ -1307,7 +1230,6 @@ renderHTML({ node, HTMLAttributes }) {
     // CONTACTS SECTION (unchanged – keep your existing)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
-        // ... (your full contacts code – unchanged)
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'contacts-section';
