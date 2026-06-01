@@ -1020,7 +1020,8 @@ renderHTML({ node, HTMLAttributes }) {
                     if (previewContent) {
                         previewContent.innerHTML = previewHtml;
                         if (window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/' });
+                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/',
+    ext: '.svg' });
                         }
                     }
                     previewArea.style.display = 'block';
