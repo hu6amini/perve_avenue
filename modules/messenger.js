@@ -429,85 +429,104 @@ function emojiToCodePoint(emoji) {
 
 // Define emoji groups with names and emoji lists
 var emojiGroups = [
-    { name: 'Smilies', emojis: ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','🥰','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🤠','🤡','🥳','🥴','🥺','🤥','🤫','🤭','🧐','🤓','😈','👿','👹','👺','💀','👻','👽','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾'] },
-    { name: 'People', emojis: ['🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎'] },
-    { name: 'Animals & Nature', emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨'] },
-    { name: 'Food & Drink', emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂'] }
-    // Add more groups as needed (Activities, Travel, Objects, Symbols, etc.)
-];
+        // ---- Emoji button & custom picker with group separators ----
+        var emojiBtn = document.createElement('button');
+        emojiBtn.type = 'button';
+        emojiBtn.className = 'modern-editor-btn';
+        emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
+        emojiBtn.title = 'Insert emoji';
+        toolbar.appendChild(emojiBtn);
+        activeButtonElements.push(emojiBtn);
 
-// Build the picker panel
-emojiGroups.forEach(function(group, groupIndex) {
-    // Add a separator heading (except for the first group)
-    if (groupIndex > 0) {
-        var separator = document.createElement('div');
-        separator.className = 'emoji-group-separator';
-        separator.style.cssText = 'grid-column:1/-1;height:1px;background:var(--border-color);margin:var(--space-xs) 0;';
-        emojiPickerPanel.appendChild(separator);
-        
-        var groupLabel = document.createElement('div');
-        groupLabel.className = 'emoji-group-label';
-        groupLabel.textContent = group.name;
-        groupLabel.style.cssText = 'grid-column:1/-1;font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-xs);font-weight:500;';
-        emojiPickerPanel.appendChild(groupLabel);
-    }
-    
-    group.emojis.forEach(function(emoji) {
-        var emojiItem = document.createElement('button');
-        emojiItem.type = 'button';
-        emojiItem.className = 'modern-emoji-item';
-        emojiItem.setAttribute('data-emoji', emoji);
-        
-        var codePoint = emojiToCodePoint(emoji);
-        var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
-        var img = document.createElement('img');
-        img.src = imgUrl;
-        img.alt = emoji;
-        img.style.width = '1.5rem';
-        img.style.height = '1.5rem';
-        img.onerror = function() {
-            emojiItem.innerHTML = emoji;
-            emojiItem.style.fontSize = '1.5rem';
-        };
-        emojiItem.appendChild(img);
-        
-        emojiItem.onclick = function(e) {
-            e.stopPropagation();
-            if (editor) {
-                var emojiChar = this.getAttribute('data-emoji');
-                var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
-                editor.chain().focus().insertContent({
-                    type: 'image',
-                    attrs: {
-                        src: emojiUrl,
-                        alt: emojiChar,
-                        loading: 'lazy',
-                        decoding: 'async',
-                        width: 24,
-                        height: 24
-                    }
-                }).run();
+        var emojiPickerPanel = document.createElement('div');
+        emojiPickerPanel.className = 'modern-emoji-picker';
+        emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
+
+        // Helper: convert emoji to its hex code point(s) for Twemoji URL
+        function emojiToCodePoint(emoji) {
+            return Array.from(emoji).map(ch => ch.codePointAt(0).toString(16)).join('-');
+        }
+
+        // Define emoji groups with names and emoji lists
+        var emojiGroups = [
+            { name: 'Smilies', emojis: ['😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','😘','🥰','😗','😙','😚','🙂','🤗','🤔','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','😴','😌','😛','😜','😝','🤤','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟','😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😡','😠','🤬','😷','🤒','🤕','🤢','🤮','🤧','😇','🤠','🤡','🥳','🥴','🥺','🤥','🤫','🤭','🧐','🤓','😈','👿','👹','👺','💀','👻','👽','🤖','💩','😺','😸','😹','😻','😼','😽','🙀','😿','😾'] },
+            { name: 'People', emojis: ['🙌','👏','👋','🤝','👍','👎','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👐','🤲','🙏','🤝','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🦷','🦴','👀','👁️','👅','👄','💋','💅','👣','🧠','🫀','🫁','🧿','💍','💎'] },
+            { name: 'Animals & Nature', emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🐙','🦑','🦐','🦞','🐠','🐟','🐡','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💐','🌷','🌹','🥀','🌺','🌸','🌼','🌻','🌞','🌝','🌛','🌜','🌚','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌙','🌎','🌍','🌏','🪐','💫','⭐','🌟','✨','⚡','🔥','💥','💧','🌊','❄️','☃️','⛄','🥶','🔥','💨'] },
+            { name: 'Food & Drink', emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂'] }
+            // Add more groups as needed
+        ];
+
+        // Build the picker panel
+        emojiGroups.forEach(function(group, groupIndex) {
+            if (groupIndex > 0) {
+                var separator = document.createElement('div');
+                separator.className = 'emoji-group-separator';
+                separator.style.cssText = 'grid-column:1/-1;height:1px;background:var(--border-color);margin:var(--space-xs) 0;';
+                emojiPickerPanel.appendChild(separator);
+                
+                var groupLabel = document.createElement('div');
+                groupLabel.className = 'emoji-group-label';
+                groupLabel.textContent = group.name;
+                groupLabel.style.cssText = 'grid-column:1/-1;font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-xs);font-weight:500;';
+                emojiPickerPanel.appendChild(groupLabel);
             }
-            emojiPickerPanel.style.display = 'none';
+            
+            group.emojis.forEach(function(emoji) {
+                var emojiItem = document.createElement('button');
+                emojiItem.type = 'button';
+                emojiItem.className = 'modern-emoji-item';
+                emojiItem.setAttribute('data-emoji', emoji);
+                
+                var codePoint = emojiToCodePoint(emoji);
+                var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
+                var img = document.createElement('img');
+                img.src = imgUrl;
+                img.alt = emoji;
+                img.style.width = '1.5rem';
+                img.style.height = '1.5rem';
+                img.onerror = function() {
+                    emojiItem.innerHTML = emoji;
+                    emojiItem.style.fontSize = '1.5rem';
+                };
+                emojiItem.appendChild(img);
+                
+                emojiItem.onclick = function(e) {
+                    e.stopPropagation();
+                    if (editor) {
+                        var emojiChar = this.getAttribute('data-emoji');
+                        var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
+                        editor.chain().focus().insertContent({
+                            type: 'image',
+                            attrs: {
+                                src: emojiUrl,
+                                alt: emojiChar,
+                                loading: 'lazy',
+                                decoding: 'async',
+                                width: 24,
+                                height: 24
+                            }
+                        }).run();
+                    }
+                    emojiPickerPanel.style.display = 'none';
+                };
+                emojiPickerPanel.appendChild(emojiItem);
+            });
+        });
+
+        toolbar.style.position = 'relative';
+        toolbar.appendChild(emojiPickerPanel);
+
+        emojiBtn.onclick = function(e) {
+            e.stopPropagation();
+            var isVisible = emojiPickerPanel.style.display === 'grid';
+            emojiPickerPanel.style.display = isVisible ? 'none' : 'grid';
         };
-        emojiPickerPanel.appendChild(emojiItem);
-    });
-});
 
-toolbar.style.position = 'relative';
-toolbar.appendChild(emojiPickerPanel);
-
-emojiBtn.onclick = function(e) {
-    e.stopPropagation();
-    var isVisible = emojiPickerPanel.style.display === 'grid';
-    emojiPickerPanel.style.display = isVisible ? 'none' : 'grid';
-};
-
-document.addEventListener('click', function(e) {
-    if (emojiPickerPanel && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn) {
-        emojiPickerPanel.style.display = 'none';
-    }
-});
+        document.addEventListener('click', function(e) {
+            if (emojiPickerPanel && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn) {
+                emojiPickerPanel.style.display = 'none';
+            }
+        });
 
         // -----------------------------------------------------------------
         // UPLOAD FUNCTION – uses worker that returns url + width + height
