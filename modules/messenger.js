@@ -781,7 +781,7 @@ renderHTML({ node, HTMLAttributes }) {
                         }
                         var previewContent = document.querySelector('#modern-preview-area .preview-content');
                         if (previewContent && window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/' });
+                            window.twemoji.parse(previewContent, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/', ext: '.svg' });
                         }
                     }
                 });
