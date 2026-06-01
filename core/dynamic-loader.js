@@ -177,7 +177,7 @@ async function bootSystem() {
         // PHASE C: Third‑party libraries (twemoji, lite-youtube, lite-vimeo)
         const phaseCStart = performance.now();
         const resultsC = await Promise.allSettled([
-            loadScript("https://cdnjs.cloudflare.com/ajax/libs/twemoji-js/14.0.2/twemoji.min.js"),
+            loadScript("https://cdn.jsdelivr.net/npm/twemoji@14.0.2/twemoji.min.js"),
             loadScript("https://cdnjs.cloudflare.com/ajax/libs/lite-youtube-embed/0.3.3/lite-yt-embed.js"),
             loadScript("https://cdn.jsdelivr.net/npm/lite-vimeo-embed@0.3.0/+esm", true)
         ]);
