@@ -394,7 +394,8 @@ var MessengerModule = (function(Utils, EventBus) {
         
         // Apply Twemoji to the picker panel (convert Unicode to images)
         if (window.twemoji) {
-            window.twemoji.parse(emojiPickerPanel, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/' });
+            window.twemoji.parse(emojiPickerPanel, { base: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/',
+    ext: '.svg' });
         }
         
         // Append panel to toolbar (toolbar needs position:relative)
