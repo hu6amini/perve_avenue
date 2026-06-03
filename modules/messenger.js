@@ -370,10 +370,17 @@ var MessengerModule = (function(Utils, EventBus) {
         emojiPickerPanel.className = 'modern-emoji-picker';
         emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
 
-        // Helper: convert emoji to its hex code point(s) for Twemoji URL
-        function emojiToCodePoint(emoji) {
-            return Array.from(emoji).map(function(ch) { return ch.codePointAt(0).toString(16); }).join('-');
-        }
+// Helper: convert emoji to its hex code point(s) for Twemoji URL
+function emojiToCodePoint(emoji) {
+    var codePoints = Array.from(emoji).map(function(ch) {
+        return ch.codePointAt(0).toString(16);
+    });
+    // Filter out variation selector (FE0F) which Twemoji does not need
+    codePoints = codePoints.filter(function(cp) {
+        return cp !== 'fe0f';
+    });
+    return codePoints.join('-');
+}
 
         // Define emoji groups with names and emoji lists
         var emojiGroups = [
