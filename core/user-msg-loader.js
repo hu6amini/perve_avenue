@@ -229,7 +229,7 @@ whenBodyReady(() => {
                 const results = await Promise.allSettled([
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c1066340cbf311e771dcbb89968413bd5cb646d2/modules/media-dimensions.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@54a757ff9e428918adc88e6fd5b26d83ab8aca83/modules/posts.min.js"),
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@cac8f13c20333b4001797843b834397a372afd52/modules/posts.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@9ed81e4a5c34524004cb4dcd1137bf1714151468/modules/messenger.js")
                 ]);
