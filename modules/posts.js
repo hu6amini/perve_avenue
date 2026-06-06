@@ -596,28 +596,32 @@ const ForumPostsModule = (function () {
     }
 
     // Modified: strips the "Original message sent on:" bold element
-    function getMessageContent($post) {
-        const contentTable = $post.querySelector('td.right.Item table.color');
-        if (!contentTable) return '';
-        const clone = contentTable.cloneNode(true);
-        // Remove any <b> containing "Original message sent on"
-        const originalMsgBold = clone.querySelector('b');
-        if (originalMsgBold && originalMsgBold.textContent.includes('Original message sent on')) {
-            originalMsgBold.remove();
+function getMessageContent($post) {
+    const contentTable = $post.querySelector('td.right.Item table.color');
+    if (!contentTable) return '';
+    const clone = contentTable.cloneNode(true);
+    
+    // Find and remove ONLY the "Original message sent on:" bold element
+    const allBolds = clone.querySelectorAll('b');
+    for (const bold of allBolds) {
+        const text = bold.textContent;
+        if (text.includes('Original message sent on')) {
+            // Remove the bold element
+            bold.remove();
             // Also remove the following <br> if it exists
-            const nextBr = originalMsgBold.nextElementSibling;
+            const nextBr = bold.nextElementSibling;
             if (nextBr && nextBr.tagName === 'BR') nextBr.remove();
+            break; // Only remove the first occurrence
         }
-        // Remove any "has read this message" line (optional, but clean)
-        const readMsg = clone.querySelector('b');
-        if (readMsg && readMsg.textContent.includes('has read this message')) {
-            readMsg.remove();
-        }
-        let html = clone.innerHTML || '';
-        html = html.trim();
-        html = transformEmbeddedLinks(html);
-        return html;
     }
+    
+    // Do NOT remove "has read this message" – it stays in the content
+    
+    let html = clone.innerHTML || '';
+    html = html.trim();
+    html = transformEmbeddedLinks(html);
+    return html;
+}
 
     function getMessagePostDate($post) {
         const whenSpan = $post.querySelector('.when');
