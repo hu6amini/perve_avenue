@@ -300,21 +300,16 @@ const ForumPostsModule = (function () {
         return container;
     }
 
-    // Modified: accepts messages posts (body#msg) even without 'ee' prefix
     function isValidPost(postEl) {
         if (!postEl) return false;
-        // For normal forum posts
         const id = postEl.getAttribute('id');
         if (id && id.startsWith(CONFIG.POST_ID_PREFIX)) return true;
-        // For private messages (body#msg)
         if (document.body.id === 'msg') {
-            // Check if it has an MSID (via delete or reply link)
             return getMsidFromPost(postEl) !== null;
         }
         return false;
     }
 
-    // Modified: returns numeric postId for topics, or MSID string for messages
     function getPostId($post) {
         const fullId = $post.getAttribute('id');
         if (fullId && fullId.startsWith(CONFIG.POST_ID_PREFIX)) {
@@ -326,9 +321,7 @@ const ForumPostsModule = (function () {
         return null;
     }
 
-    // Extract MSID from a message post
     function getMsidFromPost($post) {
-        // Look for delete link (CODE=05) or reply link (CODE=04)
         const deleteLink = $post.querySelector('a[onclick*="CODE=05"]');
         if (deleteLink) {
             const match = deleteLink.getAttribute('onclick').match(/MSID=(\d+)/);
@@ -602,12 +595,24 @@ const ForumPostsModule = (function () {
         return dd ? dd.textContent.trim() : 'Unknown';
     }
 
+    // Modified: strips the "Original message sent on:" bold element
     function getMessageContent($post) {
         const contentTable = $post.querySelector('td.right.Item table.color');
         if (!contentTable) return '';
         const clone = contentTable.cloneNode(true);
-        // Remove any unwanted elements (none expected, but clean)
-        clone.querySelectorAll('.edit, .signature').forEach(el => el.remove());
+        // Remove any <b> containing "Original message sent on"
+        const originalMsgBold = clone.querySelector('b');
+        if (originalMsgBold && originalMsgBold.textContent.includes('Original message sent on')) {
+            originalMsgBold.remove();
+            // Also remove the following <br> if it exists
+            const nextBr = originalMsgBold.nextElementSibling;
+            if (nextBr && nextBr.tagName === 'BR') nextBr.remove();
+        }
+        // Remove any "has read this message" line (optional, but clean)
+        const readMsg = clone.querySelector('b');
+        if (readMsg && readMsg.textContent.includes('has read this message')) {
+            readMsg.remove();
+        }
         let html = clone.innerHTML || '';
         html = html.trim();
         html = transformEmbeddedLinks(html);
@@ -618,7 +623,6 @@ const ForumPostsModule = (function () {
         const whenSpan = $post.querySelector('.when');
         if (!whenSpan) return null;
         let dateText = whenSpan.textContent.trim();
-        // Remove "Sent on" prefix
         dateText = dateText.replace(/^Sent\s+on\s*/i, '');
         return parseDateFromTitle(dateText);
     }
@@ -1076,7 +1080,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (extended for messages)
+    // GENERATE MODERN CARD (extended for messages, icon-only buttons)
     // ============================================================================
     function formatNumber(num) {
         return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -1162,7 +1166,8 @@ const ForumPostsModule = (function () {
             if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
             if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
             if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
-            if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i> Reply</button>';
+            // Message-specific actions (icon-only, no text)
+            if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i></button>';
         }
 
         let memberActionsHtml = '';
@@ -1189,8 +1194,8 @@ const ForumPostsModule = (function () {
             let messageActionsHtml = '';
             if (data.isMessage && (data.availableActions?.friend || data.availableActions?.block)) {
                 messageActionsHtml = '<div class="post-message-actions">';
-                if (data.availableActions.friend) messageActionsHtml += '<button class="action-icon" title="Add as Friend" aria-label="Add as Friend" data-action="friend" data-pid="' + data.postId + '"><i class="fa-regular fa-user-plus"></i> Friend</button>';
-                if (data.availableActions.block) messageActionsHtml += '<button class="action-icon" title="Block User" aria-label="Block User" data-action="block" data-pid="' + data.postId + '"><i class="fa-regular fa-user-slash"></i> Block</button>';
+                if (data.availableActions.friend) messageActionsHtml += '<button class="action-icon" title="Add as Friend" aria-label="Add as Friend" data-action="friend" data-pid="' + data.postId + '"><i class="fa-regular fa-user-plus"></i></button>';
+                if (data.availableActions.block) messageActionsHtml += '<button class="action-icon" title="Block User" aria-label="Block User" data-action="block" data-pid="' + data.postId + '"><i class="fa-regular fa-ban"></i></button>';
                 messageActionsHtml += '</div>';
             }
             footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
@@ -1294,7 +1299,6 @@ const ForumPostsModule = (function () {
     }
 
     function handleDelete(pid) {
-        // Check if it's a message post
         if (document.body.id === 'msg') {
             handleMessageDelete(pid);
             return;
@@ -1396,7 +1400,6 @@ const ForumPostsModule = (function () {
         const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
         if (deleteLink) {
             const onclick = deleteLink.getAttribute('onclick');
-            // Extract the URL from the onclick string
             const match = onclick.match(/window\.location='([^']+)'/);
             if (match) window.location.href = match[1];
             else deleteLink.click();
@@ -1408,7 +1411,6 @@ const ForumPostsModule = (function () {
         if (!originalPost) return;
         const form = originalPost.querySelector('form[name="addmem"]');
         if (form) {
-            // Ensure b=0
             const bInput = form.querySelector('input[name="b"]');
             if (bInput) bInput.value = '0';
             form.submit();
@@ -1427,7 +1429,6 @@ const ForumPostsModule = (function () {
     }
 
     function findOriginalMessagePost(msid) {
-        // Find any element that contains a link with this MSID
         const linkWithMsid = document.querySelector(`a[href*="MSID=${msid}"], a[onclick*="MSID=${msid}"]`);
         if (linkWithMsid) return linkWithMsid.closest('.post');
         return null;
@@ -1514,7 +1515,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // MESSAGE POSTS CONVERSION (NEW)
+    // MESSAGE POSTS CONVERSION
     // ============================================================================
     async function convertMessages() {
         if (conversionInProgress) {
@@ -1825,7 +1826,6 @@ const ForumPostsModule = (function () {
                 }
                 return;
             }
-            // Route to the appropriate converter
             if (document.body.id === 'msg') {
                 convertMessages().catch(err => console.error('[PostsModule] Messages conversion error', err));
             } else if (document.body.id === 'send' && document.querySelector('.summary')) {
