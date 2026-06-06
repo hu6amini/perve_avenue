@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module (Refactored)
+// Forum Modernizer - Posts Module (Refactored + Messages Support)
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -48,7 +48,7 @@ const ForumPostsModule = (function () {
     let currentAbortController = null;
 
     // ============================================================================
-    // BASIC HTML ESCAPE (already available via Utils, but fallback)
+    // BASIC HTML ESCAPE
     // ============================================================================
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return '';
@@ -58,7 +58,7 @@ const ForumPostsModule = (function () {
     };
 
     // ============================================================================
-    // HTML SANITIZER (removes scripts, event handlers, dangerous elements)
+    // HTML SANITIZER
     // ============================================================================
     const sanitizeHTML = (dirty) => {
         if (!dirty || typeof dirty !== 'string') return '';
@@ -69,12 +69,10 @@ const ForumPostsModule = (function () {
         const toRemove = [];
         let node;
         while ((node = walker.nextNode())) {
-            // Remove script and iframe elements
             if (node.tagName === 'SCRIPT' || node.tagName === 'IFRAME') {
                 toRemove.push(node);
                 continue;
             }
-            // Strip event handlers and javascript: URLs
             const attrs = node.attributes;
             for (let i = attrs.length - 1; i >= 0; i--) {
                 const attr = attrs[i];
@@ -87,12 +85,10 @@ const ForumPostsModule = (function () {
         return template.innerHTML;
     };
 
-    // Set sanitized HTML on an element
     const setSanitizedHTML = (element, htmlString) => {
         element.innerHTML = sanitizeHTML(htmlString);
     };
 
-    // Create element from sanitized HTML string
     const createElementFromHTML = (htmlString) => {
         const div = document.createElement('div');
         setSanitizedHTML(div, htmlString);
@@ -100,11 +96,11 @@ const ForumPostsModule = (function () {
     };
 
     // ============================================================================
-    // PAGE VALIDATION
+    // PAGE VALIDATION (added body#msg)
     // ============================================================================
     function isValidPage() {
         const bodyId = document.body.id;
-        if (bodyId === 'topic' || bodyId === 'send' || bodyId === 'blog') {
+        if (bodyId === 'topic' || bodyId === 'send' || bodyId === 'blog' || bodyId === 'msg') {
             return true;
         }
         if (bodyId === 'search') {
@@ -166,7 +162,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // API USER DATA FETCHING WITH ABORT & TIMEOUT
+    // API USER DATA FETCHING
     // ============================================================================
     async function fetchUserData(mid, signal) {
         if (userDataCache.has(mid)) return userDataCache.get(mid);
@@ -191,14 +187,13 @@ const ForumPostsModule = (function () {
     async function fetchMultipleUsers(midList) {
         const uniqueMids = [...new Set(midList.filter(Boolean))];
         if (uniqueMids.length === 0) return;
-        // Create a new AbortController for this batch
         currentAbortController?.abort();
         currentAbortController = new AbortController();
         const signal = currentAbortController.signal;
         try {
             await Promise.all(uniqueMids.map(mid => fetchUserData(mid, signal)));
         } catch (e) {
-            // Ignore batch errors, individual fetch already logs
+            // ignore batch errors
         }
     }
 
@@ -276,7 +271,6 @@ const ForumPostsModule = (function () {
         let wrapper = document.getElementById('modern-forum-wrapper');
         const carouselWrapper = document.querySelector('.carousel-wrapper');
 
-        // Ensure the wrapper is positioned correctly
         if (wrapper && carouselWrapper && !wrapper.contains(carouselWrapper)) {
             if (wrapper.compareDocumentPosition(carouselWrapper) & Node.DOCUMENT_POSITION_FOLLOWING) {
                 carouselWrapper.parentNode.insertBefore(wrapper, carouselWrapper.nextSibling);
@@ -306,16 +300,46 @@ const ForumPostsModule = (function () {
         return container;
     }
 
+    // Modified: accepts messages posts (body#msg) even without 'ee' prefix
     function isValidPost(postEl) {
         if (!postEl) return false;
+        // For normal forum posts
         const id = postEl.getAttribute('id');
-        return id && id.startsWith(CONFIG.POST_ID_PREFIX) && postEl.tagName !== 'BODY';
+        if (id && id.startsWith(CONFIG.POST_ID_PREFIX)) return true;
+        // For private messages (body#msg)
+        if (document.body.id === 'msg') {
+            // Check if it has an MSID (via delete or reply link)
+            return getMsidFromPost(postEl) !== null;
+        }
+        return false;
     }
 
+    // Modified: returns numeric postId for topics, or MSID string for messages
     function getPostId($post) {
         const fullId = $post.getAttribute('id');
-        if (!fullId || !fullId.startsWith(CONFIG.POST_ID_PREFIX)) return null;
-        return fullId.replace(CONFIG.POST_ID_PREFIX, '');
+        if (fullId && fullId.startsWith(CONFIG.POST_ID_PREFIX)) {
+            return fullId.replace(CONFIG.POST_ID_PREFIX, '');
+        }
+        if (document.body.id === 'msg') {
+            return getMsidFromPost($post);
+        }
+        return null;
+    }
+
+    // Extract MSID from a message post
+    function getMsidFromPost($post) {
+        // Look for delete link (CODE=05) or reply link (CODE=04)
+        const deleteLink = $post.querySelector('a[onclick*="CODE=05"]');
+        if (deleteLink) {
+            const match = deleteLink.getAttribute('onclick').match(/MSID=(\d+)/);
+            if (match) return match[1];
+        }
+        const replyLink = $post.querySelector('a[href*="CODE=04"]');
+        if (replyLink) {
+            const match = replyLink.href.match(/MSID=(\d+)/);
+            if (match) return match[1];
+        }
+        return null;
     }
 
     function getMidFromPost($post) {
@@ -333,7 +357,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // DATA EXTRACTION
+    // DATA EXTRACTION (existing for topics)
     // ============================================================================
     function getUsername($post) {
         const nickLink = $post.querySelector('.nick a');
@@ -421,7 +445,7 @@ const ForumPostsModule = (function () {
     function getSignatureHtml($post) {
         const signature = $post.querySelector('.signature');
         if (!signature) return '';
-        return signature.innerHTML; // will be sanitized later
+        return signature.innerHTML;
     }
 
     function getEditInfo($post) {
@@ -554,7 +578,53 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // BLOG ARTICLE DATA EXTRACTION
+    // MESSAGE POST DATA EXTRACTION (for body#msg)
+    // ============================================================================
+    function getMessageUsername($post) {
+        const nickLink = $post.querySelector('.nick a');
+        return nickLink ? nickLink.textContent.trim() : 'Unknown';
+    }
+
+    function getMessageGroup($post) {
+        const groupDd = $post.querySelector('.u_group dd');
+        return groupDd ? groupDd.textContent.trim() : 'Member';
+    }
+
+    function getMessagePostCount($post) {
+        const dd = $post.querySelector('.u_posts dd');
+        if (!dd) return '0';
+        const text = dd.textContent.trim();
+        return text.replace(/[^0-9]/g, '') || '0';
+    }
+
+    function getMessageJoinDate($post) {
+        const dd = $post.querySelector('.u_joined dd');
+        return dd ? dd.textContent.trim() : 'Unknown';
+    }
+
+    function getMessageContent($post) {
+        const contentTable = $post.querySelector('td.right.Item table.color');
+        if (!contentTable) return '';
+        const clone = contentTable.cloneNode(true);
+        // Remove any unwanted elements (none expected, but clean)
+        clone.querySelectorAll('.edit, .signature').forEach(el => el.remove());
+        let html = clone.innerHTML || '';
+        html = html.trim();
+        html = transformEmbeddedLinks(html);
+        return html;
+    }
+
+    function getMessagePostDate($post) {
+        const whenSpan = $post.querySelector('.when');
+        if (!whenSpan) return null;
+        let dateText = whenSpan.textContent.trim();
+        // Remove "Sent on" prefix
+        dateText = dateText.replace(/^Sent\s+on\s*/i, '');
+        return parseDateFromTitle(dateText);
+    }
+
+    // ============================================================================
+    // BLOG ARTICLE DATA EXTRACTION (unchanged)
     // ============================================================================
     function getBlogArticleData(articleLi) {
         const postId = getPostId(articleLi);
@@ -577,12 +647,10 @@ const ForumPostsModule = (function () {
 
         const editInfo = getEditInfo(articleLi);
 
-        // Content extraction
         const contentDiv = articleLi.querySelector('.center .color');
         let contentHtml = '';
         if (contentDiv) {
             const clone = contentDiv.cloneNode(true);
-            // Remove reaction widget and preceding <br>
             const reactionWidget = clone.querySelector('.st-emoji-widget');
             if (reactionWidget) {
                 let prev = reactionWidget.previousSibling;
@@ -593,7 +661,6 @@ const ForumPostsModule = (function () {
                 }
                 reactionWidget.remove();
             }
-            // Remove edit span and preceding <br>
             const editSpan = clone.querySelector('.edit');
             if (editSpan) {
                 let prev = editSpan.previousSibling;
@@ -604,7 +671,6 @@ const ForumPostsModule = (function () {
                 }
                 editSpan.remove();
             }
-            // Remove trailing <br>
             while (clone.lastChild && clone.lastChild.nodeType === Node.ELEMENT_NODE && clone.lastChild.tagName === 'BR') {
                 clone.removeChild(clone.lastChild);
             }
@@ -625,28 +691,18 @@ const ForumPostsModule = (function () {
         const availableActions = getAvailableActions(articleLi, postId);
 
         return {
-            postId,
-            mid,
-            username,
-            title,
-            permalink,
-            postDate,
-            absoluteDate,
-            contentHtml,
-            editInfo,
-            likes,
+            postId, mid, username, title, permalink, postDate, absoluteDate,
+            contentHtml, editInfo, likes,
             hasReactions: reactionData.hasReactions,
             reactionCount: reactionData.reactionCount,
             reactions: reactionData.reactions,
-            commentsCount,
-            viewsCount,
-            availableActions,
+            commentsCount, viewsCount, availableActions,
             originalPost: articleLi
         };
     }
 
     // ============================================================================
-    // GENERATE MODERN BLOG CARD (template literal free)
+    // GENERATE MODERN BLOG CARD (unchanged)
     // ============================================================================
     function generateBlogPost(data, apiUser) {
         const user = apiUser || {};
@@ -697,7 +753,6 @@ const ForumPostsModule = (function () {
             editHtml = '<div class="post-edit-info"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited <time datetime="' + isoEdit + '" title="' + escapeHtml(titleEdit) + '">' + escapeHtml(data.editInfo.relative) + '</time></div>';
         }
 
-        // Reactions and actions
         let likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '"><i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
         if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
         likeButton += '</button>';
@@ -730,12 +785,12 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // EMBEDDED LINK TRANSFORMATION (sanitized output)
+    // EMBEDDED LINK TRANSFORMATION (unchanged)
     // ============================================================================
     function transformEmbeddedLinks(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent; // only for parsing, we'll sanitize later
+        tempDiv.innerHTML = htmlContent;
         const embedContainers = tempDiv.querySelectorAll('.ffb_embedlink');
         for (const container of embedContainers) {
             const modernEmbed = convertToModernEmbed(container);
@@ -826,7 +881,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // REACTION POPUP (no eval, no innerHTML)
+    // REACTION POPUP (unchanged)
     // ============================================================================
     function getAvailableReactions(postId) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
@@ -991,7 +1046,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // REACTION BUTTONS HTML (no template literals)
+    // REACTION BUTTONS HTML (unchanged)
     // ============================================================================
     function generateReactionButtons(data) {
         if (!data.hasReactions || data.reactionCount === 0) {
@@ -1021,7 +1076,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (regular post)
+    // GENERATE MODERN CARD (extended for messages)
     // ============================================================================
     function formatNumber(num) {
         return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -1067,17 +1122,19 @@ const ForumPostsModule = (function () {
         if (user?.registration) {
             const date = new Date(user.registration);
             joinDateFormatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } else if (data.joinDate) {
+            joinDateFormatted = data.joinDate;
         }
 
         let likeButton = '';
-        if (!data.hideFooter) {
+        if (!data.hideFooter && !data.isMessage) {
             likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '"><i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
             if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
             likeButton += '</button>';
         }
 
         let reactionsHtml = '';
-        if (!data.isMemberPostsPage && !data.hideFooter) {
+        if (!data.isMemberPostsPage && !data.hideFooter && !data.isMessage) {
             reactionsHtml = generateReactionButtons({
                 postId: data.postId,
                 hasReactions: data.hasReactions,
@@ -1105,6 +1162,7 @@ const ForumPostsModule = (function () {
             if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
             if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
             if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
+            if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i> Reply</button>';
         }
 
         let memberActionsHtml = '';
@@ -1121,17 +1179,24 @@ const ForumPostsModule = (function () {
 
         const statsHtml = '<div class="user-rank"><i class="' + (data.rankIconClass || 'fa-medal fa-regular') + '" aria-hidden="true"></i> ' + (data.userTitle || 'Member') + '</div>' +
             '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
-            (!data.isMemberPostsPage ? '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' : '') +
+            (!data.isMemberPostsPage && !data.isMessage ? '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' : '') +
             '<div class="user-joined"><i class="fa-regular fa-user-plus"></i> ' + joinDateFormatted + '</div>';
 
         const headerActionsHtml = actionsHtml ? '<div class="post-actions">' + actionsHtml + '</div>' : '';
 
         let footerHtml = '';
         if (!data.hideFooter) {
-            footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + ipHtml + '</footer>';
+            let messageActionsHtml = '';
+            if (data.isMessage && (data.availableActions?.friend || data.availableActions?.block)) {
+                messageActionsHtml = '<div class="post-message-actions">';
+                if (data.availableActions.friend) messageActionsHtml += '<button class="action-icon" title="Add as Friend" aria-label="Add as Friend" data-action="friend" data-pid="' + data.postId + '"><i class="fa-regular fa-user-plus"></i> Friend</button>';
+                if (data.availableActions.block) messageActionsHtml += '<button class="action-icon" title="Block User" aria-label="Block User" data-action="block" data-pid="' + data.postId + '"><i class="fa-regular fa-user-slash"></i> Block</button>';
+                messageActionsHtml += '</div>';
+            }
+            footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
         }
 
-        return '<article class="post-card ' + groupCssClass + '" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        return '<article class="post-card ' + groupCssClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
             '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
@@ -1142,7 +1207,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // FAVICON INJECTION FOR TEXT-ONLY LINKS IN POST-MESSAGE
+    // FAVICON INJECTION
     // ============================================================================
     function applyFaviconsToMessageLinks(container) {
         if (!container) return;
@@ -1165,7 +1230,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // REFRESH FUNCTIONS
+    // REFRESH FUNCTIONS (unchanged)
     // ============================================================================
     function refreshLikeDisplay(postId) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
@@ -1212,7 +1277,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // EVENT HANDLERS – sanitized, no eval
+    // EVENT HANDLERS – extended for messages
     // ============================================================================
     function handleQuote(pid) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
@@ -1229,6 +1294,11 @@ const ForumPostsModule = (function () {
     }
 
     function handleDelete(pid) {
+        // Check if it's a message post
+        if (document.body.id === 'msg') {
+            handleMessageDelete(pid);
+            return;
+        }
         if (confirm('Are you sure you want to delete this post?')) {
             if (typeof window.delete_post === 'function') {
                 window.delete_post(pid);
@@ -1270,7 +1340,7 @@ const ForumPostsModule = (function () {
                 if (overlayLink) {
                     if (typeof $ !== 'undefined' && $.fn.overlay) {
                         if (!overlayLink.hasAttribute('data-overlay-init')) {
-                            $(overlayLink).overlay({ /* jshint ignore:line */
+                            $(overlayLink).overlay({
                                 onBeforeLoad: function() {
                                     var wrap = this.getOverlay();
                                     var content = wrap.find('div');
@@ -1309,6 +1379,58 @@ const ForumPostsModule = (function () {
 
     function handleReact(pid, buttonElement) {
         createCustomReactionPopup(buttonElement, pid);
+    }
+
+    // Message-specific handlers
+    function handleMessageReply(msid) {
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const replyLink = originalPost.querySelector('a[href*="CODE=04"]');
+        if (replyLink) window.location.href = replyLink.getAttribute('href');
+    }
+
+    function handleMessageDelete(msid) {
+        if (!confirm('Are you sure you want to delete this message?')) return;
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
+        if (deleteLink) {
+            const onclick = deleteLink.getAttribute('onclick');
+            // Extract the URL from the onclick string
+            const match = onclick.match(/window\.location='([^']+)'/);
+            if (match) window.location.href = match[1];
+            else deleteLink.click();
+        }
+    }
+
+    function handleMessageFriend(msid) {
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const form = originalPost.querySelector('form[name="addmem"]');
+        if (form) {
+            // Ensure b=0
+            const bInput = form.querySelector('input[name="b"]');
+            if (bInput) bInput.value = '0';
+            form.submit();
+        }
+    }
+
+    function handleMessageBlock(msid) {
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const form = originalPost.querySelector('form[name="addmem"]');
+        if (form) {
+            const bInput = form.querySelector('input[name="b"]');
+            if (bInput) bInput.value = '1';
+            form.submit();
+        }
+    }
+
+    function findOriginalMessagePost(msid) {
+        // Find any element that contains a link with this MSID
+        const linkWithMsid = document.querySelector(`a[href*="MSID=${msid}"], a[onclick*="MSID=${msid}"]`);
+        if (linkWithMsid) return linkWithMsid.closest('.post');
+        return null;
     }
 
     function attachEventHandlers() {
@@ -1370,6 +1492,19 @@ const ForumPostsModule = (function () {
                 handleReact(btn.getAttribute('data-pid'), btn);
             }
         });
+        // Message specific actions
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="reply"]');
+            if (btn) { e.preventDefault(); handleMessageReply(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="friend"]');
+            if (btn) { e.preventDefault(); handleMessageFriend(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="block"]');
+            if (btn) { e.preventDefault(); handleMessageBlock(btn.getAttribute('data-pid')); }
+        });
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && activePopup) {
                 activePopup.remove();
@@ -1379,7 +1514,86 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // MAIN CONVERSION PIPELINE
+    // MESSAGE POSTS CONVERSION (NEW)
+    // ============================================================================
+    async function convertMessages() {
+        if (conversionInProgress) {
+            conversionPending = true;
+            return;
+        }
+        conversionInProgress = true;
+        conversionPending = false;
+        try {
+            const container = getPostsContainer();
+            setSanitizedHTML(container, '');
+            convertedPostIds.clear();
+
+            const posts = document.querySelectorAll(CONFIG.POST_SELECTOR);
+            const validPosts = Array.from(posts).filter(isValidPost);
+            if (validPosts.length === 0) return;
+
+            const mids = [];
+            const postsData = [];
+
+            for (let i = 0; i < validPosts.length; i++) {
+                const $post = validPosts[i];
+                const msid = getMsidFromPost($post);
+                if (!msid || convertedPostIds.has(msid)) continue;
+                const mid = getMidFromPost($post);
+                mids.push(mid);
+
+                const postDate = getMessagePostDate($post);
+                const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+
+                postsData.push({
+                    postId: msid,
+                    mid: mid,
+                    originalPost: $post,
+                    username: getMessageUsername($post),
+                    groupText: getMessageGroup($post),
+                    postCount: getMessagePostCount($post),
+                    joinDate: getMessageJoinDate($post),
+                    contentHtml: getMessageContent($post),
+                    relativeTime: relativeTime,
+                    postDate: postDate,
+                    isMessage: true,
+                    hideFooter: false,
+                    hideActions: false,
+                    availableActions: {
+                        reply: true,
+                        delete: true,
+                        friend: true,
+                        block: true
+                    },
+                    postNumber: i + 1
+                });
+                convertedPostIds.add(msid);
+            }
+
+            await fetchMultipleUsers(mids);
+            for (const data of postsData) {
+                const apiUser = data.mid ? userDataCache.get(data.mid) : null;
+                const completeData = { ...data, apiUser, originalIdPrefix: '' };
+                const cardHtml = generateModernPost(completeData);
+                const card = createElementFromHTML(cardHtml);
+                container.appendChild(card);
+                applyFaviconsToMessageLinks(card);
+            }
+
+            attachEventHandlers();
+            console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
+        } catch (err) {
+            console.error('[PostsModule] Messages conversion error:', err);
+        } finally {
+            conversionInProgress = false;
+            if (conversionPending) {
+                convertMessages();
+            }
+        }
+    }
+
+    // ============================================================================
+    // MAIN CONVERSION PIPELINE (existing)
     // ============================================================================
     async function convertAllPosts() {
         if (conversionInProgress) {
@@ -1511,7 +1725,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // SUMMARY CONVERSION
+    // SUMMARY CONVERSION (unchanged)
     // ============================================================================
     async function convertSummaryPosts() {
         if (document.body.id !== 'send') return;
@@ -1586,7 +1800,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // INITIALIZE
+    // INITIALIZE (extended)
     // ============================================================================
     function initialize() {
         if (isInitialized) return Promise.resolve();
@@ -1611,7 +1825,10 @@ const ForumPostsModule = (function () {
                 }
                 return;
             }
-            if (document.body.id === 'send' && document.querySelector('.summary')) {
+            // Route to the appropriate converter
+            if (document.body.id === 'msg') {
+                convertMessages().catch(err => console.error('[PostsModule] Messages conversion error', err));
+            } else if (document.body.id === 'send' && document.querySelector('.summary')) {
                 convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
             } else {
                 convertAllPosts().catch(err => console.error('[PostsModule] Init error', err));
@@ -1625,7 +1842,8 @@ const ForumPostsModule = (function () {
                         if (!isValidPost(node)) return;
                         const postId = getPostId(node);
                         if (!postId || convertedPostIds.has(postId)) return;
-                        convertAllPosts();
+                        if (document.body.id === 'msg') convertMessages();
+                        else convertAllPosts();
                     }
                 });
                 globalThis.forumObserver.register({
