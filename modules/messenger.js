@@ -470,7 +470,7 @@ function emojiToCodePoint(emoji) {
             var placeholderStart = currentPos;
             var placeholderEnd = currentPos + '⬆️ Uploading...'.length;
 
-            fetch('https://image-chest-proxy.nhristakiev.workers.dev/', {
+            fetch('https://freeimage-upload-proxy.nhristakiev.workers.dev/', {
                 method: 'POST',
                 body: formData
             })
