@@ -21,10 +21,6 @@ var MessengerModule = (function(Utils, EventBus) {
     function initialize() {
         if (isInitialized) return Promise.resolve();
         if (document.body.id !== 'msg') return Promise.resolve();
-        // Do NOT build messenger on pages where the posts container exists (e.g., topic view)
-        if (document.getElementById('posts-container')) {
-            return Promise.resolve();
-        }
         if (document.getElementById('modern-messenger')) {
             isInitialized = true;
             return Promise.resolve();
@@ -1313,6 +1309,13 @@ renderHTML({ node, HTMLAttributes }) {
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) return;
         if (document.getElementById('modern-messenger')) return;
+
+        // If a legacy .post element exists on the page, do not build the messenger
+        if (document.querySelector('.post')) {
+            console.warn('[MessengerModule] Legacy .post element found – skipping messenger');
+            return;
+        }
+
         var carousel = wrapper.querySelector('.carousel-wrapper');
         var messengerContainer = document.createElement('div');
         messengerContainer.id = 'modern-messenger';
