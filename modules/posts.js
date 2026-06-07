@@ -1639,9 +1639,12 @@ function handleSpoilerToggle(header) {
         });
         // Spoiler toggle
         document.addEventListener('click', function (e) {
-            const header = e.target.closest('.spoiler-header');
-            if (header) { e.preventDefault(); handleSpoilerToggle(header); }
-        });
+    const header = e.target.closest('.spoiler-header');
+    if (header) {
+        e.preventDefault();
+        handleSpoilerToggle(header);
+    }
+});
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && activePopup) {
                 activePopup.remove();
