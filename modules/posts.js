@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.2 (fixed author extraction from full text)
+// Forum Modernizer - Posts Module v2.2 (full, with author extraction fix)
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -43,6 +43,9 @@ const ForumPostsModule = (function () {
     const userDataCache = new Map();
     let currentAbortController = null;
 
+    // ============================================================================
+    // BASIC HTML ESCAPE
+    // ============================================================================
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return '';
         const div = document.createElement('div');
@@ -50,6 +53,9 @@ const ForumPostsModule = (function () {
         return div.innerHTML;
     };
 
+    // ============================================================================
+    // HTML SANITIZER
+    // ============================================================================
     const sanitizeHTML = (dirty) => {
         if (!dirty || typeof dirty !== 'string') return '';
         const template = document.createElement('template');
@@ -85,6 +91,9 @@ const ForumPostsModule = (function () {
         return div.firstElementChild;
     };
 
+    // ============================================================================
+    // PAGE VALIDATION
+    // ============================================================================
     function isValidPage() {
         const bodyId = document.body.id;
         if (bodyId === 'topic' || bodyId === 'send' || bodyId === 'blog' || bodyId === 'msg') return true;
@@ -92,6 +101,9 @@ const ForumPostsModule = (function () {
         return false;
     }
 
+    // ============================================================================
+    // RELATIVE TIME & DATE PARSING
+    // ============================================================================
     function parseDateFromTitle(title) {
         if (!title) return null;
         title = title.replace(/(\d{1,2}):(\d{2})\s*(AM|PM)?:(\d+)/i, '$1:$2 $3');
@@ -134,6 +146,9 @@ const ForumPostsModule = (function () {
         return rtf.format(-Math.floor(absDiff / 31536000), 'year');
     }
 
+    // ============================================================================
+    // API USER DATA FETCHING
+    // ============================================================================
     async function fetchUserData(mid, signal) {
         if (userDataCache.has(mid)) return userDataCache.get(mid);
         try {
@@ -163,6 +178,9 @@ const ForumPostsModule = (function () {
         } catch (e) {}
     }
 
+    // ============================================================================
+    // AVATAR HANDLING
+    // ============================================================================
     function isValidAvatarUrl(url) {
         if (!url || typeof url !== 'string') return false;
         const trimmed = url.trim();
@@ -225,6 +243,9 @@ const ForumPostsModule = (function () {
         return { type: 'initial', initial: safeInitial, bgColor: bgColor };
     }
 
+    // ============================================================================
+    // HELPERS
+    // ============================================================================
     function getPostsContainer() {
         let wrapper = document.getElementById('modern-forum-wrapper');
         const carouselWrapper = document.querySelector('.carousel-wrapper');
@@ -301,9 +322,9 @@ const ForumPostsModule = (function () {
         return null;
     }
 
-    // --------------------------------------------------------------------------
-    // DATA EXTRACTION (topics, messages, blogs) - same as v2.1 (unchanged)
-    // --------------------------------------------------------------------------
+    // ============================================================================
+    // DATA EXTRACTION (topics)
+    // ============================================================================
     function getUsername($post) {
         const nickLink = $post.querySelector('.nick a');
         return nickLink ? nickLink.textContent.trim() : 'Unknown';
@@ -479,6 +500,9 @@ const ForumPostsModule = (function () {
         return { topicLink, topicTitle, forumLink, forumName };
     }
 
+    // ============================================================================
+    // MESSAGE DATA EXTRACTION
+    // ============================================================================
     function getMessageUsername($post) {
         const nickLink = $post.querySelector('.nick a');
         return nickLink ? nickLink.textContent.trim() : 'Unknown';
@@ -524,6 +548,9 @@ const ForumPostsModule = (function () {
         return parseDateFromTitle(dateText);
     }
 
+    // ============================================================================
+    // BLOG DATA EXTRACTION
+    // ============================================================================
     function getBlogArticleData(articleLi) {
         const postId = getPostId(articleLi);
         let mid = null;
@@ -589,8 +616,10 @@ const ForumPostsModule = (function () {
         };
     }
 
+    // ============================================================================
+    // GENERATE MODERN BLOG CARD
+    // ============================================================================
     function generateBlogPost(data, apiUser) {
-        // unchanged from v2.1 (keep as is)
         const user = apiUser || {};
         const username = data.username;
         const userId = data.mid;
@@ -658,7 +687,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // EMBEDDED LINK TRANSFORMATION (unchanged)
+    // EMBEDDED LINK TRANSFORMATION
     // ============================================================================
     function transformEmbeddedLinks(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -836,7 +865,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // POST-PROCESSING (image-aware, same as v2.1)
+    // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
     function initQuotesAndSpoilers() {
         const quotes = document.querySelectorAll('.modern-quote.long-quote');
@@ -883,48 +912,847 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // REACTION POPUP (shortened – include all from v2.1)
+    // REACTION POPUP (unchanged from v2.1 – include full implementation)
     // ============================================================================
-    function getAvailableReactions(postId) { /* unchanged – keep full version from v2.1 */ }
-    function getDefaultEmojis() { return [{ name: 'kekw', alt: ':kekw:', src: '', rid: '10' }, { name: 'rofl', alt: ':rofl:', src: '', rid: '1' }]; }
-    function createCustomReactionPopup(buttonElement, postId) { /* unchanged – keep full from v2.1 */ }
-    function activePopupClickHandler(e) { /* unchanged */ }
-    function handleReactionCountClick(pid) { /* unchanged */ }
-    function generateReactionButtons(data) { /* unchanged */ }
-    function sanitizeGroupName(groupName) { return groupName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
-    function formatNumber(num) { return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+    function getAvailableReactions(postId) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return Promise.resolve([]);
+        const emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return Promise.resolve([]);
+        const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+        if (!previewTrigger) return Promise.resolve([]);
+        previewTrigger.style.display = 'block';
+        previewTrigger.click();
+        previewTrigger.style.display = '';
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const originalPopup = document.querySelector('.st-emoji-pop');
+                const emojis = [];
+                if (originalPopup) {
+                    originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
+                        const dataFui = el.getAttribute('data-fui');
+                        const img = el.querySelector('img');
+                        const imgSrc = img ? img.getAttribute('src') : '';
+                        const imgAlt = img ? img.getAttribute('alt') : '';
+                        let name = dataFui ? dataFui.replace(/:/g, '') : '';
+                        if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
+                        emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
+                    });
+                }
+                if (originalPopup) originalPopup.remove();
+                resolve(emojis);
+            }, 150);
+        });
+    }
 
-    function generateModernPost(data) { /* unchanged – keep full from v2.1 */ }
-    function applyFaviconsToMessageLinks(container) { /* unchanged */ }
-    function refreshLikeDisplay(postId) { /* unchanged */ }
-    function refreshReactionDisplay(postId) { /* unchanged */ }
+    function getDefaultEmojis() {
+        return [
+            { name: 'kekw', alt: ':kekw:', src: '', rid: '10' },
+            { name: 'rofl', alt: ':rofl:', src: '', rid: '1' }
+        ];
+    }
+
+    function createCustomReactionPopup(buttonElement, postId) {
+        if (activePopup) {
+            activePopup.remove();
+            activePopup = null;
+            document.removeEventListener('click', activePopupClickHandler);
+        }
+        const buttonRect = buttonElement.getBoundingClientRect();
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (originalPost) {
+            const emojiContainer = originalPost.querySelector('.st-emoji-container');
+            if (emojiContainer) {
+                const previewTrigger = emojiContainer.querySelector('.st-emoji-preview');
+                if (previewTrigger) {
+                    previewTrigger.style.display = 'block';
+                    previewTrigger.click();
+                    previewTrigger.style.display = '';
+                }
+            }
+        }
+        let loadingPopup = document.createElement('div');
+        loadingPopup.className = 'custom-reaction-popup loading';
+        loadingPopup.style.cssText = 'position:fixed;z-index:100000;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:20px;border:1px solid #333;left:' + (buttonRect.left - 50) + 'px;top:' + (buttonRect.bottom + 10) + 'px;color:white;font-size:14px;';
+        loadingPopup.textContent = 'Loading reactions...';
+        document.body.appendChild(loadingPopup);
+        setTimeout(() => {
+            const originalPopup = document.querySelector('.st-emoji-pop');
+            let emojis = [];
+            if (originalPopup) {
+                originalPopup.querySelectorAll('.st-emoji-content').forEach(el => {
+                    const dataFui = el.getAttribute('data-fui');
+                    const img = el.querySelector('img');
+                    const imgSrc = img ? img.getAttribute('src') : '';
+                    const imgAlt = img ? img.getAttribute('alt') : '';
+                    let name = dataFui ? dataFui.replace(/:/g, '') : '';
+                    if (!name && imgAlt) name = imgAlt.replace(/:/g, '');
+                    emojis.push({ name, alt: dataFui || imgAlt, src: imgSrc, rid: el.getAttribute('data-rid') });
+                });
+            }
+            loadingPopup.remove();
+            if (emojis.length === 0) emojis = getDefaultEmojis();
+            const popup = document.createElement('div');
+            popup.className = 'custom-reaction-popup';
+            popup.style.cssText = 'position:fixed;z-index:100001;background:#1a1a1a;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);padding:12px;border:1px solid #333;left:' + (buttonRect.left - 100) + 'px;top:' + (buttonRect.bottom + 10) + 'px;';
+            const emojiGrid = document.createElement('div');
+            emojiGrid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;';
+            emojis.forEach(emoji => {
+                const emojiItem = document.createElement('div');
+                emojiItem.className = 'custom-emoji-item';
+                emojiItem.style.cssText = 'cursor:pointer;padding:8px;text-align:center;border-radius:8px;transition:background 0.2s;';
+                const img = document.createElement('img');
+                img.src = emoji.src || 'https://images.weserv.nl/?url=https://upload.forumfree.net/i/fc11517378/emojis/' + encodeURIComponent(emoji.name) + '.png&output=webp&maxage=1y&q=90&il&af&l=9';
+                img.alt = emoji.alt || ':' + emoji.name + ':';
+                img.style.cssText = 'width:32px;height:32px;object-fit:contain;';
+                img.loading = 'lazy';
+                img.onerror = function () { if (!this.src.includes('twemoji')) this.src = 'https://twemoji.maxcdn.com/v/latest/svg/1f606.svg'; };
+                emojiItem.appendChild(img);
+                emojiItem.addEventListener('mouseenter', function () { this.style.backgroundColor = '#333'; });
+                emojiItem.addEventListener('mouseleave', function () { this.style.backgroundColor = 'transparent'; });
+                emojiItem.addEventListener('click', function () {
+                    const originalPopup = document.querySelector('.st-emoji-pop');
+                    if (originalPopup) {
+                        const reactionElements = originalPopup.querySelectorAll('.st-emoji-content');
+                        let found = false;
+                        for (const el of reactionElements) {
+                            const dataFui = el.getAttribute('data-fui');
+                            const imgEl = el.querySelector('img');
+                            const imgAlt = imgEl ? imgEl.getAttribute('alt') : '';
+                            if (dataFui === emoji.alt || imgAlt === emoji.alt || dataFui === ':' + emoji.name + ':' || (emoji.rid && el.getAttribute('data-rid') === emoji.rid)) {
+                                el.click();
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found && reactionElements.length > 0) reactionElements[0].click();
+                    }
+                    popup.remove();
+                    activePopup = null;
+                    setTimeout(() => refreshReactionDisplay(postId), CONFIG.REACTION_DELAY);
+                });
+                emojiGrid.appendChild(emojiItem);
+            });
+            popup.appendChild(emojiGrid);
+            document.body.appendChild(popup);
+            activePopup = popup;
+            document.addEventListener('click', activePopupClickHandler);
+        }, 200);
+    }
+
+    function activePopupClickHandler(e) {
+        if (activePopup && !activePopup.contains(e.target) && !e.target.closest('.reaction-btn')) {
+            activePopup.remove();
+            activePopup = null;
+            document.removeEventListener('click', activePopupClickHandler);
+        }
+    }
+
+    function handleReactionCountClick(pid) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        const emojiContainer = originalPost.querySelector('.st-emoji-container');
+        if (!emojiContainer) return;
+        const counter = emojiContainer.querySelector('.st-emoji-counter');
+        if (!counter) return;
+        counter.style.visibility = 'visible';
+        counter.style.opacity = '1';
+        counter.style.position = 'relative';
+        counter.style.zIndex = '9999';
+        counter.click();
+        setTimeout(() => {
+            counter.style.visibility = '';
+            counter.style.opacity = '';
+            counter.style.position = '';
+        }, 500);
+    }
+
+    function generateReactionButtons(data) {
+        if (!data.hasReactions || data.reactionCount === 0) {
+            return '<button class="reaction-btn reaction-add-btn" aria-label="Add a reaction" data-pid="' + data.postId + '"><i class="fa-regular fa-face-smile" aria-hidden="true"></i></button>';
+        }
+        const reactionMap = new Map();
+        for (const r of data.reactions) {
+            if (reactionMap.has(r.src)) {
+                reactionMap.get(r.src).count++;
+            } else {
+                reactionMap.set(r.src, { src: r.src, alt: r.alt, name: r.name, count: 1 });
+            }
+        }
+        let html = '<div class="reactions-container" data-pid="' + data.postId + '">';
+        reactionMap.forEach(r => {
+            html += '<button class="reaction-btn reaction-with-image" title="' + escapeHtml(r.name || 'Reaction') + '" data-pid="' + data.postId + '"><img src="' + r.src + '" alt="' + escapeHtml(r.alt || 'reaction') + '" width="18" height="18" loading="lazy"><span class="reaction-count">' + r.count + '</span></button>';
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function sanitizeGroupName(groupName) {
+        if (!groupName) return 'unknown';
+        return groupName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function formatNumber(num) {
+        return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
 
     // ============================================================================
-    // EVENT HANDLERS (unchanged)
+    // GENERATE MODERN CARD (full from v2.1)
     // ============================================================================
-    function handleQuote(pid) { /* unchanged */ }
-    function handleEdit(pid) { /* unchanged */ }
-    function handleDelete(pid) { /* unchanged */ }
-    function handleShare(pid, buttonElement) { /* unchanged */ }
-    function handleReport(pid) { /* unchanged */ }
-    function handleLike(pid, isCountClick) { /* unchanged */ }
-    function handleReact(pid, buttonElement) { /* unchanged */ }
-    function handleMessageReply(msid) { /* unchanged */ }
-    function handleMessageDelete(msid) { /* unchanged */ }
-    function handleMessageFriend(msid) { /* unchanged */ }
-    function handleMessageBlock(msid) { /* unchanged */ }
-    function findOriginalMessagePost(msid) { /* unchanged */ }
-    function handleQuoteExpand(btn) { /* unchanged */ }
-    function handleQuoteJump(btn) { /* unchanged */ }
-    function handleSpoilerToggle(trigger) { /* unchanged */ }
-    function attachEventHandlers() { /* unchanged – keep full from v2.1 */ }
+    function generateModernPost(data) {
+        if (!data) return '';
+        const user = data.apiUser;
+        const username = data.username;
+        const userId = data.mid;
+        const isOnline = (user?.status === 'online') || data.isOnline;
+        const statusClass = isOnline ? 'online' : 'offline';
+        const statusText = isOnline ? 'Online' : 'Offline';
+        const profileUrl = userId ? '/?act=Profile&MID=' + userId : '#';
+        const avatarData = getUserAvatarData(user, username, userId);
+        let avatarHtml = '';
+        if (avatarData.type === 'img') {
+            avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><img class="avatar-circle" src="' + escapeHtml(avatarData.url) + '" alt="Avatar of ' + escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE + '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy"></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
+        } else {
+            avatarHtml = '<div class="post-avatar-wrapper"><a href="' + escapeHtml(profileUrl) + '" class="avatar-link" aria-label="Profile of ' + escapeHtml(username) + '"><div class="initial-avatar" style="background-color: #' + avatarData.bgColor + ';" data-initial="' + escapeHtml(avatarData.initial) + '">' + escapeHtml(avatarData.initial) + '</div></a><span class="status-dot ' + statusClass + '" data-status="' + statusText + '" aria-label="User is ' + statusText + '"></span></div>';
+        }
+
+        let groupName = user?.group?.name || data.groupText || 'Member';
+        let roleClass = 'role-badge';
+        const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
+        if (isFounder) { roleClass += ' founder'; groupName = 'Founder'; }
+        else if (groupName.toLowerCase() === 'administrator') roleClass += ' admin';
+        else if (groupName.toLowerCase() === 'moderator') roleClass += ' moderator';
+        else if (groupName.toLowerCase() === 'developer') roleClass += ' developer';
+        else roleClass += ' member';
+        const groupCssClass = 'group-' + sanitizeGroupName(groupName);
+
+        const postCount = user?.messages ?? data.postCount;
+        const reputation = user?.reputation ?? data.reputation;
+        let joinDateFormatted = 'Unknown join date';
+        if (user?.registration) {
+            const date = new Date(user.registration);
+            joinDateFormatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        } else if (data.joinDate) {
+            joinDateFormatted = data.joinDate;
+        }
+
+        let likeButton = '';
+        if (!data.hideFooter && !data.isMessage) {
+            likeButton = '<button class="reaction-btn like-btn" aria-label="Like this post" data-pid="' + data.postId + '"><i class="fa-regular fa-thumbs-up like-icon" aria-hidden="true"></i>';
+            if (data.likes > 0) likeButton += '<span class="like-count like-count-display">' + data.likes + '</span>';
+            likeButton += '</button>';
+        }
+
+        let reactionsHtml = '';
+        if (!data.isMemberPostsPage && !data.hideFooter && !data.isMessage) {
+            reactionsHtml = generateReactionButtons({
+                postId: data.postId,
+                hasReactions: data.hasReactions,
+                reactionCount: data.reactionCount,
+                reactions: data.reactions
+            });
+        }
+
+        let editHtml = '';
+        if (data.editInfo?.relative) {
+            const editDate = data.editInfo.rawDate;
+            const isoEdit = editDate ? editDate.toISOString() : '';
+            const titleEdit = editDate ? editDate.toLocaleString() : '';
+            editHtml = '<div class="post-edit-info"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i> Edited <time datetime="' + isoEdit + '" title="' + escapeHtml(titleEdit) + '">' + escapeHtml(data.editInfo.relative) + '</time></div>';
+        }
+
+        const signatureHtml = data.signatureHtml ? '<div class="post-signature">' + data.signatureHtml + '</div>' : '';
+        const ipHtml = data.ipAddress ? '<div class="post-ip">IP: ' + data.ipAddress + '</div>' : '';
+        const postTimeHtml = '<div class="post-time"><time datetime="' + (data.postDate ? data.postDate.toISOString() : '') + '">' + escapeHtml(data.relativeTime) + '</time></div>';
+
+        let actionsHtml = '';
+        if (!data.hideActions && !data.isMemberPostsPage) {
+            if (data.availableActions?.quote) actionsHtml += '<button class="action-icon" title="Quote" aria-label="Quote this post" data-action="quote" data-pid="' + data.postId + '"><i class="fa-regular fa-quote-left"></i></button>';
+            if (data.availableActions?.edit) actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
+            if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
+            if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
+            if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
+            if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i></button>';
+        }
+
+        let memberActionsHtml = '';
+        if (data.isMemberPostsPage && (data.topicLink || data.forumLink)) {
+            memberActionsHtml = '<div class="post-member-actions">';
+            if (data.topicLink) memberActionsHtml += '<button class="action-icon member-topic-link" title="Go to topic" aria-label="Go to topic" data-topic-url="' + escapeHtml(data.topicLink) + '"><i class="fa-regular fa-message" aria-hidden="true"></i></button>';
+            if (data.forumLink) memberActionsHtml += '<button class="action-icon member-forum-link" title="Go to forum" aria-label="Go to forum" data-forum-url="' + escapeHtml(data.forumLink) + '"><i class="fa-regular fa-folder" aria-hidden="true"></i></button>';
+            memberActionsHtml += '</div>';
+        }
+
+        const statsHtml = '<div class="user-rank"><i class="' + (data.rankIconClass || 'fa-medal fa-regular') + '" aria-hidden="true"></i> ' + (data.userTitle || 'Member') + '</div>' +
+            '<div class="user-posts"><i class="fa-regular fa-message"></i> ' + formatNumber(postCount) + ' posts</div>' +
+            (!data.isMemberPostsPage && !data.isMessage ? '<div class="user-reputation"><i class="fa-regular fa-thumbs-up"></i> ' + formatNumber(reputation) + ' rep</div>' : '') +
+            '<div class="user-joined"><i class="fa-regular fa-user-plus"></i> ' + joinDateFormatted + '</div>';
+
+        const headerActionsHtml = actionsHtml ? '<div class="post-actions">' + actionsHtml + '</div>' : '';
+
+        let footerHtml = '';
+        if (!data.hideFooter) {
+            let messageActionsHtml = '';
+            if (data.isMessage && (data.availableActions?.friend || data.availableActions?.block)) {
+                messageActionsHtml = '<div class="post-message-actions">';
+                if (data.availableActions.friend) messageActionsHtml += '<button class="action-icon" title="Add as Friend" aria-label="Add as Friend" data-action="friend" data-pid="' + data.postId + '"><i class="fa-regular fa-user-plus"></i></button>';
+                if (data.availableActions.block) messageActionsHtml += '<button class="action-icon" title="Block User" aria-label="Block User" data-action="block" data-pid="' + data.postId + '"><i class="fa-regular fa-ban"></i></button>';
+                messageActionsHtml += '</div>';
+            }
+            footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
+        }
+
+        return '<article class="post-card ' + groupCssClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+            '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
+            '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
+            '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
+            '<div class="user-group"><span class="' + roleClass + '">' + escapeHtml(groupName) + '</span></div>' +
+            '<div class="user-stats">' + statsHtml + '</div></div></div>' +
+            '<div class="post-content"><div class="post-message">' + data.contentHtml + editHtml + '</div>' + signatureHtml + '</div>' +
+            footerHtml + '</article>';
+    }
 
     // ============================================================================
-    // CONVERSION FUNCTIONS (unchanged, but call initQuotesAndSpoilers)
+    // FAVICON INJECTION
     // ============================================================================
-    async function convertMessages() { /* same as v2.1 */ }
-    async function convertAllPosts() { /* same as v2.1 */ }
-    async function convertSummaryPosts() { /* same as v2.1 */ }
+    function applyFaviconsToMessageLinks(container) {
+        if (!container) return;
+        const links = container.querySelectorAll('.post-message a[href]:not(.has-favicon)');
+        for (const link of links) {
+            if (link.querySelector('img')) continue;
+            try {
+                const urlObj = new URL(link.href);
+                const domain = urlObj.hostname;
+                const faviconUrl = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=32';
+                link.style.backgroundImage = 'url(' + faviconUrl + ')';
+                link.style.backgroundRepeat = 'no-repeat';
+                link.style.backgroundPosition = 'left center';
+                link.style.backgroundSize = '16px 16px';
+                link.style.paddingLeft = '22px';
+                link.style.display = 'inline';
+                link.classList.add('has-favicon');
+            } catch (e) {}
+        }
+    }
+
+    // ============================================================================
+    // REFRESH FUNCTIONS
+    // ============================================================================
+    function refreshLikeDisplay(postId) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return;
+        const pointsPos = originalPost.querySelector('.points .points_pos');
+        const newLikeCount = pointsPos ? parseInt(pointsPos.textContent) || 0 : 0;
+        const modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
+        if (!modernCard) return;
+        const likeBtn = modernCard.querySelector('.like-btn');
+        if (!likeBtn) return;
+        const likeCountSpan = likeBtn.querySelector('.like-count-display');
+        if (newLikeCount > 0) {
+            if (likeCountSpan) {
+                likeCountSpan.textContent = newLikeCount;
+            } else {
+                const newSpan = document.createElement('span');
+                newSpan.className = 'like-count like-count-display';
+                newSpan.textContent = newLikeCount;
+                likeBtn.appendChild(newSpan);
+            }
+        } else if (likeCountSpan) {
+            likeCountSpan.remove();
+        }
+    }
+
+    function refreshReactionDisplay(postId) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
+        if (!originalPost) return;
+        const reactionData = getReactionData(originalPost);
+        const modernCard = document.querySelector('.post-card[data-original-id="' + CONFIG.POST_ID_PREFIX + postId + '"]');
+        if (!modernCard) return;
+        const postReactionsDiv = modernCard.querySelector('.post-reactions');
+        if (!postReactionsDiv) return;
+        if (reactionData.reactions.length > 0) postReactions.set(postId, reactionData.reactions);
+        const likeButton = postReactionsDiv.querySelector('.like-btn');
+        const likeButtonHtml = likeButton ? likeButton.outerHTML : '';
+        const newReactionsHtml = generateReactionButtons({
+            postId,
+            hasReactions: reactionData.hasReactions,
+            reactionCount: reactionData.reactionCount,
+            reactions: reactionData.reactions
+        });
+        setSanitizedHTML(postReactionsDiv, likeButtonHtml + newReactionsHtml);
+    }
+
+    // ============================================================================
+    // EVENT HANDLERS
+    // ============================================================================
+    function handleQuote(pid) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        const quoteLink = originalPost.querySelector('a[href*="CODE=02"]');
+        if (quoteLink) window.location.href = quoteLink.getAttribute('href');
+    }
+    function handleEdit(pid) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        const editLink = originalPost.querySelector('a[href*="CODE=08"]');
+        if (editLink) window.location.href = editLink.getAttribute('href');
+    }
+    function handleDelete(pid) {
+        if (document.body.id === 'msg') {
+            handleMessageDelete(pid);
+            return;
+        }
+        if (confirm('Are you sure you want to delete this post?')) {
+            if (typeof window.delete_post === 'function') {
+                window.delete_post(pid);
+            } else {
+                const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+                if (originalPost) {
+                    const deleteLink = originalPost.querySelector('a[onclick*="delete_post"], .deletepost, a[href*="CODE=09"]');
+                    if (deleteLink) deleteLink.click();
+                }
+            }
+        }
+    }
+    function handleShare(pid, buttonElement) {
+        const url = window.location.href.split('#')[0] + '#entry' + pid;
+        navigator.clipboard.writeText(url).then(() => {
+            const originalHtml = buttonElement.innerHTML;
+            buttonElement.innerHTML = '<i class="fa-regular fa-check" aria-hidden="true"></i>';
+            setTimeout(() => { buttonElement.innerHTML = originalHtml; }, 1500);
+        }).catch(err => console.error('Copy failed:', err));
+    }
+    function handleReport(pid) {
+        const reportBtn = document.getElementById(CONFIG.POST_ID_PREFIX + pid + ' .report_button') ||
+            document.querySelector('.report_button[data-pid="' + pid + '"]');
+        if (reportBtn) reportBtn.click();
+    }
+    function handleLike(pid, isCountClick) {
+        const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
+        if (!originalPost) return;
+        const pointsContainer = originalPost.querySelector('.points');
+        if (!pointsContainer) return;
+        if (isCountClick) {
+            const pointsPos = pointsContainer.querySelector('.points_pos');
+            if (pointsPos) {
+                const overlayLink = pointsPos.closest('a[rel="#overlay"]');
+                if (overlayLink) {
+                    if (typeof $ !== 'undefined' && $.fn.overlay) {
+                        if (!overlayLink.hasAttribute('data-overlay-init')) {
+                            $(overlayLink).overlay({
+                                onBeforeLoad: function() {
+                                    var wrap = this.getOverlay();
+                                    var content = wrap.find('div');
+                                    content.html('<p><img src="https://img.forumfree.net/index_file/loads3.gif"></p>').load(overlayLink.getAttribute('href') + '&popup=1');
+                                }
+                            });
+                            overlayLink.setAttribute('data-overlay-init', 'true');
+                        }
+                        $(overlayLink).trigger('click');
+                        return;
+                    } else {
+                        overlayLink.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                        setTimeout(() => overlayLink.dispatchEvent(new MouseEvent('click', { bubbles: true })), 50);
+                        return;
+                    }
+                }
+            }
+            pointsContainer.querySelector('.points_pos')?.click();
+            return;
+        }
+        const undoButton = pointsContainer.querySelector('.bullet_delete');
+        if (undoButton) {
+            undoButton.click();
+        } else {
+            const likeBtn = pointsContainer.querySelector('.points_up');
+            if (likeBtn) {
+                likeBtn.click();
+            } else {
+                const pointsUpLink = pointsContainer.querySelector('a[href*="points_up"], a[onclick*="points_up"]');
+                if (pointsUpLink) pointsUpLink.click();
+            }
+        }
+        setTimeout(() => { refreshLikeDisplay(pid); refreshReactionDisplay(pid); }, CONFIG.REACTION_DELAY);
+    }
+    function handleReact(pid, buttonElement) {
+        createCustomReactionPopup(buttonElement, pid);
+    }
+    function handleMessageReply(msid) {
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const replyLink = originalPost.querySelector('a[href*="CODE=04"]');
+        if (replyLink) window.location.href = replyLink.getAttribute('href');
+    }
+    function handleMessageDelete(msid) {
+        if (!confirm('Are you sure you want to delete this message?')) return;
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const deleteLink = originalPost.querySelector('a[onclick*="CODE=05"]');
+        if (deleteLink) {
+            const onclick = deleteLink.getAttribute('onclick');
+            const match = onclick.match(/window\.location='([^']+)'/);
+            if (match) window.location.href = match[1];
+            else deleteLink.click();
+        }
+    }
+    function handleMessageFriend(msid) {
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const form = originalPost.querySelector('form[name="addmem"]');
+        if (form) {
+            const bInput = form.querySelector('input[name="b"]');
+            if (bInput) bInput.value = '0';
+            form.submit();
+        }
+    }
+    function handleMessageBlock(msid) {
+        const originalPost = findOriginalMessagePost(msid);
+        if (!originalPost) return;
+        const form = originalPost.querySelector('form[name="addmem"]');
+        if (form) {
+            const bInput = form.querySelector('input[name="b"]');
+            if (bInput) bInput.value = '1';
+            form.submit();
+        }
+    }
+    function findOriginalMessagePost(msid) {
+        const linkWithMsid = document.querySelector(`a[href*="MSID=${msid}"], a[onclick*="MSID=${msid}"]`);
+        if (linkWithMsid) return linkWithMsid.closest('.post');
+        return null;
+    }
+    function handleQuoteExpand(btn) {
+        const quote = btn.closest('.modern-quote');
+        if (quote) {
+            quote.classList.toggle('expanded');
+            const isExpanded = quote.classList.contains('expanded');
+            btn.innerHTML = isExpanded ? '<i class="fa-regular fa-chevron-up"></i> Show less' : '<i class="fa-regular fa-chevron-down"></i> Show more';
+        }
+    }
+    function handleQuoteJump(btn) {
+        const targetUrl = btn.getAttribute('data-target-url');
+        if (targetUrl) window.location.href = targetUrl;
+    }
+    function handleSpoilerToggle(trigger) {
+        const header = trigger.closest('.spoiler-header');
+        if (!header) return;
+        const spoiler = header.closest('.modern-spoiler');
+        const content = spoiler.querySelector('.spoiler-content');
+        const toggleBtn = header.querySelector('.spoiler-toggle');
+        if (content && content.hidden !== undefined) {
+            const isExpanded = !content.hidden;
+            content.hidden = isExpanded;
+            if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(!isExpanded));
+            header.setAttribute('aria-expanded', String(!isExpanded));
+        } else {
+            spoiler.classList.toggle('open');
+        }
+    }
+
+    function attachEventHandlers() {
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="quote"]');
+            if (btn) { e.preventDefault(); handleQuote(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="edit"]');
+            if (btn) { e.preventDefault(); handleEdit(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="delete"]');
+            if (btn) { e.preventDefault(); handleDelete(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="share"]');
+            if (btn) { e.preventDefault(); handleShare(btn.getAttribute('data-pid'), btn); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="report"]');
+            if (btn) { e.preventDefault(); handleReport(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const topicBtn = e.target.closest('.member-topic-link');
+            if (topicBtn) {
+                e.preventDefault();
+                const url = topicBtn.getAttribute('data-topic-url');
+                if (url) window.location.href = url;
+            }
+        });
+        document.addEventListener('click', function (e) {
+            const forumBtn = e.target.closest('.member-forum-link');
+            if (forumBtn) {
+                e.preventDefault();
+                const url = forumBtn.getAttribute('data-forum-url');
+                if (url) window.location.href = url;
+            }
+        });
+        document.addEventListener('click', function (e) {
+            const likeBtn = e.target.closest('.like-btn');
+            if (likeBtn) {
+                e.preventDefault();
+                handleLike(likeBtn.getAttribute('data-pid'), e.target.classList.contains('like-count-display'));
+            }
+        });
+        document.addEventListener('click', function (e) {
+            const reactionCount = e.target.closest('.reaction-count');
+            if (reactionCount) {
+                e.preventDefault(); e.stopPropagation();
+                const reactionBtn = reactionCount.closest('.reaction-btn');
+                if (reactionBtn) handleReactionCountClick(reactionBtn.getAttribute('data-pid'));
+            }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.reaction-btn:not(.like-btn)');
+            if (btn && !e.target.classList.contains('reaction-count')) {
+                e.preventDefault(); e.stopPropagation();
+                handleReact(btn.getAttribute('data-pid'), btn);
+            }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="reply"]');
+            if (btn) { e.preventDefault(); handleMessageReply(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="friend"]');
+            if (btn) { e.preventDefault(); handleMessageFriend(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.action-icon[data-action="block"]');
+            if (btn) { e.preventDefault(); handleMessageBlock(btn.getAttribute('data-pid')); }
+        });
+        document.addEventListener('click', function (e) {
+            const expandBtn = e.target.closest('.quote-expand-btn');
+            if (expandBtn) { e.preventDefault(); handleQuoteExpand(expandBtn); }
+        });
+        document.addEventListener('click', function (e) {
+            const jumpBtn = e.target.closest('.quote-jump-btn');
+            if (jumpBtn) { e.preventDefault(); handleQuoteJump(jumpBtn); }
+        });
+        document.addEventListener('click', function (e) {
+            const spoilerHeader = e.target.closest('.spoiler-header');
+            if (spoilerHeader) { e.preventDefault(); handleSpoilerToggle(spoilerHeader); }
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && activePopup) {
+                activePopup.remove();
+                activePopup = null;
+            }
+        });
+    }
+
+    // ============================================================================
+    // CONVERSION FUNCTIONS
+    // ============================================================================
+    async function convertMessages() {
+        if (conversionInProgress) { conversionPending = true; return; }
+        conversionInProgress = true;
+        conversionPending = false;
+        try {
+            const container = getPostsContainer();
+            setSanitizedHTML(container, '');
+            convertedPostIds.clear();
+            const posts = document.querySelectorAll(CONFIG.POST_SELECTOR);
+            const validPosts = Array.from(posts).filter(isValidPost);
+            if (validPosts.length === 0) return;
+            const mids = [];
+            const postsData = [];
+            for (let i = 0; i < validPosts.length; i++) {
+                const $post = validPosts[i];
+                const msid = getMsidFromPost($post);
+                if (!msid || convertedPostIds.has(msid)) continue;
+                const mid = getMidFromPost($post);
+                mids.push(mid);
+                const postDate = getMessagePostDate($post);
+                const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+                postsData.push({
+                    postId: msid, mid, originalPost: $post, username: getMessageUsername($post),
+                    groupText: getMessageGroup($post), postCount: getMessagePostCount($post),
+                    joinDate: getMessageJoinDate($post), contentHtml: getMessageContent($post),
+                    relativeTime, postDate, isMessage: true, hideFooter: false, hideActions: false,
+                    availableActions: { reply: true, delete: true, friend: true, block: true },
+                    postNumber: i + 1
+                });
+                convertedPostIds.add(msid);
+            }
+            await fetchMultipleUsers(mids);
+            for (const data of postsData) {
+                const apiUser = data.mid ? userDataCache.get(data.mid) : null;
+                const completeData = { ...data, apiUser, originalIdPrefix: '' };
+                const cardHtml = generateModernPost(completeData);
+                const card = createElementFromHTML(cardHtml);
+                container.appendChild(card);
+                applyFaviconsToMessageLinks(card);
+            }
+            attachEventHandlers();
+            initQuotesAndSpoilers();
+            console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
+        } catch (err) { console.error('[PostsModule] Messages conversion error:', err); }
+        finally { conversionInProgress = false; if (conversionPending) convertMessages(); }
+    }
+
+    async function convertAllPosts() {
+        if (conversionInProgress) { conversionPending = true; return; }
+        conversionInProgress = true;
+        conversionPending = false;
+        try {
+            const container = getPostsContainer();
+            setSanitizedHTML(container, '');
+            convertedPostIds.clear();
+            postReactions.clear();
+            const blogArticles = document.querySelectorAll('.blog .article');
+            let blogCount = 0;
+            const allMids = [];
+            for (const articleLi of blogArticles) {
+                const blogData = getBlogArticleData(articleLi);
+                if (blogData.postId && convertedPostIds.has(blogData.postId)) continue;
+                if (blogData.mid) allMids.push(blogData.mid);
+                await fetchMultipleUsers(allMids);
+                const apiUser = blogData.mid ? userDataCache.get(blogData.mid) : null;
+                const blogCardHtml = generateBlogPost(blogData, apiUser);
+                const blogCard = createElementFromHTML(blogCardHtml);
+                container.appendChild(blogCard);
+                applyFaviconsToMessageLinks(blogCard);
+                if (blogData.postId) convertedPostIds.add(blogData.postId);
+                blogCount++;
+            }
+            const posts = document.querySelectorAll(CONFIG.POST_SELECTOR);
+            const validPosts = Array.from(posts).filter(isValidPost);
+            let globalMid = null, globalUsername = null, isMemberPostsPage = false;
+            const memberPostsHeader = document.querySelector('.topic.member_posts .mtitle b');
+            if (memberPostsHeader) {
+                isMemberPostsPage = true;
+                const match = memberPostsHeader.className.match(/user(\d+)/);
+                if (match) globalMid = match[1];
+                else {
+                    const onclickAttr = memberPostsHeader.getAttribute('onclick');
+                    if (onclickAttr) {
+                        const midMatch = onclickAttr.match(/MID=(\d+)/);
+                        if (midMatch) globalMid = midMatch[1];
+                    }
+                }
+                globalUsername = memberPostsHeader.textContent.trim();
+            }
+            const mids = [];
+            const postsData = [];
+            for (const $post of validPosts) {
+                const postId = getPostId($post);
+                if (!postId || convertedPostIds.has(postId)) continue;
+                let mid = getMidFromPost($post) || globalMid;
+                mids.push(mid);
+                const reactionData = getReactionData($post);
+                const userTitleData = getUserTitleAndIcon($post);
+                if (reactionData.hasReactions) postReactions.set(postId, reactionData.reactions);
+                const whenSpan = $post.querySelector('.when');
+                let postDate = null;
+                if (whenSpan) {
+                    const title = whenSpan.getAttribute('title') || whenSpan.textContent.replace(/^Posted:\s*/i, '');
+                    postDate = parseDateFromTitle(title);
+                }
+                const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+                const editInfo = getEditInfo($post);
+                let availableActions = getAvailableActions($post, postId);
+                if (isMemberPostsPage) availableActions = { quote: false, edit: false, delete: false, report: false, share: false };
+                const memberLinks = isMemberPostsPage ? getMemberPostLinks($post) : {};
+                const username = getUsername($post) === 'Unknown' ? globalUsername : getUsername($post);
+                postsData.push({
+                    postId, mid, originalPost: $post, username, groupText: getGroupText($post),
+                    postCount: getPostCount($post), reputation: getReputation($post),
+                    isOnline: getIsOnline($post), userTitle: userTitleData.title,
+                    rankIconClass: userTitleData.iconClass, contentHtml: getCleanContent($post),
+                    signatureHtml: getSignatureHtml($post), editInfo, likes: getLikes($post),
+                    hasReactions: reactionData.hasReactions, reactionCount: reactionData.reactionCount,
+                    reactions: reactionData.reactions, ipAddress: getMaskedIp($post),
+                    relativeTime, postDate, availableActions, isMemberPostsPage,
+                    topicLink: memberLinks.topicLink, topicTitle: memberLinks.topicTitle,
+                    forumLink: memberLinks.forumLink, forumName: memberLinks.forumName,
+                    hideActions: false, hideFooter: false
+                });
+                convertedPostIds.add(postId);
+            }
+            await fetchMultipleUsers(mids);
+            for (let i = 0; i < postsData.length; i++) {
+                const data = postsData[i];
+                const apiUser = data.mid ? userDataCache.get(data.mid) : null;
+                const completeData = { ...data, apiUser, postNumber: i + 1 + blogCount };
+                const cardHtml = generateModernPost(completeData);
+                const card = createElementFromHTML(cardHtml);
+                container.appendChild(card);
+                applyFaviconsToMessageLinks(card);
+            }
+            attachEventHandlers();
+            initQuotesAndSpoilers();
+            console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
+        } catch (err) { console.error('[PostsModule] Conversion error:', err); }
+        finally { conversionInProgress = false; if (conversionPending) convertAllPosts(); }
+    }
+
+    async function convertSummaryPosts() {
+        if (document.body.id !== 'send') return;
+        const summaryEl = document.querySelector('.summary');
+        if (!summaryEl) return;
+        let container = document.getElementById('modern-summary-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'modern-summary-container';
+            container.className = 'modern-posts-container';
+            const wrapper = document.getElementById('modern-forum-wrapper') || document.body;
+            wrapper.appendChild(container);
+        } else setSanitizedHTML(container, '');
+        const header = document.createElement('div');
+        header.className = 'summary-header modern-section-header';
+        setSanitizedHTML(header, '<div class="summary-header-content"><i class="fa-regular fa-clock" aria-hidden="true"></i><h3>Latest posts <span class="summary-subtitle">(last 10, newest first)</span></h3></div>');
+        container.appendChild(header);
+        const listItems = summaryEl.querySelectorAll('.list > li');
+        if (!listItems.length) return;
+        const mids = [], postsData = [];
+        for (let i = 0; i < listItems.length; i++) {
+            const li = listItems[i];
+            const nickLink = li.querySelector('.nick a');
+            if (!nickLink) continue;
+            const username = nickLink.textContent.trim();
+            const midMatch = nickLink.href.match(/MID=(\d+)/);
+            const mid = midMatch ? midMatch[1] : null;
+            mids.push(mid);
+            let groupName = 'Member';
+            if (li.className.includes('box_founder')) groupName = 'Founder';
+            else if (li.className.includes('box_amministratore')) groupName = 'Administrator';
+            else if (li.className.includes('box_moderatore')) groupName = 'Moderator';
+            const whenSpan = li.querySelector('.when');
+            let postDate = null;
+            if (whenSpan) {
+                const title = whenSpan.getAttribute('title') || whenSpan.textContent.replace(/^Posted\s*/i, '');
+                postDate = parseDateFromTitle(title);
+            }
+            const relativeTime = postDate ? getRelativeTimeString(postDate) : 'Recently';
+            const contentDiv = li.querySelector('.color.Item');
+            let contentHtml = '';
+            if (contentDiv) {
+                const clone = contentDiv.cloneNode(true);
+                clone.querySelector('.signature')?.remove();
+                clone.querySelector('.edit')?.remove();
+                contentHtml = transformEmbeddedLinks(clone.innerHTML);
+                contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
+            }
+            postsData.push({
+                postId: 'summary_' + i, mid, username, groupText: groupName, contentHtml,
+                relativeTime, postDate, isSummary: true, hideActions: true, hideFooter: true,
+                postNumber: i + 1, postCount: '0', reputation: '0', isOnline: false,
+                userTitle: 'Member', rankIconClass: 'fa-medal fa-regular',
+                likes: 0, hasReactions: false, reactionCount: 0, reactions: [], availableActions: {}
+            });
+        }
+        if (!mids.length) return;
+        await fetchMultipleUsers(mids);
+        for (const data of postsData) {
+            const apiUser = data.mid ? userDataCache.get(data.mid) : null;
+            const completeData = { ...data, apiUser };
+            const cardHtml = generateModernPost(completeData);
+            const card = createElementFromHTML(cardHtml);
+            container.appendChild(card);
+            applyFaviconsToMessageLinks(card);
+        }
+        initQuotesAndSpoilers();
+        console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts');
+    }
 
     // ============================================================================
     // INITIALIZE
@@ -992,6 +1820,9 @@ const ForumPostsModule = (function () {
         }).catch(err => console.error('[PostsModule] Dependency wait failed:', err));
     }
 
+    // ============================================================================
+    // PUBLIC API
+    // ============================================================================
     return {
         initialize,
         refreshReactionDisplay,
