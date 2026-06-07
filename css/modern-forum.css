@@ -1698,6 +1698,180 @@ input[type="radio"]:checked::before {
 }
 
 /*--------------------------------------------
+ 14. MODERN QUOTE STYLES
+--------------------------------------------*/
+.modern-quote {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    margin: var(--space-md) 0;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+.modern-quote:hover {
+    border-color: var(--primary-color);
+}
+.quote-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--pad-3) var(--pad-5);
+    background: var(--surface-color);
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+.quote-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+.quote-icon {
+    color: var(--primary-color);
+    font-size: 0.9rem;
+}
+.quote-author {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.quote-said {
+    color: var(--text-tertiary);
+    font-weight: normal;
+}
+.quote-jump-btn {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    transition: all 0.2s;
+}
+.quote-jump-btn:hover {
+    background: var(--hover-color);
+    color: var(--primary-color);
+}
+.quote-content {
+    padding: var(--pad-5);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    max-height: none;
+    overflow: visible;
+}
+.modern-quote.long-quote .quote-content {
+    max-height: 300px;
+    overflow-y: hidden;
+    position: relative;
+}
+.modern-quote.long-quote .quote-content::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--bg-color));
+    pointer-events: none;
+}
+.quote-expand-btn {
+    display: block;
+    width: 100%;
+    background: var(--surface-color);
+    border: none;
+    border-top: 1px solid var(--border-color);
+    padding: var(--pad-2);
+    text-align: center;
+    cursor: pointer;
+    color: var(--primary-color);
+    font-size: var(--text-sm);
+    transition: background 0.2s;
+}
+.quote-expand-btn:hover {
+    background: var(--hover-color);
+}
+.quote-expand-btn i {
+    margin-right: var(--space-xs);
+    transition: transform 0.2s;
+}
+.modern-quote.long-quote.expanded .quote-content {
+    max-height: none;
+}
+.modern-quote.long-quote.expanded .quote-content::after {
+    display: none;
+}
+.modern-quote.long-quote.expanded .quote-expand-btn i {
+    transform: rotate(180deg);
+}
+
+/*--------------------------------------------
+ 15. MODERN SPOILER STYLES (collapsible)
+--------------------------------------------*/
+.modern-spoiler {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    margin: var(--space-md) 0;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+.spoiler-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--pad-3) var(--pad-5);
+    background: var(--bg-color);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+.spoiler-header:hover {
+    background: var(--hover-color);
+}
+.spoiler-icon {
+    color: var(--warning-color);
+    font-size: 1rem;
+}
+.spoiler-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+.spoiler-toggle {
+    background: transparent;
+    border: none;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    transition: transform 0.2s;
+}
+.spoiler-toggle i {
+    transition: transform 0.2s;
+}
+.modern-spoiler[open] .spoiler-toggle i,
+.modern-spoiler.open .spoiler-toggle i {
+    transform: rotate(90deg);
+}
+.spoiler-content {
+    padding: var(--pad-5);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+.spoiler-content[hidden] {
+    display: none;
+}
+
+/*--------------------------------------------
  15. HIDE LEGACY POPUP ELEMENTS
 --------------------------------------------*/
 .popup.pop_points,
