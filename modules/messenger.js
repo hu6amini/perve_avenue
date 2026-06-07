@@ -21,6 +21,10 @@ var MessengerModule = (function(Utils, EventBus) {
     function initialize() {
         if (isInitialized) return Promise.resolve();
         if (document.body.id !== 'msg') return Promise.resolve();
+        // Do NOT build messenger on pages where the posts container exists (e.g., topic view)
+        if (document.getElementById('posts-container')) {
+            return Promise.resolve();
+        }
         if (document.getElementById('modern-messenger')) {
             isInitialized = true;
             return Promise.resolve();
@@ -170,10 +174,13 @@ var MessengerModule = (function(Utils, EventBus) {
         var contactSelect    = document.querySelector('select[name="from_contact"]');
         var titleInput       = document.querySelector('input[name="msg_title"]');
         var originalTextarea = document.getElementById('Post');
+        
+        // Guard: if the compose textarea is missing, do not build the editor
         if (!originalTextarea) {
-    console.warn('[MessengerModule] Compose textarea (#Post) not found – skipping editor');
-    return document.createElement('div'); // empty container
-}
+            console.warn('[MessengerModule] Compose textarea (#Post) not found – skipping editor');
+            return document.createElement('div');
+        }
+        
         var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
         var submitButton  = document.querySelector('input[name="sub_mit"]');
