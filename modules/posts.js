@@ -853,52 +853,59 @@ const ForumPostsModule = (function () {
     // ============================================================================
 function initQuotesAndSpoilers() {
     // Process each long quote
-    document.querySelectorAll('.modern-quote.long-quote').forEach(quote => {
+    const quotes = document.querySelectorAll('.modern-quote.long-quote');
+    
+    const checkQuote = (quote) => {
         const content = quote.querySelector('.quote-content');
         const expandBtn = quote.querySelector('.quote-expand-btn');
         if (!content || !expandBtn) return;
         
-        // Function to check if content overflows and show/hide button accordingly
-        const checkOverflow = () => {
-            const maxHeight = parseInt(getComputedStyle(content).maxHeight);
-            // Use scrollHeight (includes hidden overflow) vs maxHeight
-            if (maxHeight && content.scrollHeight <= maxHeight + 5) {
-                // Content fits – remove button and long-quote class
-                expandBtn.remove();
-                quote.classList.remove('long-quote');
-            } else {
-                // Ensure button is visible and in correct state
-                expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
-                quote.classList.remove('expanded');
-            }
-        };
+        const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+        if (isNaN(maxHeight)) return;
         
-        // If there are images inside, wait for them to load
+        // Use scrollHeight (full content height) vs maxHeight
+        if (content.scrollHeight <= maxHeight + 2) {
+            // Content fits – remove button and long-quote class
+            expandBtn.remove();
+            quote.classList.remove('long-quote');
+        } else {
+            // Ensure button is visible and in correct state
+            expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
+            quote.classList.remove('expanded');
+        }
+    };
+    
+    quotes.forEach(quote => {
+        const content = quote.querySelector('.quote-content');
+        if (!content) return;
+        
         const images = content.querySelectorAll('img');
-        if (images.length) {
-            let loadedCount = 0;
-            const onImageLoad = () => {
-                loadedCount++;
-                if (loadedCount === images.length) {
-                    // All images loaded – re-check overflow
-                    checkOverflow();
+        if (images.length === 0) {
+            // No images – check immediately
+            checkQuote(quote);
+        } else {
+            let pending = images.length;
+            const onLoadOrError = () => {
+                pending--;
+                if (pending === 0) {
+                    // Wait for browser layout to settle after images load
+                    requestAnimationFrame(() => {
+                        checkQuote(quote);
+                    });
                 }
             };
             images.forEach(img => {
                 if (img.complete) {
-                    onImageLoad();
+                    onLoadOrError();
                 } else {
-                    img.addEventListener('load', onImageLoad);
-                    img.addEventListener('error', onImageLoad); // also count errors
+                    img.addEventListener('load', onLoadOrError);
+                    img.addEventListener('error', onLoadOrError);
                 }
             });
-        } else {
-            // No images – check immediately
-            checkOverflow();
         }
     });
     
-    // Initialize spoilers (hidden by default)
+    // Ensure spoilers start hidden
     document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
         if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
     });
