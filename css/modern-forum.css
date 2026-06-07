@@ -1764,19 +1764,19 @@ input[type="radio"]:checked::before {
     overflow: visible;
 }
 .modern-quote.long-quote .quote-content {
-    max-height: 300px;
-    overflow-y: hidden;
+    max-height: 170px;
+    overflow-y: auto;
     position: relative;
 }
-.modern-quote.long-quote .quote-content::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    background: linear-gradient(to bottom, transparent, var(--bg-color));
-    pointer-events: none;
+.modern-quote.long-quote .quote-content::-webkit-scrollbar {
+    width: 6px;
+}
+.modern-quote.long-quote .quote-content::-webkit-scrollbar-track {
+    background: var(--border-color);
+}
+.modern-quote.long-quote .quote-content::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 3px;
 }
 .quote-expand-btn {
     display: block;
@@ -1800,16 +1800,14 @@ input[type="radio"]:checked::before {
 }
 .modern-quote.long-quote.expanded .quote-content {
     max-height: none;
-}
-.modern-quote.long-quote.expanded .quote-content::after {
-    display: none;
+    overflow-y: visible;
 }
 .modern-quote.long-quote.expanded .quote-expand-btn i {
     transform: rotate(180deg);
 }
 
 /*--------------------------------------------
- 15. MODERN SPOILER STYLES (collapsible)
+ 15. MODERN SPOILER STYLES
 --------------------------------------------*/
 .modern-spoiler {
     background: var(--surface-color);
@@ -1817,7 +1815,6 @@ input[type="radio"]:checked::before {
     border-radius: var(--radius);
     margin: var(--space-md) 0;
     overflow: hidden;
-    transition: all 0.2s;
 }
 .spoiler-header {
     display: flex;
@@ -1856,10 +1853,6 @@ input[type="radio"]:checked::before {
 .spoiler-toggle i {
     transition: transform 0.2s;
 }
-.modern-spoiler[open] .spoiler-toggle i,
-.modern-spoiler.open .spoiler-toggle i {
-    transform: rotate(90deg);
-}
 .spoiler-content {
     padding: var(--pad-5);
     border-top: 1px solid var(--border-color);
@@ -1869,6 +1862,9 @@ input[type="radio"]:checked::before {
 }
 .spoiler-content[hidden] {
     display: none;
+}
+.modern-spoiler .spoiler-toggle[aria-expanded="true"] i {
+    transform: rotate(90deg);
 }
 
 /*--------------------------------------------
