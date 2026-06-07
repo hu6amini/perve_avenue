@@ -1,7 +1,9 @@
-// Forum Modernizer - Posts Module (Refactored + Messages + Quotes/Spoilers)
+// Forum Modernizer - Posts Module v2.1 (Fixed author extraction, image-aware quotes)
 'use strict';
 
 const ForumPostsModule = (function () {
+    console.log('🔥 ForumPostsModule v2.1 loaded'); // <-- version check
+
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
         performance.mark('posts-module-start');
@@ -761,7 +763,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // LEGACY QUOTE & SPOILER CONVERSION (FIXED)
+    // LEGACY QUOTE & SPOILER CONVERSION (FIXED AUTHOR EXTRACTION)
     // ============================================================================
     function transformLegacyQuotesAndSpoilers(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -790,15 +792,30 @@ const ForumPostsModule = (function () {
 
     function convertLegacyQuote(quoteTopElem, quoteBodyElem) {
         try {
-            const boldText = quoteTopElem.querySelector('b')?.textContent || 'QUOTE';
+            const boldText = quoteTopElem.querySelector('b')?.textContent || '';
             let author = 'Unknown';
-            // Extract author from (-Username @ ...)
-            const parenMatch = boldText.match(/\(([^@]+)@/);
-            if (parenMatch && parenMatch[1]) author = parenMatch[1].trim();
-            if (author === 'Unknown') {
+            
+            // Try to match format: "(-JuNioR- @ ...)" or "(-JuNioR- ...)"
+            const parenMatch = boldText.match(/\(([^@]+?)@/);
+            if (parenMatch && parenMatch[1]) {
+                author = parenMatch[1].trim();
+            } else {
+                // Fallback: "QUOTE (-JuNioR- ...)"
                 const fallbackMatch = boldText.match(/QUOTE\s*\(([^)]+)/i);
-                if (fallbackMatch) author = fallbackMatch[1].trim();
+                if (fallbackMatch && fallbackMatch[1]) {
+                    author = fallbackMatch[1].trim().replace(/\s+said:/i, '').trim();
+                } else {
+                    // Last resort: take everything before the first ' @' or ' said:'
+                    const simpleMatch = boldText.match(/^([^@(]+?)(?:\s+@|\s+said:|$)/i);
+                    if (simpleMatch && simpleMatch[1]) {
+                        author = simpleMatch[1].trim();
+                    }
+                }
             }
+            // Remove any leftover "QUOTE" prefix
+            author = author.replace(/^QUOTE\s*/i, '').trim();
+            if (author === '') author = 'Unknown';
+
             const jumpLink = quoteTopElem.querySelector('a');
             const targetUrl = jumpLink ? jumpLink.getAttribute('href') : '';
             let anchorId = '';
@@ -849,70 +866,57 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // POST-PROCESSING: remove expand button if content fits
+    // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
-function initQuotesAndSpoilers() {
-    // Process each long quote
-    const quotes = document.querySelectorAll('.modern-quote.long-quote');
-    
-    const checkQuote = (quote) => {
-        const content = quote.querySelector('.quote-content');
-        const expandBtn = quote.querySelector('.quote-expand-btn');
-        if (!content || !expandBtn) return;
+    function initQuotesAndSpoilers() {
+        const quotes = document.querySelectorAll('.modern-quote.long-quote');
         
-        const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
-        if (isNaN(maxHeight)) return;
+        const checkQuote = (quote) => {
+            const content = quote.querySelector('.quote-content');
+            const expandBtn = quote.querySelector('.quote-expand-btn');
+            if (!content || !expandBtn) return;
+            const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+            if (isNaN(maxHeight)) return;
+            if (content.scrollHeight <= maxHeight + 2) {
+                expandBtn.remove();
+                quote.classList.remove('long-quote');
+            } else {
+                expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
+                quote.classList.remove('expanded');
+            }
+        };
         
-        // Use scrollHeight (full content height) vs maxHeight
-        if (content.scrollHeight <= maxHeight + 2) {
-            // Content fits – remove button and long-quote class
-            expandBtn.remove();
-            quote.classList.remove('long-quote');
-        } else {
-            // Ensure button is visible and in correct state
-            expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
-            quote.classList.remove('expanded');
-        }
-    };
-    
-    quotes.forEach(quote => {
-        const content = quote.querySelector('.quote-content');
-        if (!content) return;
+        quotes.forEach(quote => {
+            const content = quote.querySelector('.quote-content');
+            if (!content) return;
+            const images = content.querySelectorAll('img');
+            if (images.length === 0) {
+                checkQuote(quote);
+            } else {
+                let pending = images.length;
+                const onLoadOrError = () => {
+                    pending--;
+                    if (pending === 0) {
+                        requestAnimationFrame(() => checkQuote(quote));
+                    }
+                };
+                images.forEach(img => {
+                    if (img.complete) onLoadOrError();
+                    else {
+                        img.addEventListener('load', onLoadOrError);
+                        img.addEventListener('error', onLoadOrError);
+                    }
+                });
+            }
+        });
         
-        const images = content.querySelectorAll('img');
-        if (images.length === 0) {
-            // No images – check immediately
-            checkQuote(quote);
-        } else {
-            let pending = images.length;
-            const onLoadOrError = () => {
-                pending--;
-                if (pending === 0) {
-                    // Wait for browser layout to settle after images load
-                    requestAnimationFrame(() => {
-                        checkQuote(quote);
-                    });
-                }
-            };
-            images.forEach(img => {
-                if (img.complete) {
-                    onLoadOrError();
-                } else {
-                    img.addEventListener('load', onLoadOrError);
-                    img.addEventListener('error', onLoadOrError);
-                }
-            });
-        }
-    });
-    
-    // Ensure spoilers start hidden
-    document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
-        if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
-    });
-}
-    
+        document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
+            if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
+        });
+    }
+
     // ============================================================================
-    // REACTION POPUP (shortened for brevity – include full original code here)
+    // REACTION POPUP (full, but keep unchanged)
     // ============================================================================
     function getAvailableReactions(postId) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
@@ -1097,7 +1101,7 @@ function initQuotesAndSpoilers() {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (unchanged from original)
+    // GENERATE MODERN CARD (unchanged)
     // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
