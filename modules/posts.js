@@ -776,7 +776,7 @@ const ForumPostsModule = (function () {
         if (data.availableActions.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
         if (data.availableActions.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
 
-        return '<article class="post-card post-card--blog ' + groupCssClass + '" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
+        const cardHtml = '<article class="post-card post-card--blog ' + groupCssClass + '" data-original-id="' + CONFIG.POST_ID_PREFIX + data.postId + '" data-post-id="' + data.postId + '">' +
             '<header class="blog-card-header"><h1 class="blog-title"><a href="' + escapeHtml(data.permalink) + '">' + escapeHtml(data.title) + '</a></h1><div class="blog-meta"><span class="blog-date">' + data.absoluteDate + '</span>' + (actionsHtml ? '<div class="blog-actions top-actions">' + actionsHtml + '</div>' : '') + '</div></header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
             '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
@@ -788,6 +788,7 @@ const ForumPostsModule = (function () {
             '</div></div>' +
             '<div class="post-content"><div class="post-message">' + data.contentHtml + editHtml + '</div></div>' +
             '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div></footer></article>';
+        return cardHtml;
     }
 
     // ============================================================================
@@ -887,7 +888,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // LEGACY QUOTE & SPOILER CONVERSION (NEW)
+    // LEGACY QUOTE & SPOILER CONVERSION (UPDATED)
     // ============================================================================
     function transformLegacyQuotesAndSpoilers(htmlContent) {
         if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -916,21 +917,38 @@ const ForumPostsModule = (function () {
 
     function convertLegacyQuote(quoteTopElem, quoteBodyElem) {
         try {
+            // Extract author name from the bold text
             const boldText = quoteTopElem.querySelector('b')?.textContent || 'QUOTE';
-            const authorMatch = boldText.match(/QUOTE\s*\((.*?)(?:@|$)/);
-            const author = authorMatch ? authorMatch[1].trim() : 'Unknown';
+            let author = 'Unknown';
+            // Match pattern: "QUOTE (username @ date)"
+            const match = boldText.match(/QUOTE\s*\(([^@]+)@/);
+            if (match && match[1]) {
+                author = match[1].trim();
+            } else {
+                const fallbackMatch = boldText.match(/\((.*?)@/);
+                if (fallbackMatch) author = fallbackMatch[1].trim();
+            }
+
+            // Get jump link from the legacy <a> inside quote_top
             const jumpLink = quoteTopElem.querySelector('a');
-            const targetUrl = jumpLink ? jumpLink.getAttribute('href') : '';
+            let targetUrl = jumpLink ? jumpLink.getAttribute('href') : '';
             let anchorId = '';
             if (targetUrl) {
+                // Convert to absolute URL if needed
+                if (!targetUrl.startsWith('http')) {
+                    targetUrl = window.location.origin + (targetUrl.startsWith('/') ? targetUrl : '/' + targetUrl);
+                }
                 const match = targetUrl.match(/#entry(\d+)/);
                 if (match) anchorId = match[1];
             }
+
+            // Clone quote body and clean it
             const contentClone = quoteBodyElem.cloneNode(true);
             contentClone.querySelectorAll('div[align="center"], .quote_top, .quote').forEach(el => el.remove());
             const innerHtml = contentClone.innerHTML;
-            const isLong = innerHtml.length > 500 || (contentClone.textContent?.length || 0) > 800;
-            let quoteHtml = `<div class="modern-quote${isLong ? ' long-quote' : ''}">
+
+            // Build modern quote (without expand button initially)
+            let quoteHtml = `<div class="modern-quote">
                 <div class="quote-header">
                     <div class="quote-meta">
                         <div class="quote-icon"><i class="fa-regular fa-quote-left"></i></div>
@@ -941,11 +959,7 @@ const ForumPostsModule = (function () {
             if (targetUrl && anchorId) {
                 quoteHtml += `<button class="quote-jump-btn" data-anchor-id="${anchorId}" data-is-cross-page="false" data-target-url="${escapeHtml(targetUrl)}" title="Jump to quoted post" aria-label="Jump to quoted post" type="button"><i class="fa-regular fa-chevron-up"></i></button>`;
             }
-            quoteHtml += `</div><div class="quote-content ${isLong ? 'collapsible-content' : ''}">${innerHtml}</div>`;
-            if (isLong) {
-                quoteHtml += `<button class="quote-expand-btn" type="button" aria-label="Show full quote"><i class="fa-regular fa-chevron-down"></i> Show more</button>`;
-            }
-            quoteHtml += `</div>`;
+            quoteHtml += `</div><div class="quote-content">${innerHtml}</div></div>`;
             return createElementFromHTML(quoteHtml);
         } catch (e) {
             return null;
@@ -973,6 +987,44 @@ const ForumPostsModule = (function () {
         } catch (e) {
             return null;
         }
+    }
+
+    // ============================================================================
+    // QUOTE HEIGHT ENHANCEMENT (adds "Show more" button if height > 170px)
+    // ============================================================================
+    function enhanceQuotesAfterInsert(container) {
+        if (!container) return;
+        const quotes = container.querySelectorAll('.modern-quote:not(.has-expand-check)');
+        quotes.forEach(quote => {
+            quote.classList.add('has-expand-check');
+            const contentDiv = quote.querySelector('.quote-content');
+            if (!contentDiv) return;
+            // Wait a tick for images to load partially
+            setTimeout(() => {
+                const height = contentDiv.scrollHeight;
+                if (height > 170) {
+                    quote.classList.add('long-quote');
+                    if (!quote.querySelector('.quote-expand-btn')) {
+                        const expandBtn = document.createElement('button');
+                        expandBtn.className = 'quote-expand-btn';
+                        expandBtn.type = 'button';
+                        expandBtn.setAttribute('aria-label', 'Show full quote');
+                        expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
+                        expandBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            quote.classList.toggle('expanded');
+                            const btn = quote.querySelector('.quote-expand-btn');
+                            if (btn) {
+                                btn.innerHTML = quote.classList.contains('expanded')
+                                    ? '<i class="fa-regular fa-chevron-up"></i> Show less'
+                                    : '<i class="fa-regular fa-chevron-down"></i> Show more';
+                            }
+                        });
+                        quote.appendChild(expandBtn);
+                    }
+                }
+            }, 50);
+        });
     }
 
     // ============================================================================
@@ -1257,7 +1309,6 @@ const ForumPostsModule = (function () {
             if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
             if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
             if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
-            // Message-specific actions (icon-only, no text)
             if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i></button>';
         }
 
@@ -1525,35 +1576,24 @@ const ForumPostsModule = (function () {
         return null;
     }
 
-    // Quote & spoiler interactions
-    function handleQuoteExpand(btn) {
-        const quote = btn.closest('.modern-quote');
-        if (quote) {
-            quote.classList.toggle('expanded');
-            btn.innerHTML = quote.classList.contains('expanded') ? '<i class="fa-regular fa-chevron-up"></i> Show less' : '<i class="fa-regular fa-chevron-down"></i> Show more';
-        }
-    }
-
+    // Quote jump handler
     function handleQuoteJump(btn) {
-        const targetUrl = btn.getAttribute('data-target-url');
-        if (targetUrl) window.location.href = targetUrl;
+        const url = btn.getAttribute('data-target-url');
+        if (url) window.location.href = url;
     }
 
-function handleSpoilerToggle(header) {
-    const spoiler = header.closest('.modern-spoiler');
-    if (!spoiler) return;
-    const content = spoiler.querySelector('.spoiler-content');
-    const toggle = spoiler.querySelector('.spoiler-toggle');
-    if (!content) return;
-
-    // Toggle hidden attribute
-    const isHidden = content.hidden;
-    content.hidden = !isHidden;
-    if (toggle) toggle.setAttribute('aria-expanded', String(isHidden));
-
-    // Optional: add class for styling
-    spoiler.classList.toggle('open', !isHidden);
-}
+    // Spoiler toggle handler
+    function handleSpoilerToggle(header) {
+        const spoiler = header.closest('.modern-spoiler');
+        if (!spoiler) return;
+        const content = spoiler.querySelector('.spoiler-content');
+        const toggle = spoiler.querySelector('.spoiler-toggle');
+        if (!content) return;
+        const isHidden = content.hidden;
+        content.hidden = !isHidden;
+        if (toggle) toggle.setAttribute('aria-expanded', String(!isHidden));
+        spoiler.classList.toggle('open', !isHidden);
+    }
 
     function attachEventHandlers() {
         document.addEventListener('click', function (e) {
@@ -1627,10 +1667,10 @@ function handleSpoilerToggle(header) {
             const btn = e.target.closest('.action-icon[data-action="block"]');
             if (btn) { e.preventDefault(); handleMessageBlock(btn.getAttribute('data-pid')); }
         });
-        // Quote expand
+        // Quote expand button (handled by the button's own listener, but also catch delegation)
         document.addEventListener('click', function (e) {
-            const btn = e.target.closest('.quote-expand-btn');
-            if (btn) { e.preventDefault(); handleQuoteExpand(btn); }
+            const expandBtn = e.target.closest('.quote-expand-btn');
+            if (expandBtn) return; // already handled by its own listener
         });
         // Quote jump
         document.addEventListener('click', function (e) {
@@ -1639,12 +1679,9 @@ function handleSpoilerToggle(header) {
         });
         // Spoiler toggle
         document.addEventListener('click', function (e) {
-    const header = e.target.closest('.spoiler-header');
-    if (header) {
-        e.preventDefault();
-        handleSpoilerToggle(header);
-    }
-});
+            const header = e.target.closest('.spoiler-header');
+            if (header) { e.preventDefault(); handleSpoilerToggle(header); }
+        });
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && activePopup) {
                 activePopup.remove();
@@ -1718,6 +1755,7 @@ function handleSpoilerToggle(header) {
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
                 applyFaviconsToMessageLinks(card);
+                enhanceQuotesAfterInsert(card);
             }
 
             attachEventHandlers();
@@ -1763,6 +1801,7 @@ function handleSpoilerToggle(header) {
                 const blogCard = createElementFromHTML(blogCardHtml);
                 container.appendChild(blogCard);
                 applyFaviconsToMessageLinks(blogCard);
+                enhanceQuotesAfterInsert(blogCard);
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
             }
@@ -1850,6 +1889,7 @@ function handleSpoilerToggle(header) {
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
                 applyFaviconsToMessageLinks(card);
+                enhanceQuotesAfterInsert(card);
             }
 
             attachEventHandlers();
@@ -1936,6 +1976,7 @@ function handleSpoilerToggle(header) {
             const card = createElementFromHTML(cardHtml);
             container.appendChild(card);
             applyFaviconsToMessageLinks(card);
+            enhanceQuotesAfterInsert(card);
         }
         console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts');
     }
