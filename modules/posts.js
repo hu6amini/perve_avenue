@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module (Refactored + Messages Support)
+// Forum Modernizer - Posts Module (Refactored + Messages + Quotes/Spoilers)
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -96,7 +96,7 @@ const ForumPostsModule = (function () {
     };
 
     // ============================================================================
-    // PAGE VALIDATION (added body#msg)
+    // PAGE VALIDATION
     // ============================================================================
     function isValidPage() {
         const bodyId = document.body.id;
@@ -432,6 +432,7 @@ const ForumPostsModule = (function () {
         html = html.replace(/<p>\s*<\/p>/g, '');
         html = html.trim();
         html = transformEmbeddedLinks(html);
+        html = transformLegacyQuotesAndSpoilers(html);
         return html;
     }
 
@@ -595,33 +596,29 @@ const ForumPostsModule = (function () {
         return dd ? dd.textContent.trim() : 'Unknown';
     }
 
-    // Modified: strips the "Original message sent on:" bold element
-function getMessageContent($post) {
-    const contentTable = $post.querySelector('td.right.Item table.color');
-    if (!contentTable) return '';
-    const clone = contentTable.cloneNode(true);
-    
-    // Find and remove ONLY the "Original message sent on:" bold element
-    const allBolds = clone.querySelectorAll('b');
-    for (const bold of allBolds) {
-        const text = bold.textContent;
-        if (text.includes('Original message sent on')) {
-            // Remove the bold element
-            bold.remove();
-            // Also remove the following <br> if it exists
-            const nextBr = bold.nextElementSibling;
-            if (nextBr && nextBr.tagName === 'BR') nextBr.remove();
-            break; // Only remove the first occurrence
+    // Modified: strips "Original message sent on" but keeps read receipt
+    function getMessageContent($post) {
+        const contentTable = $post.querySelector('td.right.Item table.color');
+        if (!contentTable) return '';
+        const clone = contentTable.cloneNode(true);
+        // Remove only the "Original message sent on" bold element
+        const allBolds = clone.querySelectorAll('b');
+        for (const bold of allBolds) {
+            const text = bold.textContent;
+            if (text.includes('Original message sent on')) {
+                bold.remove();
+                const nextBr = bold.nextElementSibling;
+                if (nextBr && nextBr.tagName === 'BR') nextBr.remove();
+                break;
+            }
         }
+        // Do NOT remove "has read this message"
+        let html = clone.innerHTML || '';
+        html = html.trim();
+        html = transformEmbeddedLinks(html);
+        html = transformLegacyQuotesAndSpoilers(html);
+        return html;
     }
-    
-    // Do NOT remove "has read this message" – it stays in the content
-    
-    let html = clone.innerHTML || '';
-    html = html.trim();
-    html = transformEmbeddedLinks(html);
-    return html;
-}
 
     function getMessagePostDate($post) {
         const whenSpan = $post.querySelector('.when');
@@ -632,7 +629,7 @@ function getMessageContent($post) {
     }
 
     // ============================================================================
-    // BLOG ARTICLE DATA EXTRACTION (unchanged)
+    // BLOG ARTICLE DATA EXTRACTION
     // ============================================================================
     function getBlogArticleData(articleLi) {
         const postId = getPostId(articleLi);
@@ -684,6 +681,7 @@ function getMessageContent($post) {
             }
             contentHtml = clone.innerHTML.trim();
             contentHtml = transformEmbeddedLinks(contentHtml);
+            contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
         }
 
         const pointsPos = articleLi.querySelector('.points_pos');
@@ -885,6 +883,95 @@ function getMessageContent($post) {
             return hostname;
         } catch (e) {
             return url.split('/')[2] || url;
+        }
+    }
+
+    // ============================================================================
+    // LEGACY QUOTE & SPOILER CONVERSION (NEW)
+    // ============================================================================
+    function transformLegacyQuotesAndSpoilers(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        // Convert quotes
+        const quoteWrappers = tempDiv.querySelectorAll('div[align="center"]:has(> .quote_top)');
+        quoteWrappers.forEach(wrapper => {
+            const quoteTop = wrapper.querySelector('.quote_top');
+            const quoteBody = wrapper.querySelector('.quote');
+            if (!quoteTop || !quoteBody) return;
+            const modernQuote = convertLegacyQuote(quoteTop, quoteBody);
+            if (modernQuote) wrapper.parentNode.replaceChild(modernQuote, wrapper);
+        });
+        // Convert spoilers
+        const spoilerDivs = tempDiv.querySelectorAll('div.spoiler[align="center"]');
+        spoilerDivs.forEach(spoiler => {
+            const codeTop = spoiler.querySelector('.code_top');
+            const codeBody = spoiler.querySelector('.code');
+            if (!codeTop || !codeBody) return;
+            const modernSpoiler = convertLegacySpoiler(codeTop, codeBody);
+            if (modernSpoiler) spoiler.parentNode.replaceChild(modernSpoiler, spoiler);
+        });
+        return tempDiv.innerHTML;
+    }
+
+    function convertLegacyQuote(quoteTopElem, quoteBodyElem) {
+        try {
+            const boldText = quoteTopElem.querySelector('b')?.textContent || 'QUOTE';
+            const authorMatch = boldText.match(/QUOTE\s*\((.*?)(?:@|$)/);
+            const author = authorMatch ? authorMatch[1].trim() : 'Unknown';
+            const jumpLink = quoteTopElem.querySelector('a');
+            const targetUrl = jumpLink ? jumpLink.getAttribute('href') : '';
+            let anchorId = '';
+            if (targetUrl) {
+                const match = targetUrl.match(/#entry(\d+)/);
+                if (match) anchorId = match[1];
+            }
+            const contentClone = quoteBodyElem.cloneNode(true);
+            contentClone.querySelectorAll('div[align="center"], .quote_top, .quote').forEach(el => el.remove());
+            const innerHtml = contentClone.innerHTML;
+            const isLong = innerHtml.length > 500 || (contentClone.textContent?.length || 0) > 800;
+            let quoteHtml = `<div class="modern-quote${isLong ? ' long-quote' : ''}">
+                <div class="quote-header">
+                    <div class="quote-meta">
+                        <div class="quote-icon"><i class="fa-regular fa-quote-left"></i></div>
+                        <div class="quote-info">
+                            <span class="quote-author">${escapeHtml(author)} <span class="quote-said">said:</span></span>
+                        </div>
+                    </div>`;
+            if (targetUrl && anchorId) {
+                quoteHtml += `<button class="quote-jump-btn" data-anchor-id="${anchorId}" data-is-cross-page="false" data-target-url="${escapeHtml(targetUrl)}" title="Jump to quoted post" aria-label="Jump to quoted post" type="button"><i class="fa-regular fa-chevron-up"></i></button>`;
+            }
+            quoteHtml += `</div><div class="quote-content ${isLong ? 'collapsible-content' : ''}">${innerHtml}</div>`;
+            if (isLong) {
+                quoteHtml += `<button class="quote-expand-btn" type="button" aria-label="Show full quote"><i class="fa-regular fa-chevron-down"></i> Show more</button>`;
+            }
+            quoteHtml += `</div>`;
+            return createElementFromHTML(quoteHtml);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function convertLegacySpoiler(codeTopElem, codeBodyElem) {
+        try {
+            const title = codeTopElem.querySelector('b')?.textContent || 'SPOILER';
+            const contentClone = codeBodyElem.cloneNode(true);
+            contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
+            const innerHtml = contentClone.innerHTML;
+            const spoilerId = 'spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+            const spoilerHtml = `<div class="modern-spoiler">
+                <div class="spoiler-header">
+                    <div class="spoiler-icon"><i class="fa-regular fa-eye-slash"></i></div>
+                    <div class="spoiler-info"><span class="spoiler-title">${escapeHtml(title)}</span></div>
+                    <button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="${spoilerId}">
+                        <i class="fa-regular fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div id="${spoilerId}" class="spoiler-content" hidden>${innerHtml}</div>
+            </div>`;
+            return createElementFromHTML(spoilerHtml);
+        } catch (e) {
+            return null;
         }
     }
 
@@ -1169,8 +1256,9 @@ function getMessageContent($post) {
             if (data.availableActions?.edit) actionsHtml += '<button class="action-icon" title="Edit" aria-label="Edit this post" data-action="edit" data-pid="' + data.postId + '"><i class="fa-regular fa-pen-to-square"></i></button>';
             if (data.availableActions?.share) actionsHtml += '<button class="action-icon" title="Share" aria-label="Share this post" data-action="share" data-pid="' + data.postId + '"><i class="fa-regular fa-share-nodes"></i></button>';
             if (data.availableActions?.report) actionsHtml += '<button class="action-icon report-action" title="Report" aria-label="Report this post" data-action="report" data-pid="' + data.postId + '"><i class="fa-regular fa-circle-exclamation"></i></button>';
-            if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i></button>';
             if (data.availableActions?.delete) actionsHtml += '<button class="action-icon delete-action" title="Delete" aria-label="Delete this post" data-action="delete" data-pid="' + data.postId + '"><i class="fa-regular fa-trash-can"></i></button>';
+            // Message-specific actions (icon-only, no text)
+            if (data.isMessage && data.availableActions?.reply) actionsHtml += '<button class="action-icon" title="Reply" aria-label="Reply" data-action="reply" data-pid="' + data.postId + '"><i class="fa-regular fa-reply"></i></button>';
         }
 
         let memberActionsHtml = '';
@@ -1285,7 +1373,7 @@ function getMessageContent($post) {
     }
 
     // ============================================================================
-    // EVENT HANDLERS – extended for messages
+    // EVENT HANDLERS – extended for messages, quotes, spoilers
     // ============================================================================
     function handleQuote(pid) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + pid);
@@ -1437,6 +1525,33 @@ function getMessageContent($post) {
         return null;
     }
 
+    // Quote & spoiler interactions
+    function handleQuoteExpand(btn) {
+        const quote = btn.closest('.modern-quote');
+        if (quote) {
+            quote.classList.toggle('expanded');
+            btn.innerHTML = quote.classList.contains('expanded') ? '<i class="fa-regular fa-chevron-up"></i> Show less' : '<i class="fa-regular fa-chevron-down"></i> Show more';
+        }
+    }
+
+    function handleQuoteJump(btn) {
+        const targetUrl = btn.getAttribute('data-target-url');
+        if (targetUrl) window.location.href = targetUrl;
+    }
+
+    function handleSpoilerToggle(header) {
+        const spoiler = header.closest('.modern-spoiler');
+        const content = spoiler.querySelector('.spoiler-content');
+        const toggle = spoiler.querySelector('.spoiler-toggle');
+        if (content && content.hidden !== undefined) {
+            const isExpanded = !content.hidden;
+            content.hidden = !isExpanded;
+            if (toggle) toggle.setAttribute('aria-expanded', String(!isExpanded));
+        } else {
+            spoiler.classList.toggle('open');
+        }
+    }
+
     function attachEventHandlers() {
         document.addEventListener('click', function (e) {
             const btn = e.target.closest('.action-icon[data-action="quote"]');
@@ -1508,6 +1623,21 @@ function getMessageContent($post) {
         document.addEventListener('click', function (e) {
             const btn = e.target.closest('.action-icon[data-action="block"]');
             if (btn) { e.preventDefault(); handleMessageBlock(btn.getAttribute('data-pid')); }
+        });
+        // Quote expand
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.quote-expand-btn');
+            if (btn) { e.preventDefault(); handleQuoteExpand(btn); }
+        });
+        // Quote jump
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.quote-jump-btn');
+            if (btn) { e.preventDefault(); handleQuoteJump(btn); }
+        });
+        // Spoiler toggle
+        document.addEventListener('click', function (e) {
+            const header = e.target.closest('.spoiler-header');
+            if (header) { e.preventDefault(); handleSpoilerToggle(header); }
         });
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && activePopup) {
@@ -1778,6 +1908,7 @@ function getMessageContent($post) {
                 clone.querySelector('.signature')?.remove();
                 clone.querySelector('.edit')?.remove();
                 contentHtml = transformEmbeddedLinks(clone.innerHTML);
+                contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
             }
             postsData.push({
                 postId: 'summary_' + i,
@@ -1821,8 +1952,6 @@ function getMessageContent($post) {
         return depsReady.then(() => {
             if (isInitialized) return;
             isInitialized = true;
-            const Utils = window.ForumDOMUtils || {};
-            const EventBus = window.ForumEventBus || {};
             if (!isValidPage()) {
                 if (document.body.id === 'send' && document.querySelector('.summary')) {
                     convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
