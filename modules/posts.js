@@ -1539,18 +1539,21 @@ const ForumPostsModule = (function () {
         if (targetUrl) window.location.href = targetUrl;
     }
 
-    function handleSpoilerToggle(header) {
-        const spoiler = header.closest('.modern-spoiler');
-        const content = spoiler.querySelector('.spoiler-content');
-        const toggle = spoiler.querySelector('.spoiler-toggle');
-        if (content && content.hidden !== undefined) {
-            const isExpanded = !content.hidden;
-            content.hidden = !isExpanded;
-            if (toggle) toggle.setAttribute('aria-expanded', String(!isExpanded));
-        } else {
-            spoiler.classList.toggle('open');
-        }
-    }
+function handleSpoilerToggle(header) {
+    const spoiler = header.closest('.modern-spoiler');
+    if (!spoiler) return;
+    const content = spoiler.querySelector('.spoiler-content');
+    const toggle = spoiler.querySelector('.spoiler-toggle');
+    if (!content) return;
+
+    // Toggle hidden attribute
+    const isHidden = content.hidden;
+    content.hidden = !isHidden;
+    if (toggle) toggle.setAttribute('aria-expanded', String(isHidden));
+
+    // Optional: add class for styling
+    spoiler.classList.toggle('open', !isHidden);
+}
 
     function attachEventHandlers() {
         document.addEventListener('click', function (e) {
