@@ -170,6 +170,10 @@ var MessengerModule = (function(Utils, EventBus) {
         var contactSelect    = document.querySelector('select[name="from_contact"]');
         var titleInput       = document.querySelector('input[name="msg_title"]');
         var originalTextarea = document.getElementById('Post');
+        if (!originalTextarea) {
+    console.warn('[MessengerModule] Compose textarea (#Post) not found – skipping editor');
+    return document.createElement('div'); // empty container
+}
         var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
         var submitButton  = document.querySelector('input[name="sub_mit"]');
