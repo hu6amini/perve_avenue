@@ -851,26 +851,59 @@ const ForumPostsModule = (function () {
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits
     // ============================================================================
-    function initQuotesAndSpoilers() {
-        document.querySelectorAll('.modern-quote.long-quote').forEach(quote => {
-            const content = quote.querySelector('.quote-content');
-            const expandBtn = quote.querySelector('.quote-expand-btn');
-            if (!content || !expandBtn) return;
-            // Force reflow to get accurate scrollHeight
+function initQuotesAndSpoilers() {
+    // Process each long quote
+    document.querySelectorAll('.modern-quote.long-quote').forEach(quote => {
+        const content = quote.querySelector('.quote-content');
+        const expandBtn = quote.querySelector('.quote-expand-btn');
+        if (!content || !expandBtn) return;
+        
+        // Function to check if content overflows and show/hide button accordingly
+        const checkOverflow = () => {
             const maxHeight = parseInt(getComputedStyle(content).maxHeight);
+            // Use scrollHeight (includes hidden overflow) vs maxHeight
             if (maxHeight && content.scrollHeight <= maxHeight + 5) {
+                // Content fits – remove button and long-quote class
                 expandBtn.remove();
                 quote.classList.remove('long-quote');
             } else {
+                // Ensure button is visible and in correct state
                 expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
                 quote.classList.remove('expanded');
             }
-        });
-        document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
-            if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
-        });
-    }
-
+        };
+        
+        // If there are images inside, wait for them to load
+        const images = content.querySelectorAll('img');
+        if (images.length) {
+            let loadedCount = 0;
+            const onImageLoad = () => {
+                loadedCount++;
+                if (loadedCount === images.length) {
+                    // All images loaded – re-check overflow
+                    checkOverflow();
+                }
+            };
+            images.forEach(img => {
+                if (img.complete) {
+                    onImageLoad();
+                } else {
+                    img.addEventListener('load', onImageLoad);
+                    img.addEventListener('error', onImageLoad); // also count errors
+                }
+            });
+        } else {
+            // No images – check immediately
+            checkOverflow();
+        }
+    });
+    
+    // Initialize spoilers (hidden by default)
+    document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
+        if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
+    });
+}
+    
     // ============================================================================
     // REACTION POPUP (shortened for brevity – include full original code here)
     // ============================================================================
