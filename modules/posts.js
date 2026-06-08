@@ -884,7 +884,7 @@ function initQuotesAndSpoilers() {
         for (const img of images) {
             // Prefer naturalHeight (after load), otherwise use height attribute or clientHeight
             let imgHeight = img.naturalHeight || img.height || img.clientHeight;
-            if (imgHeight > 120) {
+            if (imgHeight > 250) {
                 hasLargeImage = true;
                 break;
             }
