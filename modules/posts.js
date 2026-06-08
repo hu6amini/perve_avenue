@@ -868,33 +868,41 @@ const ForumPostsModule = (function () {
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
 function initQuotesAndSpoilers() {
-    const MAX_HEIGHT = 170; // pixels – adjust as needed
-    
-    // Helper: toggle expansion
+    const MAX_HEIGHT = 250; // 250px threshold – hardcoded, not from CSS
+
+    // =========================================================================
+    // HELPER: Toggle expand/collapse
+    // =========================================================================
     const toggleExpansion = (quote, expandBtn, content) => {
         const isExpanded = quote.classList.contains('expanded');
         if (isExpanded) {
+            // Collapse
             content.style.maxHeight = MAX_HEIGHT + 'px';
             expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
             quote.classList.remove('expanded');
         } else {
+            // Expand to full height
             const fullHeight = content.scrollHeight;
             content.style.maxHeight = fullHeight + 'px';
             expandBtn.innerHTML = '<i class="fa-regular fa-chevron-up"></i> Show less';
             quote.classList.add('expanded');
         }
     };
-    
-    // Helper: decide if button is needed and create/update it
+
+    // =========================================================================
+    // HELPER: Check and update quote button visibility
+    // =========================================================================
     const updateQuoteButton = (quote) => {
         const content = quote.querySelector('.quote-content');
         if (!content) return;
-        
+
         const scrollHeight = content.scrollHeight;
         const needsButton = scrollHeight > MAX_HEIGHT;
+
         let expandBtn = quote.querySelector('.quote-expand-btn');
-        
+
         if (needsButton) {
+            // Create button if it doesn't exist
             if (!expandBtn) {
                 expandBtn = document.createElement('button');
                 expandBtn.className = 'quote-expand-btn';
@@ -908,6 +916,7 @@ function initQuotesAndSpoilers() {
                 content.style.maxHeight = MAX_HEIGHT + 'px';
                 content.style.overflow = 'hidden';
             }
+            // Bind click handler only once
             if (!expandBtn.dataset.bound) {
                 expandBtn.dataset.bound = 'true';
                 expandBtn.addEventListener('click', (e) => {
@@ -918,66 +927,95 @@ function initQuotesAndSpoilers() {
                 });
             }
         } else {
+            // Content fits – hide button and unrestrict height
             if (expandBtn) expandBtn.style.display = 'none';
             content.style.maxHeight = 'none';
             content.style.overflow = 'visible';
             quote.classList.remove('expanded');
         }
     };
-    
-    // Process a single quote: wait for all images then evaluate
+
+    // =========================================================================
+    // HELPER: Wait for all images in a quote to load
+    // =========================================================================
     const processQuoteImages = (quote) => {
         const content = quote.querySelector('.quote-content');
         if (!content) return;
+
         const images = Array.from(content.querySelectorAll('img'));
         if (images.length === 0) {
             updateQuoteButton(quote);
             return;
         }
-        const imagePromises = images.map(img => {
-            return new Promise(resolve => {
-                if (img.complete) resolve();
-                else {
-                    const onReady = () => {
-                        img.removeEventListener('load', onReady);
-                        img.removeEventListener('error', onReady);
+
+        const imagePromises = images.map((img) => {
+            return new Promise((resolve) => {
+                if (img.complete) {
+                    resolve();
+                } else {
+                    const onImageReady = () => {
+                        img.removeEventListener('load', onImageReady);
+                        img.removeEventListener('error', onImageReady);
                         resolve();
                     };
-                    img.addEventListener('load', onReady);
-                    img.addEventListener('error', onReady);
+                    img.addEventListener('load', onImageReady);
+                    img.addEventListener('error', onImageReady);
                 }
             });
         });
+
         Promise.all(imagePromises).then(() => {
             requestAnimationFrame(() => updateQuoteButton(quote));
         });
     };
-    
-    // Initialize all existing quotes
-    document.querySelectorAll('.modern-quote').forEach(processQuoteImages);
-    
-    // Watch for dynamically added quotes
+
+    // =========================================================================
+    // MAIN: Initialize all existing quotes
+    // =========================================================================
+    const initAllQuotes = () => {
+        document.querySelectorAll('.modern-quote').forEach(processQuoteImages);
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAllQuotes, { once: true });
+    } else {
+        initAllQuotes();
+    }
+
+    // =========================================================================
+    // DYNAMIC: Watch for quotes added after page load
+    // =========================================================================
     if (window.MutationObserver) {
-        const observer = new MutationObserver(mutations => {
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
+        const mutationObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
                     if (node.nodeType === 1) {
-                        if (node.classList && node.classList.contains('modern-quote')) {
+                        if (node.classList?.contains('modern-quote')) {
                             processQuoteImages(node);
-                        } else if (node.querySelectorAll) {
-                            node.querySelectorAll('.modern-quote').forEach(processQuoteImages);
+                        } else {
+                            node.querySelectorAll?.('.modern-quote').forEach(processQuoteImages);
                         }
                     }
                 });
             });
         });
-        observer.observe(document.body, { childList: true, subtree: true });
+        mutationObserver.observe(document.body, { childList: true, subtree: true });
     }
-    
-    // Spoilers: ensure they start hidden
-    document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
-        if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
-    });
+
+    // =========================================================================
+    // SPOILERS: Initialize all spoiler content as hidden
+    // =========================================================================
+    const initAllSpoilers = () => {
+        document.querySelectorAll('.modern-spoiler .spoiler-content').forEach((content) => {
+            if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
+        });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initAllSpoilers, { once: true });
+    } else {
+        initAllSpoilers();
+    }
 }
     
     // ============================================================================
