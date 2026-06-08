@@ -868,7 +868,7 @@ const ForumPostsModule = (function () {
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
 function initQuotesAndSpoilers() {
-    const MAX_HEIGHT = 250; // pixels – adjust as needed
+    const MAX_HEIGHT = 170; // pixels – adjust as needed
     
     // Helper: toggle expansion
     const toggleExpansion = (quote, expandBtn, content) => {
