@@ -867,49 +867,74 @@ const ForumPostsModule = (function () {
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
-    function initQuotesAndSpoilers() {
-        const quotes = document.querySelectorAll('.modern-quote.long-quote');
-        const checkQuote = (quote) => {
-            const content = quote.querySelector('.quote-content');
-            const expandBtn = quote.querySelector('.quote-expand-btn');
-            if (!content || !expandBtn) return;
-            const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
-            if (isNaN(maxHeight)) return;
-            if (content.scrollHeight <= maxHeight + 2) {
-                expandBtn.remove();
-                quote.classList.remove('long-quote');
-            } else {
-                expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
-                quote.classList.remove('expanded');
-            }
-        };
-        quotes.forEach(quote => {
-            const content = quote.querySelector('.quote-content');
-            if (!content) return;
-            const images = content.querySelectorAll('img');
-            if (images.length === 0) {
-                checkQuote(quote);
-            } else {
-                let pending = images.length;
-                const onLoadOrError = () => {
-                    pending--;
-                    if (pending === 0) {
-                        requestAnimationFrame(() => checkQuote(quote));
-                    }
-                };
-                images.forEach(img => {
-                    if (img.complete) onLoadOrError();
-                    else {
-                        img.addEventListener('load', onLoadOrError);
-                        img.addEventListener('error', onLoadOrError);
-                    }
-                });
-            }
+function initQuotesAndSpoilers() {
+    const quotes = document.querySelectorAll('.modern-quote.long-quote');
+    
+    const checkQuote = (quote) => {
+        const content = quote.querySelector('.quote-content');
+        const expandBtn = quote.querySelector('.quote-expand-btn');
+        if (!content || !expandBtn) return;
+        
+        const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+        if (isNaN(maxHeight)) return;
+        
+        // Get actual rendered height
+        const actualHeight = content.getBoundingClientRect().height;
+        
+        // Check if any image inside has height > maxHeight
+        let anyImageTall = false;
+        const images = content.querySelectorAll('img');
+        images.forEach(img => {
+            const imgHeight = img.getBoundingClientRect().height;
+            if (imgHeight > maxHeight + 2) anyImageTall = true;
         });
-        document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
-            if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
-        });
-    }
+        
+        // Use scrollHeight as fallback, but also consider actual height and image heights
+        const overflows = (content.scrollHeight > maxHeight + 2) || (actualHeight > maxHeight + 2) || anyImageTall;
+        
+        if (!overflows) {
+            expandBtn.remove();
+            quote.classList.remove('long-quote');
+        } else {
+            expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
+            quote.classList.remove('expanded');
+        }
+    };
+    
+    quotes.forEach(quote => {
+        const content = quote.querySelector('.quote-content');
+        if (!content) return;
+        
+        const images = content.querySelectorAll('img');
+        if (images.length === 0) {
+            checkQuote(quote);
+        } else {
+            let pending = images.length;
+            const onLoadOrError = () => {
+                pending--;
+                if (pending === 0) {
+                    requestAnimationFrame(() => {
+                        // Extra 50ms to ensure layout is fully stable
+                        setTimeout(() => checkQuote(quote), 50);
+                    });
+                }
+            };
+            images.forEach(img => {
+                // Check if already loaded with actual dimensions
+                if (img.complete && img.naturalHeight !== 0) {
+                    onLoadOrError();
+                } else {
+                    img.addEventListener('load', onLoadOrError);
+                    img.addEventListener('error', onLoadOrError);
+                }
+            });
+        }
+    });
+    
+    document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
+        if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
+    });
+}
 
     // ============================================================================
     // REACTION POPUP (unchanged from v2.1 – include full implementation)
