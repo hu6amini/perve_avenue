@@ -878,23 +878,26 @@ function initQuotesAndSpoilers() {
         const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
         if (isNaN(maxHeight)) return;
         
-        // Get text length excluding HTML tags (but including image alt text)
-        const textContent = content.textContent || '';
-        const hasImages = content.querySelectorAll('img').length > 0;
+        // Check if any image inside the quote is "large" (height > 120px)
+        const images = content.querySelectorAll('img');
+        let hasLargeImage = false;
+        for (const img of images) {
+            // Prefer naturalHeight (after load), otherwise use height attribute or clientHeight
+            let imgHeight = img.naturalHeight || img.height || img.clientHeight;
+            if (imgHeight > 120) {
+                hasLargeImage = true;
+                break;
+            }
+        }
         
-        // If quote contains images AND very little text (e.g., < 50 characters), keep the button
-        const isImageOnly = hasImages && textContent.trim().length < 50;
-        
-        if (!isImageOnly && content.scrollHeight <= maxHeight + 2) {
-            // No images, or plenty of text, and it fits – remove button
-            expandBtn.remove();
-            quote.classList.remove('long-quote');
-        } else {
-            // Ensure button is visible and in correct state
+        // Keep button if there's a large image OR the total content overflows
+        if (hasLargeImage || content.scrollHeight > maxHeight + 2) {
             expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
             quote.classList.remove('expanded');
-            // Also ensure the long-quote class stays
             quote.classList.add('long-quote');
+        } else {
+            expandBtn.remove();
+            quote.classList.remove('long-quote');
         }
     };
     
@@ -927,7 +930,7 @@ function initQuotesAndSpoilers() {
         if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
     });
 }
-
+    
     // ============================================================================
     // REACTION POPUP (unchanged from v2.1 – include full implementation)
     // ============================================================================
