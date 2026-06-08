@@ -868,7 +868,6 @@ const ForumPostsModule = (function () {
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
 function initQuotesAndSpoilers() {
-function initQuotesAndSpoilers() {
     // Process each quote that has the "long-quote" class
     const quotes = document.querySelectorAll('.modern-quote.long-quote');
     
