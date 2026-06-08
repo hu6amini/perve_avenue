@@ -868,6 +868,8 @@ const ForumPostsModule = (function () {
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
 function initQuotesAndSpoilers() {
+function initQuotesAndSpoilers() {
+    // Process each quote that has the "long-quote" class
     const quotes = document.querySelectorAll('.modern-quote.long-quote');
     
     const checkQuote = (quote) => {
@@ -878,26 +880,15 @@ function initQuotesAndSpoilers() {
         const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
         if (isNaN(maxHeight)) return;
         
-        // Check if any image inside the quote is "large" (height > 120px)
-        const images = content.querySelectorAll('img');
-        let hasLargeImage = false;
-        for (const img of images) {
-            // Prefer naturalHeight (after load), otherwise use height attribute or clientHeight
-            let imgHeight = img.naturalHeight || img.height || img.clientHeight;
-            if (imgHeight > 250) {
-                hasLargeImage = true;
-                break;
-            }
-        }
-        
-        // Keep button if there's a large image OR the total content overflows
-        if (hasLargeImage || content.scrollHeight > maxHeight + 2) {
-            expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
-            quote.classList.remove('expanded');
-            quote.classList.add('long-quote');
-        } else {
+        // If the full content height is less than or equal to the max height,
+        // we don't need the expand button.
+        if (content.scrollHeight <= maxHeight + 2) {
             expandBtn.remove();
             quote.classList.remove('long-quote');
+        } else {
+            // Ensure button shows "Show more" and quote is collapsed
+            expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
+            quote.classList.remove('expanded');
         }
     };
     
@@ -906,26 +897,33 @@ function initQuotesAndSpoilers() {
         if (!content) return;
         
         const images = content.querySelectorAll('img');
+        
+        // No images – check immediately
         if (images.length === 0) {
             checkQuote(quote);
-        } else {
-            let pending = images.length;
-            const onLoadOrError = () => {
-                pending--;
-                if (pending === 0) {
-                    requestAnimationFrame(() => checkQuote(quote));
-                }
-            };
-            images.forEach(img => {
-                if (img.complete) onLoadOrError();
-                else {
-                    img.addEventListener('load', onLoadOrError);
-                    img.addEventListener('error', onLoadOrError);
-                }
-            });
+            return;
         }
+        
+        // Has images – wait for all to load (handles lazy loading)
+        let pending = images.length;
+        const onLoadOrError = () => {
+            pending--;
+            if (pending === 0) {
+                // After images are ready, allow layout to settle
+                requestAnimationFrame(() => checkQuote(quote));
+            }
+        };
+        images.forEach(img => {
+            if (img.complete) {
+                onLoadOrError();
+            } else {
+                img.addEventListener('load', onLoadOrError);
+                img.addEventListener('error', onLoadOrError);
+            }
+        });
     });
     
+    // Initialize spoilers (hidden by default)
     document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
         if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
     });
