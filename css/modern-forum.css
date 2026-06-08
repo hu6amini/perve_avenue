@@ -1764,7 +1764,7 @@ input[type="radio"]:checked::before {
     overflow: visible;
 }
 .modern-quote.long-quote .quote-content {
-    max-height: 170px;
+    max-height: 250px;
     overflow-y: auto;
     position: relative;
 }
