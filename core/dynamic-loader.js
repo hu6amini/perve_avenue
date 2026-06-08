@@ -215,7 +215,7 @@ async function bootSystem() {
             const results = await Promise.allSettled([
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c1066340cbf311e771dcbb89968413bd5cb646d2/modules/media-dimensions.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@a88198b93bbc0093b0d0d64be88d2e2472e79a89/modules/twemoji.min.js"),
-                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@940af2eb7f93b8445df1b331c54493b833ebe5cc/modules/posts.min.js"),
+                loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d6ece11e79bca84f87b81c3c1bbf2cb5c49719f1/modules/posts.min.js"),
                 loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js")
             ]);
 
