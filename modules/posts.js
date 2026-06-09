@@ -845,9 +845,7 @@ const ForumPostsModule = (function () {
 
     function convertLegacySpoiler(codeTopElem, codeBodyElem) {
         try {
-            let title = codeTopElem.querySelector('b')?.textContent || 'Spoiler';
-// If the extracted title is exactly "SPOILER" (case‑insensitive), change to "Spoiler"
-if (title && title.toUpperCase() === 'SPOILER') title = 'Spoiler';
+            const title = codeTopElem.querySelector('b')?.textContent || 'SPOILER';
             const contentClone = codeBodyElem.cloneNode(true);
             contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
             const innerHtml = contentClone.innerHTML;
