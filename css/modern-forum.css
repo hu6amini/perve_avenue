@@ -1837,7 +1837,6 @@ input[type="radio"]:checked::before {
     font-weight: 500;
     color: var(--text-primary);
     flex: 1;
-    text-transform: capitalize;
 }
 .spoiler-toggle {
     background: transparent;
