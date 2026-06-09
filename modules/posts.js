@@ -896,7 +896,7 @@ function initQuotesAndSpoilers() {
             expandBtn.remove();
             quote.classList.remove('long-quote');
         } else {
-            expandBtn.innerHTML = '<i class="fa-regular fa-chevron-down"></i> Show more';
+            expandBtn.innerHTML = '<i class="fa-regular fa-angle-down"></i> Show more';
             quote.classList.remove('expanded');
         }
     };
