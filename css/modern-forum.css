@@ -1837,10 +1837,7 @@ input[type="radio"]:checked::before {
     font-weight: 500;
     color: var(--text-primary);
     flex: 1;
-    text-transform: lowercase;
-}
-.spoiler-title::first-letter {
-    text-transform: uppercase;
+    text-transform: capitalize;
 }
 .spoiler-toggle {
     background: transparent;
