@@ -834,10 +834,10 @@ const ForumPostsModule = (function () {
                         </div>
                     </div>`;
             if (targetUrl && anchorId) {
-                quoteHtml += `<button class="quote-jump-btn" data-anchor-id="${anchorId}" data-is-cross-page="false" data-target-url="${escapeHtml(targetUrl)}" title="Jump to quoted post" aria-label="Jump to quoted post" type="button"><i class="fa-regular fa-chevron-up"></i></button>`;
+                quoteHtml += `<button class="quote-jump-btn" data-anchor-id="${anchorId}" data-is-cross-page="false" data-target-url="${escapeHtml(targetUrl)}" title="Jump to quoted post" aria-label="Jump to quoted post" type="button"><i class="fa-regular fa-angle-up"></i></button>`;
             }
             quoteHtml += `</div><div class="quote-content">${innerHtml}</div>`;
-            quoteHtml += `<button class="quote-expand-btn" type="button" aria-label="Show full quote"><i class="fa-regular fa-chevron-down"></i> Show more</button>`;
+            quoteHtml += `<button class="quote-expand-btn" type="button" aria-label="Show full quote"><i class="fa-regular fa-angle-down"></i> Show more</button>`;
             quoteHtml += `</div>`;
             return createElementFromHTML(quoteHtml);
         } catch (e) { return null; }
@@ -855,7 +855,7 @@ const ForumPostsModule = (function () {
                     <div class="spoiler-icon"><i class="fa-regular fa-eye-slash"></i></div>
                     <div class="spoiler-info"><span class="spoiler-title">${escapeHtml(title)}</span></div>
                     <button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="${spoilerId}">
-                        <i class="fa-regular fa-chevron-down"></i>
+                        <i class="fa-regular fa-angle-down"></i>
                     </button>
                 </div>
                 <div id="${spoilerId}" class="spoiler-content" hidden>${innerHtml}</div>
