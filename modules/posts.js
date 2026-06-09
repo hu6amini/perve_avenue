@@ -845,7 +845,7 @@ const ForumPostsModule = (function () {
 
     function convertLegacySpoiler(codeTopElem, codeBodyElem) {
         try {
-            const title = codeTopElem.querySelector('b')?.textContent || 'SPOILER';
+            const title = 'Spoiler';
             const contentClone = codeBodyElem.cloneNode(true);
             contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
             const innerHtml = contentClone.innerHTML;
