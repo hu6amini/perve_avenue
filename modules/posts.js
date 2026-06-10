@@ -1450,7 +1450,7 @@ function initQuotesAndSpoilers() {
         if (quote) {
             quote.classList.toggle('expanded');
             const isExpanded = quote.classList.contains('expanded');
-            btn.innerHTML = isExpanded ? '<i class="fa-regular fa-angle-up"></i> Show less' : '<i class="fa-regular fa-angle-down"></i> Show more';
+            btn.innerHTML = isExpanded ? '<i class="fa-regular fa-angle-down"></i> Show less' : '<i class="fa-regular fa-angle-down"></i> Show more';
         }
     }
     function handleQuoteJump(btn) {
