@@ -1716,7 +1716,7 @@ input[type="radio"]:checked::before {
     align-items: center;
     justify-content: space-between;
     padding: var(--pad-3) var(--pad-5);
-    background: var(--surface-color);
+    background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
     gap: var(--space-sm);
@@ -1727,29 +1727,46 @@ input[type="radio"]:checked::before {
     gap: var(--space-sm);
 }
 .quote-icon {
-    color: var(--primary-color);
-    font-size: 0.9rem;
+    align-items: center;
+    background: var(--primary-color);
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-shrink: 0;
+    height: 28px;
+    justify-content: center;
+    width: 28px;
 }
 .quote-author {
     font-weight: 600;
     color: var(--text-primary);
+    font-size: var(--text-sm);
 }
 .quote-said {
-    color: var(--text-tertiary);
-    font-weight: normal;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-style: italic;
+    font-weight: 400;
 }
 .quote-jump-btn {
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-sm);
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
     align-items: center;
-    justify-content: center;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
     cursor: pointer;
-    color: var(--text-tertiary);
-    transition: all 0.2s;
+    display: inline-flex;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    font-family: var(--font-primary);
+    line-height: 1;
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+    text-decoration: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    height: var(--btn-height);
+    min-height: var(--btn-height);
+    max-height: var(--btn-height);
+    justify-content: center;
 }
 .quote-jump-btn:hover {
     background: var(--hover-color);
