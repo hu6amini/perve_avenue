@@ -1770,7 +1770,9 @@ input[type="radio"]:checked::before {
 }
 .quote-jump-btn:hover {
     background: var(--hover-color);
-    color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    transform: translatey(calc(var(--phi-inverse) * -1px));
 }
 .quote-content {
     padding: var(--pad-5);
@@ -1796,20 +1798,25 @@ input[type="radio"]:checked::before {
     border-radius: 3px;
 }
 .quote-expand-btn {
-    display: block;
-    width: 100%;
-    background: var(--surface-color);
+    align-items: center;
+    background: var(--bg-color);
     border: none;
-    border-top: 1px solid var(--border-color);
-    padding: var(--pad-2);
-    text-align: center;
+    color: var(--text-secondary);
     cursor: pointer;
-    color: var(--primary-color);
-    font-size: var(--text-sm);
-    transition: background 0.2s;
+    display: flex;
+    font-family: var(--font-primary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    gap: 6px;
+    justify-content: center;
+    padding: var(--pad-4) var(--pad-5);
+    text-align: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
 }
 .quote-expand-btn:hover {
     background: var(--hover-color);
+    color: var(--text-primary);
 }
 .quote-expand-btn i {
     margin-right: var(--space-xs);
