@@ -1,8 +1,8 @@
-// Forum Modernizer - Posts Module v2.2 (full, with author extraction fix)
+// Forum Modernizer - Posts Module v2.3 (with missing image dimension fix)
 'use strict';
 
 const ForumPostsModule = (function () {
-    console.log('🔥 ForumPostsModule v2.2 loaded');
+    console.log('🔥 ForumPostsModule v2.3 loaded');
 
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
@@ -790,28 +790,22 @@ const ForumPostsModule = (function () {
 
     function convertLegacyQuote(quoteTopElem, quoteBodyElem) {
         try {
-            // Get the full text content of the quote_top div (includes everything)
             const fullText = quoteTopElem.textContent || '';
             let author = 'Unknown';
-            
-            // Try to extract from pattern: (-Username @ ...)
             const match = fullText.match(/\(([^@]+?)@/);
             if (match && match[1]) {
                 author = match[1].trim();
             } else {
-                // Fallback: QUOTE (Username ...)
                 const fallbackMatch = fullText.match(/QUOTE\s*\(([^)]+)/i);
                 if (fallbackMatch && fallbackMatch[1]) {
                     author = fallbackMatch[1].trim();
                 } else {
-                    // Last resort: take everything before the first ' @' or ' said:'
                     const simpleMatch = fullText.match(/^[^(]*\(?([^@(]+?)(?:\s+@|\s+said:|$)/i);
                     if (simpleMatch && simpleMatch[1]) {
                         author = simpleMatch[1].trim();
                     }
                 }
             }
-            // Clean up any leftover "QUOTE" prefix
             author = author.replace(/^QUOTE\s*/i, '').trim();
             if (author === '') author = 'Unknown';
 
@@ -867,77 +861,84 @@ const ForumPostsModule = (function () {
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
-function initQuotesAndSpoilers() {
-    const quotes = document.querySelectorAll('.modern-quote.long-quote');
-    
-    const checkQuote = (quote) => {
-        const content = quote.querySelector('.quote-content');
-        const expandBtn = quote.querySelector('.quote-expand-btn');
-        if (!content || !expandBtn) return;
-        
-        const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
-        if (isNaN(maxHeight)) return;
-        
-        // Get actual rendered height
-        const actualHeight = content.getBoundingClientRect().height;
-        
-        // Check if any image inside has height > maxHeight
-        let anyImageTall = false;
-        const images = content.querySelectorAll('img');
-        images.forEach(img => {
-            const imgHeight = img.getBoundingClientRect().height;
-            if (imgHeight > maxHeight + 2) anyImageTall = true;
-        });
-        
-        // Use scrollHeight as fallback, but also consider actual height and image heights
-        const overflows = (content.scrollHeight > maxHeight + 2) || (actualHeight > maxHeight + 2) || anyImageTall;
-        
-        if (!overflows) {
-            expandBtn.remove();
-            quote.classList.remove('long-quote');
-        } else {
-            expandBtn.innerHTML = '<i class="fa-regular fa-angle-down"></i> Show more';
-            quote.classList.remove('expanded');
-        }
-    };
-    
-    quotes.forEach(quote => {
-        const content = quote.querySelector('.quote-content');
-        if (!content) return;
-        
-        const images = content.querySelectorAll('img');
-        if (images.length === 0) {
-            checkQuote(quote);
-        } else {
-            let pending = images.length;
-            const onLoadOrError = () => {
-                pending--;
-                if (pending === 0) {
-                    requestAnimationFrame(() => {
-                        // Extra 50ms to ensure layout is fully stable
-                        setTimeout(() => checkQuote(quote), 50);
-                    });
-                }
-            };
+    function initQuotesAndSpoilers() {
+        const quotes = document.querySelectorAll('.modern-quote.long-quote');
+        const checkQuote = (quote) => {
+            const content = quote.querySelector('.quote-content');
+            const expandBtn = quote.querySelector('.quote-expand-btn');
+            if (!content || !expandBtn) return;
+            const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+            if (isNaN(maxHeight)) return;
+            const actualHeight = content.getBoundingClientRect().height;
+            let anyImageTall = false;
+            const images = content.querySelectorAll('img');
             images.forEach(img => {
-                // Check if already loaded with actual dimensions
-                if (img.complete && img.naturalHeight !== 0) {
-                    onLoadOrError();
-                } else {
-                    img.addEventListener('load', onLoadOrError);
-                    img.addEventListener('error', onLoadOrError);
-                }
+                const imgHeight = img.getBoundingClientRect().height;
+                if (imgHeight > maxHeight + 2) anyImageTall = true;
             });
-        }
-    });
-    
-    document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
-        if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
-    });
-}
+            const overflows = (content.scrollHeight > maxHeight + 2) || (actualHeight > maxHeight + 2) || anyImageTall;
+            if (!overflows) {
+                expandBtn.remove();
+                quote.classList.remove('long-quote');
+            } else {
+                expandBtn.innerHTML = '<i class="fa-regular fa-angle-down"></i> Show more';
+                quote.classList.remove('expanded');
+            }
+        };
+        quotes.forEach(quote => {
+            const content = quote.querySelector('.quote-content');
+            if (!content) return;
+            const images = content.querySelectorAll('img');
+            if (images.length === 0) {
+                checkQuote(quote);
+            } else {
+                let pending = images.length;
+                const onLoadOrError = () => {
+                    pending--;
+                    if (pending === 0) {
+                        requestAnimationFrame(() => {
+                            setTimeout(() => checkQuote(quote), 50);
+                        });
+                    }
+                };
+                images.forEach(img => {
+                    if (img.complete && img.naturalHeight !== 0) {
+                        onLoadOrError();
+                    } else {
+                        img.addEventListener('load', onLoadOrError);
+                        img.addEventListener('error', onLoadOrError);
+                    }
+                });
+            }
+        });
+        document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
+            if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
+        });
+    }
 
     // ============================================================================
-    // REACTION POPUP (unchanged from v2.1 – include full implementation)
+    // FIX MISSING IMAGE DIMENSIONS (NEW)
+    // ============================================================================
+    function fixMissingImageDimensions(container) {
+        if (!container) return;
+        const images = container.querySelectorAll('img:not([width]):not([height])');
+        images.forEach(img => {
+            if (img.complete && img.naturalWidth) {
+                img.setAttribute('width', img.naturalWidth);
+                img.setAttribute('height', img.naturalHeight);
+                img.style.aspectRatio = img.naturalWidth + '/' + img.naturalHeight;
+            } else {
+                img.addEventListener('load', () => {
+                    img.setAttribute('width', img.naturalWidth);
+                    img.setAttribute('height', img.naturalHeight);
+                    img.style.aspectRatio = img.naturalWidth + '/' + img.naturalHeight;
+                }, { once: true });
+            }
+        });
+    }
+
+    // ============================================================================
+    // REACTION POPUP (unchanged from v2.2)
     // ============================================================================
     function getAvailableReactions(postId) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
@@ -1122,7 +1123,7 @@ function initQuotesAndSpoilers() {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD (full from v2.1)
+    // GENERATE MODERN CARD
     // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
@@ -1605,6 +1606,7 @@ function initQuotesAndSpoilers() {
                 const cardHtml = generateModernPost(completeData);
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
+                fixMissingImageDimensions(card);  // <-- ADDED
                 applyFaviconsToMessageLinks(card);
             }
             attachEventHandlers();
@@ -1635,6 +1637,7 @@ function initQuotesAndSpoilers() {
                 const blogCardHtml = generateBlogPost(blogData, apiUser);
                 const blogCard = createElementFromHTML(blogCardHtml);
                 container.appendChild(blogCard);
+                fixMissingImageDimensions(blogCard);  // <-- ADDED
                 applyFaviconsToMessageLinks(blogCard);
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
@@ -1701,6 +1704,7 @@ function initQuotesAndSpoilers() {
                 const cardHtml = generateModernPost(completeData);
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
+                fixMissingImageDimensions(card);  // <-- ADDED
                 applyFaviconsToMessageLinks(card);
             }
             attachEventHandlers();
@@ -1773,6 +1777,7 @@ function initQuotesAndSpoilers() {
             const cardHtml = generateModernPost(completeData);
             const card = createElementFromHTML(cardHtml);
             container.appendChild(card);
+            fixMissingImageDimensions(card);  // <-- ADDED
             applyFaviconsToMessageLinks(card);
         }
         initQuotesAndSpoilers();
