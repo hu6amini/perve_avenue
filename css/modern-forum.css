@@ -1720,11 +1720,14 @@ input[type="radio"]:checked::before {
     border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
     gap: var(--space-sm);
+    flex-wrap: nowrap;
 }
 .quote-meta {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
+    flex: 1;
+    min-width: 0;
 }
 .quote-icon {
     align-items: center;
@@ -1740,12 +1743,18 @@ input[type="radio"]:checked::before {
     font-weight: 600;
     color: var(--text-primary);
     font-size: var(--text-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
 }
 .quote-said {
     color: var(--text-secondary);
     font-size: 0.8125rem;
     font-style: italic;
     font-weight: 400;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 .quote-jump-btn {
     align-items: center;
@@ -1767,6 +1776,7 @@ input[type="radio"]:checked::before {
     min-height: var(--btn-height);
     max-height: var(--btn-height);
     justify-content: center;
+    flex-shrink: 0;
 }
 .quote-jump-btn:hover {
     background: var(--hover-color);
