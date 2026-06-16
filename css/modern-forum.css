@@ -1718,15 +1718,14 @@ input[type="radio"]:checked::before {
     padding: var(--pad-3) var(--pad-5);
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
-    flex-wrap: wrap;
-    gap: var(--space-sm);
     flex-wrap: nowrap;
+    gap: var(--space-sm);
 }
 .quote-meta {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
 }
 .quote-icon {
@@ -1746,15 +1745,13 @@ input[type="radio"]:checked::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 150px;
+    max-width: 120px; 
 }
 .quote-said {
     color: var(--text-secondary);
     font-size: 0.8125rem;
     font-style: italic;
     font-weight: 400;
-    white-space: nowrap;
-    flex-shrink: 0;
 }
 .quote-jump-btn {
     align-items: center;
