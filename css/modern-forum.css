@@ -1810,6 +1810,7 @@ input[type="radio"]:checked::before {
 .quote-expand-btn {
     align-items: center;
     background: var(--bg-color);
+    border:none;
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);
     cursor: pointer;
