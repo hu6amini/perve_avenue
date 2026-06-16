@@ -1,5 +1,5 @@
 // =============================================
-// MEDIA DIMENSION EXTRACTOR - Module version
+// MEDIA DIMENSION EXTRACTOR - Skips all post images
 // =============================================
 
 'use strict';
@@ -47,15 +47,15 @@ class MediaDimensionExtractor {
     static #SMALL_CONTEXT_SELECTORS = '.modern-quote, .quote-content, .modern-spoiler, .spoiler-content, .signature, .post-signature';
     
     // Emoji sizes for different contexts
-    static #EMOJI_SIZE_NORMAL = 20;        // Normal text emoji size
-    static #EMOJI_SIZE_SMALL = 18;         // Emoji in small contexts (quotes, spoilers, signatures)
-    static #EMOJI_SIZE_H1 = 35;            // Heading 1 emoji size
-    static #EMOJI_SIZE_H2 = 29;            // Heading 2 emoji size
-    static #EMOJI_SIZE_H3 = 24;            // Heading 3 emoji size
-    static #EMOJI_SIZE_H4 = 20;            // Heading 4 emoji size
-    static #EMOJI_SIZE_H5 = 18;            // Heading 5 emoji size
-    static #EMOJI_SIZE_H6 = 16;            // Heading 6 emoji size
-    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };  // Fallback for broken images
+    static #EMOJI_SIZE_NORMAL = 20;
+    static #EMOJI_SIZE_SMALL = 18;
+    static #EMOJI_SIZE_H1 = 35;
+    static #EMOJI_SIZE_H2 = 29;
+    static #EMOJI_SIZE_H3 = 24;
+    static #EMOJI_SIZE_H4 = 20;
+    static #EMOJI_SIZE_H5 = 18;
+    static #EMOJI_SIZE_H6 = 16;
+    static #BROKEN_IMAGE_SIZE = { width: 600, height: 400 };
     static #BATCH_SIZE = 50;
 
     constructor() {
@@ -63,8 +63,12 @@ class MediaDimensionExtractor {
         this.#cacheContextElements();
     }
 
+    // ----- SKIP POST IMAGES: helper to check if element is inside a post -----
+    #isInsidePost(element) {
+        return element.closest?.('.post, .post-card') !== null;
+    }
+
     async #waitForDependencies() {
-        // Wait for forum observer
         if (!globalThis.forumObserver) {
             await new Promise((resolve) => {
                 const handler = () => {
@@ -77,7 +81,6 @@ class MediaDimensionExtractor {
         }
         this.#observerReady = true;
         
-        // Wait for Weserv
         const processedImages = document.querySelectorAll('img[data-optimized="true"]');
         if (processedImages.length > 0) {
             this.#weservReady = true;
@@ -111,23 +114,18 @@ class MediaDimensionExtractor {
             this.#pendingImages.clear();
         }
         
-        // Dispatch ready event
         queueMicrotask(() => {
             window.dispatchEvent(new CustomEvent('dimension-extractor-ready', {
                 detail: { timestamp: Date.now() }
             }));
-            console.log('📐 Dimension extractor ready');
+            console.log('📐 Dimension extractor ready (skipping posts)');
 
-            // ===== USER TIMING: ready and measure =====
             if (typeof performance !== 'undefined' && performance.mark) {
                 performance.mark('media-dimensions-ready');
                 try {
                     performance.measure('media-dimensions-load-time', 'media-dimensions-start', 'media-dimensions-ready');
-                } catch (e) {
-                    // Ignore if marks missing
-                }
+                } catch (e) {}
             }
-            // ==========================================
         });
     }
 
@@ -153,7 +151,6 @@ class MediaDimensionExtractor {
     }
 
     #processAllMediaBatched() {
-        // Take snapshots to prevent issues with DOM mutations during iteration
         const batches = [
             Array.from(document.images),
             Array.from(document.getElementsByTagName('iframe')),
@@ -194,8 +191,10 @@ class MediaDimensionExtractor {
         }
     }
 
+    // ----- MAIN PROCESSING METHODS (with skip checks) -----
     #processMedia(node) {
         if (!node || !node.isConnected) return;
+        if (this.#isInsidePost(node)) return;   // <-- SKIP POSTS
         if (this.#processedMedia.has(node)) return;
 
         const tag = node.tagName;
@@ -216,6 +215,7 @@ class MediaDimensionExtractor {
 
     #processNestedMedia(node) {
         if (!node || !node.isConnected) return;
+        if (this.#isInsidePost(node)) return;   // <-- SKIP POSTS
         if (this.#isInsideProseMirror(node)) return;
         
         const images = node.getElementsByTagName('img');
@@ -224,6 +224,7 @@ class MediaDimensionExtractor {
 
         for (let i = 0, len = images.length; i < len; i++) {
             const img = images[i];
+            if (this.#isInsidePost(img)) continue;   // <-- SKIP POSTS
             if (this.#isInsideProseMirror(img)) continue;
             if (img.isConnected && !this.#processedMedia.has(img)) {
                 this.#processImage(img);
@@ -232,6 +233,7 @@ class MediaDimensionExtractor {
         
         for (let i = 0, len = iframes.length; i < len; i++) {
             const iframe = iframes[i];
+            if (this.#isInsidePost(iframe)) continue;   // <-- SKIP POSTS
             if (iframe.isConnected && !this.#processedMedia.has(iframe)) {
                 this.#processIframe(iframe);
             }
@@ -239,6 +241,7 @@ class MediaDimensionExtractor {
         
         for (let i = 0, len = videos.length; i < len; i++) {
             const video = videos[i];
+            if (this.#isInsidePost(video)) continue;   // <-- SKIP POSTS
             if (video.isConnected && !this.#processedMedia.has(video)) {
                 this.#processVideo(video);
             }
@@ -247,6 +250,7 @@ class MediaDimensionExtractor {
 
     #processSingleMedia(media) {
         if (!media || !media.isConnected) return;
+        if (this.#isInsidePost(media)) return;   // <-- SKIP POSTS
         if (this.#processedMedia.has(media)) return;
         if (this.#isInsideProseMirror(media)) return;
 
@@ -271,6 +275,7 @@ class MediaDimensionExtractor {
     }
 
     #processImage(img) {
+        if (this.#isInsidePost(img)) return;   // <-- SKIP POSTS
         if (this.#isInsideProseMirror(img)) return;
         
         const isTwemoji = img.src.includes('twemoji') || 
@@ -383,7 +388,6 @@ class MediaDimensionExtractor {
     }
 
     #getCacheKey(src) {
-        // All twemoji use same cache entry for better hit rate
         if (src.includes('twemoji')) {
             return 'emoji:twemoji';
         }
@@ -485,6 +489,7 @@ class MediaDimensionExtractor {
     }
 
     #processIframe(iframe) {
+        if (this.#isInsidePost(iframe)) return;   // <-- SKIP POSTS
         const src = iframe.src || '';
         let width = '100%';
         let height = '400';
@@ -529,6 +534,7 @@ class MediaDimensionExtractor {
     }
 
     #processVideo(video) {
+        if (this.#isInsidePost(video)) return;   // <-- SKIP POSTS
         if (!video.hasAttribute('controls')) {
             video.setAttribute('controls', '');
         }
@@ -554,9 +560,9 @@ class MediaDimensionExtractor {
     }
 
     // ===== PUBLIC API =====
-    
     extractDimensionsForElement(element) {
         if (!element) return;
+        if (this.#isInsidePost(element)) return;   // <-- SKIP POSTS
         if (element.matches('img, iframe, video')) {
             this.#processSingleMedia(element);
         } else {
@@ -566,9 +572,8 @@ class MediaDimensionExtractor {
 
     forceReprocessElement(element) {
         if (!element) return;
+        if (this.#isInsidePost(element)) return;   // <-- SKIP POSTS
         this.#processedMedia.delete(element);
-        
-        // Only clear cache for images which have src attribute
         if (element.tagName === 'IMG' && element.src) {
             const cacheKey = this.#getCacheKey(element.src);
             if (this.#dimensionCache.has(cacheKey)) {
@@ -583,12 +588,13 @@ class MediaDimensionExtractor {
         console.log('Refreshing dimension extractor');
         const images = document.querySelectorAll('img:not([width])');
         images.forEach(img => {
+            if (this.#isInsidePost(img)) return;   // <-- SKIP POSTS
             this.#processedMedia.delete(img);
             this.#processImage(img);
         });
         if (this.#pendingImages.size > 0) {
             this.#pendingImages.forEach(img => {
-                if (img.isConnected) {
+                if (img.isConnected && !this.#isInsidePost(img)) {
                     this.#processImage(img);
                 }
             });
@@ -621,7 +627,6 @@ class MediaDimensionExtractor {
         this.#cleanup();
     }
 
-    // Module initialisation entry point
     static async createAndInit() {
         const instance = new MediaDimensionExtractor();
         await instance.#init();
@@ -643,4 +648,4 @@ var MediaDimensionsModule = {
     dependencies: ['forumObserver']
 };
 
-// Do NOT auto-initialise; the enhancer will call initialize()
+// DO NOT auto-initialise; the enhancer will call initialize()
