@@ -1,22 +1,11 @@
-// =============================================
-// MEDIA DIMENSION EXTRACTOR - Skips all post images
-// =============================================
-
 'use strict';
 
 class MediaDimensionExtractor {
     #processedMedia = new WeakSet();
     #postCache = new WeakMap();
 
-    constructor() {
-        // Initialization logic
-    }
-
-    // Memoized check for post status to keep the UI thread fast
     #isInsidePost(element) {
         if (this.#postCache.has(element)) return this.#postCache.get(element);
-        
-        // Skip elements inside posts as per your architectural requirement
         const result = element.closest?.('.post, .post-card') !== null;
         this.#postCache.set(element, result);
         return result;
@@ -25,8 +14,6 @@ class MediaDimensionExtractor {
     #processSingleMedia(media) {
         if (!media || !media.isConnected || this.#processedMedia.has(media)) return;
         if (this.#isInsidePost(media)) return;
-
-        // Security: Validate protocol to prevent potential javascript: URI injection
         if (media.src && media.src.startsWith('javascript:')) return;
 
         const tag = media.tagName;
@@ -37,14 +24,17 @@ class MediaDimensionExtractor {
     }
 
     #processImage(img) {
-        if (img.complete && img.naturalWidth) {
+        // If image has natural dimensions, apply them immediately
+        if (img.complete && img.naturalWidth > 0) {
             this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
         } else {
-            // Immediate listener setup for non-cached or lazy-loaded images
-            const handler = (e) => {
+            // Otherwise, set a listener to catch it once it loads
+            const handler = () => {
                 img.removeEventListener('load', handler);
                 img.removeEventListener('error', handler);
-                this.#setImageDimensions(img, img.naturalWidth || 600, img.naturalHeight || 400);
+                if (img.naturalWidth > 0) {
+                    this.#setImageDimensions(img, img.naturalWidth, img.naturalHeight);
+                }
             };
             img.addEventListener('load', handler, { once: true });
             img.addEventListener('error', handler, { once: true });
@@ -58,23 +48,23 @@ class MediaDimensionExtractor {
         this.#processedMedia.add(img);
     }
 
-    // Public API: Trigger this whenever content is injected into the DOM
     scanNow() {
         const media = document.querySelectorAll('img, iframe, video');
         media.forEach(el => this.#processSingleMedia(el));
     }
 }
 
-// Module Registration (Global)
 var MediaDimensionsModule = {
     initialized: false,
     instance: null,
     initialize: async function() {
         if (this.initialized) return this.instance;
         this.instance = new MediaDimensionExtractor();
-        this.instance.scanNow(); // Trigger initial full scan on boot
         
-        // Optional: Listen for your dynamic-loader events to auto-scan new content
+        // 1. Initial scan
+        this.instance.scanNow();
+        
+        // 2. Hook into EventBus for dynamic content (Critical for your loader)
         if (typeof ForumEventBus !== 'undefined') {
             ForumEventBus.on('content:injected', () => {
                 this.instance.scanNow();
@@ -85,5 +75,3 @@ var MediaDimensionsModule = {
         return this.instance;
     }
 };
-
-// DO NOT auto-initialise; the enhancer will call initialize()
