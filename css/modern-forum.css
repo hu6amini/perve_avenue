@@ -455,7 +455,6 @@ body#msg .textinput {
 .post-message img:not(.embedded-link-image img) {
     max-width: 100%;
     border-radius: var(--radius);
-    display: block;
     height: auto;
 }
 
