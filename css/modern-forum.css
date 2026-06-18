@@ -1744,7 +1744,7 @@ input[type="radio"]:checked::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 120px; 
+    max-width: min(200px, 30vw);
 }
 .quote-said {
     color: var(--text-secondary);
