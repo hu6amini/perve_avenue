@@ -1719,13 +1719,16 @@ input[type="radio"]:checked::before {
     border-bottom: 1px solid var(--border-color);
     flex-wrap: nowrap;
     gap: var(--space-sm);
+    /* Prevent overflow */
+    overflow: hidden;
 }
 .quote-meta {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    flex: 1 1 auto;
-    min-width: 0;
+    flex: 1 1 0;           /* allows shrinking, no growth beyond available */
+    min-width: 0;          /* allow it to shrink below content width */
+    overflow: hidden;      /* clip any overflow */
 }
 .quote-icon {
     align-items: center;
@@ -1744,13 +1747,16 @@ input[type="radio"]:checked::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: min(200px, 30vw);
+    flex: 0 1 auto;        /* don't grow, allow shrink */
+    max-width: 160px;      /* generous but still truncated on mobile */
 }
 .quote-said {
     color: var(--text-secondary);
     font-size: 0.8125rem;
     font-style: italic;
     font-weight: 400;
+    white-space: nowrap;
+    flex-shrink: 0;        /* never shrink the "said" part */
 }
 .quote-jump-btn {
     align-items: center;
