@@ -1832,6 +1832,7 @@ input[type="radio"]:checked::before {
     color: var(--text-primary);
 }
 .quote-expand-btn i {
+    color: var(--primary-color);
     margin-right: var(--space-xs);
     transition: transform 0.2s;
 }
