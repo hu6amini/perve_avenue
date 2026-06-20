@@ -1,8 +1,8 @@
-// Forum Modernizer - Posts Module v2.3 (with missing image dimension fix)
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling)
 'use strict';
 
 const ForumPostsModule = (function () {
-    console.log('🔥 ForumPostsModule v2.3 loaded');
+    console.log('🔥 ForumPostsModule v2.4 loaded');
 
     // ===== USER TIMING: mark script start =====
     if (typeof performance !== 'undefined' && performance.mark) {
@@ -917,7 +917,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // FIX MISSING IMAGE DIMENSIONS (NEW)
+    // FIX MISSING IMAGE DIMENSIONS
     // ============================================================================
     function fixMissingImageDimensions(container) {
         if (!container) return;
@@ -938,7 +938,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // REACTION POPUP (unchanged from v2.2)
+    // REACTION POPUP (unchanged)
     // ============================================================================
     function getAvailableReactions(postId) {
         const originalPost = document.getElementById(CONFIG.POST_ID_PREFIX + postId);
@@ -1123,7 +1123,7 @@ const ForumPostsModule = (function () {
     }
 
     // ============================================================================
-    // GENERATE MODERN CARD
+    // GENERATE MODERN CARD (with anchor ID)
     // ============================================================================
     function generateModernPost(data) {
         if (!data) return '';
@@ -1228,7 +1228,8 @@ const ForumPostsModule = (function () {
             footerHtml = '<footer class="post-footer"><div class="post-reactions">' + likeButton + reactionsHtml + '</div>' + memberActionsHtml + messageActionsHtml + ipHtml + '</footer>';
         }
 
-        return '<article class="post-card ' + groupCssClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
+        // MODIFIED: added id="entry{data.postId}" to the article element
+        return '<article id="entry' + data.postId + '" class="post-card ' + groupCssClass + '" data-original-id="' + (data.originalIdPrefix || CONFIG.POST_ID_PREFIX) + data.postId + '" data-post-id="' + data.postId + '" aria-labelledby="post-title-' + data.postId + '">' +
             '<header class="post-card-header"><div class="post-meta"><div class="post-number"><i class="fa-regular fa-hashtag" aria-hidden="true"></i> ' + data.postNumber + '</div>' + postTimeHtml + '</div>' + headerActionsHtml + '</header>' +
             '<div class="post-card-body"><div class="avatar-modern">' + avatarHtml + '</div>' +
             '<div class="post-user-info"><div class="user-name"><a href="' + profileUrl + '" class="user-profile-link">' + escapeHtml(username) + '</a></div>' +
@@ -1606,7 +1607,7 @@ const ForumPostsModule = (function () {
                 const cardHtml = generateModernPost(completeData);
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
-                fixMissingImageDimensions(card);  // <-- ADDED
+                fixMissingImageDimensions(card);
                 applyFaviconsToMessageLinks(card);
             }
             attachEventHandlers();
@@ -1637,7 +1638,7 @@ const ForumPostsModule = (function () {
                 const blogCardHtml = generateBlogPost(blogData, apiUser);
                 const blogCard = createElementFromHTML(blogCardHtml);
                 container.appendChild(blogCard);
-                fixMissingImageDimensions(blogCard);  // <-- ADDED
+                fixMissingImageDimensions(blogCard);
                 applyFaviconsToMessageLinks(blogCard);
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
@@ -1704,7 +1705,7 @@ const ForumPostsModule = (function () {
                 const cardHtml = generateModernPost(completeData);
                 const card = createElementFromHTML(cardHtml);
                 container.appendChild(card);
-                fixMissingImageDimensions(card);  // <-- ADDED
+                fixMissingImageDimensions(card);
                 applyFaviconsToMessageLinks(card);
             }
             attachEventHandlers();
@@ -1777,7 +1778,7 @@ const ForumPostsModule = (function () {
             const cardHtml = generateModernPost(completeData);
             const card = createElementFromHTML(cardHtml);
             container.appendChild(card);
-            fixMissingImageDimensions(card);  // <-- ADDED
+            fixMissingImageDimensions(card);
             applyFaviconsToMessageLinks(card);
         }
         initQuotesAndSpoilers();
