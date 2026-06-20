@@ -1729,6 +1729,7 @@ const ForumPostsModule = (function () {
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
+            scrollToAnchorIfNeeded();
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
         } catch (err) { console.error('[PostsModule] Conversion error:', err); }
         finally { conversionInProgress = false; if (conversionPending) convertAllPosts(); }
