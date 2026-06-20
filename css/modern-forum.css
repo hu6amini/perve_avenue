@@ -1724,7 +1724,7 @@ input[type="radio"]:checked::before {
     display: flex;
     flex: 1 1 auto;
     min-width: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: var(--space-sm);
 }
