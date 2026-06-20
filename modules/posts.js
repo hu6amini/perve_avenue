@@ -937,25 +937,6 @@ const ForumPostsModule = (function () {
         });
     }
 
-    function scrollToAnchorIfNeeded() {
-    const hash = window.location.hash;
-    if (!hash || hash === '#') return;
-
-    // Wait a moment for layout to settle
-    requestAnimationFrame(() => {
-        const target = document.getElementById(hash.replace('#', ''));
-        if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else {
-            // If not found, try again after a short delay (for images loading)
-            setTimeout(() => {
-                const target2 = document.getElementById(hash.replace('#', ''));
-                if (target2) target2.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 300);
-        }
-    });
-}
-
     // ============================================================================
     // REACTION POPUP (unchanged)
     // ============================================================================
@@ -1729,7 +1710,6 @@ const ForumPostsModule = (function () {
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
-            scrollToAnchorIfNeeded();
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
         } catch (err) { console.error('[PostsModule] Conversion error:', err); }
         finally { conversionInProgress = false; if (conversionPending) convertAllPosts(); }
