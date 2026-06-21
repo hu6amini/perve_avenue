@@ -29,7 +29,7 @@ const ForumBoardsModule = (function () {
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
 
         // Avatar
-        AVATAR_SIZE: 20,
+        AVATAR_SIZE: 24,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80
