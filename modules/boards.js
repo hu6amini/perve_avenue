@@ -288,22 +288,26 @@ function generateTopicCard(data) {
         </div>`;
     }
 
-    // Unread indicator
+    // Status icon (read / unread)
+    const statusIconHtml = `<span class="topic-status-icon" title="${data.isUnread ? 'New replies' : 'No new replies'}">
+        <i class="${escapeHtml(data.statusIconClass)}" aria-hidden="true"></i>
+    </span>`;
+
+    // Unread indicator (the small dot) – keep it, but move it after the status icon
     const unreadBadge = data.isUnread
         ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
         : '';
 
-    // Last post info – only show the poster name if different from the starter
-    const lastPosterHtml = data.lastPosterName !== data.starterName
-        ? `<span class="last-post-author">by <a href="${escapeHtml(data.lastPosterUrl)}">${escapeHtml(data.lastPosterName)}</a></span>`
-        : '';
+    // Always show last post author (remove the condition)
+    const lastPosterHtml = `<span class="last-post-author">by <a href="${escapeHtml(data.lastPosterUrl)}">${escapeHtml(data.lastPosterName)}</a></span>`;
 
     return `
         <article class="topic-card" data-topic-id="${data.topicId}" data-original-id="t${data.topicId}">
             ${imageHtml}
             <div class="topic-info">
                 <h3 class="topic-title">
-                    <a href="${escapeHtml(data.topicUrl)}">${unreadBadge}${data.topicTitleHTML}</a>
+                    ${statusIconHtml}${unreadBadge}
+                    <a href="${escapeHtml(data.topicUrl)}">${data.topicTitleHTML}</a>
                 </h3>
                 <div class="topic-meta">
                     <span class="topic-starter">by <a href="${escapeHtml(data.starterUrl)}">${escapeHtml(data.starterName)}</a></span>
