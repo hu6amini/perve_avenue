@@ -271,46 +271,56 @@ const ForumBoardsModule = (function () {
         };
     }
 
-    function generateTopicCard(data) {
-        // Thumbnail area
-        let imageHtml;
-        if (data.thumbnailUrl) {
-            imageHtml = `<div class="topic-thumbnail">
+function generateTopicCard(data) {
+    // Thumbnail area
+    let imageHtml;
+    if (data.thumbnailUrl) {
+        imageHtml = `<div class="topic-thumbnail">
+            <a href="${escapeHtml(data.topicUrl)}" aria-label="View topic: ${escapeHtml(data.topicTitle)}">
                 <img src="${escapeHtml(data.thumbnailUrl)}" alt="" loading="lazy">
-            </div>`;
-        } else {
-            // Placeholder: simple comment icon
-            imageHtml = `<div class="topic-thumbnail topic-thumbnail--placeholder">
+            </a>
+        </div>`;
+    } else {
+        imageHtml = `<div class="topic-thumbnail topic-thumbnail--placeholder">
+            <a href="${escapeHtml(data.topicUrl)}" aria-label="View topic: ${escapeHtml(data.topicTitle)}">
                 <i class="fa-regular fa-comments"></i>
-            </div>`;
-        }
-
-        // Unread indicator
-        const unreadBadge = data.isUnread
-            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
-            : '';
-
-        return `
-            <article class="topic-card" data-topic-id="${data.topicId}" data-original-id="t${data.topicId}">
-                <a href="${escapeHtml(data.topicUrl)}" class="topic-card-link" aria-label="View topic: ${escapeHtml(data.topicTitle)}">
-                    ${imageHtml}
-                    <div class="topic-info">
-                        <h3 class="topic-title">${unreadBadge}${data.topicTitleHTML}</h3>
-                        <div class="topic-meta">
-                            <span class="topic-starter">by <a href="${escapeHtml(data.starterUrl)}">${escapeHtml(data.starterName)}</a></span>
-                            <span class="topic-stats">
-                                <span><i class="fa-regular fa-reply"></i> ${formatNumber(data.replyCount)} replies</span>
-                                <span><i class="fa-regular fa-eye"></i> ${formatNumber(data.viewCount)} views</span>
-                            </span>
-                        </div>
-                        <div class="topic-last-post">
-                            <span class="last-post-date">${escapeHtml(data.lastPostRelative)}</span>
-                            ${data.lastPosterName !== data.starterName ? `<span class="last-post-author">by <a href="${escapeHtml(data.lastPosterUrl)}">${escapeHtml(data.lastPosterName)}</a></span>` : ''}
-                        </div>
-                    </div>
-                </a>
-            </article>`;
+            </a>
+        </div>`;
     }
+
+    // Unread indicator
+    const unreadBadge = data.isUnread
+        ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
+        : '';
+
+    // Last post info – only show the poster name if different from the starter
+    const lastPosterHtml = data.lastPosterName !== data.starterName
+        ? `<span class="last-post-author">by <a href="${escapeHtml(data.lastPosterUrl)}">${escapeHtml(data.lastPosterName)}</a></span>`
+        : '';
+
+    return `
+        <article class="topic-card" data-topic-id="${data.topicId}" data-original-id="t${data.topicId}">
+            ${imageHtml}
+            <div class="topic-info">
+                <h3 class="topic-title">
+                    <a href="${escapeHtml(data.topicUrl)}">${unreadBadge}${data.topicTitleHTML}</a>
+                </h3>
+                <div class="topic-meta">
+                    <span class="topic-starter">by <a href="${escapeHtml(data.starterUrl)}">${escapeHtml(data.starterName)}</a></span>
+                    <span class="topic-stats">
+                        <span><i class="fa-regular fa-reply"></i> ${formatNumber(data.replyCount)} replies</span>
+                        <span><i class="fa-regular fa-eye"></i> ${formatNumber(data.viewCount)} views</span>
+                    </span>
+                </div>
+                <div class="topic-last-post">
+                    <a href="${escapeHtml(data.lastPostUrl)}" class="last-post-date-link">
+                        <i class="fa-regular fa-clock"></i> ${escapeHtml(data.lastPostRelative)}
+                    </a>
+                    ${lastPosterHtml}
+                </div>
+            </div>
+        </article>`;
+}
 
     // =========================================================================
     // BUILD MODERN LISTS
