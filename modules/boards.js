@@ -21,7 +21,7 @@ const ForumBoardsModule = (function () {
     });
 
     // =========================================================================
-    // UTILITIES (copied from Posts module for self‑containment)
+    // UTILITIES (self‑contained)
     // =========================================================================
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return '';
@@ -88,7 +88,6 @@ const ForumBoardsModule = (function () {
         let container = document.getElementById(CONFIG.CONTAINER_ID);
         if (container) return container;
 
-        // Place after .carousel-wrapper (if exists), otherwise at the end of wrapper
         const afterEl = wrapper.querySelector(CONFIG.INSERT_AFTER_SELECTOR);
         container = document.createElement('div');
         container.id = CONFIG.CONTAINER_ID;
@@ -124,21 +123,19 @@ const ForumBoardsModule = (function () {
 
         const whereEl = row.querySelector('.zz .where');
         let lastTopicUrl = '';
-        let lastTopicTitle = '';
+        let lastTopicHTML = '';          // <-- use innerHTML to preserve emoji
         let subForumUrl = '';
         let subForumName = '';
         if (whereEl) {
             const links = whereEl.querySelectorAll('a');
-            // In your example, there's exactly one <a> for the topic
             if (links.length === 1) {
                 lastTopicUrl = links[0].getAttribute('href') || '';
-                lastTopicTitle = links[0].textContent.trim();
+                lastTopicHTML = links[0].innerHTML;      // raw HTML (emoji as <img>)
             } else if (links.length >= 2) {
-                // If there were two links, the first would be the sub‑forum
                 subForumUrl = links[0].getAttribute('href') || '';
                 subForumName = links[0].textContent.trim();
                 lastTopicUrl = links[1].getAttribute('href') || '';
-                lastTopicTitle = links[1].textContent.trim();
+                lastTopicHTML = links[1].innerHTML;
             }
         }
 
@@ -158,7 +155,7 @@ const ForumBoardsModule = (function () {
             lastPostRelative,
             lastPostDateStr,
             lastTopicUrl,
-            lastTopicTitle,
+            lastTopicHTML,            // now includes any emoji <img>
             subForumUrl,
             subForumName,
             lastPostAuthor,
@@ -196,7 +193,7 @@ const ForumBoardsModule = (function () {
             lastPostHtml = `
                 <div class="board-last-post">
                     <div class="last-post-topic">
-                        ${subText}<a href="${escapeHtml(data.lastTopicUrl)}">${escapeHtml(data.lastTopicTitle)}</a>
+                        ${subText}<a href="${escapeHtml(data.lastTopicUrl)}">${data.lastTopicHTML}</a>
                     </div>
                     <div class="last-post-meta">
                         <span class="last-post-date">${escapeHtml(data.lastPostRelative)}</span>
@@ -241,7 +238,6 @@ const ForumBoardsModule = (function () {
             const forumRows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
             if (forumRows.length === 0) return;
 
-            // Category header
             html += `<section class="board-category" data-category-id="${catData.categoryId}">
                 <header class="board-category-header">
                     <h2 class="board-category-title">${escapeHtml(catData.categoryName)}</h2>
@@ -267,18 +263,15 @@ const ForumBoardsModule = (function () {
         if (!container) return;
         const modernHtml = buildModernBoardList();
         if (!modernHtml) {
-            container.innerHTML = '';   // nothing to show
+            container.innerHTML = '';
             return;
         }
         container.innerHTML = modernHtml;
-
-        // Attach click handlers for last‑post links (optional: open in same tab)
-        // Links already work naturally, but we can add event delegation if needed.
         console.log('[BoardsModule] Board list modernized');
     }
 
     // =========================================================================
-    // INITIALIZATION
+    // INITIALIZATION (NO OBSERVER – board list is static)
     // =========================================================================
     function initialize() {
         // Only run on pages that actually have the board list
@@ -286,20 +279,7 @@ const ForumBoardsModule = (function () {
             return;
         }
         convertBoards();
-
-        // Optional: if your forum uses AJAX to update the board list, you can
-        // hook into an observer. For now, we just convert once.
-        if (typeof globalThis.forumObserver !== 'undefined' && globalThis.forumObserver) {
-            globalThis.forumObserver.register({
-                id: 'boards-module',
-                selector: CONFIG.BOARD_LIST_SELECTOR,
-                priority: 'low',
-                callback: () => {
-                    // Rebuild if the whole board list changes
-                    convertBoards();
-                }
-            });
-        }
+        console.log('[BoardsModule] Initialized');
     }
 
     // =========================================================================
