@@ -86,7 +86,6 @@ const ForumBoardsModule = (function () {
     }
 
     function extractTopicIdFromClass(row) {
-        // classList like "on thumb t63480267 m12252299 g4"
         for (const cls of row.classList) {
             if (cls.startsWith('t') && /^t\d+$/.test(cls)) {
                 return cls.substring(1);
@@ -182,41 +181,46 @@ const ForumBoardsModule = (function () {
     }
 
     function generateForumCard(data) {
-        let lastPostHtml = '';
+        var lastPostHtml = '';
         if (data.lastTopicUrl) {
-            let subText = data.subForumName
-                ? ` <span class="last-post-in">in</span> ${data.subForumUrl ? `<a href="${escapeHtml(data.subForumUrl)}">${escapeHtml(data.subForumName)}</a>` : escapeHtml(data.subForumName)} → `
-                : ' ';
-            lastPostHtml = `
-                <div class="board-last-post">
-                    <div class="last-post-topic">
-                        ${subText}<a href="${escapeHtml(data.lastTopicUrl)}">${data.lastTopicHTML}</a>
-                    </div>
-                    <div class="last-post-meta">
-                        <span class="last-post-date">${escapeHtml(data.lastPostRelative)}</span>
-                        ${data.lastPostAuthor ? `<span class="last-post-author">by <a href="${escapeHtml(data.lastPostAuthorUrl)}">${escapeHtml(data.lastPostAuthor)}</a></span>` : ''}
-                    </div>
-                </div>`;
+            var subText = ' ';
+            if (data.subForumName) {
+                var subLink = data.subForumUrl
+                    ? '<a href="' + escapeHtml(data.subForumUrl) + '">' + escapeHtml(data.subForumName) + '</a>'
+                    : escapeHtml(data.subForumName);
+                subText = ' <span class="last-post-in">in</span> ' + subLink + ' \u2192 ';
+            }
+            lastPostHtml =
+                '<div class="board-last-post">' +
+                    '<div class="last-post-topic">' +
+                        subText + '<a href="' + escapeHtml(data.lastTopicUrl) + '">' + data.lastTopicHTML + '</a>' +
+                    '</div>' +
+                    '<div class="last-post-meta">' +
+                        '<span class="last-post-date">' + escapeHtml(data.lastPostRelative) + '</span>' +
+                        (data.lastPostAuthor ? '<span class="last-post-author">by <a href="' + escapeHtml(data.lastPostAuthorUrl) + '">' + escapeHtml(data.lastPostAuthor) + '</a></span>' : '') +
+                    '</div>' +
+                '</div>';
         } else {
             lastPostHtml = '<div class="board-last-post board-last-post--empty">No posts yet</div>';
         }
 
-        return `
-            <article class="board-card" data-forum-id="${data.forumId}" data-original-id="f${data.forumId}">
-                <a href="${escapeHtml(data.forumUrl)}" class="board-card-main-link" aria-label="Go to ${escapeHtml(data.forumName)}">
-                    <div class="board-icon">
-                        <i class="${escapeHtml(data.iconClass)}" aria-hidden="true"></i>
-                    </div>
-                    <div class="board-info">
-                        <h3 class="board-name">${escapeHtml(data.forumName)}</h3>
-                        <div class="board-stats">
-                            <span class="stat"><i class="fa-regular fa-message"></i> ${formatNumber(data.topicsCount)} topics</span>
-                            <span class="stat"><i class="fa-regular fa-reply"></i> ${formatNumber(data.repliesCount)} replies</span>
-                        </div>
-                    </div>
-                </a>
-                ${lastPostHtml}
-            </article>`;
+        return (
+            '<article class="board-card" data-forum-id="' + data.forumId + '" data-original-id="f' + data.forumId + '">' +
+                '<a href="' + escapeHtml(data.forumUrl) + '" class="board-card-main-link" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
+                    '<div class="board-icon">' +
+                        '<i class="' + escapeHtml(data.iconClass) + '" aria-hidden="true"></i>' +
+                    '</div>' +
+                    '<div class="board-info">' +
+                        '<h3 class="board-name">' + escapeHtml(data.forumName) + '</h3>' +
+                        '<div class="board-stats">' +
+                            '<span class="stat"><i class="fa-regular fa-message"></i> ' + formatNumber(data.topicsCount) + ' topics</span>' +
+                            '<span class="stat"><i class="fa-regular fa-reply"></i> ' + formatNumber(data.repliesCount) + ' replies</span>' +
+                        '</div>' +
+                    '</div>' +
+                '</a>' +
+                lastPostHtml +
+            '</article>'
+        );
     }
 
     // =========================================================================
@@ -224,32 +228,27 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     function extractTopicData(row) {
         const topicId = extractTopicIdFromClass(row);
-        const isUnread = row.classList.contains('on');   // new replies
+        const isUnread = row.classList.contains('on');
         const statusIconEl = row.querySelector('.aa i');
         const statusIconClass = statusIconEl ? statusIconEl.className : 'fa-regular fa-folder';
 
-        // Title
         const titleEl = row.querySelector('h3.web a');
         const topicTitle = titleEl ? titleEl.textContent.trim() : 'Unknown Topic';
         const topicUrl = titleEl ? titleEl.getAttribute('href') : '#';
-        const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle); // preserve emoji
+        const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle);
 
-        // Thumbnail
         const thumbImg = row.querySelector('h4.desc a.a_desc img.tmb');
         const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
 
-        // Starter
         const starterEl = row.querySelector('.xx a');
         const starterName = starterEl ? starterEl.textContent.trim() : 'Unknown';
         const starterUrl = starterEl ? starterEl.getAttribute('href') : '#';
 
-        // Stats
         const repliesEl = row.querySelector('.yy .replies em');
         const viewsEl = row.querySelector('.yy .views em');
         const replyCount = repliesEl ? parseInt(repliesEl.textContent, 10) || 0 : 0;
         const viewCount = viewsEl ? parseInt(viewsEl.textContent, 10) || 0 : 0;
 
-        // Last post
         const lastPostDateEl = row.querySelector('.zz .when a');
         const lastPostDateStr = lastPostDateEl ? lastPostDateEl.textContent.trim() : '';
         const lastPostDate = parseDateFromTitle(lastPostDateStr);
@@ -271,60 +270,62 @@ const ForumBoardsModule = (function () {
         };
     }
 
-function generateTopicCard(data) {
-    // Thumbnail area
-    let imageHtml;
-    if (data.thumbnailUrl) {
-        imageHtml = `<div class="topic-thumbnail">
-            <a href="${escapeHtml(data.topicUrl)}" aria-label="View topic: ${escapeHtml(data.topicTitle)}">
-                <img src="${escapeHtml(data.thumbnailUrl)}" alt="" loading="lazy">
-            </a>
-        </div>`;
-    } else {
-        imageHtml = `<div class="topic-thumbnail topic-thumbnail--placeholder">
-            <a href="${escapeHtml(data.topicUrl)}" aria-label="View topic: ${escapeHtml(data.topicTitle)}">
-                <i class="fa-regular fa-comments"></i>
-            </a>
-        </div>`;
+    function generateTopicCard(data) {
+        var imageHtml;
+        if (data.thumbnailUrl) {
+            imageHtml =
+                '<div class="topic-thumbnail">' +
+                    '<a href="' + escapeHtml(data.topicUrl) + '" aria-label="View topic: ' + escapeHtml(data.topicTitle) + '">' +
+                        '<img src="' + escapeHtml(data.thumbnailUrl) + '" alt="" loading="lazy">' +
+                    '</a>' +
+                '</div>';
+        } else {
+            imageHtml =
+                '<div class="topic-thumbnail topic-thumbnail--placeholder">' +
+                    '<a href="' + escapeHtml(data.topicUrl) + '" aria-label="View topic: ' + escapeHtml(data.topicTitle) + '">' +
+                        '<i class="fa-regular fa-comments"></i>' +
+                    '</a>' +
+                '</div>';
+        }
+
+        var statusIconTitle = data.isUnread ? 'New replies' : 'No new replies';
+        var statusIconHtml =
+            '<span class="topic-status-icon" title="' + escapeHtml(statusIconTitle) + '">' +
+                '<i class="' + escapeHtml(data.statusIconClass) + '" aria-hidden="true"></i>' +
+            '</span>';
+
+        var unreadBadge = data.isUnread
+            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
+            : '';
+
+        var lastPosterHtml =
+            '<span class="last-post-author">by <a href="' + escapeHtml(data.lastPosterUrl) + '">' + escapeHtml(data.lastPosterName) + '</a></span>';
+
+        return (
+            '<article class="topic-card" data-topic-id="' + data.topicId + '" data-original-id="t' + data.topicId + '">' +
+                imageHtml +
+                '<div class="topic-info">' +
+                    '<h3 class="topic-title">' +
+                        statusIconHtml + unreadBadge +
+                        '<a href="' + escapeHtml(data.topicUrl) + '">' + data.topicTitleHTML + '</a>' +
+                    '</h3>' +
+                    '<div class="topic-meta">' +
+                        '<span class="topic-starter">by <a href="' + escapeHtml(data.starterUrl) + '">' + escapeHtml(data.starterName) + '</a></span>' +
+                        '<span class="topic-stats">' +
+                            '<span><i class="fa-regular fa-reply"></i> ' + formatNumber(data.replyCount) + ' replies</span>' +
+                            '<span><i class="fa-regular fa-eye"></i> ' + formatNumber(data.viewCount) + ' views</span>' +
+                        '</span>' +
+                    '</div>' +
+                    '<div class="topic-last-post">' +
+                        '<a href="' + escapeHtml(data.lastPostUrl) + '" class="last-post-date-link">' +
+                            '<i class="fa-regular fa-clock"></i> ' + escapeHtml(data.lastPostRelative) +
+                        '</a>' +
+                        lastPosterHtml +
+                    '</div>' +
+                '</div>' +
+            '</article>'
+        );
     }
-
-    // Status icon (read / unread)
-    const statusIconHtml = `<span class="topic-status-icon" title="${data.isUnread ? 'New replies' : 'No new replies'}">
-        <i class="${escapeHtml(data.statusIconClass)}" aria-hidden="true"></i>
-    </span>`;
-
-    // Unread indicator (the small dot) – keep it, but move it after the status icon
-    const unreadBadge = data.isUnread
-        ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
-        : '';
-
-    // Always show last post author (remove the condition)
-    const lastPosterHtml = `<span class="last-post-author">by <a href="${escapeHtml(data.lastPosterUrl)}">${escapeHtml(data.lastPosterName)}</a></span>`;
-
-    return `
-        <article class="topic-card" data-topic-id="${data.topicId}" data-original-id="t${data.topicId}">
-            ${imageHtml}
-            <div class="topic-info">
-                <h3 class="topic-title">
-                    ${statusIconHtml}${unreadBadge}
-                    <a href="${escapeHtml(data.topicUrl)}">${data.topicTitleHTML}</a>
-                </h3>
-                <div class="topic-meta">
-                    <span class="topic-starter">by <a href="${escapeHtml(data.starterUrl)}">${escapeHtml(data.starterName)}</a></span>
-                    <span class="topic-stats">
-                        <span><i class="fa-regular fa-reply"></i> ${formatNumber(data.replyCount)} replies</span>
-                        <span><i class="fa-regular fa-eye"></i> ${formatNumber(data.viewCount)} views</span>
-                    </span>
-                </div>
-                <div class="topic-last-post">
-                    <a href="${escapeHtml(data.lastPostUrl)}" class="last-post-date-link">
-                        <i class="fa-regular fa-clock"></i> ${escapeHtml(data.lastPostRelative)}
-                    </a>
-                    ${lastPosterHtml}
-                </div>
-            </div>
-        </article>`;
-}
 
     // =========================================================================
     // BUILD MODERN LISTS
@@ -336,24 +337,25 @@ function generateTopicCard(data) {
         const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
         if (categories.length === 0) return '';
 
-        let html = '';
-        categories.forEach(cat => {
+        var html = '';
+        categories.forEach(function (cat) {
             const catData = extractCategoryData(cat);
             const forumRows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
             if (forumRows.length === 0) return;
 
-            html += `<section class="board-category" data-category-id="${catData.categoryId}">
-                <header class="board-category-header">
-                    <h2 class="board-category-title">${escapeHtml(catData.categoryName)}</h2>
-                </header>
-                <div class="board-category-grid">`;
+            html +=
+                '<section class="board-category" data-category-id="' + catData.categoryId + '">' +
+                    '<header class="board-category-header">' +
+                        '<h2 class="board-category-title">' + escapeHtml(catData.categoryName) + '</h2>' +
+                    '</header>' +
+                    '<div class="board-category-grid">';
 
-            forumRows.forEach(row => {
+            forumRows.forEach(function (row) {
                 const data = extractForumData(row);
                 html += generateForumCard(data);
             });
 
-            html += `</div></section>`;
+            html += '</div></section>';
         });
         return html;
     }
@@ -368,22 +370,22 @@ function generateTopicCard(data) {
         const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
         if (rows.length === 0) return '';
 
-        // Get the forum title from the header
         const forumTitleEl = forumWrapper.querySelector('.mtitle h1');
         const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
 
-        let html = `<section class="topic-list-section">
-            <header class="topic-list-header">
-                <h2 class="topic-list-title">${escapeHtml(forumTitle)}</h2>
-            </header>
-            <div class="topic-cards-grid">`;
+        var html =
+            '<section class="topic-list-section">' +
+                '<header class="topic-list-header">' +
+                    '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
+                '</header>' +
+                '<div class="topic-cards-grid">';
 
-        rows.forEach(row => {
+        rows.forEach(function (row) {
             const data = extractTopicData(row);
             html += generateTopicCard(data);
         });
 
-        html += `</div></section>`;
+        html += '</div></section>';
         return html;
     }
 
@@ -418,11 +420,9 @@ function generateTopicCard(data) {
     // INITIALIZATION
     // =========================================================================
     function initialize() {
-        // Board index
         if (document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) {
             convertBoards();
         }
-        // Forum view (topic list)
         if (document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR)) {
             convertTopics();
         }
@@ -433,7 +433,7 @@ function generateTopicCard(data) {
     // PUBLIC API
     // =========================================================================
     return {
-        initialize,
+        initialize: initialize,
         refresh: function () {
             convertBoards();
             convertTopics();
@@ -443,9 +443,9 @@ function generateTopicCard(data) {
 
 // Auto‑initialize when DOM is ready
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
-    setTimeout(() => ForumBoardsModule.initialize(), 0);
+    setTimeout(function () { ForumBoardsModule.initialize(); }, 0);
 } else {
-    document.addEventListener('DOMContentLoaded', () => ForumBoardsModule.initialize());
+    document.addEventListener('DOMContentLoaded', function () { ForumBoardsModule.initialize(); });
 }
 
 // Expose globally
