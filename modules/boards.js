@@ -1,12 +1,12 @@
 /* =============================================
    Forum Boards & Topics Modernizer – Emerald Theme
    Converts legacy board list AND topic list into
-   modern, card‑based layouts.
+   modern, card‑based layouts with author avatars.
    ============================================= */
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars)');
 
     // =========================================================================
     // CONFIGURATION
@@ -27,7 +27,26 @@ const ForumBoardsModule = (function () {
         // Shared
         WRAPPER_ID: 'modern-forum-wrapper',
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
+
+        // Avatar
+        AVATAR_SIZE: 20,
+        WESERV_CDN: 'https://images.weserv.nl/',
+        CACHE: '1y',
+        QUALITY: 80
     });
+
+    // =========================================================================
+    // AVATAR COLOUR PALETTE (same as Posts module)
+    // =========================================================================
+    const AVATAR_COLORS = [
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
+    ];
 
     // =========================================================================
     // UTILITIES (self‑contained)
@@ -92,6 +111,92 @@ const ForumBoardsModule = (function () {
             }
         }
         return '';
+    }
+
+    function extractMidFromUrl(url) {
+        if (!url) return null;
+        const match = url.match(/MID=(\d+)/);
+        return match ? match[1] : null;
+    }
+
+    // =========================================================================
+    // AVATAR HELPERS (same as Posts module)
+    // =========================================================================
+    const userDataCache = new Map();
+
+    async function fetchUserData(mid) {
+        if (userDataCache.has(mid)) return userDataCache.get(mid);
+        try {
+            const response = await fetch('/api.php?mid=' + mid);
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+            const user = data['m' + mid] || data.info;
+            if (user && user.id) {
+                userDataCache.set(mid, user);
+                return user;
+            }
+            return null;
+        } catch (e) {
+            console.warn('[BoardsModule] API error for MID', mid, e);
+            return null;
+        }
+    }
+
+    function getColorFromNickname(nickname, userId) {
+        let hash = 0;
+        const str = nickname || userId || 'user';
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+
+    function isValidAvatarUrl(url) {
+        if (!url || typeof url !== 'string') return false;
+        const trimmed = url.trim();
+        return /^(https?:)?\/\//i.test(trimmed) && trimmed.length > 3;
+    }
+
+    function optimizeImageUrl(url, width, height) {
+        if (!isValidAvatarUrl(url)) return null;
+        const lowerUrl = url.toLowerCase();
+        if (lowerUrl.indexOf('weserv.nl') !== -1 || lowerUrl.indexOf('data:') === 0) return url;
+        const encodedUrl = encodeURIComponent(url);
+        return CONFIG.WESERV_CDN + '?url=' + encodedUrl +
+            '&output=webp&maxage=' + CONFIG.CACHE + '&q=' + CONFIG.QUALITY +
+            '&w=' + width + '&h=' + height + '&fit=cover&a=attention&il';
+    }
+
+    function getUserAvatarData(user, username, userId) {
+        function isDefaultAvatarUrl(url) {
+            return url && url.includes('style_images/default_avatar.png');
+        }
+        if (user && user.avatar && isValidAvatarUrl(user.avatar) && !isDefaultAvatarUrl(user.avatar)) {
+            let avatarUrl = user.avatar;
+            if (avatarUrl.startsWith('//')) avatarUrl = 'https:' + avatarUrl;
+            if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
+                avatarUrl = avatarUrl.replace('http://', 'https://');
+            }
+            const optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE, CONFIG.AVATAR_SIZE);
+            if (optimized) return { type: 'img', url: optimized };
+        }
+        const initial = username ? username.charAt(0).toUpperCase() : '?';
+        const safeInitial = (/[A-Z0-9]/i.test(initial)) ? initial : '?';
+        const bgColor = getColorFromNickname(username, userId);
+        return { type: 'initial', initial: safeInitial, bgColor: bgColor };
+    }
+
+    function generateAvatarHtml(user, username, userId) {
+        const avatarData = getUserAvatarData(user, username, userId);
+        if (avatarData.type === 'img') {
+            return '<img class="mini-avatar" src="' + escapeHtml(avatarData.url) +
+                '" alt="' + escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE +
+                '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy">';
+        } else {
+            return '<span class="mini-avatar mini-avatar--initial" style="background-color:#' +
+                avatarData.bgColor + ';">' + escapeHtml(avatarData.initial) + '</span>';
+        }
     }
 
     // =========================================================================
@@ -161,6 +266,7 @@ const ForumBoardsModule = (function () {
         const whoLink = row.querySelector('.zz .who a');
         const lastPostAuthor = whoLink ? whoLink.textContent.trim() : '';
         const lastPostAuthorUrl = whoLink ? whoLink.getAttribute('href') : '';
+        const lastPostAuthorMid = extractMidFromUrl(lastPostAuthorUrl);
 
         const iconEl = row.querySelector('.aa i');
         const iconClass = iconEl ? iconEl.className : 'fa-regular fa-folder';
@@ -168,7 +274,8 @@ const ForumBoardsModule = (function () {
         return {
             forumId, forumName, forumUrl, topicsCount, repliesCount,
             lastPostRelative, lastPostDateStr, lastTopicUrl, lastTopicHTML,
-            subForumUrl, subForumName, lastPostAuthor, lastPostAuthorUrl, iconClass
+            subForumUrl, subForumName, lastPostAuthor, lastPostAuthorUrl,
+            lastPostAuthorMid, iconClass
         };
     }
 
@@ -181,6 +288,12 @@ const ForumBoardsModule = (function () {
     }
 
     function generateForumCard(data) {
+        var avatarHtml = '';
+        if (data.lastPostAuthorMid && data.lastPostAuthor) {
+            const user = userDataCache.get(data.lastPostAuthorMid);
+            avatarHtml = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid);
+        }
+
         var lastPostHtml = '';
         if (data.lastTopicUrl) {
             var subText = ' ';
@@ -190,6 +303,11 @@ const ForumBoardsModule = (function () {
                     : escapeHtml(data.subForumName);
                 subText = ' <span class="last-post-in">in</span> ' + subLink + ' \u2192 ';
             }
+            var authorHtml = data.lastPostAuthor
+                ? '<span class="last-post-author">' + avatarHtml +
+                    '<a href="' + escapeHtml(data.lastPostAuthorUrl) + '">' + escapeHtml(data.lastPostAuthor) + '</a></span>'
+                : '';
+
             lastPostHtml =
                 '<div class="board-last-post">' +
                     '<div class="last-post-topic">' +
@@ -197,7 +315,7 @@ const ForumBoardsModule = (function () {
                     '</div>' +
                     '<div class="last-post-meta">' +
                         '<span class="last-post-date">' + escapeHtml(data.lastPostRelative) + '</span>' +
-                        (data.lastPostAuthor ? '<span class="last-post-author">by <a href="' + escapeHtml(data.lastPostAuthorUrl) + '">' + escapeHtml(data.lastPostAuthor) + '</a></span>' : '') +
+                        authorHtml +
                     '</div>' +
                 '</div>';
         } else {
@@ -243,6 +361,7 @@ const ForumBoardsModule = (function () {
         const starterEl = row.querySelector('.xx a');
         const starterName = starterEl ? starterEl.textContent.trim() : 'Unknown';
         const starterUrl = starterEl ? starterEl.getAttribute('href') : '#';
+        const starterMid = extractMidFromUrl(starterUrl);
 
         const repliesEl = row.querySelector('.yy .replies em');
         const viewsEl = row.querySelector('.yy .views em');
@@ -258,15 +377,16 @@ const ForumBoardsModule = (function () {
         const lastPosterEl = row.querySelector('.zz .who a');
         const lastPosterName = lastPosterEl ? lastPosterEl.textContent.trim() : starterName;
         const lastPosterUrl = lastPosterEl ? lastPosterEl.getAttribute('href') : starterUrl;
+        const lastPosterMid = extractMidFromUrl(lastPosterUrl);
 
         return {
             topicId, isUnread, statusIconClass,
             topicTitle, topicUrl, topicTitleHTML,
             thumbnailUrl,
-            starterName, starterUrl,
+            starterName, starterUrl, starterMid,
             replyCount, viewCount,
             lastPostRelative, lastPostUrl,
-            lastPosterName, lastPosterUrl
+            lastPosterName, lastPosterUrl, lastPosterMid
         };
     }
 
@@ -295,11 +415,18 @@ const ForumBoardsModule = (function () {
             '</span>';
 
         var unreadBadge = data.isUnread
-            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-comment-dots"></i></span>'
+            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
             : '';
 
+        var lastPosterAvatarHtml = '';
+        if (data.lastPosterMid && data.lastPosterName) {
+            const user = userDataCache.get(data.lastPosterMid);
+            lastPosterAvatarHtml = generateAvatarHtml(user, data.lastPosterName, data.lastPosterMid);
+        }
+
         var lastPosterHtml =
-            '<span class="last-post-author">by <a href="' + escapeHtml(data.lastPosterUrl) + '">' + escapeHtml(data.lastPosterName) + '</a></span>';
+            '<span class="last-post-author">' + lastPosterAvatarHtml +
+                '<a href="' + escapeHtml(data.lastPosterUrl) + '">' + escapeHtml(data.lastPosterName) + '</a></span>';
 
         return (
             '<article class="topic-card" data-topic-id="' + data.topicId + '" data-original-id="t' + data.topicId + '">' +
@@ -328,15 +455,36 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
+    // DATA FETCHING & RENDERING
+    // =========================================================================
+    async function fetchAllRelevantUsers(boardRows, topicRows) {
+        const mids = new Set();
+        // Collect MIDs from board rows (last post author)
+        boardRows.forEach(function (row) {
+            const whoLink = row.querySelector('.zz .who a');
+            if (whoLink) {
+                const mid = extractMidFromUrl(whoLink.getAttribute('href'));
+                if (mid) mids.add(mid);
+            }
+        });
+        // Collect MIDs from topic rows (last post author)
+        topicRows.forEach(function (row) {
+            const whoLink = row.querySelector('.zz .who a');
+            if (whoLink) {
+                const mid = extractMidFromUrl(whoLink.getAttribute('href'));
+                if (mid) mids.add(mid);
+            }
+        });
+        // Fetch all in parallel
+        await Promise.all(Array.from(mids).map(function (mid) {
+            return fetchUserData(mid);
+        }));
+    }
+
+    // =========================================================================
     // BUILD MODERN LISTS
     // =========================================================================
-    function buildModernBoardList() {
-        const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
-        if (!legacyList) return '';
-
-        const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
-        if (categories.length === 0) return '';
-
+    function buildModernBoardList(categories) {
         var html = '';
         categories.forEach(function (cat) {
             const catData = extractCategoryData(cat);
@@ -360,10 +508,7 @@ const ForumBoardsModule = (function () {
         return html;
     }
 
-    function buildModernTopicList() {
-        const forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
-        if (!forumWrapper) return '';
-
+    function buildModernTopicList(forumWrapper) {
         const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
         if (!topicList) return '';
 
@@ -390,41 +535,63 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // CONVERSION FUNCTIONS
+    // CONVERSION FUNCTIONS (async)
     // =========================================================================
-    function convertBoards() {
+    async function convertBoards() {
         const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
         if (!container) return;
-        const modernHtml = buildModernBoardList();
-        if (!modernHtml) {
-            container.innerHTML = '';
-            return;
-        }
-        container.innerHTML = modernHtml;
+
+        const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
+        if (!legacyList) return;
+
+        const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
+        if (categories.length === 0) return;
+
+        // Collect all forum rows (to extract MID later, but we'll do it in fetchAllRelevantUsers)
+        const allForumRows = [];
+        categories.forEach(function (cat) {
+            const rows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
+            rows.forEach(function (row) { allForumRows.push(row); });
+        });
+
+        // No topic rows for board page, pass empty
+        await fetchAllRelevantUsers(allForumRows, []);
+
+        const modernHtml = buildModernBoardList(categories);
+        container.innerHTML = modernHtml || '';
         console.log('[BoardsModule] Board list modernized');
     }
 
-    function convertTopics() {
+    async function convertTopics() {
         const container = getOrCreateContainer(CONFIG.TOPIC_CONTAINER_ID);
         if (!container) return;
-        const modernHtml = buildModernTopicList();
-        if (!modernHtml) {
-            container.innerHTML = '';
-            return;
-        }
-        container.innerHTML = modernHtml;
+
+        const forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+        if (!forumWrapper) return;
+
+        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+        if (!topicList) return;
+
+        const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+        if (topicRows.length === 0) return;
+
+        // No board rows for topic page
+        await fetchAllRelevantUsers([], Array.from(topicRows));
+
+        const modernHtml = buildModernTopicList(forumWrapper);
+        container.innerHTML = modernHtml || '';
         console.log('[BoardsModule] Topic list modernized');
     }
 
     // =========================================================================
-    // INITIALIZATION
+    // INITIALIZATION (async)
     // =========================================================================
-    function initialize() {
+    async function initialize() {
         if (document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) {
-            convertBoards();
+            await convertBoards();
         }
         if (document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR)) {
-            convertTopics();
+            await convertTopics();
         }
         console.log('[BoardsModule] Initialized');
     }
@@ -434,9 +601,9 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     return {
         initialize: initialize,
-        refresh: function () {
-            convertBoards();
-            convertTopics();
+        refresh: async function () {
+            userDataCache.clear();
+            await initialize();
         }
     };
 })();
