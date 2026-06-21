@@ -2,11 +2,12 @@
    Forum Boards & Topics Modernizer – Emerald Theme
    Converts legacy board list AND topic list into
    modern, card‑based layouts with author avatars.
+   Includes collapsible categories (localStorage).
    ============================================= */
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars + collapsible)');
 
     // =========================================================================
     // CONFIGURATION
@@ -222,6 +223,37 @@ const ForumBoardsModule = (function () {
             wrapper.appendChild(container);
         }
         return container;
+    }
+
+    // =========================================================================
+    // COLLAPSIBLE CATEGORIES HELPERS
+    // =========================================================================
+    function attachCategoryToggleEvents() {
+        // Use event delegation on the body (or a stable parent)
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.category-toggle-btn');
+            if (!btn) return;
+            const categoryId = btn.getAttribute('data-category-id');
+            const section = document.querySelector('.board-category[data-category-id="' + categoryId + '"]');
+            if (!section) return;
+            section.classList.toggle('collapsed');
+            const collapsed = section.classList.contains('collapsed');
+            try {
+                localStorage.setItem('board-cat-' + categoryId, collapsed ? '1' : '0');
+            } catch (ignore) {}
+        });
+    }
+
+    function restoreCategoryStates() {
+        document.querySelectorAll('.board-category').forEach(function (section) {
+            const id = section.getAttribute('data-category-id');
+            if (!id) return;
+            try {
+                if (localStorage.getItem('board-cat-' + id) === '1') {
+                    section.classList.add('collapsed');
+                }
+            } catch (ignore) {}
+        });
     }
 
     // =========================================================================
@@ -459,7 +491,6 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     async function fetchAllRelevantUsers(boardRows, topicRows) {
         const mids = new Set();
-        // Collect MIDs from board rows (last post author)
         boardRows.forEach(function (row) {
             const whoLink = row.querySelector('.zz .who a');
             if (whoLink) {
@@ -467,7 +498,6 @@ const ForumBoardsModule = (function () {
                 if (mid) mids.add(mid);
             }
         });
-        // Collect MIDs from topic rows (last post author)
         topicRows.forEach(function (row) {
             const whoLink = row.querySelector('.zz .who a');
             if (whoLink) {
@@ -475,14 +505,13 @@ const ForumBoardsModule = (function () {
                 if (mid) mids.add(mid);
             }
         });
-        // Fetch all in parallel
         await Promise.all(Array.from(mids).map(function (mid) {
             return fetchUserData(mid);
         }));
     }
 
     // =========================================================================
-    // BUILD MODERN LISTS
+    // BUILD MODERN LISTS (with toggle button for categories)
     // =========================================================================
     function buildModernBoardList(categories) {
         var html = '';
@@ -495,6 +524,9 @@ const ForumBoardsModule = (function () {
                 '<section class="board-category" data-category-id="' + catData.categoryId + '">' +
                     '<header class="board-category-header">' +
                         '<h2 class="board-category-title">' + escapeHtml(catData.categoryName) + '</h2>' +
+                        '<button class="category-toggle-btn" aria-label="Toggle category" title="Collapse / expand" data-category-id="' + catData.categoryId + '">' +
+                            '<i class="fa-regular fa-chevron-down"></i>' +
+                        '</button>' +
                     '</header>' +
                     '<div class="board-category-grid">';
 
@@ -547,18 +579,21 @@ const ForumBoardsModule = (function () {
         const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
         if (categories.length === 0) return;
 
-        // Collect all forum rows (to extract MID later, but we'll do it in fetchAllRelevantUsers)
         const allForumRows = [];
         categories.forEach(function (cat) {
             const rows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
             rows.forEach(function (row) { allForumRows.push(row); });
         });
 
-        // No topic rows for board page, pass empty
         await fetchAllRelevantUsers(allForumRows, []);
 
         const modernHtml = buildModernBoardList(categories);
         container.innerHTML = modernHtml || '';
+
+        // Attach toggle events and restore saved collapsed states
+        attachCategoryToggleEvents();
+        restoreCategoryStates();
+
         console.log('[BoardsModule] Board list modernized');
     }
 
@@ -575,7 +610,6 @@ const ForumBoardsModule = (function () {
         const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
         if (topicRows.length === 0) return;
 
-        // No board rows for topic page
         await fetchAllRelevantUsers([], Array.from(topicRows));
 
         const modernHtml = buildModernTopicList(forumWrapper);
