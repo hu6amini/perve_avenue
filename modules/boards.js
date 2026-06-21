@@ -1,21 +1,30 @@
 /* =============================================
-   Forum Boards Modernizer – Emerald Theme
-   Converts legacy <ul class="board List"> into
-   modern cards grouped by category.
+   Forum Boards & Topics Modernizer – Emerald Theme
+   Converts legacy board list AND topic list into
+   modern, card‑based layouts.
    ============================================= */
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics)');
 
     // =========================================================================
     // CONFIGURATION
     // =========================================================================
     const CONFIG = Object.freeze({
+        // Board list
         BOARD_LIST_SELECTOR: 'ul.board.List',
         CATEGORY_SELECTOR: 'li.skin_tbl',
         FORUM_ROW_SELECTOR: 'ul.big_list > li',
-        CONTAINER_ID: 'modern-board-list',
+        BOARD_CONTAINER_ID: 'modern-board-list',
+
+        // Topic list
+        FORUM_WRAPPER_SELECTOR: 'div.forum',
+        TOPIC_LIST_SELECTOR: 'ol.big_list',
+        TOPIC_ROW_SELECTOR: 'li[id^="t"]',
+        TOPIC_CONTAINER_ID: 'modern-topic-list',
+
+        // Shared
         WRAPPER_ID: 'modern-forum-wrapper',
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
     });
@@ -76,22 +85,33 @@ const ForumBoardsModule = (function () {
         return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     }
 
-    // =========================================================================
-    // GET OR CREATE MODERN BOARD CONTAINER
-    // =========================================================================
-    function getModernBoardContainer() {
-        const wrapper = document.getElementById(CONFIG.WRAPPER_ID);
-        if (!wrapper) {
-            console.warn('[BoardsModule] #modern-forum-wrapper not found');
-            return null;
+    function extractTopicIdFromClass(row) {
+        // classList like "on thumb t63480267 m12252299 g4"
+        for (const cls of row.classList) {
+            if (cls.startsWith('t') && /^t\d+$/.test(cls)) {
+                return cls.substring(1);
+            }
         }
-        let container = document.getElementById(CONFIG.CONTAINER_ID);
+        return '';
+    }
+
+    // =========================================================================
+    // CONTAINER HELPERS
+    // =========================================================================
+    function getWrapper() {
+        return document.getElementById(CONFIG.WRAPPER_ID);
+    }
+
+    function getOrCreateContainer(containerId) {
+        const wrapper = getWrapper();
+        if (!wrapper) return null;
+        let container = document.getElementById(containerId);
         if (container) return container;
 
         const afterEl = wrapper.querySelector(CONFIG.INSERT_AFTER_SELECTOR);
         container = document.createElement('div');
-        container.id = CONFIG.CONTAINER_ID;
-        container.className = 'modern-board-list';
+        container.id = containerId;
+        container.className = containerId === CONFIG.BOARD_CONTAINER_ID ? 'modern-board-list' : 'modern-topic-list';
         if (afterEl) {
             afterEl.insertAdjacentElement('afterend', container);
         } else {
@@ -101,10 +121,10 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // DATA EXTRACTION FROM LEGACY FORUM ROW
+    // BOARD LIST EXTRACTION & GENERATION
     // =========================================================================
     function extractForumData(row) {
-        const id = row.id;                          // e.g. "f9107304"
+        const id = row.id;
         const forumId = id ? id.replace('f', '') : '';
 
         const nameEl = row.querySelector('.bb h3 a');
@@ -123,14 +143,14 @@ const ForumBoardsModule = (function () {
 
         const whereEl = row.querySelector('.zz .where');
         let lastTopicUrl = '';
-        let lastTopicHTML = '';          // <-- use innerHTML to preserve emoji
+        let lastTopicHTML = '';
         let subForumUrl = '';
         let subForumName = '';
         if (whereEl) {
             const links = whereEl.querySelectorAll('a');
             if (links.length === 1) {
                 lastTopicUrl = links[0].getAttribute('href') || '';
-                lastTopicHTML = links[0].innerHTML;      // raw HTML (emoji as <img>)
+                lastTopicHTML = links[0].innerHTML;
             } else if (links.length >= 2) {
                 subForumUrl = links[0].getAttribute('href') || '';
                 subForumName = links[0].textContent.trim();
@@ -147,49 +167,26 @@ const ForumBoardsModule = (function () {
         const iconClass = iconEl ? iconEl.className : 'fa-regular fa-folder';
 
         return {
-            forumId,
-            forumName,
-            forumUrl,
-            topicsCount,
-            repliesCount,
-            lastPostRelative,
-            lastPostDateStr,
-            lastTopicUrl,
-            lastTopicHTML,            // now includes any emoji <img>
-            subForumUrl,
-            subForumName,
-            lastPostAuthor,
-            lastPostAuthorUrl,
-            iconClass,
+            forumId, forumName, forumUrl, topicsCount, repliesCount,
+            lastPostRelative, lastPostDateStr, lastTopicUrl, lastTopicHTML,
+            subForumUrl, subForumName, lastPostAuthor, lastPostAuthorUrl, iconClass
         };
     }
 
-    // =========================================================================
-    // EXTRACT CATEGORY DATA (group header)
-    // =========================================================================
     function extractCategoryData(catLi) {
-        const id = catLi.id;                       // e.g. "c9107304"
+        const id = catLi.id;
         const categoryId = id ? id.replace('c', '') : '';
         const titleEl = catLi.querySelector('h2.mtitle');
         const categoryName = titleEl ? titleEl.textContent.trim() : 'Category';
         return { categoryId, categoryName };
     }
 
-    // =========================================================================
-    // GENERATE MODERN HTML FOR ONE FORUM CARD
-    // =========================================================================
     function generateForumCard(data) {
         let lastPostHtml = '';
         if (data.lastTopicUrl) {
-            let subText = '';
-            if (data.subForumName) {
-                const subLink = data.subForumUrl
-                    ? `<a href="${escapeHtml(data.subForumUrl)}">${escapeHtml(data.subForumName)}</a>`
-                    : escapeHtml(data.subForumName);
-                subText = ` <span class="last-post-in">in</span> ${subLink} → `;
-            } else {
-                subText = ' ';
-            }
+            let subText = data.subForumName
+                ? ` <span class="last-post-in">in</span> ${data.subForumUrl ? `<a href="${escapeHtml(data.subForumUrl)}">${escapeHtml(data.subForumName)}</a>` : escapeHtml(data.subForumName)} → `
+                : ' ';
             lastPostHtml = `
                 <div class="board-last-post">
                     <div class="last-post-topic">
@@ -213,8 +210,8 @@ const ForumBoardsModule = (function () {
                     <div class="board-info">
                         <h3 class="board-name">${escapeHtml(data.forumName)}</h3>
                         <div class="board-stats">
-                            <span class="stat"><i class="fa-regular fa-message" aria-hidden="true"></i> ${formatNumber(data.topicsCount)} topics</span>
-                            <span class="stat"><i class="fa-regular fa-reply" aria-hidden="true"></i> ${formatNumber(data.repliesCount)} replies</span>
+                            <span class="stat"><i class="fa-regular fa-message"></i> ${formatNumber(data.topicsCount)} topics</span>
+                            <span class="stat"><i class="fa-regular fa-reply"></i> ${formatNumber(data.repliesCount)} replies</span>
                         </div>
                     </div>
                 </a>
@@ -223,7 +220,100 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // BUILD COMPLETE MODERN BOARD LIST FROM LEGACY
+    // TOPIC LIST EXTRACTION & GENERATION
+    // =========================================================================
+    function extractTopicData(row) {
+        const topicId = extractTopicIdFromClass(row);
+        const isUnread = row.classList.contains('on');   // new replies
+        const statusIconEl = row.querySelector('.aa i');
+        const statusIconClass = statusIconEl ? statusIconEl.className : 'fa-regular fa-folder';
+
+        // Title
+        const titleEl = row.querySelector('h3.web a');
+        const topicTitle = titleEl ? titleEl.textContent.trim() : 'Unknown Topic';
+        const topicUrl = titleEl ? titleEl.getAttribute('href') : '#';
+        const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle); // preserve emoji
+
+        // Thumbnail
+        const thumbImg = row.querySelector('h4.desc a.a_desc img.tmb');
+        const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
+
+        // Starter
+        const starterEl = row.querySelector('.xx a');
+        const starterName = starterEl ? starterEl.textContent.trim() : 'Unknown';
+        const starterUrl = starterEl ? starterEl.getAttribute('href') : '#';
+
+        // Stats
+        const repliesEl = row.querySelector('.yy .replies em');
+        const viewsEl = row.querySelector('.yy .views em');
+        const replyCount = repliesEl ? parseInt(repliesEl.textContent, 10) || 0 : 0;
+        const viewCount = viewsEl ? parseInt(viewsEl.textContent, 10) || 0 : 0;
+
+        // Last post
+        const lastPostDateEl = row.querySelector('.zz .when a');
+        const lastPostDateStr = lastPostDateEl ? lastPostDateEl.textContent.trim() : '';
+        const lastPostDate = parseDateFromTitle(lastPostDateStr);
+        const lastPostRelative = lastPostDate ? getRelativeTimeString(lastPostDate) : '';
+        const lastPostUrl = lastPostDateEl ? lastPostDateEl.getAttribute('href') : topicUrl + '#newpost';
+
+        const lastPosterEl = row.querySelector('.zz .who a');
+        const lastPosterName = lastPosterEl ? lastPosterEl.textContent.trim() : starterName;
+        const lastPosterUrl = lastPosterEl ? lastPosterEl.getAttribute('href') : starterUrl;
+
+        return {
+            topicId, isUnread, statusIconClass,
+            topicTitle, topicUrl, topicTitleHTML,
+            thumbnailUrl,
+            starterName, starterUrl,
+            replyCount, viewCount,
+            lastPostRelative, lastPostUrl,
+            lastPosterName, lastPosterUrl
+        };
+    }
+
+    function generateTopicCard(data) {
+        // Thumbnail area
+        let imageHtml;
+        if (data.thumbnailUrl) {
+            imageHtml = `<div class="topic-thumbnail">
+                <img src="${escapeHtml(data.thumbnailUrl)}" alt="" loading="lazy">
+            </div>`;
+        } else {
+            // Placeholder: simple comment icon
+            imageHtml = `<div class="topic-thumbnail topic-thumbnail--placeholder">
+                <i class="fa-regular fa-comments"></i>
+            </div>`;
+        }
+
+        // Unread indicator
+        const unreadBadge = data.isUnread
+            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
+            : '';
+
+        return `
+            <article class="topic-card" data-topic-id="${data.topicId}" data-original-id="t${data.topicId}">
+                <a href="${escapeHtml(data.topicUrl)}" class="topic-card-link" aria-label="View topic: ${escapeHtml(data.topicTitle)}">
+                    ${imageHtml}
+                    <div class="topic-info">
+                        <h3 class="topic-title">${unreadBadge}${data.topicTitleHTML}</h3>
+                        <div class="topic-meta">
+                            <span class="topic-starter">by <a href="${escapeHtml(data.starterUrl)}">${escapeHtml(data.starterName)}</a></span>
+                            <span class="topic-stats">
+                                <span><i class="fa-regular fa-reply"></i> ${formatNumber(data.replyCount)} replies</span>
+                                <span><i class="fa-regular fa-eye"></i> ${formatNumber(data.viewCount)} views</span>
+                            </span>
+                        </div>
+                        <div class="topic-last-post">
+                            <span class="last-post-date">${escapeHtml(data.lastPostRelative)}</span>
+                            ${data.lastPosterName !== data.starterName ? `<span class="last-post-author">by <a href="${escapeHtml(data.lastPosterUrl)}">${escapeHtml(data.lastPosterName)}</a></span>` : ''}
+                        </div>
+                    </div>
+                </a>
+            </article>`;
+    }
+
+    // =========================================================================
+    // BUILD MODERN LISTS
     // =========================================================================
     function buildModernBoardList() {
         const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
@@ -251,15 +341,43 @@ const ForumBoardsModule = (function () {
 
             html += `</div></section>`;
         });
+        return html;
+    }
 
+    function buildModernTopicList() {
+        const forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+        if (!forumWrapper) return '';
+
+        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+        if (!topicList) return '';
+
+        const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+        if (rows.length === 0) return '';
+
+        // Get the forum title from the header
+        const forumTitleEl = forumWrapper.querySelector('.mtitle h1');
+        const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
+
+        let html = `<section class="topic-list-section">
+            <header class="topic-list-header">
+                <h2 class="topic-list-title">${escapeHtml(forumTitle)}</h2>
+            </header>
+            <div class="topic-cards-grid">`;
+
+        rows.forEach(row => {
+            const data = extractTopicData(row);
+            html += generateTopicCard(data);
+        });
+
+        html += `</div></section>`;
         return html;
     }
 
     // =========================================================================
-    // MAIN CONVERSION FUNCTION
+    // CONVERSION FUNCTIONS
     // =========================================================================
     function convertBoards() {
-        const container = getModernBoardContainer();
+        const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
         if (!container) return;
         const modernHtml = buildModernBoardList();
         if (!modernHtml) {
@@ -270,15 +388,30 @@ const ForumBoardsModule = (function () {
         console.log('[BoardsModule] Board list modernized');
     }
 
-    // =========================================================================
-    // INITIALIZATION (NO OBSERVER – board list is static)
-    // =========================================================================
-    function initialize() {
-        // Only run on pages that actually have the board list
-        if (!document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) {
+    function convertTopics() {
+        const container = getOrCreateContainer(CONFIG.TOPIC_CONTAINER_ID);
+        if (!container) return;
+        const modernHtml = buildModernTopicList();
+        if (!modernHtml) {
+            container.innerHTML = '';
             return;
         }
-        convertBoards();
+        container.innerHTML = modernHtml;
+        console.log('[BoardsModule] Topic list modernized');
+    }
+
+    // =========================================================================
+    // INITIALIZATION
+    // =========================================================================
+    function initialize() {
+        // Board index
+        if (document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) {
+            convertBoards();
+        }
+        // Forum view (topic list)
+        if (document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR)) {
+            convertTopics();
+        }
         console.log('[BoardsModule] Initialized');
     }
 
@@ -287,11 +420,14 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     return {
         initialize,
-        refresh: convertBoards
+        refresh: function () {
+            convertBoards();
+            convertTopics();
+        }
     };
 })();
 
-// Auto‑initialize when DOM is ready (or immediately if already interactive)
+// Auto‑initialize when DOM is ready
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
     setTimeout(() => ForumBoardsModule.initialize(), 0);
 } else {
