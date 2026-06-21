@@ -2,12 +2,11 @@
    Forum Boards & Topics Modernizer – Emerald Theme
    Converts legacy board list AND topic list into
    modern, card‑based layouts with author avatars.
-   Includes collapsible categories (localStorage).
    ============================================= */
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars + collapsible)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars + collapse)');
 
     // =========================================================================
     // CONFIGURATION
@@ -33,7 +32,10 @@ const ForumBoardsModule = (function () {
         AVATAR_SIZE: 20,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
-        QUALITY: 80
+        QUALITY: 80,
+
+        // Collapse
+        COLLAPSE_STORAGE_PREFIX: 'board-cat-'
     });
 
     // =========================================================================
@@ -223,37 +225,6 @@ const ForumBoardsModule = (function () {
             wrapper.appendChild(container);
         }
         return container;
-    }
-
-    // =========================================================================
-    // COLLAPSIBLE CATEGORIES HELPERS
-    // =========================================================================
-    function attachCategoryToggleEvents() {
-        // Use event delegation on the body (or a stable parent)
-        document.addEventListener('click', function (e) {
-            const btn = e.target.closest('.category-toggle-btn');
-            if (!btn) return;
-            const categoryId = btn.getAttribute('data-category-id');
-            const section = document.querySelector('.board-category[data-category-id="' + categoryId + '"]');
-            if (!section) return;
-            section.classList.toggle('collapsed');
-            const collapsed = section.classList.contains('collapsed');
-            try {
-                localStorage.setItem('board-cat-' + categoryId, collapsed ? '1' : '0');
-            } catch (ignore) {}
-        });
-    }
-
-    function restoreCategoryStates() {
-        document.querySelectorAll('.board-category').forEach(function (section) {
-            const id = section.getAttribute('data-category-id');
-            if (!id) return;
-            try {
-                if (localStorage.getItem('board-cat-' + id) === '1') {
-                    section.classList.add('collapsed');
-                }
-            } catch (ignore) {}
-        });
     }
 
     // =========================================================================
@@ -511,7 +482,7 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // BUILD MODERN LISTS (with toggle button for categories)
+    // BUILD MODERN LISTS
     // =========================================================================
     function buildModernBoardList(categories) {
         var html = '';
@@ -525,7 +496,7 @@ const ForumBoardsModule = (function () {
                     '<header class="board-category-header">' +
                         '<h2 class="board-category-title">' + escapeHtml(catData.categoryName) + '</h2>' +
                         '<button class="category-toggle-btn" aria-label="Toggle category" title="Collapse / expand" data-category-id="' + catData.categoryId + '">' +
-                            '<i class="fa-regular fa-chevron-down"></i>' +
+                            '<i class="fa-regular fa-angle-down"></i>' +
                         '</button>' +
                     '</header>' +
                     '<div class="board-category-grid">';
@@ -567,6 +538,36 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
+    // COLLAPSIBLE CATEGORY TOGGLE
+    // =========================================================================
+    function attachCategoryToggleEvents() {
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.category-toggle-btn');
+            if (!btn) return;
+            const categoryId = btn.getAttribute('data-category-id');
+            const section = document.querySelector('.board-category[data-category-id="' + categoryId + '"]');
+            if (!section) return;
+            section.classList.toggle('collapsed');
+            const collapsed = section.classList.contains('collapsed');
+            try {
+                localStorage.setItem(CONFIG.COLLAPSE_STORAGE_PREFIX + categoryId, collapsed ? '1' : '0');
+            } catch (ignore) {}
+        });
+    }
+
+    function restoreCategoryStates() {
+        document.querySelectorAll('.board-category').forEach(function (section) {
+            const id = section.getAttribute('data-category-id');
+            if (!id) return;
+            try {
+                if (localStorage.getItem(CONFIG.COLLAPSE_STORAGE_PREFIX + id) === '1') {
+                    section.classList.add('collapsed');
+                }
+            } catch (ignore) {}
+        });
+    }
+
+    // =========================================================================
     // CONVERSION FUNCTIONS (async)
     // =========================================================================
     async function convertBoards() {
@@ -590,7 +591,6 @@ const ForumBoardsModule = (function () {
         const modernHtml = buildModernBoardList(categories);
         container.innerHTML = modernHtml || '';
 
-        // Attach toggle events and restore saved collapsed states
         attachCategoryToggleEvents();
         restoreCategoryStates();
 
