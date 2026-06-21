@@ -295,7 +295,7 @@ const ForumBoardsModule = (function () {
             '</span>';
 
         var unreadBadge = data.isUnread
-            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
+            ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-comment-dots"></i></span>'
             : '';
 
         var lastPosterHtml =
