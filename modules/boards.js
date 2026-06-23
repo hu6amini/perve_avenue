@@ -238,9 +238,23 @@ const ForumBoardsModule = (function () {
         const forumName = nameEl ? nameEl.textContent.trim() : 'Unknown Forum';
         const forumUrl = nameEl ? nameEl.getAttribute('href') : '#';
 
-        // Thumbnail – any image inside .bb
+        // ---- UPDATED THUMBNAIL EXTRACTION ----
+        let thumbnailUrl = null;
         const thumbImg = row.querySelector('.bb img');
-        const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
+        if (thumbImg) {
+            const src = thumbImg.getAttribute('src') || '';
+            // Check if it's a spacer GIF (common in forumfree) – then grab the background image
+            if (src.includes('spacer.gif') || src.includes('spacer')) {
+                const style = thumbImg.getAttribute('style') || '';
+                const bgMatch = style.match(/background-image:\s*url\(['"]?([^'"()]+)['"]?\)/i);
+                if (bgMatch && bgMatch[1]) {
+                    thumbnailUrl = bgMatch[1];   // SVG URL (or whatever is set in the style)
+                }
+            } else {
+                thumbnailUrl = src;
+            }
+        }
+        // -------------------------------------
 
         // Stats
         const topicsEm = row.querySelector('.yy .topics em');
