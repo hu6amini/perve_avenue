@@ -234,15 +234,22 @@ const ForumBoardsModule = (function () {
         const id = row.id;
         const forumId = id ? id.replace('f', '') : '';
 
+        // Forum name & URL
         const nameEl = row.querySelector('.bb h3 a');
         const forumName = nameEl ? nameEl.textContent.trim() : 'Unknown Forum';
         const forumUrl = nameEl ? nameEl.getAttribute('href') : '#';
 
+        // Thumbnail – look for any image inside .bb (like a description image)
+        const thumbImg = row.querySelector('.bb img');
+        const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
+
+        // Stats
         const topicsEm = row.querySelector('.yy .topics em');
         const repliesEm = row.querySelector('.yy .replies em');
         const topicsCount = topicsEm ? parseInt(topicsEm.textContent, 10) || 0 : 0;
         const repliesCount = repliesEm ? parseInt(repliesEm.textContent, 10) || 0 : 0;
 
+        // Last post info
         const whenEl = row.querySelector('.zz .when');
         const lastPostDateStr = whenEl ? whenEl.textContent.trim() : '';
         const lastPostDate = parseDateFromTitle(lastPostDateStr);
@@ -271,14 +278,19 @@ const ForumBoardsModule = (function () {
         const lastPostAuthorUrl = whoLink ? whoLink.getAttribute('href') : '';
         const lastPostAuthorMid = extractMidFromUrl(lastPostAuthorUrl);
 
+        // Keep the original folder icon for possible use in last-post author
         const iconEl = row.querySelector('.aa i');
         const iconClass = iconEl ? iconEl.className : 'fa-regular fa-folder';
 
         return {
-            forumId, forumName, forumUrl, topicsCount, repliesCount,
-            lastPostRelative, lastPostDateStr, lastTopicUrl, lastTopicHTML,
-            subForumUrl, subForumName, lastPostAuthor, lastPostAuthorUrl,
-            lastPostAuthorMid, iconClass
+            forumId, forumName, forumUrl,
+            thumbnailUrl,
+            topicsCount, repliesCount,
+            lastPostRelative, lastPostDateStr,
+            lastTopicUrl, lastTopicHTML,
+            subForumUrl, subForumName,
+            lastPostAuthor, lastPostAuthorUrl, lastPostAuthorMid,
+            iconClass
         };
     }
 
@@ -291,12 +303,25 @@ const ForumBoardsModule = (function () {
     }
 
     function generateForumCard(data) {
-        var avatarHtml = '';
-        if (data.lastPostAuthorMid && data.lastPostAuthor) {
-            const user = userDataCache.get(data.lastPostAuthorMid);
-            avatarHtml = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid);
+        // Thumbnail area
+        var imageHtml;
+        if (data.thumbnailUrl) {
+            imageHtml =
+                '<div class="modern-thumbnail">' +
+                    '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
+                        '<img src="' + escapeHtml(data.thumbnailUrl) + '" alt="" loading="lazy">' +
+                    '</a>' +
+                '</div>';
+        } else {
+            imageHtml =
+                '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
+                    '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
+                        '<i class="fa-regular fa-comments"></i>' +
+                    '</a>' +
+                '</div>';
         }
 
+        // Last post info
         var lastPostHtml = '';
         if (data.lastTopicUrl) {
             var subText = ' ';
@@ -306,13 +331,19 @@ const ForumBoardsModule = (function () {
                     : escapeHtml(data.subForumName);
                 subText = ' <span class="last-post-in">in</span> ' + subLink + ' \u2192 ';
             }
+
+            var avatarHtml = '';
+            if (data.lastPostAuthorMid && data.lastPostAuthor) {
+                const user = userDataCache.get(data.lastPostAuthorMid);
+                avatarHtml = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid);
+            }
             var authorHtml = data.lastPostAuthor
                 ? '<span class="last-post-author">' + avatarHtml +
                     '<a href="' + escapeHtml(data.lastPostAuthorUrl) + '">' + escapeHtml(data.lastPostAuthor) + '</a></span>'
                 : '';
 
             lastPostHtml =
-                '<div class="board-last-post">' +
+                '<div class="modern-last-post">' +
                     '<div class="last-post-topic">' +
                         subText + '<a href="' + escapeHtml(data.lastTopicUrl) + '">' + data.lastTopicHTML + '</a>' +
                     '</div>' +
@@ -322,24 +353,24 @@ const ForumBoardsModule = (function () {
                     '</div>' +
                 '</div>';
         } else {
-            lastPostHtml = '<div class="board-last-post board-last-post--empty">No posts yet</div>';
+            lastPostHtml = '<div class="modern-last-post modern-last-post--empty">No posts yet</div>';
         }
 
         return (
-            '<article class="board-card" data-forum-id="' + data.forumId + '" data-original-id="f' + data.forumId + '">' +
-                '<a href="' + escapeHtml(data.forumUrl) + '" class="board-card-main-link" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
-                    '<div class="board-icon">' +
-                        '<i class="' + escapeHtml(data.iconClass) + '" aria-hidden="true"></i>' +
+            '<article class="modern-card" data-forum-id="' + data.forumId + '" data-original-id="f' + data.forumId + '">' +
+                imageHtml +
+                '<div class="modern-info">' +
+                    '<h3 class="modern-title">' +
+                        '<a href="' + escapeHtml(data.forumUrl) + '">' + escapeHtml(data.forumName) + '</a>' +
+                    '</h3>' +
+                    '<div class="modern-meta">' +
+                        '<span class="modern-stats">' +
+                            '<span><i class="fa-regular fa-message"></i> ' + formatNumber(data.topicsCount) + ' topics</span>' +
+                            '<span><i class="fa-regular fa-reply"></i> ' + formatNumber(data.repliesCount) + ' replies</span>' +
+                        '</span>' +
                     '</div>' +
-                    '<div class="board-info">' +
-                        '<h3 class="board-name">' + escapeHtml(data.forumName) + '</h3>' +
-                        '<div class="board-stats">' +
-                            '<span class="stat"><i class="fa-regular fa-message"></i> ' + formatNumber(data.topicsCount) + ' topics</span>' +
-                            '<span class="stat"><i class="fa-regular fa-reply"></i> ' + formatNumber(data.repliesCount) + ' replies</span>' +
-                        '</div>' +
-                    '</div>' +
-                '</a>' +
-                lastPostHtml +
+                    lastPostHtml +
+                '</div>' +
             '</article>'
         );
     }
@@ -397,14 +428,14 @@ const ForumBoardsModule = (function () {
         var imageHtml;
         if (data.thumbnailUrl) {
             imageHtml =
-                '<div class="topic-thumbnail">' +
+                '<div class="modern-thumbnail">' +
                     '<a href="' + escapeHtml(data.topicUrl) + '" aria-label="View topic: ' + escapeHtml(data.topicTitle) + '">' +
                         '<img src="' + escapeHtml(data.thumbnailUrl) + '" alt="" loading="lazy">' +
                     '</a>' +
                 '</div>';
         } else {
             imageHtml =
-                '<div class="topic-thumbnail topic-thumbnail--placeholder">' +
+                '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
                     '<a href="' + escapeHtml(data.topicUrl) + '" aria-label="View topic: ' + escapeHtml(data.topicTitle) + '">' +
                         '<i class="fa-regular fa-comments"></i>' +
                     '</a>' +
@@ -432,21 +463,21 @@ const ForumBoardsModule = (function () {
                 '<a href="' + escapeHtml(data.lastPosterUrl) + '">' + escapeHtml(data.lastPosterName) + '</a></span>';
 
         return (
-            '<article class="topic-card" data-topic-id="' + data.topicId + '" data-original-id="t' + data.topicId + '">' +
+            '<article class="modern-card" data-topic-id="' + data.topicId + '" data-original-id="t' + data.topicId + '">' +
                 imageHtml +
-                '<div class="topic-info">' +
-                    '<h3 class="topic-title">' +
+                '<div class="modern-info">' +
+                    '<h3 class="modern-title">' +
                         statusIconHtml + unreadBadge +
                         '<a href="' + escapeHtml(data.topicUrl) + '">' + data.topicTitleHTML + '</a>' +
                     '</h3>' +
-                    '<div class="topic-meta">' +
+                    '<div class="modern-meta">' +
                         '<span class="topic-starter">by <a href="' + escapeHtml(data.starterUrl) + '">' + escapeHtml(data.starterName) + '</a></span>' +
-                        '<span class="topic-stats">' +
+                        '<span class="modern-stats">' +
                             '<span><i class="fa-regular fa-reply"></i> ' + formatNumber(data.replyCount) + ' replies</span>' +
                             '<span><i class="fa-regular fa-eye"></i> ' + formatNumber(data.viewCount) + ' views</span>' +
                         '</span>' +
                     '</div>' +
-                    '<div class="topic-last-post">' +
+                    '<div class="modern-last-post">' +
                         '<a href="' + escapeHtml(data.lastPostUrl) + '" class="last-post-date-link">' +
                             '<i class="fa-regular fa-clock"></i> ' + escapeHtml(data.lastPostRelative) +
                         '</a>' +
@@ -499,7 +530,7 @@ const ForumBoardsModule = (function () {
                             '<i class="fa-regular fa-angle-down"></i>' +
                         '</button>' +
                     '</header>' +
-                    '<div class="board-category-grid">';
+                    '<div class="modern-cards-grid">';
 
             forumRows.forEach(function (row) {
                 const data = extractForumData(row);
@@ -526,7 +557,7 @@ const ForumBoardsModule = (function () {
                 '<header class="topic-list-header">' +
                     '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
                 '</header>' +
-                '<div class="topic-cards-grid">';
+                '<div class="modern-cards-grid">';
 
         rows.forEach(function (row) {
             const data = extractTopicData(row);
