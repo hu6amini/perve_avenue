@@ -6,30 +6,35 @@
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars + collapse + bg-thumbs)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + subscriptions + bg-thumbs)');
 
     // =========================================================================
     // CONFIGURATION
     // =========================================================================
     const CONFIG = Object.freeze({
+        // Board list
         BOARD_LIST_SELECTOR: 'ul.board.List',
         CATEGORY_SELECTOR: 'li.skin_tbl',
         FORUM_ROW_SELECTOR: 'ul.big_list > li',
         BOARD_CONTAINER_ID: 'modern-board-list',
 
+        // Topic list (forum view & subscriptions)
         FORUM_WRAPPER_SELECTOR: 'div.forum',
         TOPIC_LIST_SELECTOR: 'ol.big_list',
         TOPIC_ROW_SELECTOR: 'li[id^="t"]',
         TOPIC_CONTAINER_ID: 'modern-topic-list',
 
+        // Shared
         WRAPPER_ID: 'modern-forum-wrapper',
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
 
+        // Avatar
         AVATAR_SIZE: 20,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80,
 
+        // Collapse
         COLLAPSE_STORAGE_PREFIX: 'board-cat-'
     });
 
@@ -379,14 +384,15 @@ const ForumBoardsModule = (function () {
         const topicUrl = titleEl ? titleEl.getAttribute('href') : '#';
         const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle);
 
-        // Real image thumbnail source (used as background)
-        const thumbImg = row.querySelector('h4.desc a.a_desc img.tmb');
+        // Any img inside h4.desc (with or without .tmb)
+        const thumbImg = row.querySelector('h4.desc img');
         const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
 
+        // Starter – only present on normal forum pages, not subscriptions
         const starterEl = row.querySelector('.xx a');
-        const starterName = starterEl ? starterEl.textContent.trim() : 'Unknown';
+        const starterName = starterEl ? starterEl.textContent.trim() : '';
         const starterUrl = starterEl ? starterEl.getAttribute('href') : '#';
-        const starterMid = extractMidFromUrl(starterUrl);
+        const starterMid = starterEl ? extractMidFromUrl(starterUrl) : null;
 
         const repliesEl = row.querySelector('.yy .replies em');
         const viewsEl = row.querySelector('.yy .views em');
@@ -428,12 +434,16 @@ const ForumBoardsModule = (function () {
             ? '<span class="topic-unread-badge" title="New replies"><i class="fa-regular fa-circle"></i></span>'
             : '';
 
+        var starterHtml = '';
+        if (data.starterName) {
+            starterHtml = '<span class="topic-starter">by <a href="' + escapeHtml(data.starterUrl) + '">' + escapeHtml(data.starterName) + '</a></span>';
+        }
+
         var lastPosterAvatarHtml = '';
         if (data.lastPosterMid && data.lastPosterName) {
             const user = userDataCache.get(data.lastPosterMid);
             lastPosterAvatarHtml = generateAvatarHtml(user, data.lastPosterName, data.lastPosterMid);
         }
-
         var lastPosterHtml =
             '<span class="last-post-author">' + lastPosterAvatarHtml +
                 '<a href="' + escapeHtml(data.lastPosterUrl) + '">' + escapeHtml(data.lastPosterName) + '</a></span>';
@@ -447,7 +457,7 @@ const ForumBoardsModule = (function () {
                         '<a href="' + escapeHtml(data.topicUrl) + '">' + data.topicTitleHTML + '</a>' +
                     '</h3>' +
                     '<div class="modern-meta">' +
-                        '<span class="topic-starter">by <a href="' + escapeHtml(data.starterUrl) + '">' + escapeHtml(data.starterName) + '</a></span>' +
+                        starterHtml +
                         '<span class="modern-stats">' +
                             '<span><i class="fa-regular fa-reply"></i> ' + formatNumber(data.replyCount) + ' replies</span>' +
                             '<span><i class="fa-regular fa-eye"></i> ' + formatNumber(data.viewCount) + ' views</span>' +
@@ -523,7 +533,8 @@ const ForumBoardsModule = (function () {
         const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
         if (rows.length === 0) return '';
 
-        const forumTitleEl = forumWrapper.querySelector('.mtitle h1');
+        // Title: try h1 first, then h2 (subscriptions page uses h2)
+        const forumTitleEl = forumWrapper.querySelector('.mtitle h1') || forumWrapper.querySelector('.mtitle h2');
         const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
 
         var html =
