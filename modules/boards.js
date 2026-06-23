@@ -12,34 +12,29 @@ const ForumBoardsModule = (function () {
     // CONFIGURATION
     // =========================================================================
     const CONFIG = Object.freeze({
-        // Board list
         BOARD_LIST_SELECTOR: 'ul.board.List',
         CATEGORY_SELECTOR: 'li.skin_tbl',
         FORUM_ROW_SELECTOR: 'ul.big_list > li',
         BOARD_CONTAINER_ID: 'modern-board-list',
 
-        // Topic list
         FORUM_WRAPPER_SELECTOR: 'div.forum',
         TOPIC_LIST_SELECTOR: 'ol.big_list',
         TOPIC_ROW_SELECTOR: 'li[id^="t"]',
         TOPIC_CONTAINER_ID: 'modern-topic-list',
 
-        // Shared
         WRAPPER_ID: 'modern-forum-wrapper',
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
 
-        // Avatar
         AVATAR_SIZE: 20,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80,
 
-        // Collapse
         COLLAPSE_STORAGE_PREFIX: 'board-cat-'
     });
 
     // =========================================================================
-    // AVATAR COLOUR PALETTE (same as Posts module)
+    // AVATAR COLOUR PALETTE
     // =========================================================================
     const AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
@@ -52,7 +47,7 @@ const ForumBoardsModule = (function () {
     ];
 
     // =========================================================================
-    // UTILITIES (self‑contained)
+    // UTILITIES
     // =========================================================================
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return '';
@@ -109,9 +104,7 @@ const ForumBoardsModule = (function () {
 
     function extractTopicIdFromClass(row) {
         for (const cls of row.classList) {
-            if (cls.startsWith('t') && /^t\d+$/.test(cls)) {
-                return cls.substring(1);
-            }
+            if (cls.startsWith('t') && /^t\d+$/.test(cls)) return cls.substring(1);
         }
         return '';
     }
@@ -123,7 +116,7 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // AVATAR HELPERS (same as Posts module)
+    // AVATAR HELPERS
     // =========================================================================
     const userDataCache = new Map();
 
@@ -205,9 +198,7 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     // CONTAINER HELPERS
     // =========================================================================
-    function getWrapper() {
-        return document.getElementById(CONFIG.WRAPPER_ID);
-    }
+    function getWrapper() { return document.getElementById(CONFIG.WRAPPER_ID); }
 
     function getOrCreateContainer(containerId) {
         const wrapper = getWrapper();
@@ -219,11 +210,8 @@ const ForumBoardsModule = (function () {
         container = document.createElement('div');
         container.id = containerId;
         container.className = containerId === CONFIG.BOARD_CONTAINER_ID ? 'modern-board-list' : 'modern-topic-list';
-        if (afterEl) {
-            afterEl.insertAdjacentElement('afterend', container);
-        } else {
-            wrapper.appendChild(container);
-        }
+        if (afterEl) afterEl.insertAdjacentElement('afterend', container);
+        else wrapper.appendChild(container);
         return container;
     }
 
@@ -238,43 +226,27 @@ const ForumBoardsModule = (function () {
         const forumName = nameEl ? nameEl.textContent.trim() : 'Unknown Forum';
         const forumUrl = nameEl ? nameEl.getAttribute('href') : '#';
 
-        // ---- Thumbnail: background-image from spacer img ----
+        // Extract background-image from the legacy spacer GIF
         const thumbImg = row.querySelector('.bb img');
-        var thumbnailUrl = null;      // traditional src
-        var thumbnailBgUrl = null;    // background-image SVG
-
+        var thumbnailUrl = null;
         if (thumbImg) {
-            // 1) Try background-image first (the common case)
             const style = thumbImg.getAttribute('style') || '';
             const bgMatch = style.match(/background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i);
-            if (bgMatch && bgMatch[1]) {
-                thumbnailBgUrl = bgMatch[1];
-            } else {
-                // 2) Fallback: normal src (if ever used)
-                var src = thumbImg.getAttribute('src');
-                if (src && src.indexOf('spacer.gif') === -1) {
-                    thumbnailUrl = src;
-                }
-            }
+            if (bgMatch && bgMatch[1]) thumbnailUrl = bgMatch[1];
         }
 
-        // Stats
         const topicsEm = row.querySelector('.yy .topics em');
         const repliesEm = row.querySelector('.yy .replies em');
         const topicsCount = topicsEm ? parseInt(topicsEm.textContent, 10) || 0 : 0;
         const repliesCount = repliesEm ? parseInt(repliesEm.textContent, 10) || 0 : 0;
 
-        // Last post info
         const whenEl = row.querySelector('.zz .when');
         const lastPostDateStr = whenEl ? whenEl.textContent.trim() : '';
         const lastPostDate = parseDateFromTitle(lastPostDateStr);
         const lastPostRelative = lastPostDate ? getRelativeTimeString(lastPostDate) : '';
 
         const whereEl = row.querySelector('.zz .where');
-        let lastTopicUrl = '';
-        let lastTopicHTML = '';
-        let subForumUrl = '';
-        let subForumName = '';
+        let lastTopicUrl = '', lastTopicHTML = '', subForumUrl = '', subForumName = '';
         if (whereEl) {
             const links = whereEl.querySelectorAll('a');
             if (links.length === 1) {
@@ -293,16 +265,13 @@ const ForumBoardsModule = (function () {
         const lastPostAuthorUrl = whoLink ? whoLink.getAttribute('href') : '';
         const lastPostAuthorMid = extractMidFromUrl(lastPostAuthorUrl);
 
-        // Status icon (folder-open / folder)
         const iconEl = row.querySelector('.aa i');
         const iconClass = iconEl ? iconEl.className : 'fa-regular fa-folder';
         const isUnread = row.classList.contains('on');
 
         return {
             forumId, forumName, forumUrl,
-            thumbnailUrl,          // ordinary image src (rare)
-            thumbnailBgUrl,        // SVG background-image (common)
-            topicsCount, repliesCount,
+            thumbnailUrl, topicsCount, repliesCount,
             lastPostRelative, lastPostDateStr,
             lastTopicUrl, lastTopicHTML,
             subForumUrl, subForumName,
@@ -319,41 +288,29 @@ const ForumBoardsModule = (function () {
         return { categoryId, categoryName };
     }
 
-    function generateForumCard(data) {
-        // ---- Thumbnail area ----
-        var imageHtml;
-        if (data.thumbnailBgUrl) {
-            // SVG background-image from legacy spacer
-            imageHtml =
-                '<div class="modern-thumbnail modern-thumbnail--bg" style="background-image: url(\'' + escapeHtml(data.thumbnailBgUrl) + '\');">' +
-                    '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '" class="modern-thumbnail-cover-link"></a>' +
-                '</div>';
-        } else if (data.thumbnailUrl) {
-            // Ordinary image src
-            imageHtml =
-                '<div class="modern-thumbnail">' +
-                    '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
-                        '<img src="' + escapeHtml(data.thumbnailUrl) + '" alt="" loading="lazy">' +
-                    '</a>' +
-                '</div>';
+    function buildThumbnailDiv(linkUrl, label, bgUrl) {
+        if (bgUrl) {
+            return '<div class="modern-thumbnail modern-thumbnail--bg" style="background-image: url(\'' + escapeHtml(bgUrl) + '\');">' +
+                       '<a href="' + escapeHtml(linkUrl) + '" aria-label="' + escapeHtml(label) + '" class="modern-thumbnail-cover-link"></a>' +
+                   '</div>';
         } else {
-            // Placeholder icon
-            imageHtml =
-                '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
-                    '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
-                        '<i class="fa-regular fa-comments"></i>' +
-                    '</a>' +
-                '</div>';
+            return '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
+                       '<a href="' + escapeHtml(linkUrl) + '" aria-label="' + escapeHtml(label) + '">' +
+                           '<i class="fa-regular fa-comments"></i>' +
+                       '</a>' +
+                   '</div>';
         }
+    }
 
-        // Status icon (activity indicator)
+    function generateForumCard(data) {
+        var imageHtml = buildThumbnailDiv(data.forumUrl, 'Go to ' + data.forumName, data.thumbnailUrl);
+
         var statusIconTitle = data.isUnread ? 'New posts' : 'No new posts';
         var statusIconHtml =
             '<span class="topic-status-icon" title="' + escapeHtml(statusIconTitle) + '">' +
                 '<i class="' + escapeHtml(data.iconClass) + '" aria-hidden="true"></i>' +
             '</span>';
 
-        // Last post info
         var lastPostHtml = '';
         if (data.lastTopicUrl) {
             var subText = ' ';
@@ -409,7 +366,7 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // TOPIC LIST EXTRACTION & GENERATION (unchanged)
+    // TOPIC LIST EXTRACTION & GENERATION
     // =========================================================================
     function extractTopicData(row) {
         const topicId = extractTopicIdFromClass(row);
@@ -422,6 +379,7 @@ const ForumBoardsModule = (function () {
         const topicUrl = titleEl ? titleEl.getAttribute('href') : '#';
         const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle);
 
+        // Real image thumbnail source (used as background)
         const thumbImg = row.querySelector('h4.desc a.a_desc img.tmb');
         const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
 
@@ -458,22 +416,7 @@ const ForumBoardsModule = (function () {
     }
 
     function generateTopicCard(data) {
-        var imageHtml;
-        if (data.thumbnailUrl) {
-            imageHtml =
-                '<div class="modern-thumbnail">' +
-                    '<a href="' + escapeHtml(data.topicUrl) + '" aria-label="View topic: ' + escapeHtml(data.topicTitle) + '">' +
-                        '<img src="' + escapeHtml(data.thumbnailUrl) + '" alt="" loading="lazy">' +
-                    '</a>' +
-                '</div>';
-        } else {
-            imageHtml =
-                '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
-                    '<a href="' + escapeHtml(data.topicUrl) + '" aria-label="View topic: ' + escapeHtml(data.topicTitle) + '">' +
-                        '<i class="fa-regular fa-comments"></i>' +
-                    '</a>' +
-                '</div>';
-        }
+        var imageHtml = buildThumbnailDiv(data.topicUrl, 'View topic: ' + data.topicTitle, data.thumbnailUrl);
 
         var statusIconTitle = data.isUnread ? 'New replies' : 'No new replies';
         var statusIconHtml =
@@ -540,9 +483,7 @@ const ForumBoardsModule = (function () {
                 if (mid) mids.add(mid);
             }
         });
-        await Promise.all(Array.from(mids).map(function (mid) {
-            return fetchUserData(mid);
-        }));
+        await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
     }
 
     // =========================================================================
@@ -624,15 +565,13 @@ const ForumBoardsModule = (function () {
             const id = section.getAttribute('data-category-id');
             if (!id) return;
             try {
-                if (localStorage.getItem(CONFIG.COLLAPSE_STORAGE_PREFIX + id) === '1') {
-                    section.classList.add('collapsed');
-                }
+                if (localStorage.getItem(CONFIG.COLLAPSE_STORAGE_PREFIX + id) === '1') section.classList.add('collapsed');
             } catch (ignore) {}
         });
     }
 
     // =========================================================================
-    // CONVERSION FUNCTIONS (async)
+    // CONVERSION FUNCTIONS
     // =========================================================================
     async function convertBoards() {
         const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
@@ -682,21 +621,14 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // INITIALIZATION (async)
+    // INITIALIZATION
     // =========================================================================
     async function initialize() {
-        if (document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) {
-            await convertBoards();
-        }
-        if (document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR)) {
-            await convertTopics();
-        }
+        if (document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) await convertBoards();
+        if (document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR)) await convertTopics();
         console.log('[BoardsModule] Initialized');
     }
 
-    // =========================================================================
-    // PUBLIC API
-    // =========================================================================
     return {
         initialize: initialize,
         refresh: async function () {
@@ -706,14 +638,12 @@ const ForumBoardsModule = (function () {
     };
 })();
 
-// Auto‑initialize when DOM is ready
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
     setTimeout(function () { ForumBoardsModule.initialize(); }, 0);
 } else {
     document.addEventListener('DOMContentLoaded', function () { ForumBoardsModule.initialize(); });
 }
 
-// Expose globally
 if (typeof window !== 'undefined') {
     window.ForumBoardsModule = ForumBoardsModule;
     window.dispatchEvent(new CustomEvent('boards-module-ready'));
