@@ -6,7 +6,7 @@
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars + collapse)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + avatars + collapse + bg-thumbs)');
 
     // =========================================================================
     // CONFIGURATION
@@ -238,23 +238,25 @@ const ForumBoardsModule = (function () {
         const forumName = nameEl ? nameEl.textContent.trim() : 'Unknown Forum';
         const forumUrl = nameEl ? nameEl.getAttribute('href') : '#';
 
-        // ---- UPDATED THUMBNAIL EXTRACTION ----
-        let thumbnailUrl = null;
+        // ---- Thumbnail: background-image from spacer img ----
         const thumbImg = row.querySelector('.bb img');
+        var thumbnailUrl = null;      // traditional src
+        var thumbnailBgUrl = null;    // background-image SVG
+
         if (thumbImg) {
-            const src = thumbImg.getAttribute('src') || '';
-            // Check if it's a spacer GIF (common in forumfree) – then grab the background image
-            if (src.includes('spacer.gif') || src.includes('spacer')) {
-                const style = thumbImg.getAttribute('style') || '';
-                const bgMatch = style.match(/background-image:\s*url\(['"]?([^'"()]+)['"]?\)/i);
-                if (bgMatch && bgMatch[1]) {
-                    thumbnailUrl = bgMatch[1];   // SVG URL (or whatever is set in the style)
-                }
+            // 1) Try background-image first (the common case)
+            const style = thumbImg.getAttribute('style') || '';
+            const bgMatch = style.match(/background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i);
+            if (bgMatch && bgMatch[1]) {
+                thumbnailBgUrl = bgMatch[1];
             } else {
-                thumbnailUrl = src;
+                // 2) Fallback: normal src (if ever used)
+                var src = thumbImg.getAttribute('src');
+                if (src && src.indexOf('spacer.gif') === -1) {
+                    thumbnailUrl = src;
+                }
             }
         }
-        // -------------------------------------
 
         // Stats
         const topicsEm = row.querySelector('.yy .topics em');
@@ -294,11 +296,12 @@ const ForumBoardsModule = (function () {
         // Status icon (folder-open / folder)
         const iconEl = row.querySelector('.aa i');
         const iconClass = iconEl ? iconEl.className : 'fa-regular fa-folder';
-        const isUnread = row.classList.contains('on');   // 'on' = new posts
+        const isUnread = row.classList.contains('on');
 
         return {
             forumId, forumName, forumUrl,
-            thumbnailUrl,
+            thumbnailUrl,          // ordinary image src (rare)
+            thumbnailBgUrl,        // SVG background-image (common)
             topicsCount, repliesCount,
             lastPostRelative, lastPostDateStr,
             lastTopicUrl, lastTopicHTML,
@@ -317,9 +320,16 @@ const ForumBoardsModule = (function () {
     }
 
     function generateForumCard(data) {
-        // Thumbnail area
+        // ---- Thumbnail area ----
         var imageHtml;
-        if (data.thumbnailUrl) {
+        if (data.thumbnailBgUrl) {
+            // SVG background-image from legacy spacer
+            imageHtml =
+                '<div class="modern-thumbnail modern-thumbnail--bg" style="background-image: url(\'' + escapeHtml(data.thumbnailBgUrl) + '\');">' +
+                    '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '" class="modern-thumbnail-cover-link"></a>' +
+                '</div>';
+        } else if (data.thumbnailUrl) {
+            // Ordinary image src
             imageHtml =
                 '<div class="modern-thumbnail">' +
                     '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
@@ -327,6 +337,7 @@ const ForumBoardsModule = (function () {
                     '</a>' +
                 '</div>';
         } else {
+            // Placeholder icon
             imageHtml =
                 '<div class="modern-thumbnail modern-thumbnail--placeholder">' +
                     '<a href="' + escapeHtml(data.forumUrl) + '" aria-label="Go to ' + escapeHtml(data.forumName) + '">' +
@@ -398,7 +409,7 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // TOPIC LIST EXTRACTION & GENERATION
+    // TOPIC LIST EXTRACTION & GENERATION (unchanged)
     // =========================================================================
     function extractTopicData(row) {
         const topicId = extractTopicIdFromClass(row);
