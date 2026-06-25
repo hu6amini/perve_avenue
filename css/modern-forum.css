@@ -2644,3 +2644,100 @@ input[type="radio"]:checked::before {
         animation-duration: 0.01ms !important;
     }
 }
+
+/* Latest Posts Section */
+.latest-posts-section {
+    margin-top: var(--space-xl);
+}
+
+.latest-posts-header {
+    padding-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--primary-color);
+    margin-bottom: var(--space-md);
+}
+
+.latest-posts-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-xl);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.latest-posts-title i {
+    color: var(--primary-light);
+}
+
+.latest-posts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-md);
+}
+
+.latest-post-card {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: var(--pad-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.latest-post-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-color);
+}
+
+.latest-post-card.is-new {
+    border-left: 3px solid var(--primary-light);
+}
+
+.latest-post-avatar {
+    flex-shrink: 0;
+}
+
+.latest-post-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.latest-post-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.latest-post-title a {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.latest-post-title a:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+.latest-post-meta {
+    margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.latest-post-author {
+    color: var(--text-secondary);
+}
+
+.latest-post-author:hover {
+    color: var(--primary-light);
+}
+
+.latest-post-time {
+    color: var(--text-tertiary);
+}
