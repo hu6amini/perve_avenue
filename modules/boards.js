@@ -1,12 +1,11 @@
 /* =============================================
-   Forum Boards & Topics Modernizer – Emerald Theme
-   Converts legacy board list AND topic list into
-   modern, card‑based layouts with author avatars.
+   Forum Boards, Topics & Latest Posts Modernizer
+   Emerald Theme – all lists in one module
    ============================================= */
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + subscriptions + bg-thumbs)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts)');
 
     // =========================================================================
     // CONFIGURATION
@@ -24,18 +23,27 @@ const ForumBoardsModule = (function () {
         TOPIC_ROW_SELECTOR: 'li[id^="t"]',
         TOPIC_CONTAINER_ID: 'modern-topic-list',
 
+        // Latest posts
+        LATEST_POSTS_SELECTOR: 'div.side_topics',
+        LATEST_POST_ITEM_SELECTOR: 'div.topic',
+        LATEST_POSTS_CONTAINER_ID: 'modern-latest-posts',
+
         // Shared
         WRAPPER_ID: 'modern-forum-wrapper',
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
 
         // Avatar
-        AVATAR_SIZE: 20,
+        AVATAR_SIZE_MINI: 20,   // for last‑post author icons
+        AVATAR_SIZE_SMALL: 32,  // for latest‑posts thumbnails
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80,
 
-        // Collapse
-        COLLAPSE_STORAGE_PREFIX: 'board-cat-'
+        // Collapse (board categories)
+        COLLAPSE_STORAGE_PREFIX: 'board-cat-',
+
+        // Container order
+        ORDERED_CONTAINERS: ['modern-latest-posts', 'modern-board-list', 'modern-topic-list']
     });
 
     // =========================================================================
@@ -61,6 +69,7 @@ const ForumBoardsModule = (function () {
         return div.innerHTML;
     };
 
+    // Parser for the common format: "6/21/2026, 01:23 PM"
     function parseDateFromTitle(title) {
         if (!title) return null;
         title = title.replace(/(\d{1,2}):(\d{2})\s*(AM|PM)?:(\d+)/i, '$1:$2 $3');
@@ -87,6 +96,24 @@ const ForumBoardsModule = (function () {
             second = parseInt(nums[5] || 0, 10);
         }
         return new Date(year, month, day, hour, minute, second);
+    }
+
+    // Parser for European format used by latest‑posts: "25/6/2026, 17:37"
+    function parseDateEuropean(dateStr) {
+        if (!dateStr) return null;
+        const parts = dateStr.trim().split(/[\s,]+/); // "25/6/2026", "17:37"
+        if (parts.length < 2) return null;
+        const datePart = parts[0]; // "25/6/2026"
+        const timePart = parts[1]; // "17:37"
+        const dateNums = datePart.split('/');
+        const timeNums = timePart.split(':');
+        if (dateNums.length < 3 || timeNums.length < 2) return null;
+        const day = parseInt(dateNums[0], 10);
+        const month = parseInt(dateNums[1], 10) - 1; // 0‑based
+        const year = parseInt(dateNums[2], 10);
+        const hour = parseInt(timeNums[0], 10);
+        const minute = parseInt(timeNums[1], 10);
+        return new Date(year, month, day, hour, minute);
     }
 
     function getRelativeTimeString(date) {
@@ -179,7 +206,7 @@ const ForumBoardsModule = (function () {
             if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
                 avatarUrl = avatarUrl.replace('http://', 'https://');
             }
-            const optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE, CONFIG.AVATAR_SIZE);
+            const optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE_SMALL, CONFIG.AVATAR_SIZE_SMALL);
             if (optimized) return { type: 'img', url: optimized };
         }
         const initial = username ? username.charAt(0).toUpperCase() : '?';
@@ -188,15 +215,22 @@ const ForumBoardsModule = (function () {
         return { type: 'initial', initial: safeInitial, bgColor: bgColor };
     }
 
-    function generateAvatarHtml(user, username, userId) {
+    function generateAvatarHtml(user, username, userId, size) {
+        const effectiveSize = size || CONFIG.AVATAR_SIZE_MINI;
         const avatarData = getUserAvatarData(user, username, userId);
         if (avatarData.type === 'img') {
-            return '<img class="mini-avatar" src="' + escapeHtml(avatarData.url) +
-                '" alt="' + escapeHtml(username) + '" width="' + CONFIG.AVATAR_SIZE +
-                '" height="' + CONFIG.AVATAR_SIZE + '" loading="lazy">';
+            // Re‑optimize for the requested size if different from the default
+            let url = avatarData.url;
+            if (effectiveSize !== CONFIG.AVATAR_SIZE_MINI && effectiveSize !== CONFIG.AVATAR_SIZE_SMALL) {
+                url = optimizeImageUrl(user.avatar, effectiveSize, effectiveSize) || url;
+            }
+            return '<img class="mini-avatar" src="' + escapeHtml(url) +
+                '" alt="' + escapeHtml(username) + '" width="' + effectiveSize +
+                '" height="' + effectiveSize + '" loading="lazy">';
         } else {
             return '<span class="mini-avatar mini-avatar--initial" style="background-color:#' +
-                avatarData.bgColor + ';">' + escapeHtml(avatarData.initial) + '</span>';
+                avatarData.bgColor + ';width:' + effectiveSize + 'px;height:' + effectiveSize + 'px;font-size:' + (effectiveSize * 0.618) + 'px;line-height:' + effectiveSize + 'px;">' +
+                escapeHtml(avatarData.initial) + '</span>';
         }
     }
 
@@ -211,13 +245,29 @@ const ForumBoardsModule = (function () {
         let container = document.getElementById(containerId);
         if (container) return container;
 
-        const afterEl = wrapper.querySelector(CONFIG.INSERT_AFTER_SELECTOR);
         container = document.createElement('div');
         container.id = containerId;
-        container.className = containerId === CONFIG.BOARD_CONTAINER_ID ? 'modern-board-list' : 'modern-topic-list';
-        if (afterEl) afterEl.insertAdjacentElement('afterend', container);
-        else wrapper.appendChild(container);
+        container.className = containerId;   // uses the same name as id for simplicity
+        // Insert after carousel – order will be corrected later
+        const afterEl = wrapper.querySelector(CONFIG.INSERT_AFTER_SELECTOR);
+        if (afterEl) {
+            afterEl.insertAdjacentElement('afterend', container);
+        } else {
+            wrapper.appendChild(container);
+        }
         return container;
+    }
+
+    // Ensure containers appear in the defined order
+    function reorderContainers() {
+        const wrapper = getWrapper();
+        if (!wrapper) return;
+        CONFIG.ORDERED_CONTAINERS.forEach(function (id) {
+            const el = document.getElementById(id);
+            if (el && el.parentNode === wrapper) {
+                wrapper.appendChild(el);   // moves to end
+            }
+        });
     }
 
     // =========================================================================
@@ -231,7 +281,6 @@ const ForumBoardsModule = (function () {
         const forumName = nameEl ? nameEl.textContent.trim() : 'Unknown Forum';
         const forumUrl = nameEl ? nameEl.getAttribute('href') : '#';
 
-        // Extract background-image from the legacy spacer GIF
         const thumbImg = row.querySelector('.bb img');
         var thumbnailUrl = null;
         if (thumbImg) {
@@ -329,7 +378,7 @@ const ForumBoardsModule = (function () {
             var avatarHtml = '';
             if (data.lastPostAuthorMid && data.lastPostAuthor) {
                 const user = userDataCache.get(data.lastPostAuthorMid);
-                avatarHtml = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid);
+                avatarHtml = generateAvatarHtml(user, data.lastPostAuthor, data.lastPostAuthorMid, CONFIG.AVATAR_SIZE_MINI);
             }
             var authorHtml = data.lastPostAuthor
                 ? '<span class="last-post-author">' + avatarHtml +
@@ -371,7 +420,7 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // TOPIC LIST EXTRACTION & GENERATION
+    // TOPIC LIST EXTRACTION & GENERATION (unchanged from previous)
     // =========================================================================
     function extractTopicData(row) {
         const topicId = extractTopicIdFromClass(row);
@@ -384,11 +433,9 @@ const ForumBoardsModule = (function () {
         const topicUrl = titleEl ? titleEl.getAttribute('href') : '#';
         const topicTitleHTML = titleEl ? titleEl.innerHTML : escapeHtml(topicTitle);
 
-        // Any img inside h4.desc (with or without .tmb)
         const thumbImg = row.querySelector('h4.desc img');
         const thumbnailUrl = thumbImg ? thumbImg.getAttribute('src') : null;
 
-        // Starter – only present on normal forum pages, not subscriptions
         const starterEl = row.querySelector('.xx a');
         const starterName = starterEl ? starterEl.textContent.trim() : '';
         const starterUrl = starterEl ? starterEl.getAttribute('href') : '#';
@@ -442,7 +489,7 @@ const ForumBoardsModule = (function () {
         var lastPosterAvatarHtml = '';
         if (data.lastPosterMid && data.lastPosterName) {
             const user = userDataCache.get(data.lastPosterMid);
-            lastPosterAvatarHtml = generateAvatarHtml(user, data.lastPosterName, data.lastPosterMid);
+            lastPosterAvatarHtml = generateAvatarHtml(user, data.lastPosterName, data.lastPosterMid, CONFIG.AVATAR_SIZE_MINI);
         }
         var lastPosterHtml =
             '<span class="last-post-author">' + lastPosterAvatarHtml +
@@ -475,7 +522,77 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // DATA FETCHING & RENDERING
+    // LATEST POSTS EXTRACTION & GENERATION
+    // =========================================================================
+    function extractLatestPostData(topicDiv) {
+        const avatarImg = topicDiv.querySelector('.thumbs img');
+        const avatarSrc = avatarImg ? avatarImg.getAttribute('src') : null;
+
+        const whoLink = topicDiv.querySelector('.who a');
+        const authorName = whoLink ? whoLink.textContent.trim() : 'Unknown';
+        const authorProfileUrl = whoLink ? whoLink.getAttribute('href') : '#';
+        const authorMid = extractMidFromUrl(authorProfileUrl);
+
+        const topicLink = topicDiv.querySelector('a[href*="#lastpost"]');
+        const topicUrl = topicLink ? topicLink.getAttribute('href') : '#';
+        // Title may contain a <i class="reply">Re: </i> – preserve innerHTML
+        const boldEl = topicLink ? topicLink.querySelector('b') : null;
+        const topicTitleHTML = boldEl ? boldEl.innerHTML : (topicLink ? topicLink.textContent : 'Untitled');
+
+        const whenSpan = topicDiv.querySelector('.when');
+        var dateStr = '';
+        if (whenSpan) {
+            // "on: 25/6/2026, 17:37" – extract after "on:"
+            const text = whenSpan.textContent || '';
+            const match = text.match(/on:\s*(.+)/);
+            dateStr = match ? match[1].trim() : text.trim();
+        }
+        const postDate = parseDateEuropean(dateStr);
+        const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
+
+        const isNew = topicDiv.classList.contains('new');
+
+        return {
+            avatarSrc,
+            authorName, authorProfileUrl, authorMid,
+            topicUrl, topicTitleHTML,
+            relativeTime, isNew
+        };
+    }
+
+    function generateLatestPostCard(data) {
+        var avatarHtml = '';
+        if (data.authorMid) {
+            const user = userDataCache.get(data.authorMid);
+            avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
+        } else if (data.avatarSrc) {
+            // Legacy avatar fallback without API (use provided src)
+            avatarHtml = '<img class="mini-avatar" src="' + escapeHtml(data.avatarSrc) +
+                '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
+                '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
+        } else {
+            avatarHtml = '<span class="mini-avatar mini-avatar--initial" style="background-color:#059669;width:' +
+                CONFIG.AVATAR_SIZE_SMALL + 'px;height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;">?</span>';
+        }
+
+        var titleHtml = data.topicTitleHTML;
+        // Make sure the title links correctly
+        var titleLink = '<a href="' + escapeHtml(data.topicUrl) + '">' + titleHtml + '</a>';
+
+        return '<article class="latest-post-card' + (data.isNew ? ' is-new' : '') + '">' +
+            '<div class="latest-post-avatar">' + avatarHtml + '</div>' +
+            '<div class="latest-post-content">' +
+                '<div class="latest-post-title">' + titleLink + '</div>' +
+                '<div class="latest-post-meta">' +
+                    '<a href="' + escapeHtml(data.authorProfileUrl) + '" class="latest-post-author">' + escapeHtml(data.authorName) + '</a>' +
+                    '<span class="latest-post-time">' + escapeHtml(data.relativeTime) + '</span>' +
+                '</div>' +
+            '</div>' +
+        '</article>';
+    }
+
+    // =========================================================================
+    // DATA FETCHING
     // =========================================================================
     async function fetchAllRelevantUsers(boardRows, topicRows) {
         const mids = new Set();
@@ -488,6 +605,18 @@ const ForumBoardsModule = (function () {
         });
         topicRows.forEach(function (row) {
             const whoLink = row.querySelector('.zz .who a');
+            if (whoLink) {
+                const mid = extractMidFromUrl(whoLink.getAttribute('href'));
+                if (mid) mids.add(mid);
+            }
+        });
+        await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+    }
+
+    async function fetchLatestPostAuthors(latestPostElements) {
+        const mids = new Set();
+        latestPostElements.forEach(function (div) {
+            const whoLink = div.querySelector('.who a');
             if (whoLink) {
                 const mid = extractMidFromUrl(whoLink.getAttribute('href'));
                 if (mid) mids.add(mid);
@@ -533,7 +662,6 @@ const ForumBoardsModule = (function () {
         const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
         if (rows.length === 0) return '';
 
-        // Title: try h1 first, then h2 (subscriptions page uses h2)
         const forumTitleEl = forumWrapper.querySelector('.mtitle h1') || forumWrapper.querySelector('.mtitle h2');
         const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
 
@@ -547,6 +675,24 @@ const ForumBoardsModule = (function () {
         rows.forEach(function (row) {
             const data = extractTopicData(row);
             html += generateTopicCard(data);
+        });
+
+        html += '</div></section>';
+        return html;
+    }
+
+    function buildLatestPostsList(latestDivs) {
+        if (latestDivs.length === 0) return '';
+        var html =
+            '<section class="latest-posts-section">' +
+                '<header class="latest-posts-header">' +
+                    '<h2 class="latest-posts-title"><i class="fa-regular fa-clock"></i> Latest Posts</h2>' +
+                '</header>' +
+                '<div class="latest-posts-grid">';
+
+        latestDivs.forEach(function (div) {
+            const data = extractLatestPostData(div);
+            html += generateLatestPostCard(data);
         });
 
         html += '</div></section>';
@@ -631,13 +777,40 @@ const ForumBoardsModule = (function () {
         console.log('[BoardsModule] Topic list modernized');
     }
 
+    async function convertLatestPosts() {
+        const container = getOrCreateContainer(CONFIG.LATEST_POSTS_CONTAINER_ID);
+        if (!container) return;
+
+        const legacyLatest = document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+        if (!legacyLatest) return;
+
+        const topicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
+        if (topicDivs.length === 0) return;
+
+        await fetchLatestPostAuthors(Array.from(topicDivs));
+
+        const modernHtml = buildLatestPostsList(Array.from(topicDivs));
+        container.innerHTML = modernHtml || '';
+        console.log('[BoardsModule] Latest posts modernized');
+    }
+
     // =========================================================================
     // INITIALIZATION
     // =========================================================================
     async function initialize() {
-        if (document.querySelector(CONFIG.BOARD_LIST_SELECTOR)) await convertBoards();
-        if (document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR)) await convertTopics();
-        console.log('[BoardsModule] Initialized');
+        // Detect and convert each section; order of containers is fixed afterwards
+        var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+        var hasBoard = !!document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
+        var hasForum = !!document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+
+        if (hasLatest) await convertLatestPosts();
+        if (hasBoard) await convertBoards();
+        if (hasForum) await convertTopics();
+
+        // Ensure containers appear in the desired order
+        reorderContainers();
+
+        console.log('[BoardsModule] All lists modernized');
     }
 
     return {
@@ -649,12 +822,14 @@ const ForumBoardsModule = (function () {
     };
 })();
 
+// Auto‑initialize when DOM is ready
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
     setTimeout(function () { ForumBoardsModule.initialize(); }, 0);
 } else {
     document.addEventListener('DOMContentLoaded', function () { ForumBoardsModule.initialize(); });
 }
 
+// Expose globally
 if (typeof window !== 'undefined') {
     window.ForumBoardsModule = ForumBoardsModule;
     window.dispatchEvent(new CustomEvent('boards-module-ready'));
