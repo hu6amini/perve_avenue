@@ -525,71 +525,83 @@ const ForumBoardsModule = (function () {
     // LATEST POSTS EXTRACTION & GENERATION
     // =========================================================================
     function extractLatestPostData(topicDiv) {
-        const avatarImg = topicDiv.querySelector('.thumbs img');
-        const avatarSrc = avatarImg ? avatarImg.getAttribute('src') : null;
+function extractLatestPostData(topicDiv) {
+    const avatarImg = topicDiv.querySelector('.thumbs img');
+    const avatarSrc = avatarImg ? avatarImg.getAttribute('src') : null;
 
-        const whoLink = topicDiv.querySelector('.who a');
-        const authorName = whoLink ? whoLink.textContent.trim() : 'Unknown';
-        const authorProfileUrl = whoLink ? whoLink.getAttribute('href') : '#';
-        const authorMid = extractMidFromUrl(authorProfileUrl);
+    const whoLink = topicDiv.querySelector('.who a');
+    const authorName = whoLink ? whoLink.textContent.trim() : 'Unknown';
+    const authorProfileUrl = whoLink ? whoLink.getAttribute('href') : '#';
+    const authorMid = extractMidFromUrl(authorProfileUrl);
 
-        const topicLink = topicDiv.querySelector('a[href*="#lastpost"]');
-        const topicUrl = topicLink ? topicLink.getAttribute('href') : '#';
-        // Title may contain a <i class="reply">Re: </i> – preserve innerHTML
-        const boldEl = topicLink ? topicLink.querySelector('b') : null;
-        const topicTitleHTML = boldEl ? boldEl.innerHTML : (topicLink ? topicLink.textContent : 'Untitled');
+    const topicLink = topicDiv.querySelector('a[href*="#lastpost"]');
+    const topicUrl = topicLink ? topicLink.getAttribute('href') : '#';
 
-        const whenSpan = topicDiv.querySelector('.when');
-        var dateStr = '';
-        if (whenSpan) {
-            // "on: 25/6/2026, 17:37" – extract after "on:"
-            const text = whenSpan.textContent || '';
-            const match = text.match(/on:\s*(.+)/);
-            dateStr = match ? match[1].trim() : text.trim();
-        }
-        const postDate = parseDateEuropean(dateStr);
-        const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
+    // Title: the <b> element may contain a <i class="reply">Re: </i>
+    const boldEl = topicLink ? topicLink.querySelector('b') : null;
+    const replyIcon = boldEl ? boldEl.querySelector('i.reply') : null;
+    const isReply = !!replyIcon;
 
-        const isNew = topicDiv.classList.contains('new');
-
-        return {
-            avatarSrc,
-            authorName, authorProfileUrl, authorMid,
-            topicUrl, topicTitleHTML,
-            relativeTime, isNew
-        };
+    var topicTitleHTML = boldEl ? boldEl.innerHTML : (topicLink ? topicLink.textContent : 'Untitled');
+    if (replyIcon) {
+        // Remove the <i class="reply">...</i> and any following space
+        topicTitleHTML = topicTitleHTML.replace(/<i class="reply"[^>]*>[^<]*<\/i>\s*/i, '');
     }
 
-    function generateLatestPostCard(data) {
-        var avatarHtml = '';
-        if (data.authorMid) {
-            const user = userDataCache.get(data.authorMid);
-            avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
-        } else if (data.avatarSrc) {
-            // Legacy avatar fallback without API (use provided src)
-            avatarHtml = '<img class="mini-avatar" src="' + escapeHtml(data.avatarSrc) +
-                '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
-                '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
-        } else {
-            avatarHtml = '<span class="mini-avatar mini-avatar--initial" style="background-color:#059669;width:' +
-                CONFIG.AVATAR_SIZE_SMALL + 'px;height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;">?</span>';
-        }
+    const whenSpan = topicDiv.querySelector('.when');
+    var dateStr = '';
+    if (whenSpan) {
+        const text = whenSpan.textContent || '';
+        const match = text.match(/on:\s*(.+)/);
+        dateStr = match ? match[1].trim() : text.trim();
+    }
+    const postDate = parseDateEuropean(dateStr);
+    const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
 
-        var titleHtml = data.topicTitleHTML;
-        // Make sure the title links correctly
-        var titleLink = '<a href="' + escapeHtml(data.topicUrl) + '">' + titleHtml + '</a>';
+    const isNew = topicDiv.classList.contains('new');
 
-        return '<article class="latest-post-card' + (data.isNew ? ' is-new' : '') + '">' +
-            '<div class="latest-post-avatar">' + avatarHtml + '</div>' +
-            '<div class="latest-post-content">' +
-                '<div class="latest-post-title">' + titleLink + '</div>' +
-                '<div class="latest-post-meta">' +
-                    '<a href="' + escapeHtml(data.authorProfileUrl) + '" class="latest-post-author">' + escapeHtml(data.authorName) + '</a>' +
-                    '<span class="latest-post-time">' + escapeHtml(data.relativeTime) + '</span>' +
-                '</div>' +
+    return {
+        avatarSrc,
+        authorName, authorProfileUrl, authorMid,
+        topicUrl, topicTitleHTML,
+        relativeTime, isNew,
+        isReply      // ← new flag
+    };
+}
+
+function generateLatestPostCard(data) {
+    var avatarHtml = '';
+    if (data.authorMid) {
+        const user = userDataCache.get(data.authorMid);
+        avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
+    } else if (data.avatarSrc) {
+        avatarHtml = '<img class="mini-avatar" src="' + escapeHtml(data.avatarSrc) +
+            '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
+            '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
+    } else {
+        avatarHtml = '<span class="mini-avatar mini-avatar--initial" style="background-color:#059669;width:' +
+            CONFIG.AVATAR_SIZE_SMALL + 'px;height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;">?</span>';
+    }
+
+    // Reply icon replaces "Re:" text
+    var titlePrefix = '';
+    if (data.isReply) {
+        titlePrefix = '<i class="fa-regular fa-reply latest-reply-icon" aria-hidden="true"></i> ';
+    }
+
+    var titleLink = '<a href="' + escapeHtml(data.topicUrl) + '">' + titlePrefix + data.topicTitleHTML + '</a>';
+
+    return '<article class="latest-post-card' + (data.isNew ? ' is-new' : '') + '">' +
+        '<div class="latest-post-avatar">' + avatarHtml + '</div>' +
+        '<div class="latest-post-content">' +
+            '<div class="latest-post-title">' + titleLink + '</div>' +
+            '<div class="latest-post-meta">' +
+                '<a href="' + escapeHtml(data.authorProfileUrl) + '" class="latest-post-author">' + escapeHtml(data.authorName) + '</a>' +
+                '<span class="latest-post-time">' + escapeHtml(data.relativeTime) + '</span>' +
             '</div>' +
-        '</article>';
-    }
+        '</div>' +
+    '</article>';
+}
 
     // =========================================================================
     // DATA FETCHING
