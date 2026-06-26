@@ -97,21 +97,54 @@ const ForumBoardsModule = (function () {
         return new Date(year, month, day, hour, minute, second);
     }
 
-    function parseDateEuropean(dateStr) {
+    // =========================================================================
+    // TIMEZONE-AWARE PARSER FOR ITALIAN DATES (server local time)
+    // =========================================================================
+
+    function getLastSundayOfMonth(year, monthIndex) {
+        // monthIndex: 0=January … 11=December
+        var lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)); // last day of month
+        var dayOfWeek = lastDay.getUTCDay();                        // 0=Sun … 6=Sat
+        lastDay.setUTCDate(lastDay.getUTCDate() - dayOfWeek);       // go back to Sunday
+        lastDay.setUTCHours(0, 0, 0, 0);
+        return lastDay.getTime();                                    // UTC ms
+    }
+
+    function isItalianDST(day, month, year) {
+        var dstStart = getLastSundayOfMonth(year, 2);  // March (month index 2)
+        var dstEnd   = getLastSundayOfMonth(year, 9);  // October (month index 9)
+        var target = Date.UTC(year, month - 1, day);
+        return target >= dstStart && target < dstEnd;
+    }
+
+    /**
+     * Parses a string like "25/6/2026, 17:37" (Italian local time)
+     * and returns a JavaScript Date object representing the correct
+     * absolute moment.
+     */
+    function parseItalianDate(dateStr) {
         if (!dateStr) return null;
-        const parts = dateStr.trim().split(/[\s,]+/);
+
+        var parts = dateStr.trim().split(/[\s,]+/);   // ["25/6/2026","17:37"]
         if (parts.length < 2) return null;
-        const datePart = parts[0];
-        const timePart = parts[1];
-        const dateNums = datePart.split('/');
-        const timeNums = timePart.split(':');
+
+        var dateNums = parts[0].split('/');
+        var timeNums = parts[1].split(':');
         if (dateNums.length < 3 || timeNums.length < 2) return null;
-        const day = parseInt(dateNums[0], 10);
-        const month = parseInt(dateNums[1], 10) - 1;
-        const year = parseInt(dateNums[2], 10);
-        const hour = parseInt(timeNums[0], 10);
-        const minute = parseInt(timeNums[1], 10);
-        return new Date(year, month, day, hour, minute);
+
+        var day   = parseInt(dateNums[0], 10);
+        var month = parseInt(dateNums[1], 10);   // 1‑based
+        var year  = parseInt(dateNums[2], 10);
+        var hour  = parseInt(timeNums[0], 10);
+        var min   = parseInt(timeNums[1], 10);
+
+        var offsetMinutes = isItalianDST(day, month, year) ? 120 : 60;
+
+        // Build UTC from the Italian wall‑clock time
+        var utcMs = Date.UTC(year, month - 1, day, hour, min)
+                    - offsetMinutes * 60000;
+
+        return new Date(utcMs);
     }
 
     function getRelativeTimeString(date) {
@@ -562,7 +595,7 @@ const ForumBoardsModule = (function () {
             const match = text.match(/on:\s*(.+)/);
             dateStr = match ? match[1].trim() : text.trim();
         }
-        const postDate = parseDateEuropean(dateStr);
+        const postDate = parseItalianDate(dateStr);   // ← corrected to timezone-aware
         const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
 
         const isNew = topicDiv.classList.contains('new');
@@ -582,7 +615,6 @@ const ForumBoardsModule = (function () {
             const user = userDataCache.get(data.authorMid);
             avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
         } else if (data.avatarSrc) {
-            // Fallback without API – use a default group
             avatarHtml = '<img class="mini-avatar group-member" src="' + escapeHtml(data.avatarSrc) +
                 '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
                 '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
@@ -841,12 +873,14 @@ const ForumBoardsModule = (function () {
     };
 })();
 
+// Auto‑initialize when DOM is ready
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
     setTimeout(function () { ForumBoardsModule.initialize(); }, 0);
 } else {
     document.addEventListener('DOMContentLoaded', function () { ForumBoardsModule.initialize(); });
 }
 
+// Expose globally
 if (typeof window !== 'undefined') {
     window.ForumBoardsModule = ForumBoardsModule;
     window.dispatchEvent(new CustomEvent('boards-module-ready'));
