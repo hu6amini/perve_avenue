@@ -2719,11 +2719,18 @@ input[type="radio"]:checked::before {
     display: none;
 }
 
-/* ---- Cards grid (used by board, topic, and latest posts lists) ---- */
-.modern-cards-grid,
-.latest-posts-grid {
+/* ---- Cards grid (boards & topics) ---- */
+.modern-cards-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-md);
+    justify-content: center;
+}
+
+/* ---- Latest‑posts grid (needs tighter min width for 4 columns) ---- */
+.latest-posts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: var(--space-md);
     justify-content: center;
 }
