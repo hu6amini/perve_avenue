@@ -525,7 +525,6 @@ const ForumBoardsModule = (function () {
     // LATEST POSTS EXTRACTION & GENERATION
     // =========================================================================
     function extractLatestPostData(topicDiv) {
-function extractLatestPostData(topicDiv) {
     const avatarImg = topicDiv.querySelector('.thumbs img');
     const avatarSrc = avatarImg ? avatarImg.getAttribute('src') : null;
 
