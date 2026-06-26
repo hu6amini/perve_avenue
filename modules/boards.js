@@ -5,7 +5,7 @@
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + role avatars)');
 
     // =========================================================================
     // CONFIGURATION
@@ -69,7 +69,6 @@ const ForumBoardsModule = (function () {
         return div.innerHTML;
     };
 
-    // Parser for the common format: "6/21/2026, 01:23 PM"
     function parseDateFromTitle(title) {
         if (!title) return null;
         title = title.replace(/(\d{1,2}):(\d{2})\s*(AM|PM)?:(\d+)/i, '$1:$2 $3');
@@ -98,18 +97,17 @@ const ForumBoardsModule = (function () {
         return new Date(year, month, day, hour, minute, second);
     }
 
-    // Parser for European format used by latest‑posts: "25/6/2026, 17:37"
     function parseDateEuropean(dateStr) {
         if (!dateStr) return null;
-        const parts = dateStr.trim().split(/[\s,]+/); // "25/6/2026", "17:37"
+        const parts = dateStr.trim().split(/[\s,]+/);
         if (parts.length < 2) return null;
-        const datePart = parts[0]; // "25/6/2026"
-        const timePart = parts[1]; // "17:37"
+        const datePart = parts[0];
+        const timePart = parts[1];
         const dateNums = datePart.split('/');
         const timeNums = timePart.split(':');
         if (dateNums.length < 3 || timeNums.length < 2) return null;
         const day = parseInt(dateNums[0], 10);
-        const month = parseInt(dateNums[1], 10) - 1; // 0‑based
+        const month = parseInt(dateNums[1], 10) - 1;
         const year = parseInt(dateNums[2], 10);
         const hour = parseInt(timeNums[0], 10);
         const minute = parseInt(timeNums[1], 10);
@@ -215,20 +213,34 @@ const ForumBoardsModule = (function () {
         return { type: 'initial', initial: safeInitial, bgColor: bgColor };
     }
 
+    function sanitizeGroupName(groupName) {
+        if (!groupName) return 'member';
+        return groupName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function getGroupClass(user) {
+        if (!user || !user.group || !user.group.name) return 'group-member';
+        const groupName = user.group.name;
+        // Founder check
+        if (user.group.class && user.group.class.includes('founder')) return 'group-founder';
+        const sanitized = sanitizeGroupName(groupName);
+        return 'group-' + sanitized;
+    }
+
     function generateAvatarHtml(user, username, userId, size) {
         const effectiveSize = size || CONFIG.AVATAR_SIZE_MINI;
         const avatarData = getUserAvatarData(user, username, userId);
+        const groupClass = getGroupClass(user);
         if (avatarData.type === 'img') {
-            // Re‑optimize for the requested size if different from the default
             let url = avatarData.url;
             if (effectiveSize !== CONFIG.AVATAR_SIZE_MINI && effectiveSize !== CONFIG.AVATAR_SIZE_SMALL) {
                 url = optimizeImageUrl(user.avatar, effectiveSize, effectiveSize) || url;
             }
-            return '<img class="mini-avatar" src="' + escapeHtml(url) +
+            return '<img class="mini-avatar ' + groupClass + '" src="' + escapeHtml(url) +
                 '" alt="' + escapeHtml(username) + '" width="' + effectiveSize +
                 '" height="' + effectiveSize + '" loading="lazy">';
         } else {
-            return '<span class="mini-avatar mini-avatar--initial" style="background-color:#' +
+            return '<span class="mini-avatar mini-avatar--initial ' + groupClass + '" style="background-color:#' +
                 avatarData.bgColor + ';width:' + effectiveSize + 'px;height:' + effectiveSize + 'px;font-size:' + (effectiveSize * 0.618) + 'px;line-height:' + effectiveSize + 'px;">' +
                 escapeHtml(avatarData.initial) + '</span>';
         }
@@ -247,8 +259,7 @@ const ForumBoardsModule = (function () {
 
         container = document.createElement('div');
         container.id = containerId;
-        container.className = containerId;   // uses the same name as id for simplicity
-        // Insert after carousel – order will be corrected later
+        container.className = containerId;
         const afterEl = wrapper.querySelector(CONFIG.INSERT_AFTER_SELECTOR);
         if (afterEl) {
             afterEl.insertAdjacentElement('afterend', container);
@@ -258,14 +269,13 @@ const ForumBoardsModule = (function () {
         return container;
     }
 
-    // Ensure containers appear in the defined order
     function reorderContainers() {
         const wrapper = getWrapper();
         if (!wrapper) return;
         CONFIG.ORDERED_CONTAINERS.forEach(function (id) {
             const el = document.getElementById(id);
             if (el && el.parentNode === wrapper) {
-                wrapper.appendChild(el);   // moves to end
+                wrapper.appendChild(el);
             }
         });
     }
@@ -420,7 +430,7 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
-    // TOPIC LIST EXTRACTION & GENERATION (unchanged from previous)
+    // TOPIC LIST EXTRACTION & GENERATION
     // =========================================================================
     function extractTopicData(row) {
         const topicId = extractTopicIdFromClass(row);
@@ -525,82 +535,80 @@ const ForumBoardsModule = (function () {
     // LATEST POSTS EXTRACTION & GENERATION
     // =========================================================================
     function extractLatestPostData(topicDiv) {
-    const avatarImg = topicDiv.querySelector('.thumbs img');
-    const avatarSrc = avatarImg ? avatarImg.getAttribute('src') : null;
+        const avatarImg = topicDiv.querySelector('.thumbs img');
+        const avatarSrc = avatarImg ? avatarImg.getAttribute('src') : null;
 
-    const whoLink = topicDiv.querySelector('.who a');
-    const authorName = whoLink ? whoLink.textContent.trim() : 'Unknown';
-    const authorProfileUrl = whoLink ? whoLink.getAttribute('href') : '#';
-    const authorMid = extractMidFromUrl(authorProfileUrl);
+        const whoLink = topicDiv.querySelector('.who a');
+        const authorName = whoLink ? whoLink.textContent.trim() : 'Unknown';
+        const authorProfileUrl = whoLink ? whoLink.getAttribute('href') : '#';
+        const authorMid = extractMidFromUrl(authorProfileUrl);
 
-    const topicLink = topicDiv.querySelector('a[href*="#lastpost"]');
-    const topicUrl = topicLink ? topicLink.getAttribute('href') : '#';
+        const topicLink = topicDiv.querySelector('a[href*="#lastpost"]');
+        const topicUrl = topicLink ? topicLink.getAttribute('href') : '#';
 
-    // Title: the <b> element may contain a <i class="reply">Re: </i>
-    const boldEl = topicLink ? topicLink.querySelector('b') : null;
-    const replyIcon = boldEl ? boldEl.querySelector('i.reply') : null;
-    const isReply = !!replyIcon;
+        const boldEl = topicLink ? topicLink.querySelector('b') : null;
+        const replyIcon = boldEl ? boldEl.querySelector('i.reply') : null;
+        const isReply = !!replyIcon;
 
-    var topicTitleHTML = boldEl ? boldEl.innerHTML : (topicLink ? topicLink.textContent : 'Untitled');
-    if (replyIcon) {
-        // Remove the <i class="reply">...</i> and any following space
-        topicTitleHTML = topicTitleHTML.replace(/<i class="reply"[^>]*>[^<]*<\/i>\s*/i, '');
+        var topicTitleHTML = boldEl ? boldEl.innerHTML : (topicLink ? topicLink.textContent : 'Untitled');
+        if (replyIcon) {
+            topicTitleHTML = topicTitleHTML.replace(/<i class="reply"[^>]*>[^<]*<\/i>\s*/i, '');
+        }
+
+        const whenSpan = topicDiv.querySelector('.when');
+        var dateStr = '';
+        if (whenSpan) {
+            const text = whenSpan.textContent || '';
+            const match = text.match(/on:\s*(.+)/);
+            dateStr = match ? match[1].trim() : text.trim();
+        }
+        const postDate = parseDateEuropean(dateStr);
+        const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
+
+        const isNew = topicDiv.classList.contains('new');
+
+        return {
+            avatarSrc,
+            authorName, authorProfileUrl, authorMid,
+            topicUrl, topicTitleHTML,
+            relativeTime, isNew,
+            isReply
+        };
     }
 
-    const whenSpan = topicDiv.querySelector('.when');
-    var dateStr = '';
-    if (whenSpan) {
-        const text = whenSpan.textContent || '';
-        const match = text.match(/on:\s*(.+)/);
-        dateStr = match ? match[1].trim() : text.trim();
-    }
-    const postDate = parseDateEuropean(dateStr);
-    const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
+    function generateLatestPostCard(data) {
+        var avatarHtml = '';
+        if (data.authorMid) {
+            const user = userDataCache.get(data.authorMid);
+            avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
+        } else if (data.avatarSrc) {
+            // Fallback without API – use a default group
+            avatarHtml = '<img class="mini-avatar group-member" src="' + escapeHtml(data.avatarSrc) +
+                '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
+                '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
+        } else {
+            avatarHtml = '<span class="mini-avatar mini-avatar--initial group-member" style="background-color:#059669;width:' +
+                CONFIG.AVATAR_SIZE_SMALL + 'px;height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;font-size:' + (CONFIG.AVATAR_SIZE_SMALL * 0.618) + 'px;line-height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;">?</span>';
+        }
 
-    const isNew = topicDiv.classList.contains('new');
+        var titlePrefix = '';
+        if (data.isReply) {
+            titlePrefix = '<i class="fa-regular fa-reply latest-reply-icon" aria-hidden="true"></i> ';
+        }
 
-    return {
-        avatarSrc,
-        authorName, authorProfileUrl, authorMid,
-        topicUrl, topicTitleHTML,
-        relativeTime, isNew,
-        isReply      // ← new flag
-    };
-}
+        var titleLink = '<a href="' + escapeHtml(data.topicUrl) + '">' + titlePrefix + data.topicTitleHTML + '</a>';
 
-function generateLatestPostCard(data) {
-    var avatarHtml = '';
-    if (data.authorMid) {
-        const user = userDataCache.get(data.authorMid);
-        avatarHtml = generateAvatarHtml(user, data.authorName, data.authorMid, CONFIG.AVATAR_SIZE_SMALL);
-    } else if (data.avatarSrc) {
-        avatarHtml = '<img class="mini-avatar" src="' + escapeHtml(data.avatarSrc) +
-            '" alt="' + escapeHtml(data.authorName) + '" width="' + CONFIG.AVATAR_SIZE_SMALL +
-            '" height="' + CONFIG.AVATAR_SIZE_SMALL + '" loading="lazy">';
-    } else {
-        avatarHtml = '<span class="mini-avatar mini-avatar--initial" style="background-color:#059669;width:' +
-            CONFIG.AVATAR_SIZE_SMALL + 'px;height:' + CONFIG.AVATAR_SIZE_SMALL + 'px;">?</span>';
-    }
-
-    // Reply icon replaces "Re:" text
-    var titlePrefix = '';
-    if (data.isReply) {
-        titlePrefix = '<i class="fa-regular fa-reply latest-reply-icon" aria-hidden="true"></i> ';
-    }
-
-    var titleLink = '<a href="' + escapeHtml(data.topicUrl) + '">' + titlePrefix + data.topicTitleHTML + '</a>';
-
-    return '<article class="latest-post-card' + (data.isNew ? ' is-new' : '') + '">' +
-        '<div class="latest-post-avatar">' + avatarHtml + '</div>' +
-        '<div class="latest-post-content">' +
-            '<div class="latest-post-title">' + titleLink + '</div>' +
-            '<div class="latest-post-meta">' +
-                '<a href="' + escapeHtml(data.authorProfileUrl) + '" class="latest-post-author">' + escapeHtml(data.authorName) + '</a>' +
-                '<span class="latest-post-time">' + escapeHtml(data.relativeTime) + '</span>' +
+        return '<article class="latest-post-card' + (data.isNew ? ' is-new' : '') + '">' +
+            '<div class="latest-post-avatar">' + avatarHtml + '</div>' +
+            '<div class="latest-post-content">' +
+                '<div class="latest-post-title">' + titleLink + '</div>' +
+                '<div class="latest-post-meta">' +
+                    '<a href="' + escapeHtml(data.authorProfileUrl) + '" class="latest-post-author">' + escapeHtml(data.authorName) + '</a>' +
+                    '<span class="latest-post-time">' + escapeHtml(data.relativeTime) + '</span>' +
+                '</div>' +
             '</div>' +
-        '</div>' +
-    '</article>';
-}
+        '</article>';
+    }
 
     // =========================================================================
     // DATA FETCHING
@@ -795,21 +803,22 @@ function generateLatestPostCard(data) {
         const legacyLatest = document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
         if (!legacyLatest) return;
 
-        const topicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
-        if (topicDivs.length === 0) return;
+        const allTopicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
+        if (allTopicDivs.length === 0) return;
 
-        await fetchLatestPostAuthors(Array.from(topicDivs));
+        const limitedDivs = Array.from(allTopicDivs).slice(0, 12);
 
-        const modernHtml = buildLatestPostsList(Array.from(topicDivs));
+        await fetchLatestPostAuthors(limitedDivs);
+
+        const modernHtml = buildLatestPostsList(limitedDivs);
         container.innerHTML = modernHtml || '';
-        console.log('[BoardsModule] Latest posts modernized');
+        console.log('[BoardsModule] Latest posts modernized (12 shown)');
     }
 
     // =========================================================================
     // INITIALIZATION
     // =========================================================================
     async function initialize() {
-        // Detect and convert each section; order of containers is fixed afterwards
         var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
         var hasBoard = !!document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
         var hasForum = !!document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
@@ -818,7 +827,6 @@ function generateLatestPostCard(data) {
         if (hasBoard) await convertBoards();
         if (hasForum) await convertTopics();
 
-        // Ensure containers appear in the desired order
         reorderContainers();
 
         console.log('[BoardsModule] All lists modernized');
@@ -833,14 +841,12 @@ function generateLatestPostCard(data) {
     };
 })();
 
-// Auto‑initialize when DOM is ready
 if (document.readyState === 'interactive' || document.readyState === 'complete') {
     setTimeout(function () { ForumBoardsModule.initialize(); }, 0);
 } else {
     document.addEventListener('DOMContentLoaded', function () { ForumBoardsModule.initialize(); });
 }
 
-// Expose globally
 if (typeof window !== 'undefined') {
     window.ForumBoardsModule = ForumBoardsModule;
     window.dispatchEvent(new CustomEvent('boards-module-ready'));
