@@ -2645,21 +2645,41 @@ input[type="radio"]:checked::before {
     }
 }
 
-/* Latest Posts Section */
+/* ==========================================================================
+   UNIFIED MODERN CARDS (boards, topics, latest posts)
+   ========================================================================== */
+
+/* ---- Section containers (board list, topic list, latest posts) ---- */
+.modern-board-list,
+.topic-list-section,
 .latest-posts-section {
     margin-top: var(--space-xl);
 }
 
+.board-category {
+    margin-bottom: var(--space-xl);
+}
+
+/* ---- Section headers ---- */
+.board-category-header,
+.topic-list-header,
 .latest-posts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding-bottom: var(--space-sm);
     border-bottom: 2px solid var(--primary-color);
     margin-bottom: var(--space-md);
 }
 
+.board-category-title,
+.topic-list-title,
 .latest-posts-title {
     font-family: var(--font-heading);
     font-size: var(--text-xl);
     color: var(--text-primary);
+    text-align: left;
+    margin: 0;
     display: flex;
     align-items: center;
     gap: var(--space-xs);
@@ -2669,73 +2689,340 @@ input[type="radio"]:checked::before {
     color: var(--primary-light);
 }
 
-.latest-posts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-md);
+/* Category collapse button */
+.category-toggle-btn {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+.category-toggle-btn:hover {
+    background: var(--hover-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+}
+.category-toggle-btn i {
+    transition: transform 0.3s ease;
+}
+.board-category.collapsed .category-toggle-btn i {
+    transform: rotate(-90deg);
+}
+.board-category.collapsed .modern-cards-grid {
+    display: none;
 }
 
+/* ---- Cards grid (used by board, topic, and latest posts lists) ---- */
+.modern-cards-grid,
+.latest-posts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-md);
+    justify-content: center;
+}
+
+/* ---- Individual card (board, topic, latest post) ---- */
+.modern-card,
 .latest-post-card {
     background: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: var(--pad-4);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
     display: flex;
+    flex-direction: column;
+    max-width: 450px;
+    justify-self: center;
+    width: 100%;
+}
+.latest-post-card {
+    flex-direction: row;
     align-items: center;
     gap: var(--space-sm);
-    transition: transform 0.2s, box-shadow 0.2s;
+    padding: var(--pad-4);
+    max-width: none;           /* no max‑width restriction for the horizontal card */
 }
-
+.modern-card:hover,
 .latest-post-card:hover {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-md);
     border-color: var(--primary-color);
 }
-
+.latest-post-card:hover {
+    transform: translateY(-1px);
+}
 .latest-post-card.is-new {
     border-left: 3px solid var(--primary-light);
 }
 
+/* ---- Thumbnail area (boards & topics) ---- */
+.modern-thumbnail {
+    width: 100%;
+    aspect-ratio: 2 / 1;
+    overflow: hidden;
+    background-color: var(--surface-light);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+}
+.modern-thumbnail a {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.modern-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+.modern-card:hover .modern-thumbnail img {
+    transform: scale(1.03);
+}
+
+/* Invisible clickable overlay for background‑image thumbnails */
+.modern-thumbnail-cover-link {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    text-decoration: none;
+    z-index: 1;
+}
+
+/* Placeholder when no image */
+.modern-thumbnail--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    color: var(--text-muted);
+    background: var(--surface-light);
+}
+.modern-thumbnail--placeholder a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+}
+
+/* ---- Latest‑post avatar ---- */
 .latest-post-avatar {
     flex-shrink: 0;
 }
-
 .latest-post-content {
     flex: 1;
     min-width: 0;
 }
 
-.latest-post-title {
-    font-size: var(--text-sm);
+/* ---- Info area (boards & topics) ---- */
+.modern-info {
+    padding: var(--pad-5);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
 }
 
+.modern-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-wrap: wrap;
+}
+.modern-title a {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+.modern-title a:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+/* Latest‑post title (horizontal card) */
+.latest-post-title {
+    font-size: var(--text-sm);
+    font-family: var(--font-heading);
+    display: flex;
+    align-items: flex-start;
+}
 .latest-post-title a {
     color: var(--text-primary);
     text-decoration: none;
 }
-
 .latest-post-title a:hover {
     color: var(--primary-light);
     text-decoration: underline;
 }
 
-.latest-post-meta {
-    margin-top: 2px;
-    font-size: var(--text-xs);
-    color: var(--text-tertiary);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* Status icons (activity indicator) */
+.topic-status-icon {
+    font-size: 1rem;
+    color: var(--primary-light);
+    flex-shrink: 0;
+}
+.topic-status-icon .fa-regular.fa-folder-open,
+.topic-unread-badge .fa-regular.fa-circle {
+    color: var(--warning-color);
+}
+.topic-unread-badge {
+    color: var(--warning-color);
+    font-size: var(--text-base);
+    flex-shrink: 0;
 }
 
-.latest-post-author {
+/* ---- Meta row ---- */
+.modern-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-md);
+    font-size: var(--text-xs);
     color: var(--text-secondary);
 }
-
-.latest-post-author:hover {
+.topic-starter a {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.topic-starter a:hover {
     color: var(--primary-light);
 }
 
-.latest-post-time {
+/* Stats (used in both boards and topics) */
+.modern-stats {
+    display: flex;
+    gap: var(--space-lg);
     color: var(--text-tertiary);
 }
+.modern-stats i {
+    margin-right: 4px;
+    color: var(--primary-light);
+}
+
+/* ---- Last post row (boards & topics) ---- */
+.modern-last-post {
+    margin-top: auto;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-color);
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.modern-last-post--empty {
+    font-style: italic;
+}
+
+.last-post-topic {
+    text-align: left;
+}
+.last-post-topic a {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.last-post-topic a:hover {
+    color: var(--primary-light);
+}
+
+.last-post-meta,
+.latest-post-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-top: 2px;
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+}
+
+.last-post-date-link {
+    color: var(--text-tertiary);
+    text-decoration: none;
+}
+.last-post-date-link:hover {
+    color: var(--primary-light);
+}
+
+.last-post-author,
+.latest-post-author {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.last-post-author a,
+.latest-post-author a {
+    color: var(--text-secondary);
+}
+.last-post-author a:hover,
+.latest-post-author a:hover {
+    color: var(--primary-light);
+}
+
+.latest-reply-icon {
+    font-size: 0.85em;
+    color: var(--primary-light);
+    margin-right: 2px;
+}
+
+/* ---- Mini avatar (20px for last‑post, 32px for latest‑posts) ---- */
+.mini-avatar {
+    border-radius: 50%;
+    object-fit: cover;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+/* Default size for last‑post author icons */
+.last-post-author .mini-avatar,
+.last-post-meta .mini-avatar {
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-color);
+}
+/* Latest‑posts avatar (bigger, 32px) */
+.latest-posts-grid .mini-avatar {
+    width: 32px;
+    height: 32px;
+    border: 2px solid;
+    margin-right: 0;
+}
+
+/* Initial avatar base */
+.mini-avatar--initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: white;
+    background-color: var(--primary-color);
+    line-height: 1;
+}
+
+/* Group‑specific avatar border colours */
+.mini-avatar.group-founder          { border-color: #F59E0B !important; }
+.mini-avatar.group-administrator    { border-color: #DC2626 !important; }
+.mini-avatar.group-global-moderator { border-color: #06B6D4 !important; }
+.mini-avatar.group-moderator        { border-color: #8B5CF6 !important; }
+.mini-avatar.group-developer        { border-color: #0EA5E9 !important; }
+.mini-avatar.group-game-dev         { border-color: #3B82F6 !important; }
+.mini-avatar.group-fan              { border-color: #EC4899 !important; }
+.mini-avatar.group-member           { border-color: var(--primary-color) !important; }
+.mini-avatar.group-guest            { border-color: #6B7280 !important; }
