@@ -697,7 +697,7 @@ function generateLatestPostCard(data) {
         var html =
             '<section class="latest-posts-section">' +
                 '<header class="latest-posts-header">' +
-                    '<h2 class="latest-posts-title"><i class="fa-regular fa-clock"></i> Latest Posts</h2>' +
+                    '<h2 class="latest-posts-title"><i class="fa-regular fa-clock"></i> Latest posts</h2>' +
                 '</header>' +
                 '<div class="latest-posts-grid">';
 
