@@ -686,10 +686,11 @@ function extractForumStatistics(statsContainer) {
     var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
     if (!bottomSection) return {};
 
-    // The text with posts, topics, members, visits, top forum, newest member
-    var textDiv = bottomSection.querySelector('.zz.right.Sub.Item div');
-    var html = textDiv ? textDiv.innerHTML : '';
+    // The wrapper containing all stats
+    var rightDiv = bottomSection.querySelector('.zz.right.Sub.Item div');
+    if (!rightDiv) return {};
 
+    var html = rightDiv.innerHTML;
     var stats = {};
 
     // posts
@@ -716,8 +717,8 @@ function extractForumStatistics(statsContainer) {
     var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
     stats.topForum = topForumMatch ? topForumMatch[1] : '';
 
-    // newest member – also inside the first div
-    var newestMemberLink = textDiv ? textDiv.querySelector('.lastreg dd a') : null;
+    // newest member
+    var newestMemberLink = rightDiv.querySelector('.lastreg dd a');
     if (newestMemberLink) {
         stats.newestMember = {
             name: newestMemberLink.textContent.trim(),
@@ -726,8 +727,8 @@ function extractForumStatistics(statsContainer) {
         };
     }
 
-    // ---- Most users ever online (sibling of the first div) ----
-    var recordSpan = bottomSection.querySelector('.zz.right.Sub.Item > .usersrecord');
+    // Most users ever online – this is a child of `rightDiv`, not a sibling
+    var recordSpan = rightDiv.querySelector('.usersrecord');
     if (recordSpan) {
         var recordText = recordSpan.textContent || '';
         var recordMatch = recordText.match(/Most users ever online was\s*(\d+)\s*on\s*(.*)/i);
@@ -741,7 +742,7 @@ function extractForumStatistics(statsContainer) {
 
     return stats;
 }
-
+   
 function buildModernStats(onlineData, statsData) {
     // Online users avatars
     var usersHtml = '';
