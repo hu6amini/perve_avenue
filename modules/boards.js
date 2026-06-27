@@ -779,8 +779,8 @@ function buildModernStats(onlineData, statsData) {
         statsHtml += '<div class="stat-item"><i class="fa-regular fa-user-plus"></i><span class="stat-value"><a href="' + escapeHtml(statsData.newestMember.url) + '">' + escapeHtml(statsData.newestMember.name) + '</a></span><span class="stat-label">newest member</span></div>';
     }
     if (statsData.mostOnline) {
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online (' + escapeHtml(statsData.mostOnline.date) + ')</span></div>';
-    }
+    statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online</span></div>';
+}
     statsHtml += '</div>';
 
     return '<section class="modern-stats">' +
