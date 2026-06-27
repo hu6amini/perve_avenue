@@ -2996,6 +2996,7 @@ input[type="radio"]:checked::before {
     object-fit: cover;
     vertical-align: middle;
     margin-right: 4px;
+    border: 2px solid;
 }
 /* Default size for last‑post author icons */
 .last-post-author .mini-avatar,
