@@ -682,66 +682,65 @@ const ForumBoardsModule = (function () {
         return { users: users, counts: counts };
     }
 
-    function extractForumStatistics(statsContainer) {
-        var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
-        if (!bottomSection) return {};
+function extractForumStatistics(statsContainer) {
+    var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
+    if (!bottomSection) return {};
 
-        var textDiv = bottomSection.querySelector('.zz.right.Sub.Item div');
-        if (!textDiv) return {};
+    // The text with posts, topics, members, visits, top forum, newest member
+    var textDiv = bottomSection.querySelector('.zz.right.Sub.Item div');
+    var html = textDiv ? textDiv.innerHTML : '';
 
-        // Extract stats from text using regex on the innerHTML or text
-        var html = textDiv.innerHTML;
-        var stats = {};
+    var stats = {};
 
-        // posts
-        var postMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>posts<\/span>/i);
-        stats.posts = postMatch ? postMatch[1] : '0';
+    // posts
+    var postMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>posts<\/span>/i);
+    stats.posts = postMatch ? postMatch[1] : '0';
 
-        // topics
-        var topicMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>topics<\/span>/i);
-        stats.topics = topicMatch ? topicMatch[1] : '0';
+    // topics
+    var topicMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>topics<\/span>/i);
+    stats.topics = topicMatch ? topicMatch[1] : '0';
 
-        // members
-        var memberMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>members<\/span>/i);
-        stats.members = memberMatch ? memberMatch[1] : '0';
+    // members
+    var memberMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>members<\/span>/i);
+    stats.members = memberMatch ? memberMatch[1] : '0';
 
-        // total visits
-        var totalVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>total visits<\/span>/i);
-        stats.totalVisits = totalVisitMatch ? totalVisitMatch[1] : '0';
+    // total visits
+    var totalVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>total visits<\/span>/i);
+    stats.totalVisits = totalVisitMatch ? totalVisitMatch[1] : '0';
 
-        // monthly visits
-        var monthlyVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>monthly visits<\/span>/i);
-        stats.monthlyVisits = monthlyVisitMatch ? monthlyVisitMatch[1] : '0';
+    // monthly visits
+    var monthlyVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>monthly visits<\/span>/i);
+    stats.monthlyVisits = monthlyVisitMatch ? monthlyVisitMatch[1] : '0';
 
-        // top forum rank
-        var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
-        stats.topForum = topForumMatch ? topForumMatch[1] : '';
+    // top forum rank
+    var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
+    stats.topForum = topForumMatch ? topForumMatch[1] : '';
 
-        // newest member
-        var newestMemberLink = textDiv.querySelector('.lastreg dd a');
-        if (newestMemberLink) {
-            stats.newestMember = {
-                name: newestMemberLink.textContent.trim(),
-                url: newestMemberLink.getAttribute('href'),
-                mid: extractMidFromUrl(newestMemberLink.getAttribute('href'))
+    // newest member – also inside the first div
+    var newestMemberLink = textDiv ? textDiv.querySelector('.lastreg dd a') : null;
+    if (newestMemberLink) {
+        stats.newestMember = {
+            name: newestMemberLink.textContent.trim(),
+            url: newestMemberLink.getAttribute('href'),
+            mid: extractMidFromUrl(newestMemberLink.getAttribute('href'))
+        };
+    }
+
+    // ---- Most users ever online (sibling of the first div) ----
+    var recordSpan = bottomSection.querySelector('.zz.right.Sub.Item > .usersrecord');
+    if (recordSpan) {
+        var recordText = recordSpan.textContent || '';
+        var recordMatch = recordText.match(/Most users ever online was\s*(\d+)\s*on\s*(.*)/i);
+        if (recordMatch) {
+            stats.mostOnline = {
+                count: recordMatch[1],
+                date: recordMatch[2].trim()
             };
         }
-
-        // most users online
-        var recordSpan = textDiv.querySelector('.usersrecord');
-        if (recordSpan) {
-            var recordText = recordSpan.textContent || '';
-            var recordMatch = recordText.match(/Most users ever online was\s*(\d+)\s*on\s*(.*)/i);
-            if (recordMatch) {
-                stats.mostOnline = {
-                    count: recordMatch[1],
-                    date: recordMatch[2].trim()
-                };
-            }
-        }
-
-        return stats;
     }
+
+    return stats;
+}
 
 function buildModernStats(onlineData, statsData) {
     // Online users avatars
