@@ -227,6 +227,8 @@
 .fa-message-dots::before {content: "\f4a3"; }
 .fa-comment::before {content: "\f075"; }
 .fa-comment-dots::before {content: "\f4ad"; }
+.fa-bolt::before {content: "\f0e7"; }
+.fa-calendar::before {content: "\f133"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
