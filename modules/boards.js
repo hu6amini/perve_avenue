@@ -723,10 +723,12 @@ function extractForumStatistics(statsContainer) {
         };
     }
 
-    // Most users ever online – using bottomSection to avoid nesting trouble
+    // Most users ever online – hidden span "users record" must be removed first
     var recordSpan = bottomSection.querySelector('.usersrecord');
     if (recordSpan) {
         var recordText = recordSpan.textContent || '';
+        // Remove the hidden text that breaks the regex
+        recordText = recordText.replace(/users record/i, '');
         var recordMatch = recordText.match(/Most users ever online was\s*(\d+)\s*on\s*(.*)/i);
         if (recordMatch) {
             stats.mostOnline = {
