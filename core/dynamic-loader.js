@@ -113,7 +113,7 @@ function injectStylesheet(url) {
 
 async function loadLightGallery() {
     const LIGHTGALLERY_CSS = [
-        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@d5567ae5f8e554999f1b04898aa513c1a0c17a15/lightgallery@2.7.1/lightgallery.min.css",
+        "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e3da0e57d21df428676468b7aa105d074d78e2f2/lightgallery@2.7.1/lightgallery.min.css",
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@e44a482dc929aec9979f410815e3bf7bdc233da7/lightgallery@2.7.1/lg-zoom.min.css",
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@c5a5f520f3985fb7ef4d90892360aba8bf55a2c0/lightgallery@2.7.1/lg-thumbnail.min.css",
         "https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@b6a816af149a4736f9ee02135f35997b7c03eb4d/lightgallery@2.7.1/lg-fullscreen.min.css",
