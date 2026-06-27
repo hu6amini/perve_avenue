@@ -743,65 +743,65 @@ const ForumBoardsModule = (function () {
         return stats;
     }
 
-    function buildModernStats(onlineData, statsData) {
-        // Online users avatars
-        var usersHtml = '';
-        if (onlineData.users.length > 0) {
-            var avatarItems = onlineData.users.map(function (u) {
-                var avatarHtml;
-                if (u.mid) {
-                    const user = userDataCache.get(u.mid);
-                    avatarHtml = generateAvatarHtml(user, u.username, u.mid, CONFIG.AVATAR_SIZE_ONLINE);
-                } else {
-                    // fallback initial
-                    var initial = u.username.charAt(0).toUpperCase();
-                    avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + u.groupClass + '" style="width:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">' + initial + '</span>';
-                }
-                return '<a href="' + escapeHtml(u.profileUrl) + '" class="online-user-avatar" title="' + escapeHtml(u.username) + '">' + avatarHtml + '</a>';
-            }).join('');
-            usersHtml = '<div class="online-users-avatars">' + avatarItems + '</div>';
-        }
-
-        var countsHtml = '<div class="online-counts">' +
-            '<span><i class="fa-regular fa-user"></i> ' + onlineData.counts.members + ' members</span>' +
-            '<span><i class="fa-regular fa-eye"></i> ' + onlineData.counts.guests + ' guests</span>' +
-            (onlineData.counts.anon ? '<span><i class="fa-regular fa-user-secret"></i> ' + onlineData.counts.anon + ' anonymous</span>' : '') +
-            '</div>';
-
-        // Statistics grid
-        var statsHtml = '<div class="stats-grid">';
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-message"></i><span class="stat-value">' + statsData.posts + '</span><span class="stat-label">posts</span></div>';
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-comments"></i><span class="stat-value">' + statsData.topics + '</span><span class="stat-label">topics</span></div>';
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-users"></i><span class="stat-value">' + statsData.members + '</span><span class="stat-label">members</span></div>';
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-eye"></i><span class="stat-value">' + statsData.totalVisits + '</span><span class="stat-label">total visits</span></div>';
-        if (statsData.monthlyVisits) {
-            statsHtml += '<div class="stat-item"><i class="fa-regular fa-calendar"></i><span class="stat-value">' + statsData.monthlyVisits + '</span><span class="stat-label">monthly visits</span></div>';
-        }
-        if (statsData.topForum) {
-            statsHtml += '<div class="stat-item"><i class="fa-regular fa-trophy"></i><span class="stat-value">' + statsData.topForum + '</span><span class="stat-label">top forum</span></div>';
-        }
-        if (statsData.newestMember) {
-            statsHtml += '<div class="stat-item"><i class="fa-regular fa-user-plus"></i><span class="stat-value"><a href="' + escapeHtml(statsData.newestMember.url) + '">' + escapeHtml(statsData.newestMember.name) + '</a></span><span class="stat-label">newest member</span></div>';
-        }
-        if (statsData.mostOnline) {
-            statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online (' + escapeHtml(statsData.mostOnline.date) + ')</span></div>';
-        }
-        statsHtml += '</div>';
-
-        return '<section class="modern-stats">' +
-            '<div class="stats-card">' +
-                '<div class="stats-section online-section">' +
-                    '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
-                    usersHtml +
-                    countsHtml +
-                '</div>' +
-                '<div class="stats-section forum-stats-section">' +
-                    '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum Statistics</h3>' +
-                    statsHtml +
-                '</div>' +
-            '</div>' +
-        '</section>';
+function buildModernStats(onlineData, statsData) {
+    // Online users avatars
+    var usersHtml = '';
+    if (onlineData.users.length > 0) {
+        var avatarItems = onlineData.users.map(function (u) {
+            var avatarHtml;
+            if (u.mid) {
+                const user = userDataCache.get(u.mid);
+                avatarHtml = generateAvatarHtml(user, u.username, u.mid, CONFIG.AVATAR_SIZE_ONLINE);
+            } else {
+                var initial = u.username.charAt(0).toUpperCase();
+                avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + u.groupClass + '" style="width:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">' + initial + '</span>';
+            }
+            return '<a href="' + escapeHtml(u.profileUrl) + '" class="online-user-avatar" title="' + escapeHtml(u.username) + '">' + avatarHtml + '</a>';
+        }).join('');
+        usersHtml = '<div class="online-users-avatars">' + avatarItems + '</div>';
     }
+
+    var countsHtml = '<div class="online-counts">' +
+        '<span><i class="fa-regular fa-user"></i> ' + onlineData.counts.members + ' members</span>' +
+        '<span><i class="fa-regular fa-eye"></i> ' + onlineData.counts.guests + ' guests</span>' +
+        (onlineData.counts.anon ? '<span><i class="fa-regular fa-user-secret"></i> ' + onlineData.counts.anon + ' anonymous</span>' : '') +
+        '</div>';
+
+    // Statistics grid
+    var statsHtml = '<div class="stats-grid">';
+    statsHtml += '<div class="stat-item"><i class="fa-regular fa-message"></i><span class="stat-value">' + statsData.posts + '</span><span class="stat-label">posts</span></div>';
+    statsHtml += '<div class="stat-item"><i class="fa-regular fa-comments"></i><span class="stat-value">' + statsData.topics + '</span><span class="stat-label">topics</span></div>';
+    statsHtml += '<div class="stat-item"><i class="fa-regular fa-users"></i><span class="stat-value">' + statsData.members + '</span><span class="stat-label">members</span></div>';
+    statsHtml += '<div class="stat-item"><i class="fa-regular fa-eye"></i><span class="stat-value">' + statsData.totalVisits + '</span><span class="stat-label">total visits</span></div>';
+    if (statsData.monthlyVisits) {
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-calendar"></i><span class="stat-value">' + statsData.monthlyVisits + '</span><span class="stat-label">monthly visits</span></div>';
+    }
+    if (statsData.topForum) {
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-trophy"></i><span class="stat-value">' + statsData.topForum + '</span><span class="stat-label">top forum</span></div>';
+    }
+    if (statsData.newestMember) {
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-user-plus"></i><span class="stat-value"><a href="' + escapeHtml(statsData.newestMember.url) + '">' + escapeHtml(statsData.newestMember.name) + '</a></span><span class="stat-label">newest member</span></div>';
+    }
+    if (statsData.mostOnline) {
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online (' + escapeHtml(statsData.mostOnline.date) + ')</span></div>';
+    }
+    statsHtml += '</div>';
+
+    return '<section class="modern-stats">' +
+        '<header class="stats-header"><h2 class="stats-title">Community Stats</h2></header>' +
+        '<div class="stats-card">' +
+            '<div class="stats-section online-section">' +
+                '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
+                usersHtml +
+                countsHtml +
+            '</div>' +
+            '<div class="stats-section forum-stats-section">' +
+                '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum Statistics</h3>' +
+                statsHtml +
+            '</div>' +
+        '</div>' +
+    '</section>';
+}
 
     // =========================================================================
     // DATA FETCHING
