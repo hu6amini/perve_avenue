@@ -3004,6 +3004,7 @@ input[type="radio"]:checked::before {
     height: 20px;
     border: 1px solid var(--border-color);
 }
+.latest-post-author {color: var(--text-secondary)}
 /* Latest‑posts avatar (bigger, 32px) */
 .latest-posts-grid .mini-avatar {
     width: 32px;
