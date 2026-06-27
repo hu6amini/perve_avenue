@@ -686,11 +686,7 @@ function extractForumStatistics(statsContainer) {
     var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
     if (!bottomSection) return {};
 
-    // The wrapper containing all stats
-    var rightDiv = bottomSection.querySelector('.zz.right.Sub.Item div');
-    if (!rightDiv) return {};
-
-    var html = rightDiv.innerHTML;
+    var html = bottomSection.innerHTML;
     var stats = {};
 
     // posts
@@ -718,7 +714,7 @@ function extractForumStatistics(statsContainer) {
     stats.topForum = topForumMatch ? topForumMatch[1] : '';
 
     // newest member
-    var newestMemberLink = rightDiv.querySelector('.lastreg dd a');
+    var newestMemberLink = bottomSection.querySelector('.lastreg dd a');
     if (newestMemberLink) {
         stats.newestMember = {
             name: newestMemberLink.textContent.trim(),
@@ -727,8 +723,8 @@ function extractForumStatistics(statsContainer) {
         };
     }
 
-    // Most users ever online – this is a child of `rightDiv`, not a sibling
-    var recordSpan = rightDiv.querySelector('.usersrecord');
+    // Most users ever online – using bottomSection to avoid nesting trouble
+    var recordSpan = bottomSection.querySelector('.usersrecord');
     if (recordSpan) {
         var recordText = recordSpan.textContent || '';
         var recordMatch = recordText.match(/Most users ever online was\s*(\d+)\s*on\s*(.*)/i);
