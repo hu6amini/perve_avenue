@@ -1,11 +1,11 @@
 /* =============================================
-   Forum Boards, Topics & Latest Posts Modernizer
+   Forum Boards, Topics, Latest Posts & Stats Modernizer
    Emerald Theme – all lists in one module
    ============================================= */
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + role avatars)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + stats + role avatars)');
 
     // =========================================================================
     // CONFIGURATION
@@ -28,6 +28,10 @@ const ForumBoardsModule = (function () {
         LATEST_POST_ITEM_SELECTOR: 'div.topic',
         LATEST_POSTS_CONTAINER_ID: 'modern-latest-posts',
 
+        // Stats (who's online + forum statistics)
+        STATS_SELECTOR: 'ul.stats.List',
+        STATS_CONTAINER_ID: 'modern-stats',
+
         // Shared
         WRAPPER_ID: 'modern-forum-wrapper',
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
@@ -35,6 +39,7 @@ const ForumBoardsModule = (function () {
         // Avatar
         AVATAR_SIZE_MINI: 20,   // for last‑post author icons
         AVATAR_SIZE_SMALL: 32,  // for latest‑posts thumbnails
+        AVATAR_SIZE_ONLINE: 32, // for online users
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80,
@@ -43,7 +48,12 @@ const ForumBoardsModule = (function () {
         COLLAPSE_STORAGE_PREFIX: 'board-cat-',
 
         // Container order
-        ORDERED_CONTAINERS: ['modern-latest-posts', 'modern-board-list', 'modern-topic-list']
+        ORDERED_CONTAINERS: [
+            'modern-latest-posts',
+            'modern-board-list',
+            'modern-topic-list',
+            'modern-stats'
+        ]
     });
 
     // =========================================================================
@@ -97,53 +107,35 @@ const ForumBoardsModule = (function () {
         return new Date(year, month, day, hour, minute, second);
     }
 
-    // =========================================================================
-    // TIMEZONE-AWARE PARSER FOR ITALIAN DATES (server local time)
-    // =========================================================================
-
     function getLastSundayOfMonth(year, monthIndex) {
-        // monthIndex: 0=January … 11=December
-        var lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)); // last day of month
-        var dayOfWeek = lastDay.getUTCDay();                        // 0=Sun … 6=Sat
-        lastDay.setUTCDate(lastDay.getUTCDate() - dayOfWeek);       // go back to Sunday
+        var lastDay = new Date(Date.UTC(year, monthIndex + 1, 0));
+        var dayOfWeek = lastDay.getUTCDay();
+        lastDay.setUTCDate(lastDay.getUTCDate() - dayOfWeek);
         lastDay.setUTCHours(0, 0, 0, 0);
-        return lastDay.getTime();                                    // UTC ms
+        return lastDay.getTime();
     }
 
     function isItalianDST(day, month, year) {
-        var dstStart = getLastSundayOfMonth(year, 2);  // March (month index 2)
-        var dstEnd   = getLastSundayOfMonth(year, 9);  // October (month index 9)
+        var dstStart = getLastSundayOfMonth(year, 2);
+        var dstEnd   = getLastSundayOfMonth(year, 9);
         var target = Date.UTC(year, month - 1, day);
         return target >= dstStart && target < dstEnd;
     }
 
-    /**
-     * Parses a string like "25/6/2026, 17:37" (Italian local time)
-     * and returns a JavaScript Date object representing the correct
-     * absolute moment.
-     */
     function parseItalianDate(dateStr) {
         if (!dateStr) return null;
-
-        var parts = dateStr.trim().split(/[\s,]+/);   // ["25/6/2026","17:37"]
+        var parts = dateStr.trim().split(/[\s,]+/);
         if (parts.length < 2) return null;
-
         var dateNums = parts[0].split('/');
         var timeNums = parts[1].split(':');
         if (dateNums.length < 3 || timeNums.length < 2) return null;
-
         var day   = parseInt(dateNums[0], 10);
-        var month = parseInt(dateNums[1], 10);   // 1‑based
+        var month = parseInt(dateNums[1], 10);
         var year  = parseInt(dateNums[2], 10);
         var hour  = parseInt(timeNums[0], 10);
         var min   = parseInt(timeNums[1], 10);
-
         var offsetMinutes = isItalianDST(day, month, year) ? 120 : 60;
-
-        // Build UTC from the Italian wall‑clock time
-        var utcMs = Date.UTC(year, month - 1, day, hour, min)
-                    - offsetMinutes * 60000;
-
+        var utcMs = Date.UTC(year, month - 1, day, hour, min) - offsetMinutes * 60000;
         return new Date(utcMs);
     }
 
@@ -237,7 +229,7 @@ const ForumBoardsModule = (function () {
             if (avatarUrl.startsWith('http://') && window.location.protocol === 'https:') {
                 avatarUrl = avatarUrl.replace('http://', 'https://');
             }
-            const optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE_SMALL, CONFIG.AVATAR_SIZE_SMALL);
+            const optimized = optimizeImageUrl(avatarUrl, CONFIG.AVATAR_SIZE_ONLINE, CONFIG.AVATAR_SIZE_ONLINE);
             if (optimized) return { type: 'img', url: optimized };
         }
         const initial = username ? username.charAt(0).toUpperCase() : '?';
@@ -254,7 +246,6 @@ const ForumBoardsModule = (function () {
     function getGroupClass(user) {
         if (!user || !user.group || !user.group.name) return 'group-member';
         const groupName = user.group.name;
-        // Founder check
         if (user.group.class && user.group.class.includes('founder')) return 'group-founder';
         const sanitized = sanitizeGroupName(groupName);
         return 'group-' + sanitized;
@@ -266,7 +257,7 @@ const ForumBoardsModule = (function () {
         const groupClass = getGroupClass(user);
         if (avatarData.type === 'img') {
             let url = avatarData.url;
-            if (effectiveSize !== CONFIG.AVATAR_SIZE_MINI && effectiveSize !== CONFIG.AVATAR_SIZE_SMALL) {
+            if (effectiveSize !== CONFIG.AVATAR_SIZE_MINI && effectiveSize !== CONFIG.AVATAR_SIZE_SMALL && effectiveSize !== CONFIG.AVATAR_SIZE_ONLINE) {
                 url = optimizeImageUrl(user.avatar, effectiveSize, effectiveSize) || url;
             }
             return '<img class="mini-avatar ' + groupClass + '" src="' + escapeHtml(url) +
@@ -595,7 +586,7 @@ const ForumBoardsModule = (function () {
             const match = text.match(/on:\s*(.+)/);
             dateStr = match ? match[1].trim() : text.trim();
         }
-        const postDate = parseItalianDate(dateStr);   // ← corrected to timezone-aware
+        const postDate = parseItalianDate(dateStr);
         const relativeTime = postDate ? getRelativeTimeString(postDate) : '';
 
         const isNew = topicDiv.classList.contains('new');
@@ -643,6 +634,176 @@ const ForumBoardsModule = (function () {
     }
 
     // =========================================================================
+    // STATS EXTRACTION & GENERATION
+    // =========================================================================
+    function extractOnlineUsers(statsContainer) {
+        var topSection = statsContainer.querySelector('li.skin_tbl.top');
+        if (!topSection) return { users: [], counts: { guests: 0, members: 0, anon: 0 } };
+
+        // Counts
+        var guestEl = topSection.querySelector('.online_guests b');
+        var memberEl = topSection.querySelector('.online_members b');
+        var anonEl = topSection.querySelector('.online_anon b');
+        var counts = {
+            guests: guestEl ? parseInt(guestEl.textContent, 10) || 0 : 0,
+            members: memberEl ? parseInt(memberEl.textContent, 10) || 0 : 0,
+            anon: anonEl ? parseInt(anonEl.textContent, 10) || 0 : 0
+        };
+
+        // Users list
+        var userEls = topSection.querySelectorAll('ol.users li');
+        var users = [];
+        for (var i = 0; i < userEls.length; i++) {
+            var li = userEls[i];
+            var link = li.querySelector('a');
+            if (!link) continue;
+            var username = link.textContent.trim();
+            var profileUrl = link.getAttribute('href');
+            var mid = extractMidFromUrl(profileUrl);
+            // Get group class from the link's classList, e.g. "amministratore founder male"
+            var groupClass = '';
+            var classList = link.className.split(/\s+/);
+            // Map known legacy classes to our group classes
+            if (classList.indexOf('amministratore') !== -1) groupClass = 'group-administrator';
+            else if (classList.indexOf('founder') !== -1) groupClass = 'group-founder';
+            else if (classList.indexOf('globalmod') !== -1 || classList.indexOf('gruppo1') !== -1) groupClass = 'group-global-moderator';
+            else if (classList.indexOf('gamdev') !== -1 || classList.indexOf('gruppo2') !== -1) groupClass = 'group-game-dev';
+            else if (classList.indexOf('fan') !== -1 || classList.indexOf('gruppo3') !== -1) groupClass = 'group-fan';
+            else groupClass = 'group-member';
+
+            users.push({
+                username: username,
+                profileUrl: profileUrl,
+                mid: mid,
+                groupClass: groupClass
+            });
+        }
+
+        return { users: users, counts: counts };
+    }
+
+    function extractForumStatistics(statsContainer) {
+        var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
+        if (!bottomSection) return {};
+
+        var textDiv = bottomSection.querySelector('.zz.right.Sub.Item div');
+        if (!textDiv) return {};
+
+        // Extract stats from text using regex on the innerHTML or text
+        var html = textDiv.innerHTML;
+        var stats = {};
+
+        // posts
+        var postMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>posts<\/span>/i);
+        stats.posts = postMatch ? postMatch[1] : '0';
+
+        // topics
+        var topicMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>topics<\/span>/i);
+        stats.topics = topicMatch ? topicMatch[1] : '0';
+
+        // members
+        var memberMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>members<\/span>/i);
+        stats.members = memberMatch ? memberMatch[1] : '0';
+
+        // total visits
+        var totalVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>total visits<\/span>/i);
+        stats.totalVisits = totalVisitMatch ? totalVisitMatch[1] : '0';
+
+        // monthly visits
+        var monthlyVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>monthly visits<\/span>/i);
+        stats.monthlyVisits = monthlyVisitMatch ? monthlyVisitMatch[1] : '0';
+
+        // top forum rank
+        var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
+        stats.topForum = topForumMatch ? topForumMatch[1] : '';
+
+        // newest member
+        var newestMemberLink = textDiv.querySelector('.lastreg dd a');
+        if (newestMemberLink) {
+            stats.newestMember = {
+                name: newestMemberLink.textContent.trim(),
+                url: newestMemberLink.getAttribute('href'),
+                mid: extractMidFromUrl(newestMemberLink.getAttribute('href'))
+            };
+        }
+
+        // most users online
+        var recordSpan = textDiv.querySelector('.usersrecord');
+        if (recordSpan) {
+            var recordText = recordSpan.textContent || '';
+            var recordMatch = recordText.match(/Most users ever online was\s*(\d+)\s*on\s*(.*)/i);
+            if (recordMatch) {
+                stats.mostOnline = {
+                    count: recordMatch[1],
+                    date: recordMatch[2].trim()
+                };
+            }
+        }
+
+        return stats;
+    }
+
+    function buildModernStats(onlineData, statsData) {
+        // Online users avatars
+        var usersHtml = '';
+        if (onlineData.users.length > 0) {
+            var avatarItems = onlineData.users.map(function (u) {
+                var avatarHtml;
+                if (u.mid) {
+                    const user = userDataCache.get(u.mid);
+                    avatarHtml = generateAvatarHtml(user, u.username, u.mid, CONFIG.AVATAR_SIZE_ONLINE);
+                } else {
+                    // fallback initial
+                    var initial = u.username.charAt(0).toUpperCase();
+                    avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + u.groupClass + '" style="width:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">' + initial + '</span>';
+                }
+                return '<a href="' + escapeHtml(u.profileUrl) + '" class="online-user-avatar" title="' + escapeHtml(u.username) + '">' + avatarHtml + '</a>';
+            }).join('');
+            usersHtml = '<div class="online-users-avatars">' + avatarItems + '</div>';
+        }
+
+        var countsHtml = '<div class="online-counts">' +
+            '<span><i class="fa-regular fa-user"></i> ' + onlineData.counts.members + ' members</span>' +
+            '<span><i class="fa-regular fa-eye"></i> ' + onlineData.counts.guests + ' guests</span>' +
+            (onlineData.counts.anon ? '<span><i class="fa-regular fa-user-secret"></i> ' + onlineData.counts.anon + ' anonymous</span>' : '') +
+            '</div>';
+
+        // Statistics grid
+        var statsHtml = '<div class="stats-grid">';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-message"></i><span class="stat-value">' + statsData.posts + '</span><span class="stat-label">posts</span></div>';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-comments"></i><span class="stat-value">' + statsData.topics + '</span><span class="stat-label">topics</span></div>';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-users"></i><span class="stat-value">' + statsData.members + '</span><span class="stat-label">members</span></div>';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-eye"></i><span class="stat-value">' + statsData.totalVisits + '</span><span class="stat-label">total visits</span></div>';
+        if (statsData.monthlyVisits) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-calendar"></i><span class="stat-value">' + statsData.monthlyVisits + '</span><span class="stat-label">monthly visits</span></div>';
+        }
+        if (statsData.topForum) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-trophy"></i><span class="stat-value">' + statsData.topForum + '</span><span class="stat-label">top forum</span></div>';
+        }
+        if (statsData.newestMember) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-user-plus"></i><span class="stat-value"><a href="' + escapeHtml(statsData.newestMember.url) + '">' + escapeHtml(statsData.newestMember.name) + '</a></span><span class="stat-label">newest member</span></div>';
+        }
+        if (statsData.mostOnline) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online (' + escapeHtml(statsData.mostOnline.date) + ')</span></div>';
+        }
+        statsHtml += '</div>';
+
+        return '<section class="modern-stats">' +
+            '<div class="stats-card">' +
+                '<div class="stats-section online-section">' +
+                    '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
+                    usersHtml +
+                    countsHtml +
+                '</div>' +
+                '<div class="stats-section forum-stats-section">' +
+                    '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum Statistics</h3>' +
+                    statsHtml +
+                '</div>' +
+            '</div>' +
+        '</section>';
+    }
+
+    // =========================================================================
     // DATA FETCHING
     // =========================================================================
     async function fetchAllRelevantUsers(boardRows, topicRows) {
@@ -672,6 +833,14 @@ const ForumBoardsModule = (function () {
                 const mid = extractMidFromUrl(whoLink.getAttribute('href'));
                 if (mid) mids.add(mid);
             }
+        });
+        await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+    }
+
+    async function fetchOnlineUsers(onlineUsers) {
+        const mids = new Set();
+        onlineUsers.forEach(function (u) {
+            if (u.mid) mids.add(u.mid);
         });
         await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
     }
@@ -847,6 +1016,24 @@ const ForumBoardsModule = (function () {
         console.log('[BoardsModule] Latest posts modernized (12 shown)');
     }
 
+    async function convertStats() {
+        const container = getOrCreateContainer(CONFIG.STATS_CONTAINER_ID);
+        if (!container) return;
+
+        const legacyStats = document.querySelector(CONFIG.STATS_SELECTOR);
+        if (!legacyStats) return;
+
+        var onlineData = extractOnlineUsers(legacyStats);
+        var statsData = extractForumStatistics(legacyStats);
+
+        // Fetch avatars for online users
+        await fetchOnlineUsers(onlineData.users);
+
+        var modernHtml = buildModernStats(onlineData, statsData);
+        container.innerHTML = modernHtml || '';
+        console.log('[BoardsModule] Stats modernized');
+    }
+
     // =========================================================================
     // INITIALIZATION
     // =========================================================================
@@ -854,10 +1041,12 @@ const ForumBoardsModule = (function () {
         var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
         var hasBoard = !!document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
         var hasForum = !!document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+        var hasStats = !!document.querySelector(CONFIG.STATS_SELECTOR);
 
         if (hasLatest) await convertLatestPosts();
         if (hasBoard) await convertBoards();
         if (hasForum) await convertTopics();
+        if (hasStats) await convertStats();
 
         reorderContainers();
 
