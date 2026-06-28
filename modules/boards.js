@@ -1002,36 +1002,33 @@ const ForumBoardsModule = (function () {
         }
     }
 
-async function convertTopics(forumWrapper) {
-    if (conversionInProgress) return;
-    conversionInProgress = true;
-    try {
-        const container = getOrCreateContainer(CONFIG.TOPIC_CONTAINER_ID);
-        if (!container) return;
+    async function convertTopics() {
+        if (conversionInProgress) return;
+        conversionInProgress = true;
+        try {
+            const container = getOrCreateContainer(CONFIG.TOPIC_CONTAINER_ID);
+            if (!container) return;
 
-        // Use the wrapper passed, or fall back to the first available
-        if (!forumWrapper) {
-            forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+            const forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+            if (!forumWrapper) return;
+
+            const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+            if (!topicList) return;
+
+            const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+            if (topicRows.length === 0) return;
+
+            await fetchAllRelevantUsers([], Array.from(topicRows));
+
+            const modernHtml = buildModernTopicList(forumWrapper);
+            container.innerHTML = modernHtml || '';
+            console.log('[BoardsModule] Topic list modernized');
+        } catch (err) {
+            console.error('[BoardsModule] Topic conversion error:', err);
+        } finally {
+            conversionInProgress = false;
         }
-        if (!forumWrapper) return;
-
-        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
-        if (!topicList) return;
-
-        const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
-        if (topicRows.length === 0) return;
-
-        await fetchAllRelevantUsers([], Array.from(topicRows));
-
-        const modernHtml = buildModernTopicList(forumWrapper);
-        container.innerHTML = modernHtml || '';
-        console.log('[BoardsModule] Topic list modernized');
-    } catch (err) {
-        console.error('[BoardsModule] Topic conversion error:', err);
-    } finally {
-        conversionInProgress = false;
     }
-}
 
     async function convertLatestPosts() {
         if (conversionInProgress) return;
@@ -1137,36 +1134,24 @@ async function convertTopics(forumWrapper) {
     // =========================================================================
     // INITIALIZATION
     // =========================================================================
-async function initialize() {
-    // 1) Find all relevant containers
-    var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
-    var hasBoard = !!document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
-    var hasStats = !!document.querySelector(CONFIG.STATS_SELECTOR);
+    async function initialize() {
+        var hasLatest = !!document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+        var hasBoard = !!document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
+        var hasForum = !!document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+        var hasStats = !!document.querySelector(CONFIG.STATS_SELECTOR);
 
-    // 2) For topic lists, look for any div.forum that contains an ol.big_list
-    var forumWrappers = document.querySelectorAll(CONFIG.FORUM_WRAPPER_SELECTOR);
-    var validForumWrapper = null;
-    for (var i = 0; i < forumWrappers.length; i++) {
-        if (forumWrappers[i].querySelector(CONFIG.TOPIC_LIST_SELECTOR)) {
-            validForumWrapper = forumWrappers[i];
-            break;
-        }
+        if (hasLatest) await convertLatestPosts();
+        if (hasBoard) await convertBoards();
+        if (hasForum) await convertTopics();
+        if (hasStats) await convertStats();
+
+        reorderContainers();
+
+        // Register for future DOM changes
+        registerObservers();
+
+        console.log('[BoardsModule] All lists modernized and observing');
     }
-
-    // 3) Run conversions
-    if (hasLatest) await convertLatestPosts();
-    if (hasBoard) await convertBoards();
-    if (validForumWrapper) await convertTopics(validForumWrapper);
-    if (hasStats) await convertStats();
-
-    // 4) Reorder containers (always)
-    reorderContainers();
-
-    // 5) Register observers for future changes
-    registerObservers();
-
-    console.log('[BoardsModule] All lists modernized and observing');
-}
 
     return {
         initialize: initialize,
