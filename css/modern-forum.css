@@ -2663,7 +2663,8 @@ input[type="radio"]:checked::before {
 /* ---- Section headers ---- */
 .board-category-header,
 .topic-list-header,
-.latest-posts-header {
+.latest-posts-header, 
+.stats-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2674,7 +2675,8 @@ input[type="radio"]:checked::before {
 
 .board-category-title,
 .topic-list-title,
-.latest-posts-title {
+.latest-posts-title,
+.stats-title {
     font-family: var(--font-heading);
     font-size: var(--text-xl);
     color: var(--text-primary);
@@ -2911,7 +2913,7 @@ input[type="radio"]:checked::before {
 }
 
 /* Stats (used in both boards and topics) */
-.modern-stats {
+.modern-board-list .modern-stats, .modern-topic-list .modern-stats {
     display: flex;
     gap: var(--space-lg);
     color: var(--text-tertiary);
