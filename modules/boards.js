@@ -895,32 +895,32 @@ const ForumBoardsModule = (function () {
         return html;
     }
 
-    function buildModernTopicList(forumWrapper) {
-        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
-        if (!topicList) return '';
+function buildModernTopicList(forumWrapper) {
+    const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+    if (!topicList) return '';
 
-        const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
-        if (rows.length === 0) return '';
+    const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+    if (rows.length === 0) return '';
 
-        // Fixed: targets h1.mtitle or h2.mtitle directly (the heading IS the .mtitle)
-        const forumTitleEl = forumWrapper.querySelector('h1.mtitle, h2.mtitle');
-        const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
+    // Now catches: <div class="mtitle"><h1>...</h1></div> AND <h2 class="mtitle">...</h2>
+    const forumTitleEl = forumWrapper.querySelector('div.mtitle h1, h1.mtitle, h2.mtitle');
+    const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
 
-        var html =
-            '<section class="topic-list-section">' +
-                '<header class="topic-list-header">' +
-                    '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
-                '</header>' +
-                '<div class="modern-cards-grid">';
+    var html =
+        '<section class="topic-list-section">' +
+            '<header class="topic-list-header">' +
+                '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
+            '</header>' +
+            '<div class="modern-cards-grid">';
 
-        rows.forEach(function (row) {
-            const data = extractTopicData(row);
-            html += generateTopicCard(data);
-        });
+    rows.forEach(function (row) {
+        const data = extractTopicData(row);
+        html += generateTopicCard(data);
+    });
 
-        html += '</div></section>';
-        return html;
-    }
+    html += '</div></section>';
+    return html;
+}
 
     function buildLatestPostsList(latestDivs) {
         if (latestDivs.length === 0) return '';
