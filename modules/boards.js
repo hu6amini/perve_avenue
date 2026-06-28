@@ -17,7 +17,7 @@ const ForumBoardsModule = (function () {
         FORUM_ROW_SELECTOR: 'ul.big_list > li',
         BOARD_CONTAINER_ID: 'modern-board-list',
 
-        // Topic list (forum view & subscriptions)
+        // Topic list (forum view, subscriptions, search)
         FORUM_WRAPPER_SELECTOR: 'div.forum',
         TOPIC_LIST_SELECTOR: 'ol.big_list',
         TOPIC_ROW_SELECTOR: 'li[id^="t"]',
@@ -491,6 +491,17 @@ const ForumBoardsModule = (function () {
         const lastPosterUrl = lastPosterEl ? lastPosterEl.getAttribute('href') : starterUrl;
         const lastPosterMid = extractMidFromUrl(lastPosterUrl);
 
+        // Forum location (for search results / popular topics)
+        var forumName = '', forumUrl = '';
+        var whereEl = row.querySelector('.bb .where');
+        if (whereEl) {
+            var whereLink = whereEl.querySelector('a');
+            if (whereLink) {
+                forumName = whereLink.textContent.trim();
+                forumUrl = whereLink.getAttribute('href') || '';
+            }
+        }
+
         return {
             topicId, isUnread, statusIconClass,
             topicTitle, topicUrl, topicTitleHTML,
@@ -498,7 +509,8 @@ const ForumBoardsModule = (function () {
             starterName, starterUrl, starterMid,
             replyCount, viewCount,
             lastPostRelative, lastPostUrl,
-            lastPosterName, lastPosterUrl, lastPosterMid
+            lastPosterName, lastPosterUrl, lastPosterMid,
+            forumName, forumUrl
         };
     }
 
@@ -520,6 +532,12 @@ const ForumBoardsModule = (function () {
             starterHtml = '<span class="topic-starter">by <a href="' + escapeHtml(data.starterUrl) + '">' + escapeHtml(data.starterName) + '</a></span>';
         }
 
+        // Forum location (if present)
+        var forumLocationHtml = '';
+        if (data.forumName) {
+            forumLocationHtml = '<span class="topic-forum-location">in <a href="' + escapeHtml(data.forumUrl) + '"><i class="fa-regular fa-folder"></i> ' + escapeHtml(data.forumName) + '</a></span>';
+        }
+
         var lastPosterAvatarHtml = '';
         if (data.lastPosterMid && data.lastPosterName) {
             const user = userDataCache.get(data.lastPosterMid);
@@ -539,6 +557,7 @@ const ForumBoardsModule = (function () {
                     '</h3>' +
                     '<div class="modern-meta">' +
                         starterHtml +
+                        forumLocationHtml +
                         '<span class="modern-stats">' +
                             '<span><i class="fa-regular fa-reply"></i> ' + formatNumber(data.replyCount) + ' replies</span>' +
                             '<span><i class="fa-regular fa-eye"></i> ' + formatNumber(data.viewCount) + ' views</span>' +
@@ -682,122 +701,122 @@ const ForumBoardsModule = (function () {
         return { users: users, counts: counts };
     }
 
-function extractForumStatistics(statsContainer) {
-    var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
-    if (!bottomSection) return {};
+    function extractForumStatistics(statsContainer) {
+        var bottomSection = statsContainer.querySelector('li.skin_tbl.bottom');
+        if (!bottomSection) return {};
 
-    var html = bottomSection.innerHTML;
-    var stats = {};
+        var html = bottomSection.innerHTML;
+        var stats = {};
 
-    // posts
-    var postMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>posts<\/span>/i);
-    stats.posts = postMatch ? postMatch[1] : '0';
+        // posts
+        var postMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>posts<\/span>/i);
+        stats.posts = postMatch ? postMatch[1] : '0';
 
-    // topics
-    var topicMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>topics<\/span>/i);
-    stats.topics = topicMatch ? topicMatch[1] : '0';
+        // topics
+        var topicMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>topics<\/span>/i);
+        stats.topics = topicMatch ? topicMatch[1] : '0';
 
-    // members
-    var memberMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>members<\/span>/i);
-    stats.members = memberMatch ? memberMatch[1] : '0';
+        // members
+        var memberMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>members<\/span>/i);
+        stats.members = memberMatch ? memberMatch[1] : '0';
 
-    // total visits
-    var totalVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>total visits<\/span>/i);
-    stats.totalVisits = totalVisitMatch ? totalVisitMatch[1] : '0';
+        // total visits
+        var totalVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>total visits<\/span>/i);
+        stats.totalVisits = totalVisitMatch ? totalVisitMatch[1] : '0';
 
-    // monthly visits
-    var monthlyVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>monthly visits<\/span>/i);
-    stats.monthlyVisits = monthlyVisitMatch ? monthlyVisitMatch[1] : '0';
+        // monthly visits
+        var monthlyVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>monthly visits<\/span>/i);
+        stats.monthlyVisits = monthlyVisitMatch ? monthlyVisitMatch[1] : '0';
 
-    // top forum rank
-    var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
-    stats.topForum = topForumMatch ? topForumMatch[1] : '';
+        // top forum rank
+        var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
+        stats.topForum = topForumMatch ? topForumMatch[1] : '';
 
-    // newest member
-    var newestMemberLink = bottomSection.querySelector('.lastreg dd a');
-    if (newestMemberLink) {
-        stats.newestMember = {
-            name: newestMemberLink.textContent.trim(),
-            url: newestMemberLink.getAttribute('href'),
-            mid: extractMidFromUrl(newestMemberLink.getAttribute('href'))
-        };
-    }
-
-    // Most users ever online – date omitted, only the number
-    var recordSpan = bottomSection.querySelector('.usersrecord');
-    if (recordSpan) {
-        var recordText = recordSpan.textContent || '';
-        recordText = recordText.replace(/users record/i, '');
-        var recordMatch = recordText.match(/Most users ever online was\s*(\d+)/i);
-        if (recordMatch) {
-            stats.mostOnline = {
-                count: recordMatch[1]
+        // newest member
+        var newestMemberLink = bottomSection.querySelector('.lastreg dd a');
+        if (newestMemberLink) {
+            stats.newestMember = {
+                name: newestMemberLink.textContent.trim(),
+                url: newestMemberLink.getAttribute('href'),
+                mid: extractMidFromUrl(newestMemberLink.getAttribute('href'))
             };
         }
-    }
 
-    return stats;
-}
-   
-function buildModernStats(onlineData, statsData) {
-    // Online users avatars
-    var usersHtml = '';
-    if (onlineData.users.length > 0) {
-        var avatarItems = onlineData.users.map(function (u) {
-            var avatarHtml;
-            if (u.mid) {
-                const user = userDataCache.get(u.mid);
-                avatarHtml = generateAvatarHtml(user, u.username, u.mid, CONFIG.AVATAR_SIZE_ONLINE);
-            } else {
-                var initial = u.username.charAt(0).toUpperCase();
-                avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + u.groupClass + '" style="width:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">' + initial + '</span>';
+        // Most users ever online – date omitted, only the number
+        var recordSpan = bottomSection.querySelector('.usersrecord');
+        if (recordSpan) {
+            var recordText = recordSpan.textContent || '';
+            recordText = recordText.replace(/users record/i, '');
+            var recordMatch = recordText.match(/Most users ever online was\s*(\d+)/i);
+            if (recordMatch) {
+                stats.mostOnline = {
+                    count: recordMatch[1]
+                };
             }
-            return '<a href="' + escapeHtml(u.profileUrl) + '" class="online-user-avatar" title="' + escapeHtml(u.username) + '">' + avatarHtml + '</a>';
-        }).join('');
-        usersHtml = '<div class="online-users-avatars">' + avatarItems + '</div>';
-    }
+        }
 
-    var countsHtml = '<div class="online-counts">' +
-        '<span><i class="fa-regular fa-user"></i> ' + onlineData.counts.members + ' members</span>' +
-        '<span><i class="fa-regular fa-eye"></i> ' + onlineData.counts.guests + ' guests</span>' +
-        (onlineData.counts.anon ? '<span><i class="fa-regular fa-user-secret"></i> ' + onlineData.counts.anon + ' anonymous</span>' : '') +
-        '</div>';
+        return stats;
+    }
+   
+    function buildModernStats(onlineData, statsData) {
+        // Online users avatars
+        var usersHtml = '';
+        if (onlineData.users.length > 0) {
+            var avatarItems = onlineData.users.map(function (u) {
+                var avatarHtml;
+                if (u.mid) {
+                    const user = userDataCache.get(u.mid);
+                    avatarHtml = generateAvatarHtml(user, u.username, u.mid, CONFIG.AVATAR_SIZE_ONLINE);
+                } else {
+                    var initial = u.username.charAt(0).toUpperCase();
+                    avatarHtml = '<span class="mini-avatar mini-avatar--initial ' + u.groupClass + '" style="width:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;line-height:' + CONFIG.AVATAR_SIZE_ONLINE + 'px;">' + initial + '</span>';
+                }
+                return '<a href="' + escapeHtml(u.profileUrl) + '" class="online-user-avatar" title="' + escapeHtml(u.username) + '">' + avatarHtml + '</a>';
+            }).join('');
+            usersHtml = '<div class="online-users-avatars">' + avatarItems + '</div>';
+        }
 
-    // Statistics grid
-    var statsHtml = '<div class="stats-grid">';
-    statsHtml += '<div class="stat-item"><i class="fa-regular fa-message"></i><span class="stat-value">' + statsData.posts + '</span><span class="stat-label">posts</span></div>';
-    statsHtml += '<div class="stat-item"><i class="fa-regular fa-comments"></i><span class="stat-value">' + statsData.topics + '</span><span class="stat-label">topics</span></div>';
-    statsHtml += '<div class="stat-item"><i class="fa-regular fa-users"></i><span class="stat-value">' + statsData.members + '</span><span class="stat-label">members</span></div>';
-    statsHtml += '<div class="stat-item"><i class="fa-regular fa-eye"></i><span class="stat-value">' + statsData.totalVisits + '</span><span class="stat-label">total visits</span></div>';
-    if (statsData.monthlyVisits) {
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-calendar"></i><span class="stat-value">' + statsData.monthlyVisits + '</span><span class="stat-label">monthly visits</span></div>';
-    }
-    if (statsData.topForum) {
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-trophy"></i><span class="stat-value">' + statsData.topForum + '</span><span class="stat-label">top forum</span></div>';
-    }
-    if (statsData.newestMember) {
-        statsHtml += '<div class="stat-item"><i class="fa-regular fa-user-plus"></i><span class="stat-value"><a href="' + escapeHtml(statsData.newestMember.url) + '">' + escapeHtml(statsData.newestMember.name) + '</a></span><span class="stat-label">newest member</span></div>';
-    }
-    if (statsData.mostOnline) {
-    statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online</span></div>';
-}
-    statsHtml += '</div>';
+        var countsHtml = '<div class="online-counts">' +
+            '<span><i class="fa-regular fa-user"></i> ' + onlineData.counts.members + ' members</span>' +
+            '<span><i class="fa-regular fa-eye"></i> ' + onlineData.counts.guests + ' guests</span>' +
+            (onlineData.counts.anon ? '<span><i class="fa-regular fa-user-secret"></i> ' + onlineData.counts.anon + ' anonymous</span>' : '') +
+            '</div>';
 
-    return '<section class="modern-stats">' +
-        '<header class="stats-header"><h2 class="stats-title">Community Stats</h2></header>' +
-        '<div class="stats-card">' +
-            '<div class="stats-section online-section">' +
-                '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
-                usersHtml +
-                countsHtml +
+        // Statistics grid
+        var statsHtml = '<div class="stats-grid">';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-message"></i><span class="stat-value">' + statsData.posts + '</span><span class="stat-label">posts</span></div>';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-comments"></i><span class="stat-value">' + statsData.topics + '</span><span class="stat-label">topics</span></div>';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-users"></i><span class="stat-value">' + statsData.members + '</span><span class="stat-label">members</span></div>';
+        statsHtml += '<div class="stat-item"><i class="fa-regular fa-eye"></i><span class="stat-value">' + statsData.totalVisits + '</span><span class="stat-label">total visits</span></div>';
+        if (statsData.monthlyVisits) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-calendar"></i><span class="stat-value">' + statsData.monthlyVisits + '</span><span class="stat-label">monthly visits</span></div>';
+        }
+        if (statsData.topForum) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-trophy"></i><span class="stat-value">' + statsData.topForum + '</span><span class="stat-label">top forum</span></div>';
+        }
+        if (statsData.newestMember) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-user-plus"></i><span class="stat-value"><a href="' + escapeHtml(statsData.newestMember.url) + '">' + escapeHtml(statsData.newestMember.name) + '</a></span><span class="stat-label">newest member</span></div>';
+        }
+        if (statsData.mostOnline) {
+            statsHtml += '<div class="stat-item"><i class="fa-regular fa-chart-line"></i><span class="stat-value">' + statsData.mostOnline.count + '</span><span class="stat-label">most online</span></div>';
+        }
+        statsHtml += '</div>';
+
+        return '<section class="modern-stats">' +
+            '<header class="stats-header"><h2 class="stats-title">Community Stats</h2></header>' +
+            '<div class="stats-card">' +
+                '<div class="stats-section online-section">' +
+                    '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
+                    usersHtml +
+                    countsHtml +
+                '</div>' +
+                '<div class="stats-section forum-stats-section">' +
+                    '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum Statistics</h3>' +
+                    statsHtml +
+                '</div>' +
             '</div>' +
-            '<div class="stats-section forum-stats-section">' +
-                '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum Statistics</h3>' +
-                statsHtml +
-            '</div>' +
-        '</div>' +
-    '</section>';
-}
+        '</section>';
+    }
 
     // =========================================================================
     // DATA FETCHING
@@ -1022,7 +1041,6 @@ function buildModernStats(onlineData, statsData) {
         var onlineData = extractOnlineUsers(legacyStats);
         var statsData = extractForumStatistics(legacyStats);
 
-        // Fetch avatars for online users
         await fetchOnlineUsers(onlineData.users);
 
         var modernHtml = buildModernStats(onlineData, statsData);
