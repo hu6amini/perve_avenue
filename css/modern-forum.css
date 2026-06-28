@@ -2904,6 +2904,9 @@ input[type="radio"]:checked::before {
     font-size: var(--text-xs);
     color: var(--text-secondary);
 }
+.topic-forum-location {
+    margin-left: auto;
+}
 .topic-starter a {
     color: var(--text-secondary);
     font-weight: 500;
@@ -2917,6 +2920,7 @@ input[type="radio"]:checked::before {
     display: flex;
     gap: var(--space-lg);
     color: var(--text-tertiary);
+    width: 100%; 
 }
 .modern-stats i {
     margin-right: 4px;
