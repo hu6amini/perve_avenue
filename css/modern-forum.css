@@ -2929,7 +2929,6 @@ input[type="radio"]:checked::before {
     font-size: var(--text-xs);
     color: var(--text-tertiary);
     display: flex;
-    flex-direction: column;
     gap: 2px;
 }
 .modern-last-post--empty {
@@ -2966,6 +2965,8 @@ input[type="radio"]:checked::before {
 .last-post-date-link:hover {
     color: var(--primary-light);
 }
+
+.last-post-author {margin-left: auto;}
 
 .last-post-author,
 .latest-post-author {
