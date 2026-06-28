@@ -5,7 +5,7 @@
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + stats + role avatars)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + stats + role avatars + observer)');
 
     // =========================================================================
     // CONFIGURATION
@@ -965,87 +965,170 @@ const ForumBoardsModule = (function () {
     // =========================================================================
     // CONVERSION FUNCTIONS
     // =========================================================================
+    let conversionInProgress = false;
+
     async function convertBoards() {
-        const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
-        if (!container) return;
+        if (conversionInProgress) return;
+        conversionInProgress = true;
+        try {
+            const container = getOrCreateContainer(CONFIG.BOARD_CONTAINER_ID);
+            if (!container) return;
 
-        const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
-        if (!legacyList) return;
+            const legacyList = document.querySelector(CONFIG.BOARD_LIST_SELECTOR);
+            if (!legacyList) return;
 
-        const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
-        if (categories.length === 0) return;
+            const categories = legacyList.querySelectorAll(CONFIG.CATEGORY_SELECTOR);
+            if (categories.length === 0) return;
 
-        const allForumRows = [];
-        categories.forEach(function (cat) {
-            const rows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
-            rows.forEach(function (row) { allForumRows.push(row); });
-        });
+            const allForumRows = [];
+            categories.forEach(function (cat) {
+                const rows = cat.querySelectorAll(CONFIG.FORUM_ROW_SELECTOR);
+                rows.forEach(function (row) { allForumRows.push(row); });
+            });
 
-        await fetchAllRelevantUsers(allForumRows, []);
+            await fetchAllRelevantUsers(allForumRows, []);
 
-        const modernHtml = buildModernBoardList(categories);
-        container.innerHTML = modernHtml || '';
+            const modernHtml = buildModernBoardList(categories);
+            container.innerHTML = modernHtml || '';
 
-        attachCategoryToggleEvents();
-        restoreCategoryStates();
+            attachCategoryToggleEvents();
+            restoreCategoryStates();
 
-        console.log('[BoardsModule] Board list modernized');
+            console.log('[BoardsModule] Board list modernized');
+        } catch (err) {
+            console.error('[BoardsModule] Board conversion error:', err);
+        } finally {
+            conversionInProgress = false;
+        }
     }
 
     async function convertTopics() {
-        const container = getOrCreateContainer(CONFIG.TOPIC_CONTAINER_ID);
-        if (!container) return;
+        if (conversionInProgress) return;
+        conversionInProgress = true;
+        try {
+            const container = getOrCreateContainer(CONFIG.TOPIC_CONTAINER_ID);
+            if (!container) return;
 
-        const forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
-        if (!forumWrapper) return;
+            const forumWrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+            if (!forumWrapper) return;
 
-        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
-        if (!topicList) return;
+            const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+            if (!topicList) return;
 
-        const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
-        if (topicRows.length === 0) return;
+            const topicRows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+            if (topicRows.length === 0) return;
 
-        await fetchAllRelevantUsers([], Array.from(topicRows));
+            await fetchAllRelevantUsers([], Array.from(topicRows));
 
-        const modernHtml = buildModernTopicList(forumWrapper);
-        container.innerHTML = modernHtml || '';
-        console.log('[BoardsModule] Topic list modernized');
+            const modernHtml = buildModernTopicList(forumWrapper);
+            container.innerHTML = modernHtml || '';
+            console.log('[BoardsModule] Topic list modernized');
+        } catch (err) {
+            console.error('[BoardsModule] Topic conversion error:', err);
+        } finally {
+            conversionInProgress = false;
+        }
     }
 
     async function convertLatestPosts() {
-        const container = getOrCreateContainer(CONFIG.LATEST_POSTS_CONTAINER_ID);
-        if (!container) return;
+        if (conversionInProgress) return;
+        conversionInProgress = true;
+        try {
+            const container = getOrCreateContainer(CONFIG.LATEST_POSTS_CONTAINER_ID);
+            if (!container) return;
 
-        const legacyLatest = document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
-        if (!legacyLatest) return;
+            const legacyLatest = document.querySelector(CONFIG.LATEST_POSTS_SELECTOR);
+            if (!legacyLatest) return;
 
-        const allTopicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
-        if (allTopicDivs.length === 0) return;
+            const allTopicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
+            if (allTopicDivs.length === 0) return;
 
-        const limitedDivs = Array.from(allTopicDivs).slice(0, 12);
+            const limitedDivs = Array.from(allTopicDivs).slice(0, 12);
 
-        await fetchLatestPostAuthors(limitedDivs);
+            await fetchLatestPostAuthors(limitedDivs);
 
-        const modernHtml = buildLatestPostsList(limitedDivs);
-        container.innerHTML = modernHtml || '';
-        console.log('[BoardsModule] Latest posts modernized (12 shown)');
+            const modernHtml = buildLatestPostsList(limitedDivs);
+            container.innerHTML = modernHtml || '';
+            console.log('[BoardsModule] Latest posts modernized (12 shown)');
+        } catch (err) {
+            console.error('[BoardsModule] Latest posts error:', err);
+        } finally {
+            conversionInProgress = false;
+        }
     }
 
     async function convertStats() {
-        const container = getOrCreateContainer(CONFIG.STATS_CONTAINER_ID);
-        if (!container) return;
+        if (conversionInProgress) return;
+        conversionInProgress = true;
+        try {
+            const container = getOrCreateContainer(CONFIG.STATS_CONTAINER_ID);
+            if (!container) return;
 
-        const legacyStats = document.querySelector(CONFIG.STATS_SELECTOR);
-        if (!legacyStats) return;
+            const legacyStats = document.querySelector(CONFIG.STATS_SELECTOR);
+            if (!legacyStats) return;
 
-        var onlineData = extractOnlineUsers(legacyStats);
-        var statsData = extractForumStatistics(legacyStats);
+            var onlineData = extractOnlineUsers(legacyStats);
+            var statsData = extractForumStatistics(legacyStats);
 
-        await fetchOnlineUsers(onlineData.users);
+            await fetchOnlineUsers(onlineData.users);
 
-        var modernHtml = buildModernStats(onlineData, statsData);
-        container.innerHTML = modernHtml || '';
-        console.log('[BoardsModule] Stats modernized');
+            var modernHtml = buildModernStats(onlineData, statsData);
+            container.innerHTML = modernHtml || '';
+            console.log('[BoardsModule] Stats modernized');
+        } catch (err) {
+            console.error('[BoardsModule] Stats error:', err);
+        } finally {
+            conversionInProgress = false;
+        }
+    }
+
+    // =========================================================================
+    // OBSERVER INTEGRATION
+    // =========================================================================
+    function registerObservers() {
+        if (!globalThis.forumObserver) return;
+
+        // Board list – when any board list appears or changes
+        globalThis.forumObserver.register({
+            id: 'boards-module-board-list',
+            selector: CONFIG.BOARD_LIST_SELECTOR,
+            priority: 'high',
+            callback: function () {
+                convertBoards();
+            }
+        });
+
+        // Topic list – reacts to forum wrappers (forum view, subscriptions, search)
+        globalThis.forumObserver.register({
+            id: 'boards-module-topic-list',
+            selector: CONFIG.FORUM_WRAPPER_SELECTOR,
+            priority: 'high',
+            callback: function () {
+                convertTopics();
+            }
+        });
+
+        // Latest posts
+        globalThis.forumObserver.register({
+            id: 'boards-module-latest-posts',
+            selector: CONFIG.LATEST_POSTS_SELECTOR,
+            priority: 'high',
+            callback: function () {
+                convertLatestPosts();
+            }
+        });
+
+        // Stats
+        globalThis.forumObserver.register({
+            id: 'boards-module-stats',
+            selector: CONFIG.STATS_SELECTOR,
+            priority: 'high',
+            callback: function () {
+                convertStats();
+            }
+        });
+
+        console.log('[BoardsModule] Registered with ForumCoreObserver');
     }
 
     // =========================================================================
@@ -1064,7 +1147,10 @@ const ForumBoardsModule = (function () {
 
         reorderContainers();
 
-        console.log('[BoardsModule] All lists modernized');
+        // Register for future DOM changes
+        registerObservers();
+
+        console.log('[BoardsModule] All lists modernized and observing');
     }
 
     return {
