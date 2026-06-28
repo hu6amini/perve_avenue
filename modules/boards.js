@@ -481,11 +481,17 @@ const ForumBoardsModule = (function () {
         const replyCount = repliesEl ? parseInt(repliesEl.textContent, 10) || 0 : 0;
         const viewCount = viewsEl ? parseInt(viewsEl.textContent, 10) || 0 : 0;
 
-        const lastPostDateEl = row.querySelector('.zz .when a');
+        // Robust date extraction – plain .when or nested a
+        const lastPostDateEl = row.querySelector('.zz .when a') || row.querySelector('.zz .when');
         const lastPostDateStr = lastPostDateEl ? lastPostDateEl.textContent.trim() : '';
-        const lastPostDate = parseDateFromTitle(lastPostDateStr);
+        var lastPostDate = parseDateFromTitle(lastPostDateStr);
+        if (!lastPostDate || isNaN(lastPostDate.getTime())) {
+            lastPostDate = parseItalianDate(lastPostDateStr);
+        }
         const lastPostRelative = lastPostDate ? getRelativeTimeString(lastPostDate) : '';
-        const lastPostUrl = lastPostDateEl ? lastPostDateEl.getAttribute('href') : topicUrl + '#newpost';
+        const lastPostUrl = lastPostDateEl && lastPostDateEl.tagName === 'A'
+            ? lastPostDateEl.getAttribute('href')
+            : topicUrl + '#newpost';
 
         const lastPosterEl = row.querySelector('.zz .who a');
         const lastPosterName = lastPosterEl ? lastPosterEl.textContent.trim() : starterName;
@@ -889,32 +895,32 @@ const ForumBoardsModule = (function () {
         return html;
     }
 
-function buildModernTopicList(forumWrapper) {
-    const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
-    if (!topicList) return '';
+    function buildModernTopicList(forumWrapper) {
+        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+        if (!topicList) return '';
 
-    const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
-    if (rows.length === 0) return '';
+        const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+        if (rows.length === 0) return '';
 
-    // Fixed: targets h1.mtitle or h2.mtitle directly (the heading IS the .mtitle)
-    const forumTitleEl = forumWrapper.querySelector('h1.mtitle, h2.mtitle');
-    const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
+        // Fixed: targets h1.mtitle or h2.mtitle directly (the heading IS the .mtitle)
+        const forumTitleEl = forumWrapper.querySelector('h1.mtitle, h2.mtitle');
+        const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
 
-    var html =
-        '<section class="topic-list-section">' +
-            '<header class="topic-list-header">' +
-                '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
-            '</header>' +
-            '<div class="modern-cards-grid">';
+        var html =
+            '<section class="topic-list-section">' +
+                '<header class="topic-list-header">' +
+                    '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
+                '</header>' +
+                '<div class="modern-cards-grid">';
 
-    rows.forEach(function (row) {
-        const data = extractTopicData(row);
-        html += generateTopicCard(data);
-    });
+        rows.forEach(function (row) {
+            const data = extractTopicData(row);
+            html += generateTopicCard(data);
+        });
 
-    html += '</div></section>';
-    return html;
-}
+        html += '</div></section>';
+        return html;
+    }
 
     function buildLatestPostsList(latestDivs) {
         if (latestDivs.length === 0) return '';
