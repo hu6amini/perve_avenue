@@ -37,14 +37,14 @@ const ForumBoardsModule = (function () {
         INSERT_AFTER_SELECTOR: '.carousel-wrapper',
 
         // Avatar
-        AVATAR_SIZE_MINI: 20,   // for last‑post author icons
-        AVATAR_SIZE_SMALL: 32,  // for latest‑posts thumbnails
-        AVATAR_SIZE_ONLINE: 32, // for online users
+        AVATAR_SIZE_MINI: 20,
+        AVATAR_SIZE_SMALL: 32,
+        AVATAR_SIZE_ONLINE: 32,
         WESERV_CDN: 'https://images.weserv.nl/',
         CACHE: '1y',
         QUALITY: 80,
 
-        // Collapse (board categories)
+        // Collapse
         COLLAPSE_STORAGE_PREFIX: 'board-cat-',
 
         // Container order
@@ -659,7 +659,6 @@ const ForumBoardsModule = (function () {
         var topSection = statsContainer.querySelector('li.skin_tbl.top');
         if (!topSection) return { users: [], counts: { guests: 0, members: 0, anon: 0 } };
 
-        // Counts
         var guestEl = topSection.querySelector('.online_guests b');
         var memberEl = topSection.querySelector('.online_members b');
         var anonEl = topSection.querySelector('.online_anon b');
@@ -669,7 +668,6 @@ const ForumBoardsModule = (function () {
             anon: anonEl ? parseInt(anonEl.textContent, 10) || 0 : 0
         };
 
-        // Users list
         var userEls = topSection.querySelectorAll('ol.users li');
         var users = [];
         for (var i = 0; i < userEls.length; i++) {
@@ -679,10 +677,8 @@ const ForumBoardsModule = (function () {
             var username = link.textContent.trim();
             var profileUrl = link.getAttribute('href');
             var mid = extractMidFromUrl(profileUrl);
-            // Get group class from the link's classList, e.g. "amministratore founder male"
             var groupClass = '';
             var classList = link.className.split(/\s+/);
-            // Map known legacy classes to our group classes
             if (classList.indexOf('amministratore') !== -1) groupClass = 'group-administrator';
             else if (classList.indexOf('founder') !== -1) groupClass = 'group-founder';
             else if (classList.indexOf('globalmod') !== -1 || classList.indexOf('gruppo1') !== -1) groupClass = 'group-global-moderator';
@@ -708,31 +704,24 @@ const ForumBoardsModule = (function () {
         var html = bottomSection.innerHTML;
         var stats = {};
 
-        // posts
         var postMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>posts<\/span>/i);
         stats.posts = postMatch ? postMatch[1] : '0';
 
-        // topics
         var topicMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>topics<\/span>/i);
         stats.topics = topicMatch ? topicMatch[1] : '0';
 
-        // members
         var memberMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>members<\/span>/i);
         stats.members = memberMatch ? memberMatch[1] : '0';
 
-        // total visits
         var totalVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>total visits<\/span>/i);
         stats.totalVisits = totalVisitMatch ? totalVisitMatch[1] : '0';
 
-        // monthly visits
         var monthlyVisitMatch = html.match(/<b>([\d,]+)<\/b>\s*<span>monthly visits<\/span>/i);
         stats.monthlyVisits = monthlyVisitMatch ? monthlyVisitMatch[1] : '0';
 
-        // top forum rank
         var topForumMatch = html.match(/<b>(\d+º)<\/b>\s*<span>in Top Forum<\/span>/i);
         stats.topForum = topForumMatch ? topForumMatch[1] : '';
 
-        // newest member
         var newestMemberLink = bottomSection.querySelector('.lastreg dd a');
         if (newestMemberLink) {
             stats.newestMember = {
@@ -742,7 +731,6 @@ const ForumBoardsModule = (function () {
             };
         }
 
-        // Most users ever online – date omitted, only the number
         var recordSpan = bottomSection.querySelector('.usersrecord');
         if (recordSpan) {
             var recordText = recordSpan.textContent || '';
@@ -759,7 +747,6 @@ const ForumBoardsModule = (function () {
     }
    
     function buildModernStats(onlineData, statsData) {
-        // Online users avatars
         var usersHtml = '';
         if (onlineData.users.length > 0) {
             var avatarItems = onlineData.users.map(function (u) {
@@ -782,7 +769,6 @@ const ForumBoardsModule = (function () {
             (onlineData.counts.anon ? '<span><i class="fa-regular fa-user-secret"></i> ' + onlineData.counts.anon + ' anonymous</span>' : '') +
             '</div>';
 
-        // Statistics grid
         var statsHtml = '<div class="stats-grid">';
         statsHtml += '<div class="stat-item"><i class="fa-regular fa-message"></i><span class="stat-value">' + statsData.posts + '</span><span class="stat-label">posts</span></div>';
         statsHtml += '<div class="stat-item"><i class="fa-regular fa-comments"></i><span class="stat-value">' + statsData.topics + '</span><span class="stat-label">topics</span></div>';
@@ -837,7 +823,11 @@ const ForumBoardsModule = (function () {
                 if (mid) mids.add(mid);
             }
         });
-        await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+        try {
+            await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+        } catch (e) {
+            console.warn('[BoardsModule] User data fetch failed, using initials only');
+        }
     }
 
     async function fetchLatestPostAuthors(latestPostElements) {
@@ -849,7 +839,11 @@ const ForumBoardsModule = (function () {
                 if (mid) mids.add(mid);
             }
         });
-        await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+        try {
+            await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+        } catch (e) {
+            console.warn('[BoardsModule] Latest post author fetch failed');
+        }
     }
 
     async function fetchOnlineUsers(onlineUsers) {
@@ -857,7 +851,11 @@ const ForumBoardsModule = (function () {
         onlineUsers.forEach(function (u) {
             if (u.mid) mids.add(u.mid);
         });
-        await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+        try {
+            await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+        } catch (e) {
+            console.warn('[BoardsModule] Online user fetch failed');
+        }
     }
 
     // =========================================================================
@@ -1022,7 +1020,7 @@ const ForumBoardsModule = (function () {
 
             const modernHtml = buildModernTopicList(forumWrapper);
             container.innerHTML = modernHtml || '';
-            console.log('[BoardsModule] Topic list modernized');
+            console.log('[BoardsModule] Topic list modernized (' + topicRows.length + ' topics)');
         } catch (err) {
             console.error('[BoardsModule] Topic conversion error:', err);
         } finally {
@@ -1088,7 +1086,6 @@ const ForumBoardsModule = (function () {
     function registerObservers() {
         if (!globalThis.forumObserver) return;
 
-        // Board list – when any board list appears or changes
         globalThis.forumObserver.register({
             id: 'boards-module-board-list',
             selector: CONFIG.BOARD_LIST_SELECTOR,
@@ -1098,7 +1095,6 @@ const ForumBoardsModule = (function () {
             }
         });
 
-        // Topic list – reacts to forum wrappers (forum view, subscriptions, search)
         globalThis.forumObserver.register({
             id: 'boards-module-topic-list',
             selector: CONFIG.FORUM_WRAPPER_SELECTOR,
@@ -1108,7 +1104,6 @@ const ForumBoardsModule = (function () {
             }
         });
 
-        // Latest posts
         globalThis.forumObserver.register({
             id: 'boards-module-latest-posts',
             selector: CONFIG.LATEST_POSTS_SELECTOR,
@@ -1118,7 +1113,6 @@ const ForumBoardsModule = (function () {
             }
         });
 
-        // Stats
         globalThis.forumObserver.register({
             id: 'boards-module-stats',
             selector: CONFIG.STATS_SELECTOR,
@@ -1140,14 +1134,21 @@ const ForumBoardsModule = (function () {
         var hasForum = !!document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
         var hasStats = !!document.querySelector(CONFIG.STATS_SELECTOR);
 
+        // On search pages, only convert if we actually have a topic list with rows
+        if (document.body.id === 'search') {
+            if (hasForum) {
+                const wrapper = document.querySelector(CONFIG.FORUM_WRAPPER_SELECTOR);
+                const rows = wrapper ? wrapper.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR) : [];
+                if (rows.length === 0) hasForum = false;
+            }
+        }
+
         if (hasLatest) await convertLatestPosts();
         if (hasBoard) await convertBoards();
         if (hasForum) await convertTopics();
         if (hasStats) await convertStats();
 
         reorderContainers();
-
-        // Register for future DOM changes
         registerObservers();
 
         console.log('[BoardsModule] All lists modernized and observing');
