@@ -2931,6 +2931,9 @@ input[type="radio"]:checked::before {
     display: flex;
     gap: 2px;
 }
+
+.modern-board-list .modern-last-post {flex-direction: column;}
+
 .modern-last-post--empty {
     font-style: italic;
 }
