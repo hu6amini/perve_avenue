@@ -20,7 +20,8 @@ const ForumBoardsModule = (function () {
         // Topic list (forum view, subscriptions, search)
         FORUM_WRAPPER_SELECTOR: 'div.forum',
         TOPIC_LIST_SELECTOR: 'ol.big_list',
-        TOPIC_ROW_SELECTOR: 'li[id^="t"]',
+        // Updated: matches both id-based (forum view) and class-based (search) rows
+        TOPIC_ROW_SELECTOR: 'li[id^="t"], li[class*=" t"]',
         TOPIC_CONTAINER_ID: 'modern-topic-list',
 
         // Latest posts
