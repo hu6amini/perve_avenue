@@ -796,7 +796,7 @@ const ForumBoardsModule = (function () {
         statsHtml += '</div>';
 
         return '<section class="modern-stats">' +
-            '<header class="stats-header"><h2 class="stats-title">Community Stats</h2></header>' +
+            '<header class="stats-header"><h2 class="stats-title">Community stats</h2></header>' +
             '<div class="stats-card">' +
                 '<div class="stats-section online-section">' +
                     '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
