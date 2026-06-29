@@ -799,12 +799,12 @@ const ForumBoardsModule = (function () {
             '<header class="stats-header"><h2 class="stats-title">Community stats</h2></header>' +
             '<div class="stats-card">' +
                 '<div class="stats-section online-section">' +
-                    '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s Online</h3>' +
+                    '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s online</h3>' +
                     usersHtml +
                     countsHtml +
                 '</div>' +
                 '<div class="stats-section forum-stats-section">' +
-                    '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum Statistics</h3>' +
+                    '<h3 class="stats-section-title"><i class="fa-regular fa-chart-simple"></i> Forum statistics</h3>' +
                     statsHtml +
                 '</div>' +
             '</div>' +
