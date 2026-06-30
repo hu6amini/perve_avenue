@@ -54,7 +54,13 @@ const ForumBoardsModule = (function () {
             'modern-board-list',
             'modern-topic-list',
             'modern-stats'
-        ]
+        ],
+
+        // Latest posts limit
+        LATEST_POSTS_LIMIT: 12,
+
+        // API timeout (ms)
+        API_TIMEOUT: 3000
     });
 
     // =========================================================================
@@ -190,6 +196,21 @@ const ForumBoardsModule = (function () {
             return null;
         } catch (e) {
             console.warn('[BoardsModule] API error for MID', mid, e);
+            return null;
+        }
+    }
+
+    // Time‑limited fetch that never blocks the UI indefinitely
+    async function fetchUserDataWithTimeout(mid, timeoutMs) {
+        if (userDataCache.has(mid)) return userDataCache.get(mid);
+        const effectiveTimeout = timeoutMs || CONFIG.API_TIMEOUT;
+        const timeoutPromise = new Promise(function (_, reject) {
+            setTimeout(function () { reject(new Error('Timeout')); }, effectiveTimeout);
+        });
+        try {
+            return await Promise.race([fetchUserData(mid), timeoutPromise]);
+        } catch (e) {
+            console.warn('[BoardsModule] User fetch timeout / error for MID', mid, e);
             return null;
         }
     }
@@ -831,7 +852,9 @@ const ForumBoardsModule = (function () {
             }
         });
         try {
-            await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+            await Promise.all(Array.from(mids).map(function (mid) {
+                return fetchUserDataWithTimeout(mid);
+            }));
         } catch (e) {
             console.warn('[BoardsModule] User data fetch failed, using initials only');
         }
@@ -847,7 +870,9 @@ const ForumBoardsModule = (function () {
             }
         });
         try {
-            await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+            await Promise.all(Array.from(mids).map(function (mid) {
+                return fetchUserDataWithTimeout(mid);
+            }));
         } catch (e) {
             console.warn('[BoardsModule] Latest post author fetch failed');
         }
@@ -859,7 +884,9 @@ const ForumBoardsModule = (function () {
             if (u.mid) mids.add(u.mid);
         });
         try {
-            await Promise.all(Array.from(mids).map(function (mid) { return fetchUserData(mid); }));
+            await Promise.all(Array.from(mids).map(function (mid) {
+                return fetchUserDataWithTimeout(mid);
+            }));
         } catch (e) {
             console.warn('[BoardsModule] Online user fetch failed');
         }
@@ -895,32 +922,32 @@ const ForumBoardsModule = (function () {
         return html;
     }
 
-function buildModernTopicList(forumWrapper) {
-    const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
-    if (!topicList) return '';
+    function buildModernTopicList(forumWrapper) {
+        const topicList = forumWrapper.querySelector(CONFIG.TOPIC_LIST_SELECTOR);
+        if (!topicList) return '';
 
-    const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
-    if (rows.length === 0) return '';
+        const rows = topicList.querySelectorAll(CONFIG.TOPIC_ROW_SELECTOR);
+        if (rows.length === 0) return '';
 
-    // Now catches: <div class="mtitle"><h1>...</h1></div> AND <h2 class="mtitle">...</h2>
-    const forumTitleEl = forumWrapper.querySelector('div.mtitle h1, h1.mtitle, h2.mtitle');
-    const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
+        // Now catches: <div class="mtitle"><h1>...</h1></div> AND <h2 class="mtitle">...</h2>
+        const forumTitleEl = forumWrapper.querySelector('div.mtitle h1, h1.mtitle, h2.mtitle');
+        const forumTitle = forumTitleEl ? forumTitleEl.textContent.trim() : 'Forum';
 
-    var html =
-        '<section class="topic-list-section">' +
-            '<header class="topic-list-header">' +
-                '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
-            '</header>' +
-            '<div class="modern-cards-grid">';
+        var html =
+            '<section class="topic-list-section">' +
+                '<header class="topic-list-header">' +
+                    '<h2 class="topic-list-title">' + escapeHtml(forumTitle) + '</h2>' +
+                '</header>' +
+                '<div class="modern-cards-grid">';
 
-    rows.forEach(function (row) {
-        const data = extractTopicData(row);
-        html += generateTopicCard(data);
-    });
+        rows.forEach(function (row) {
+            const data = extractTopicData(row);
+            html += generateTopicCard(data);
+        });
 
-    html += '</div></section>';
-    return html;
-}
+        html += '</div></section>';
+        return html;
+    }
 
     function buildLatestPostsList(latestDivs) {
         if (latestDivs.length === 0) return '';
@@ -1049,13 +1076,13 @@ function buildModernTopicList(forumWrapper) {
             const allTopicDivs = legacyLatest.querySelectorAll(CONFIG.LATEST_POST_ITEM_SELECTOR);
             if (allTopicDivs.length === 0) return;
 
-            const limitedDivs = Array.from(allTopicDivs).slice(0, 12);
+            const limitedDivs = Array.from(allTopicDivs).slice(0, CONFIG.LATEST_POSTS_LIMIT);
 
             await fetchLatestPostAuthors(limitedDivs);
 
             const modernHtml = buildLatestPostsList(limitedDivs);
             container.innerHTML = modernHtml || '';
-            console.log('[BoardsModule] Latest posts modernized (12 shown)');
+            console.log('[BoardsModule] Latest posts modernized (' + limitedDivs.length + ' shown)');
         } catch (err) {
             console.error('[BoardsModule] Latest posts error:', err);
         } finally {
@@ -1089,46 +1116,54 @@ function buildModernTopicList(forumWrapper) {
     }
 
     // =========================================================================
-    // OBSERVER INTEGRATION
+    // OBSERVER INTEGRATION – now each registration is individually guarded
     // =========================================================================
     function registerObservers() {
         if (!globalThis.forumObserver) return;
 
-        globalThis.forumObserver.register({
-            id: 'boards-module-board-list',
-            selector: CONFIG.BOARD_LIST_SELECTOR,
-            priority: 'high',
-            callback: function () {
-                convertBoards();
-            }
-        });
+        try {
+            globalThis.forumObserver.register({
+                id: 'boards-module-board-list',
+                selector: CONFIG.BOARD_LIST_SELECTOR,
+                priority: 'high',
+                callback: function () { convertBoards(); }
+            });
+        } catch (e) {
+            console.error('[BoardsModule] Failed to register board list observer:', e);
+        }
 
-        globalThis.forumObserver.register({
-            id: 'boards-module-topic-list',
-            selector: CONFIG.FORUM_WRAPPER_SELECTOR,
-            priority: 'high',
-            callback: function () {
-                convertTopics();
-            }
-        });
+        try {
+            globalThis.forumObserver.register({
+                id: 'boards-module-topic-list',
+                selector: CONFIG.FORUM_WRAPPER_SELECTOR,
+                priority: 'high',
+                callback: function () { convertTopics(); }
+            });
+        } catch (e) {
+            console.error('[BoardsModule] Failed to register topic list observer:', e);
+        }
 
-        globalThis.forumObserver.register({
-            id: 'boards-module-latest-posts',
-            selector: CONFIG.LATEST_POSTS_SELECTOR,
-            priority: 'high',
-            callback: function () {
-                convertLatestPosts();
-            }
-        });
+        try {
+            globalThis.forumObserver.register({
+                id: 'boards-module-latest-posts',
+                selector: CONFIG.LATEST_POSTS_SELECTOR,
+                priority: 'high',
+                callback: function () { convertLatestPosts(); }
+            });
+        } catch (e) {
+            console.error('[BoardsModule] Failed to register latest posts observer:', e);
+        }
 
-        globalThis.forumObserver.register({
-            id: 'boards-module-stats',
-            selector: CONFIG.STATS_SELECTOR,
-            priority: 'high',
-            callback: function () {
-                convertStats();
-            }
-        });
+        try {
+            globalThis.forumObserver.register({
+                id: 'boards-module-stats',
+                selector: CONFIG.STATS_SELECTOR,
+                priority: 'high',
+                callback: function () { convertStats(); }
+            });
+        } catch (e) {
+            console.error('[BoardsModule] Failed to register stats observer:', e);
+        }
 
         console.log('[BoardsModule] Registered with ForumCoreObserver');
     }
