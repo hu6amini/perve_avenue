@@ -2961,12 +2961,14 @@ input[type="radio"]:checked::before {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
     gap: var(--space-xs);
     margin-top: 2px;
     font-size: var(--text-xs);
     color: var(--text-tertiary);
 }
+
+.last-post-meta {flex-wrap: wrap;}
+.latest-post-meta {white-space: nowrap;}
 
 .last-post-date-link {
     color: var(--text-tertiary);
@@ -2978,10 +2980,14 @@ input[type="radio"]:checked::before {
 
 .last-post-author {margin-left: auto;}
 
-.last-post-author,
-.latest-post-author {
+.last-post-author {
     display: flex;
     align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.latest-post-author {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
