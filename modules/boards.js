@@ -5,7 +5,7 @@
 'use strict';
 
 const ForumBoardsModule = (function () {
-    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + stats + role avatars + observer)');
+    console.log('🔥 ForumBoardsModule loaded (boards + topics + latest posts + stats + role avatars + observer + vote)');
 
     // =========================================================================
     // CONFIGURATION
@@ -817,7 +817,10 @@ const ForumBoardsModule = (function () {
         statsHtml += '</div>';
 
         return '<section class="modern-stats">' +
-            '<header class="stats-header"><h2 class="stats-title">Community stats</h2></header>' +
+            '<header class="stats-header">' +
+                '<h2 class="stats-title">Community stats</h2>' +
+                '<button id="modern-vote-btn" class="modern-btn modern-btn-primary" style="display:none"><i class="fa-regular fa-star"></i></button>' +
+            '</header>' +
             '<div class="stats-card">' +
                 '<div class="stats-section online-section">' +
                     '<h3 class="stats-section-title"><i class="fa-regular fa-bolt"></i> Who\'s online</h3>' +
@@ -1107,6 +1110,29 @@ const ForumBoardsModule = (function () {
 
             var modernHtml = buildModernStats(onlineData, statsData);
             container.innerHTML = modernHtml || '';
+
+            // ---- Voting button setup (after DOM is populated) ----
+            setTimeout(function () {
+                var legacyForm = document.querySelector('#legacy-topbutton form.topbutton');
+                var modernBtn = document.getElementById('modern-vote-btn');
+                if (legacyForm && modernBtn) {
+                    var submitInput = legacyForm.querySelector('input[type="submit"]');
+                    var buttonText = 'Vote for us!';
+                    if (submitInput) {
+                        var fullText = submitInput.value;
+                        // "Vote for us in Top Forum for June!" → "Vote for us in June!"
+                        buttonText = fullText.replace(/in Top Forum for /i, 'in ');
+                    }
+                    modernBtn.innerHTML = '<i class="fa-regular fa-star"></i> ' + buttonText;
+                    modernBtn.style.display = '';
+                    modernBtn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        var hiddenSubmit = legacyForm.querySelector('input[type="submit"]');
+                        if (hiddenSubmit) hiddenSubmit.click();
+                    });
+                }
+            }, 200);  // host replaces [TOPBUTTON] asynchronously
+
             console.log('[BoardsModule] Stats modernized');
         } catch (err) {
             console.error('[BoardsModule] Stats error:', err);
