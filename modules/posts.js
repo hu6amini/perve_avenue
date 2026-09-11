@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (fixed detection)
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -1143,7 +1143,20 @@ function initQuotesAndSpoilers() {
     // ============================================================================
     // TOOLTIPS / HOVERCARDS (progressive enhancement)
     // ============================================================================
-    const hasTippy = typeof window.tippy === 'function';
+    // Lazy check – Tippy loads with `defer` so we can't trust a one-time snapshot.
+    function isTippyAvailable() {
+        return typeof window.tippy === 'function';
+    }
+
+    // Explicit guest detection – body.guest is set by the forum for unregistered users.
+    function isGuest() {
+        return document.body.classList.contains('guest');
+    }
+
+    // Should we use rich tooltips for this user?
+    function useRichTips() {
+        return !isGuest() && isTippyAvailable();
+    }
 
     const ROLE_DESCRIPTIONS = {
         'founder': 'The site founder',
@@ -1209,9 +1222,11 @@ function initQuotesAndSpoilers() {
 
     function applyTip(el, htmlContent, options) {
         if (!el) return;
-        // Skip if already has tippy
+        // Skip if already has tippy or a title
         if (el._tippy) return;
-        if (hasTippy) {
+
+        if (useRichTips()) {
+            // Rich tooltip path — Tippy is available and user is registered.
             window.tippy(el, Object.assign({
                 content: htmlContent,
                 allowHTML: true,
@@ -1222,8 +1237,11 @@ function initQuotesAndSpoilers() {
                 touch: false
             }, options || {}));
         } else {
-            // Fallback: strip tags and set native title
-            const text = String(htmlContent).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            // Fallback: strip HTML and set a plain native title.
+            const text = String(htmlContent)
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
             if (text) el.setAttribute('title', text);
         }
     }
@@ -1231,8 +1249,10 @@ function initQuotesAndSpoilers() {
     function attachTips(card, data) {
         if (!card || !data) return;
 
+        const rich = useRichTips();
+
         // 1) Profile hovercard (avatar + username)
-        const hovercardHtml = hasTippy ? buildProfileHovercardHtml(data) : null;
+        const hovercardHtml = rich ? buildProfileHovercardHtml(data) : null;
         const profileFallback = 'View profile of ' + data.username;
         [card.querySelector('.avatar-link'), card.querySelector('.user-profile-link')].forEach(el => {
             if (!el) return;
@@ -1249,7 +1269,7 @@ function initQuotesAndSpoilers() {
         const postNumberEl = card.querySelector('.post-number');
         if (postNumberEl) {
             const num = data.postNumber;
-            applyTip(postNumberEl, hasTippy
+            applyTip(postNumberEl, rich
                 ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-hashtag"></i>Post #' + num + '</div><div class="tip-info-text">Use the share button in the post header to copy a direct link.</div></div>'
                 : 'Post #' + num,
                 { placement: 'bottom' });
@@ -1262,7 +1282,7 @@ function initQuotesAndSpoilers() {
                 weekday: 'long', year: 'numeric', month: 'long',
                 day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
-            applyTip(timeEl, hasTippy
+            applyTip(timeEl, rich
                 ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(abs) + '</div><div class="tip-info-text">Posted ' + escapeHtml(data.relativeTime || '') + '</div></div>'
                 : abs,
                 { placement: 'bottom' });
@@ -1271,7 +1291,7 @@ function initQuotesAndSpoilers() {
         // 3b) Blog date (absolute)
         const blogDateEl = card.querySelector('.blog-date');
         if (blogDateEl && data.absoluteDate) {
-            applyTip(blogDateEl, hasTippy
+            applyTip(blogDateEl, rich
                 ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(data.absoluteDate) + '</div><div class="tip-info-text">Publication date</div></div>'
                 : data.absoluteDate,
                 { placement: 'bottom' });
@@ -1282,7 +1302,7 @@ function initQuotesAndSpoilers() {
         if (roleBadge) {
             const roleText = roleBadge.textContent.trim();
             const desc = getRoleDescription(roleText);
-            applyTip(roleBadge, hasTippy
+            applyTip(roleBadge, rich
                 ? '<div class="tip-info"><div class="tip-info-title">' + escapeHtml(roleText) + '</div><div class="tip-info-text">' + escapeHtml(desc) + '</div></div>'
                 : desc,
                 { placement: 'top' });
@@ -1291,7 +1311,7 @@ function initQuotesAndSpoilers() {
         // 5) User rank
         const rankEl = card.querySelector('.user-rank');
         if (rankEl) {
-            applyTip(rankEl, hasTippy
+            applyTip(rankEl, rich
                 ? '<div class="tip-info"><div class="tip-info-title">Rank</div><div class="tip-info-text">Based on activity and post count.</div></div>'
                 : 'Based on activity and post count',
                 { placement: 'top' });
@@ -1303,7 +1323,7 @@ function initQuotesAndSpoilers() {
             const editor = data.editInfo.editor || 'someone';
             const rawDate = data.editInfo.rawDate;
             const abs = rawDate ? rawDate.toLocaleString() : '';
-            applyTip(editEl, hasTippy
+            applyTip(editEl, rich
                 ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-pen-to-square"></i>Edited by ' + escapeHtml(editor) + '</div><div class="tip-info-text">' + escapeHtml(abs) + '</div></div>'
                 : 'Edited by ' + editor + ' on ' + abs,
                 { placement: 'top' });
@@ -1312,7 +1332,7 @@ function initQuotesAndSpoilers() {
         // 7) IP address (privacy note)
         const ipEl = card.querySelector('.post-ip');
         if (ipEl && data.ipAddress) {
-            applyTip(ipEl, hasTippy
+            applyTip(ipEl, rich
                 ? '<div class="tip-info"><div class="tip-info-title">IP Address</div><div class="tip-info-text">Last three octets masked for privacy.</div></div>'
                 : 'Last three octets masked for privacy',
                 { placement: 'top' });
