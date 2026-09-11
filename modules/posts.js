@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (data-tippy-content + polling)
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion)
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -1141,7 +1141,7 @@ function initQuotesAndSpoilers() {
     }
 
     // ============================================================================
-    // TOOLTIPS (data-tippy-content + polling + mutation observer)
+    // TOOLTIPS (data-tippy-content + polling + mutation observer + auto title conversion)
     // ============================================================================
     // Guest detection – body.guest is set by the forum for unregistered users.
     function isGuest() {
@@ -1195,12 +1195,38 @@ function initQuotesAndSpoilers() {
         } catch (e) { /* silent */ }
     }
 
+    // Auto‑convert any element with a `title` attribute into a tippy (registered users only).
+    // Mirrors the pattern used on the working forum.
+    function autoTippyFromTitle(root) {
+        if (isGuest() || !isTippyAvailable()) return;
+        const scope = root || document.body;
+        const els = scope.querySelectorAll('[title]');
+        els.forEach(function (el) {
+            // Skip if already processed
+            if (el._tippy || el.hasAttribute('data-tippy-content')) return;
+            // Skip inside a tippy popup itself
+            if (el.closest('.tippy-box')) return;
+            // Skip non-interactive elements we don't want tips on
+            if (el.tagName === 'HTML' || el.tagName === 'BODY' || el.tagName === 'IFRAME') return;
+
+            const text = (el.getAttribute('title') || '').trim();
+            if (!text) return;
+
+            el.setAttribute('data-tippy-content', text);
+            el.removeAttribute('title');
+            initTippyOn(el);
+        });
+    }
+
     // Scan the whole document for [data-tippy-content] and init any not yet initialised.
+    // Also converts any remaining `title` attributes.
     function initAllTippys(root) {
         if (isGuest() || !isTippyAvailable()) return;
         (root || document).querySelectorAll('[data-tippy-content]').forEach(function (el) {
             initTippyOn(el);
         });
+        // Convert any remaining native titles.
+        autoTippyFromTitle(root);
     }
 
     // Apply a tooltip: sets data-tippy-content (registered) or title (guest), and initialises if possible.
@@ -1245,7 +1271,8 @@ function initQuotesAndSpoilers() {
         }
     }
 
-    // MutationObserver — auto-init any [data-tippy-content] that appears later.
+    // MutationObserver — auto-init any [data-tippy-content] that appears later,
+    // and auto-convert any new [title] attributes.
     let tooltipObserver = null;
     function setupTooltipObserver() {
         if (isGuest()) return;
@@ -1258,9 +1285,22 @@ function initQuotesAndSpoilers() {
                     if (node.hasAttribute && node.hasAttribute('data-tippy-content')) {
                         initTippyOn(node);
                     }
+                    if (node.hasAttribute && node.hasAttribute('title')) {
+                        autoTippyFromTitle(node.parentNode || document.body);
+                    }
                     if (node.querySelectorAll) {
                         node.querySelectorAll('[data-tippy-content]').forEach(function (el) {
                             initTippyOn(el);
+                        });
+                        node.querySelectorAll('[title]').forEach(function (el) {
+                            if (!el._tippy && !el.hasAttribute('data-tippy-content')) {
+                                const t = (el.getAttribute('title') || '').trim();
+                                if (t) {
+                                    el.setAttribute('data-tippy-content', t);
+                                    el.removeAttribute('title');
+                                    initTippyOn(el);
+                                }
+                            }
                         });
                     }
                 });
@@ -2741,6 +2781,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
+            // Convert any remaining native titles into tippys
+            whenTippyReady(function () { autoTippyFromTitle(container); });
             // Fix any remaining broken images globally
             setTimeout(fixBrokenWeservImages, 300);
             console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
@@ -2852,6 +2894,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
+            // Convert any remaining native titles into tippys
+            whenTippyReady(function () { autoTippyFromTitle(container); });
             // Fix any remaining broken images globally
             setTimeout(fixBrokenWeservImages, 300);
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
@@ -2930,6 +2974,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             attachTips(card, completeData);
         }
         initQuotesAndSpoilers();
+        // Convert any remaining native titles into tippys
+        whenTippyReady(function () { autoTippyFromTitle(container); });
         // Fix any remaining broken images globally
         setTimeout(fixBrokenWeservImages, 300);
         console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts');
