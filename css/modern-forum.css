@@ -2476,6 +2476,279 @@ input[type="radio"]:checked::before {
 }
 
 /* ==========================================================================
+   TOOLTIPS — EMERALD THEME (Tippy.js)
+   Works with .tippy-box[data-theme~='emerald'] when Tippy is loaded.
+   Falls back to native title attributes for guests (no CSS needed).
+   ========================================================================== */
+
+.tippy-box[data-theme~='emerald'] {
+    background-color: var(--surface-color);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-xl);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    padding: 0;
+    overflow: hidden;
+    max-width: 320px;
+}
+
+/* Arrow color matches the surface background */
+.tippy-box[data-theme~='emerald'] > .tippy-arrow::before {
+    color: var(--surface-color);
+}
+.tippy-box[data-theme~='emerald'][data-placement^='top'] > .tippy-arrow::before {
+    border-top-color: var(--surface-color);
+}
+.tippy-box[data-theme~='emerald'][data-placement^='bottom'] > .tippy-arrow::before {
+    border-bottom-color: var(--surface-color);
+}
+.tippy-box[data-theme~='emerald'][data-placement^='left'] > .tippy-arrow::before {
+    border-left-color: var(--surface-color);
+}
+.tippy-box[data-theme~='emerald'][data-placement^='right'] > .tippy-arrow::before {
+    border-right-color: var(--surface-color);
+}
+
+.tippy-box[data-theme~='emerald'] .tippy-content {
+    padding: 0;
+    color: inherit;
+}
+
+/* ------------------------------------------------------------------
+   Simple info tooltips (post number, dates, roles, edit info, IP)
+   ------------------------------------------------------------------ */
+.tip-info {
+    padding: var(--pad-3) var(--pad-4);
+    max-width: 300px;
+}
+.tip-info-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+.tip-info-title i {
+    color: var(--primary-light);
+    font-size: 0.85em;
+}
+.tip-info-text {
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------
+   Profile hovercard
+   ------------------------------------------------------------------ */
+.tip-profile {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+}
+
+.tip-profile-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--pad-4);
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+
+.tip-profile-avatar {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+}
+
+.tip-avatar-img {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary-color);
+    display: block;
+}
+
+.tip-avatar-initial {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: calc(56px * 0.618);
+    border: 2px solid var(--primary-color);
+    line-height: 1;
+}
+
+.tip-profile-names {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tip-profile-username {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: var(--text-base);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.2s;
+}
+.tip-profile-username:hover {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+.tip-profile-group {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    background: var(--primary-color);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 600;
+    width: fit-content;
+    letter-spacing: 0.02em;
+}
+
+.tip-profile-status {
+    position: absolute;
+    top: var(--pad-4);
+    right: var(--pad-4);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.tip-profile-status.online {
+    background: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+.tip-profile-status.offline {
+    background: #6b7280;
+    box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.25);
+}
+
+.tip-profile-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: var(--pad-3) var(--pad-2);
+    gap: var(--space-xs);
+}
+
+.tip-profile-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: var(--pad-2) var(--pad-1);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    transition: background 0.2s;
+}
+.tip-profile-stat i {
+    color: var(--primary-light);
+    font-size: 0.9rem;
+    margin-bottom: 2px;
+}
+.tip-profile-stat-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: var(--text-xs);
+    white-space: nowrap;
+}
+.tip-profile-stat-label {
+    color: var(--text-tertiary);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tip-profile-footer {
+    border-top: 1px solid var(--border-color);
+    padding: var(--pad-2) var(--pad-4);
+    text-align: right;
+    background: var(--bg-color);
+}
+.tip-profile-link {
+    color: var(--primary-color);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s;
+}
+.tip-profile-link:hover {
+    color: var(--primary-light);
+    text-decoration: none;
+}
+.tip-profile-link i {
+    font-size: 0.75em;
+    transition: transform 0.2s ease;
+}
+.tip-profile-link:hover i {
+    transform: translateX(2px);
+}
+
+/* ------------------------------------------------------------------
+   Responsive: shrink hovercard on small screens
+   ------------------------------------------------------------------ */
+@media (max-width: 680px) {
+    .tippy-box[data-theme~='emerald'] {
+        max-width: 260px;
+    }
+    .tip-profile {
+        width: 240px;
+    }
+    .tip-profile-header {
+        padding: var(--pad-3);
+    }
+    .tip-profile-avatar,
+    .tip-avatar-img,
+    .tip-avatar-initial {
+        width: 44px;
+        height: 44px;
+    }
+    .tip-avatar-initial {
+        font-size: calc(44px * 0.618);
+    }
+    .tip-profile-stat-value {
+        font-size: 0.7rem;
+    }
+    .tip-profile-stat-label {
+        font-size: 0.6rem;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Reduced motion
+   ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+    .tippy-box,
+    .tippy-box * {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+/* ==========================================================================
    MODERN MESSENGER – TipTap WYSIWYG + Messages & Contacts (Emerald Theme)
    ========================================================================== */
 
