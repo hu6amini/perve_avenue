@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (fixed detection)
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (data-tippy-content + polling)
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -1141,21 +1141,132 @@ function initQuotesAndSpoilers() {
     }
 
     // ============================================================================
-    // TOOLTIPS / HOVERCARDS (progressive enhancement)
+    // TOOLTIPS (data-tippy-content + polling + mutation observer)
     // ============================================================================
-    // Lazy check – Tippy loads with `defer` so we can't trust a one-time snapshot.
-    function isTippyAvailable() {
-        return typeof window.tippy === 'function';
-    }
-
-    // Explicit guest detection – body.guest is set by the forum for unregistered users.
+    // Guest detection – body.guest is set by the forum for unregistered users.
     function isGuest() {
         return document.body.classList.contains('guest');
     }
 
-    // Should we use rich tooltips for this user?
-    function useRichTips() {
-        return !isGuest() && isTippyAvailable();
+    // Tippy availability check – evaluated at call time (Tippy loads with defer).
+    function isTippyAvailable() {
+        return typeof window.tippy === 'function';
+    }
+
+    // Wait for Tippy to become available, then run the callback once.
+    let tippyReadyCallbacks = [];
+    let tippyPollTimer = null;
+    function whenTippyReady(cb) {
+        if (isGuest()) return;
+        if (isTippyAvailable()) { cb(); return; }
+        tippyReadyCallbacks.push(cb);
+        if (tippyPollTimer) return;
+        const start = Date.now();
+        tippyPollTimer = setInterval(function () {
+            if (isTippyAvailable()) {
+                clearInterval(tippyPollTimer);
+                tippyPollTimer = null;
+                const cbs = tippyReadyCallbacks.slice();
+                tippyReadyCallbacks = [];
+                cbs.forEach(function (fn) { try { fn(); } catch (e) {} });
+            } else if (Date.now() - start > 8000) {
+                clearInterval(tippyPollTimer);
+                tippyPollTimer = null;
+                tippyReadyCallbacks = [];
+            }
+        }, 50);
+    }
+
+    // Init a single element (idempotent)
+    function initTippyOn(el, opts) {
+        if (!el || el._tippy || !isTippyAvailable()) return;
+        try {
+            window.tippy(el, Object.assign({
+                allowHTML: true,
+                theme: 'emerald',
+                animation: 'fade',
+                placement: 'top',
+                offset: [0, 8],
+                arrow: true,
+                appendTo: document.body,
+                delay: [200, 80],
+                touch: false
+            }, opts || {}));
+        } catch (e) { /* silent */ }
+    }
+
+    // Scan the whole document for [data-tippy-content] and init any not yet initialised.
+    function initAllTippys(root) {
+        if (isGuest() || !isTippyAvailable()) return;
+        (root || document).querySelectorAll('[data-tippy-content]').forEach(function (el) {
+            initTippyOn(el);
+        });
+    }
+
+    // Apply a tooltip: sets data-tippy-content (registered) or title (guest), and initialises if possible.
+    // Options that affect initialisation (interactive, placement, maxWidth, delay, hideOnClick)
+    // are stored as data-* attributes so the deferred initialiser can read them.
+    function applyTip(el, htmlContent, options) {
+        if (!el || el._tippy) return;
+        options = options || {};
+
+        // Guest path — native title only
+        if (isGuest() || !htmlContent) {
+            if (!el.hasAttribute('title')) {
+                const text = String(htmlContent || '')
+                    .replace(/<[^>]*>/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                if (text) el.setAttribute('title', text);
+            }
+            return;
+        }
+
+        // Registered user path — set data-tippy-content and remember options
+        el.setAttribute('data-tippy-content', htmlContent);
+        if (options.placement) el.setAttribute('data-tippy-placement', options.placement);
+        if (options.interactive) el.setAttribute('data-tippy-interactive', 'true');
+        if (options.maxWidth) el.setAttribute('data-tippy-maxwidth', String(options.maxWidth));
+        if (options.hideOnClick === false) el.setAttribute('data-tippy-hideonclick', 'false');
+
+        // If Tippy is already loaded, initialise right away.
+        if (isTippyAvailable()) {
+            initTippyOn(el, {
+                placement: el.getAttribute('data-tippy-placement') || 'top',
+                interactive: el.getAttribute('data-tippy-interactive') === 'true',
+                maxWidth: el.getAttribute('data-tippy-maxwidth') ? parseInt(el.getAttribute('data-tippy-maxwidth'), 10) : 320,
+                hideOnClick: el.getAttribute('data-tippy-hideonclick') !== 'false'
+            });
+        } else {
+            // Otherwise, wait for Tippy to load, then init.
+            whenTippyReady(function () {
+                initAllTippys(el.parentNode || document);
+            });
+        }
+    }
+
+    // MutationObserver — auto-init any [data-tippy-content] that appears later.
+    let tooltipObserver = null;
+    function setupTooltipObserver() {
+        if (isGuest()) return;
+        if (tooltipObserver) return;
+        tooltipObserver = new MutationObserver(function (mutations) {
+            if (!isTippyAvailable()) return;
+            mutations.forEach(function (mutation) {
+                mutation.addedNodes.forEach(function (node) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+                    if (node.hasAttribute && node.hasAttribute('data-tippy-content')) {
+                        initTippyOn(node);
+                    }
+                    if (node.querySelectorAll) {
+                        node.querySelectorAll('[data-tippy-content]').forEach(function (el) {
+                            initTippyOn(el);
+                        });
+                    }
+                });
+            });
+        });
+        tooltipObserver.observe(document.body, { childList: true, subtree: true });
     }
 
     const ROLE_DESCRIPTIONS = {
@@ -1220,39 +1331,11 @@ function initQuotesAndSpoilers() {
         '</div>';
     }
 
-    function applyTip(el, htmlContent, options) {
-        if (!el) return;
-        // Skip if already has tippy or a title
-        if (el._tippy) return;
-
-        if (useRichTips()) {
-            // Rich tooltip path — Tippy is available and user is registered.
-            window.tippy(el, Object.assign({
-                content: htmlContent,
-                allowHTML: true,
-                theme: 'emerald',
-                appendTo: document.body,
-                placement: 'top',
-                delay: [200, 80],
-                touch: false
-            }, options || {}));
-        } else {
-            // Fallback: strip HTML and set a plain native title.
-            const text = String(htmlContent)
-                .replace(/<[^>]*>/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-            if (text) el.setAttribute('title', text);
-        }
-    }
-
     function attachTips(card, data) {
         if (!card || !data) return;
 
-        const rich = useRichTips();
-
         // 1) Profile hovercard (avatar + username)
-        const hovercardHtml = rich ? buildProfileHovercardHtml(data) : null;
+        const hovercardHtml = buildProfileHovercardHtml(data);
         const profileFallback = 'View profile of ' + data.username;
         [card.querySelector('.avatar-link'), card.querySelector('.user-profile-link')].forEach(el => {
             if (!el) return;
@@ -1269,9 +1352,8 @@ function initQuotesAndSpoilers() {
         const postNumberEl = card.querySelector('.post-number');
         if (postNumberEl) {
             const num = data.postNumber;
-            applyTip(postNumberEl, rich
-                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-hashtag"></i>Post #' + num + '</div><div class="tip-info-text">Use the share button in the post header to copy a direct link.</div></div>'
-                : 'Post #' + num,
+            applyTip(postNumberEl,
+                '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-hashtag"></i>Post #' + num + '</div><div class="tip-info-text">Use the share button in the post header to copy a direct link.</div></div>',
                 { placement: 'bottom' });
         }
 
@@ -1282,18 +1364,16 @@ function initQuotesAndSpoilers() {
                 weekday: 'long', year: 'numeric', month: 'long',
                 day: 'numeric', hour: '2-digit', minute: '2-digit'
             });
-            applyTip(timeEl, rich
-                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(abs) + '</div><div class="tip-info-text">Posted ' + escapeHtml(data.relativeTime || '') + '</div></div>'
-                : abs,
+            applyTip(timeEl,
+                '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(abs) + '</div><div class="tip-info-text">Posted ' + escapeHtml(data.relativeTime || '') + '</div></div>',
                 { placement: 'bottom' });
         }
 
         // 3b) Blog date (absolute)
         const blogDateEl = card.querySelector('.blog-date');
         if (blogDateEl && data.absoluteDate) {
-            applyTip(blogDateEl, rich
-                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(data.absoluteDate) + '</div><div class="tip-info-text">Publication date</div></div>'
-                : data.absoluteDate,
+            applyTip(blogDateEl,
+                '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(data.absoluteDate) + '</div><div class="tip-info-text">Publication date</div></div>',
                 { placement: 'bottom' });
         }
 
@@ -1302,18 +1382,16 @@ function initQuotesAndSpoilers() {
         if (roleBadge) {
             const roleText = roleBadge.textContent.trim();
             const desc = getRoleDescription(roleText);
-            applyTip(roleBadge, rich
-                ? '<div class="tip-info"><div class="tip-info-title">' + escapeHtml(roleText) + '</div><div class="tip-info-text">' + escapeHtml(desc) + '</div></div>'
-                : desc,
+            applyTip(roleBadge,
+                '<div class="tip-info"><div class="tip-info-title">' + escapeHtml(roleText) + '</div><div class="tip-info-text">' + escapeHtml(desc) + '</div></div>',
                 { placement: 'top' });
         }
 
         // 5) User rank
         const rankEl = card.querySelector('.user-rank');
         if (rankEl) {
-            applyTip(rankEl, rich
-                ? '<div class="tip-info"><div class="tip-info-title">Rank</div><div class="tip-info-text">Based on activity and post count.</div></div>'
-                : 'Based on activity and post count',
+            applyTip(rankEl,
+                '<div class="tip-info"><div class="tip-info-title">Rank</div><div class="tip-info-text">Based on activity and post count.</div></div>',
                 { placement: 'top' });
         }
 
@@ -1323,18 +1401,16 @@ function initQuotesAndSpoilers() {
             const editor = data.editInfo.editor || 'someone';
             const rawDate = data.editInfo.rawDate;
             const abs = rawDate ? rawDate.toLocaleString() : '';
-            applyTip(editEl, rich
-                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-pen-to-square"></i>Edited by ' + escapeHtml(editor) + '</div><div class="tip-info-text">' + escapeHtml(abs) + '</div></div>'
-                : 'Edited by ' + editor + ' on ' + abs,
+            applyTip(editEl,
+                '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-pen-to-square"></i>Edited by ' + escapeHtml(editor) + '</div><div class="tip-info-text">' + escapeHtml(abs) + '</div></div>',
                 { placement: 'top' });
         }
 
         // 7) IP address (privacy note)
         const ipEl = card.querySelector('.post-ip');
         if (ipEl && data.ipAddress) {
-            applyTip(ipEl, rich
-                ? '<div class="tip-info"><div class="tip-info-title">IP Address</div><div class="tip-info-text">Last three octets masked for privacy.</div></div>'
-                : 'Last three octets masked for privacy',
+            applyTip(ipEl,
+                '<div class="tip-info"><div class="tip-info-title">IP Address</div><div class="tip-info-text">Last three octets masked for privacy.</div></div>',
                 { placement: 'top' });
         }
     }
@@ -2880,6 +2956,12 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
 
             // Set up global image error handler
             setupGlobalImageErrorHandler();
+
+            // Kick off tooltip infrastructure immediately (in case Tippy is already loaded)
+            setupTooltipObserver();
+            whenTippyReady(function () {
+                initAllTippys(document);
+            });
 
             if (!isValidPage()) {
                 if (document.body.id === 'send' && document.querySelector('.summary')) convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
