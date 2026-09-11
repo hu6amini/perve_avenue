@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -1138,6 +1138,185 @@ function initQuotesAndSpoilers() {
                 }
             }
         }, true); // Use capture phase to catch errors early
+    }
+
+    // ============================================================================
+    // TOOLTIPS / HOVERCARDS (progressive enhancement)
+    // ============================================================================
+    const hasTippy = typeof window.tippy === 'function';
+
+    const ROLE_DESCRIPTIONS = {
+        'founder': 'The site founder',
+        'administrator': 'Full site administration',
+        'moderator': 'Moderates content and members',
+        'global moderator': 'Moderates across all forums',
+        'developer': 'Develops and maintains the site',
+        'game dev': 'Works on game development',
+        'fan': 'Enthusiastic community member',
+        'member': 'Regular forum member'
+    };
+
+    function getRoleDescription(role) {
+        const key = (role || '').toLowerCase();
+        return ROLE_DESCRIPTIONS[key] || ('Member of the ' + role + ' group');
+    }
+
+    function buildProfileHovercardHtml(data) {
+        const user = data.apiUser || {};
+        const avatarData = getUserAvatarData(user, data.username, data.mid);
+        const profileUrl = data.mid ? '/?act=Profile&MID=' + data.mid : '#';
+
+        let avatarHtml = '';
+        if (avatarData.type === 'img') {
+            avatarHtml = '<img class="tip-avatar-img" src="' + escapeHtml(avatarData.url) + '" alt="" width="56" height="56" loading="lazy">';
+        } else {
+            avatarHtml = '<div class="tip-avatar-initial" style="background-color:#' + avatarData.bgColor + '">' + escapeHtml(avatarData.initial) + '</div>';
+        }
+
+        let groupName = user?.group?.name || data.groupText || 'Member';
+        const isFounder = user?.group && ((user.group.class?.includes('founder')) || (user.group.bodyclass?.includes('founder')));
+        if (isFounder) groupName = 'Founder';
+
+        const postCount = user?.messages ?? data.postCount ?? 0;
+        const reputation = user?.reputation ?? data.reputation ?? 0;
+
+        let joinDate = 'Unknown';
+        if (user?.registration) {
+            joinDate = new Date(user.registration).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        } else if (data.joinDate) {
+            joinDate = data.joinDate;
+        }
+
+        const isOnline = (user?.status === 'online') || data.isOnline;
+
+        return '<div class="tip-profile">' +
+            '<div class="tip-profile-header">' +
+                '<div class="tip-profile-avatar">' + avatarHtml + '</div>' +
+                '<div class="tip-profile-names">' +
+                    '<a class="tip-profile-username" href="' + escapeHtml(profileUrl) + '">' + escapeHtml(data.username) + '</a>' +
+                    '<span class="tip-profile-group">' + escapeHtml(groupName) + '</span>' +
+                '</div>' +
+                '<span class="tip-profile-status ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+            '</div>' +
+            '<div class="tip-profile-stats">' +
+                '<div class="tip-profile-stat"><i class="fa-regular fa-message"></i><span class="tip-profile-stat-value">' + formatNumber(postCount) + '</span><span class="tip-profile-stat-label">posts</span></div>' +
+                '<div class="tip-profile-stat"><i class="fa-regular fa-thumbs-up"></i><span class="tip-profile-stat-value">' + formatNumber(reputation) + '</span><span class="tip-profile-stat-label">rep</span></div>' +
+                '<div class="tip-profile-stat"><i class="fa-regular fa-user-plus"></i><span class="tip-profile-stat-value">' + escapeHtml(joinDate) + '</span><span class="tip-profile-stat-label">joined</span></div>' +
+            '</div>' +
+            '<div class="tip-profile-footer"><a class="tip-profile-link" href="' + escapeHtml(profileUrl) + '">View Profile <i class="fa-regular fa-angle-right"></i></a></div>' +
+        '</div>';
+    }
+
+    function applyTip(el, htmlContent, options) {
+        if (!el) return;
+        // Skip if already has tippy
+        if (el._tippy) return;
+        if (hasTippy) {
+            window.tippy(el, Object.assign({
+                content: htmlContent,
+                allowHTML: true,
+                theme: 'emerald',
+                appendTo: document.body,
+                placement: 'top',
+                delay: [200, 80],
+                touch: false
+            }, options || {}));
+        } else {
+            // Fallback: strip tags and set native title
+            const text = String(htmlContent).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            if (text) el.setAttribute('title', text);
+        }
+    }
+
+    function attachTips(card, data) {
+        if (!card || !data) return;
+
+        // 1) Profile hovercard (avatar + username)
+        const hovercardHtml = hasTippy ? buildProfileHovercardHtml(data) : null;
+        const profileFallback = 'View profile of ' + data.username;
+        [card.querySelector('.avatar-link'), card.querySelector('.user-profile-link')].forEach(el => {
+            if (!el) return;
+            applyTip(el, hovercardHtml || profileFallback, {
+                placement: 'right-start',
+                interactive: true,
+                maxWidth: 300,
+                delay: [250, 80],
+                hideOnClick: false
+            });
+        });
+
+        // 2) Post number
+        const postNumberEl = card.querySelector('.post-number');
+        if (postNumberEl) {
+            const num = data.postNumber;
+            applyTip(postNumberEl, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-hashtag"></i>Post #' + num + '</div><div class="tip-info-text">Use the share button in the post header to copy a direct link.</div></div>'
+                : 'Post #' + num,
+                { placement: 'bottom' });
+        }
+
+        // 3) Post time (relative → absolute)
+        const timeEl = card.querySelector('.post-time time');
+        if (timeEl && data.postDate) {
+            const abs = data.postDate.toLocaleString(undefined, {
+                weekday: 'long', year: 'numeric', month: 'long',
+                day: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+            applyTip(timeEl, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(abs) + '</div><div class="tip-info-text">Posted ' + escapeHtml(data.relativeTime || '') + '</div></div>'
+                : abs,
+                { placement: 'bottom' });
+        }
+
+        // 3b) Blog date (absolute)
+        const blogDateEl = card.querySelector('.blog-date');
+        if (blogDateEl && data.absoluteDate) {
+            applyTip(blogDateEl, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-calendar"></i>' + escapeHtml(data.absoluteDate) + '</div><div class="tip-info-text">Publication date</div></div>'
+                : data.absoluteDate,
+                { placement: 'bottom' });
+        }
+
+        // 4) Role badge
+        const roleBadge = card.querySelector('.role-badge');
+        if (roleBadge) {
+            const roleText = roleBadge.textContent.trim();
+            const desc = getRoleDescription(roleText);
+            applyTip(roleBadge, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title">' + escapeHtml(roleText) + '</div><div class="tip-info-text">' + escapeHtml(desc) + '</div></div>'
+                : desc,
+                { placement: 'top' });
+        }
+
+        // 5) User rank
+        const rankEl = card.querySelector('.user-rank');
+        if (rankEl) {
+            applyTip(rankEl, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title">Rank</div><div class="tip-info-text">Based on activity and post count.</div></div>'
+                : 'Based on activity and post count',
+                { placement: 'top' });
+        }
+
+        // 6) Edit info
+        const editEl = card.querySelector('.post-edit-info');
+        if (editEl && data.editInfo) {
+            const editor = data.editInfo.editor || 'someone';
+            const rawDate = data.editInfo.rawDate;
+            const abs = rawDate ? rawDate.toLocaleString() : '';
+            applyTip(editEl, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title"><i class="fa-regular fa-pen-to-square"></i>Edited by ' + escapeHtml(editor) + '</div><div class="tip-info-text">' + escapeHtml(abs) + '</div></div>'
+                : 'Edited by ' + editor + ' on ' + abs,
+                { placement: 'top' });
+        }
+
+        // 7) IP address (privacy note)
+        const ipEl = card.querySelector('.post-ip');
+        if (ipEl && data.ipAddress) {
+            applyTip(ipEl, hasTippy
+                ? '<div class="tip-info"><div class="tip-info-title">IP Address</div><div class="tip-info-text">Last three octets masked for privacy.</div></div>'
+                : 'Last three octets masked for privacy',
+                { placement: 'top' });
+        }
     }
 
     // ============================================================================
@@ -2462,6 +2641,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 fixMissingImageDimensions(card);
                 applyFaviconsToMessageLinks(card);
                 wrapImagesWithDimensions(card);
+                attachTips(card, completeData);
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
@@ -2501,6 +2681,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 fixMissingImageDimensions(blogCard);
                 applyFaviconsToMessageLinks(blogCard);
                 wrapImagesWithDimensions(blogCard);
+                attachTips(blogCard, { ...blogData, apiUser });
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
             }
@@ -2571,6 +2752,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 fixMissingImageDimensions(card);
                 applyFaviconsToMessageLinks(card);
                 wrapImagesWithDimensions(card);
+                attachTips(card, completeData);
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
@@ -2649,6 +2831,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             fixMissingImageDimensions(card);
             applyFaviconsToMessageLinks(card);
             wrapImagesWithDimensions(card);
+            attachTips(card, completeData);
         }
         initQuotesAndSpoilers();
         // Fix any remaining broken images globally
