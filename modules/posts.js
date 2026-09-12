@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion) + User Tags
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion) + User Tags + LightGallery
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -1489,7 +1489,7 @@ function initQuotesAndSpoilers() {
         userTags.forEach(tag => {
             if (tag._tippy || tag.hasAttribute('data-tippy-content')) return;
             const uid = tag.getAttribute('data-uid');
-            const username = tag.getAttribute('data-username') || tag.textContent.trim();
+            const username = tag.getAttribute('data-username') || tag.textContent.trim().replace(/^@/, '');
             if (!uid) return;
 
             // Guests get a plain native title
@@ -1522,6 +1522,153 @@ function initQuotesAndSpoilers() {
                 tag.setAttribute('title', 'View profile of ' + username);
             });
         });
+    }
+
+    // ============================================================================
+    // LIGHTGALLERY INITIALIZATION
+    // ============================================================================
+    function initModernLightGallery() {
+        if (typeof lightGallery === 'undefined') {
+            setTimeout(initModernLightGallery, 100);
+            return;
+        }
+
+        const validPages = ['topic', 'send', 'blog', 'search'];
+        if (!validPages.includes(document.body.id)) return;
+
+        const containers = document.querySelectorAll('#posts-container, #modern-summary-container');
+
+        containers.forEach(container => {
+            if (container.dataset.lgInit === 'true') return;
+
+            const images = container.querySelectorAll(
+                '.post-message img[src], .post-signature img[src], .quote-content img[src], .spoiler-content img[src]'
+            );
+
+            let hasValidImages = false;
+            const initTime = Date.now();
+            let idx = 0;
+
+            images.forEach(img => {
+                // Skip twemoji
+                if (img.classList.contains('twemoji')) return;
+
+                // Skip emoji alt (alt starts AND ends with ":")
+                const alt = img.getAttribute('alt');
+                if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
+
+                // Skip link‑preview images
+                if (img.closest('.modern-embedded-link')) return;
+
+                // Skip already-processed images
+                if (img.dataset.src) return;
+
+                // Skip images inside <a> where the link points elsewhere (thumbnails like imagebam)
+                const link = img.closest('a');
+                if (link) {
+                    const href = link.getAttribute('href') || '';
+                    // Favicon links
+                    if (img.src.startsWith('https://www.google.com/s2/favicons')) return;
+                    // Thumbnail that leads to a viewer page (imagebam, etc.)
+                    if (href && href !== img.src) return;
+                }
+
+                // Prepare lightGallery metadata
+                img.dataset.src = img.src;
+                img.dataset.thumb = img.src;
+                if (!img.dataset.lgId) img.dataset.lgId = `lg-${initTime}-${idx++}`;
+
+                // Determine intrinsic size (fall back to width/height attributes)
+                if (img.naturalWidth && img.naturalHeight) {
+                    img.dataset.lgSize = `${img.naturalWidth}-${img.naturalHeight}`;
+                } else {
+                    const probe = new Image();
+                    probe.onload = () => { img.dataset.lgSize = `${probe.naturalWidth}-${probe.naturalHeight}`; };
+                    probe.onerror = () => {
+                        const w = img.getAttribute('width') || '1920';
+                        const h = img.getAttribute('height') || '1080';
+                        img.dataset.lgSize = `${w}-${h}`;
+                    };
+                    probe.src = img.src;
+                }
+
+                hasValidImages = true;
+            });
+
+            if (!hasValidImages) return;
+
+            try {
+                lightGallery(container, {
+                    selector: 'img[data-src]',
+                    plugins: [lgZoom, lgThumbnail, lgFullscreen, lgAutoplay, lgHash, lgShare],
+                    speed: 300,
+                    download: true,
+                    counter: true,
+                    enableDrag: true,
+                    enableSwipe: true,
+                    hash: true,
+                    autoplay: true,
+                    autoplayControls: true,
+                    thumbnail: true,
+                    animateThumb: true,
+                    showThumbByDefault: true,
+                    toggleThumb: true,
+                    exThumbImage: 'data-thumb',
+                    hideBarsDelay: 2000,
+                    hideControlOnEnd: false,
+                    addClass: 'lg-custom',
+                    dynamic: false,
+                    debug: false,
+                    allowMediaOverlap: true,
+                    mousewheel: true,
+                    closable: true,
+                    closeOnTap: true,
+                    showCloseIcon: true,
+                    escKey: true,
+                    preload: 2,
+                    loop: true,
+                    slideEndAnimation: true,
+                    hideScrollbar: true,
+                    resetScrollPosition: true,
+                    actualSize: true,
+                    alignThumbnails: 'middle',
+                    enableThumbDrag: true,
+                    enableThumbSwipe: true,
+                    progressBar: true,
+                    slideShowInterval: 3820,
+                    mobileSettings: {
+                        controls: true,
+                        showCloseIcon: true,
+                        download: true
+                    }
+                });
+                container.dataset.lgInit = 'true';
+            } catch (e) {
+                console.error('[PostsModule] lightGallery init failed:', e);
+            }
+        });
+    }
+
+    // Wait for lightGallery + plugins, then init
+    function waitForLightGallery() {
+        if (
+            typeof lightGallery !== 'undefined' &&
+            typeof lgZoom !== 'undefined' &&
+            typeof lgThumbnail !== 'undefined' &&
+            typeof lgFullscreen !== 'undefined' &&
+            typeof lgAutoplay !== 'undefined' &&
+            typeof lgHash !== 'undefined' &&
+            typeof lgShare !== 'undefined'
+        ) {
+            const run = () => setTimeout(initModernLightGallery, 300);
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(run);
+            } else {
+                run();
+            }
+        } else {
+            setTimeout(waitForLightGallery, 100);
+        }
     }
 
     // ============================================================================
@@ -2854,6 +3001,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             initQuotesAndSpoilers();
             // Convert any remaining native titles into tippys
             whenTippyReady(function () { autoTippyFromTitle(container); });
+            // Init lightGallery on the new cards
+            waitForLightGallery();
             // Fix any remaining broken images globally
             setTimeout(fixBrokenWeservImages, 300);
             console.log('[PostsModule] Messages ready - ' + postsData.length + ' messages converted');
@@ -2967,6 +3116,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             initQuotesAndSpoilers();
             // Convert any remaining native titles into tippys
             whenTippyReady(function () { autoTippyFromTitle(container); });
+            // Init lightGallery on the new cards
+            waitForLightGallery();
             // Fix any remaining broken images globally
             setTimeout(fixBrokenWeservImages, 300);
             console.log('[PostsModule] Ready - ' + (postsData.length + blogCount) + ' posts converted');
@@ -3048,6 +3199,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
         initQuotesAndSpoilers();
         // Convert any remaining native titles into tippys
         whenTippyReady(function () { autoTippyFromTitle(container); });
+        // Init lightGallery on the summary container
+        waitForLightGallery();
         // Fix any remaining broken images globally
         setTimeout(fixBrokenWeservImages, 300);
         console.log('[PostsModule] Summary conversion ready - ' + postsData.length + ' posts');
@@ -3080,6 +3233,9 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             whenTippyReady(function () {
                 initAllTippys(document);
             });
+
+            // Kick off lightGallery watcher
+            waitForLightGallery();
 
             if (!isValidPage()) {
                 if (document.body.id === 'send' && document.querySelector('.summary')) convertSummaryPosts().catch(err => console.error('[PostsModule] Summary conversion error', err));
