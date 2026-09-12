@@ -2647,6 +2647,7 @@ input[type="radio"]:checked::before {
     overflow: hidden;
     text-overflow: ellipsis;
     transition: color 0.2s;
+    text-align: left;
 }
 
 .tip-profile-username:hover {
