@@ -2475,6 +2475,35 @@ input[type="radio"]:checked::before {
   font-size: var(--text-xs);
 }
 
+/* ------------------------------------------------------------------
+   User tags (modern @-mention chips)
+   ------------------------------------------------------------------ */
+.user-tag {
+    display: inline-block;
+    padding: 0.1em 0.6em;
+    border-radius: var(--radius-full);
+    background-color: rgba(5, 150, 105, 0.12);
+    color: var(--primary-light);
+    font-weight: 500;
+    font-size: 0.95em;
+    line-height: 1.4;
+    text-decoration: none;
+    vertical-align: baseline;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    white-space: nowrap;
+}
+.user-tag:hover {
+    background-color: rgba(5, 150, 105, 0.22);
+    color: var(--primary-color);
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+.user-tag:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 /* ==========================================================================
    TOOLTIPS — EMERALD THEME (Tippy.js)
    Works with .tippy-box[data-theme~='emerald'] when Tippy is loaded.
