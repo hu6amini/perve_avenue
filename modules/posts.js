@@ -1536,13 +1536,15 @@ function initQuotesAndSpoilers() {
         const validPages = ['topic', 'send', 'blog', 'search'];
         if (!validPages.includes(document.body.id)) return;
 
-        const containers = document.querySelectorAll('#posts-container, #modern-summary-container');
+        // Init per post card so each gallery is isolated to its own post
+        const cards = document.querySelectorAll('#posts-container .post-card, #modern-summary-container .post-card');
 
-        containers.forEach(container => {
-            if (container.dataset.lgInit === 'true') return;
+        cards.forEach(card => {
+            if (card.dataset.lgInit === 'true') return;
 
-            const images = container.querySelectorAll(
-                '.post-message img[src], .post-signature img[src], .quote-content img[src], .spoiler-content img[src]'
+            // Only scan post content — skip signatures entirely
+            const images = card.querySelectorAll(
+                '.post-message img[src], .quote-content img[src], .spoiler-content img[src]'
             );
 
             let hasValidImages = false;
@@ -1557,39 +1559,56 @@ function initQuotesAndSpoilers() {
                 const alt = img.getAttribute('alt');
                 if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
 
-                // Skip link‑preview images
+                // Skip link-preview images
                 if (img.closest('.modern-embedded-link')) return;
 
                 // Skip already-processed images
                 if (img.dataset.src) return;
 
-                // Skip images inside <a> where the link points elsewhere (thumbnails like imagebam)
+                // Skip linked thumbnails that lead to a viewer page (imagebam, etc.)
                 const link = img.closest('a');
                 if (link) {
                     const href = link.getAttribute('href') || '';
-                    // Favicon links
                     if (img.src.startsWith('https://www.google.com/s2/favicons')) return;
-                    // Thumbnail that leads to a viewer page (imagebam, etc.)
                     if (href && href !== img.src) return;
                 }
 
-                // Prepare lightGallery metadata
-                img.dataset.src = img.src;
+                // ---- Determine the full-size URL ----
+                // Prefer the original URL (data-original, or the url= param
+                // inside the weserv URL). Fall back to the current src.
+                let fullSizeSrc = img.getAttribute('data-original');
+                if (!fullSizeSrc) {
+                    const src = img.src;
+                    if (src.indexOf('weserv.nl') !== -1 || src.indexOf('wsrv.nl') !== -1) {
+                        try {
+                            const url = new URL(src);
+                            const param = url.searchParams.get('url');
+                            if (param) fullSizeSrc = decodeURIComponent(param);
+                        } catch (e) {}
+                    }
+                }
+                if (!fullSizeSrc) fullSizeSrc = img.src;
+
+                // LightGallery source = original full-size image.
+                // Thumbnail = current (optimized) src.
+                img.dataset.src = fullSizeSrc;
                 img.dataset.thumb = img.src;
                 if (!img.dataset.lgId) img.dataset.lgId = `lg-${initTime}-${idx++}`;
 
-                // Determine intrinsic size (fall back to width/height attributes)
+                // Determine intrinsic size (probe the full-size image)
                 if (img.naturalWidth && img.naturalHeight) {
                     img.dataset.lgSize = `${img.naturalWidth}-${img.naturalHeight}`;
                 } else {
                     const probe = new Image();
-                    probe.onload = () => { img.dataset.lgSize = `${probe.naturalWidth}-${probe.naturalHeight}`; };
+                    probe.onload = () => {
+                        img.dataset.lgSize = `${probe.naturalWidth}-${probe.naturalHeight}`;
+                    };
                     probe.onerror = () => {
                         const w = img.getAttribute('width') || '1920';
                         const h = img.getAttribute('height') || '1080';
                         img.dataset.lgSize = `${w}-${h}`;
                     };
-                    probe.src = img.src;
+                    probe.src = fullSizeSrc;
                 }
 
                 hasValidImages = true;
@@ -1598,7 +1617,7 @@ function initQuotesAndSpoilers() {
             if (!hasValidImages) return;
 
             try {
-                lightGallery(container, {
+                lightGallery(card, {
                     selector: 'img[data-src]',
                     plugins: [lgZoom, lgThumbnail, lgFullscreen, lgAutoplay, lgHash, lgShare],
                     speed: 300,
@@ -1642,7 +1661,7 @@ function initQuotesAndSpoilers() {
                         download: true
                     }
                 });
-                container.dataset.lgInit = 'true';
+                card.dataset.lgInit = 'true';
             } catch (e) {
                 console.error('[PostsModule] lightGallery init failed:', e);
             }
