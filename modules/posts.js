@@ -1212,7 +1212,7 @@ function initQuotesAndSpoilers() {
             const text = (el.getAttribute('title') || '').trim();
             if (!text) return;
 
-            el.setAttribute('data-tippy-content', text);
+            el.setAttribute('data-tippy-content', '<div class="tip-plain">' + escapeHtml(text) + '</div>');
             el.removeAttribute('title');
             initTippyOn(el);
         });
