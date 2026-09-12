@@ -2544,6 +2544,15 @@ input[type="radio"]:checked::before {
     line-height: 1.5;
 }
 
+/* Plain-text tooltips (auto-converted from title attributes) */
+.tip-plain {
+    padding: var(--pad-3) var(--pad-4);
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    color: var(--text-primary);
+    max-width: 240px;
+}
+
 /* ------------------------------------------------------------------
    Profile hovercard
    ------------------------------------------------------------------ */
