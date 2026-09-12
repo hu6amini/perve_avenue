@@ -1,4 +1,4 @@
-// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion)
+// Forum Modernizer - Posts Module v2.4 (with anchor ID for scrolling) + Poll + Attachments + Code Blocks + Image Wrapper + Global Broken Image Fix + Event Listener + Tooltips (auto title conversion) + User Tags
 'use strict';
 
 const ForumPostsModule = (function () {
@@ -431,6 +431,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyQuotesAndSpoilers(html);
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
+        html = transformUserTags(html);
         return html;
     }
 
@@ -569,6 +570,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyQuotesAndSpoilers(html);
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
+        html = transformUserTags(html);
         return html;
     }
     function getMessagePostDate($post) {
@@ -629,6 +631,7 @@ function parseDateFromTitle(title) {
             contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
             contentHtml = transformLegacyAttachments(contentHtml);
             contentHtml = transformLegacyCodeBlocks(contentHtml);
+            contentHtml = transformUserTags(contentHtml);
         }
         const pointsPos = articleLi.querySelector('.points_pos');
         const likes = pointsPos ? parseInt(pointsPos.textContent.replace(/[^0-9]/g, '')) || 0 : 0;
@@ -793,6 +796,33 @@ function parseDateFromTitle(title) {
             if (hostname.startsWith('www.')) hostname = hostname.substring(4);
             return hostname;
         } catch (e) { return url.split('/')[2] || url; }
+    }
+
+    // ============================================================================
+    // USER TAG TRANSFORMATION (replaces legacy <mark data-uid>)
+    // ============================================================================
+    function transformUserTags(htmlContent) {
+        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+        if (htmlContent.indexOf('<mark') === -1) return htmlContent;
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        const marks = tempDiv.querySelectorAll('mark[data-uid]');
+        marks.forEach(mark => {
+            const uid = (mark.getAttribute('data-uid') || '').trim();
+            if (!uid || !/^\d+$/.test(uid)) return;
+            const username = mark.textContent.trim();
+            if (!username) return;
+
+            const a = document.createElement('a');
+            a.className = 'user-tag';
+            a.href = '/?act=Profile&MID=' + uid;
+            a.setAttribute('data-uid', uid);
+            a.setAttribute('data-username', username);
+            a.textContent = username;
+            mark.parentNode.replaceChild(a, mark);
+        });
+        return tempDiv.innerHTML;
     }
 
     // ============================================================================
@@ -1296,7 +1326,7 @@ function initQuotesAndSpoilers() {
                             if (!el._tippy && !el.hasAttribute('data-tippy-content')) {
                                 const t = (el.getAttribute('title') || '').trim();
                                 if (t) {
-                                    el.setAttribute('data-tippy-content', t);
+                                    el.setAttribute('data-tippy-content', '<div class="tip-plain">' + escapeHtml(t) + '</div>');
                                     el.removeAttribute('title');
                                     initTippyOn(el);
                                 }
@@ -1453,6 +1483,45 @@ function initQuotesAndSpoilers() {
                 '<div class="tip-info"><div class="tip-info-title">IP Address</div><div class="tip-info-text">Last three octets masked for privacy.</div></div>',
                 { placement: 'top' });
         }
+
+        // 8) User tags — async fetch + hovercard
+        const userTags = card.querySelectorAll('.user-tag');
+        userTags.forEach(tag => {
+            if (tag._tippy || tag.hasAttribute('data-tippy-content')) return;
+            const uid = tag.getAttribute('data-uid');
+            const username = tag.getAttribute('data-username') || tag.textContent.trim();
+            if (!uid) return;
+
+            // Guests get a plain native title
+            if (isGuest()) {
+                tag.setAttribute('title', 'View profile of ' + username);
+                return;
+            }
+
+            // Fetch the tagged user's data, then attach the hovercard
+            fetchUserData(uid).then(user => {
+                const tagData = {
+                    mid: uid,
+                    username: username,
+                    apiUser: user,
+                    groupText: user?.group?.name || 'Member',
+                    postCount: user?.messages ?? 0,
+                    reputation: user?.reputation ?? 0,
+                    isOnline: user?.status === 'online'
+                };
+                const html = buildProfileHovercardHtml(tagData);
+                applyTip(tag, html, {
+                    placement: 'top',
+                    interactive: true,
+                    maxWidth: 300,
+                    delay: [250, 80],
+                    hideOnClick: false
+                });
+            }).catch(() => {
+                // Fallback on API error
+                tag.setAttribute('title', 'View profile of ' + username);
+            });
+        });
     }
 
     // ============================================================================
@@ -1768,6 +1837,8 @@ function initQuotesAndSpoilers() {
             if (link.closest('.attachment-actions')) continue;
             if (link.classList.contains('attachment-download-btn') || link.classList.contains('attachment-view-btn')) continue;
             if (link.querySelector('img')) continue;
+            // Skip user tags — they have their own styling
+            if (link.classList.contains('user-tag')) continue;
             try {
                 const urlObj = new URL(link.href);
                 const domain = urlObj.hostname;
@@ -2951,6 +3022,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
                 contentHtml = transformLegacyAttachments(contentHtml);
                 contentHtml = transformLegacyCodeBlocks(contentHtml);
+                contentHtml = transformUserTags(contentHtml);
             }
             postsData.push({
                 postId: 'summary_' + i, mid, username, groupText: groupName, contentHtml,
