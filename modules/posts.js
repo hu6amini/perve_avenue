@@ -819,7 +819,7 @@ function parseDateFromTitle(title) {
             a.href = '/?act=Profile&MID=' + uid;
             a.setAttribute('data-uid', uid);
             a.setAttribute('data-username', username);
-            a.textContent = username;
+            a.textContent = '@' + username;
             mark.parentNode.replaceChild(a, mark);
         });
         return tempDiv.innerHTML;
