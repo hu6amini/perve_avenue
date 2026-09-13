@@ -563,7 +563,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var colorDropdownBtn = document.createElement('button');
         colorDropdownBtn.type = 'button';
         colorDropdownBtn.className = 'modern-editor-btn';
-        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i>;
+        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i>';
         colorDropdownBtn.title = 'Text color';
         var colorDropdownMenu = document.createElement('div');
         colorDropdownMenu.className = 'modern-dropdown-menu';
