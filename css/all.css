@@ -250,6 +250,7 @@
 .fa-magnifying-glass-plus::before {content: "\f00e"; }
 .fa-sun-bright::before {content: "\e28f"; }
 .fa-moon::before {content: "\f186"; }
+.fa-eraser::before {content: "\f12d"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
