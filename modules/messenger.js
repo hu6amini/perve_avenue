@@ -489,7 +489,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var headingDropdownBtn = document.createElement('button');
         headingDropdownBtn.type = 'button';
         headingDropdownBtn.className = 'modern-editor-btn';
-        headingDropdownBtn.innerHTML = '<i class="fa-regular fa-heading"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        headingDropdownBtn.innerHTML = '<i class="fa-regular fa-heading"></i> <i class="fa-regular fa-angle-down" style="font-size:0.7rem;"></i>';
         headingDropdownBtn.title = 'Heading';
         var headingDropdownMenu = document.createElement('div');
         headingDropdownMenu.className = 'modern-dropdown-menu';
@@ -522,7 +522,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var listDropdownBtn = document.createElement('button');
         listDropdownBtn.type = 'button';
         listDropdownBtn.className = 'modern-editor-btn';
-        listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i> <i class="fa-regular fa-angle-down" style="font-size:0.7rem;"></i>';
         listDropdownBtn.title = 'Insert list';
         var listDropdownMenu = document.createElement('div');
         listDropdownMenu.className = 'modern-dropdown-menu';
@@ -563,7 +563,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var colorDropdownBtn = document.createElement('button');
         colorDropdownBtn.type = 'button';
         colorDropdownBtn.className = 'modern-editor-btn';
-        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i> <i class="fa-regular fa-angle-down" style="font-size:0.7rem;"></i>';
         colorDropdownBtn.title = 'Text color';
         var colorDropdownMenu = document.createElement('div');
         colorDropdownMenu.className = 'modern-dropdown-menu';
@@ -616,7 +616,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var imageDropdownBtn = document.createElement('button');
         imageDropdownBtn.type = 'button';
         imageDropdownBtn.className = 'modern-editor-btn';
-        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-chevron-down" style="font-size:0.7rem;"></i>';
+        imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i> <i class="fa-regular fa-angle-down" style="font-size:0.7rem;"></i>';
         imageDropdownBtn.title = 'Insert image';
         var imageDropdownMenu = document.createElement('div');
         imageDropdownMenu.className = 'modern-dropdown-menu';
