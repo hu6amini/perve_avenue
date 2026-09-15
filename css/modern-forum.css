@@ -3243,9 +3243,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-color: var(--primary-color);
   color: var(--text-primary);
   transform: translateY(-1px);
+  text-align: left;
 }
-
-/* Preview area */
 .modern-preview {
   background-color: var(--bg-color);
   border: 1px dashed var(--border-color);
