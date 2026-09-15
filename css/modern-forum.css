@@ -3029,6 +3029,54 @@ section.modern-stats { flex-direction: column; width: 100%; }
   outline: none;
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
+/* Field error state */
+.modern-field {
+    position: relative;  /* anchor for the absolutely-positioned error */
+}
+
+.modern-input.has-error {
+    border-color: var(--danger-color);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+
+.modern-input.has-error:focus {
+    border-color: var(--danger-color);
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+}
+
+.modern-field-error {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    font-size: var(--text-xs);
+    color: var(--danger-color);
+    font-weight: 500;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.modern-field-error.visible {
+    display: block;
+    animation: fieldErrorIn 0.2s ease;
+}
+
+@keyframes fieldErrorIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fieldShake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-4px); }
+    40%      { transform: translateX(4px); }
+    60%      { transform: translateX(-3px); }
+    80%      { transform: translateX(3px); }
+}
+
+.modern-input.shake {
+    animation: fieldShake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
 .modern-select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%236B7280' d='M360.5 217.5l-152 143.1C203.9 365.8 197.9 368 192 368s-11.88-2.188-16.5-6.562L23.5 217.5C13.87 208.3 13.47 193.1 22.56 183.5C31.69 173.8 46.94 173.5 56.5 182.6L192 310.9l135.5-128.4c9.562-9.094 24.75-8.75 33.94 .9375C370.5 193.1 370.1 208.3 360.5 217.5z'/%3E%3C/svg%3E") !important;
   background-size: auto 1rem;
