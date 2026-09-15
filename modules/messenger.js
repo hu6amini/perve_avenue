@@ -1134,7 +1134,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     element: editorElement,
                     extensions: [
                         StarterKit,
-                        Placeholder.configure({ placeholder: '💬 Write your message...' }),
+                        Placeholder.configure({ placeholder: 'Write your message...' }),
                         Underline,
                         CustomImage,
                         CustomLink,
