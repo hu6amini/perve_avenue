@@ -3139,13 +3139,23 @@ section.modern-stats { flex-direction: column; width: 100%; }
   line-height: 1.618;
   text-align: left;
 }
+
+.modern-wysiwyg:empty::before {
+    content: "Write your message...";
+    color: var(--text-tertiary);
+    display: block;
+    padding: var(--pad-4);
+    pointer-events: none;
+}
+
 .ProseMirror p.is-editor-empty:first-child::before {
-  content: "💬 Write your message...";
+  content: attr(data-placeholder);
   float: left;
   color: var(--text-tertiary);
   pointer-events: none;
   height: 0;
 }
+
 .ProseMirror strong { font-weight: bold; }
 .ProseMirror em { font-style: italic; }
 .ProseMirror u { text-decoration: underline; }
