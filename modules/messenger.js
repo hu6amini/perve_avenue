@@ -1558,17 +1558,13 @@ var MessengerModule = (function(Utils, EventBus) {
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
-                + '<div class="action-group">'
-                + '<button class="modern-btn modern-btn-secondary" id="export-messages"><i class="fa-regular fa-download"></i> Export as</button> '
-                + '<select id="export-format" class="modern-select-sm"><option value="html">HTML</option><option value="xls">Excel</option></select>'
-                + '</div>'
-                + '<div class="action-group">'
-                + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
-                + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
-                + '</div>'
-                + '<div class="action-group">'
-                + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
-                + '</div>';
+    + '<div class="action-group">'
+    + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
+    + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
+    + '</div>'
+    + '<div class="action-group">'
+    + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
+    + '</div>';
             container.appendChild(actionBar);
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
@@ -1592,17 +1588,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 container.querySelectorAll('.message-row .modern-checkbox-input').forEach(function(cb) {
                     var hidden = inboxForm.querySelector('input[name="' + cb.name + '"]');
                     if (hidden) hidden.checked = cb.checked;
-                });
-            }
-            var exportBtn = container.querySelector('#export-messages');
-            if (exportBtn && inboxForm) {
-                exportBtn.addEventListener('click', function() {
-                    syncCheckboxesToForm();
-                    var fmt = container.querySelector('#export-format');
-                    var typeSelect = inboxForm.querySelector('select[name="type"]');
-                    if (fmt && typeSelect) typeSelect.value = fmt.value;
-                    var archiveBtn = inboxForm.querySelector('input[name="archive"]');
-                    if (archiveBtn) archiveBtn.click(); else inboxForm.submit();
                 });
             }
             var deleteBtn = container.querySelector('#delete-messages');
