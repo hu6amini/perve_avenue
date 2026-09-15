@@ -3132,7 +3132,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .ProseMirror {
   outline: none;
-  padding: 0;
+  padding: var(--pad-4);
   min-height: 0;
   color: var(--text-primary);
   font-family: var(--font-primary);
