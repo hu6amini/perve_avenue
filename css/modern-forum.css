@@ -3192,13 +3192,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-right: var(--space-micro) solid transparent;
 }
 
-.modern-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-lg);
-  padding: var(--pad-4) var(--pad-6);
-  border-top: 1px solid var(--border-color);
-}
 .modern-checkbox {
   display: inline-flex;
   align-items: center;
@@ -3561,7 +3554,6 @@ input[type="radio"]:checked::before {
   .modern-messenger-main { order: 1; }
   .modern-recipient-row { flex-direction: column; gap: var(--space-md); margin: var(--space-sm); }
   .modern-editor-toolbar { justify-content: center; }
-  .modern-options { flex-direction: column; gap: var(--space-sm); }
   .modern-actions { justify-content: center; }
 
   .messages-list-header { display: none; }
