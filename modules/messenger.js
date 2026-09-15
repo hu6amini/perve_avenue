@@ -354,6 +354,14 @@ var MessengerModule = (function(Utils, EventBus) {
         var previewButton = document.querySelector('button[name="preview"]');
         var originalForm  = window.REPLIER;
 
+        // -----------------------------------------------------------------
+        // Force both legacy options on. The forum resets them per session,
+        // and users overwhelmingly want both enabled. We re-assert at submit
+        // time as well, in case the AJAX preview path resets them.
+        // -----------------------------------------------------------------
+        if (addSentCheckbox) addSentCheckbox.checked = true;
+        if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
+
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
@@ -1357,14 +1365,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
-        // Options row, action buttons, data binding (raw HTML)
-        var optionsRow = document.createElement('div');
-        optionsRow.className = 'modern-options';
-        optionsRow.innerHTML = ''
-            + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-sent" '     + (addSentCheckbox     && addSentCheckbox.checked     ? 'checked' : '') + '> <span>Add a copy to Sent Items</span></label>'
-            + '<label class="modern-checkbox"><input type="checkbox" id="modern-add-tracking" ' + (addTrackingCheckbox && addTrackingCheckbox.checked ? 'checked' : '') + '> <span>Notify when read</span></label>';
-        container.appendChild(optionsRow);
-
         // ----- Modern preview area -----
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
@@ -1383,29 +1383,21 @@ var MessengerModule = (function(Utils, EventBus) {
         var modernRecipient   = container.querySelector('#modern-recipient');
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
-        var modernAddSent     = container.querySelector('#modern-add-sent');
-        var modernAddTracking = container.querySelector('#modern-add-tracking');
 
         function syncToOriginal() {
             if (recipientInput && modernRecipient) recipientInput.value = modernRecipient.value;
             if (contactSelect && modernContact) contactSelect.value = modernContact.value;
             if (titleInput && modernTitle) titleInput.value = modernTitle.value;
-            if (addSentCheckbox && modernAddSent) addSentCheckbox.checked = modernAddSent.checked;
-            if (addTrackingCheckbox && modernAddTracking) addTrackingCheckbox.checked = modernAddTracking.checked;
         }
         function syncFromOriginal() {
             if (recipientInput && modernRecipient) modernRecipient.value = recipientInput.value;
             if (contactSelect && modernContact) modernContact.value = contactSelect.value;
             if (titleInput && modernTitle) modernTitle.value = titleInput.value;
-            if (addSentCheckbox && modernAddSent) modernAddSent.checked = addSentCheckbox.checked;
-            if (addTrackingCheckbox && modernAddTracking) modernAddTracking.checked = addTrackingCheckbox.checked;
         }
 
         if (modernRecipient)   modernRecipient.addEventListener('input', syncToOriginal);
         if (modernContact)     modernContact.addEventListener('change', syncToOriginal);
         if (modernTitle)       modernTitle.addEventListener('input', syncToOriginal);
-        if (modernAddSent)     modernAddSent.addEventListener('change', syncToOriginal);
-        if (modernAddTracking) modernAddTracking.addEventListener('change', syncToOriginal);
         syncFromOriginal();
 
         // -----------------------------------------------------------------
@@ -1434,6 +1426,10 @@ var MessengerModule = (function(Utils, EventBus) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
+                // Re-assert both checkboxes right before submit — nothing should
+                // be able to uncheck them between build and send.
+                if (addSentCheckbox) addSentCheckbox.checked = true;
+                if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
                 if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
                 if (originalForm && typeof originalForm.submit === 'function') {
                     if (typeof ValidateForm === 'function' && !ValidateForm(1)) return;
