@@ -3146,6 +3146,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     display: block;
     padding: var(--pad-4);
     pointer-events: none;
+    text-align: left;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -3243,7 +3244,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-color: var(--primary-color);
   color: var(--text-primary);
   transform: translateY(-1px);
-  text-align: left;
 }
 .modern-preview {
   background-color: var(--bg-color);
