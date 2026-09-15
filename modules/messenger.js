@@ -381,7 +381,7 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<select id="modern-contact" class="modern-select">' + (contactSelect ? contactSelect.innerHTML : '') + '</select>'
             + '</div></div>'
             + '<div class="modern-field">'
-            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
+            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject (required)" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
             + '</div>';
         container.appendChild(recipientRow);
 
@@ -1384,6 +1384,51 @@ var MessengerModule = (function(Utils, EventBus) {
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
 
+        // -----------------------------------------------------------------
+        // INLINE VALIDATION — Subject field
+        // Builds the error element, wires the clear-on-input handler, and
+        // exposes show/clear functions used by the submit handler.
+        // -----------------------------------------------------------------
+        var titleField = modernTitle ? modernTitle.closest('.modern-field') : null;
+        var titleError = null;
+
+        if (titleField && modernTitle) {
+            titleError = document.createElement('span');
+            titleError.className = 'modern-field-error';
+            titleError.id = 'modern-title-error';
+            titleError.setAttribute('role', 'alert');
+            titleError.textContent = 'Please enter a subject before sending';
+            titleField.appendChild(titleError);
+
+            modernTitle.addEventListener('input', function() {
+                if (this.value.trim()) clearTitleError();
+            });
+        }
+
+        function showTitleError() {
+            if (!modernTitle || !titleError) return;
+            modernTitle.classList.add('has-error');
+            modernTitle.setAttribute('aria-invalid', 'true');
+            modernTitle.setAttribute('aria-describedby', 'modern-title-error');
+            titleError.classList.add('visible');
+            // Restart the shake animation if it's already running
+            modernTitle.classList.remove('shake');
+            void modernTitle.offsetWidth;
+            modernTitle.classList.add('shake');
+            modernTitle.focus();
+            setTimeout(function() {
+                if (modernTitle) modernTitle.classList.remove('shake');
+            }, 400);
+        }
+
+        function clearTitleError() {
+            if (!modernTitle || !titleError) return;
+            modernTitle.classList.remove('has-error', 'shake');
+            modernTitle.removeAttribute('aria-invalid');
+            modernTitle.removeAttribute('aria-describedby');
+            titleError.classList.remove('visible');
+        }
+
         function syncToOriginal() {
             if (recipientInput && modernRecipient) recipientInput.value = modernRecipient.value;
             if (contactSelect && modernContact) contactSelect.value = modernContact.value;
@@ -1426,8 +1471,17 @@ var MessengerModule = (function(Utils, EventBus) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
-                // Re-assert both checkboxes right before submit — nothing should
-                // be able to uncheck them between build and send.
+
+                // Modern validation — subject is required.
+                // We catch it here so the legacy ValidateForm dialog never fires.
+                var subjectValue = modernTitle ? modernTitle.value.trim() : '';
+                if (!subjectValue) {
+                    showTitleError();
+                    return;
+                }
+                clearTitleError();
+
+                // Re-assert both legacy options, then hand off to the legacy form.
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
                 if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
