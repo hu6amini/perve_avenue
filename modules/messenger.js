@@ -331,7 +331,39 @@ var MessengerModule = (function(Utils, EventBus) {
         return html;
     }
 
-    // No htmlToLegacy – we keep HTML in the textarea
+    // ------------------------------------------------------------------------
+    // HTML → legacy BBCode (outbound only)
+    // Currently converts <blockquote> → [QUOTE][/QUOTE]. Everything else is
+    // passed through as HTML — the forum accepts HTML for the rest of the
+    // formatting. If more tags need BBCode on submit, add rules here.
+    // ------------------------------------------------------------------------
+    function htmlToLegacy(html) {
+        if (!html || typeof html !== 'string') return html;
+
+        var result = html;
+
+        // Convert <blockquote>...</blockquote> → [QUOTE]...[/QUOTE]
+        // Run in a loop to handle nested quotes. The non-greedy match
+        // naturally finds the innermost quote first, so each pass
+        // peels off one level of nesting.
+        var maxIterations = 10;
+        for (var i = 0; i < maxIterations; i++) {
+            var before = result;
+            result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
+                // Strip <p> tags from quote content. Paragraph breaks in
+                // HTML become line breaks in BBCode.
+                var cleaned = inner
+                    .replace(/<p[^>]*>/gi, '')
+                    .replace(/<\/p>\s*/gi, '\n');
+                // Collapse trailing newlines
+                cleaned = cleaned.replace(/\n+$/, '');
+                return '[QUOTE]' + cleaned + '[/QUOTE]';
+            });
+            if (result === before) break;
+        }
+
+        return result;
+    }
 
     // ------------------------------------------------------------------------
     // COMPOSE SECTION – TipTap with custom image, link preview, heading dropdown,
@@ -1149,7 +1181,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                     onUpdate: function({ editor }) {
                         if (originalTextarea) {
-                            originalTextarea.value = editor.getHTML();
+                            originalTextarea.value = htmlToLegacy(editor.getHTML());
                         }
                         var previewContent = document.querySelector('#modern-preview-area .preview-content');
                         if (previewContent && window.twemoji) {
@@ -1484,7 +1516,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 // Re-assert both legacy options, then hand off to the legacy form.
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
-                if (originalTextarea && editor) originalTextarea.value = editor.getHTML();
+                if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
                 if (originalForm && typeof originalForm.submit === 'function') {
                     if (typeof ValidateForm === 'function' && !ValidateForm(1)) return;
                     originalForm.submit();
@@ -1558,13 +1590,13 @@ var MessengerModule = (function(Utils, EventBus) {
             var actionBar = document.createElement('div');
             actionBar.className = 'messages-action-bar';
             actionBar.innerHTML = ''
-    + '<div class="action-group">'
-    + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
-    + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
-    + '</div>'
-    + '<div class="action-group">'
-    + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
-    + '</div>';
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
+                + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
+                + '</div>'
+                + '<div class="action-group">'
+                + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
+                + '</div>';
             container.appendChild(actionBar);
             var folderForm   = folderSelect ? folderSelect.form : null;
             var inboxForm    = document.querySelector('form[name="inbox"]');
