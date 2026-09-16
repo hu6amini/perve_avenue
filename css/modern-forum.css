@@ -2945,6 +2945,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-color);
     font-size: var(--text-sm);
+    border-top-right-radius: var(--radius-lg);
 }
 
 .modern-replying-label {
@@ -3275,6 +3276,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   padding: var(--pad-5);
   border-top: 1px solid var(--border-color);
   background: var(--surface-color);
+  border-bottom-right-radius: var(--radius-lg);
 }
 .modern-btn {
   border: none;
