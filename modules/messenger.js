@@ -381,7 +381,7 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<select id="modern-contact" class="modern-select">' + (contactSelect ? contactSelect.innerHTML : '') + '</select>'
             + '</div></div>'
             + '<div class="modern-field">'
-            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject (required)" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
+            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
             + '</div>';
         container.appendChild(recipientRow);
 
