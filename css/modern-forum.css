@@ -3253,6 +3253,55 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-right: var(--space-micro) solid transparent;
 }
 
+/* ------------------------------------------------------------
+   Quotes in the TipTap editor & preview — labelled blockquote
+   Uses a pseudo-element header so it reads as a quote without
+   any of the structural weight of the rendered .modern-quote.
+   The pseudo header is decorative only — it never survives
+   serialization to [QUOTE]...[/QUOTE].
+   ------------------------------------------------------------ */
+.modern-wysiwyg .ProseMirror blockquote,
+.modern-preview .preview-content blockquote {
+    position: relative;
+    border-left: 3px solid var(--primary-color);
+    background: var(--bg-color);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin: var(--space-sm) 0;
+    padding: 2.25rem var(--pad-5) var(--pad-4);
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.modern-wysiwyg .ProseMirror blockquote::before,
+.modern-preview .preview-content blockquote::before {
+    content: "QUOTE";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: var(--pad-2) var(--pad-4);
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary-light);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    font-style: normal;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-top-right-radius: var(--radius-sm);
+}
+
+/* Tighten paragraph spacing inside the quote */
+.modern-wysiwyg .ProseMirror blockquote p:first-child,
+.modern-preview .preview-content blockquote p:first-child {
+    margin-top: 0;
+}
+
+.modern-wysiwyg .ProseMirror blockquote p:last-child,
+.modern-preview .preview-content blockquote p:last-child {
+    margin-bottom: 0;
+}
+
 .ProseMirror img[src*="twemoji"] {
   display: inline-block;
   user-select: all;
