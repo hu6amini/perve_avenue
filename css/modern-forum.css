@@ -3263,13 +3263,13 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-wysiwyg .ProseMirror blockquote,
 .modern-preview .preview-content blockquote {
     position: relative;
+    border: 1px solid var(--border-color);
     border-left: 3px solid var(--primary-color);
     background: var(--bg-color);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
     margin: var(--space-sm) 0;
-    padding: 2.25rem var(--pad-5) var(--pad-4);
+    padding: 3rem var(--pad-5) var(--pad-5);
     color: var(--text-secondary);
-    font-style: italic;
+    border-radius: var(--radius);
 }
 
 .modern-wysiwyg .ProseMirror blockquote::before,
@@ -3279,7 +3279,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     top: 0;
     left: 0;
     right: 0;
-    padding: var(--pad-2) var(--pad-4);
+    padding: var(--pad-3) var(--pad-5);
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
     color: var(--primary-light);
