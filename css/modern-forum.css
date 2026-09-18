@@ -705,7 +705,7 @@
   overflow: hidden;
   transition: all 0.2s ease;
 }
-.modern-quote:hover { border-color: var(--primary-color); }
+.modern-quote:hover { border-color: var(--warning-color); }
 
 .quote-header {
   display: flex;
