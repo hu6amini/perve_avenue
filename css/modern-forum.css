@@ -3264,7 +3264,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content blockquote {
     position: relative;
     border: 1px solid var(--border-color);
-    border-left: 3px solid var(--primary-color);
+    border-left: 3px solid var(--warning-color);
     background: var(--bg-color);
     margin: var(--space-sm) 0;
     padding: 3.25rem var(--pad-5) var(--pad-5);
