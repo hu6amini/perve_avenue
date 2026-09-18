@@ -699,6 +699,7 @@
 .modern-quote {
   background: var(--bg-color);
   border: 1px solid var(--border-color);
+  border-left: 3px solid var(--warning-color);
   border-radius: var(--radius);
   margin: var(--space-md) 0;
   overflow: hidden;
@@ -726,7 +727,7 @@
 }
 .quote-icon {
   align-items: center;
-  background: var(--primary-color);
+  background: var(--warning-color);
   border-radius: var(--radius-sm);
   display: flex;
   flex-shrink: 0;
