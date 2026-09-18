@@ -3284,7 +3284,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--primary-color);
+    background: var(--warning-color);
     color: #fff;
     border-radius: var(--radius-sm);
     font-family: "Font Awesome 6 Pro";
