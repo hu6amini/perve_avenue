@@ -3266,7 +3266,9 @@ section.modern-stats { flex-direction: column; width: 100%; }
     position: relative;
     border: 1px solid var(--border-color);
     border-left: 3px solid var(--primary-color);
-    background: var(--bg-color);
+    background:
+        linear-gradient(var(--border-color), var(--border-color)) 0 calc(3.25rem - 1px) / 100% 1px no-repeat,
+        var(--bg-color);
     margin: var(--space-sm) 0;
     padding: 3.25rem var(--pad-5) var(--pad-5);
     color: var(--text-secondary);
