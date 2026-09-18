@@ -3267,24 +3267,50 @@ section.modern-stats { flex-direction: column; width: 100%; }
     border-left: 3px solid var(--primary-color);
     background: var(--bg-color);
     margin: var(--space-sm) 0;
-    padding: 3rem var(--pad-5) var(--pad-5);
+    padding: 3.25rem var(--pad-5) var(--pad-5);
     color: var(--text-secondary);
     border-radius: var(--radius);
 }
 
+/* Icon square — same treatment as .quote-icon in the modern post quote */
 .modern-wysiwyg .ProseMirror blockquote::before,
 .modern-preview .preview-content blockquote::before {
-    content: "\f10d  Quote";
-    font-family: "Font Awesome 6 Pro", var(--font-primary);
+    content: "\f10d";
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    padding: var(--pad-3) var(--pad-5);
-    background: var(--bg-color);
-    border-bottom: 1px solid var(--border-color);
+    top: var(--pad-4);
+    left: var(--pad-5);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 0.85rem;
+    font-style: normal;
+    line-height: 1;
+    pointer-events: none;
+}
+
+/* "QUOTE" label — positioned next to the icon square */
+.modern-wysiwyg .ProseMirror blockquote::after,
+.modern-preview .preview-content blockquote::after {
+    content: "Quote";
+    position: absolute;
+    top: var(--pad-4);
+    left: calc(var(--pad-5) + 28px + 0.75rem);
+    height: 28px;
+    display: flex;
+    align-items: center;
     color: var(--primary-light);
-    border-top-right-radius: var(--radius-sm);
+    font-family: var(--font-primary);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 /* Tighten paragraph spacing inside the quote */
@@ -3297,7 +3323,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content blockquote p:last-child {
     margin-bottom: 0;
 }
-
 .ProseMirror img[src*="twemoji"] {
   display: inline-block;
   user-select: all;
