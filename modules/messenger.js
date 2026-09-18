@@ -1084,14 +1084,27 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                const Spoiler = Node.create({
-                    name: 'spoiler',
-                    group: 'block',
-                    content: 'block+',
-                    defining: true,
-                    parseHTML: () => [{ tag: 'div.spoiler' }],
-                    renderHTML: () => ['div', { class: 'spoiler' }, 0],
-                });
+const Spoiler = Node.create({
+    name: 'spoiler',
+    group: 'block',
+    content: 'block+',
+    defining: true,
+    parseHTML: () => [{ tag: 'div.spoiler' }],
+    renderHTML: () => ['div', { class: 'spoiler' }, 0],
+    addCommands() {
+        return {
+            setSpoiler: () => ({ commands }) => {
+                return commands.wrapIn(this.name);
+            },
+            toggleSpoiler: () => ({ commands }) => {
+                return commands.toggleWrap(this.name);
+            },
+            unsetSpoiler: () => ({ commands }) => {
+                return commands.lift(this.name);
+            },
+        };
+    },
+});
 
                 // -------------------------------------------------------------
                 // SEMANTIC COLOR MARK
