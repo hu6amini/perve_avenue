@@ -812,7 +812,7 @@
 }
 .quote-expand-btn:hover { background: var(--hover-color); color: var(--text-primary); }
 .quote-expand-btn i {
-  color: var(--primary-color);
+  color: var(--warning-color);
   margin-right: var(--space-xs);
   transition: transform 0.2s;
 }
