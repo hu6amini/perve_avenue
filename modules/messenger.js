@@ -367,6 +367,18 @@ var MessengerModule = (function(Utils, EventBus) {
             cleaned = cleaned.replace(/\n+$/, '');
             return '[SPOILER]' + cleaned + '[/SPOILER]';
         });
+            // <pre><code>...</code></pre> → [CODE]...[/CODE]
+result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, inner) {
+    // HTML-decode the entities that TipTap escapes for code display,
+    // then re-encode for BBCode (which stores raw characters).
+    var decoded = inner
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    return '[CODE]' + decoded + '[/CODE]';
+});
             if (result === before) break;
         }
 
