@@ -3284,8 +3284,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
     color: var(--primary-light);
-    font-size: var(--text-xs);
-    font-style: normal;
     border-top-right-radius: var(--radius-sm);
 }
 
