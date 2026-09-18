@@ -3229,20 +3229,79 @@ section.modern-stats { flex-direction: column; width: 100%; }
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
-.ProseMirror .spoiler {
-  background: var(--surface-light);
-  padding: var(--space-sm);
-  border-radius: var(--radius);
-  margin: var(--space-sm) 0;
-  border: 1px solid var(--border-color);
+/* ------------------------------------------------------------
+   Spoilers in the TipTap editor & preview — labelled block,
+   visually mirrors the blockquote treatment but uses the
+   warning color to preserve the semantic split (quote vs.
+   spoiler). Icon + label are decorative-only pseudos; neither
+   survives htmlToLegacy() which emits [SPOILER]…[/SPOILER].
+   ------------------------------------------------------------ */
+.modern-wysiwyg .ProseMirror div.spoiler,
+.modern-preview .preview-content div.spoiler {
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--warning-color);
+    background:
+        linear-gradient(var(--border-color), var(--border-color)) 0 calc(2.75rem - 1px) / 100% 1px no-repeat,
+        var(--bg-color);
+    margin: 0 0 var(--space-md) 0;
+    padding: 3.75rem var(--pad-5) var(--pad-5);
+    color: var(--text-secondary);
+    border-radius: var(--radius);
 }
-.ProseMirror .spoiler::before {
-  content: "Spoiler";
-  display: block;
-  font-weight: bold;
-  margin-bottom: var(--space-xs);
-  color: var(--text-tertiary);
+
+/* Icon square — mirrors .spoiler-icon in the rendered post spoiler */
+.modern-wysiwyg .ProseMirror div.spoiler::before,
+.modern-preview .preview-content div.spoiler::before {
+    content: "\f070";
+    position: absolute;
+    top: calc(var(--pad-3) + 2px);
+    left: var(--pad-5);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--warning-color);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 0.85rem;
+    font-style: normal;
+    line-height: 1;
+    pointer-events: none;
 }
+
+/* "Spoiler" label — positioned next to the icon square */
+.modern-wysiwyg .ProseMirror div.spoiler::after,
+.modern-preview .preview-content div.spoiler::after {
+    content: "Spoiler";
+    position: absolute;
+    top: calc(var(--pad-3) + 2px);
+    left: calc(var(--pad-5) + 28px + var(--space-sm));
+    height: 28px;
+    display: flex;
+    align-items: center;
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* Tighten paragraph spacing inside the spoiler */
+.modern-wysiwyg .ProseMirror div.spoiler p:first-child,
+.modern-preview .preview-content div.spoiler p:first-child {
+    margin-top: 0;
+}
+
+.modern-wysiwyg .ProseMirror div.spoiler p:last-child,
+.modern-preview .preview-content div.spoiler p:last-child {
+    margin-bottom: 0;
+}
+
 .ProseMirror img:not(.link-preview-image, .link-preview-favicon, .simple-favicon, img[src*="twemoji"]) {
   height: auto;
   display: inline-block;
