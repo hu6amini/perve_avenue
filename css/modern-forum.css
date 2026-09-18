@@ -3304,7 +3304,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     content: "Quote";
     position: absolute;
     top: calc(var(--pad-3) + 2px);
-    left: calc(var(--pad-5) + 28px + 0.75rem);
+    left: calc(var(--pad-5) + 28px + var(--space-sm));
     height: 28px;
     display: flex;
     align-items: center;
