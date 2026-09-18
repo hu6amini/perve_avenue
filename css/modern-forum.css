@@ -3276,7 +3276,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content blockquote::before {
     content: "\f10d  Quote";
     font-family: "Font Awesome 6 Pro", var(--font-primary);
-    font-weight: 400;
     position: absolute;
     top: 0;
     left: 0;
@@ -3287,8 +3286,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     color: var(--primary-light);
     font-size: var(--text-xs);
     font-style: normal;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
     border-top-right-radius: var(--radius-sm);
 }
 
