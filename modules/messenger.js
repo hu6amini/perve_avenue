@@ -359,6 +359,14 @@ var MessengerModule = (function(Utils, EventBus) {
                 cleaned = cleaned.replace(/\n+$/, '');
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
+                    // <div class="spoiler">...</div> → [SPOILER]...[/SPOILER]
+        result = result.replace(/<div class="spoiler"[^>]*>([\s\S]*?)<\/div>/gi, function(match, inner) {
+            var cleaned = inner
+                .replace(/<p[^>]*>/gi, '')
+                .replace(/<\/p>\s*/gi, '\n');
+            cleaned = cleaned.replace(/\n+$/, '');
+            return '[SPOILER]' + cleaned + '[/SPOILER]';
+        });
             if (result === before) break;
         }
 
