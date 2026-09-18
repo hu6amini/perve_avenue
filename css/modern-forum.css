@@ -3221,13 +3221,88 @@ section.modern-stats { flex-direction: column; width: 100%; }
   padding-left: var(--space-md);
   color: var(--text-secondary);
 }
-.ProseMirror pre {
-  background: var(--bg-color);
-  padding: var(--space-sm);
-  border-radius: var(--radius-sm);
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+/* ------------------------------------------------------------
+   Code blocks in the TipTap editor & preview — labelled block,
+   visually mirrors the blockquote and spoiler treatments but
+   uses the accent color (sky blue) to distinguish technical
+   content from citations (emerald) and hidden content (amber).
+   The header divider, icon, and label are decorative-only and
+   never survive htmlToLegacy(), which emits [CODE]…[/CODE].
+   ------------------------------------------------------------ */
+.modern-wysiwyg .ProseMirror pre,
+.modern-preview .preview-content pre {
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent-color);
+    background:
+        linear-gradient(var(--border-color), var(--border-color)) 0 calc(2.75rem - 1px) / 100% 1px no-repeat,
+        var(--bg-color);
+    margin: 0 0 var(--space-md) 0;
+    padding: 3.75rem var(--pad-5) var(--pad-5);
+    color: var(--text-primary);
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+    overflow: visible; /* keep the header band outside the scroll area */
+}
+
+/* Icon square — mirrors .code-icon in the rendered post code block */
+.modern-wysiwyg .ProseMirror pre::before,
+.modern-preview .preview-content pre::before {
+    content: "\f121";
+    position: absolute;
+    top: calc(var(--pad-3) + 2px);
+    left: var(--pad-5);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-color);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-family: "Font Awesome 6 Pro";
+    font-weight: 400;
+    font-size: 0.85rem;
+    font-style: normal;
+    line-height: 1;
+    pointer-events: none;
+}
+
+/* "Code" label — positioned next to the icon square */
+.modern-wysiwyg .ProseMirror pre::after,
+.modern-preview .preview-content pre::after {
+    content: "Code";
+    position: absolute;
+    top: calc(var(--pad-3) + 2px);
+    left: calc(var(--pad-5) + 28px + var(--space-sm));
+    height: 28px;
+    display: flex;
+    align-items: center;
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* The <code> inside the <pre> becomes the horizontal scroll
+   container so the header band and icon stay pinned while the
+   code scrolls. This is why overflow-x moved off <pre>. */
+.modern-wysiwyg .ProseMirror pre code,
+.modern-preview .preview-content pre code {
+    display: block;
+    overflow-x: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
 }
 /* ------------------------------------------------------------
    Spoilers in the TipTap editor & preview — labelled block,
