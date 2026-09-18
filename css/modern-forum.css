@@ -3280,7 +3280,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content blockquote::before {
     content: "\f10d";
     position: absolute;
-    top: var(--pad-4);
+    top: calc(var(--pad-3) + 2px);
     left: var(--pad-5);
     width: 28px;
     height: 28px;
@@ -3303,7 +3303,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content blockquote::after {
     content: "Quote";
     position: absolute;
-    top: var(--pad-4);
+    top: calc(var(--pad-3) + 2px);
     left: calc(var(--pad-5) + 28px + 0.75rem);
     height: 28px;
     display: flex;
