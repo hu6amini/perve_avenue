@@ -79,14 +79,39 @@ var MessengerModule = (function(Utils, EventBus) {
         return true;
     }
 
+    // ------------------------------------------------------------------------
+    // CONTENT FINGERPRINT
+    // Normalized fingerprint of an HTML string: text content (whitespace
+    // collapsed) plus a count of embedded images. Two HTML strings that
+    // describe the same visible content share a fingerprint even if their
+    // markup differs (TipTap normalizes HTML differently from the raw
+    // legacy→HTML conversion).
+    // ------------------------------------------------------------------------
     function contentFingerprint(html) {
-    if (!html) return '';
-    var d = document.createElement('div');
-    d.innerHTML = html;
-    var text = (d.textContent || '').replace(/\s+/g, ' ').trim();
-    var imgCount = d.querySelectorAll('img').length;
-    return text + '||imgs:' + imgCount;
-}
+        if (!html) return '';
+        var d = document.createElement('div');
+        d.innerHTML = html;
+        var text = (d.textContent || '').replace(/\s+/g, ' ').trim();
+        var imgCount = d.querySelectorAll('img').length;
+        return text + '||imgs:' + imgCount;
+    }
+
+    // ------------------------------------------------------------------------
+    // TRAILING PARAGRAPH GUARANTEE
+    // Ensure the HTML ends with a paragraph so the cursor can land below
+    // block-level content (quotes, spoilers, code blocks, lists, headings).
+    // focus('end') drops the cursor into the last leaf node otherwise.
+    // ------------------------------------------------------------------------
+    function ensureTrailingParagraphInHtml(html) {
+        if (!html || typeof html !== 'string') return html;
+        var d = document.createElement('div');
+        d.innerHTML = html;
+        var last = d.lastElementChild;
+        if (!last) return html;
+        if (last.tagName === 'P') return html;   // already ends with a paragraph
+        d.appendChild(document.createElement('p'));
+        return d.innerHTML;
+    }
 
     // ------------------------------------------------------------------------
     // PUBLIC API
@@ -1881,62 +1906,64 @@ var MessengerModule = (function(Utils, EventBus) {
                 // INITIAL CONTENT
                 // The textarea is populated server-side when the user replies (or
                 // when a message is forwarded) — that content is always fresh and
-                // must win over any stale draft. Only fall back to the draft when
-                // the textarea itself is empty. When both have content, keep the
-                // draft below the textarea content so nothing is silently lost.
+                // must win over any stale draft. A draft is only ever authoritative
+                // when its *content* differs from the pristine textarea content
+                // (i.e. the user actually typed something). Otherwise the two
+                // would describe the same quote in slightly different HTML and
+                // appending both would duplicate it.
                 // -----------------------------------------------------------------
-var draft = loadDraft();
-var modernRecipientEl = container.querySelector('#modern-recipient');
-var modernTitleEl = container.querySelector('#modern-title');
+                var draft = loadDraft();
+                var modernRecipientEl = container.querySelector('#modern-recipient');
+                var modernTitleEl = container.querySelector('#modern-title');
 
-var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
-var textareaHtmlConverted = textareaRaw ? legacyToHtml(textareaRaw) : '';
-var textareaHasContent = textareaRaw.trim().length > 0 &&
-                         !editorContentIsEmpty(textareaHtmlConverted);
-var textareaHtml = textareaHasContent ? textareaHtmlConverted : '';
+                var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
+                var textareaHtmlConverted = textareaRaw ? legacyToHtml(textareaRaw) : '';
+                var textareaHasContent = textareaRaw.trim().length > 0 &&
+                                         !editorContentIsEmpty(textareaHtmlConverted);
+                var textareaHtml = textareaHasContent ? textareaHtmlConverted : '';
 
-var draftHasContent = !!(draft &&
-                         typeof draft.body === 'string' &&
-                         !editorContentIsEmpty(draft.body));
+                var draftHasContent = !!(draft &&
+                                         typeof draft.body === 'string' &&
+                                         !editorContentIsEmpty(draft.body));
 
-// If the stored draft describes exactly the same visible content as
-// the pristine textarea, it carries no user edit — discard it so the
-// quote can't render twice.
-if (draftHasContent && textareaHasContent &&
-    contentFingerprint(draft.body) === contentFingerprint(textareaHtml)) {
-    clearDraft();
-    draft = null;
-    draftHasContent = false;
-}
+                // If the stored draft describes exactly the same visible content as
+                // the pristine textarea, it carries no user edit — discard it so the
+                // quote can't render twice.
+                if (draftHasContent && textareaHasContent &&
+                    contentFingerprint(draft.body) === contentFingerprint(textareaHtml)) {
+                    clearDraft();
+                    draft = null;
+                    draftHasContent = false;
+                }
 
-var initialHtml = '';
-var draftWasUsed = false;
+                var initialHtml = '';
+                var draftWasUsed = false;
 
-if (textareaHasContent && draftHasContent) {
-    // Distinct content on both sides — keep both, textarea first.
-    initialHtml = textareaHtml + '<p></p>' + draft.body;
-    draftWasUsed = true;
-} else if (textareaHasContent) {
-    initialHtml = textareaHtml;
-} else if (draftHasContent) {
-    initialHtml = draft.body;
-    draftWasUsed = true;
-}
+                if (textareaHasContent && draftHasContent) {
+                    // Distinct content on both sides — keep both, textarea first.
+                    initialHtml = textareaHtml + '<p></p>' + draft.body;
+                    draftWasUsed = true;
+                } else if (textareaHasContent) {
+                    initialHtml = textareaHtml;
+                } else if (draftHasContent) {
+                    initialHtml = draft.body;
+                    draftWasUsed = true;
+                }
 
-// Recipient / subject: textarea-derived inputs already hold the
-// server-provided values; the draft only fills in what's empty.
-if (draft) {
-    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
-        modernRecipientEl.value = draft.recipient;
-    }
-    if (draft.subject && modernTitleEl && !modernTitleEl.value.trim()) {
-        modernTitleEl.value = draft.subject;
-    }
-}
+                // Recipient / subject: textarea-derived inputs already hold the
+                // server-provided values; the draft only fills in what's empty.
+                if (draft) {
+                    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
+                        modernRecipientEl.value = draft.recipient;
+                    }
+                    if (draft.subject && modernTitleEl && !modernTitleEl.value.trim()) {
+                        modernTitleEl.value = draft.subject;
+                    }
+                }
 
-                // Only surface "Draft restored" when the draft actually contributed
-                // content — not when a fresh reply simply reused the textarea.
-                var draftWasUsed = !textareaHasContent && draftHasContent;
+                // Guarantee a trailing empty paragraph so `focus('end')` lands
+                // *below* a blockquote / spoiler / code block rather than inside it.
+                initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
                 editor = new Editor({
                     element: editorElement,
@@ -2004,6 +2031,30 @@ if (draft) {
                 });
 
                 // -----------------------------------------------------------------
+                // TRAILING-PARAGRAPH HELPER FOR TOOLBAR INSERTIONS
+                // If the block the caret is inside is the last child of the doc,
+                // append a paragraph after it so the user can arrow/click downward.
+                // Cursor stays where it is — the user still needs to fill the block.
+                // -----------------------------------------------------------------
+                function ensureTrailingParagraphAfterBlock(blockType) {
+                    if (!editor) return;
+                    var state = editor.state;
+                    var $from = state.selection.$from;
+                    for (var d = $from.depth; d > 0; d--) {
+                        var node = $from.node(d);
+                        if (node.type.name === blockType) {
+                            var posAfter = $from.after(d);
+                            if (!state.doc.nodeAt(posAfter)) {
+                                editor.chain()
+                                    .insertContentAt(posAfter, { type: 'paragraph' })
+                                    .run();
+                            }
+                            return;
+                        }
+                    }
+                }
+
+                // -----------------------------------------------------------------
                 // TOOLBAR ACTIONS
                 // -----------------------------------------------------------------
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
@@ -2038,9 +2089,25 @@ if (draft) {
                     exec(function() { editor.chain().focus().toggleOrderedList().run(); });
                     closeDropdown(listDropdownBtn, listDropdownMenu);
                 };
-                blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
-                codeBtn.onclick       = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
-                spoilerBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
+
+                blockquoteBtn.onclick = function() {
+                    if (!editor) return;
+                    var wasActive = editor.isActive('blockquote');
+                    exec(function() { editor.chain().focus().toggleBlockquote().run(); });
+                    if (!wasActive) ensureTrailingParagraphAfterBlock('blockquote');
+                };
+                codeBtn.onclick = function() {
+                    if (!editor) return;
+                    var wasActive = editor.isActive('codeBlock');
+                    exec(function() { editor.chain().focus().toggleCodeBlock().run(); });
+                    if (!wasActive) ensureTrailingParagraphAfterBlock('codeBlock');
+                };
+                spoilerBtn.onclick = function() {
+                    if (!editor) return;
+                    var wasActive = editor.isActive('spoiler');
+                    exec(function() { editor.chain().focus().toggleSpoiler().run(); });
+                    if (!wasActive) ensureTrailingParagraphAfterBlock('spoiler');
+                };
 
                 linkBtn.onclick = function() {
                     if (!editor) return;
@@ -2241,12 +2308,13 @@ if (draft) {
                     if (_saveTimer) clearTimeout(_saveTimer);
                     _saveTimer = setTimeout(function() {
                         _saveTimer = null;
-                        // Don't cache a body that exactly matches the untouched textarea.
-        var currentBody = editor ? editor.getHTML() : '';
-        var pristine = textareaHasContent &&
-                       !editorContentIsEmpty(currentBody) &&
-                       contentFingerprint(currentBody) === contentFingerprint(textareaHtml);
-        if (pristine) return;
+                        // Don't cache a body whose visible content is identical
+                        // to the untouched textarea (i.e. the pristine quote).
+                        var currentBody = editor ? editor.getHTML() : '';
+                        var pristine = textareaHasContent &&
+                                       !editorContentIsEmpty(currentBody) &&
+                                       contentFingerprint(currentBody) === contentFingerprint(textareaHtml);
+                        if (pristine) return;
                         var modernRecipient = container.querySelector('#modern-recipient');
                         var modernTitle = container.querySelector('#modern-title');
                         var ok = saveDraft({
