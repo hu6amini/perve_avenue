@@ -333,52 +333,47 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // HTML → legacy BBCode (outbound only)
-    // Currently converts <blockquote> → [QUOTE][/QUOTE]. Everything else is
-    // passed through as HTML — the forum accepts HTML for the rest of the
-    // formatting. If more tags need BBCode on submit, add rules here.
+    // Converts <blockquote>, <div class="spoiler">, and <pre><code> to their
+    // BBCode equivalents. Runs in a loop so nested blocks resolve correctly.
     // ------------------------------------------------------------------------
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
 
         var result = html;
 
-        // Convert <blockquote>...</blockquote> → [QUOTE]...[/QUOTE]
-        // Run in a loop to handle nested quotes. The non-greedy match
-        // naturally finds the innermost quote first, so each pass
-        // peels off one level of nesting.
         var maxIterations = 10;
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
+
+            // <blockquote>...</blockquote> → [QUOTE]...[/QUOTE]
             result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
-                // Strip <p> tags from quote content. Paragraph breaks in
-                // HTML become line breaks in BBCode.
                 var cleaned = inner
                     .replace(/<p[^>]*>/gi, '')
                     .replace(/<\/p>\s*/gi, '\n');
-                // Collapse trailing newlines
                 cleaned = cleaned.replace(/\n+$/, '');
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
-                    // <div class="spoiler">...</div> → [SPOILER]...[/SPOILER]
-        result = result.replace(/<div class="spoiler"[^>]*>([\s\S]*?)<\/div>/gi, function(match, inner) {
-            var cleaned = inner
-                .replace(/<p[^>]*>/gi, '')
-                .replace(/<\/p>\s*/gi, '\n');
-            cleaned = cleaned.replace(/\n+$/, '');
-            return '[SPOILER]' + cleaned + '[/SPOILER]';
-        });
+
+            // <div class="spoiler">...</div> → [SPOILER]...[/SPOILER]
+            result = result.replace(/<div class="spoiler"[^>]*>([\s\S]*?)<\/div>/gi, function(match, inner) {
+                var cleaned = inner
+                    .replace(/<p[^>]*>/gi, '')
+                    .replace(/<\/p>\s*/gi, '\n');
+                cleaned = cleaned.replace(/\n+$/, '');
+                return '[SPOILER]' + cleaned + '[/SPOILER]';
+            });
+
             // <pre><code>...</code></pre> → [CODE]...[/CODE]
-result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, inner) {
-    // HTML-decode the entities that TipTap escapes for code display,
-    // then re-encode for BBCode (which stores raw characters).
-    var decoded = inner
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'");
-    return '[CODE]' + decoded + '[/CODE]';
-});
+            result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, inner) {
+                var decoded = inner
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&amp;/g, '&')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'");
+                return '[CODE]' + decoded + '[/CODE]';
+            });
+
             if (result === before) break;
         }
 
@@ -522,6 +517,30 @@ result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi
             editor.commands.focus();
         }
 
+        // ========== UNDO / REDO ==========
+        // Meta-actions: they belong before any formatting group. Both
+        // commands are registered by StarterKit's history extension.
+        // Buttons start disabled and are enabled/disabled by
+        // updateActiveStates based on editor.can().undo() / .redo().
+        var undoBtn = document.createElement('button');
+        undoBtn.type = 'button';
+        undoBtn.className = 'modern-editor-btn';
+        undoBtn.innerHTML = '<i class="fa-regular fa-undo"></i>';
+        undoBtn.title = 'Undo';
+        undoBtn.disabled = true;
+        toolbar.appendChild(undoBtn);
+
+        var redoBtn = document.createElement('button');
+        redoBtn.type = 'button';
+        redoBtn.className = 'modern-editor-btn';
+        redoBtn.innerHTML = '<i class="fa-regular fa-redo"></i>';
+        redoBtn.title = 'Redo';
+        redoBtn.disabled = true;
+        toolbar.appendChild(redoBtn);
+
+        addSeparator();
+        // ========== END UNDO / REDO ==========
+
         // ----- Build toolbar UI -----
         var group1 = [
             { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
@@ -540,6 +559,16 @@ result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi
             g.btn = button;
             activeButtonElements.push(button);
         }
+
+        // ---- Clear formatting button (grouped with text marks) ----
+        var clearFormatBtn = document.createElement('button');
+        clearFormatBtn.type = 'button';
+        clearFormatBtn.className = 'modern-editor-btn';
+        clearFormatBtn.innerHTML = '<i class="fa-regular fa-remove-format"></i>';
+        clearFormatBtn.title = 'Clear formatting';
+        toolbar.appendChild(clearFormatBtn);
+        activeButtonElements.push(clearFormatBtn);
+
         addSeparator();
 
         // ========== HEADING DROPDOWN ==========
@@ -1096,27 +1125,27 @@ result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi
                     },
                 });
 
-const Spoiler = Node.create({
-    name: 'spoiler',
-    group: 'block',
-    content: 'block+',
-    defining: true,
-    parseHTML: () => [{ tag: 'div.spoiler' }],
-    renderHTML: () => ['div', { class: 'spoiler' }, 0],
-    addCommands() {
-        return {
-            setSpoiler: () => ({ commands }) => {
-                return commands.wrapIn(this.name);
-            },
-            toggleSpoiler: () => ({ commands }) => {
-                return commands.toggleWrap(this.name);
-            },
-            unsetSpoiler: () => ({ commands }) => {
-                return commands.lift(this.name);
-            },
-        };
-    },
-});
+                const Spoiler = Node.create({
+                    name: 'spoiler',
+                    group: 'block',
+                    content: 'block+',
+                    defining: true,
+                    parseHTML: () => [{ tag: 'div.spoiler' }],
+                    renderHTML: () => ['div', { class: 'spoiler' }, 0],
+                    addCommands() {
+                        return {
+                            setSpoiler: () => ({ commands }) => {
+                                return commands.wrapIn(this.name);
+                            },
+                            toggleSpoiler: () => ({ commands }) => {
+                                return commands.toggleWrap(this.name);
+                            },
+                            unsetSpoiler: () => ({ commands }) => {
+                                return commands.lift(this.name);
+                            },
+                        };
+                    },
+                });
 
                 // -------------------------------------------------------------
                 // SEMANTIC COLOR MARK
@@ -1226,6 +1255,14 @@ const Spoiler = Node.create({
                 // -----------------------------------------------------------------
                 // Assign toolbar actions
                 // -----------------------------------------------------------------
+                undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
+                redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
+                clearFormatBtn.onclick = function() {
+                    exec(function() {
+                        editor.chain().focus().unsetAllMarks().clearNodes().run();
+                    });
+                };
+
                 group1[0].btn.onclick = function() { exec(function() { editor.chain().focus().toggleBold().run(); }); };
                 group1[1].btn.onclick = function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); };
                 group1[2].btn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
@@ -1315,6 +1352,12 @@ const Spoiler = Node.create({
                 spoilerBtn.onclick = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
 
                 function updateActiveStates() {
+                    // Undo/redo availability — TipTap knows whether there's
+                    // anything in the history stack to traverse. Disabling
+                    // the buttons visually communicates that.
+                    undoBtn.disabled = !editor.can().undo();
+                    redoBtn.disabled = !editor.can().redo();
+
                     var isActive = {
                         bold: editor.isActive('bold'),
                         italic: editor.isActive('italic'),
