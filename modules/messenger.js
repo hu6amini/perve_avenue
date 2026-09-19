@@ -1225,26 +1225,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
                 editor = new Editor({
-                    autofocus: (editorInstance) => {
-                        // Only on pointer-based devices. On touch, focusing pops
-                        // the soft keyboard, which pushes content and hides the
-                        // page — do not steal the user's view.
-                        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-                            return false;
-                        }
-
-                        // Don't steal focus if the user has already clicked
-                        // or tabbed into something else on the page (recipient
-                        // field, subject field, a dropdown, etc.).
-                        var active = document.activeElement;
-                        if (active && active !== document.body && active !== document.documentElement) {
-                            return false;
-                        }
-
-                        // Place the cursor at the end of any existing content,
-                        // so a resumed draft continues where the user left off.
-                        return 'end';
-                    },
                     element: editorElement,
                     extensions: [
                         StarterKit,
@@ -1260,6 +1240,26 @@ var MessengerModule = (function(Utils, EventBus) {
                     editorProps: {
                         attributes: { class: 'modern-wysiwyg-content' },
                         plugins: [linkPreviewPlugin],
+                    },
+                    onCreate: function({ editor }) {
+                        // Conditional auto-focus. We do this here rather than
+                        // via the `autofocus` option because that option only
+                        // accepts static values in TipTap 2.x — a function
+                        // gets misinterpreted as a focus position and crashes
+                        // with "Position NaN out of range".
+                        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+                            // Touch device — don't pop the soft keyboard.
+                            return;
+                        }
+
+                        var active = document.activeElement;
+                        if (active && active !== document.body && active !== document.documentElement) {
+                            // User has already clicked or tabbed into
+                            // something else (recipient, subject, etc.).
+                            return;
+                        }
+
+                        editor.commands.focus('end');
                     },
                     onUpdate: function({ editor }) {
                         if (originalTextarea) {
