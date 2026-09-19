@@ -1,7 +1,7 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
 // Includes custom emoji picker with Twemoji images, semantic color palette,
-// mention autocomplete, recipient autocomplete, draft persistence, image paste,
-// plain-text paste, toast notifications, and link preview skeleton.
+// mention autocomplete, recipient autocomplete, image paste, plain-text paste,
+// toast notifications, and link preview skeleton.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -11,8 +11,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // Configurable limits — set MAX_MESSAGE_LENGTH to 0 to disable the counter.
     var MAX_MESSAGE_LENGTH = 0;
-    var DRAFT_KEY = 'messenger-draft-v1';
-    var DRAFT_SAVE_DEBOUNCE = 500;
     var OG_FETCH_TIMEOUT = 8000;
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
     var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
@@ -79,19 +77,11 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTENT FINGERPRINT
-    // ------------------------------------------------------------------------
-    function contentFingerprint(html) {
-        if (!html) return '';
-        var d = document.createElement('div');
-        d.innerHTML = html;
-        var text = (d.textContent || '').replace(/\s+/g, ' ').trim();
-        var imgCount = d.querySelectorAll('img').length;
-        return text + '||imgs:' + imgCount;
-    }
-
-    // ------------------------------------------------------------------------
     // TRAILING PARAGRAPH GUARANTEE (initial content only)
+    // Applied to the initial HTML so that a pre-existing block at the end of
+    // the document doesn't trap the caret inside it. Not applied after toolbar
+    // insertions — when the user clicks the quote/code/spoiler button, they
+    // want to keep typing inside the new block.
     // ------------------------------------------------------------------------
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -303,28 +293,6 @@ var MessengerModule = (function(Utils, EventBus) {
             toast.style.transform = 'translateY(8px)';
             setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 250);
         }, duration);
-    }
-
-    // ------------------------------------------------------------------------
-    // DRAFT PERSISTENCE
-    // ------------------------------------------------------------------------
-    function loadDraft() {
-        try {
-            var raw = localStorage.getItem(DRAFT_KEY);
-            if (!raw) return null;
-            return JSON.parse(raw);
-        } catch (e) { return null; }
-    }
-
-    function saveDraft(data) {
-        try {
-            localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
-            return true;
-        } catch (e) { return false; }
-    }
-
-    function clearDraft() {
-        try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
     }
 
     // ------------------------------------------------------------------------
@@ -914,21 +882,6 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.id = 'tiptap-editor';
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
-
-        // Draft status indicator (shown briefly after each save)
-        var draftStatus = document.createElement('div');
-        draftStatus.className = 'messenger-draft-status';
-        draftStatus.setAttribute('aria-live', 'polite');
-        draftStatus.style.cssText = 'padding:0 var(--pad-6) var(--pad-3);font-size:var(--text-xs);color:var(--text-tertiary);text-align:right;opacity:0;transition:opacity .3s ease;';
-        container.appendChild(draftStatus);
-
-        var draftStatusTimer = null;
-        function flashDraftStatus(text) {
-            draftStatus.innerHTML = '<i class="fa-regular fa-circle-check" aria-hidden="true" style="color:var(--primary-light);"></i> ' + escapeHtml(text);
-            draftStatus.style.opacity = '1';
-            if (draftStatusTimer) clearTimeout(draftStatusTimer);
-            draftStatusTimer = setTimeout(function() { draftStatus.style.opacity = '0'; }, 1800);
-        }
 
         var editor = null;
 
@@ -1929,54 +1882,14 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 // -----------------------------------------------------------------
                 // INITIAL CONTENT
+                // We rely entirely on the legacy textarea for persistence — it
+                // already has onchange/onclick/onkeyup/onselect handlers that
+                // cache the current value. On load we just read whatever the
+                // server put in there (quote for a reply, empty for fresh
+                // compose) and use it as the editor's initial content.
                 // -----------------------------------------------------------------
-                var draft = loadDraft();
-                var modernRecipientEl = container.querySelector('#modern-recipient');
-                var modernTitleEl = container.querySelector('#modern-title');
-
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
-                var textareaHtmlConverted = textareaRaw ? legacyToHtml(textareaRaw) : '';
-                var textareaHasContent = textareaRaw.trim().length > 0 &&
-                                         !editorContentIsEmpty(textareaHtmlConverted);
-                var textareaHtml = textareaHasContent ? textareaHtmlConverted : '';
-
-                var draftHasContent = !!(draft &&
-                                         typeof draft.body === 'string' &&
-                                         !editorContentIsEmpty(draft.body));
-
-                if (draftHasContent && textareaHasContent &&
-                    contentFingerprint(draft.body) === contentFingerprint(textareaHtml)) {
-                    clearDraft();
-                    draft = null;
-                    draftHasContent = false;
-                }
-
-                var initialHtml = '';
-                var draftWasUsed = false;
-
-                if (textareaHasContent && draftHasContent) {
-                    initialHtml = textareaHtml + '<p></p>' + draft.body;
-                    draftWasUsed = true;
-                } else if (textareaHasContent) {
-                    initialHtml = textareaHtml;
-                } else if (draftHasContent) {
-                    initialHtml = draft.body;
-                    draftWasUsed = true;
-                }
-
-                if (draft) {
-                    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
-                        modernRecipientEl.value = draft.recipient;
-                    }
-                    if (draft.subject && modernTitleEl && !modernTitleEl.value.trim()) {
-                        modernTitleEl.value = draft.subject;
-                    }
-                }
-
-                // Only apply the trailing-paragraph guarantee when the initial
-                // content came from the server (existing quote) or from a
-                // restored draft. Toolbar-inserted blocks are handled directly
-                // by their handlers and deliberately leave the caret inside.
+                var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
                 editor = new Editor({
@@ -2036,7 +1949,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         if (previewContent && window.twemoji) {
                             window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
                         }
-                        scheduleDraftSave();
                         updateSendState();
                         updateCharCounter();
                     }
@@ -2270,30 +2182,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 };
 
                 // -----------------------------------------------------------------
-                // DRAFT AUTOSAVE + SEND STATE + CHAR COUNTER
+                // SEND STATE + CHAR COUNTER
                 // -----------------------------------------------------------------
-                var _saveTimer = null;
-                function scheduleDraftSave() {
-                    if (_saveTimer) clearTimeout(_saveTimer);
-                    _saveTimer = setTimeout(function() {
-                        _saveTimer = null;
-                        var currentBody = editor ? editor.getHTML() : '';
-                        var pristine = textareaHasContent &&
-                                       !editorContentIsEmpty(currentBody) &&
-                                       contentFingerprint(currentBody) === contentFingerprint(textareaHtml);
-                        if (pristine) return;
-                        var modernRecipient = container.querySelector('#modern-recipient');
-                        var modernTitle = container.querySelector('#modern-title');
-                        var ok = saveDraft({
-                            recipient: modernRecipient ? modernRecipient.value : '',
-                            subject: modernTitle ? modernTitle.value : '',
-                            body: currentBody,
-                            savedAt: Date.now()
-                        });
-                        if (ok) flashDraftStatus('Draft saved');
-                    }, DRAFT_SAVE_DEBOUNCE);
-                }
-
                 var modernSubmitBtnRef = container.querySelector('#modern-submit');
                 function updateSendState() {
                     if (!modernSubmitBtnRef) return;
@@ -2341,13 +2231,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 });
 
-                container._updateSendState = updateSendState;
-                container._scheduleDraftSave = scheduleDraftSave;
-                container._flashDraftStatus = flashDraftStatus;
-
                 updateSendState();
                 updateCharCounter();
-                if (draftWasUsed) flashDraftStatus('Draft restored');
 
             } catch (err) {
                 console.error('[MessengerModule] TipTap failed to load:', err);
@@ -2490,8 +2375,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var originalLabel = modernSubmitBtn.innerHTML;
                 modernSubmitBtn.disabled = true;
                 modernSubmitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Sending…';
-
-                clearDraft();
 
                 try {
                     if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
@@ -2779,5 +2662,4 @@ var MessengerModule = (function(Utils, EventBus) {
         initialize: initialize,
         reset: reset
     };
-})(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
-   typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus);
+})(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumEventBus);
