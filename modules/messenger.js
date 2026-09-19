@@ -1,12 +1,20 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
 // Includes custom emoji picker with Twemoji images (grouped), semantic color
-// palette, and mention autocomplete.
+// palette, mention autocomplete, recipient autocomplete, draft persistence,
+// image paste, plain-text paste, toast notifications, and link preview skeleton.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
     var isInitialized = false;
     var observerCallbacks = [];
     var _originalEmoticon = null;
+
+    // Configurable limits — set MAX_MESSAGE_LENGTH to 0 to disable the counter.
+    var MAX_MESSAGE_LENGTH = 0;
+    var DRAFT_KEY = 'messenger-draft-v1';
+    var DRAFT_SAVE_DEBOUNCE = 500;
+    var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
+    var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
 
     var currentUrl = window.location.href;
     var currentSection = 'compose';
@@ -18,8 +26,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // SHARED AVATAR COLOR PALETTE
-    // Mirrors ForumPostsModule so the same user gets the same initial-avatar
-    // colour across posts, the messenger header, and the mention dropdown.
     // ------------------------------------------------------------------------
     var AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
@@ -44,10 +50,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // HTML ENTITY DECODER
-    // The forum stores/returns usernames HTML-encoded (e.g. "Mormont&trade;"
-    // instead of "Mormont™"). textContent and setAttribute do NOT decode
-    // entities, so an encoded name would render literally. Decode once at
-    // every read point and keep the decoded form thereafter.
     // ------------------------------------------------------------------------
     function decodeHtmlEntities(str) {
         if (!str || typeof str !== 'string') return str;
@@ -180,8 +182,108 @@ var MessengerModule = (function(Utils, EventBus) {
         } catch(e) { return dateStr; }
     }
 
+    function debounce(fn, delay) {
+        var t = null;
+        return function() {
+            var args = arguments, ctx = this;
+            if (t) clearTimeout(t);
+            t = setTimeout(function() { t = null; fn.apply(ctx, args); }, delay);
+        };
+    }
+
     // ------------------------------------------------------------------------
-    // CURRENT USER RESOLUTION (module-level, reusable by posts editor later)
+    // TOAST NOTIFICATIONS
+    // ------------------------------------------------------------------------
+    function ensureToastContainer() {
+        var c = document.getElementById('messenger-toasts');
+        if (!c) {
+            c = document.createElement('div');
+            c.id = 'messenger-toasts';
+            c.setAttribute('aria-live', 'polite');
+            c.setAttribute('aria-atomic', 'true');
+            c.style.cssText = 'position:fixed;bottom:var(--space-lg);right:var(--space-lg);z-index:100000;display:flex;flex-direction:column;gap:var(--space-xs);pointer-events:none;';
+            document.body.appendChild(c);
+        }
+        return c;
+    }
+
+    function showToast(message, opts) {
+        opts = opts || {};
+        var type = opts.type || 'info';
+        var duration = opts.duration || 3000;
+
+        var bg = 'var(--surface-color)';
+        var fg = 'var(--text-primary)';
+        var icon = 'fa-regular fa-circle-info';
+        var borderColor = 'var(--border-color)';
+
+        if (type === 'success') {
+            icon = 'fa-regular fa-circle-check';
+            borderColor = 'var(--success-color)';
+        } else if (type === 'error') {
+            icon = 'fa-regular fa-circle-exclamation';
+            borderColor = 'var(--danger-color)';
+        } else if (type === 'warning') {
+            icon = 'fa-regular fa-triangle-exclamation';
+            borderColor = 'var(--warning-color)';
+        }
+
+        var toast = document.createElement('div');
+        toast.setAttribute('role', 'status');
+        toast.style.cssText =
+            'display:flex;align-items:center;gap:var(--space-sm);' +
+            'padding:var(--pad-3) var(--pad-5);' +
+            'background:' + bg + ';color:' + fg + ';' +
+            'border:1px solid ' + borderColor + ';border-left-width:3px;' +
+            'border-radius:var(--radius);' +
+            'box-shadow:var(--shadow-lg);' +
+            'font-family:var(--font-primary);font-size:var(--text-sm);' +
+            'max-width:360px;pointer-events:auto;' +
+            'opacity:0;transform:translateY(8px);' +
+            'transition:opacity .2s ease,transform .2s ease;';
+        toast.innerHTML =
+            '<i class="' + icon + '" aria-hidden="true" style="color:' + borderColor + ';"></i>' +
+            '<span style="flex:1;">' + escapeHtml(message) + '</span>';
+
+        var container = ensureToastContainer();
+        container.appendChild(toast);
+
+        requestAnimationFrame(function() {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        });
+
+        setTimeout(function() {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(8px)';
+            setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 250);
+        }, duration);
+    }
+
+    // ------------------------------------------------------------------------
+    // DRAFT PERSISTENCE
+    // ------------------------------------------------------------------------
+    function loadDraft() {
+        try {
+            var raw = localStorage.getItem(DRAFT_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) { return null; }
+    }
+
+    function saveDraft(data) {
+        try {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function clearDraft() {
+        try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    }
+
+    // ------------------------------------------------------------------------
+    // CURRENT USER RESOLUTION
     // ------------------------------------------------------------------------
     var _currentUserCache = null;
 
@@ -270,13 +372,13 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     function shouldUseInitialAvatar(avatarUrl) {
-    if (!avatarUrl || typeof avatarUrl !== 'string') return true;
-    var lower = avatarUrl.toLowerCase();
-    if (lower.indexOf('img.forumfree.net') !== -1) return true;
-    if (lower.indexOf('style_images/default_avatar.png') !== -1) return true;
-    if (lower.indexOf('default_avatar') !== -1) return true;
-    return false;
-}
+        if (!avatarUrl || typeof avatarUrl !== 'string') return true;
+        var lower = avatarUrl.toLowerCase();
+        if (lower.indexOf('img.forumfree.net') !== -1) return true;
+        if (lower.indexOf('style_images/default_avatar.png') !== -1) return true;
+        if (lower.indexOf('default_avatar') !== -1) return true;
+        return false;
+    }
 
     function buildReplyingAsHeader(user) {
         if (!user) return null;
@@ -297,7 +399,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 'width="36" height="36" loading="lazy" decoding="async">';
         } else {
             var initial = (username.charAt(0) || '?').toUpperCase();
-            // Consistent colour, same palette + hash as the Posts module.
             var bgColor = getColorFromNickname(username, mid);
             avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
                 'style="background-color:#' + bgColor + ';">' +
@@ -315,9 +416,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MENTION SEARCH (module-level, so it can be reused by the posts editor)
-    // Calls the same endpoint the legacy mention picker uses.
-    // Response shape: { users: [{ name, id, avatar }, ...] }
+    // MENTION SEARCH
     // ------------------------------------------------------------------------
     var _mentionSearchAbort = null;
 
@@ -341,9 +440,6 @@ var MessengerModule = (function(Utils, EventBus) {
         })
         .then(function (data) {
             var users = (data && Array.isArray(data.users)) ? data.users : [];
-            // The API returns names HTML-encoded (e.g. "Mormont&trade;") —
-            // decode once here so the editor, suggestion list, and stored
-            // <mark data-username> all carry the human-readable form.
             return users.slice(0, 8).map(function (u) {
                 if (u && typeof u.name === 'string') {
                     u = Object.assign({}, u, { name: decodeHtmlEntities(u.name) });
@@ -359,19 +455,171 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // RECIPIENT AUTOCOMPLETE
+    // Shares styling with the mention suggestion dropdown.
+    // ------------------------------------------------------------------------
+    function attachRecipientAutocomplete(inputEl) {
+        if (!inputEl) return;
+
+        var popup = null;
+        var items = [];
+        var selectedIndex = 0;
+        var itemEls = [];
+        var debounceTimer = null;
+        var lastQuery = '';
+        var blurCloseTimer = null;
+
+        function closePopup() {
+            if (popup) { popup.remove(); popup = null; }
+            items = []; itemEls = []; selectedIndex = 0;
+        }
+
+        function updateSelected() {
+            itemEls.forEach(function(el, i) {
+                el.classList.toggle('is-selected', i === selectedIndex);
+            });
+        }
+
+        function makeInitial(name, id) {
+            var span = document.createElement('span');
+            span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
+            span.style.backgroundColor = '#' + getColorFromNickname(name, id);
+            span.textContent = (name || '?').charAt(0).toUpperCase();
+            return span;
+        }
+
+        function buildPopup(users) {
+            if (!popup) return;
+            popup.innerHTML = '';
+            itemEls = [];
+            items = users;
+
+            if (users.length === 0) {
+                var empty = document.createElement('div');
+                empty.style.cssText = 'padding:var(--pad-2) var(--pad-3);color:var(--text-tertiary);font-size:var(--text-xs);font-style:italic;';
+                empty.textContent = 'No users found';
+                popup.appendChild(empty);
+                popup.style.display = 'block';
+                return;
+            }
+
+            users.forEach(function(user) {
+                var el = document.createElement('button');
+                el.type = 'button';
+                el.className = 'mention-suggestion-item';
+                el.setAttribute('role', 'option');
+
+                var rawAvatar = user.avatar;
+                var avatarUrl = (rawAvatar && !shouldUseInitialAvatar(rawAvatar))
+                    ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
+                    : null;
+
+                if (avatarUrl) {
+                    var img = document.createElement('img');
+                    img.className = 'mention-suggestion-avatar';
+                    img.src = avatarUrl; img.alt = ''; img.width = 28; img.height = 28; img.loading = 'lazy';
+                    img.onerror = function() { this.replaceWith(makeInitial(user.name, user.id)); };
+                    img.onload = function() {
+                        if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
+                            this.replaceWith(makeInitial(user.name, user.id));
+                        }
+                    };
+                    el.appendChild(img);
+                } else {
+                    el.appendChild(makeInitial(user.name, user.id));
+                }
+
+                var name = document.createElement('span');
+                name.className = 'mention-suggestion-name';
+                name.textContent = decodeHtmlEntities(user.name || '');
+                el.appendChild(name);
+
+                el.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    inputEl.value = decodeHtmlEntities(user.name || '');
+                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    closePopup();
+                });
+
+                itemEls.push(el);
+                popup.appendChild(el);
+            });
+
+            popup.style.display = 'block';
+            updateSelected();
+        }
+
+        function positionPopup() {
+            if (!popup) return;
+            var rect = inputEl.getBoundingClientRect();
+            popup.style.left = (rect.left + window.pageXOffset) + 'px';
+            popup.style.top = (rect.bottom + window.pageYOffset + 4) + 'px';
+            popup.style.minWidth = rect.width + 'px';
+        }
+
+        inputEl.addEventListener('input', function() {
+            var query = inputEl.value.trim();
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (!query) { closePopup(); return; }
+            if (query === lastQuery) return;
+            lastQuery = query;
+            debounceTimer = setTimeout(function() {
+                searchMentions(query).then(function(users) {
+                    if (inputEl.value.trim() !== query) return;
+                    if (!popup) {
+                        popup = document.createElement('div');
+                        popup.className = 'mention-suggestions';
+                        popup.setAttribute('role', 'listbox');
+                        document.body.appendChild(popup);
+                    }
+                    buildPopup(users);
+                    positionPopup();
+                });
+            }, 180);
+        });
+
+        inputEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') { closePopup(); return; }
+            if (!popup || popup.style.display === 'none' || items.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedIndex = (selectedIndex + 1) % items.length;
+                updateSelected();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                updateSelected();
+            } else if (e.key === 'Enter') {
+                var user = items[selectedIndex];
+                if (user) {
+                    e.preventDefault();
+                    inputEl.value = decodeHtmlEntities(user.name || '');
+                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    closePopup();
+                }
+            }
+        });
+
+        inputEl.addEventListener('focus', function() {
+            if (blurCloseTimer) { clearTimeout(blurCloseTimer); blurCloseTimer = null; }
+        });
+
+        inputEl.addEventListener('blur', function() {
+            blurCloseTimer = setTimeout(closePopup, 150);
+        });
+    }
+
+    // ------------------------------------------------------------------------
     // SEMANTIC COLOR PALETTE
-    // Maps legacy [color=X] values to semantic classes. Unknown colors are
-    // stripped (safer than carrying an unreadable inline style forward).
     // ------------------------------------------------------------------------
     var LEGACY_COLOR_MAP = {
-        // Named colors
         green: 'primary', darkgreen: 'primary', limegreen: 'primary',
         blue: 'info', darkblue: 'info', navy: 'info', dodgerblue: 'info', cyan: 'info', teal: 'info',
         purple: 'accent', violet: 'accent', magenta: 'accent', fuchsia: 'accent',
         orange: 'warning', gold: 'warning', yellow: 'warning', darkorange: 'warning',
         red: 'danger', darkred: 'danger', crimson: 'danger',
         gray: 'muted', grey: 'muted', silver: 'muted',
-        // Hex (lowercased)
         '#008000': 'primary', '#10b981': 'primary', '#059669': 'primary',
         '#0000ff': 'info', '#3b82f6': 'info', '#0ea5e9': 'info', '#0369a1': 'info',
         '#800080': 'accent', '#7c3aed': 'accent', '#6d28d9': 'accent',
@@ -383,17 +631,14 @@ var MessengerModule = (function(Utils, EventBus) {
     function normalizeLegacyColor(raw) {
         if (!raw) return null;
         var key = String(raw).trim().toLowerCase();
-
-        // Expand #abc → #aabbcc shorthand
         if (/^#[0-9a-f]{3}$/i.test(key)) {
             key = '#' + key[1] + key[1] + key[2] + key[2] + key[3] + key[3];
         }
-
         return LEGACY_COLOR_MAP[key] || null;
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML) – keep for loading existing messages
+    // CONVERTERS (Legacy BBCode ↔ HTML)
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -411,11 +656,8 @@ var MessengerModule = (function(Utils, EventBus) {
         html = html.replace(/\[code\](.*?)\[\/code\]/gis, '<pre><code>$1</code></pre>');
         html = html.replace(/\[spoiler\](.*?)\[\/spoiler\]/gis, '<div class="spoiler">$1</div>');
         html = html.replace(/\[CENTER\](.*?)\[\/CENTER\]/gis, '<div style="text-align:center">$1</div>');
-
-        // Font: strip entirely (legacy font families are inconsistent and don't theme well)
         html = html.replace(/\[font=([^\]]+)\](.*?)\[\/font\]/gis, '$2');
 
-        // Size: clamp to a safe range (10–30px)
         html = html.replace(/\[size=([^\]]+)\](.*?)\[\/size\]/gis, function(_, sz, content) {
             var n = parseInt(sz, 10);
             if (isNaN(n)) n = 14;
@@ -423,7 +665,6 @@ var MessengerModule = (function(Utils, EventBus) {
             return '<span style="font-size:' + n + 'px">' + content + '</span>';
         });
 
-        // Color: map to semantic classes, strip unknowns
         html = html.replace(/\[color=([^\]]+)\](.*?)\[\/color\]/gis, function(_, color, content) {
             var variant = normalizeLegacyColor(color);
             return variant
@@ -435,33 +676,21 @@ var MessengerModule = (function(Utils, EventBus) {
         return html;
     }
 
-    // ------------------------------------------------------------------------
-    // HTML → legacy BBCode (outbound only)
-    // Converts <blockquote>, <div class="spoiler">, and <pre><code> to their
-    // BBCode equivalents. Mentions (<mark data-uid>) are passed through
-    // unchanged — ForumFree stores them verbatim.
-    // ------------------------------------------------------------------------
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
-
         var result = html;
-
         var maxIterations = 10;
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
 
             result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
-                var cleaned = inner
-                    .replace(/<p[^>]*>/gi, '')
-                    .replace(/<\/p>\s*/gi, '\n');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
             result = result.replace(/<div class="spoiler"[^>]*>([\s\S]*?)<\/div>/gi, function(match, inner) {
-                var cleaned = inner
-                    .replace(/<p[^>]*>/gi, '')
-                    .replace(/<\/p>\s*/gi, '\n');
+                var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
                 return '[SPOILER]' + cleaned + '[/SPOILER]';
             });
@@ -478,8 +707,63 @@ var MessengerModule = (function(Utils, EventBus) {
 
             if (result === before) break;
         }
-
         return result;
+    }
+
+    // ------------------------------------------------------------------------
+    // EMOJI PICKER DATA
+    // ------------------------------------------------------------------------
+    var EMOJI_GROUPS = [
+        { name: 'Smileys & Emotion', emojis: [
+            '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','🤩','😘','🥲','😏','😋','😛','😜','🤪','😝','🤗','🤭','🤫','🤔','🤤','🥳','😎','🤓','🧐','🙃','🤐','🤨','😒','🙄','😬','😌','😔','😪','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😵','🤯','😕','😟','🙁','😮','😲','😳','🥺','😨','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👻','👽','🤖'
+        ]},
+        { name: 'Gestures & People', emojis: [
+            '👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🙏','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅','👄'
+        ]},
+        { name: 'Hearts & Symbols', emojis: [
+            '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚕️','♻️','⚜️','🔱','📛','🔰','⭕','✅','☑️','✔️','❌','❎','➕','➖','➗','✖️'
+        ]},
+        { name: 'Animals & Nature', emojis: [
+            '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔'
+        ]},
+        { name: 'Food & Objects', emojis: [
+            '🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','🫖','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾'
+        ]},
+        { name: 'Activities & Travel', emojis: [
+            '⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🪃','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','⛹️','🤺','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🪗','🎸','🪕','🎻','🎲','♟️','🎯','🎳','🎮','🎰','🧩'
+        ]}
+    ];
+
+    var EMOJI_RECENTS_KEY = 'messenger-emoji-recents-v1';
+    var EMOJI_RECENTS_MAX = 16;
+
+    function loadEmojiRecents() {
+        try {
+            var raw = localStorage.getItem(EMOJI_RECENTS_KEY);
+            if (!raw) return [];
+            var arr = JSON.parse(raw);
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+
+    function saveEmojiRecents(arr) {
+        try { localStorage.setItem(EMOJI_RECENTS_KEY, JSON.stringify(arr.slice(0, EMOJI_RECENTS_MAX))); } catch (e) {}
+    }
+
+    function pushEmojiRecent(emoji) {
+        var recents = loadEmojiRecents();
+        var idx = recents.indexOf(emoji);
+        if (idx !== -1) recents.splice(idx, 1);
+        recents.unshift(emoji);
+        saveEmojiRecents(recents);
+    }
+
+    function emojiToCodePoint(emoji) {
+        var codePoints = Array.from(emoji).map(function(ch) {
+            return ch.codePointAt(0).toString(16);
+        });
+        codePoints = codePoints.filter(function(cp) { return cp !== 'fe0f'; });
+        return codePoints.join('-');
     }
 
     // ------------------------------------------------------------------------
@@ -490,19 +774,17 @@ var MessengerModule = (function(Utils, EventBus) {
         var contactSelect    = document.querySelector('select[name="from_contact"]');
         var titleInput       = document.querySelector('input[name="msg_title"]');
         var originalTextarea = document.getElementById('Post');
-        
+
         if (!originalTextarea) {
             console.warn('[MessengerModule] Compose textarea (#Post) not found – skipping editor');
             return document.createElement('div');
         }
-        
+
         var addSentCheckbox     = document.getElementById('add_sent');
         var addTrackingCheckbox = document.getElementById('add_tracking');
         var submitButton  = document.querySelector('input[name="sub_mit"]');
-        var previewButton = document.querySelector('button[name="preview"]');
         var originalForm  = window.REPLIER;
 
-        // Force both legacy options on.
         if (addSentCheckbox) addSentCheckbox.checked = true;
         if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
 
@@ -520,20 +802,22 @@ var MessengerModule = (function(Utils, EventBus) {
         recipientRow.innerHTML = ''
             + '<div class="modern-field">'
             + '<div class="modern-recipient-controls">'
-            + '<input type="text" id="modern-recipient" class="modern-input" placeholder="Recipient" value="' + escapeHtml(recipientInput ? recipientInput.value : '') + '">'
-            + '<select id="modern-contact" class="modern-select">' + (contactSelect ? contactSelect.innerHTML : '') + '</select>'
+            + '<input type="text" id="modern-recipient" class="modern-input" placeholder="Recipient" autocomplete="off" spellcheck="false" aria-label="Recipient" value="' + escapeHtml(recipientInput ? recipientInput.value : '') + '">'
+            + '<select id="modern-contact" class="modern-select" aria-label="Pick from contacts">' + (contactSelect ? contactSelect.innerHTML : '') + '</select>'
             + '</div></div>'
             + '<div class="modern-field">'
-            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
+            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" aria-label="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
             + '</div>';
         container.appendChild(recipientRow);
 
         // Toolbar
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
+        toolbar.setAttribute('role', 'toolbar');
+        toolbar.setAttribute('aria-label', 'Formatting');
         container.appendChild(toolbar);
 
-        // Replying-as header — sync-render immediately, refine async.
+        // Replying-as header — sync-render, refine async.
         var syncUser = getCurrentUserSync();
         var currentHeader = null;
         if (syncUser) {
@@ -595,12 +879,27 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
 
+        // Draft status indicator (shown briefly after each save)
+        var draftStatus = document.createElement('div');
+        draftStatus.className = 'messenger-draft-status';
+        draftStatus.setAttribute('aria-live', 'polite');
+        draftStatus.style.cssText = 'padding:0 var(--pad-6) var(--pad-3);font-size:var(--text-xs);color:var(--text-tertiary);text-align:right;opacity:0;transition:opacity .3s ease;';
+        container.appendChild(draftStatus);
+
+        var draftStatusTimer = null;
+        function flashDraftStatus(text) {
+            draftStatus.innerHTML = '<i class="fa-regular fa-circle-check" aria-hidden="true" style="color:var(--primary-light);"></i> ' + escapeHtml(text);
+            draftStatus.style.opacity = '1';
+            if (draftStatusTimer) clearTimeout(draftStatusTimer);
+            draftStatusTimer = setTimeout(function() { draftStatus.style.opacity = '0'; }, 1800);
+        }
+
         var editor = null;
-        var activeButtonElements = [];
 
         function addSeparator() {
             var sep = document.createElement('span');
             sep.className = 'toolbar-separator';
+            sep.setAttribute('aria-hidden', 'true');
             sep.style.cssText = 'width:1px;height:1.5rem;background:var(--border-color);margin:0 var(--space-sm);display:inline-block;vertical-align:middle;';
             toolbar.appendChild(sep);
         }
@@ -611,44 +910,31 @@ var MessengerModule = (function(Utils, EventBus) {
             editor.commands.focus();
         }
 
-        // ========== UNDO / REDO ==========
-        var undoBtn = document.createElement('button');
-        undoBtn.type = 'button';
-        undoBtn.className = 'modern-editor-btn';
-        undoBtn.innerHTML = '<i class="fa-regular fa-undo"></i>';
-        undoBtn.title = 'Undo';
-        undoBtn.disabled = true;
-        toolbar.appendChild(undoBtn);
-
-        var redoBtn = document.createElement('button');
-        redoBtn.type = 'button';
-        redoBtn.className = 'modern-editor-btn';
-        redoBtn.innerHTML = '<i class="fa-regular fa-redo"></i>';
-        redoBtn.title = 'Redo';
-        redoBtn.disabled = true;
-        toolbar.appendChild(redoBtn);
-
-        addSeparator();
-        // ========== END UNDO / REDO ==========
-
-        // ----- Build toolbar UI -----
-        var group1 = [
-            { title: 'Bold',           icon: 'fa-regular fa-bold',          btn: null },
-            { title: 'Italic',         icon: 'fa-regular fa-italic',        btn: null },
-            { title: 'Underline',      icon: 'fa-regular fa-underline',     btn: null },
-            { title: 'Strikethrough',  icon: 'fa-regular fa-strikethrough', btn: null }
-        ];
-        for (var i = 0; i < group1.length; i++) {
-            var g = group1[i];
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'modern-editor-btn';
-            button.innerHTML = '<i class="' + g.icon + '"></i>';
-            button.title = g.title;
-            toolbar.appendChild(button);
-            g.btn = button;
-            activeButtonElements.push(button);
+        function makeToolbarButton(icon, label, opts) {
+            opts = opts || {};
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'modern-editor-btn';
+            btn.innerHTML = '<i class="' + icon + '"></i>';
+            btn.title = label;
+            btn.setAttribute('aria-label', label);
+            if (opts.shortcut) btn.setAttribute('aria-keyshortcuts', opts.shortcut);
+            toolbar.appendChild(btn);
+            return btn;
         }
+
+        // ========== UNDO / REDO ==========
+        var undoBtn = makeToolbarButton('fa-regular fa-undo', 'Undo', { shortcut: 'Control+Z' });
+        undoBtn.disabled = true;
+        var redoBtn = makeToolbarButton('fa-regular fa-redo', 'Redo', { shortcut: 'Control+Shift+Z' });
+        redoBtn.disabled = true;
+        addSeparator();
+
+        // ----- Inline formatting -----
+        var boldBtn      = makeToolbarButton('fa-regular fa-bold', 'Bold', { shortcut: 'Control+B' });
+        var italicBtn    = makeToolbarButton('fa-regular fa-italic', 'Italic', { shortcut: 'Control+I' });
+        var underlineBtn = makeToolbarButton('fa-regular fa-underline', 'Underline', { shortcut: 'Control+U' });
+        var strikeBtn    = makeToolbarButton('fa-regular fa-strikethrough', 'Strikethrough');
 
         // ========== COLOR DROPDOWN ==========
         var colorDropdownContainer = document.createElement('div');
@@ -659,25 +945,41 @@ var MessengerModule = (function(Utils, EventBus) {
         colorDropdownBtn.className = 'modern-editor-btn';
         colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i>';
         colorDropdownBtn.title = 'Text color';
+        colorDropdownBtn.setAttribute('aria-label', 'Text color');
+        colorDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        colorDropdownBtn.setAttribute('aria-expanded', 'false');
         var colorDropdownMenu = document.createElement('div');
         colorDropdownMenu.className = 'modern-dropdown-menu';
+        colorDropdownMenu.setAttribute('role', 'menu');
         colorDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
         colorDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" data-color="primary"><span class="color-swatch color-swatch--primary"></span> Primary</button>'
-            + '<button class="modern-dropdown-item" data-color="info"><span class="color-swatch color-swatch--info"></span> Info</button>'
-            + '<button class="modern-dropdown-item" data-color="accent"><span class="color-swatch color-swatch--accent"></span> Accent</button>'
-            + '<button class="modern-dropdown-item" data-color="warning"><span class="color-swatch color-swatch--warning"></span> Warning</button>'
-            + '<button class="modern-dropdown-item" data-color="danger"><span class="color-swatch color-swatch--danger"></span> Danger</button>'
-            + '<button class="modern-dropdown-item" data-color="muted"><span class="color-swatch color-swatch--muted"></span> Muted</button>'
-            + '<button class="modern-dropdown-item" data-color="remove"><i class="fa-regular fa-eraser" aria-hidden="true"></i> Remove color</button>';
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="primary"><span class="color-swatch color-swatch--primary"></span> Primary</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="info"><span class="color-swatch color-swatch--info"></span> Info</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="accent"><span class="color-swatch color-swatch--accent"></span> Accent</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="warning"><span class="color-swatch color-swatch--warning"></span> Warning</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="danger"><span class="color-swatch color-swatch--danger"></span> Danger</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="muted"><span class="color-swatch color-swatch--muted"></span> Muted</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-color="remove"><i class="fa-regular fa-eraser" aria-hidden="true"></i> Remove color</button>';
         colorDropdownContainer.appendChild(colorDropdownBtn);
         colorDropdownContainer.appendChild(colorDropdownMenu);
         toolbar.appendChild(colorDropdownContainer);
+
+        function openDropdown(btn, menu) {
+            menu.style.display = 'block';
+            btn.setAttribute('aria-expanded', 'true');
+        }
+        function closeDropdown(btn, menu) {
+            menu.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+        }
+
         colorDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            colorDropdownMenu.style.display = colorDropdownMenu.style.display === 'block' ? 'none' : 'block';
+            var isOpen = colorDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(colorDropdownBtn, colorDropdownMenu);
         };
-        document.addEventListener('click', function() { colorDropdownMenu.style.display = 'none'; });
         colorDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         colorDropdownMenu.querySelectorAll('[data-color]').forEach(function(btn) {
@@ -689,19 +991,12 @@ var MessengerModule = (function(Utils, EventBus) {
                 } else {
                     editor.chain().focus().setMark('semanticColor', { variant: variant }).run();
                 }
-                colorDropdownMenu.style.display = 'none';
+                closeDropdown(colorDropdownBtn, colorDropdownMenu);
             };
         });
-        // ========== END COLOR DROPDOWN ==========
 
-        // ---- Clear formatting button ----
-        var clearFormatBtn = document.createElement('button');
-        clearFormatBtn.type = 'button';
-        clearFormatBtn.className = 'modern-editor-btn';
-        clearFormatBtn.innerHTML = '<i class="fa-regular fa-remove-format"></i>';
-        clearFormatBtn.title = 'Clear formatting';
-        toolbar.appendChild(clearFormatBtn);
-        activeButtonElements.push(clearFormatBtn);
+        // ----- Clear formatting -----
+        var clearFormatBtn = makeToolbarButton('fa-regular fa-remove-format', 'Clear formatting');
 
         addSeparator();
 
@@ -714,21 +1009,27 @@ var MessengerModule = (function(Utils, EventBus) {
         headingDropdownBtn.className = 'modern-editor-btn';
         headingDropdownBtn.innerHTML = '<i class="fa-regular fa-heading"></i>';
         headingDropdownBtn.title = 'Heading';
+        headingDropdownBtn.setAttribute('aria-label', 'Heading');
+        headingDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        headingDropdownBtn.setAttribute('aria-expanded', 'false');
         var headingDropdownMenu = document.createElement('div');
         headingDropdownMenu.className = 'modern-dropdown-menu';
+        headingDropdownMenu.setAttribute('role', 'menu');
         headingDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
         headingDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" data-level="1">Heading 1</button>'
-            + '<button class="modern-dropdown-item" data-level="2">Heading 2</button>'
-            + '<button class="modern-dropdown-item" data-level="3">Heading 3</button>';
+            + '<button class="modern-dropdown-item" role="menuitem" data-level="1">Heading 1</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-level="2">Heading 2</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" data-level="3">Heading 3</button>';
         headingDropdownContainer.appendChild(headingDropdownBtn);
         headingDropdownContainer.appendChild(headingDropdownMenu);
         toolbar.appendChild(headingDropdownContainer);
         headingDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            headingDropdownMenu.style.display = headingDropdownMenu.style.display === 'block' ? 'none' : 'block';
+            var isOpen = headingDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(headingDropdownBtn, headingDropdownMenu);
         };
-        document.addEventListener('click', function() { headingDropdownMenu.style.display = 'none'; });
         headingDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         var headingButtons = {
@@ -736,7 +1037,6 @@ var MessengerModule = (function(Utils, EventBus) {
             h2: headingDropdownMenu.querySelector('[data-level="2"]'),
             h3: headingDropdownMenu.querySelector('[data-level="3"]')
         };
-        // ========== END HEADING DROPDOWN ==========
 
         // List dropdown
         var listDropdownContainer = document.createElement('div');
@@ -747,47 +1047,34 @@ var MessengerModule = (function(Utils, EventBus) {
         listDropdownBtn.className = 'modern-editor-btn';
         listDropdownBtn.innerHTML = '<i class="fa-regular fa-list"></i>';
         listDropdownBtn.title = 'Insert list';
+        listDropdownBtn.setAttribute('aria-label', 'Insert list');
+        listDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        listDropdownBtn.setAttribute('aria-expanded', 'false');
         var listDropdownMenu = document.createElement('div');
         listDropdownMenu.className = 'modern-dropdown-menu';
+        listDropdownMenu.setAttribute('role', 'menu');
         listDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
         listDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
-            + '<button class="modern-dropdown-item" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
+            + '<button class="modern-dropdown-item" role="menuitem" id="bullet-list-option"><i class="fa-regular fa-list"></i> Bullet list</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" id="ordered-list-option"><i class="fa-regular fa-list-ol"></i> Ordered list</button>';
         listDropdownContainer.appendChild(listDropdownBtn);
         listDropdownContainer.appendChild(listDropdownMenu);
         toolbar.appendChild(listDropdownContainer);
         listDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            listDropdownMenu.style.display = listDropdownMenu.style.display === 'block' ? 'none' : 'block';
+            var isOpen = listDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(listDropdownBtn, listDropdownMenu);
         };
-        document.addEventListener('click', function() { listDropdownMenu.style.display = 'none'; });
         listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
-        var blockquoteBtn = document.createElement('button');
-        blockquoteBtn.type = 'button';
-        blockquoteBtn.className = 'modern-editor-btn';
-        blockquoteBtn.innerHTML = '<i class="fa-regular fa-quote-left"></i>';
-        blockquoteBtn.title = 'Blockquote';
-        toolbar.appendChild(blockquoteBtn);
-        activeButtonElements.push(blockquoteBtn);
-
-        var codeBtn = document.createElement('button');
-        codeBtn.type = 'button';
-        codeBtn.className = 'modern-editor-btn';
-        codeBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
-        codeBtn.title = 'Code block';
-        toolbar.appendChild(codeBtn);
-        activeButtonElements.push(codeBtn);
+        var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
+        var codeBtn       = makeToolbarButton('fa-regular fa-code', 'Code block');
 
         addSeparator();
 
-        var linkBtn = document.createElement('button');
-        linkBtn.type = 'button';
-        linkBtn.className = 'modern-editor-btn';
-        linkBtn.innerHTML = '<i class="fa-regular fa-link"></i>';
-        linkBtn.title = 'Insert link';
-        toolbar.appendChild(linkBtn);
-        activeButtonElements.push(linkBtn);
+        var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
 
         var imageDropdownContainer = document.createElement('div');
         imageDropdownContainer.className = 'modern-dropdown';
@@ -797,171 +1084,175 @@ var MessengerModule = (function(Utils, EventBus) {
         imageDropdownBtn.className = 'modern-editor-btn';
         imageDropdownBtn.innerHTML = '<i class="fa-regular fa-image"></i>';
         imageDropdownBtn.title = 'Insert image';
+        imageDropdownBtn.setAttribute('aria-label', 'Insert image');
+        imageDropdownBtn.setAttribute('aria-haspopup', 'menu');
+        imageDropdownBtn.setAttribute('aria-expanded', 'false');
         var imageDropdownMenu = document.createElement('div');
         imageDropdownMenu.className = 'modern-dropdown-menu';
-        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:160px;display:none;';
+        imageDropdownMenu.setAttribute('role', 'menu');
+        imageDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:200px;display:none;';
         imageDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
-            + '<button class="modern-dropdown-item" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
+            + '<button class="modern-dropdown-item" role="menuitem" id="image-url-option"><i class="fa-regular fa-link"></i> By URL</button>'
+            + '<button class="modern-dropdown-item" role="menuitem" id="image-upload-option"><i class="fa-regular fa-cloud-arrow-up"></i> Upload from computer</button>';
         imageDropdownContainer.appendChild(imageDropdownBtn);
         imageDropdownContainer.appendChild(imageDropdownMenu);
         toolbar.appendChild(imageDropdownContainer);
         imageDropdownBtn.onclick = function(e) {
             e.stopPropagation();
-            imageDropdownMenu.style.display = imageDropdownMenu.style.display === 'block' ? 'none' : 'block';
+            var isOpen = imageDropdownMenu.style.display === 'block';
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            if (!isOpen) openDropdown(imageDropdownBtn, imageDropdownMenu);
         };
-        document.addEventListener('click', function() { imageDropdownMenu.style.display = 'none'; });
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+
         addSeparator();
 
-        // ---- Spoiler button ----
-        var spoilerBtn = document.createElement('button');
-        spoilerBtn.type = 'button';
-        spoilerBtn.className = 'modern-editor-btn';
-        spoilerBtn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
-        spoilerBtn.title = 'Spoiler';
-        toolbar.appendChild(spoilerBtn);
-        activeButtonElements.push(spoilerBtn);
+        var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
 
-        // ---- Emoji button & custom picker ----
-        var emojiBtn = document.createElement('button');
-        emojiBtn.type = 'button';
-        emojiBtn.className = 'modern-editor-btn';
-        emojiBtn.innerHTML = '<i class="fa-regular fa-face-smile"></i>';
-        emojiBtn.title = 'Insert emoji';
-        toolbar.appendChild(emojiBtn);
-        activeButtonElements.push(emojiBtn);
+        // Global click closes any open dropdown.
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+            document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+        });
+
+        // ---- Emoji button & picker ----
+        var emojiBtn = makeToolbarButton('fa-regular fa-face-smile', 'Insert emoji');
 
         var emojiPickerPanel = document.createElement('div');
         emojiPickerPanel.className = 'modern-emoji-picker';
-        emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:320px;max-height:200px;overflow-y:auto;';
+        emojiPickerPanel.setAttribute('role', 'dialog');
+        emojiPickerPanel.setAttribute('aria-label', 'Emoji picker');
+        emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:340px;max-height:280px;overflow-y:auto;';
+        toolbar.style.position = 'relative';
+        toolbar.appendChild(emojiPickerPanel);
 
-        function emojiToCodePoint(emoji) {
-            var codePoints = Array.from(emoji).map(function(ch) {
-                return ch.codePointAt(0).toString(16);
-            });
-            codePoints = codePoints.filter(function(cp) {
-                return cp !== 'fe0f';
-            });
-            return codePoints.join('-');
-        }
+        function renderEmojiPicker() {
+            emojiPickerPanel.innerHTML = '';
 
-        var emojiGroups = [
-            { name: 'Emojis', emojis: [
-                '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','🤩','😘','🥲','😏','😋','😛','😜','🤪','😝','🤗','🤭','🤫','🤔','🤤','🥳','😎','🤓','🧐','🙃','🤐','🤨','😒','🙄','😬','😌','😔','😪','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😵','🤯','😕','😟','🙁','😮','😲','😳','🥺','😨','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👋','👌','👍','👎','✊','👏','🙏','💪','👀','🤦','🤷','🎉','❤️','💔','🔥','💯','💥'
-            ] }
-        ];
+            var recents = loadEmojiRecents();
+            var allGroups = [];
+            if (recents.length > 0) {
+                allGroups.push({ name: 'Recently used', emojis: recents });
+            }
+            allGroups = allGroups.concat(EMOJI_GROUPS);
 
-        emojiGroups.forEach(function(group, groupIndex) {
-            if (groupIndex > 0) {
-                var separator = document.createElement('div');
-                separator.className = 'emoji-group-separator';
-                separator.style.cssText = 'grid-column:1/-1;height:1px;background:var(--border-color);margin:var(--space-xs) 0;';
-                emojiPickerPanel.appendChild(separator);
-                
+            allGroups.forEach(function(group, groupIndex) {
+                if (groupIndex > 0) {
+                    var separator = document.createElement('div');
+                    separator.className = 'emoji-group-separator';
+                    separator.setAttribute('aria-hidden', 'true');
+                    emojiPickerPanel.appendChild(separator);
+                }
                 var groupLabel = document.createElement('div');
                 groupLabel.className = 'emoji-group-label';
                 groupLabel.textContent = group.name;
-                groupLabel.style.cssText = 'grid-column:1/-1;font-size:var(--text-xs);color:var(--text-tertiary);margin-top:var(--space-xs);font-weight:500;';
                 emojiPickerPanel.appendChild(groupLabel);
-            }
-            
-            group.emojis.forEach(function(emoji) {
-                var emojiItem = document.createElement('button');
-                emojiItem.type = 'button';
-                emojiItem.className = 'modern-emoji-item';
-                emojiItem.setAttribute('data-emoji', emoji);
-                
-                var codePoint = emojiToCodePoint(emoji);
-                var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
-                var img = document.createElement('img');
-                img.src = imgUrl;
-                img.alt = emoji;
-                img.style.width = '1.5rem';
-                img.style.height = '1.5rem';
-                img.onerror = function() {
-                    emojiItem.innerHTML = emoji;
-                    emojiItem.style.fontSize = '1.5rem';
-                };
-                emojiItem.appendChild(img);
-                
-                emojiItem.onclick = function(e) {
-                    e.stopPropagation();
-                    if (editor) {
-                        var emojiChar = this.getAttribute('data-emoji');
-                        var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
-                        editor.chain().focus().insertContent({
-                            type: 'image',
-                            attrs: {
-                                src: emojiUrl,
-                                alt: emojiChar,
-                                loading: 'lazy',
-                                decoding: 'async',
-                                width: 24,
-                                height: 24
-                            }
-                        }).run();
-                    }
-                    emojiPickerPanel.style.display = 'none';
-                };
-                emojiPickerPanel.appendChild(emojiItem);
-            });
-        });
 
-        toolbar.style.position = 'relative';
-        toolbar.appendChild(emojiPickerPanel);
+                group.emojis.forEach(function(emoji) {
+                    var emojiItem = document.createElement('button');
+                    emojiItem.type = 'button';
+                    emojiItem.className = 'modern-emoji-item';
+                    emojiItem.setAttribute('data-emoji', emoji);
+                    emojiItem.setAttribute('aria-label', emoji);
+                    emojiItem.title = emoji;
+
+                    var codePoint = emojiToCodePoint(emoji);
+                    var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
+                    var img = document.createElement('img');
+                    img.src = imgUrl;
+                    img.alt = emoji;
+                    img.style.width = '1.5rem';
+                    img.style.height = '1.5rem';
+                    img.onerror = function() {
+                        emojiItem.innerHTML = '';
+                        emojiItem.textContent = emoji;
+                        emojiItem.style.fontSize = '1.5rem';
+                    };
+                    emojiItem.appendChild(img);
+
+                    emojiItem.onclick = function(e) {
+                        e.stopPropagation();
+                        if (editor) {
+                            var emojiChar = this.getAttribute('data-emoji');
+                            var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
+                            editor.chain().focus().insertContent({
+                                type: 'image',
+                                attrs: {
+                                    src: emojiUrl,
+                                    alt: emojiChar,
+                                    loading: 'lazy',
+                                    decoding: 'async',
+                                    width: 24,
+                                    height: 24
+                                }
+                            }).run();
+                            pushEmojiRecent(emojiChar);
+                        }
+                        emojiPickerPanel.style.display = 'none';
+                    };
+                    emojiPickerPanel.appendChild(emojiItem);
+                });
+            });
+        }
 
         emojiBtn.onclick = function(e) {
             e.stopPropagation();
             var isVisible = emojiPickerPanel.style.display === 'grid';
-            emojiPickerPanel.style.display = isVisible ? 'none' : 'grid';
+            if (!isVisible) {
+                renderEmojiPicker();
+                emojiPickerPanel.style.display = 'grid';
+            } else {
+                emojiPickerPanel.style.display = 'none';
+            }
         };
 
         document.addEventListener('click', function(e) {
-            if (emojiPickerPanel && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn) {
+            if (emojiPickerPanel && emojiPickerPanel.style.display === 'grid' && !emojiPickerPanel.contains(e.target) && e.target !== emojiBtn && !emojiBtn.contains(e.target)) {
                 emojiPickerPanel.style.display = 'none';
             }
         });
 
         // -----------------------------------------------------------------
-        // UPLOAD FUNCTION
+        // UPLOAD
         // -----------------------------------------------------------------
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
             var currentPos = editorInstance.state.selection.from;
-            editorInstance.chain().focus().insertContent('⬆️ Uploading...').run();
+            var placeholderText = '⬆️ Uploading…';
+            editorInstance.chain().focus().insertContent(placeholderText).run();
             var placeholderStart = currentPos;
-            var placeholderEnd = currentPos + '⬆️ Uploading...'.length;
+            var placeholderEnd = currentPos + placeholderText.length;
 
-            fetch('https://imgbb-upload-proxy.nhristakiev.workers.dev/', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
-                if (data.url) {
-                    editorInstance.chain().focus().insertContent({
-                        type: 'image',
-                        attrs: {
-                            src: data.url,
-                            alt: 'Uploaded image',
-                            loading: 'lazy',
-                            decoding: 'async',
-                            width: data.width ? parseInt(data.width) : null,
-                            height: data.height ? parseInt(data.height) : null
-                        }
-                    }).run();
-                } else {
-                    editorInstance.chain().focus().insertContent('[Upload failed]').run();
-                }
-            })
-            .catch(error => {
-                console.error('Upload error:', error);
-                editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
-                editorInstance.chain().focus().insertContent('[Upload error]').run();
-            });
+            fetch(UPLOAD_WORKER_URL, { method: 'POST', body: formData })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                    if (data.url) {
+                        editorInstance.chain().focus().insertContent({
+                            type: 'image',
+                            attrs: {
+                                src: data.url,
+                                alt: 'Uploaded image',
+                                loading: 'lazy',
+                                decoding: 'async',
+                                width: data.width ? parseInt(data.width) : null,
+                                height: data.height ? parseInt(data.height) : null
+                            }
+                        }).run();
+                        showToast('Image uploaded', { type: 'success' });
+                    } else {
+                        editorInstance.chain().focus().insertContent('[Upload failed]').run();
+                        showToast('Upload failed', { type: 'error' });
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Upload error:', error);
+                    editorInstance.chain().focus().deleteRange({ from: placeholderStart, to: placeholderEnd }).run();
+                    editorInstance.chain().focus().insertContent('[Upload error]').run();
+                    showToast('Upload error', { type: 'error' });
+                });
         }
 
         function showInputModal(title, placeholder, callback) {
@@ -1025,9 +1316,7 @@ var MessengerModule = (function(Utils, EventBus) {
             modalBox.querySelector('#modal-submit').onclick = function() {
                 var linkText = textInput.value.trim();
                 var linkUrl = urlInput.value.trim();
-                if (linkUrl) {
-                    callback(linkUrl, linkText || null);
-                }
+                if (linkUrl) callback(linkUrl, linkText || null);
                 close();
             };
             textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
@@ -1043,7 +1332,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 const Editor = core.Editor || (core.default && core.default.Editor);
                 const Node = core.Node || (core.default && core.default.Node);
                 const Mark = core.Mark || (core.default && core.default.Mark);
-                
+
                 if (!Editor || !Node || !Mark) {
                     throw new Error('Editor, Node, or Mark not found in @tiptap/core');
                 }
@@ -1064,18 +1353,13 @@ var MessengerModule = (function(Utils, EventBus) {
                 const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
                 const Mention = mentionModule.Mention || (mentionModule.default && mentionModule.default.Mention);
 
-                if (!Mention) {
-                    throw new Error('Mention extension not found');
-                }
+                if (!Mention) throw new Error('Mention extension not found');
 
                 const CustomLink = Link.configure({
                     openOnClick: true,
                     autolink: true,
                     linkOnPaste: true,
-                    HTMLAttributes: {
-                        target: '_blank',
-                        rel: 'noopener noreferrer',
-                    },
+                    HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
                 });
 
                 const CustomImage = BaseImage.extend({
@@ -1108,6 +1392,9 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
+                // -------------------------------------------------------------
+                // LINK PREVIEW — now supports a `loading` state skeleton
+                // -------------------------------------------------------------
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
                     inline: true,
@@ -1121,6 +1408,7 @@ var MessengerModule = (function(Utils, EventBus) {
                             title: { default: '' },
                             description: { default: '' },
                             imageSrc: { default: '' },
+                            loading: { default: false },
                         };
                     },
                     parseHTML() {
@@ -1131,24 +1419,34 @@ var MessengerModule = (function(Utils, EventBus) {
                         var title = node.attrs.title;
                         var description = node.attrs.description;
                         var imageSrc = node.attrs.imageSrc;
-
-                        var finalImageUrl = imageSrc;
-                        if (imageSrc && imageSrc.startsWith('/')) {
-                            try {
-                                var urlObj = new URL(href);
-                                finalImageUrl = urlObj.origin + imageSrc;
-                            } catch (e) {
-                                finalImageUrl = imageSrc;
-                            }
-                        }
+                        var loading = node.attrs.loading;
 
                         var hostname = '';
                         try {
-                            var urlObj = new URL(href);
-                            hostname = urlObj.hostname.replace(/^www\./, '');
+                            hostname = new URL(href).hostname.replace(/^www\./, '');
                         } catch (e) {
                             hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
                         }
+
+                        // Skeleton while OG fetch is in flight
+                        if (loading) {
+                            return [
+                                'span',
+                                { class: 'link-preview-card link-preview-card--loading', 'data-type': 'link-preview', ...HTMLAttributes },
+                                ['span', { class: 'link-preview-skeleton' },
+                                    ['span', { class: 'link-preview-skeleton-bar', style: 'width:40%;' }],
+                                    ['span', { class: 'link-preview-skeleton-bar', style: 'width:80%;' }],
+                                    ['span', { class: 'link-preview-skeleton-bar', style: 'width:60%;' }]
+                                ]
+                            ];
+                        }
+
+                        var finalImageUrl = imageSrc;
+                        if (imageSrc && imageSrc.startsWith('/')) {
+                            try { finalImageUrl = new URL(href).origin + imageSrc; }
+                            catch (e) { finalImageUrl = imageSrc; }
+                        }
+
                         var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + hostname + '&sz=32';
                         var isRich = finalImageUrl && finalImageUrl.trim() !== '';
 
@@ -1158,7 +1456,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             var lower = t.toLowerCase();
                             return generic.some(function(term) { return lower.indexOf(term) !== -1; });
                         }
-
                         function needsProxy(url) {
                             if (!url) return false;
                             var blocked = ['discordapp.com', 'cdn.discordapp.com', 'media.discordapp.net', 'github.com', 'raw.githubusercontent.com', 'redd.it', 'reddit.com', 'twimg.com', 'pbs.twimg.com'];
@@ -1230,26 +1527,15 @@ var MessengerModule = (function(Utils, EventBus) {
                     renderHTML: () => ['div', { class: 'spoiler' }, 0],
                     addCommands() {
                         return {
-                            setSpoiler: () => ({ commands }) => {
-                                return commands.wrapIn(this.name);
-                            },
-                            toggleSpoiler: () => ({ commands }) => {
-                                return commands.toggleWrap(this.name);
-                            },
-                            unsetSpoiler: () => ({ commands }) => {
-                                return commands.lift(this.name);
-                            },
+                            setSpoiler: () => ({ commands }) => commands.wrapIn(this.name),
+                            toggleSpoiler: () => ({ commands }) => commands.toggleWrap(this.name),
+                            unsetSpoiler: () => ({ commands }) => commands.lift(this.name),
                         };
                     },
                 });
 
                 // -------------------------------------------------------------
                 // MENTION
-                // Outputs <mark data-uid="..." data-username="...">name</mark>.
-                // The mark content is JUST the name (no leading @) so the
-                // reader's transformUserTags can prepend @ without duplicating
-                // it. The editor renders the leading @ via CSS ::before so the
-                // user sees @name while typing — matching what the reader shows.
                 // -------------------------------------------------------------
                 const CustomMention = Mention.extend({
                     addAttributes() {
@@ -1264,9 +1550,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             label: {
                                 default: null,
                                 parseHTML: function(el) {
-                                    // Decode entities: the forum may have stored
-                                    // "Mormont&trade;" in data-username, but we
-                                    // want "Mormont™" in the editor / attributes.
                                     var v = el.getAttribute('data-username') || el.textContent || '';
                                     return decodeHtmlEntities(v).replace(/^@/, '');
                                 },
@@ -1286,38 +1569,27 @@ var MessengerModule = (function(Utils, EventBus) {
                         return [{
                             tag: 'mark[data-uid]',
                             getAttrs: function(el) {
-                                // Decode entities so existing tags round-trip cleanly.
                                 var raw = el.getAttribute('data-username') || el.textContent || '';
                                 raw = decodeHtmlEntities(raw).replace(/^@/, '');
-                                return {
-                                    id: el.getAttribute('data-uid'),
-                                    label: raw,
-                                };
+                                return { id: el.getAttribute('data-uid'), label: raw };
                             },
                         }];
                     },
                 }).configure({
                     HTMLAttributes: { class: 'user-tag' },
                     renderText: function({ node }) {
-                        // When serialized via getText(), still produce @name
-                        // for legacy compatibility even if anything ever
-                        // reads the plain-text version.
                         return '@' + (node.attrs.label || '');
                     },
                     suggestion: {
                         char: '@',
                         allowSpaces: false,
-                        // Don't fire inside code blocks — @ appears in code
-                        // for email addresses, decorators, etc.
                         allow: function({ state, range }) {
                             try {
                                 var $from = state.doc.resolve(range.from);
                                 return $from.parent.type.name !== 'codeBlock';
                             } catch (e) { return true; }
                         },
-                        items: function({ query }) {
-                            return searchMentions(query);
-                        },
+                        items: function({ query }) { return searchMentions(query); },
                         render: function() {
                             var popup = null;
                             var items = [];
@@ -1334,90 +1606,85 @@ var MessengerModule = (function(Utils, EventBus) {
                                 var initial = (name || '?').charAt(0).toUpperCase();
                                 var span = document.createElement('span');
                                 span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
-                                // Consistent colour, same palette + hash as the Posts module.
-                                var bgColor = getColorFromNickname(name, userId);
-                                span.style.backgroundColor = '#' + bgColor;
+                                span.style.backgroundColor = '#' + getColorFromNickname(name, userId);
                                 span.textContent = initial;
                                 return span;
                             }
 
-function buildList(props) {
-    items = props.items || [];
-    selectedIndex = 0;
-    itemEls = [];
+                            function buildList(props) {
+                                items = props.items || [];
+                                // Dedupe by id — API sometimes returns duplicates in quick succession
+                                var seen = {};
+                                items = items.filter(function(u) {
+                                    var k = String(u.id);
+                                    if (seen[k]) return false;
+                                    seen[k] = true;
+                                    return true;
+                                });
+                                selectedIndex = 0;
+                                itemEls = [];
 
-    if (!popup) return;
-    popup.innerHTML = '';
+                                if (!popup) return;
+                                popup.innerHTML = '';
 
-    if (items.length === 0) {
-        popup.style.display = 'none';
-        return;
-    }
+                                if (items.length === 0) {
+                                    var emptyRow = document.createElement('div');
+                                    emptyRow.style.cssText = 'padding:var(--pad-2) var(--pad-3);color:var(--text-tertiary);font-size:var(--text-xs);font-style:italic;';
+                                    emptyRow.textContent = 'No users found';
+                                    popup.appendChild(emptyRow);
+                                    popup.style.display = 'block';
+                                    return;
+                                }
 
-    items.forEach(function(user) {
-        var el = document.createElement('button');
-        el.type = 'button';
-        el.className = 'mention-suggestion-item';
+                                items.forEach(function(user) {
+                                    var el = document.createElement('button');
+                                    el.type = 'button';
+                                    el.className = 'mention-suggestion-item';
+                                    el.setAttribute('role', 'option');
 
-        var rawAvatar = (typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
-        var avatarUrl = (rawAvatar && !shouldUseInitialAvatar(rawAvatar))
-            ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
-            : null;
+                                    var rawAvatar = (typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
+                                    var avatarUrl = (rawAvatar && !shouldUseInitialAvatar(rawAvatar))
+                                        ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
+                                        : null;
 
-        // Defensive decode: even if a future code path skips searchMentions,
-        // the suggestion list should never display "&trade;" literally.
-        var userName = decodeHtmlEntities(user.name || '');
+                                    var userName = decodeHtmlEntities(user.name || '');
 
-        if (avatarUrl) {
-            var img = document.createElement('img');
-            img.className = 'mention-suggestion-avatar';
-            img.src = avatarUrl;
-            img.alt = '';
-            img.width = 28;
-            img.height = 28;
-            img.loading = 'lazy';
+                                    if (avatarUrl) {
+                                        var img = document.createElement('img');
+                                        img.className = 'mention-suggestion-avatar';
+                                        img.src = avatarUrl;
+                                        img.alt = '';
+                                        img.width = 28;
+                                        img.height = 28;
+                                        img.loading = 'lazy';
+                                        img.onerror = function() { this.replaceWith(makeInitialAvatar(userName, user.id)); };
+                                        img.onload = function() {
+                                            if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
+                                                this.replaceWith(makeInitialAvatar(userName, user.id));
+                                            }
+                                        };
+                                        el.appendChild(img);
+                                    } else {
+                                        el.appendChild(makeInitialAvatar(userName, user.id));
+                                    }
 
-            // Broken image (network error, 404, CORS-blocked): fall back to initials.
-            img.onerror = function() {
-                this.replaceWith(makeInitialAvatar(userName, user.id));
-            };
+                                    var name = document.createElement('span');
+                                    name.className = 'mention-suggestion-name';
+                                    name.textContent = userName;
+                                    el.appendChild(name);
 
-            // Some CDNs return a 1×1 transparent placeholder with a 200 status
-            // instead of a proper 404 — onerror never fires, but the visible
-            // result is an empty circle. Catch that case after load.
-            img.onload = function() {
-                if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
-                    this.replaceWith(makeInitialAvatar(userName, user.id));
-                }
-            };
+                                    el.addEventListener('mousedown', function(e) {
+                                        e.preventDefault();
+                                        props.command({ id: String(user.id), label: userName || String(user.id) });
+                                    });
 
-            el.appendChild(img);
-        } else {
-            el.appendChild(makeInitialAvatar(userName, user.id));
-        }
+                                    itemEls.push(el);
+                                    popup.appendChild(el);
+                                });
 
-        var name = document.createElement('span');
-        name.className = 'mention-suggestion-name';
-        name.textContent = userName;
-        el.appendChild(name);
-
-        // mousedown fires before blur, so the editor
-        // doesn't lose focus before the command runs
-        el.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            props.command({
-                id: String(user.id),
-                label: userName || String(user.id),
-            });
-        });
-
-        itemEls.push(el);
-        popup.appendChild(el);
-    });
-
-    popup.style.display = 'block';
-    updateSelected();
-}
+                                popup.style.display = 'block';
+                                updateSelected();
+                            }
 
                             function positionPopup(props) {
                                 if (!popup) return;
@@ -1433,6 +1700,7 @@ function buildList(props) {
                                 onStart: function(props) {
                                     popup = document.createElement('div');
                                     popup.className = 'mention-suggestions';
+                                    popup.setAttribute('role', 'listbox');
                                     document.body.appendChild(popup);
                                     buildList(props);
                                     positionPopup(props);
@@ -1443,9 +1711,7 @@ function buildList(props) {
                                     positionPopup(props);
                                 },
                                 onKeyDown: function(props) {
-                                    if (!popup || popup.style.display === 'none' || items.length === 0) {
-                                        return false;
-                                    }
+                                    if (!popup || popup.style.display === 'none' || items.length === 0) return false;
                                     if (props.event.key === 'ArrowDown') {
                                         selectedIndex = (selectedIndex + 1) % items.length;
                                         updateSelected();
@@ -1467,19 +1733,13 @@ function buildList(props) {
                                         return true;
                                     }
                                     if (props.event.key === 'Escape') {
-                                        if (popup) {
-                                            popup.remove();
-                                            popup = null;
-                                        }
+                                        if (popup) { popup.remove(); popup = null; }
                                         return true;
                                     }
                                     return false;
                                 },
                                 onExit: function() {
-                                    if (popup) {
-                                        popup.remove();
-                                        popup = null;
-                                    }
+                                    if (popup) { popup.remove(); popup = null; }
                                     items = [];
                                     itemEls = [];
                                 },
@@ -1493,11 +1753,7 @@ function buildList(props) {
                 // -------------------------------------------------------------
                 const SemanticColor = Mark.create({
                     name: 'semanticColor',
-                    addAttributes() {
-                        return {
-                            variant: { default: 'primary' }
-                        };
-                    },
+                    addAttributes() { return { variant: { default: 'primary' } }; },
                     parseHTML() {
                         return [{
                             tag: 'span[data-color]',
@@ -1511,62 +1767,113 @@ function buildList(props) {
                     },
                     renderHTML({ HTMLAttributes }) {
                         var variant = HTMLAttributes.variant || 'primary';
-                        return ['span', {
-                            class: 'text-' + variant,
-                            'data-color': variant
-                        }, 0];
+                        return ['span', { class: 'text-' + variant, 'data-color': variant }, 0];
                     }
                 });
 
+                // -------------------------------------------------------------
+                // LINK PREVIEW PASTE PLUGIN (with skeleton)
+                // -------------------------------------------------------------
                 const linkPreviewPlugin = new Plugin({
                     key: new PluginKey('linkPreview'),
                     props: {
                         handlePaste: (view, event) => {
                             var text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
                             if (!text) return false;
-                            var urlRegex = /(https?:\/\/[^\s]+)/g;
-                            var match = urlRegex.exec(text);
-                            if (!match) return false;
-                            var url = match[0];
-                            fetch('https://og-worker.nhristakiev.workers.dev/?url=' + encodeURIComponent(url))
+                            var trimmed = text.trim();
+                            var urlRegex = /^(https?:\/\/[^\s]+)$/;
+                            if (!urlRegex.test(trimmed)) return false;
+                            event.preventDefault();
+
+                            var url = trimmed;
+                            // Insert skeleton immediately
+                            var state = view.state;
+                            var tr = state.tr.replaceWith(
+                                state.selection.from, state.selection.to,
+                                state.schema.nodes.linkPreview.create({
+                                    href: url, title: '', description: '', imageSrc: '', loading: true
+                                })
+                            );
+                            view.dispatch(tr);
+
+                            fetch(OG_WORKER_URL + encodeURIComponent(url))
                                 .then(function(res) { return res.json(); })
                                 .then(function(data) {
+                                    // Find the loading node for this URL and replace it
+                                    var foundPos = -1;
+                                    view.state.doc.descendants(function(node, pos) {
+                                        if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
+                                            foundPos = pos;
+                                            return false;
+                                        }
+                                        return true;
+                                    });
+                                    if (foundPos === -1) return;
+
+                                    // If the OG worker failed, replace with the plain URL text
                                     if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
-                                        var state = view.state;
-                                        var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
-                                        view.dispatch(tr);
+                                        var trPlain = view.state.tr.replaceWith(
+                                            foundPos, foundPos + 1, view.state.schema.text(url)
+                                        );
+                                        view.dispatch(trPlain);
                                         return;
                                     }
-                                    var title = data.title || url;
-                                    var description = data.description || '';
-                                    var imageSrc = data.imageSrc || '';
-                                    var href = data.href || url;
-                                    var state = view.state;
-                                    var tr = state.tr.replaceWith(
-                                        state.selection.from, state.selection.to,
-                                        state.schema.nodes.linkPreview.create({
-                                            href: href, title: title, description: description, imageSrc: imageSrc
-                                        })
-                                    );
-                                    view.dispatch(tr);
+
+                                    var newNode = view.state.schema.nodes.linkPreview.create({
+                                        href: data.href || url,
+                                        title: data.title || url,
+                                        description: data.description || '',
+                                        imageSrc: data.imageSrc || '',
+                                        loading: false,
+                                    });
+                                    var tr2 = view.state.tr.replaceWith(foundPos, foundPos + 1, newNode);
+                                    view.dispatch(tr2);
                                 })
                                 .catch(function(err) {
                                     console.error('Link preview error:', err);
-                                    var state = view.state;
-                                    var tr = state.tr.replaceWith(state.selection.from, state.selection.to, state.schema.text(url));
-                                    view.dispatch(tr);
+                                    var foundPos = -1;
+                                    view.state.doc.descendants(function(node, pos) {
+                                        if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
+                                            foundPos = pos;
+                                            return false;
+                                        }
+                                        return true;
+                                    });
+                                    if (foundPos === -1) return;
+                                    var trErr = view.state.tr.replaceWith(foundPos, foundPos + 1, view.state.schema.text(url));
+                                    view.dispatch(trErr);
                                 });
                             return true;
                         },
                     },
                 });
 
-                var initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+                // Restore draft if any
+                var draft = loadDraft();
+                var initialHtml = '';
+                if (draft && typeof draft.body === 'string' && draft.body.length > 0) {
+                    initialHtml = draft.body;
+                } else {
+                    initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
+                }
+
+                // Restore recipient / subject from draft too
+                var modernRecipientEl = container.querySelector('#modern-recipient');
+                var modernTitleEl = container.querySelector('#modern-title');
+                if (draft) {
+                    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value) {
+                        modernRecipientEl.value = draft.recipient;
+                    }
+                    if (draft.subject && modernTitleEl && !modernTitleEl.value) {
+                        modernTitleEl.value = draft.subject;
+                    }
+                }
+
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
                         StarterKit,
-                        Placeholder.configure({ placeholder: 'Write your message...' }),
+                        Placeholder.configure({ placeholder: 'Write your message…' }),
                         Underline,
                         CustomImage,
                         CustomLink,
@@ -1577,21 +1884,40 @@ function buildList(props) {
                     ],
                     content: initialHtml,
                     editorProps: {
-                        attributes: { class: 'modern-wysiwyg-content' },
+                        attributes: {
+                            class: 'modern-wysiwyg-content',
+                            'aria-label': 'Message body',
+                        },
                         plugins: [linkPreviewPlugin],
+                        handlePaste: function(view, event) {
+                            // Image paste wins over everything else.
+                            var files = event.clipboardData ? event.clipboardData.files : null;
+                            if (files && files.length) {
+                                var imgs = Array.prototype.slice.call(files).filter(function(f) {
+                                    return f.type && f.type.indexOf('image/') === 0;
+                                });
+                                if (imgs.length) {
+                                    event.preventDefault();
+                                    imgs.forEach(function(f) { uploadImageToWorker(f, editor); });
+                                    return true;
+                                }
+                            }
+                            // Shift + Ctrl + V → paste as plain text
+                            if (event.shiftKey) {
+                                var text = event.clipboardData.getData('text/plain');
+                                if (text) {
+                                    event.preventDefault();
+                                    view.dispatch(view.state.tr.insertText(text));
+                                    return true;
+                                }
+                            }
+                            return false;
+                        },
                     },
                     onCreate: function({ editor }) {
-                        // Conditional auto-focus. The `autofocus` option only
-                        // accepts static values in TipTap 2.x — a function
-                        // gets misinterpreted as a focus position and crashes
-                        // with "Position NaN out of range", so we do it here.
-                        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-                            return; // touch device — don't pop the soft keyboard
-                        }
+                        if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
                         var active = document.activeElement;
-                        if (active && active !== document.body && active !== document.documentElement) {
-                            return; // user already focused something else
-                        }
+                        if (active && active !== document.body && active !== document.documentElement) return;
                         editor.commands.focus('end');
                     },
                     onUpdate: function({ editor }) {
@@ -1602,48 +1928,50 @@ function buildList(props) {
                         if (previewContent && window.twemoji) {
                             window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
                         }
+                        scheduleDraftSave();
+                        updateSendState();
+                        updateCharCounter();
                     }
                 });
 
                 // -----------------------------------------------------------------
-                // Assign toolbar actions
+                // TOOLBAR ACTIONS
                 // -----------------------------------------------------------------
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
                 redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
                 clearFormatBtn.onclick = function() {
-                    exec(function() {
-                        editor.chain().focus().unsetAllMarks().clearNodes().run();
-                    });
+                    exec(function() { editor.chain().focus().unsetAllMarks().clearNodes().run(); });
                 };
 
-                group1[0].btn.onclick = function() { exec(function() { editor.chain().focus().toggleBold().run(); }); };
-                group1[1].btn.onclick = function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); };
-                group1[2].btn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
-                group1[3].btn.onclick = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
+                boldBtn.onclick      = function() { exec(function() { editor.chain().focus().toggleBold().run(); }); };
+                italicBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); };
+                underlineBtn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
+                strikeBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
 
                 headingButtons.h1.onclick = function() {
                     exec(function() { editor.chain().focus().toggleHeading({ level: 1 }).run(); });
-                    headingDropdownMenu.style.display = 'none';
+                    closeDropdown(headingDropdownBtn, headingDropdownMenu);
                 };
                 headingButtons.h2.onclick = function() {
                     exec(function() { editor.chain().focus().toggleHeading({ level: 2 }).run(); });
-                    headingDropdownMenu.style.display = 'none';
+                    closeDropdown(headingDropdownBtn, headingDropdownMenu);
                 };
                 headingButtons.h3.onclick = function() {
                     exec(function() { editor.chain().focus().toggleHeading({ level: 3 }).run(); });
-                    headingDropdownMenu.style.display = 'none';
+                    closeDropdown(headingDropdownBtn, headingDropdownMenu);
                 };
 
                 listDropdownMenu.querySelector('#bullet-list-option').onclick = function() {
                     exec(function() { editor.chain().focus().toggleBulletList().run(); });
-                    listDropdownMenu.style.display = 'none';
+                    closeDropdown(listDropdownBtn, listDropdownMenu);
                 };
                 listDropdownMenu.querySelector('#ordered-list-option').onclick = function() {
                     exec(function() { editor.chain().focus().toggleOrderedList().run(); });
-                    listDropdownMenu.style.display = 'none';
+                    closeDropdown(listDropdownBtn, listDropdownMenu);
                 };
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
-                codeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
+                codeBtn.onclick       = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
+                spoilerBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
 
                 linkBtn.onclick = function() {
                     if (!editor) return;
@@ -1668,6 +1996,7 @@ function buildList(props) {
                 };
 
                 imageDropdownMenu.querySelector('#image-url-option').onclick = function() {
+                    closeDropdown(imageDropdownBtn, imageDropdownMenu);
                     showInputModal('Insert image URL', 'https://example.com/image.jpg', function(url) {
                         var img = new Image();
                         img.onload = function() {
@@ -1686,24 +2015,22 @@ function buildList(props) {
                         };
                         img.src = url;
                     });
-                    imageDropdownMenu.style.display = 'none';
                 };
 
                 imageDropdownMenu.querySelector('#image-upload-option').onclick = function() {
+                    closeDropdown(imageDropdownBtn, imageDropdownMenu);
                     var input = document.createElement('input');
                     input.type = 'file';
                     input.accept = 'image/*';
                     input.onchange = function() {
-                        if (input.files && input.files[0]) {
-                            uploadImageToWorker(input.files[0], editor);
-                        }
+                        if (input.files && input.files[0]) uploadImageToWorker(input.files[0], editor);
                     };
                     input.click();
-                    imageDropdownMenu.style.display = 'none';
                 };
 
-                spoilerBtn.onclick = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
-
+                // -----------------------------------------------------------------
+                // ACTIVE STATES
+                // -----------------------------------------------------------------
                 function updateActiveStates() {
                     undoBtn.disabled = !editor.can().undo();
                     redoBtn.disabled = !editor.can().redo();
@@ -1722,10 +2049,10 @@ function buildList(props) {
                         heading2: editor.isActive('heading', { level: 2 }),
                         heading3: editor.isActive('heading', { level: 3 })
                     };
-                    group1[0].btn.classList.toggle('active', isActive.bold);
-                    group1[1].btn.classList.toggle('active', isActive.italic);
-                    group1[2].btn.classList.toggle('active', isActive.underline);
-                    group1[3].btn.classList.toggle('active', isActive.strike);
+                    boldBtn.classList.toggle('active', isActive.bold);
+                    italicBtn.classList.toggle('active', isActive.italic);
+                    underlineBtn.classList.toggle('active', isActive.underline);
+                    strikeBtn.classList.toggle('active', isActive.strike);
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
                     codeBtn.classList.toggle('active', isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
@@ -1745,7 +2072,6 @@ function buildList(props) {
                             break;
                         }
                     }
-
                     colorDropdownMenu.querySelectorAll('[data-color]').forEach(function(item) {
                         var v = item.getAttribute('data-color');
                         item.classList.toggle('active', v === activeColorVariant);
@@ -1777,6 +2103,9 @@ function buildList(props) {
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
+                // -----------------------------------------------------------------
+                // DRAG-DROP IMAGES
+                // -----------------------------------------------------------------
                 var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
@@ -1784,17 +2113,34 @@ function buildList(props) {
                     editorRoot.addEventListener('drop', function(e) {
                         e.preventDefault();
                         var file = e.dataTransfer.files[0];
-                        if (file && file.type.startsWith('image/')) {
-                            uploadImageToWorker(file, editor);
-                        }
+                        if (file && file.type.startsWith('image/')) uploadImageToWorker(file, editor);
                     });
                 }
 
+                // -----------------------------------------------------------------
+                // KEYBOARD SHORTCUTS
+                // -----------------------------------------------------------------
                 editor.setOptions({
                     editorProps: {
                         handleDOMEvents: {
                             keydown: function(view, event) {
-                                if (event.ctrlKey && event.shiftKey && event.key === 'S') {
+                                var mod = event.ctrlKey || event.metaKey;
+
+                                // Ctrl+Enter → Send
+                                if (mod && event.key === 'Enter') {
+                                    event.preventDefault();
+                                    var sendBtn = container.querySelector('#modern-submit');
+                                    if (sendBtn && !sendBtn.disabled) sendBtn.click();
+                                    return true;
+                                }
+                                // Ctrl+K → Insert link
+                                if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) {
+                                    event.preventDefault();
+                                    linkBtn.click();
+                                    return true;
+                                }
+                                // Ctrl+Shift+S → Spoiler (existing behaviour)
+                                if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     editor.chain().focus().toggleSpoiler().run();
                                     return true;
@@ -1805,6 +2151,9 @@ function buildList(props) {
                     }
                 });
 
+                // -----------------------------------------------------------------
+                // LEGACY EMOTICON BRIDGE
+                // -----------------------------------------------------------------
                 _originalEmoticon = window.emoticon;
                 window.emoticon = function(x) {
                     if (editor) {
@@ -1813,6 +2162,74 @@ function buildList(props) {
                         _originalEmoticon(x);
                     }
                 };
+
+                // -----------------------------------------------------------------
+                // DRAFT AUTOSAVE + SEND STATE + CHAR COUNTER
+                // (defined here so they close over `editor`)
+                // -----------------------------------------------------------------
+                var _saveTimer = null;
+                function scheduleDraftSave() {
+                    if (_saveTimer) clearTimeout(_saveTimer);
+                    _saveTimer = setTimeout(function() {
+                        _saveTimer = null;
+                        var modernRecipient = container.querySelector('#modern-recipient');
+                        var modernTitle = container.querySelector('#modern-title');
+                        var ok = saveDraft({
+                            recipient: modernRecipient ? modernRecipient.value : '',
+                            subject: modernTitle ? modernTitle.value : '',
+                            body: editor.getHTML(),
+                            savedAt: Date.now()
+                        });
+                        if (ok) flashDraftStatus('Draft saved');
+                    }, DRAFT_SAVE_DEBOUNCE);
+                }
+
+                var modernSubmitBtnRef = container.querySelector('#modern-submit');
+                function updateSendState() {
+                    if (!modernSubmitBtnRef) return;
+                    var r = container.querySelector('#modern-recipient');
+                    var t = container.querySelector('#modern-title');
+                    var hasRecipient = r && r.value.trim().length > 0;
+                    var hasSubject = t && t.value.trim().length > 0;
+                    var hasBody = editor && !editor.isEmpty;
+                    modernSubmitBtnRef.disabled = !(hasRecipient && hasSubject && hasBody);
+                    modernSubmitBtnRef.setAttribute('aria-disabled', String(!(hasRecipient && hasSubject && hasBody)));
+                }
+
+                var charCounter = null;
+                function updateCharCounter() {
+                    if (!MAX_MESSAGE_LENGTH) return;
+                    var len = editor ? editor.getText().length : 0;
+                    if (!charCounter) {
+                        charCounter = document.createElement('span');
+                        charCounter.className = 'messenger-char-counter';
+                        charCounter.style.cssText = 'margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary);';
+                        toolbar.appendChild(charCounter);
+                    }
+                    charCounter.textContent = len + ' / ' + MAX_MESSAGE_LENGTH;
+                    if (len > MAX_MESSAGE_LENGTH) charCounter.style.color = 'var(--danger-color)';
+                    else if (len > MAX_MESSAGE_LENGTH * 0.9) charCounter.style.color = 'var(--warning-color)';
+                    else charCounter.style.color = 'var(--text-tertiary)';
+                    if (modernSubmitBtnRef) {
+                        modernSubmitBtnRef.disabled = modernSubmitBtnRef.disabled || len > MAX_MESSAGE_LENGTH;
+                    }
+                }
+
+                // Re-evaluate send state whenever recipient / subject change.
+                var modernRecipientInput = container.querySelector('#modern-recipient');
+                var modernTitleInput = container.querySelector('#modern-title');
+                if (modernRecipientInput) modernRecipientInput.addEventListener('input', updateSendState);
+                if (modernTitleInput) modernTitleInput.addEventListener('input', updateSendState);
+
+                // Expose for the button's click handler below.
+                container._updateSendState = updateSendState;
+                container._scheduleDraftSave = scheduleDraftSave;
+                container._flashDraftStatus = flashDraftStatus;
+
+                updateSendState();
+                updateCharCounter();
+                if (initialHtml) flashDraftStatus('Draft restored');
+
             } catch (err) {
                 console.error('[MessengerModule] TipTap failed to load:', err);
                 editorElement.innerHTML = '<div style="color:red;padding:1rem;">Editor failed to load. Please refresh the page.<br>' + escapeHtml(err.message) + '</div>';
@@ -1826,17 +2243,20 @@ function buildList(props) {
         previewArea.style.display = 'none';
         previewArea.innerHTML = '<h3 class="modern-preview-title"><i class="fa-regular fa-eye"></i> Preview</h3><div class="preview-content"></div>';
         container.appendChild(previewArea);
-        
+
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
-            + '<button type="button" id="modern-submit"  class="modern-btn modern-btn-primary"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
+            + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
         container.appendChild(actions);
 
         var modernRecipient   = container.querySelector('#modern-recipient');
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
+
+        // Attach recipient autocomplete
+        attachRecipientAutocomplete(modernRecipient);
 
         // INLINE VALIDATION — Subject field
         var titleField = modernTitle ? modernTitle.closest('.modern-field') : null;
@@ -1894,46 +2314,87 @@ function buildList(props) {
         if (modernTitle)       modernTitle.addEventListener('input', syncToOriginal);
         syncFromOriginal();
 
-        // MODERN PREVIEW
+        // PREVIEW
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
                 syncToOriginal();
-                if (originalTextarea && editor) {
-                    var previewHtml = editor.getHTML();
-                    var previewContent = previewArea.querySelector('.preview-content');
-                    if (previewContent) {
-                        previewContent.innerHTML = previewHtml;
-                        if (window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
-                        }
+                if (!editor) return;
+                var previewHtml = editor.getHTML();
+                var previewContent = previewArea.querySelector('.preview-content');
+                if (previewContent) {
+                    previewContent.innerHTML = previewHtml;
+                    if (window.twemoji) {
+                        window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
                     }
-                    previewArea.style.display = 'block';
                 }
+                previewArea.style.display = 'block';
+                previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             };
         }
 
+        // SUBMIT
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
                 syncToOriginal();
 
+                var recipientValue = modernRecipient ? modernRecipient.value.trim() : '';
+                if (!recipientValue) {
+                    showToast('Please enter a recipient', { type: 'warning' });
+                    if (modernRecipient) modernRecipient.focus();
+                    return;
+                }
+
                 var subjectValue = modernTitle ? modernTitle.value.trim() : '';
                 if (!subjectValue) {
                     showTitleError();
+                    showToast('Please enter a subject', { type: 'warning' });
                     return;
                 }
                 clearTitleError();
 
+                if (!editor || editor.isEmpty) {
+                    showToast('Message body is empty', { type: 'warning' });
+                    return;
+                }
+
+                if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
+                    showToast('Message exceeds the maximum length', { type: 'error' });
+                    return;
+                }
+
+                // Sync and show spinner
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
                 if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
-                if (originalForm && typeof originalForm.submit === 'function') {
-                    if (typeof ValidateForm === 'function' && !ValidateForm(1)) return;
-                    originalForm.submit();
-                } else if (submitButton) {
-                    submitButton.click();
+
+                var originalLabel = modernSubmitBtn.innerHTML;
+                modernSubmitBtn.disabled = true;
+                modernSubmitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Sending…';
+
+                // Clear draft on successful submit intent (page will navigate)
+                clearDraft();
+
+                try {
+                    if (originalForm && typeof originalForm.submit === 'function') {
+                        if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
+                            modernSubmitBtn.disabled = false;
+                            modernSubmitBtn.innerHTML = originalLabel;
+                            return;
+                        }
+                        originalForm.submit();
+                    } else if (submitButton) {
+                        submitButton.click();
+                    } else {
+                        throw new Error('No form submit handler found');
+                    }
+                } catch (err) {
+                    console.error('[MessengerModule] Submit failed:', err);
+                    modernSubmitBtn.disabled = false;
+                    modernSubmitBtn.innerHTML = originalLabel;
+                    showToast('Could not send message', { type: 'error' });
                 }
             };
         }
@@ -1942,7 +2403,7 @@ function buildList(props) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (unchanged)
+    // MESSAGES SECTION
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
         var container = document.createElement('div');
@@ -1963,7 +2424,7 @@ function buildList(props) {
                 + '</div>'
                 + '<div class="messages-folder-selector">'
                 + '<label>Folder:</label> '
-                + '<select id="modern-folder-select" class="modern-select">'
+                + '<select id="modern-folder-select" class="modern-select" aria-label="Message folder">'
                 + (folderSelect ? folderSelect.innerHTML : '<option value="in">Inbox</option><option value="sent">Sent Items</option>')
                 + '</select>'
                 + '</div>';
@@ -1975,7 +2436,7 @@ function buildList(props) {
                 + '<div class="msg-title">Message Title</div>'
                 + '<div class="msg-sender">Sender</div>'
                 + '<div class="msg-date">Date</div>'
-                + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input"></div>';
+                + '<div class="msg-select"><input type="checkbox" id="select-all-msgs" class="modern-checkbox-input" aria-label="Select all messages"></div>';
             container.appendChild(listHeader);
             var listContainer = document.createElement('div');
             listContainer.className = 'messages-list';
@@ -1995,7 +2456,7 @@ function buildList(props) {
                     + '<div class="msg-title"><a href="' + escapeHtml(titleLink ? titleLink.getAttribute('href') : '#') + '">' + escapeHtml(titleLink ? titleLink.textContent.trim() : '(no title)') + '</a></div>'
                     + '<div class="msg-sender"><a href="' + escapeHtml(senderLink ? senderLink.getAttribute('href') : '#') + '">' + escapeHtml(senderLink ? senderLink.textContent.trim() : 'Unknown') + '</a></div>'
                     + '<div class="msg-date">' + escapeHtml(formatDate(date)) + '</div>'
-                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '"></div>';
+                    + '<div class="msg-select"><input type="checkbox" class="modern-checkbox-input" name="' + escapeHtml(msgName) + '" id="msg-' + i + '" aria-label="Select message"></div>';
                 listContainer.appendChild(msgRow);
             }
             container.appendChild(listContainer);
@@ -2004,7 +2465,7 @@ function buildList(props) {
             actionBar.innerHTML = ''
                 + '<div class="action-group">'
                 + '<button class="modern-btn modern-btn-secondary" id="move-messages"><i class="fa-regular fa-folder-open"></i> Move to</button> '
-                + '<select id="move-folder" class="modern-select-sm"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
+                + '<select id="move-folder" class="modern-select-sm" aria-label="Destination folder"><option value="in">Inbox</option><option value="sent">Sent Items</option></select>'
                 + '</div>'
                 + '<div class="action-group">'
                 + '<button class="modern-btn modern-btn-secondary danger" id="delete-messages"><i class="fa-regular fa-trash-can"></i> Delete selected</button>'
@@ -2070,7 +2531,7 @@ function buildList(props) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (unchanged)
+    // CONTACTS SECTION
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
@@ -2085,14 +2546,14 @@ function buildList(props) {
             friendsCard.className = 'contacts-card';
             friendsCard.innerHTML = ''
                 + '<h3 class="contacts-card-title"><i class="fa-regular fa-user-group"></i> Friends list</h3>'
-                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line">' + escapeHtml(friendsTextarea ? friendsTextarea.value : '') + '</textarea>'
+                + '<textarea id="modern-friends-list" class="modern-textarea-contacts" rows="8" placeholder="One username per line" aria-label="Friends list">' + escapeHtml(friendsTextarea ? friendsTextarea.value : '') + '</textarea>'
                 + '<p class="contacts-help">Users you allow to message you when privacy mode is on.</p>';
             container.appendChild(friendsCard);
             var blockedCard = document.createElement('div');
             blockedCard.className = 'contacts-card';
             blockedCard.innerHTML = ''
                 + '<h3 class="contacts-card-title"><i class="fa-regular fa-ban"></i> Blocked users</h3>'
-                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line">' + escapeHtml(blockedTextarea ? blockedTextarea.value : '') + '</textarea>'
+                + '<textarea id="modern-blocked-list" class="modern-textarea-contacts" rows="5" placeholder="One username per line" aria-label="Blocked users">' + escapeHtml(blockedTextarea ? blockedTextarea.value : '') + '</textarea>'
                 + '<p class="contacts-help">These users cannot send you messages or mention you.</p>';
             container.appendChild(blockedCard);
             var privacyVal = privacySelect ? privacySelect.value : '0';
@@ -2155,6 +2616,7 @@ function buildList(props) {
         messengerContainer.className = 'modern-messenger';
         var navContainer = document.createElement('nav');
         navContainer.className = 'modern-messenger-nav';
+        navContainer.setAttribute('aria-label', 'Messenger sections');
         var navItems = [
             { text: 'Compose',  icon: 'fa-regular fa-pen-to-square', url: '/?act=Msg&CODE=04&c=660892', section: 'compose' },
             { text: 'Messages', icon: 'fa-regular fa-envelope',       url: '/?act=Msg&CODE=01&c=660892', section: 'messages' },
@@ -2165,6 +2627,7 @@ function buildList(props) {
             var link = document.createElement('a');
             link.href = item.url;
             link.className = 'modern-nav-link' + (item.section === currentSection ? ' current' : '');
+            if (item.section === currentSection) link.setAttribute('aria-current', 'page');
             link.innerHTML = '<i class="' + item.icon + '" aria-hidden="true"></i><span class="modern-nav-text">' + item.text + '</span>';
             navContainer.appendChild(link);
         }
