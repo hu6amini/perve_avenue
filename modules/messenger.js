@@ -43,6 +43,21 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // HTML ENTITY DECODER
+    // The forum stores/returns usernames HTML-encoded (e.g. "Mormont&trade;"
+    // instead of "Mormont™"). textContent and setAttribute do NOT decode
+    // entities, so an encoded name would render literally. Decode once at
+    // every read point and keep the decoded form thereafter.
+    // ------------------------------------------------------------------------
+    function decodeHtmlEntities(str) {
+        if (!str || typeof str !== 'string') return str;
+        if (str.indexOf('&') === -1) return str;
+        var txt = document.createElement('textarea');
+        txt.innerHTML = str;
+        return txt.value;
+    }
+
+    // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
     function initialize() {
@@ -192,7 +207,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var menu = document.querySelector('.menuwrap');
         if (menu) {
             var nick = menu.querySelector('.nick');
-            if (nick) username = nick.textContent.trim();
+            if (nick) username = decodeHtmlEntities(nick.textContent.trim());
 
             var img = menu.querySelector('.avatar img');
             if (img && img.src) avatarUrl = img.src;
@@ -219,6 +234,12 @@ var MessengerModule = (function(Utils, EventBus) {
                 var user = data['m' + mid] || data.info;
                 if (user) {
                     user.mid = mid;
+                    if (typeof user.nickname === 'string') {
+                        user.nickname = decodeHtmlEntities(user.nickname);
+                    }
+                    if (typeof user.name === 'string') {
+                        user.name = decodeHtmlEntities(user.name);
+                    }
                     _currentUserCache = user;
                 }
                 return user || null;
@@ -260,7 +281,7 @@ var MessengerModule = (function(Utils, EventBus) {
     function buildReplyingAsHeader(user) {
         if (!user) return null;
 
-        var username = user.nickname || 'You';
+        var username = decodeHtmlEntities(user.nickname) || 'You';
         var mid = user.mid;
         var profileUrl = '/?act=Profile&MID=' + mid;
         var avatarUrl = optimizeAvatarUrl(user.avatar, 36, 36);
@@ -320,7 +341,15 @@ var MessengerModule = (function(Utils, EventBus) {
         })
         .then(function (data) {
             var users = (data && Array.isArray(data.users)) ? data.users : [];
-            return users.slice(0, 8);
+            // The API returns names HTML-encoded (e.g. "Mormont&trade;") —
+            // decode once here so the editor, suggestion list, and stored
+            // <mark data-username> all carry the human-readable form.
+            return users.slice(0, 8).map(function (u) {
+                if (u && typeof u.name === 'string') {
+                    u = Object.assign({}, u, { name: decodeHtmlEntities(u.name) });
+                }
+                return u;
+            });
         })
         .catch(function (err) {
             if (err && err.name === 'AbortError') return [];
@@ -1235,8 +1264,11 @@ var MessengerModule = (function(Utils, EventBus) {
                             label: {
                                 default: null,
                                 parseHTML: function(el) {
+                                    // Decode entities: the forum may have stored
+                                    // "Mormont&trade;" in data-username, but we
+                                    // want "Mormont™" in the editor / attributes.
                                     var v = el.getAttribute('data-username') || el.textContent || '';
-                                    return v.replace(/^@/, '');
+                                    return decodeHtmlEntities(v).replace(/^@/, '');
                                 },
                                 renderHTML: function(attrs) {
                                     return attrs.label ? { 'data-username': attrs.label } : {};
@@ -1254,10 +1286,12 @@ var MessengerModule = (function(Utils, EventBus) {
                         return [{
                             tag: 'mark[data-uid]',
                             getAttrs: function(el) {
+                                // Decode entities so existing tags round-trip cleanly.
                                 var raw = el.getAttribute('data-username') || el.textContent || '';
+                                raw = decodeHtmlEntities(raw).replace(/^@/, '');
                                 return {
                                     id: el.getAttribute('data-uid'),
-                                    label: raw.replace(/^@/, ''),
+                                    label: raw,
                                 };
                             },
                         }];
@@ -1330,6 +1364,10 @@ function buildList(props) {
             ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
             : null;
 
+        // Defensive decode: even if a future code path skips searchMentions,
+        // the suggestion list should never display "&trade;" literally.
+        var userName = decodeHtmlEntities(user.name || '');
+
         if (avatarUrl) {
             var img = document.createElement('img');
             img.className = 'mention-suggestion-avatar';
@@ -1341,7 +1379,7 @@ function buildList(props) {
 
             // Broken image (network error, 404, CORS-blocked): fall back to initials.
             img.onerror = function() {
-                this.replaceWith(makeInitialAvatar(user.name, user.id));
+                this.replaceWith(makeInitialAvatar(userName, user.id));
             };
 
             // Some CDNs return a 1×1 transparent placeholder with a 200 status
@@ -1349,18 +1387,18 @@ function buildList(props) {
             // result is an empty circle. Catch that case after load.
             img.onload = function() {
                 if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
-                    this.replaceWith(makeInitialAvatar(user.name, user.id));
+                    this.replaceWith(makeInitialAvatar(userName, user.id));
                 }
             };
 
             el.appendChild(img);
         } else {
-            el.appendChild(makeInitialAvatar(user.name, user.id));
+            el.appendChild(makeInitialAvatar(userName, user.id));
         }
 
         var name = document.createElement('span');
         name.className = 'mention-suggestion-name';
-        name.textContent = user.name || '';
+        name.textContent = userName;
         el.appendChild(name);
 
         // mousedown fires before blur, so the editor
@@ -1369,7 +1407,7 @@ function buildList(props) {
             e.preventDefault();
             props.command({
                 id: String(user.id),
-                label: user.name || String(user.id),
+                label: userName || String(user.id),
             });
         });
 
@@ -1423,7 +1461,7 @@ function buildList(props) {
                                         if (user) {
                                             props.command({
                                                 id: String(user.id),
-                                                label: user.name || String(user.id),
+                                                label: decodeHtmlEntities(user.name || '') || String(user.id),
                                             });
                                         }
                                         return true;
