@@ -13,6 +13,7 @@ var MessengerModule = (function(Utils, EventBus) {
     var MAX_MESSAGE_LENGTH = 0;
     var DRAFT_KEY = 'messenger-draft-v1';
     var DRAFT_SAVE_DEBOUNCE = 500;
+    var OG_FETCH_TIMEOUT = 8000;
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
     var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
 
@@ -61,8 +62,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // HTML CONTENT EMPTINESS CHECK
-    // True when the string is empty or contains only structural wrappers
-    // (<p></p>, <p><br></p>, whitespace entities) with no visible content.
     // ------------------------------------------------------------------------
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
@@ -73,19 +72,14 @@ var MessengerModule = (function(Utils, EventBus) {
             .replace(/\s+/g, ' ')
             .trim();
         if (text.length > 0) return false;
-        if (/<img[^>]+src\s*=/i.test(html)) return false;   // embedded media
-        if (/<hr\b/i.test(html)) return false;               // horizontal rule
+        if (/<img[^>]+src\s*=/i.test(html)) return false;
+        if (/<hr\b/i.test(html)) return false;
         if (/<(video|audio|iframe)\b/i.test(html)) return false;
         return true;
     }
 
     // ------------------------------------------------------------------------
     // CONTENT FINGERPRINT
-    // Normalized fingerprint of an HTML string: text content (whitespace
-    // collapsed) plus a count of embedded images. Two HTML strings that
-    // describe the same visible content share a fingerprint even if their
-    // markup differs (TipTap normalizes HTML differently from the raw
-    // legacy→HTML conversion).
     // ------------------------------------------------------------------------
     function contentFingerprint(html) {
         if (!html) return '';
@@ -98,9 +92,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // TRAILING PARAGRAPH GUARANTEE
-    // Ensure the HTML ends with a paragraph so the cursor can land below
-    // block-level content (quotes, spoilers, code blocks, lists, headings).
-    // focus('end') drops the cursor into the last leaf node otherwise.
     // ------------------------------------------------------------------------
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -108,7 +99,7 @@ var MessengerModule = (function(Utils, EventBus) {
         d.innerHTML = html;
         var last = d.lastElementChild;
         if (!last) return html;
-        if (last.tagName === 'P') return html;   // already ends with a paragraph
+        if (last.tagName === 'P') return html;
         d.appendChild(document.createElement('p'));
         return d.innerHTML;
     }
@@ -510,7 +501,8 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // RECIPIENT AUTOCOMPLETE
-    // Shares styling with the mention suggestion dropdown.
+    // Shares styling with the mention suggestion dropdown. Repositions itself
+    // on scroll/resize so it never detaches from the input.
     // ------------------------------------------------------------------------
     function attachRecipientAutocomplete(inputEl) {
         if (!inputEl) return;
@@ -523,7 +515,17 @@ var MessengerModule = (function(Utils, EventBus) {
         var lastQuery = '';
         var blurCloseTimer = null;
 
+        function reposition() {
+            if (!popup || !popup.parentNode) return;
+            var rect = inputEl.getBoundingClientRect();
+            popup.style.left = (rect.left + window.pageXOffset) + 'px';
+            popup.style.top = (rect.bottom + window.pageYOffset + 4) + 'px';
+            popup.style.minWidth = rect.width + 'px';
+        }
+
         function closePopup() {
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
             if (popup) { popup.remove(); popup = null; }
             items = []; itemEls = []; selectedIndex = 0;
         }
@@ -603,14 +605,6 @@ var MessengerModule = (function(Utils, EventBus) {
             updateSelected();
         }
 
-        function positionPopup() {
-            if (!popup) return;
-            var rect = inputEl.getBoundingClientRect();
-            popup.style.left = (rect.left + window.pageXOffset) + 'px';
-            popup.style.top = (rect.bottom + window.pageYOffset + 4) + 'px';
-            popup.style.minWidth = rect.width + 'px';
-        }
-
         inputEl.addEventListener('input', function() {
             var query = inputEl.value.trim();
             if (debounceTimer) clearTimeout(debounceTimer);
@@ -625,9 +619,11 @@ var MessengerModule = (function(Utils, EventBus) {
                         popup.className = 'mention-suggestions';
                         popup.setAttribute('role', 'listbox');
                         document.body.appendChild(popup);
+                        window.addEventListener('scroll', reposition, true);
+                        window.addEventListener('resize', reposition);
                     }
                     buildPopup(users);
-                    positionPopup();
+                    reposition();
                 });
             }, 180);
         });
@@ -1170,6 +1166,17 @@ var MessengerModule = (function(Utils, EventBus) {
             document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
         });
 
+        // Global Escape closes any open dropdown.
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var openMenu = document.querySelector('.modern-dropdown-menu[style*="display: block"]');
+                if (openMenu) {
+                    document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+                    document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+                }
+            }
+        });
+
         // ---- Emoji button & picker ----
         var emojiBtn = makeToolbarButton('fa-regular fa-face-smile', 'Insert emoji');
 
@@ -1177,7 +1184,7 @@ var MessengerModule = (function(Utils, EventBus) {
         emojiPickerPanel.className = 'modern-emoji-picker';
         emojiPickerPanel.setAttribute('role', 'dialog');
         emojiPickerPanel.setAttribute('aria-label', 'Emoji picker');
-        emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:340px;max-height:280px;overflow-y:auto;';
+        emojiPickerPanel.style.cssText = 'position:absolute;bottom:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:var(--space-sm);z-index:1000;display:none;grid-template-columns:repeat(8,1fr);gap:var(--space-xs);width:min(340px, calc(100vw - 2rem));max-height:280px;overflow-y:auto;';
         toolbar.style.position = 'relative';
         toolbar.appendChild(emojiPickerPanel);
 
@@ -1309,6 +1316,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
         }
 
+        // Modal helpers — both now close on Escape and restore editor focus on exit.
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -1327,7 +1335,15 @@ var MessengerModule = (function(Utils, EventBus) {
             document.body.appendChild(modalOverlay);
             var input = modalBox.querySelector('#modal-input');
             input.focus();
-            function close() { modalOverlay.remove(); }
+
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+
+            document.addEventListener('keydown', onEscape);
             modalBox.querySelector('#modal-cancel').onclick = close;
             modalBox.querySelector('#modal-submit').onclick = function() {
                 var val = input.value.trim();
@@ -1365,7 +1381,15 @@ var MessengerModule = (function(Utils, EventBus) {
             var textInput = modalBox.querySelector('#modal-link-text');
             var urlInput = modalBox.querySelector('#modal-link-url');
             urlInput.focus();
-            function close() { modalOverlay.remove(); }
+
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+
+            document.addEventListener('keydown', onEscape);
             modalBox.querySelector('#modal-cancel').onclick = close;
             modalBox.querySelector('#modal-submit').onclick = function() {
                 var linkText = textInput.value.trim();
@@ -1446,9 +1470,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // -------------------------------------------------------------
-                // LINK PREVIEW — supports a `loading` state skeleton
-                // -------------------------------------------------------------
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
                     inline: true,
@@ -1482,7 +1503,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             hostname = href.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
                         }
 
-                        // Skeleton while OG fetch is in flight
                         if (loading) {
                             return [
                                 'span',
@@ -1588,9 +1608,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // -------------------------------------------------------------
-                // MENTION
-                // -------------------------------------------------------------
                 const CustomMention = Mention.extend({
                     addAttributes() {
                         return {
@@ -1649,6 +1666,7 @@ var MessengerModule = (function(Utils, EventBus) {
                             var items = [];
                             var selectedIndex = 0;
                             var itemEls = [];
+                            var lastProps = null;
 
                             function updateSelected() {
                                 itemEls.forEach(function(el, i) {
@@ -1667,7 +1685,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                             function buildList(props) {
                                 items = props.items || [];
-                                // Dedupe by id — API sometimes returns duplicates in quick succession
                                 var seen = {};
                                 items = items.filter(function(u) {
                                     var k = String(u.id);
@@ -1750,16 +1767,24 @@ var MessengerModule = (function(Utils, EventBus) {
                                 popup.style.top = (rect.bottom + scrollY + 4) + 'px';
                             }
 
+                            function reposition() {
+                                if (lastProps && popup) positionPopup(lastProps);
+                            }
+
                             return {
                                 onStart: function(props) {
+                                    lastProps = props;
                                     popup = document.createElement('div');
                                     popup.className = 'mention-suggestions';
                                     popup.setAttribute('role', 'listbox');
                                     document.body.appendChild(popup);
+                                    window.addEventListener('scroll', reposition, true);
+                                    window.addEventListener('resize', reposition);
                                     buildList(props);
                                     positionPopup(props);
                                 },
                                 onUpdate: function(props) {
+                                    lastProps = props;
                                     if (!popup) return;
                                     buildList(props);
                                     positionPopup(props);
@@ -1793,18 +1818,18 @@ var MessengerModule = (function(Utils, EventBus) {
                                     return false;
                                 },
                                 onExit: function() {
+                                    window.removeEventListener('scroll', reposition, true);
+                                    window.removeEventListener('resize', reposition);
                                     if (popup) { popup.remove(); popup = null; }
                                     items = [];
                                     itemEls = [];
+                                    lastProps = null;
                                 },
                             };
                         },
                     },
                 });
 
-                // -------------------------------------------------------------
-                // SEMANTIC COLOR MARK
-                // -------------------------------------------------------------
                 const SemanticColor = Mark.create({
                     name: 'semanticColor',
                     addAttributes() { return { variant: { default: 'primary' } }; },
@@ -1826,7 +1851,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -------------------------------------------------------------
-                // LINK PREVIEW PASTE PLUGIN (with skeleton)
+                // LINK PREVIEW PASTE PLUGIN (skeleton + 8s timeout)
                 // -------------------------------------------------------------
                 const linkPreviewPlugin = new Plugin({
                     key: new PluginKey('linkPreview'),
@@ -1840,7 +1865,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             event.preventDefault();
 
                             var url = trimmed;
-                            // Insert skeleton immediately
                             var state = view.state;
                             var tr = state.tr.replaceWith(
                                 state.selection.from, state.selection.to,
@@ -1850,10 +1874,31 @@ var MessengerModule = (function(Utils, EventBus) {
                             );
                             view.dispatch(tr);
 
-                            fetch(OG_WORKER_URL + encodeURIComponent(url))
-                                .then(function(res) { return res.json(); })
+                            function replaceSkeletonWithText() {
+                                var foundPos = -1;
+                                view.state.doc.descendants(function(node, pos) {
+                                    if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
+                                        foundPos = pos;
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                                if (foundPos === -1) return;
+                                var trPlain = view.state.tr.replaceWith(
+                                    foundPos, foundPos + 1, view.state.schema.text(url)
+                                );
+                                view.dispatch(trPlain);
+                            }
+
+                            var controller = new AbortController();
+                            var timeoutId = setTimeout(function() { controller.abort(); }, OG_FETCH_TIMEOUT);
+
+                            fetch(OG_WORKER_URL + encodeURIComponent(url), { signal: controller.signal })
+                                .then(function(res) {
+                                    clearTimeout(timeoutId);
+                                    return res.json();
+                                })
                                 .then(function(data) {
-                                    // Find the loading node for this URL and replace it
                                     var foundPos = -1;
                                     view.state.doc.descendants(function(node, pos) {
                                         if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
@@ -1864,7 +1909,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     });
                                     if (foundPos === -1) return;
 
-                                    // If the OG worker failed, replace with the plain URL text
                                     if (data.error || (!data.imageSrc && (!data.title || data.title === url))) {
                                         var trPlain = view.state.tr.replaceWith(
                                             foundPos, foundPos + 1, view.state.schema.text(url)
@@ -1884,18 +1928,13 @@ var MessengerModule = (function(Utils, EventBus) {
                                     view.dispatch(tr2);
                                 })
                                 .catch(function(err) {
+                                    clearTimeout(timeoutId);
+                                    if (err && err.name === 'AbortError') {
+                                        replaceSkeletonWithText();
+                                        return;
+                                    }
                                     console.error('Link preview error:', err);
-                                    var foundPos = -1;
-                                    view.state.doc.descendants(function(node, pos) {
-                                        if (node.type.name === 'linkPreview' && node.attrs.href === url && node.attrs.loading) {
-                                            foundPos = pos;
-                                            return false;
-                                        }
-                                        return true;
-                                    });
-                                    if (foundPos === -1) return;
-                                    var trErr = view.state.tr.replaceWith(foundPos, foundPos + 1, view.state.schema.text(url));
-                                    view.dispatch(trErr);
+                                    replaceSkeletonWithText();
                                 });
                             return true;
                         },
@@ -1904,13 +1943,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 // -----------------------------------------------------------------
                 // INITIAL CONTENT
-                // The textarea is populated server-side when the user replies (or
-                // when a message is forwarded) — that content is always fresh and
-                // must win over any stale draft. A draft is only ever authoritative
-                // when its *content* differs from the pristine textarea content
-                // (i.e. the user actually typed something). Otherwise the two
-                // would describe the same quote in slightly different HTML and
-                // appending both would duplicate it.
                 // -----------------------------------------------------------------
                 var draft = loadDraft();
                 var modernRecipientEl = container.querySelector('#modern-recipient');
@@ -1926,9 +1958,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                          typeof draft.body === 'string' &&
                                          !editorContentIsEmpty(draft.body));
 
-                // If the stored draft describes exactly the same visible content as
-                // the pristine textarea, it carries no user edit — discard it so the
-                // quote can't render twice.
                 if (draftHasContent && textareaHasContent &&
                     contentFingerprint(draft.body) === contentFingerprint(textareaHtml)) {
                     clearDraft();
@@ -1940,7 +1969,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 var draftWasUsed = false;
 
                 if (textareaHasContent && draftHasContent) {
-                    // Distinct content on both sides — keep both, textarea first.
                     initialHtml = textareaHtml + '<p></p>' + draft.body;
                     draftWasUsed = true;
                 } else if (textareaHasContent) {
@@ -1950,8 +1978,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     draftWasUsed = true;
                 }
 
-                // Recipient / subject: textarea-derived inputs already hold the
-                // server-provided values; the draft only fills in what's empty.
                 if (draft) {
                     if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
                         modernRecipientEl.value = draft.recipient;
@@ -1961,8 +1987,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
-                // Guarantee a trailing empty paragraph so `focus('end')` lands
-                // *below* a blockquote / spoiler / code block rather than inside it.
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
                 editor = new Editor({
@@ -1986,7 +2010,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         },
                         plugins: [linkPreviewPlugin],
                         handlePaste: function(view, event) {
-                            // Image paste wins over everything else.
                             var files = event.clipboardData ? event.clipboardData.files : null;
                             if (files && files.length) {
                                 var imgs = Array.prototype.slice.call(files).filter(function(f) {
@@ -1998,7 +2021,6 @@ var MessengerModule = (function(Utils, EventBus) {
                                     return true;
                                 }
                             }
-                            // Shift + Ctrl + V → paste as plain text
                             if (event.shiftKey) {
                                 var text = event.clipboardData.getData('text/plain');
                                 if (text) {
@@ -2032,9 +2054,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 // -----------------------------------------------------------------
                 // TRAILING-PARAGRAPH HELPER FOR TOOLBAR INSERTIONS
-                // If the block the caret is inside is the last child of the doc,
-                // append a paragraph after it so the user can arrow/click downward.
-                // Cursor stays where it is — the user still needs to fill the block.
                 // -----------------------------------------------------------------
                 function ensureTrailingParagraphAfterBlock(blockType) {
                     if (!editor) return;
@@ -2262,20 +2281,17 @@ var MessengerModule = (function(Utils, EventBus) {
                             keydown: function(view, event) {
                                 var mod = event.ctrlKey || event.metaKey;
 
-                                // Ctrl+Enter → Send
                                 if (mod && event.key === 'Enter') {
                                     event.preventDefault();
                                     var sendBtn = container.querySelector('#modern-submit');
                                     if (sendBtn && !sendBtn.disabled) sendBtn.click();
                                     return true;
                                 }
-                                // Ctrl+K → Insert link
                                 if (mod && !event.shiftKey && (event.key === 'k' || event.key === 'K')) {
                                     event.preventDefault();
                                     linkBtn.click();
                                     return true;
                                 }
-                                // Ctrl+Shift+S → Spoiler
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     editor.chain().focus().toggleSpoiler().run();
@@ -2301,15 +2317,12 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 // -----------------------------------------------------------------
                 // DRAFT AUTOSAVE + SEND STATE + CHAR COUNTER
-                // (defined here so they close over `editor`)
                 // -----------------------------------------------------------------
                 var _saveTimer = null;
                 function scheduleDraftSave() {
                     if (_saveTimer) clearTimeout(_saveTimer);
                     _saveTimer = setTimeout(function() {
                         _saveTimer = null;
-                        // Don't cache a body whose visible content is identical
-                        // to the untouched textarea (i.e. the pristine quote).
                         var currentBody = editor ? editor.getHTML() : '';
                         var pristine = textareaHasContent &&
                                        !editorContentIsEmpty(currentBody) &&
@@ -2359,13 +2372,23 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
-                // Re-evaluate send state whenever recipient / subject change.
+                // Send-state watchers on recipient / subject.
                 var modernRecipientInput = container.querySelector('#modern-recipient');
                 var modernTitleInput = container.querySelector('#modern-title');
                 if (modernRecipientInput) modernRecipientInput.addEventListener('input', updateSendState);
                 if (modernTitleInput) modernTitleInput.addEventListener('input', updateSendState);
 
-                // Expose for the button's click handler below.
+                // Ctrl+Enter from recipient / subject also sends.
+                [modernRecipientInput, modernTitleInput].forEach(function(el) {
+                    if (!el) return;
+                    el.addEventListener('keydown', function(e) {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                            e.preventDefault();
+                            if (modernSubmitBtnRef && !modernSubmitBtnRef.disabled) modernSubmitBtnRef.click();
+                        }
+                    });
+                });
+
                 container._updateSendState = updateSendState;
                 container._scheduleDraftSave = scheduleDraftSave;
                 container._flashDraftStatus = flashDraftStatus;
@@ -2399,7 +2422,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
 
-        // Attach recipient autocomplete
         attachRecipientAutocomplete(modernRecipient);
 
         // INLINE VALIDATION — Subject field
@@ -2509,7 +2531,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     return;
                 }
 
-                // Sync and show spinner
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
                 if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
@@ -2518,19 +2539,29 @@ var MessengerModule = (function(Utils, EventBus) {
                 modernSubmitBtn.disabled = true;
                 modernSubmitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Sending…';
 
-                // Clear draft on successful submit intent (page will navigate)
                 clearDraft();
 
                 try {
-                    if (originalForm && typeof originalForm.submit === 'function') {
-                        if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
-                            modernSubmitBtn.disabled = false;
-                            modernSubmitBtn.innerHTML = originalLabel;
-                            return;
-                        }
-                        originalForm.submit();
+                    // Validate first, if a validator is available.
+                    if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
+                        modernSubmitBtn.disabled = false;
+                        modernSubmitBtn.innerHTML = originalLabel;
+                        return;
+                    }
+
+                    // The legacy submit input starts disabled and only unlocks
+                    // via the textarea's onclick handler, which we replaced.
+                    // Re-enable it before use.
+                    if (submitButton) submitButton.disabled = false;
+
+                    if (originalForm && originalForm instanceof HTMLFormElement) {
+                        // Native form.submit() bypasses the name-shadowing caused
+                        // by <input name="submit"> on the form element.
+                        HTMLFormElement.prototype.submit.call(originalForm);
                     } else if (submitButton) {
                         submitButton.click();
+                    } else if (originalForm && typeof originalForm.submit === 'function') {
+                        originalForm.submit();
                     } else {
                         throw new Error('No form submit handler found');
                     }
