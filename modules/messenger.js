@@ -222,6 +222,15 @@ var MessengerModule = (function(Utils, EventBus) {
             '&fit=cover&a=attention&il';
     }
 
+    function shouldUseInitialAvatar(avatarUrl) {
+    if (!avatarUrl || typeof avatarUrl !== 'string') return true;
+    var lower = avatarUrl.toLowerCase();
+    if (lower.indexOf('img.forumfree.net') !== -1) return true;
+    if (lower.indexOf('style_images/default_avatar.png') !== -1) return true;
+    if (lower.indexOf('default_avatar') !== -1) return true;
+    return false;
+}
+
     function buildReplyingAsHeader(user) {
         if (!user) return null;
 
@@ -1266,66 +1275,79 @@ var MessengerModule = (function(Utils, EventBus) {
                                 return span;
                             }
 
-                            function buildList(props) {
-                                items = props.items || [];
-                                selectedIndex = 0;
-                                itemEls = [];
+function buildList(props) {
+    items = props.items || [];
+    selectedIndex = 0;
+    itemEls = [];
 
-                                if (!popup) return;
-                                popup.innerHTML = '';
+    if (!popup) return;
+    popup.innerHTML = '';
 
-                                if (items.length === 0) {
-                                    popup.style.display = 'none';
-                                    return;
-                                }
+    if (items.length === 0) {
+        popup.style.display = 'none';
+        return;
+    }
 
-                                items.forEach(function(user) {
-                                    var el = document.createElement('button');
-                                    el.type = 'button';
-                                    el.className = 'mention-suggestion-item';
+    items.forEach(function(user) {
+        var el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'mention-suggestion-item';
 
-                                    var avatarUrl = (typeof user.avatar === 'string' && user.avatar)
-                                        ? (optimizeAvatarUrl(user.avatar, 28, 28) || user.avatar)
-                                        : null;
+        var rawAvatar = (typeof user.avatar === 'string' && user.avatar) ? user.avatar : null;
+        var avatarUrl = (rawAvatar && !shouldUseInitialAvatar(rawAvatar))
+            ? (optimizeAvatarUrl(rawAvatar, 28, 28) || rawAvatar)
+            : null;
 
-                                    if (avatarUrl) {
-                                        var img = document.createElement('img');
-                                        img.className = 'mention-suggestion-avatar';
-                                        img.src = avatarUrl;
-                                        img.alt = '';
-                                        img.width = 28;
-                                        img.height = 28;
-                                        img.loading = 'lazy';
-                                        img.onerror = function() {
-                                            this.replaceWith(makeInitialAvatar(user.name));
-                                        };
-                                        el.appendChild(img);
-                                    } else {
-                                        el.appendChild(makeInitialAvatar(user.name));
-                                    }
+        if (avatarUrl) {
+            var img = document.createElement('img');
+            img.className = 'mention-suggestion-avatar';
+            img.src = avatarUrl;
+            img.alt = '';
+            img.width = 28;
+            img.height = 28;
+            img.loading = 'lazy';
 
-                                    var name = document.createElement('span');
-                                    name.className = 'mention-suggestion-name';
-                                    name.textContent = user.name || '';
-                                    el.appendChild(name);
+            // Broken image (network error, 404, CORS-blocked): fall back to initials.
+            img.onerror = function() {
+                this.replaceWith(makeInitialAvatar(user.name));
+            };
 
-                                    // mousedown fires before blur, so the editor
-                                    // doesn't lose focus before the command runs
-                                    el.addEventListener('mousedown', function(e) {
-                                        e.preventDefault();
-                                        props.command({
-                                            id: String(user.id),
-                                            label: user.name || String(user.id),
-                                        });
-                                    });
+            // Some CDNs return a 1×1 transparent placeholder with a 200 status
+            // instead of a proper 404 — onerror never fires, but the visible
+            // result is an empty circle. Catch that case after load.
+            img.onload = function() {
+                if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
+                    this.replaceWith(makeInitialAvatar(user.name));
+                }
+            };
 
-                                    itemEls.push(el);
-                                    popup.appendChild(el);
-                                });
+            el.appendChild(img);
+        } else {
+            el.appendChild(makeInitialAvatar(user.name));
+        }
 
-                                popup.style.display = 'block';
-                                updateSelected();
-                            }
+        var name = document.createElement('span');
+        name.className = 'mention-suggestion-name';
+        name.textContent = user.name || '';
+        el.appendChild(name);
+
+        // mousedown fires before blur, so the editor
+        // doesn't lose focus before the command runs
+        el.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            props.command({
+                id: String(user.id),
+                label: user.name || String(user.id),
+            });
+        });
+
+        itemEls.push(el);
+        popup.appendChild(el);
+    });
+
+    popup.style.display = 'block';
+    updateSelected();
+}
 
                             function positionPopup(props) {
                                 if (!popup) return;
