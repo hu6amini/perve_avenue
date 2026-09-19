@@ -17,6 +17,32 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // SHARED AVATAR COLOR PALETTE
+    // Mirrors ForumPostsModule so the same user gets the same initial-avatar
+    // colour across posts, the messenger header, and the mention dropdown.
+    // ------------------------------------------------------------------------
+    var AVATAR_COLORS = [
+        '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
+        '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
+        '3B82F6', '60A5FA', '93C5FD', '2563EB', '1D4ED8',
+        '6366F1', '818CF8', 'A5B4FC', '4F46E5', '4338CA',
+        '8B5CF6', 'A78BFA', 'C4B5FD', '7C3AED', '6D28D9',
+        'D97706', 'F59E0B', 'FBBF24', 'FCD34D', 'B45309',
+        '64748B', '94A3B8', 'CBD5E1', '475569', '334155'
+    ];
+
+    function getColorFromNickname(nickname, userId) {
+        var hash = 0;
+        var str = nickname || userId || 'user';
+        for (var i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        var colorIndex = Math.abs(hash) % AVATAR_COLORS.length;
+        return AVATAR_COLORS[colorIndex];
+    }
+
+    // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
     function initialize() {
@@ -250,7 +276,10 @@ var MessengerModule = (function(Utils, EventBus) {
                 'width="36" height="36" loading="lazy" decoding="async">';
         } else {
             var initial = (username.charAt(0) || '?').toUpperCase();
-            avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial">' +
+            // Consistent colour, same palette + hash as the Posts module.
+            var bgColor = getColorFromNickname(username, mid);
+            avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
+                'style="background-color:#' + bgColor + ';">' +
                 escapeHtml(initial) + '</span>';
         }
 
@@ -1267,10 +1296,13 @@ var MessengerModule = (function(Utils, EventBus) {
                                 });
                             }
 
-                            function makeInitialAvatar(name) {
+                            function makeInitialAvatar(name, userId) {
                                 var initial = (name || '?').charAt(0).toUpperCase();
                                 var span = document.createElement('span');
                                 span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
+                                // Consistent colour, same palette + hash as the Posts module.
+                                var bgColor = getColorFromNickname(name, userId);
+                                span.style.backgroundColor = '#' + bgColor;
                                 span.textContent = initial;
                                 return span;
                             }
@@ -1309,7 +1341,7 @@ function buildList(props) {
 
             // Broken image (network error, 404, CORS-blocked): fall back to initials.
             img.onerror = function() {
-                this.replaceWith(makeInitialAvatar(user.name));
+                this.replaceWith(makeInitialAvatar(user.name, user.id));
             };
 
             // Some CDNs return a 1×1 transparent placeholder with a 200 status
@@ -1317,13 +1349,13 @@ function buildList(props) {
             // result is an empty circle. Catch that case after load.
             img.onload = function() {
                 if (this.naturalWidth <= 1 || this.naturalHeight <= 1) {
-                    this.replaceWith(makeInitialAvatar(user.name));
+                    this.replaceWith(makeInitialAvatar(user.name, user.id));
                 }
             };
 
             el.appendChild(img);
         } else {
-            el.appendChild(makeInitialAvatar(user.name));
+            el.appendChild(makeInitialAvatar(user.name, user.id));
         }
 
         var name = document.createElement('span');
