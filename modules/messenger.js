@@ -91,7 +91,11 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // TRAILING PARAGRAPH GUARANTEE
+    // TRAILING PARAGRAPH GUARANTEE (initial content only)
+    // Applied to the initial HTML so that a pre-existing block at the end of
+    // the document doesn't trap the caret inside it. Not applied after toolbar
+    // insertions — when the user clicks the quote/code/spoiler button, they
+    // want to keep typing inside the new block.
     // ------------------------------------------------------------------------
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -501,8 +505,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // RECIPIENT AUTOCOMPLETE
-    // Shares styling with the mention suggestion dropdown. Repositions itself
-    // on scroll/resize so it never detaches from the input.
     // ------------------------------------------------------------------------
     function attachRecipientAutocomplete(inputEl) {
         if (!inputEl) return;
@@ -1316,7 +1318,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
         }
 
-        // Modal helpers — both now close on Escape and restore editor focus on exit.
+        // Modal helpers — both close on Escape and restore editor focus on exit.
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -1987,6 +1989,10 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
+                // Only apply the trailing-paragraph guarantee when the initial
+                // content came from the server (existing quote) or from a
+                // restored draft. Toolbar-inserted blocks are handled directly
+                // by their handlers and deliberately leave the caret inside.
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
                 editor = new Editor({
@@ -2053,27 +2059,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -----------------------------------------------------------------
-                // TRAILING-PARAGRAPH HELPER FOR TOOLBAR INSERTIONS
-                // -----------------------------------------------------------------
-                function ensureTrailingParagraphAfterBlock(blockType) {
-                    if (!editor) return;
-                    var state = editor.state;
-                    var $from = state.selection.$from;
-                    for (var d = $from.depth; d > 0; d--) {
-                        var node = $from.node(d);
-                        if (node.type.name === blockType) {
-                            var posAfter = $from.after(d);
-                            if (!state.doc.nodeAt(posAfter)) {
-                                editor.chain()
-                                    .insertContentAt(posAfter, { type: 'paragraph' })
-                                    .run();
-                            }
-                            return;
-                        }
-                    }
-                }
-
-                // -----------------------------------------------------------------
                 // TOOLBAR ACTIONS
                 // -----------------------------------------------------------------
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
@@ -2109,24 +2094,13 @@ var MessengerModule = (function(Utils, EventBus) {
                     closeDropdown(listDropdownBtn, listDropdownMenu);
                 };
 
-                blockquoteBtn.onclick = function() {
-                    if (!editor) return;
-                    var wasActive = editor.isActive('blockquote');
-                    exec(function() { editor.chain().focus().toggleBlockquote().run(); });
-                    if (!wasActive) ensureTrailingParagraphAfterBlock('blockquote');
-                };
-                codeBtn.onclick = function() {
-                    if (!editor) return;
-                    var wasActive = editor.isActive('codeBlock');
-                    exec(function() { editor.chain().focus().toggleCodeBlock().run(); });
-                    if (!wasActive) ensureTrailingParagraphAfterBlock('codeBlock');
-                };
-                spoilerBtn.onclick = function() {
-                    if (!editor) return;
-                    var wasActive = editor.isActive('spoiler');
-                    exec(function() { editor.chain().focus().toggleSpoiler().run(); });
-                    if (!wasActive) ensureTrailingParagraphAfterBlock('spoiler');
-                };
+                // Toolbar-inserted blocks leave the caret inside the block so
+                // the user can type its content immediately. No trailing
+                // paragraph is added — that behaviour is reserved for content
+                // that already existed on load.
+                blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
+                codeBtn.onclick       = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
+                spoilerBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
 
                 linkBtn.onclick = function() {
                     if (!editor) return;
@@ -2372,13 +2346,11 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
-                // Send-state watchers on recipient / subject.
                 var modernRecipientInput = container.querySelector('#modern-recipient');
                 var modernTitleInput = container.querySelector('#modern-title');
                 if (modernRecipientInput) modernRecipientInput.addEventListener('input', updateSendState);
                 if (modernTitleInput) modernTitleInput.addEventListener('input', updateSendState);
 
-                // Ctrl+Enter from recipient / subject also sends.
                 [modernRecipientInput, modernTitleInput].forEach(function(el) {
                     if (!el) return;
                     el.addEventListener('keydown', function(e) {
@@ -2542,21 +2514,15 @@ var MessengerModule = (function(Utils, EventBus) {
                 clearDraft();
 
                 try {
-                    // Validate first, if a validator is available.
                     if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
                         modernSubmitBtn.disabled = false;
                         modernSubmitBtn.innerHTML = originalLabel;
                         return;
                     }
 
-                    // The legacy submit input starts disabled and only unlocks
-                    // via the textarea's onclick handler, which we replaced.
-                    // Re-enable it before use.
                     if (submitButton) submitButton.disabled = false;
 
                     if (originalForm && originalForm instanceof HTMLFormElement) {
-                        // Native form.submit() bypasses the name-shadowing caused
-                        // by <input name="submit"> on the form element.
                         HTMLFormElement.prototype.submit.call(originalForm);
                     } else if (submitButton) {
                         submitButton.click();
