@@ -3119,11 +3119,10 @@ section.modern-stats { flex-direction: column; width: 100%; }
   transform: translateY(-1px);
 }
 .modern-editor-btn.active {
-  background: var(--primary-color) !important;
+  background: rgba(5, 150, 105, 0.12) !important;
   border-color: var(--primary-color) !important;
-  color: white !important;
 }
-.modern-editor-btn.active i { color: white !important; }
+.modern-editor-btn.active i { color: var(--primary-color) !important; }
 .toolbar-separator {
   display: inline-block;
   width: 1px;
@@ -3133,7 +3132,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   vertical-align: middle;
 }
 .modern-editor-btn:disabled {
-    opacity: 0.35;
+    opacity: 0.382;
     cursor: not-allowed;
     pointer-events: none;
 }
