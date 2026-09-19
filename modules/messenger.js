@@ -79,6 +79,15 @@ var MessengerModule = (function(Utils, EventBus) {
         return true;
     }
 
+    function contentFingerprint(html) {
+    if (!html) return '';
+    var d = document.createElement('div');
+    d.innerHTML = html;
+    var text = (d.textContent || '').replace(/\s+/g, ' ').trim();
+    var imgCount = d.querySelectorAll('img').length;
+    return text + '||imgs:' + imgCount;
+}
+
     // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
@@ -1876,41 +1885,54 @@ var MessengerModule = (function(Utils, EventBus) {
                 // the textarea itself is empty. When both have content, keep the
                 // draft below the textarea content so nothing is silently lost.
                 // -----------------------------------------------------------------
-                var draft = loadDraft();
-                var modernRecipientEl = container.querySelector('#modern-recipient');
-                var modernTitleEl = container.querySelector('#modern-title');
+var draft = loadDraft();
+var modernRecipientEl = container.querySelector('#modern-recipient');
+var modernTitleEl = container.querySelector('#modern-title');
 
-                var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
-                var textareaHtmlConverted = textareaRaw ? legacyToHtml(textareaRaw) : '';
-                var textareaHasContent = textareaRaw.trim().length > 0 &&
-                                         !editorContentIsEmpty(textareaHtmlConverted);
-                var textareaHtml = textareaHasContent ? textareaHtmlConverted : '';
+var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
+var textareaHtmlConverted = textareaRaw ? legacyToHtml(textareaRaw) : '';
+var textareaHasContent = textareaRaw.trim().length > 0 &&
+                         !editorContentIsEmpty(textareaHtmlConverted);
+var textareaHtml = textareaHasContent ? textareaHtmlConverted : '';
 
-                var draftHasContent = !!(draft &&
-                                         typeof draft.body === 'string' &&
-                                         !editorContentIsEmpty(draft.body));
+var draftHasContent = !!(draft &&
+                         typeof draft.body === 'string' &&
+                         !editorContentIsEmpty(draft.body));
 
-                var initialHtml = '';
-                if (textareaHasContent) {
-                    initialHtml = textareaHtml;
-                    // Preserve a non-empty draft beneath the fresh textarea content.
-                    if (draftHasContent && draft.body.trim() !== textareaHtml.trim()) {
-                        initialHtml += '<p></p>' + draft.body;
-                    }
-                } else if (draftHasContent) {
-                    initialHtml = draft.body;
-                }
+// If the stored draft describes exactly the same visible content as
+// the pristine textarea, it carries no user edit — discard it so the
+// quote can't render twice.
+if (draftHasContent && textareaHasContent &&
+    contentFingerprint(draft.body) === contentFingerprint(textareaHtml)) {
+    clearDraft();
+    draft = null;
+    draftHasContent = false;
+}
 
-                // Recipient / subject: textarea-derived inputs already hold the
-                // server-provided values; the draft only fills in what's empty.
-                if (draft) {
-                    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
-                        modernRecipientEl.value = draft.recipient;
-                    }
-                    if (draft.subject && modernTitleEl && !modernTitleEl.value.trim()) {
-                        modernTitleEl.value = draft.subject;
-                    }
-                }
+var initialHtml = '';
+var draftWasUsed = false;
+
+if (textareaHasContent && draftHasContent) {
+    // Distinct content on both sides — keep both, textarea first.
+    initialHtml = textareaHtml + '<p></p>' + draft.body;
+    draftWasUsed = true;
+} else if (textareaHasContent) {
+    initialHtml = textareaHtml;
+} else if (draftHasContent) {
+    initialHtml = draft.body;
+    draftWasUsed = true;
+}
+
+// Recipient / subject: textarea-derived inputs already hold the
+// server-provided values; the draft only fills in what's empty.
+if (draft) {
+    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
+        modernRecipientEl.value = draft.recipient;
+    }
+    if (draft.subject && modernTitleEl && !modernTitleEl.value.trim()) {
+        modernTitleEl.value = draft.subject;
+    }
+}
 
                 // Only surface "Draft restored" when the draft actually contributed
                 // content — not when a fresh reply simply reused the textarea.
@@ -2220,11 +2242,11 @@ var MessengerModule = (function(Utils, EventBus) {
                     _saveTimer = setTimeout(function() {
                         _saveTimer = null;
                         // Don't cache a body that exactly matches the untouched textarea.
-                        var currentBody = editor ? editor.getHTML() : '';
-                        var pristine = textareaHasContent &&
-                                       !editorContentIsEmpty(currentBody) &&
-                                       currentBody.trim() === textareaHtml.trim();
-                        if (pristine) return;
+        var currentBody = editor ? editor.getHTML() : '';
+        var pristine = textareaHasContent &&
+                       !editorContentIsEmpty(currentBody) &&
+                       contentFingerprint(currentBody) === contentFingerprint(textareaHtml);
+        if (pristine) return;
                         var modernRecipient = container.querySelector('#modern-recipient');
                         var modernTitle = container.querySelector('#modern-title');
                         var ok = saveDraft({
