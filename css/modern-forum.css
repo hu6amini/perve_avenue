@@ -3132,6 +3132,11 @@ section.modern-stats { flex-direction: column; width: 100%; }
   margin: 0 var(--space-sm);
   vertical-align: middle;
 }
+.modern-editor-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
 
 /* Dropdown menus (editor toolbar) */
 .modern-dropdown {
