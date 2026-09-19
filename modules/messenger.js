@@ -1,5 +1,6 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
-// Includes custom emoji picker with Twemoji images (grouped) and semantic color palette
+// Includes custom emoji picker with Twemoji images (grouped), semantic color
+// palette, and mention autocomplete.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -255,6 +256,42 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // MENTION SEARCH (module-level, so it can be reused by the posts editor)
+    // Calls the same endpoint the legacy mention picker uses.
+    // Response shape: { users: [{ name, id, avatar }, ...] }
+    // ------------------------------------------------------------------------
+    var _mentionSearchAbort = null;
+
+    function searchMentions(query) {
+        if (!query || query.length < 1) return Promise.resolve([]);
+
+        if (_mentionSearchAbort) {
+            try { _mentionSearchAbort.abort(); } catch (e) {}
+        }
+        _mentionSearchAbort = new AbortController();
+
+        var url = '/api.php?search&name=' + encodeURIComponent(query) + '&n=10&cookie=1';
+
+        return fetch(url, {
+            credentials: 'include',
+            signal: _mentionSearchAbort.signal
+        })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (data) {
+            var users = (data && Array.isArray(data.users)) ? data.users : [];
+            return users.slice(0, 8);
+        })
+        .catch(function (err) {
+            if (err && err.name === 'AbortError') return [];
+            console.warn('[MessengerModule] Mention search failed:', err);
+            return [];
+        });
+    }
+
+    // ------------------------------------------------------------------------
     // SEMANTIC COLOR PALETTE
     // Maps legacy [color=X] values to semantic classes. Unknown colors are
     // stripped (safer than carrying an unreadable inline style forward).
@@ -334,7 +371,8 @@ var MessengerModule = (function(Utils, EventBus) {
     // ------------------------------------------------------------------------
     // HTML → legacy BBCode (outbound only)
     // Converts <blockquote>, <div class="spoiler">, and <pre><code> to their
-    // BBCode equivalents. Runs in a loop so nested blocks resolve correctly.
+    // BBCode equivalents. Mentions (<mark data-uid>) are passed through
+    // unchanged — ForumFree stores them verbatim.
     // ------------------------------------------------------------------------
     function htmlToLegacy(html) {
         if (!html || typeof html !== 'string') return html;
@@ -345,7 +383,6 @@ var MessengerModule = (function(Utils, EventBus) {
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
 
-            // <blockquote>...</blockquote> → [QUOTE]...[/QUOTE]
             result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
                 var cleaned = inner
                     .replace(/<p[^>]*>/gi, '')
@@ -354,7 +391,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
-            // <div class="spoiler">...</div> → [SPOILER]...[/SPOILER]
             result = result.replace(/<div class="spoiler"[^>]*>([\s\S]*?)<\/div>/gi, function(match, inner) {
                 var cleaned = inner
                     .replace(/<p[^>]*>/gi, '')
@@ -363,7 +399,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return '[SPOILER]' + cleaned + '[/SPOILER]';
             });
 
-            // <pre><code>...</code></pre> → [CODE]...[/CODE]
             result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, inner) {
                 var decoded = inner
                     .replace(/&lt;/g, '<')
@@ -381,8 +416,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // COMPOSE SECTION – TipTap with custom image, link preview, heading dropdown,
-    // emoji picker, and semantic color palette
+    // COMPOSE SECTION
     // ------------------------------------------------------------------------
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
@@ -401,11 +435,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var previewButton = document.querySelector('button[name="preview"]');
         var originalForm  = window.REPLIER;
 
-        // -----------------------------------------------------------------
-        // Force both legacy options on. The forum resets them per session,
-        // and users overwhelmingly want both enabled. We re-assert at submit
-        // time as well, in case the AJAX preview path resets them.
-        // -----------------------------------------------------------------
+        // Force both legacy options on.
         if (addSentCheckbox) addSentCheckbox.checked = true;
         if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
 
@@ -413,7 +443,6 @@ var MessengerModule = (function(Utils, EventBus) {
         container.className = 'modern-messenger-section';
         container.id = 'compose-section';
 
-        // Replying-as header placeholder (filled sync, refined async)
         var replyingAsPlaceholder = document.createElement('div');
         replyingAsPlaceholder.className = 'modern-replying-as-placeholder';
         container.appendChild(replyingAsPlaceholder);
@@ -437,9 +466,7 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.className = 'modern-editor-toolbar';
         container.appendChild(toolbar);
 
-        // -----------------------------------------------------------------
         // Replying-as header — sync-render immediately, refine async.
-        // -----------------------------------------------------------------
         var syncUser = getCurrentUserSync();
         var currentHeader = null;
         if (syncUser) {
@@ -518,10 +545,6 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // ========== UNDO / REDO ==========
-        // Meta-actions: they belong before any formatting group. Both
-        // commands are registered by StarterKit's history extension.
-        // Buttons start disabled and are enabled/disabled by
-        // updateActiveStates based on editor.can().undo() / .redo().
         var undoBtn = document.createElement('button');
         undoBtn.type = 'button';
         undoBtn.className = 'modern-editor-btn';
@@ -560,7 +583,7 @@ var MessengerModule = (function(Utils, EventBus) {
             activeButtonElements.push(button);
         }
 
-                // ========== COLOR DROPDOWN ==========
+        // ========== COLOR DROPDOWN ==========
         var colorDropdownContainer = document.createElement('div');
         colorDropdownContainer.className = 'modern-dropdown';
         colorDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -604,7 +627,7 @@ var MessengerModule = (function(Utils, EventBus) {
         });
         // ========== END COLOR DROPDOWN ==========
 
-        // ---- Clear formatting button (grouped with text marks) ----
+        // ---- Clear formatting button ----
         var clearFormatBtn = document.createElement('button');
         clearFormatBtn.type = 'button';
         clearFormatBtn.className = 'modern-editor-btn';
@@ -733,7 +756,7 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.appendChild(spoilerBtn);
         activeButtonElements.push(spoilerBtn);
 
-        // ---- Emoji button & custom picker with group separators ----
+        // ---- Emoji button & custom picker ----
         var emojiBtn = document.createElement('button');
         emojiBtn.type = 'button';
         emojiBtn.className = 'modern-editor-btn';
@@ -834,7 +857,7 @@ var MessengerModule = (function(Utils, EventBus) {
         });
 
         // -----------------------------------------------------------------
-        // UPLOAD FUNCTION – uses worker that returns url + width + height
+        // UPLOAD FUNCTION
         // -----------------------------------------------------------------
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
@@ -965,12 +988,18 @@ var MessengerModule = (function(Utils, EventBus) {
                 const underlineModule = await import('https://esm.sh/@tiptap/extension-underline@2.5.2');
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
                 const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
+                const mentionModule = await import('https://esm.sh/@tiptap/extension-mention@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
                 const Underline = underlineModule.Underline || (underlineModule.default && underlineModule.default.Underline);
                 const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
                 const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
+                const Mention = mentionModule.Mention || (mentionModule.default && mentionModule.default.Mention);
+
+                if (!Mention) {
+                    throw new Error('Mention extension not found');
+                }
 
                 const CustomLink = Link.configure({
                     openOnClick: true,
@@ -1148,9 +1177,227 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -------------------------------------------------------------
+                // MENTION
+                // Outputs <mark data-uid="..." data-username="...">name</mark>.
+                // The mark content is JUST the name (no leading @) so the
+                // reader's transformUserTags can prepend @ without duplicating
+                // it. The editor renders the leading @ via CSS ::before so the
+                // user sees @name while typing — matching what the reader shows.
+                // -------------------------------------------------------------
+                const CustomMention = Mention.extend({
+                    addAttributes() {
+                        return {
+                            id: {
+                                default: null,
+                                parseHTML: function(el) { return el.getAttribute('data-uid'); },
+                                renderHTML: function(attrs) {
+                                    return attrs.id != null ? { 'data-uid': attrs.id } : {};
+                                },
+                            },
+                            label: {
+                                default: null,
+                                parseHTML: function(el) {
+                                    var v = el.getAttribute('data-username') || el.textContent || '';
+                                    return v.replace(/^@/, '');
+                                },
+                                renderHTML: function(attrs) {
+                                    return attrs.label ? { 'data-username': attrs.label } : {};
+                                },
+                            },
+                        };
+                    },
+                    renderHTML: function({ node }) {
+                        return ['mark', {
+                            'data-uid': node.attrs.id,
+                            'data-username': node.attrs.label || '',
+                        }, node.attrs.label || ''];
+                    },
+                    parseHTML: function() {
+                        return [{
+                            tag: 'mark[data-uid]',
+                            getAttrs: function(el) {
+                                var raw = el.getAttribute('data-username') || el.textContent || '';
+                                return {
+                                    id: el.getAttribute('data-uid'),
+                                    label: raw.replace(/^@/, ''),
+                                };
+                            },
+                        }];
+                    },
+                }).configure({
+                    HTMLAttributes: { class: 'user-tag' },
+                    renderText: function({ node }) {
+                        // When serialized via getText(), still produce @name
+                        // for legacy compatibility even if anything ever
+                        // reads the plain-text version.
+                        return '@' + (node.attrs.label || '');
+                    },
+                    suggestion: {
+                        char: '@',
+                        allowSpaces: false,
+                        // Don't fire inside code blocks — @ appears in code
+                        // for email addresses, decorators, etc.
+                        allow: function({ state, range }) {
+                            try {
+                                var $from = state.doc.resolve(range.from);
+                                return $from.parent.type.name !== 'codeBlock';
+                            } catch (e) { return true; }
+                        },
+                        items: function({ query }) {
+                            return searchMentions(query);
+                        },
+                        render: function() {
+                            var popup = null;
+                            var items = [];
+                            var selectedIndex = 0;
+                            var itemEls = [];
+
+                            function updateSelected() {
+                                itemEls.forEach(function(el, i) {
+                                    el.classList.toggle('is-selected', i === selectedIndex);
+                                });
+                            }
+
+                            function makeInitialAvatar(name) {
+                                var initial = (name || '?').charAt(0).toUpperCase();
+                                var span = document.createElement('span');
+                                span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
+                                span.textContent = initial;
+                                return span;
+                            }
+
+                            function buildList(props) {
+                                items = props.items || [];
+                                selectedIndex = 0;
+                                itemEls = [];
+
+                                if (!popup) return;
+                                popup.innerHTML = '';
+
+                                if (items.length === 0) {
+                                    popup.style.display = 'none';
+                                    return;
+                                }
+
+                                items.forEach(function(user) {
+                                    var el = document.createElement('button');
+                                    el.type = 'button';
+                                    el.className = 'mention-suggestion-item';
+
+                                    var avatarUrl = (typeof user.avatar === 'string' && user.avatar)
+                                        ? (optimizeAvatarUrl(user.avatar, 28, 28) || user.avatar)
+                                        : null;
+
+                                    if (avatarUrl) {
+                                        var img = document.createElement('img');
+                                        img.className = 'mention-suggestion-avatar';
+                                        img.src = avatarUrl;
+                                        img.alt = '';
+                                        img.width = 28;
+                                        img.height = 28;
+                                        img.loading = 'lazy';
+                                        img.onerror = function() {
+                                            this.replaceWith(makeInitialAvatar(user.name));
+                                        };
+                                        el.appendChild(img);
+                                    } else {
+                                        el.appendChild(makeInitialAvatar(user.name));
+                                    }
+
+                                    var name = document.createElement('span');
+                                    name.className = 'mention-suggestion-name';
+                                    name.textContent = user.name || '';
+                                    el.appendChild(name);
+
+                                    // mousedown fires before blur, so the editor
+                                    // doesn't lose focus before the command runs
+                                    el.addEventListener('mousedown', function(e) {
+                                        e.preventDefault();
+                                        props.command({
+                                            id: String(user.id),
+                                            label: user.name || String(user.id),
+                                        });
+                                    });
+
+                                    itemEls.push(el);
+                                    popup.appendChild(el);
+                                });
+
+                                popup.style.display = 'block';
+                                updateSelected();
+                            }
+
+                            function positionPopup(props) {
+                                if (!popup) return;
+                                var rect = props.clientRect && props.clientRect();
+                                if (!rect) return;
+                                var scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+                                var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                                popup.style.left = (rect.left + scrollX) + 'px';
+                                popup.style.top = (rect.bottom + scrollY + 4) + 'px';
+                            }
+
+                            return {
+                                onStart: function(props) {
+                                    popup = document.createElement('div');
+                                    popup.className = 'mention-suggestions';
+                                    document.body.appendChild(popup);
+                                    buildList(props);
+                                    positionPopup(props);
+                                },
+                                onUpdate: function(props) {
+                                    if (!popup) return;
+                                    buildList(props);
+                                    positionPopup(props);
+                                },
+                                onKeyDown: function(props) {
+                                    if (!popup || popup.style.display === 'none' || items.length === 0) {
+                                        return false;
+                                    }
+                                    if (props.event.key === 'ArrowDown') {
+                                        selectedIndex = (selectedIndex + 1) % items.length;
+                                        updateSelected();
+                                        return true;
+                                    }
+                                    if (props.event.key === 'ArrowUp') {
+                                        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                                        updateSelected();
+                                        return true;
+                                    }
+                                    if (props.event.key === 'Enter') {
+                                        var user = items[selectedIndex];
+                                        if (user) {
+                                            props.command({
+                                                id: String(user.id),
+                                                label: user.name || String(user.id),
+                                            });
+                                        }
+                                        return true;
+                                    }
+                                    if (props.event.key === 'Escape') {
+                                        if (popup) {
+                                            popup.remove();
+                                            popup = null;
+                                        }
+                                        return true;
+                                    }
+                                    return false;
+                                },
+                                onExit: function() {
+                                    if (popup) {
+                                        popup.remove();
+                                        popup = null;
+                                    }
+                                    items = [];
+                                    itemEls = [];
+                                },
+                            };
+                        },
+                    },
+                });
+
+                // -------------------------------------------------------------
                 // SEMANTIC COLOR MARK
-                // Stores variant as `data-color` attribute and renders semantic
-                // CSS class. No inline styles — the palette adapts to theme.
                 // -------------------------------------------------------------
                 const SemanticColor = Mark.create({
                     name: 'semanticColor',
@@ -1164,7 +1411,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             tag: 'span[data-color]',
                             getAttrs: function(el) {
                                 var v = el.getAttribute('data-color');
-                                // Backward-compat alias for pre-launch 'success' variant
                                 if (v === 'success') v = 'primary';
                                 if (v && LEGACY_COLOR_MAP[v]) v = LEGACY_COLOR_MAP[v];
                                 return v ? { variant: v } : false;
@@ -1235,6 +1481,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         Spoiler,
                         LinkPreview,
                         SemanticColor,
+                        CustomMention,
                     ],
                     content: initialHtml,
                     editorProps: {
@@ -1242,23 +1489,17 @@ var MessengerModule = (function(Utils, EventBus) {
                         plugins: [linkPreviewPlugin],
                     },
                     onCreate: function({ editor }) {
-                        // Conditional auto-focus. We do this here rather than
-                        // via the `autofocus` option because that option only
+                        // Conditional auto-focus. The `autofocus` option only
                         // accepts static values in TipTap 2.x — a function
                         // gets misinterpreted as a focus position and crashes
-                        // with "Position NaN out of range".
+                        // with "Position NaN out of range", so we do it here.
                         if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-                            // Touch device — don't pop the soft keyboard.
-                            return;
+                            return; // touch device — don't pop the soft keyboard
                         }
-
                         var active = document.activeElement;
                         if (active && active !== document.body && active !== document.documentElement) {
-                            // User has already clicked or tabbed into
-                            // something else (recipient, subject, etc.).
-                            return;
+                            return; // user already focused something else
                         }
-
                         editor.commands.focus('end');
                     },
                     onUpdate: function({ editor }) {
@@ -1372,9 +1613,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 spoilerBtn.onclick = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
 
                 function updateActiveStates() {
-                    // Undo/redo availability — TipTap knows whether there's
-                    // anything in the history stack to traverse. Disabling
-                    // the buttons visually communicates that.
                     undoBtn.disabled = !editor.can().undo();
                     redoBtn.disabled = !editor.can().redo();
 
@@ -1407,7 +1645,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         headingDropdownBtn.style.color = '';
                     }
 
-                    // Color dropdown active state + live swatch
                     var activeColorVariant = null;
                     var colorVariants = ['primary', 'info', 'accent', 'warning', 'danger', 'muted'];
                     for (var ci = 0; ci < colorVariants.length; ci++) {
@@ -1417,13 +1654,11 @@ var MessengerModule = (function(Utils, EventBus) {
                         }
                     }
 
-                    // Highlight the matching item in the dropdown menu
                     colorDropdownMenu.querySelectorAll('[data-color]').forEach(function(item) {
                         var v = item.getAttribute('data-color');
                         item.classList.toggle('active', v === activeColorVariant);
                     });
 
-                    // Show a live swatch on the palette button when a color is active
                     var swatch = colorDropdownBtn.querySelector('.active-color-indicator');
                     if (activeColorVariant) {
                         colorDropdownBtn.classList.add('active');
@@ -1432,7 +1667,6 @@ var MessengerModule = (function(Utils, EventBus) {
                             swatch.className = 'active-color-indicator';
                             colorDropdownBtn.appendChild(swatch);
                         }
-                        // Map variant → the CSS variable that represents it
                         var varMap = {
                             primary: 'primary-light',
                             info: 'accent-color',
@@ -1512,11 +1746,7 @@ var MessengerModule = (function(Utils, EventBus) {
         var modernContact     = container.querySelector('#modern-contact');
         var modernTitle       = container.querySelector('#modern-title');
 
-        // -----------------------------------------------------------------
         // INLINE VALIDATION — Subject field
-        // Builds the error element, wires the clear-on-input handler, and
-        // exposes show/clear functions used by the submit handler.
-        // -----------------------------------------------------------------
         var titleField = modernTitle ? modernTitle.closest('.modern-field') : null;
         var titleError = null;
 
@@ -1539,7 +1769,6 @@ var MessengerModule = (function(Utils, EventBus) {
             modernTitle.setAttribute('aria-invalid', 'true');
             modernTitle.setAttribute('aria-describedby', 'modern-title-error');
             titleError.classList.add('visible');
-            // Restart the shake animation if it's already running
             modernTitle.classList.remove('shake');
             void modernTitle.offsetWidth;
             modernTitle.classList.add('shake');
@@ -1573,9 +1802,7 @@ var MessengerModule = (function(Utils, EventBus) {
         if (modernTitle)       modernTitle.addEventListener('input', syncToOriginal);
         syncFromOriginal();
 
-        // -----------------------------------------------------------------
-        // MODERN PREVIEW – uses editor.getHTML() directly, no legacy AJAX
-        // -----------------------------------------------------------------
+        // MODERN PREVIEW
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
@@ -1600,8 +1827,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 e.preventDefault();
                 syncToOriginal();
 
-                // Modern validation — subject is required.
-                // We catch it here so the legacy ValidateForm dialog never fires.
                 var subjectValue = modernTitle ? modernTitle.value.trim() : '';
                 if (!subjectValue) {
                     showTitleError();
@@ -1609,7 +1834,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
                 clearTitleError();
 
-                // Re-assert both legacy options, then hand off to the legacy form.
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
                 if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
@@ -1626,7 +1850,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MESSAGES SECTION (unchanged – keep your existing)
+    // MESSAGES SECTION (unchanged)
     // ------------------------------------------------------------------------
     function buildModernMessagesSection() {
         var container = document.createElement('div');
@@ -1754,7 +1978,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONTACTS SECTION (unchanged – keep your existing)
+    // CONTACTS SECTION (unchanged)
     // ------------------------------------------------------------------------
     function buildModernContactsSection() {
         var container = document.createElement('div');
