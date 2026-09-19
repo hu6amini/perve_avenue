@@ -3678,8 +3678,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
   display: none;
   grid-template-columns: repeat(8, 1fr);
   gap: var(--space-xs);
-  width: 320px;
-  max-height: 200px;
+  width: min(340px, calc(100vw - 2rem));
+  max-height: 280px;
   overflow-y: auto;
 }
 .modern-emoji-item {
@@ -3709,6 +3709,14 @@ section.modern-stats { flex-direction: column; width: 100%; }
   margin-top: var(--space-xs);
   font-weight: 500;
   padding-left: var(--space-xs);
+}
+
+/* On narrow phones (≤380px) drop to 6 columns so emoji stay tappable */
+@media (max-width: 380px) {
+  .modern-emoji-picker {
+    grid-template-columns: repeat(6, 1fr);
+    gap: var(--space-xxs, 2px);
+  }
 }
 
 /* ------------------------------------------------------------
