@@ -3846,6 +3846,100 @@ input[type="radio"]:checked::before {
 }
 
 /* ------------------------------------------------------------
+   Mentions — pill styling matches .user-tag on the reader side
+   ------------------------------------------------------------ */
+.modern-wysiwyg .ProseMirror mark[data-uid],
+.modern-preview .preview-content mark[data-uid] {
+    background-color: rgba(5, 150, 105, 0.12);
+    color: var(--primary-light);
+    padding: 0.1em 0.6em;
+    border-radius: var(--radius-full);
+    font-weight: 500;
+    font-size: 0.95em;
+    line-height: 1.4;
+    text-decoration: none;
+    vertical-align: baseline;
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------------
+   Mention autocomplete popup
+   ------------------------------------------------------------ */
+.mention-suggestions {
+    position: absolute;
+    z-index: 1000;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    min-width: 200px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: var(--space-xs);
+}
+
+.mention-suggestions::-webkit-scrollbar { width: 6px; }
+.mention-suggestions::-webkit-scrollbar-track { background: transparent; }
+.mention-suggestions::-webkit-scrollbar-thumb {
+    background: var(--surface-light);
+    border-radius: 3px;
+}
+
+.mention-suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--pad-2) var(--pad-3);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-size: var(--text-sm);
+    transition: background 0.1s ease;
+}
+
+.mention-suggestion-item:hover,
+.mention-suggestion-item.is-selected {
+    background: var(--hover-color);
+}
+
+.mention-suggestion-item.is-selected {
+    background: rgba(5, 150, 105, 0.12);
+    color: var(--primary-light);
+}
+
+.mention-suggestion-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border-color);
+}
+
+.mention-suggestion-avatar--initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 600;
+    font-size: calc(28px * 0.5);
+}
+
+.mention-suggestion-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------------
    24. REDUCED MOTION
    ------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
