@@ -560,6 +560,50 @@ var MessengerModule = (function(Utils, EventBus) {
             activeButtonElements.push(button);
         }
 
+                // ========== COLOR DROPDOWN ==========
+        var colorDropdownContainer = document.createElement('div');
+        colorDropdownContainer.className = 'modern-dropdown';
+        colorDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+        var colorDropdownBtn = document.createElement('button');
+        colorDropdownBtn.type = 'button';
+        colorDropdownBtn.className = 'modern-editor-btn';
+        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i>';
+        colorDropdownBtn.title = 'Text color';
+        var colorDropdownMenu = document.createElement('div');
+        colorDropdownMenu.className = 'modern-dropdown-menu';
+        colorDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
+        colorDropdownMenu.innerHTML = ''
+            + '<button class="modern-dropdown-item" data-color="primary"><span class="color-swatch color-swatch--primary"></span> Primary</button>'
+            + '<button class="modern-dropdown-item" data-color="info"><span class="color-swatch color-swatch--info"></span> Info</button>'
+            + '<button class="modern-dropdown-item" data-color="accent"><span class="color-swatch color-swatch--accent"></span> Accent</button>'
+            + '<button class="modern-dropdown-item" data-color="warning"><span class="color-swatch color-swatch--warning"></span> Warning</button>'
+            + '<button class="modern-dropdown-item" data-color="danger"><span class="color-swatch color-swatch--danger"></span> Danger</button>'
+            + '<button class="modern-dropdown-item" data-color="muted"><span class="color-swatch color-swatch--muted"></span> Muted</button>'
+            + '<button class="modern-dropdown-item" data-color="remove"><i class="fa-regular fa-eraser" aria-hidden="true"></i> Remove color</button>';
+        colorDropdownContainer.appendChild(colorDropdownBtn);
+        colorDropdownContainer.appendChild(colorDropdownMenu);
+        toolbar.appendChild(colorDropdownContainer);
+        colorDropdownBtn.onclick = function(e) {
+            e.stopPropagation();
+            colorDropdownMenu.style.display = colorDropdownMenu.style.display === 'block' ? 'none' : 'block';
+        };
+        document.addEventListener('click', function() { colorDropdownMenu.style.display = 'none'; });
+        colorDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+
+        colorDropdownMenu.querySelectorAll('[data-color]').forEach(function(btn) {
+            btn.onclick = function() {
+                if (!editor) return;
+                var variant = btn.getAttribute('data-color');
+                if (variant === 'remove') {
+                    editor.chain().focus().unsetMark('semanticColor').run();
+                } else {
+                    editor.chain().focus().setMark('semanticColor', { variant: variant }).run();
+                }
+                colorDropdownMenu.style.display = 'none';
+            };
+        });
+        // ========== END COLOR DROPDOWN ==========
+
         // ---- Clear formatting button (grouped with text marks) ----
         var clearFormatBtn = document.createElement('button');
         clearFormatBtn.type = 'button';
@@ -644,50 +688,6 @@ var MessengerModule = (function(Utils, EventBus) {
         codeBtn.title = 'Code block';
         toolbar.appendChild(codeBtn);
         activeButtonElements.push(codeBtn);
-
-        // ========== COLOR DROPDOWN ==========
-        var colorDropdownContainer = document.createElement('div');
-        colorDropdownContainer.className = 'modern-dropdown';
-        colorDropdownContainer.style.cssText = 'position:relative;display:inline-block';
-        var colorDropdownBtn = document.createElement('button');
-        colorDropdownBtn.type = 'button';
-        colorDropdownBtn.className = 'modern-editor-btn';
-        colorDropdownBtn.innerHTML = '<i class="fa-regular fa-palette"></i>';
-        colorDropdownBtn.title = 'Text color';
-        var colorDropdownMenu = document.createElement('div');
-        colorDropdownMenu.className = 'modern-dropdown-menu';
-        colorDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
-        colorDropdownMenu.innerHTML = ''
-            + '<button class="modern-dropdown-item" data-color="primary"><span class="color-swatch color-swatch--primary"></span> Primary</button>'
-            + '<button class="modern-dropdown-item" data-color="info"><span class="color-swatch color-swatch--info"></span> Info</button>'
-            + '<button class="modern-dropdown-item" data-color="accent"><span class="color-swatch color-swatch--accent"></span> Accent</button>'
-            + '<button class="modern-dropdown-item" data-color="warning"><span class="color-swatch color-swatch--warning"></span> Warning</button>'
-            + '<button class="modern-dropdown-item" data-color="danger"><span class="color-swatch color-swatch--danger"></span> Danger</button>'
-            + '<button class="modern-dropdown-item" data-color="muted"><span class="color-swatch color-swatch--muted"></span> Muted</button>'
-            + '<button class="modern-dropdown-item" data-color="remove"><i class="fa-regular fa-eraser" aria-hidden="true"></i> Remove color</button>';
-        colorDropdownContainer.appendChild(colorDropdownBtn);
-        colorDropdownContainer.appendChild(colorDropdownMenu);
-        toolbar.appendChild(colorDropdownContainer);
-        colorDropdownBtn.onclick = function(e) {
-            e.stopPropagation();
-            colorDropdownMenu.style.display = colorDropdownMenu.style.display === 'block' ? 'none' : 'block';
-        };
-        document.addEventListener('click', function() { colorDropdownMenu.style.display = 'none'; });
-        colorDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
-
-        colorDropdownMenu.querySelectorAll('[data-color]').forEach(function(btn) {
-            btn.onclick = function() {
-                if (!editor) return;
-                var variant = btn.getAttribute('data-color');
-                if (variant === 'remove') {
-                    editor.chain().focus().unsetMark('semanticColor').run();
-                } else {
-                    editor.chain().focus().setMark('semanticColor', { variant: variant }).run();
-                }
-                colorDropdownMenu.style.display = 'none';
-            };
-        });
-        // ========== END COLOR DROPDOWN ==========
 
         addSeparator();
 
