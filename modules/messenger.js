@@ -60,6 +60,26 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // HTML CONTENT EMPTINESS CHECK
+    // True when the string is empty or contains only structural wrappers
+    // (<p></p>, <p><br></p>, whitespace entities) with no visible content.
+    // ------------------------------------------------------------------------
+    function editorContentIsEmpty(html) {
+        if (!html || typeof html !== 'string') return true;
+        var text = html
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&zeroWidthSpace;/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (text.length > 0) return false;
+        if (/<img[^>]+src\s*=/i.test(html)) return false;   // embedded media
+        if (/<hr\b/i.test(html)) return false;               // horizontal rule
+        if (/<(video|audio|iframe)\b/i.test(html)) return false;
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
     // PUBLIC API
     // ------------------------------------------------------------------------
     function initialize() {
@@ -1393,7 +1413,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
 
                 // -------------------------------------------------------------
-                // LINK PREVIEW — now supports a `loading` state skeleton
+                // LINK PREVIEW — supports a `loading` state skeleton
                 // -------------------------------------------------------------
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
@@ -1848,26 +1868,53 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // Restore draft if any
+                // -----------------------------------------------------------------
+                // INITIAL CONTENT
+                // The textarea is populated server-side when the user replies (or
+                // when a message is forwarded) — that content is always fresh and
+                // must win over any stale draft. Only fall back to the draft when
+                // the textarea itself is empty. When both have content, keep the
+                // draft below the textarea content so nothing is silently lost.
+                // -----------------------------------------------------------------
                 var draft = loadDraft();
-                var initialHtml = '';
-                if (draft && typeof draft.body === 'string' && draft.body.length > 0) {
-                    initialHtml = draft.body;
-                } else {
-                    initialHtml = legacyToHtml(originalTextarea ? originalTextarea.value : '');
-                }
-
-                // Restore recipient / subject from draft too
                 var modernRecipientEl = container.querySelector('#modern-recipient');
                 var modernTitleEl = container.querySelector('#modern-title');
+
+                var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
+                var textareaHtmlConverted = textareaRaw ? legacyToHtml(textareaRaw) : '';
+                var textareaHasContent = textareaRaw.trim().length > 0 &&
+                                         !editorContentIsEmpty(textareaHtmlConverted);
+                var textareaHtml = textareaHasContent ? textareaHtmlConverted : '';
+
+                var draftHasContent = !!(draft &&
+                                         typeof draft.body === 'string' &&
+                                         !editorContentIsEmpty(draft.body));
+
+                var initialHtml = '';
+                if (textareaHasContent) {
+                    initialHtml = textareaHtml;
+                    // Preserve a non-empty draft beneath the fresh textarea content.
+                    if (draftHasContent && draft.body.trim() !== textareaHtml.trim()) {
+                        initialHtml += '<p></p>' + draft.body;
+                    }
+                } else if (draftHasContent) {
+                    initialHtml = draft.body;
+                }
+
+                // Recipient / subject: textarea-derived inputs already hold the
+                // server-provided values; the draft only fills in what's empty.
                 if (draft) {
-                    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value) {
+                    if (draft.recipient && modernRecipientEl && !modernRecipientEl.value.trim()) {
                         modernRecipientEl.value = draft.recipient;
                     }
-                    if (draft.subject && modernTitleEl && !modernTitleEl.value) {
+                    if (draft.subject && modernTitleEl && !modernTitleEl.value.trim()) {
                         modernTitleEl.value = draft.subject;
                     }
                 }
+
+                // Only surface "Draft restored" when the draft actually contributed
+                // content — not when a fresh reply simply reused the textarea.
+                var draftWasUsed = !textareaHasContent && draftHasContent;
 
                 editor = new Editor({
                     element: editorElement,
@@ -2139,7 +2186,7 @@ var MessengerModule = (function(Utils, EventBus) {
                                     linkBtn.click();
                                     return true;
                                 }
-                                // Ctrl+Shift+S → Spoiler (existing behaviour)
+                                // Ctrl+Shift+S → Spoiler
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     editor.chain().focus().toggleSpoiler().run();
@@ -2172,12 +2219,18 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (_saveTimer) clearTimeout(_saveTimer);
                     _saveTimer = setTimeout(function() {
                         _saveTimer = null;
+                        // Don't cache a body that exactly matches the untouched textarea.
+                        var currentBody = editor ? editor.getHTML() : '';
+                        var pristine = textareaHasContent &&
+                                       !editorContentIsEmpty(currentBody) &&
+                                       currentBody.trim() === textareaHtml.trim();
+                        if (pristine) return;
                         var modernRecipient = container.querySelector('#modern-recipient');
                         var modernTitle = container.querySelector('#modern-title');
                         var ok = saveDraft({
                             recipient: modernRecipient ? modernRecipient.value : '',
                             subject: modernTitle ? modernTitle.value : '',
-                            body: editor.getHTML(),
+                            body: currentBody,
                             savedAt: Date.now()
                         });
                         if (ok) flashDraftStatus('Draft saved');
@@ -2192,8 +2245,9 @@ var MessengerModule = (function(Utils, EventBus) {
                     var hasRecipient = r && r.value.trim().length > 0;
                     var hasSubject = t && t.value.trim().length > 0;
                     var hasBody = editor && !editor.isEmpty;
-                    modernSubmitBtnRef.disabled = !(hasRecipient && hasSubject && hasBody);
-                    modernSubmitBtnRef.setAttribute('aria-disabled', String(!(hasRecipient && hasSubject && hasBody)));
+                    var ready = hasRecipient && hasSubject && hasBody;
+                    modernSubmitBtnRef.disabled = !ready;
+                    modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
                 }
 
                 var charCounter = null;
@@ -2228,7 +2282,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 updateSendState();
                 updateCharCounter();
-                if (initialHtml) flashDraftStatus('Draft restored');
+                if (draftWasUsed) flashDraftStatus('Draft restored');
 
             } catch (err) {
                 console.error('[MessengerModule] TipTap failed to load:', err);
