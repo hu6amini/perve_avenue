@@ -1,7 +1,7 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
-// Includes custom emoji picker with Twemoji images (grouped), semantic color
-// palette, mention autocomplete, recipient autocomplete, draft persistence,
-// image paste, plain-text paste, toast notifications, and link preview skeleton.
+// Includes custom emoji picker with Twemoji images, semantic color palette,
+// mention autocomplete, recipient autocomplete, draft persistence, image paste,
+// plain-text paste, toast notifications, and link preview skeleton.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -92,10 +92,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // TRAILING PARAGRAPH GUARANTEE (initial content only)
-    // Applied to the initial HTML so that a pre-existing block at the end of
-    // the document doesn't trap the caret inside it. Not applied after toolbar
-    // insertions — when the user clicks the quote/code/spoiler button, they
-    // want to keep typing inside the new block.
     // ------------------------------------------------------------------------
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -764,26 +760,14 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // EMOJI PICKER DATA
+    // Curated set chosen with a second custom-emoji group in mind. Kept
+    // deliberately compact so the native and custom rows sit side by side
+    // without the picker feeling overloaded.
     // ------------------------------------------------------------------------
     var EMOJI_GROUPS = [
-        { name: 'Smileys & Emotion', emojis: [
-            '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','🤩','😘','🥲','😏','😋','😛','😜','🤪','😝','🤗','🤭','🤫','🤔','🤤','🥳','😎','🤓','🧐','🙃','🤐','🤨','😒','🙄','😬','😌','😔','😪','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😵','🤯','😕','😟','🙁','😮','😲','😳','🥺','😨','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👻','👽','🤖'
-        ]},
-        { name: 'Gestures & People', emojis: [
-            '👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🙏','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅','👄'
-        ]},
-        { name: 'Hearts & Symbols', emojis: [
-            '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚕️','♻️','⚜️','🔱','📛','🔰','⭕','✅','☑️','✔️','❌','❎','➕','➖','➗','✖️'
-        ]},
-        { name: 'Animals & Nature', emojis: [
-            '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔'
-        ]},
-        { name: 'Food & Objects', emojis: [
-            '🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','🫖','☕','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾'
-        ]},
-        { name: 'Activities & Travel', emojis: [
-            '⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🪃','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','⛹️','🤺','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🪗','🎸','🪕','🎻','🎲','♟️','🎯','🎳','🎮','🎰','🧩'
-        ]}
+        { name: 'Emojis', emojis: [
+            '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😉','😊','😇','🥰','😍','🤩','😘','🥲','😏','😋','😛','😜','🤪','😝','🤗','🤭','🤫','🤔','🤤','🥳','😎','🤓','🧐','🙃','🤐','🤨','😒','🙄','😬','😌','😔','😪','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','😵','🤯','😕','😟','🙁','😮','😲','😳','🥺','😨','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','😤','😡','😠','🤬','😈','👿','💀','💩','🤡','👋','👌','👍','👎','✊','👏','🙏','💪','👀','🤦','🤷','🎉','❤️','💔','🔥','💯','💥'
+        ] }
     ];
 
     var EMOJI_RECENTS_KEY = 'messenger-emoji-recents-v1';
@@ -2094,10 +2078,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     closeDropdown(listDropdownBtn, listDropdownMenu);
                 };
 
-                // Toolbar-inserted blocks leave the caret inside the block so
-                // the user can type its content immediately. No trailing
-                // paragraph is added — that behaviour is reserved for content
-                // that already existed on load.
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
                 codeBtn.onclick       = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
                 spoilerBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
