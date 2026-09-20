@@ -891,15 +891,30 @@ var MessengerModule = (function(Utils, EventBus) {
         // order.
         // ------------------------------------------------------------------
 
-        function updateSendState() {
-            if (!modernSubmitBtnRef) return;
-            var hasRecipient = !!currentRecipient;
-            var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
-            var hasBody      = !!(editor && !editor.isEmpty);
-            var ready        = hasRecipient && hasSubject && hasBody;
-            modernSubmitBtnRef.disabled = !ready;
-            modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
-        }
+function updateSendState() {
+    if (!modernSubmitBtnRef) return;
+
+    var hasRecipient = !!currentRecipient;
+    var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
+    var hasBody      = !!(editor && !editor.isEmpty);
+    var ready        = hasRecipient && hasSubject && hasBody;
+
+    modernSubmitBtnRef.disabled = !ready;
+    modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
+
+    // The dim state alone doesn't tell the user *which* field is
+    // missing. A native title tooltip fills that gap for mouse
+    // hover, and gets read out on focus for assistive tech.
+    if (ready) {
+        modernSubmitBtnRef.removeAttribute('title');
+    } else {
+        var missing = [];
+        if (!hasRecipient) missing.push('a recipient');
+        if (!hasSubject)   missing.push('a subject');
+        if (!hasBody)      missing.push('a message body');
+        modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
+    }
+}
 
         function updateCharCounter() {
             if (!MAX_MESSAGE_LENGTH) return;
@@ -2514,33 +2529,20 @@ var MessengerModule = (function(Utils, EventBus) {
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
-                e.preventDefault();
+    e.preventDefault();
 
-                if (!currentRecipient || !currentRecipient.name) {
-                    showToast('Please pick a recipient', { type: 'warning' });
-                    if (modernRecipient && !modernRecipient.hidden) {
-                        modernRecipient.focus();
-                    }
-                    return;
-                }
+    // Defensive: if the button somehow fires while state is incomplete
+    // (extension, stale DOM, whatever), refuse silently rather than
+    // navigate with bad data.
+    if (!currentRecipient || !currentRecipient.name) return;
+    var subjectValue = modernTitle ? modernTitle.value.trim() : '';
+    if (!subjectValue) return;
+    if (!editor || editor.isEmpty) return;
 
-                var subjectValue = modernTitle ? modernTitle.value.trim() : '';
-                if (!subjectValue) {
-                    showTitleError();
-                    showToast('Please enter a subject', { type: 'warning' });
-                    return;
-                }
-                clearTitleError();
-
-                if (!editor || editor.isEmpty) {
-                    showToast('Message body is empty', { type: 'warning' });
-                    return;
-                }
-
-                if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
-                    showToast('Message exceeds the maximum length', { type: 'error' });
-                    return;
-                }
+    if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
+        showToast('Message exceeds the maximum length', { type: 'error' });
+        return;
+    }
 
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
