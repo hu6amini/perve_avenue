@@ -3868,6 +3868,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+  text-align: left;
 }
 
 .modern-send-confirmation-actions {
