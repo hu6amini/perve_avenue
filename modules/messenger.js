@@ -1,8 +1,8 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
 // Includes custom emoji picker with Twemoji images, semantic color palette,
 // mention autocomplete, recipient chip with autocomplete, image paste,
-// plain-text paste, toast notifications, link preview skeleton, and ASCII
-// emoticon conversion.
+// plain-text paste, toast notifications, link preview skeleton, ASCII
+// emoticon conversion, and a post-send confirmation banner.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -97,6 +97,119 @@ var MessengerModule = (function(Utils, EventBus) {
         try {
             return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
         } catch(e) { return dateStr; }
+    }
+
+    // ------------------------------------------------------------------------
+    // SEND CONFIRMATION
+    // The compose section writes a small record to sessionStorage right
+    // before submitting. The messages section reads it back on the next
+    // page load to show a confirmation banner. Nothing here touches the
+    // actual send — it's purely a side channel for the confirmation UI.
+    // ------------------------------------------------------------------------
+    var LAST_SEND_KEY = 'messenger-last-send-v1';
+    var LAST_SEND_TTL = 60000;
+
+    function stashLastSentMessage(data) {
+        try {
+            sessionStorage.setItem(
+                LAST_SEND_KEY,
+                JSON.stringify(Object.assign({}, data, { ts: Date.now() }))
+            );
+        } catch (e) {}
+    }
+
+    function loadLastSentMessage() {
+        try {
+            var raw = sessionStorage.getItem(LAST_SEND_KEY);
+            if (!raw) return null;
+            var data = JSON.parse(raw);
+            if (!data || typeof data !== 'object') return null;
+            // Guard against a stale record from an unrelated earlier visit.
+            if (typeof data.ts !== 'number' || Date.now() - data.ts > LAST_SEND_TTL) {
+                sessionStorage.removeItem(LAST_SEND_KEY);
+                return null;
+            }
+            return data;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearLastSentMessage() {
+        try { sessionStorage.removeItem(LAST_SEND_KEY); } catch (e) {}
+    }
+
+    function goToSentFolder() {
+        var folderSelect = document.querySelector('select[name="VID"]');
+        var folderForm = folderSelect ? folderSelect.form : null;
+        if (!folderSelect || !folderForm) return;
+
+        for (var i = 0; i < folderSelect.options.length; i++) {
+            var opt = folderSelect.options[i];
+            var val = String(opt.value || '').toLowerCase();
+            var lbl = (opt.textContent || '').trim();
+            if (val === 'sent' || /sent|inviat|envoy|gesendet/i.test(lbl)) {
+                folderSelect.value = opt.value;
+                HTMLFormElement.prototype.submit.call(folderForm);
+                return;
+            }
+        }
+    }
+
+    function buildSentBanner(data) {
+        var banner = document.createElement('div');
+        banner.className = 'modern-send-confirmation';
+        banner.setAttribute('role', 'status');
+
+        var nameText = (data && data.name) ? decodeHtmlEntities(data.name) : '';
+
+        var avatarHtml = '';
+        if (data && data.id && nameText) {
+            var profileUrl = '/?act=Profile&MID=' + encodeURIComponent(data.id);
+            var bgColor = getColorFromNickname(nameText, data.id);
+            var initial = nameText.charAt(0).toUpperCase();
+            avatarHtml =
+                '<a href="' + escapeHtml(profileUrl) + '" class="modern-send-confirmation-avatar" ' +
+                'style="background-color:#' + bgColor + ';" aria-hidden="true" tabindex="-1">' +
+                escapeHtml(initial) +
+                '</a>';
+        }
+
+        var titleHtml = nameText
+            ? 'Message sent to ' + avatarHtml + escapeHtml(nameText)
+            : 'Message sent';
+
+        var subjectHtml = (data && data.subject)
+            ? '<div class="modern-send-confirmation-subject">' + escapeHtml(data.subject) + '</div>'
+            : '';
+
+        banner.innerHTML = ''
+            + '<div class="modern-send-confirmation-icon"><i class="fa-regular fa-circle-check" aria-hidden="true"></i></div>'
+            + '<div class="modern-send-confirmation-body">'
+            +   '<div class="modern-send-confirmation-title">' + titleHtml + '</div>'
+            +   subjectHtml
+            + '</div>'
+            + '<div class="modern-send-confirmation-actions">'
+            +   '<button type="button" class="modern-btn modern-btn-secondary modern-send-confirmation-action" data-action="view-sent">View in Sent</button>'
+            +   '<button type="button" class="modern-send-confirmation-dismiss" aria-label="Dismiss"><i class="fa-regular fa-xmark"></i></button>'
+            + '</div>';
+
+        var viewSentBtn = banner.querySelector('[data-action="view-sent"]');
+        if (viewSentBtn) {
+            viewSentBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                goToSentFolder();
+            });
+        }
+
+        var dismissBtn = banner.querySelector('.modern-send-confirmation-dismiss');
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', function() {
+                banner.remove();
+            });
+        }
+
+        return banner;
     }
 
     // ------------------------------------------------------------------------
@@ -1060,58 +1173,58 @@ var MessengerModule = (function(Utils, EventBus) {
         })();
 
         (function resolveInitialRecipientAvatar() {
-    if (!currentRecipient) return;
-    var pending = currentRecipient;
+            if (!currentRecipient) return;
+            var pending = currentRecipient;
 
-    function applyAvatar(avatarUrl) {
-        if (!avatarUrl) return;
-        if (currentRecipient !== pending) return;
-        if (typeof avatarUrl !== 'string') return;
-        pending.avatar = avatarUrl;
-        renderChipAvatar(pending);
-    }
-
-    function fetchById(mid) {
-        fetch('/api.php?mid=' + encodeURIComponent(mid))
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(data) {
-                if (!data) return;
-                var user = data['m' + mid] || data.info;
-                if (user && typeof user.avatar === 'string') {
-                    applyAvatar(user.avatar);
-                }
-            })
-            .catch(function() {});
-    }
-
-    if (pending.id) {
-        // We know the MID from from_contact — fetch directly.
-        fetchById(pending.id);
-        return;
-    }
-
-    // No MID — try to resolve one by searching the display name.
-    // Only adopt the result when the name matches exactly and
-    // there is no ambiguity (single match).
-    if (pending.name) {
-        searchMentions(pending.name).then(function(users) {
-            if (currentRecipient !== pending) return;
-            if (!users || users.length === 0) return;
-            var matches = users.filter(function(u) {
-                return u && u.name === pending.name;
-            });
-            if (matches.length !== 1) return;
-            var match = matches[0];
-            if (match.id && !pending.id) {
-                pending.id = String(match.id);
-                syncToOriginal();
+            function applyAvatar(avatarUrl) {
+                if (!avatarUrl) return;
+                if (currentRecipient !== pending) return;
+                if (typeof avatarUrl !== 'string') return;
+                pending.avatar = avatarUrl;
+                renderChipAvatar(pending);
             }
-            if (typeof match.avatar === 'string' && match.avatar) {
-                applyAvatar(match.avatar);
+
+            function fetchById(mid) {
+                fetch('/api.php?mid=' + encodeURIComponent(mid))
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(data) {
+                        if (!data) return;
+                        var user = data['m' + mid] || data.info;
+                        if (user && typeof user.avatar === 'string') {
+                            applyAvatar(user.avatar);
+                        }
+                    })
+                    .catch(function() {});
             }
-        }).catch(function() {});
-    }
-})();
+
+            if (pending.id) {
+                // We know the MID from from_contact — fetch directly.
+                fetchById(pending.id);
+                return;
+            }
+
+            // No MID — try to resolve one by searching the display name.
+            // Only adopt the result when the name matches exactly and
+            // there is no ambiguity (single match).
+            if (pending.name) {
+                searchMentions(pending.name).then(function(users) {
+                    if (currentRecipient !== pending) return;
+                    if (!users || users.length === 0) return;
+                    var matches = users.filter(function(u) {
+                        return u && u.name === pending.name;
+                    });
+                    if (matches.length !== 1) return;
+                    var match = matches[0];
+                    if (match.id && !pending.id) {
+                        pending.id = String(match.id);
+                        syncToOriginal();
+                    }
+                    if (typeof match.avatar === 'string' && match.avatar) {
+                        applyAvatar(match.avatar);
+                    }
+                }).catch(function() {});
+            }
+        })();
 
         if (recipientChipRemove) {
             recipientChipRemove.addEventListener('click', function(e) {
@@ -2588,6 +2701,16 @@ var MessengerModule = (function(Utils, EventBus) {
 
                     if (submitButton) submitButton.disabled = false;
 
+                    // Stash a record so the messages page can show a
+                    // confirmation banner after the server redirect.
+                    // Fires after validation so we don't confuse a
+                    // validation failure with a real send.
+                    stashLastSentMessage({
+                        id: currentRecipient ? currentRecipient.id : null,
+                        name: currentRecipient ? currentRecipient.name : '',
+                        subject: subjectValue
+                    });
+
                     if (originalForm && originalForm instanceof HTMLFormElement) {
                         HTMLFormElement.prototype.submit.call(originalForm);
                     } else if (submitButton) {
@@ -2616,6 +2739,18 @@ var MessengerModule = (function(Utils, EventBus) {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
+
+        // Confirmation banner — only present on the immediate post-send
+        // page load. Any error here is non-fatal: worst case the user
+        // just doesn't see the banner.
+        try {
+            var lastSend = loadLastSentMessage();
+            if (lastSend) {
+                container.appendChild(buildSentBanner(lastSend));
+                clearLastSentMessage();
+            }
+        } catch (e) {}
+
         try {
             var folderSelect  = document.querySelector('select[name="VID"]');
             var messageRows   = document.querySelectorAll('.big_list .row-mp');
