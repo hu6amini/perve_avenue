@@ -3711,10 +3711,10 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .message-row:hover { background: var(--hover-color); }
 .message-row.unread { background: rgba(5, 150, 105, 0.05); }
 .msg-status { width: 30px; text-align: center; color: var(--text-tertiary); }
-.msg-title { flex: 2; font-size: var(--text-sm); }
+.msg-title { flex: 2; font-size: var(--text-sm); text-align: left; }
 .msg-title a { color: var(--text-primary); text-decoration: none; }
 .msg-title a:hover { color: var(--primary-light); }
-.msg-sender { flex: 1; font-size: var(--text-xs); }
+.msg-sender { flex: 1; font-size: var(--text-xs); text-align: left; }
 .msg-sender a { color: var(--text-secondary); text-decoration: none; }
 .msg-sender a:hover { color: var(--primary-light); }
 .msg-date { width: 120px; font-size: var(--text-xs); color: var(--text-tertiary); }
