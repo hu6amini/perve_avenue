@@ -1,7 +1,8 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
 // Includes custom emoji picker with Twemoji images, semantic color palette,
-// mention autocomplete, recipient autocomplete, image paste, plain-text paste,
-// toast notifications, link preview skeleton, and ASCII emoticon conversion.
+// mention autocomplete, recipient chip with autocomplete, image paste,
+// plain-text paste, toast notifications, link preview skeleton, and ASCII
+// emoticon conversion.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -9,7 +10,6 @@ var MessengerModule = (function(Utils, EventBus) {
     var observerCallbacks = [];
     var _originalEmoticon = null;
 
-    // Configurable limits — set MAX_MESSAGE_LENGTH to 0 to disable the counter.
     var MAX_MESSAGE_LENGTH = 0;
     var OG_FETCH_TIMEOUT = 8000;
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
@@ -49,7 +49,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // HTML ENTITY DECODER
+    // HELPERS
     // ------------------------------------------------------------------------
     function decodeHtmlEntities(str) {
         if (!str || typeof str !== 'string') return str;
@@ -59,9 +59,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return txt.value;
     }
 
-    // ------------------------------------------------------------------------
-    // HTML CONTENT EMPTINESS CHECK
-    // ------------------------------------------------------------------------
     function editorContentIsEmpty(html) {
         if (!html || typeof html !== 'string') return true;
         var text = html
@@ -77,9 +74,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return true;
     }
 
-    // ------------------------------------------------------------------------
-    // TRAILING PARAGRAPH GUARANTEE (initial content only)
-    // ------------------------------------------------------------------------
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
         var d = document.createElement('div');
@@ -89,6 +83,20 @@ var MessengerModule = (function(Utils, EventBus) {
         if (last.tagName === 'P') return html;
         d.appendChild(document.createElement('p'));
         return d.innerHTML;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>"']/g, function(m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+        });
+    }
+
+    function formatDate(dateStr) {
+        if (!dateStr) return '';
+        try {
+            return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch(e) { return dateStr; }
     }
 
     // ------------------------------------------------------------------------
@@ -195,32 +203,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 setTimeout(resolve, 300);
             }
         });
-    }
-
-    // ------------------------------------------------------------------------
-    // HELPERS
-    // ------------------------------------------------------------------------
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>"']/g, function(m) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
-        });
-    }
-
-    function formatDate(dateStr) {
-        if (!dateStr) return '';
-        try {
-            return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-        } catch(e) { return dateStr; }
-    }
-
-    function debounce(fn, delay) {
-        var t = null;
-        return function() {
-            var args = arguments, ctx = this;
-            if (t) clearTimeout(t);
-            t = setTimeout(function() { t = null; fn.apply(ctx, args); }, delay);
-        };
     }
 
     // ------------------------------------------------------------------------
@@ -426,7 +408,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MENTION SEARCH
+    // MENTION SEARCH (shared by mention autocomplete + recipient autocomplete)
     // ------------------------------------------------------------------------
     var _mentionSearchAbort = null;
 
@@ -459,15 +441,16 @@ var MessengerModule = (function(Utils, EventBus) {
         })
         .catch(function (err) {
             if (err && err.name === 'AbortError') return [];
-            console.warn('[MessengerModule] Mention search failed:', err);
+            console.warn('[MessengerModule] Search failed:', err);
             return [];
         });
     }
 
     // ------------------------------------------------------------------------
-    // RECIPIENT AUTOCOMPLETE
+    // RECIPIENT AUTOCOMPLETE (with chip commit callback)
+    // onCommit receives: { id: string|null, name: string, avatar: string|null }
     // ------------------------------------------------------------------------
-    function attachRecipientAutocomplete(inputEl) {
+    function attachRecipientAutocomplete(inputEl, onCommit) {
         if (!inputEl) return;
 
         var popup = null;
@@ -483,7 +466,7 @@ var MessengerModule = (function(Utils, EventBus) {
             var rect = inputEl.getBoundingClientRect();
             popup.style.left = (rect.left + window.pageXOffset) + 'px';
             popup.style.top = (rect.bottom + window.pageYOffset + 4) + 'px';
-            popup.style.minWidth = rect.width + 'px';
+            popup.style.minWidth = Math.max(rect.width, 220) + 'px';
         }
 
         function closePopup() {
@@ -507,6 +490,20 @@ var MessengerModule = (function(Utils, EventBus) {
             return span;
         }
 
+        function commitUser(user) {
+            if (!onCommit) return;
+            onCommit({
+                id: user.id != null ? String(user.id) : null,
+                name: decodeHtmlEntities(user.name || ''),
+                avatar: typeof user.avatar === 'string' ? user.avatar : null
+            });
+        }
+
+        function commitFreeText(text) {
+            if (!onCommit || !text) return;
+            onCommit({ id: null, name: text, avatar: null });
+        }
+
         function buildPopup(users) {
             if (!popup) return;
             popup.innerHTML = '';
@@ -516,7 +513,7 @@ var MessengerModule = (function(Utils, EventBus) {
             if (users.length === 0) {
                 var empty = document.createElement('div');
                 empty.style.cssText = 'padding:var(--pad-2) var(--pad-3);color:var(--text-tertiary);font-size:var(--text-xs);font-style:italic;';
-                empty.textContent = 'No users found';
+                empty.textContent = 'No users found — press Enter to use "' + inputEl.value.trim() + '"';
                 popup.appendChild(empty);
                 popup.style.display = 'block';
                 return;
@@ -555,8 +552,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 el.addEventListener('mousedown', function(e) {
                     e.preventDefault();
-                    inputEl.value = decodeHtmlEntities(user.name || '');
-                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    commitUser(user);
                     closePopup();
                 });
 
@@ -593,22 +589,34 @@ var MessengerModule = (function(Utils, EventBus) {
 
         inputEl.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') { closePopup(); return; }
-            if (!popup || popup.style.display === 'none' || items.length === 0) return;
 
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                selectedIndex = (selectedIndex + 1) % items.length;
-                updateSelected();
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-                updateSelected();
-            } else if (e.key === 'Enter') {
-                var user = items[selectedIndex];
-                if (user) {
+            if (popup && popup.style.display !== 'none' && items.length > 0) {
+                if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    inputEl.value = decodeHtmlEntities(user.name || '');
-                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    selectedIndex = (selectedIndex + 1) % items.length;
+                    updateSelected();
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                    updateSelected();
+                    return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    commitUser(items[selectedIndex]);
+                    closePopup();
+                    return;
+                }
+            }
+
+            // Free-text commit when no suggestion is active
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var text = inputEl.value.trim();
+                if (text) {
+                    commitFreeText(text);
                     closePopup();
                 }
             }
@@ -651,7 +659,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // CONVERTERS (Legacy BBCode ↔ HTML)
+    // CONVERTERS
     // ------------------------------------------------------------------------
     function legacyToHtml(legacy) {
         if (!legacy) return '';
@@ -724,9 +732,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // ASCII EMOTICON MAP (from Converse.js — codepoints, not characters)
-    // Typing any of these followed by a word boundary converts them to a
-    // Twemoji image via the EmoticonRule TipTap extension.
+    // ASCII EMOTICON MAP (Converse.js)
     // ------------------------------------------------------------------------
     var ASCII_EMOTICON_MAP = {
         '*\\0/*':'1f646', '*\\O/*':'1f646', '-___-':'1f611', ':\'-)':'1f602',
@@ -761,7 +767,7 @@ var MessengerModule = (function(Utils, EventBus) {
     };
 
     // ------------------------------------------------------------------------
-    // EMOJI PICKER DATA
+    // EMOJI PICKER
     // ------------------------------------------------------------------------
     var EMOJI_GROUPS = [
         { name: 'Emojis', emojis: [
@@ -801,9 +807,9 @@ var MessengerModule = (function(Utils, EventBus) {
         return codePoints.join('-');
     }
 
-    // ------------------------------------------------------------------------
+    // ========================================================================
     // COMPOSE SECTION
-    // ------------------------------------------------------------------------
+    // ========================================================================
     function buildComposeSection() {
         var recipientInput   = document.querySelector('input[name="entered_name"]');
         var contactSelect    = document.querySelector('select[name="from_contact"]');
@@ -831,21 +837,182 @@ var MessengerModule = (function(Utils, EventBus) {
         replyingAsPlaceholder.className = 'modern-replying-as-placeholder';
         container.appendChild(replyingAsPlaceholder);
 
-        // Recipient + Subject row
-        var recipientRow = document.createElement('div');
-        recipientRow.className = 'modern-recipient-row';
-        recipientRow.innerHTML = ''
-            + '<div class="modern-field">'
-            + '<div class="modern-recipient-controls">'
-            + '<input type="text" id="modern-recipient" class="modern-input" placeholder="Recipient" autocomplete="off" spellcheck="false" aria-label="Recipient" value="' + escapeHtml(recipientInput ? recipientInput.value : '') + '">'
-            + '<select id="modern-contact" class="modern-select" aria-label="Pick from contacts">' + (contactSelect ? contactSelect.innerHTML : '') + '</select>'
-            + '</div></div>'
-            + '<div class="modern-field">'
-            + '<input type="text" id="modern-title" class="modern-input" placeholder="Subject" aria-label="Subject" value="' + escapeHtml(titleInput ? titleInput.value : '') + '">'
+        // ----- Stacked compose header (To + Subject) -----
+        var composeHeader = document.createElement('div');
+        composeHeader.className = 'modern-compose-header';
+        composeHeader.innerHTML = ''
+            + '<div class="modern-compose-field modern-recipient-field">'
+            +   '<label class="modern-compose-label" for="modern-recipient">To</label>'
+            +   '<div class="modern-compose-control">'
+            +     '<input type="text" id="modern-recipient" class="modern-input-bare" placeholder="Search by name…" autocomplete="off" spellcheck="false" aria-label="Recipient">'
+            +     '<div class="modern-recipient-chip" hidden>'
+            +       '<span class="modern-recipient-chip-avatar" aria-hidden="true"></span>'
+            +       '<span class="modern-recipient-chip-name"></span>'
+            +       '<button type="button" class="modern-recipient-chip-remove" aria-label="Remove recipient">'
+            +         '<i class="fa-regular fa-xmark"></i>'
+            +       '</button>'
+            +     '</div>'
+            +   '</div>'
+            + '</div>'
+            + '<div class="modern-compose-field modern-subject-field">'
+            +   '<label class="modern-compose-label" for="modern-title">Subject</label>'
+            +   '<div class="modern-compose-control">'
+            +     '<input type="text" id="modern-title" class="modern-input-bare" placeholder="Add a subject" aria-label="Subject">'
+            +     '<span class="modern-field-error" id="modern-title-error" role="alert">Please enter a subject before sending</span>'
+            +   '</div>'
             + '</div>';
-        container.appendChild(recipientRow);
+        container.appendChild(composeHeader);
 
-        // Toolbar
+        // ----- Recipient state -----
+        // currentRecipient is the single source of truth: null | { id, name, avatar }
+        var currentRecipient = null;
+
+        var modernRecipient   = container.querySelector('#modern-recipient');
+        var modernTitle       = container.querySelector('#modern-title');
+        var recipientChip     = container.querySelector('.modern-recipient-chip');
+        var recipientChipAvatar = container.querySelector('.modern-recipient-chip-avatar');
+        var recipientChipName = container.querySelector('.modern-recipient-chip-name');
+        var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
+
+        function renderChipAvatar(recipient) {
+            if (!recipientChipAvatar) return;
+            recipientChipAvatar.innerHTML = '';
+            recipientChipAvatar.style.background = '';
+            var name = recipient ? recipient.name : '';
+            var initial = (name || '?').charAt(0).toUpperCase();
+
+            if (recipient && recipient.avatar) {
+                var img = document.createElement('img');
+                img.src = recipient.avatar;
+                img.alt = '';
+                img.onerror = function() {
+                    if (img.parentNode) img.parentNode.removeChild(img);
+                    recipientChipAvatar.textContent = initial;
+                    recipientChipAvatar.style.background = '#' + getColorFromNickname(name, null);
+                };
+                recipientChipAvatar.appendChild(img);
+            } else {
+                recipientChipAvatar.textContent = initial;
+                recipientChipAvatar.style.background = '#' + getColorFromNickname(name, null);
+            }
+        }
+
+        function setContactSelectValue(mid) {
+            if (!contactSelect) return;
+            if (!mid) {
+                contactSelect.value = '-';
+                return;
+            }
+            var str = String(mid);
+            for (var i = 0; i < contactSelect.options.length; i++) {
+                if (contactSelect.options[i].value === str) {
+                    contactSelect.value = str;
+                    return;
+                }
+            }
+            // MID isn't in the friend list — the server will fall back to
+            // entered_name, so leave the select at "-".
+            contactSelect.value = '-';
+        }
+
+        function syncToOriginal() {
+            if (recipientInput) {
+                recipientInput.value = currentRecipient ? currentRecipient.name : '';
+            }
+            if (contactSelect) {
+                setContactSelectValue(currentRecipient ? currentRecipient.id : null);
+            }
+            if (titleInput && modernTitle) {
+                titleInput.value = modernTitle.value;
+            }
+        }
+
+        function applyRecipient(recipient) {
+            if (!recipient || !recipient.name) return;
+            currentRecipient = {
+                id: recipient.id || null,
+                name: recipient.name,
+                avatar: recipient.avatar || null
+            };
+
+            if (recipientChipName) recipientChipName.textContent = currentRecipient.name;
+            renderChipAvatar(currentRecipient);
+
+            if (recipientChip) recipientChip.hidden = false;
+            if (modernRecipient) modernRecipient.hidden = true;
+            if (modernRecipient) modernRecipient.value = currentRecipient.name;
+
+            syncToOriginal();
+
+            // Smooth flow: after picking a recipient, jump to the subject
+            if (modernTitle && !modernTitle.value.trim()) {
+                modernTitle.focus();
+            }
+
+            updateSendState();
+        }
+
+        function clearRecipient() {
+            currentRecipient = null;
+            if (recipientChip) recipientChip.hidden = true;
+            if (modernRecipient) {
+                modernRecipient.hidden = false;
+                modernRecipient.value = '';
+            }
+            syncToOriginal();
+            if (modernRecipient) modernRecipient.focus();
+            updateSendState();
+        }
+
+        // Initialize from legacy values (friend picked earlier, or free text)
+        (function initRecipientFromLegacy() {
+            var initialName = recipientInput ? (recipientInput.value || '').trim() : '';
+            var initialId = null;
+
+            if (contactSelect && contactSelect.value && contactSelect.value !== '-') {
+                var opt = contactSelect.options[contactSelect.selectedIndex];
+                if (opt) {
+                    var optName = (opt.textContent || '').trim();
+                    if (!initialName || optName === initialName) {
+                        initialId = contactSelect.value;
+                        if (!initialName) initialName = optName;
+                    }
+                }
+            }
+
+            if (initialName) {
+                currentRecipient = {
+                    id: initialId,
+                    name: initialName,
+                    avatar: null
+                };
+                if (recipientChipName) recipientChipName.textContent = initialName;
+                renderChipAvatar(currentRecipient);
+                if (recipientChip) recipientChip.hidden = false;
+                if (modernRecipient) {
+                    modernRecipient.hidden = true;
+                    modernRecipient.value = initialName;
+                }
+            } else if (modernRecipient && recipientInput) {
+                modernRecipient.value = recipientInput.value || '';
+            }
+
+            if (modernTitle && titleInput) {
+                modernTitle.value = titleInput.value || '';
+            }
+        })();
+
+        if (recipientChipRemove) {
+            recipientChipRemove.addEventListener('click', function(e) {
+                e.preventDefault();
+                clearRecipient();
+            });
+        }
+
+        // Wire the autocomplete — commits go through applyRecipient
+        attachRecipientAutocomplete(modernRecipient, applyRecipient);
+
+        // ----- Toolbar -----
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
         toolbar.setAttribute('role', 'toolbar');
@@ -943,20 +1110,20 @@ var MessengerModule = (function(Utils, EventBus) {
             return btn;
         }
 
-        // ========== UNDO / REDO ==========
+        // Undo / Redo
         var undoBtn = makeToolbarButton('fa-regular fa-undo', 'Undo', { shortcut: 'Control+Z' });
         undoBtn.disabled = true;
         var redoBtn = makeToolbarButton('fa-regular fa-redo', 'Redo', { shortcut: 'Control+Shift+Z' });
         redoBtn.disabled = true;
         addSeparator();
 
-        // ----- Inline formatting -----
+        // Inline formatting
         var boldBtn      = makeToolbarButton('fa-regular fa-bold', 'Bold', { shortcut: 'Control+B' });
         var italicBtn    = makeToolbarButton('fa-regular fa-italic', 'Italic', { shortcut: 'Control+I' });
         var underlineBtn = makeToolbarButton('fa-regular fa-underline', 'Underline', { shortcut: 'Control+U' });
         var strikeBtn    = makeToolbarButton('fa-regular fa-strikethrough', 'Strikethrough');
 
-        // ========== COLOR DROPDOWN ==========
+        // Color dropdown
         var colorDropdownContainer = document.createElement('div');
         colorDropdownContainer.className = 'modern-dropdown';
         colorDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -1015,12 +1182,10 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         });
 
-        // ----- Clear formatting -----
         var clearFormatBtn = makeToolbarButton('fa-regular fa-remove-format', 'Clear formatting');
-
         addSeparator();
 
-        // ========== HEADING DROPDOWN ==========
+        // Heading dropdown
         var headingDropdownContainer = document.createElement('div');
         headingDropdownContainer.className = 'modern-dropdown';
         headingDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -1091,7 +1256,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
         var codeBtn       = makeToolbarButton('fa-regular fa-code', 'Code block');
-
         addSeparator();
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
@@ -1127,16 +1291,14 @@ var MessengerModule = (function(Utils, EventBus) {
         imageDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         addSeparator();
-
         var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
 
-        // Global click closes any open dropdown.
+        // Dropdown-close listeners
         document.addEventListener('click', function() {
             document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
             document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
         });
 
-        // Global Escape closes any open dropdown.
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 var openMenu = document.querySelector('.modern-dropdown-menu[style*="display: block"]');
@@ -1147,9 +1309,8 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // ---- Emoji button & picker ----
+        // Emoji picker
         var emojiBtn = makeToolbarButton('fa-regular fa-face-smile', 'Insert emoji');
-
         var emojiPickerPanel = document.createElement('div');
         emojiPickerPanel.className = 'modern-emoji-picker';
         emojiPickerPanel.setAttribute('role', 'dialog');
@@ -1160,12 +1321,9 @@ var MessengerModule = (function(Utils, EventBus) {
 
         function renderEmojiPicker() {
             emojiPickerPanel.innerHTML = '';
-
             var recents = loadEmojiRecents();
             var allGroups = [];
-            if (recents.length > 0) {
-                allGroups.push({ name: 'Recently used', emojis: recents });
-            }
+            if (recents.length > 0) allGroups.push({ name: 'Recently used', emojis: recents });
             allGroups = allGroups.concat(EMOJI_GROUPS);
 
             allGroups.forEach(function(group, groupIndex) {
@@ -1188,10 +1346,8 @@ var MessengerModule = (function(Utils, EventBus) {
                     emojiItem.setAttribute('aria-label', emoji);
                     emojiItem.title = emoji;
 
-                    var codePoint = emojiToCodePoint(emoji);
-                    var imgUrl = TWEMOJI_BASE + codePoint + '.svg';
                     var img = document.createElement('img');
-                    img.src = imgUrl;
+                    img.src = TWEMOJI_BASE + emojiToCodePoint(emoji) + '.svg';
                     img.alt = emoji;
                     img.style.width = '1.5rem';
                     img.style.height = '1.5rem';
@@ -1206,11 +1362,10 @@ var MessengerModule = (function(Utils, EventBus) {
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
-                            var emojiUrl = TWEMOJI_BASE + emojiToCodePoint(emojiChar) + '.svg';
                             editor.chain().focus().insertContent({
                                 type: 'image',
                                 attrs: {
-                                    src: emojiUrl,
+                                    src: TWEMOJI_BASE + emojiToCodePoint(emojiChar) + '.svg',
                                     alt: emojiChar,
                                     loading: 'lazy',
                                     decoding: 'async',
@@ -1244,9 +1399,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // -----------------------------------------------------------------
-        // UPLOAD
-        // -----------------------------------------------------------------
+        // Upload
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
@@ -1286,7 +1439,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 });
         }
 
-        // Modal helpers — both close on Escape and restore editor focus on exit.
+        // Modals
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -1371,9 +1524,9 @@ var MessengerModule = (function(Utils, EventBus) {
             urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
 
-        // -----------------------------------------------------------------
-        // Load TipTap ES modules
-        // -----------------------------------------------------------------
+        // =================================================================
+        // TipTap bootstrap
+        // =================================================================
         (async function initTipTap() {
             try {
                 const core = await import('https://esm.sh/@tiptap/core@2.5.2');
@@ -1442,11 +1595,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // -------------------------------------------------------------
-                // ASCII EMOTICON INPUT RULE
-                // Converts text like ":)", "<3", ":D" to Twemoji image nodes
-                // as the user types. Uses the Converse.js ASCII_LIST map.
-                // -----------------------------------------------------------------
+                // ASCII emoticon input rule
                 const emoticonPattern = Object.keys(ASCII_EMOTICON_MAP)
                     .sort(function(a, b) { return b.length - a.length; })
                     .map(function(e) { return e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
@@ -1466,10 +1615,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                                     const unicodeEmoji = String.fromCodePoint(parseInt(codepoint, 16));
                                     const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
-
-                                    // range.to is right after the emoticon; range.from
-                                    // points at the preceding whitespace (or start).
-                                    // Only replace the emoticon itself, keep the space.
                                     const emoticonStart = range.to - emoticon.length;
 
                                     const imageNode = state.schema.nodes.image.create({
@@ -1867,9 +2012,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // -------------------------------------------------------------
-                // LINK PREVIEW PASTE PLUGIN (skeleton + 8s timeout)
-                // -------------------------------------------------------------
                 const linkPreviewPlugin = new Plugin({
                     key: new PluginKey('linkPreview'),
                     props: {
@@ -1958,9 +2100,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     },
                 });
 
-                // -----------------------------------------------------------------
-                // INITIAL CONTENT
-                // -----------------------------------------------------------------
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
@@ -2028,9 +2167,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // -----------------------------------------------------------------
-                // TOOLBAR ACTIONS
-                // -----------------------------------------------------------------
+                // Toolbar actions
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
                 redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
                 clearFormatBtn.onclick = function() {
@@ -2123,9 +2260,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     input.click();
                 };
 
-                // -----------------------------------------------------------------
-                // ACTIVE STATES
-                // -----------------------------------------------------------------
                 function updateActiveStates() {
                     undoBtn.disabled = !editor.can().undo();
                     redoBtn.disabled = !editor.can().redo();
@@ -2135,8 +2269,6 @@ var MessengerModule = (function(Utils, EventBus) {
                         italic: editor.isActive('italic'),
                         underline: editor.isActive('underline'),
                         strike: editor.isActive('strike'),
-                        bulletList: editor.isActive('bulletList'),
-                        orderedList: editor.isActive('orderedList'),
                         blockquote: editor.isActive('blockquote'),
                         codeBlock: editor.isActive('codeBlock'),
                         spoiler: editor.isActive('spoiler'),
@@ -2198,9 +2330,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
-                // -----------------------------------------------------------------
-                // DRAG-DROP IMAGES
-                // -----------------------------------------------------------------
+                // Drag-drop images
                 var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
@@ -2212,9 +2342,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     });
                 }
 
-                // -----------------------------------------------------------------
-                // KEYBOARD SHORTCUTS
-                // -----------------------------------------------------------------
+                // Keyboard shortcuts
                 editor.setOptions({
                     editorProps: {
                         handleDOMEvents: {
@@ -2243,9 +2371,6 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
-                // -----------------------------------------------------------------
-                // LEGACY EMOTICON BRIDGE
-                // -----------------------------------------------------------------
                 _originalEmoticon = window.emoticon;
                 window.emoticon = function(x) {
                     if (editor) {
@@ -2255,16 +2380,12 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 };
 
-                // -----------------------------------------------------------------
-                // SEND STATE + CHAR COUNTER
-                // -----------------------------------------------------------------
+                // Send state + char counter
                 var modernSubmitBtnRef = container.querySelector('#modern-submit');
                 function updateSendState() {
                     if (!modernSubmitBtnRef) return;
-                    var r = container.querySelector('#modern-recipient');
-                    var t = container.querySelector('#modern-title');
-                    var hasRecipient = r && r.value.trim().length > 0;
-                    var hasSubject = t && t.value.trim().length > 0;
+                    var hasRecipient = !!currentRecipient;
+                    var hasSubject = modernTitle && modernTitle.value.trim().length > 0;
                     var hasBody = editor && !editor.isEmpty;
                     var ready = hasRecipient && hasSubject && hasBody;
                     modernSubmitBtnRef.disabled = !ready;
@@ -2290,23 +2411,29 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 }
 
-                var modernRecipientInput = container.querySelector('#modern-recipient');
-                var modernTitleInput = container.querySelector('#modern-title');
-                if (modernRecipientInput) modernRecipientInput.addEventListener('input', updateSendState);
-                if (modernTitleInput) modernTitleInput.addEventListener('input', updateSendState);
+                if (modernTitle) modernTitle.addEventListener('input', function() {
+                    if (this.value.trim()) clearTitleError();
+                    syncToOriginal();
+                    updateSendState();
+                });
 
-                [modernRecipientInput, modernTitleInput].forEach(function(el) {
-                    if (!el) return;
-                    el.addEventListener('keydown', function(e) {
+                if (modernTitle) {
+                    modernTitle.addEventListener('keydown', function(e) {
                         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                             e.preventDefault();
                             if (modernSubmitBtnRef && !modernSubmitBtnRef.disabled) modernSubmitBtnRef.click();
                         }
                     });
-                });
+                }
+
+                // Expose for the button handlers below
+                container._updateSendState = updateSendState;
+                container._clearTitleError = clearTitleError;
+                container._syncToOriginal = syncToOriginal;
 
                 updateSendState();
                 updateCharCounter();
+                syncToOriginal();
 
             } catch (err) {
                 console.error('[MessengerModule] TipTap failed to load:', err);
@@ -2314,7 +2441,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
-        // ----- Modern preview area -----
+        // ----- Preview -----
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
@@ -2329,28 +2456,9 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
         container.appendChild(actions);
 
-        var modernRecipient   = container.querySelector('#modern-recipient');
-        var modernContact     = container.querySelector('#modern-contact');
-        var modernTitle       = container.querySelector('#modern-title');
-
-        attachRecipientAutocomplete(modernRecipient);
-
-        // INLINE VALIDATION — Subject field
-        var titleField = modernTitle ? modernTitle.closest('.modern-field') : null;
-        var titleError = null;
-
-        if (titleField && modernTitle) {
-            titleError = document.createElement('span');
-            titleError.className = 'modern-field-error';
-            titleError.id = 'modern-title-error';
-            titleError.setAttribute('role', 'alert');
-            titleError.textContent = 'Please enter a subject before sending';
-            titleField.appendChild(titleError);
-
-            modernTitle.addEventListener('input', function() {
-                if (this.value.trim()) clearTitleError();
-            });
-        }
+        // ----- Title error handling -----
+        var titleField = modernTitle ? modernTitle.closest('.modern-compose-field') : null;
+        var titleError = titleField ? titleField.querySelector('#modern-title-error') : null;
 
         function showTitleError() {
             if (!modernTitle || !titleError) return;
@@ -2375,27 +2483,10 @@ var MessengerModule = (function(Utils, EventBus) {
             titleError.classList.remove('visible');
         }
 
-        function syncToOriginal() {
-            if (recipientInput && modernRecipient) recipientInput.value = modernRecipient.value;
-            if (contactSelect && modernContact) contactSelect.value = modernContact.value;
-            if (titleInput && modernTitle) titleInput.value = modernTitle.value;
-        }
-        function syncFromOriginal() {
-            if (recipientInput && modernRecipient) modernRecipient.value = recipientInput.value;
-            if (contactSelect && modernContact) modernContact.value = contactSelect.value;
-            if (titleInput && modernTitle) modernTitle.value = titleInput.value;
-        }
-
-        if (modernRecipient)   modernRecipient.addEventListener('input', syncToOriginal);
-        if (modernContact)     modernContact.addEventListener('change', syncToOriginal);
-        if (modernTitle)       modernTitle.addEventListener('input', syncToOriginal);
-        syncFromOriginal();
-
-        // PREVIEW
+        // Preview
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
             modernPreviewBtn.onclick = function() {
-                syncToOriginal();
                 if (!editor) return;
                 var previewHtml = editor.getHTML();
                 var previewContent = previewArea.querySelector('.preview-content');
@@ -2410,17 +2501,20 @@ var MessengerModule = (function(Utils, EventBus) {
             };
         }
 
-        // SUBMIT
+        // Submit
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
-                syncToOriginal();
 
-                var recipientValue = modernRecipient ? modernRecipient.value.trim() : '';
-                if (!recipientValue) {
-                    showToast('Please enter a recipient', { type: 'warning' });
-                    if (modernRecipient) modernRecipient.focus();
+                if (!currentRecipient || !currentRecipient.name) {
+                    showToast('Please pick a recipient', { type: 'warning' });
+                    if (modernRecipient && modernRecipient.hidden) {
+                        // Chip is showing — clicking the chip remove is the way
+                        // to re-pick. Just toast and return.
+                    } else if (modernRecipient) {
+                        modernRecipient.focus();
+                    }
                     return;
                 }
 
@@ -2445,6 +2539,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
                 if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
+                syncToOriginal();
 
                 var originalLabel = modernSubmitBtn.innerHTML;
                 modernSubmitBtn.disabled = true;
@@ -2480,9 +2575,9 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ------------------------------------------------------------------------
+    // ========================================================================
     // MESSAGES SECTION
-    // ------------------------------------------------------------------------
+    // ========================================================================
     function buildModernMessagesSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -2608,9 +2703,9 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ------------------------------------------------------------------------
+    // ========================================================================
     // CONTACTS SECTION
-    // ------------------------------------------------------------------------
+    // ========================================================================
     function buildModernContactsSection() {
         var container = document.createElement('div');
         container.className = 'modern-messenger-section';
@@ -2673,9 +2768,9 @@ var MessengerModule = (function(Utils, EventBus) {
         return container;
     }
 
-    // ------------------------------------------------------------------------
+    // ========================================================================
     // CORE BUILDER
-    // ------------------------------------------------------------------------
+    // ========================================================================
     function buildModernMessenger() {
         var wrapper = document.getElementById('modern-forum-wrapper');
         if (!wrapper) return;
