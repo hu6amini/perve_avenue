@@ -1400,7 +1400,6 @@
     margin-right: var(--space-xs);
     vertical-align: middle;
     border: 1px solid var(--border-color);
-    font-family: var(--font-primary);
 }
 .modern-dropdown-item .color-swatch--primary { background: var(--primary-light); }
 .modern-dropdown-item .color-swatch--info    { background: var(--accent-color); }
@@ -3301,6 +3300,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   font-size: var(--text-sm);
   cursor: pointer;
   text-align: left;
+  font-family: var(--font-primary);
 }
 .modern-dropdown-item:hover { background: var(--hover-color); }
 
