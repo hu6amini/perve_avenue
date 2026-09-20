@@ -863,16 +863,115 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(composeHeader);
 
-        // ----- Recipient state -----
-        // currentRecipient is the single source of truth: null | { id, name, avatar }
-        var currentRecipient = null;
+        // ------------------------------------------------------------------
+        // OUTER-SCOPE STATE
+        // These live at the buildComposeSection level (not inside the async
+        // IIFE) so applyRecipient / clearRecipient / showTitleError can see
+        // them without hitting a ReferenceError.
+        // ------------------------------------------------------------------
+        var currentRecipient   = null;
+        var editor             = null;
+        var modernSubmitBtnRef = null;
+        var charCounter        = null;
 
-        var modernRecipient   = container.querySelector('#modern-recipient');
-        var modernTitle       = container.querySelector('#modern-title');
-        var recipientChip     = container.querySelector('.modern-recipient-chip');
+        var modernRecipient     = container.querySelector('#modern-recipient');
+        var modernTitle         = container.querySelector('#modern-title');
+        var recipientChip       = container.querySelector('.modern-recipient-chip');
         var recipientChipAvatar = container.querySelector('.modern-recipient-chip-avatar');
-        var recipientChipName = container.querySelector('.modern-recipient-chip-name');
+        var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
+
+        var titleField = modernTitle ? modernTitle.closest('.modern-compose-field') : null;
+        var titleError = titleField ? titleField.querySelector('#modern-title-error') : null;
+
+        // ------------------------------------------------------------------
+        // OUTER-SCOPE HELPERS
+        // Declared as function declarations so hoisting makes them visible
+        // to every other function in this scope, regardless of declaration
+        // order.
+        // ------------------------------------------------------------------
+
+        function updateSendState() {
+            if (!modernSubmitBtnRef) return;
+            var hasRecipient = !!currentRecipient;
+            var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
+            var hasBody      = !!(editor && !editor.isEmpty);
+            var ready        = hasRecipient && hasSubject && hasBody;
+            modernSubmitBtnRef.disabled = !ready;
+            modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
+        }
+
+        function updateCharCounter() {
+            if (!MAX_MESSAGE_LENGTH) return;
+            var len = editor ? editor.getText().length : 0;
+            if (!charCounter) {
+                charCounter = document.createElement('span');
+                charCounter.className = 'messenger-char-counter';
+                charCounter.style.cssText = 'margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary);';
+                var tb = container.querySelector('.modern-editor-toolbar');
+                if (tb) tb.appendChild(charCounter);
+            }
+            charCounter.textContent = len + ' / ' + MAX_MESSAGE_LENGTH;
+            if (len > MAX_MESSAGE_LENGTH) charCounter.style.color = 'var(--danger-color)';
+            else if (len > MAX_MESSAGE_LENGTH * 0.9) charCounter.style.color = 'var(--warning-color)';
+            else charCounter.style.color = 'var(--text-tertiary)';
+            if (modernSubmitBtnRef) {
+                modernSubmitBtnRef.disabled = modernSubmitBtnRef.disabled || len > MAX_MESSAGE_LENGTH;
+            }
+        }
+
+        function showTitleError() {
+            if (!modernTitle || !titleError) return;
+            modernTitle.classList.add('has-error');
+            modernTitle.setAttribute('aria-invalid', 'true');
+            modernTitle.setAttribute('aria-describedby', 'modern-title-error');
+            titleError.classList.add('visible');
+            modernTitle.classList.remove('shake');
+            void modernTitle.offsetWidth;
+            modernTitle.classList.add('shake');
+            modernTitle.focus();
+            setTimeout(function() {
+                if (modernTitle) modernTitle.classList.remove('shake');
+            }, 400);
+        }
+
+        function clearTitleError() {
+            if (!modernTitle || !titleError) return;
+            modernTitle.classList.remove('has-error', 'shake');
+            modernTitle.removeAttribute('aria-invalid');
+            modernTitle.removeAttribute('aria-describedby');
+            titleError.classList.remove('visible');
+        }
+
+        function setContactSelectValue(mid) {
+            if (!contactSelect) return;
+            if (!mid) {
+                contactSelect.value = '-';
+                return;
+            }
+            var str = String(mid);
+            for (var i = 0; i < contactSelect.options.length; i++) {
+                if (contactSelect.options[i].value === str) {
+                    contactSelect.value = str;
+                    return;
+                }
+            }
+            // MID isn't in the friend list — the server falls back to
+            // entered_name, so leave the select at "-".
+            contactSelect.value = '-';
+        }
+
+        function syncToOriginal() {
+            if (recipientInput) {
+                recipientInput.value = currentRecipient ? currentRecipient.name : '';
+            }
+            if (contactSelect) {
+                setContactSelectValue(currentRecipient ? currentRecipient.id : null);
+            }
+            if (titleInput && modernTitle) {
+                titleInput.value = modernTitle.value;
+            }
+        }
 
         function renderChipAvatar(recipient) {
             if (!recipientChipAvatar) return;
@@ -897,36 +996,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         }
 
-        function setContactSelectValue(mid) {
-            if (!contactSelect) return;
-            if (!mid) {
-                contactSelect.value = '-';
-                return;
-            }
-            var str = String(mid);
-            for (var i = 0; i < contactSelect.options.length; i++) {
-                if (contactSelect.options[i].value === str) {
-                    contactSelect.value = str;
-                    return;
-                }
-            }
-            // MID isn't in the friend list — the server will fall back to
-            // entered_name, so leave the select at "-".
-            contactSelect.value = '-';
-        }
-
-        function syncToOriginal() {
-            if (recipientInput) {
-                recipientInput.value = currentRecipient ? currentRecipient.name : '';
-            }
-            if (contactSelect) {
-                setContactSelectValue(currentRecipient ? currentRecipient.id : null);
-            }
-            if (titleInput && modernTitle) {
-                titleInput.value = modernTitle.value;
-            }
-        }
-
         function applyRecipient(recipient) {
             if (!recipient || !recipient.name) return;
             currentRecipient = {
@@ -939,12 +1008,14 @@ var MessengerModule = (function(Utils, EventBus) {
             renderChipAvatar(currentRecipient);
 
             if (recipientChip) recipientChip.hidden = false;
-            if (modernRecipient) modernRecipient.hidden = true;
-            if (modernRecipient) modernRecipient.value = currentRecipient.name;
+            if (modernRecipient) {
+                modernRecipient.hidden = true;
+                modernRecipient.value = currentRecipient.name;
+            }
 
             syncToOriginal();
 
-            // Smooth flow: after picking a recipient, jump to the subject
+            // Smooth flow: after picking a recipient, jump to the subject.
             if (modernTitle && !modernTitle.value.trim()) {
                 modernTitle.focus();
             }
@@ -964,7 +1035,9 @@ var MessengerModule = (function(Utils, EventBus) {
             updateSendState();
         }
 
-        // Initialize from legacy values (friend picked earlier, or free text)
+        // ------------------------------------------------------------------
+        // Initialize from legacy inputs
+        // ------------------------------------------------------------------
         (function initRecipientFromLegacy() {
             var initialName = recipientInput ? (recipientInput.value || '').trim() : '';
             var initialId = null;
@@ -981,11 +1054,7 @@ var MessengerModule = (function(Utils, EventBus) {
             }
 
             if (initialName) {
-                currentRecipient = {
-                    id: initialId,
-                    name: initialName,
-                    avatar: null
-                };
+                currentRecipient = { id: initialId, name: initialName, avatar: null };
                 if (recipientChipName) recipientChipName.textContent = initialName;
                 renderChipAvatar(currentRecipient);
                 if (recipientChip) recipientChip.hidden = false;
@@ -1009,8 +1078,23 @@ var MessengerModule = (function(Utils, EventBus) {
             });
         }
 
-        // Wire the autocomplete — commits go through applyRecipient
+        // Wire the autocomplete — commits go through applyRecipient.
         attachRecipientAutocomplete(modernRecipient, applyRecipient);
+
+        // Title input — clears error, keeps legacy in sync, updates Send state.
+        if (modernTitle) {
+            modernTitle.addEventListener('input', function() {
+                if (this.value.trim()) clearTitleError();
+                syncToOriginal();
+                updateSendState();
+            });
+            modernTitle.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    if (modernSubmitBtnRef && !modernSubmitBtnRef.disabled) modernSubmitBtnRef.click();
+                }
+            });
+        }
 
         // ----- Toolbar -----
         var toolbar = document.createElement('div');
@@ -1019,7 +1103,7 @@ var MessengerModule = (function(Utils, EventBus) {
         toolbar.setAttribute('aria-label', 'Formatting');
         container.appendChild(toolbar);
 
-        // Replying-as header — sync-render, refine async.
+        // ----- Replying-as header -----
         var syncUser = getCurrentUserSync();
         var currentHeader = null;
         if (syncUser) {
@@ -1080,8 +1164,6 @@ var MessengerModule = (function(Utils, EventBus) {
         editorElement.id = 'tiptap-editor';
         editorElement.className = 'modern-wysiwyg';
         container.appendChild(editorElement);
-
-        var editor = null;
 
         function addSeparator() {
             var sep = document.createElement('span');
@@ -2167,6 +2249,10 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 });
 
+                // Capture the submit button reference at outer scope so
+                // updateSendState() can use it.
+                modernSubmitBtnRef = container.querySelector('#modern-submit');
+
                 // Toolbar actions
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
                 redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
@@ -2380,57 +2466,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     }
                 };
 
-                // Send state + char counter
-                var modernSubmitBtnRef = container.querySelector('#modern-submit');
-                function updateSendState() {
-                    if (!modernSubmitBtnRef) return;
-                    var hasRecipient = !!currentRecipient;
-                    var hasSubject = modernTitle && modernTitle.value.trim().length > 0;
-                    var hasBody = editor && !editor.isEmpty;
-                    var ready = hasRecipient && hasSubject && hasBody;
-                    modernSubmitBtnRef.disabled = !ready;
-                    modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
-                }
-
-                var charCounter = null;
-                function updateCharCounter() {
-                    if (!MAX_MESSAGE_LENGTH) return;
-                    var len = editor ? editor.getText().length : 0;
-                    if (!charCounter) {
-                        charCounter = document.createElement('span');
-                        charCounter.className = 'messenger-char-counter';
-                        charCounter.style.cssText = 'margin-left:auto;font-size:var(--text-xs);color:var(--text-tertiary);';
-                        toolbar.appendChild(charCounter);
-                    }
-                    charCounter.textContent = len + ' / ' + MAX_MESSAGE_LENGTH;
-                    if (len > MAX_MESSAGE_LENGTH) charCounter.style.color = 'var(--danger-color)';
-                    else if (len > MAX_MESSAGE_LENGTH * 0.9) charCounter.style.color = 'var(--warning-color)';
-                    else charCounter.style.color = 'var(--text-tertiary)';
-                    if (modernSubmitBtnRef) {
-                        modernSubmitBtnRef.disabled = modernSubmitBtnRef.disabled || len > MAX_MESSAGE_LENGTH;
-                    }
-                }
-
-                if (modernTitle) modernTitle.addEventListener('input', function() {
-                    if (this.value.trim()) clearTitleError();
-                    syncToOriginal();
-                    updateSendState();
-                });
-
-                if (modernTitle) {
-                    modernTitle.addEventListener('keydown', function(e) {
-                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                            e.preventDefault();
-                            if (modernSubmitBtnRef && !modernSubmitBtnRef.disabled) modernSubmitBtnRef.click();
-                        }
-                    });
-                }
-
-                // Expose for the button handlers below
-                container._updateSendState = updateSendState;
-                container._clearTitleError = clearTitleError;
-                container._syncToOriginal = syncToOriginal;
-
+                // Prime the state and the counter now that editor exists.
                 updateSendState();
                 updateCharCounter();
                 syncToOriginal();
@@ -2455,33 +2491,6 @@ var MessengerModule = (function(Utils, EventBus) {
             + '<button type="button" id="modern-preview" class="modern-btn modern-btn-secondary"><i class="fa-regular fa-eye"></i> Preview</button>'
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
         container.appendChild(actions);
-
-        // ----- Title error handling -----
-        var titleField = modernTitle ? modernTitle.closest('.modern-compose-field') : null;
-        var titleError = titleField ? titleField.querySelector('#modern-title-error') : null;
-
-        function showTitleError() {
-            if (!modernTitle || !titleError) return;
-            modernTitle.classList.add('has-error');
-            modernTitle.setAttribute('aria-invalid', 'true');
-            modernTitle.setAttribute('aria-describedby', 'modern-title-error');
-            titleError.classList.add('visible');
-            modernTitle.classList.remove('shake');
-            void modernTitle.offsetWidth;
-            modernTitle.classList.add('shake');
-            modernTitle.focus();
-            setTimeout(function() {
-                if (modernTitle) modernTitle.classList.remove('shake');
-            }, 400);
-        }
-
-        function clearTitleError() {
-            if (!modernTitle || !titleError) return;
-            modernTitle.classList.remove('has-error', 'shake');
-            modernTitle.removeAttribute('aria-invalid');
-            modernTitle.removeAttribute('aria-describedby');
-            titleError.classList.remove('visible');
-        }
 
         // Preview
         var modernPreviewBtn = container.querySelector('#modern-preview');
@@ -2509,10 +2518,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 if (!currentRecipient || !currentRecipient.name) {
                     showToast('Please pick a recipient', { type: 'warning' });
-                    if (modernRecipient && modernRecipient.hidden) {
-                        // Chip is showing — clicking the chip remove is the way
-                        // to re-pick. Just toast and return.
-                    } else if (modernRecipient) {
+                    if (modernRecipient && !modernRecipient.hidden) {
                         modernRecipient.focus();
                     }
                     return;
