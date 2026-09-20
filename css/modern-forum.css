@@ -3045,7 +3045,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 
 .modern-compose-label {
-  flex: 0 0 72px;
+  flex: 0 0 88px;
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--text-tertiary);
@@ -3071,9 +3071,11 @@ section.modern-stats { flex-direction: column; width: 100%; }
   font-size: var(--text-base);
   line-height: 1.4;
   color: var(--text-primary);
+  transition: color 0.15s ease;
 }
 .modern-input-bare::placeholder {
   color: var(--text-tertiary);
+  transition: color 0.15s ease;
 }
 .modern-input-bare:focus {
   outline: none;
@@ -3082,8 +3084,29 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-input-bare[hidden] {
   display: none;
 }
+
+/* ------------------------------------------------------------------
+   Compose-header error state — the bare input has no border, so the
+   "empty subject" cue is delivered through:
+     • a red bottom underline (inset box-shadow, so it hugs the input
+       rather than the field row)
+     • a red placeholder so the cue shows even when the field is empty
+     • red typed text for the case where the user cleared a subject
+   ------------------------------------------------------------------ */
 .modern-input-bare.has-error {
   color: var(--danger-color);
+  background: rgba(220, 38, 38, 0.06);
+  box-shadow: inset 0 -2px 0 0 var(--danger-color);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  padding-left: var(--space-xs);
+  padding-right: var(--space-xs);
+}
+.modern-input-bare.has-error::placeholder {
+  color: var(--danger-color);
+  opacity: 0.75;
+}
+.modern-input-bare.has-error:focus {
+  box-shadow: inset 0 -2px 0 0 var(--danger-color);
 }
 
 /* Recipient chip */
@@ -3191,23 +3214,18 @@ section.modern-stats { flex-direction: column; width: 100%; }
   padding-right: var(--space-lg);
 }
 
-/* Field error state — shared by .modern-input (modals) and
-   .modern-input-bare (compose header). The position: relative
-   anchor is on .modern-compose-control and .modern-field where
-   those wrappers exist; where they don't, the error simply
-   floats relative to the nearest positioned ancestor. */
+/* Field error state — scoped variants.
+   The modals use .modern-input (has a border); the compose header uses
+   .modern-input-bare (no border) — each gets its own visual treatment. */
 .modern-field {
     position: relative;
 }
 
-.modern-input.has-error,
-.modern-input-bare.has-error {
+.modern-input.has-error {
     border-color: var(--danger-color);
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
 }
-
-.modern-input.has-error:focus,
-.modern-input-bare.has-error:focus {
+.modern-input.has-error:focus {
     border-color: var(--danger-color);
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
 }
@@ -3396,14 +3414,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   color: var(--text-secondary);
 }
 
-/* ------------------------------------------------------------
-   Code blocks in the TipTap editor & preview — labelled block,
-   visually mirrors the blockquote and spoiler treatments but
-   uses the accent color (sky blue) to distinguish technical
-   content from citations (emerald) and hidden content (amber).
-   The header divider, icon, and label are decorative-only and
-   never survive htmlToLegacy(), which emits [CODE]…[/CODE].
-   ------------------------------------------------------------ */
+/* Code blocks */
 .modern-wysiwyg .ProseMirror pre,
 .modern-preview .preview-content pre {
     position: relative;
@@ -3419,10 +3430,9 @@ section.modern-stats { flex-direction: column; width: 100%; }
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     line-height: 1.5;
-    overflow: visible; /* keep the header band outside the scroll area */
+    overflow: visible;
 }
 
-/* Icon square — mirrors .code-icon in the rendered post code block */
 .modern-wysiwyg .ProseMirror pre::before,
 .modern-preview .preview-content pre::before {
     content: "\f121";
@@ -3445,7 +3455,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
-/* "Code" label — positioned next to the icon square */
 .modern-wysiwyg .ProseMirror pre::after,
 .modern-preview .preview-content pre::after {
     content: "Code";
@@ -3463,9 +3472,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
-/* The <code> inside the <pre> becomes the horizontal scroll
-   container so the header band and icon stay pinned while the
-   code scrolls. This is why overflow-x moved off <pre>. */
 .modern-wysiwyg .ProseMirror pre code,
 .modern-preview .preview-content pre code {
     display: block;
@@ -3480,13 +3486,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     white-space: pre;
 }
 
-/* ------------------------------------------------------------
-   Spoilers in the TipTap editor & preview — labelled block,
-   visually mirrors the blockquote treatment but uses the
-   warning color to preserve the semantic split (quote vs.
-   spoiler). Icon + label are decorative-only pseudos; neither
-   survives htmlToLegacy() which emits [SPOILER]…[/SPOILER].
-   ------------------------------------------------------------ */
+/* Spoilers */
 .modern-wysiwyg .ProseMirror div.spoiler,
 .modern-preview .preview-content div.spoiler {
     position: relative;
@@ -3501,7 +3501,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     border-radius: var(--radius);
 }
 
-/* Icon square — mirrors .spoiler-icon in the rendered post spoiler */
 .modern-wysiwyg .ProseMirror div.spoiler::before,
 .modern-preview .preview-content div.spoiler::before {
     content: "\f070";
@@ -3524,7 +3523,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
-/* "Spoiler" label — positioned next to the icon square */
 .modern-wysiwyg .ProseMirror div.spoiler::after,
 .modern-preview .preview-content div.spoiler::after {
     content: "Spoiler";
@@ -3542,12 +3540,10 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
-/* Tighten paragraph spacing inside the spoiler */
 .modern-wysiwyg .ProseMirror div.spoiler p:first-child,
 .modern-preview .preview-content div.spoiler p:first-child {
     margin-top: 0;
 }
-
 .modern-wysiwyg .ProseMirror div.spoiler p:last-child,
 .modern-preview .preview-content div.spoiler p:last-child {
     margin-bottom: 0;
@@ -3564,13 +3560,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-right: var(--space-micro) solid transparent;
 }
 
-/* ------------------------------------------------------------
-   Quotes in the TipTap editor & preview — labelled blockquote
-   Uses a pseudo-element header so it reads as a quote without
-   any of the structural weight of the rendered .modern-quote.
-   The pseudo header is decorative only — it never survives
-   serialization to [QUOTE]...[/QUOTE].
-   ------------------------------------------------------------ */
+/* Quotes */
 .modern-wysiwyg .ProseMirror blockquote,
 .modern-preview .preview-content blockquote {
     position: relative;
@@ -3585,7 +3575,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     border-radius: var(--radius);
 }
 
-/* Icon square — same treatment as .quote-icon in the modern post quote */
 .modern-wysiwyg .ProseMirror blockquote::before,
 .modern-preview .preview-content blockquote::before {
     content: "\f10d";
@@ -3608,7 +3597,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
-/* "QUOTE" label — positioned next to the icon square */
 .modern-wysiwyg .ProseMirror blockquote::after,
 .modern-preview .preview-content blockquote::after {
     content: "Quote";
@@ -3626,12 +3614,10 @@ section.modern-stats { flex-direction: column; width: 100%; }
     pointer-events: none;
 }
 
-/* Tighten paragraph spacing inside the quote */
 .modern-wysiwyg .ProseMirror blockquote p:first-child,
 .modern-preview .preview-content blockquote p:first-child {
     margin-top: 0;
 }
-
 .modern-wysiwyg .ProseMirror blockquote p:last-child,
 .modern-preview .preview-content blockquote p:last-child {
     margin-bottom: 0;
@@ -3688,6 +3674,27 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-color: var(--primary-color);
   color: var(--text-primary);
   transform: translateY(-1px);
+}
+
+/* Disabled state — Send and Preview both need a visible "not ready yet" cue. */
+.modern-btn:disabled,
+.modern-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none;
+}
+.modern-btn-primary:disabled:hover,
+.modern-btn-primary[aria-disabled="true"]:hover {
+  background: var(--primary-color);
+  transform: none !important;
+}
+.modern-btn-secondary:disabled:hover,
+.modern-btn-secondary[aria-disabled="true"]:hover {
+  background: var(--surface-color);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+  transform: none !important;
 }
 
 .modern-preview {
@@ -3837,7 +3844,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     min-height: 44px;
   }
   .modern-compose-label {
-    flex: 0 0 56px;
+    flex: 0 0 64px;
     font-size: var(--text-xs);
   }
   .modern-recipient-chip-avatar {
