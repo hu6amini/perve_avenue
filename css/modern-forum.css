@@ -2951,6 +2951,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-left-color: var(--primary-color);
   color: var(--primary-light);
 }
+
 /* ------------------------------------------------------------------
    Replying-as header (compose section)
    ------------------------------------------------------------------ */
@@ -3010,6 +3011,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     font-weight: 600;
     color: inherit;
 }
+
 .modern-messenger-main {
   flex: 1;
   min-width: 0;
@@ -3018,17 +3020,149 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-bottom-right-radius: var(--radius-lg);
 }
 
-.modern-recipient-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-lg);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius);
-  margin: var(--space-md) var(--space-md) var(--space-lg) var(--space-md);
-  border: 1px solid var(--border-color);
+/* ------------------------------------------------------------------
+   Compose header — stacked "To" / "Subject" rows
+   Mirrors Gmail/Linear/Notion: quiet labels, borderless inputs,
+   a single hairline between rows, and a chip once the recipient
+   has been resolved.
+   ------------------------------------------------------------------ */
+.modern-compose-header {
+  background: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
 }
-.modern-field { flex: 1; min-width: 200px; }
-.modern-recipient-controls { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+
+.modern-compose-field {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 var(--pad-6);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+}
+.modern-compose-field:last-child {
+  border-bottom: none;
+}
+
+.modern-compose-label {
+  flex: 0 0 72px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+
+.modern-compose-control {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.modern-input-bare {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: var(--pad-3) 0;
+  font-family: var(--font-primary);
+  font-size: var(--text-base);
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+.modern-input-bare::placeholder {
+  color: var(--text-tertiary);
+}
+.modern-input-bare:focus {
+  outline: none;
+  box-shadow: none;
+}
+.modern-input-bare[hidden] {
+  display: none;
+}
+.modern-input-bare.has-error {
+  color: var(--danger-color);
+}
+
+/* Recipient chip */
+.modern-recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 3px;
+  background: var(--hover-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  max-width: 100%;
+  min-width: 0;
+}
+.modern-recipient-chip[hidden] {
+  display: none;
+}
+
+.modern-recipient-chip-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background-color: var(--primary-color);
+  flex-shrink: 0;
+  overflow: hidden;
+  line-height: 1;
+}
+.modern-recipient-chip-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.modern-recipient-chip-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  padding: 0 var(--space-xs);
+}
+
+.modern-recipient-chip-remove {
+  background: transparent;
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.modern-recipient-chip-remove:hover {
+  background: var(--surface-light);
+  color: var(--text-primary);
+}
+.modern-recipient-chip-remove i {
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------------
+   Generic form controls — still used by modals, folder selectors,
+   and the contacts textareas. Scoped by class so the compose header
+   can opt out with .modern-input-bare.
+   ------------------------------------------------------------------ */
 .modern-input,
 .modern-select {
   background: var(--bg-color);
@@ -3047,17 +3181,33 @@ section.modern-stats { flex-direction: column; width: 100%; }
   outline: none;
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
-/* Field error state */
-.modern-field {
-    position: relative;  /* anchor for the absolutely-positioned error */
+
+.modern-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%236B7280' d='M360.5 217.5l-152 143.1C203.9 365.8 197.9 368 192 368s-11.88-2.188-16.5-6.562L23.5 217.5C13.87 208.3 13.47 193.1 22.56 183.5C31.69 173.8 46.94 173.5 56.5 182.6L192 310.9l135.5-128.4c9.562-9.094 24.75-8.75 33.94 .9375C370.5 193.1 370.1 208.3 360.5 217.5z'/%3E%3C/svg%3E") !important;
+  background-size: auto 1rem;
+  background-repeat: no-repeat;
+  background-position: right var(--pad-3) center;
+  appearance: none;
+  padding-right: var(--space-lg);
 }
 
-.modern-input.has-error {
+/* Field error state — shared by .modern-input (modals) and
+   .modern-input-bare (compose header). The position: relative
+   anchor is on .modern-compose-control and .modern-field where
+   those wrappers exist; where they don't, the error simply
+   floats relative to the nearest positioned ancestor. */
+.modern-field {
+    position: relative;
+}
+
+.modern-input.has-error,
+.modern-input-bare.has-error {
     border-color: var(--danger-color);
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
 }
 
-.modern-input.has-error:focus {
+.modern-input.has-error:focus,
+.modern-input-bare.has-error:focus {
     border-color: var(--danger-color);
     box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
 }
@@ -3079,6 +3229,12 @@ section.modern-stats { flex-direction: column; width: 100%; }
     animation: fieldErrorIn 0.2s ease;
 }
 
+/* Compose-header error is anchored to .modern-compose-control
+   rather than to a full-width field wrapper. */
+.modern-compose-control .modern-field-error {
+    top: calc(100% + 2px);
+}
+
 @keyframes fieldErrorIn {
     from { opacity: 0; transform: translateY(-4px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -3092,18 +3248,14 @@ section.modern-stats { flex-direction: column; width: 100%; }
     80%      { transform: translateX(3px); }
 }
 
-.modern-input.shake {
+.modern-input.shake,
+.modern-input-bare.shake {
     animation: fieldShake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
-.modern-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 384 512'%3E%3Cpath fill='%236B7280' d='M360.5 217.5l-152 143.1C203.9 365.8 197.9 368 192 368s-11.88-2.188-16.5-6.562L23.5 217.5C13.87 208.3 13.47 193.1 22.56 183.5C31.69 173.8 46.94 173.5 56.5 182.6L192 310.9l135.5-128.4c9.562-9.094 24.75-8.75 33.94 .9375C370.5 193.1 370.1 208.3 360.5 217.5z'/%3E%3C/svg%3E") !important;
-  background-size: auto 1rem;
-  background-repeat: no-repeat;
-  background-position: right var(--pad-3) center;
-  appearance: none;
-  padding-right: var(--space-lg);
-}
 
+/* ------------------------------------------------------------------
+   Editor toolbar
+   ------------------------------------------------------------------ */
 .modern-editor-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -3185,7 +3337,9 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .modern-dropdown-item:hover { background: var(--hover-color); }
 
-/* TipTap base */
+/* ------------------------------------------------------------------
+   TipTap base
+   ------------------------------------------------------------------ */
 .modern-wysiwyg {
   margin: var(--pad-6);
   padding: var(--pad-4);
@@ -3241,6 +3395,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   padding-left: var(--space-md);
   color: var(--text-secondary);
 }
+
 /* ------------------------------------------------------------
    Code blocks in the TipTap editor & preview — labelled block,
    visually mirrors the blockquote and spoiler treatments but
@@ -3324,6 +3479,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
     line-height: inherit;
     white-space: pre;
 }
+
 /* ------------------------------------------------------------
    Spoilers in the TipTap editor & preview — labelled block,
    visually mirrors the blockquote treatment but uses the
@@ -3480,6 +3636,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content blockquote p:last-child {
     margin-bottom: 0;
 }
+
 .ProseMirror img[src*="twemoji"] {
   display: inline-block;
   user-select: all;
@@ -3496,6 +3653,9 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .modern-checkbox input { cursor: pointer; }
 
+/* ------------------------------------------------------------------
+   Preview + actions
+   ------------------------------------------------------------------ */
 .modern-actions {
   display: flex;
   justify-content: flex-end;
@@ -3529,6 +3689,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   color: var(--text-primary);
   transform: translateY(-1px);
 }
+
 .modern-preview {
   background-color: var(--bg-color);
   border: 1px dashed var(--border-color);
@@ -3560,7 +3721,9 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .modern-preview .preview-content img { max-width: 100%; height: auto; border-radius: var(--radius-sm); }
 
-/* Messages */
+/* ------------------------------------------------------------------
+   Messages section
+   ------------------------------------------------------------------ */
 .messages-folder-row {
   display: flex;
   justify-content: space-between;
@@ -3624,7 +3787,9 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-btn.danger { background: transparent; border-color: var(--danger-color); color: var(--danger-color); }
 .modern-btn.danger:hover { background: rgba(220, 38, 38, 0.1); border-color: var(--danger-color); color: var(--danger-color); }
 
-/* Contacts */
+/* ------------------------------------------------------------------
+   Contacts section
+   ------------------------------------------------------------------ */
 .contacts-card {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
@@ -3662,6 +3827,25 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .modern-radio input { accent-color: var(--primary-color); width: 1rem; height: 1rem; }
 .contacts-actions { padding: var(--space-md); text-align: right; border-top: 1px solid var(--border-color); }
+
+/* ------------------------------------------------------------------
+   Mobile
+   ------------------------------------------------------------------ */
+@media (max-width: 680px) {
+  .modern-compose-field {
+    padding: 0 var(--pad-4);
+    min-height: 44px;
+  }
+  .modern-compose-label {
+    flex: 0 0 56px;
+    font-size: var(--text-xs);
+  }
+  .modern-recipient-chip-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+}
 
 /* ------------------------------------------------------------
    20. MODERN EMOJI PICKER
