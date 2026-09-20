@@ -1099,10 +1099,9 @@ function updateSendState() {
         // Title input — clears error, keeps legacy in sync, updates Send state.
         if (modernTitle) {
             modernTitle.addEventListener('input', function() {
-                if (this.value.trim()) clearTitleError();
-                syncToOriginal();
-                updateSendState();
-            });
+    syncToOriginal();
+    updateSendState();
+});
             modernTitle.addEventListener('keydown', function(e) {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     e.preventDefault();
