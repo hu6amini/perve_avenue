@@ -1,7 +1,7 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
 // Includes custom emoji picker with Twemoji images, semantic color palette,
 // mention autocomplete, recipient autocomplete, image paste, plain-text paste,
-// toast notifications, and link preview skeleton.
+// toast notifications, link preview skeleton, and ASCII emoticon conversion.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -14,6 +14,7 @@ var MessengerModule = (function(Utils, EventBus) {
     var OG_FETCH_TIMEOUT = 8000;
     var UPLOAD_WORKER_URL = 'https://imgbb-upload-proxy.nhristakiev.workers.dev/';
     var OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
+    var TWEMOJI_BASE = 'https://twemoji.maxcdn.com/v/latest/svg/';
 
     var currentUrl = window.location.href;
     var currentSection = 'compose';
@@ -78,10 +79,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // TRAILING PARAGRAPH GUARANTEE (initial content only)
-    // Applied to the initial HTML so that a pre-existing block at the end of
-    // the document doesn't trap the caret inside it. Not applied after toolbar
-    // insertions — when the user clicks the quote/code/spoiler button, they
-    // want to keep typing inside the new block.
     // ------------------------------------------------------------------------
     function ensureTrailingParagraphInHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -727,10 +724,44 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
+    // ASCII EMOTICON MAP (from Converse.js — codepoints, not characters)
+    // Typing any of these followed by a word boundary converts them to a
+    // Twemoji image via the EmoticonRule TipTap extension.
+    // ------------------------------------------------------------------------
+    var ASCII_EMOTICON_MAP = {
+        '*\\0/*':'1f646', '*\\O/*':'1f646', '-___-':'1f611', ':\'-)':'1f602',
+        '\':-)':'1f605', '\':-D':'1f605', '>:-)':'1f606', '\':-(':'1f613',
+        '>:-(':'1f620', ':\'-(':'1f622', 'O:-)':'1f607', '0:-3':'1f607',
+        '0:-)':'1f607', '0;^)':'1f607', 'O;-)':'1f607', '0;-)':'1f607',
+        'O:-3':'1f607', '-__-':'1f611', ':-Þ':'1f61b', '</3':'1f494',
+        ':\')':'1f602', ':-D':'1f603', '\':)':'1f605', '\'=)':'1f605',
+        '\':D':'1f605', '\'=D':'1f605', '>:)':'1f606', '>;)':'1f606',
+        '>=)':'1f606', ';-)':'1f609', '*-)':'1f609', ';-]':'1f609',
+        ';^)':'1f609', '\':(':'1f613', '\'=(':'1f613', ':-*':'1f618',
+        ':^*':'1f618', '>:P':'1f61c', 'X-P':'1f61c', '>:[':'1f61e',
+        ':-(':'1f61e', ':-[':'1f61e', '>:(':'1f620', ':\'(':'1f622',
+        ';-(':'1f622', '>.<':'1f623', '#-)':'1f635', '%-)':'1f635',
+        'X-)':'1f635', '\\0/':'1f646', '\\O/':'1f646', '0:3':'1f607',
+        '0:)':'1f607', 'O:)':'1f607', 'O=)':'1f607', 'O:3':'1f607',
+        'B-)':'1f60e', '8-)':'1f60e', 'B-D':'1f60e', '8-D':'1f60e',
+        '-_-':'1f611', '>:\\':'1f615', '>:/':'1f615', ':-/':'1f615',
+        ':-.':'1f615', ':-P':'1f61b', ':Þ':'1f61b', ':-b':'1f61b',
+        ':-O':'1f62e', 'O_O':'1f62e', '>:O':'1f62e', ':-X':'1f636',
+        ':-#':'1f636', ':-)':'1f642', '(y)':'1f44d', '<3':'2764',
+        ':D':'1f603', '=D':'1f603', ';)':'1f609', '*)':'1f609',
+        ';]':'1f609', ';D':'1f609', ':*':'1f618', '=*':'1f618',
+        ':(':'1f61e', ':[':'1f61e', '=(':'1f61e', ':@':'1f620',
+        ';(':'1f622', 'D:':'1f628', ':$':'1f633', '=$':'1f633',
+        '#)':'1f635', '%)':'1f635', 'X)':'1f635', 'B)':'1f60e',
+        '8)':'1f60e', ':/':'1f615', ':\\':'1f615', '=/':'1f615',
+        '=\\':'1f615', ':L':'1f615', '=L':'1f615', ':P':'1f61b',
+        '=P':'1f61b', ':b':'1f61b', ':O':'1f62e', ':X':'1f636',
+        ':#':'1f636', '=X':'1f636', '=#':'1f636', ':)':'1f642',
+        '=]':'1f642', '=)':'1f642', ':]':'1f642'
+    };
+
+    // ------------------------------------------------------------------------
     // EMOJI PICKER DATA
-    // Curated set chosen with a second custom-emoji group in mind. Kept
-    // deliberately compact so the native and custom rows sit side by side
-    // without the picker feeling overloaded.
     // ------------------------------------------------------------------------
     var EMOJI_GROUPS = [
         { name: 'Emojis', emojis: [
@@ -1158,7 +1189,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     emojiItem.title = emoji;
 
                     var codePoint = emojiToCodePoint(emoji);
-                    var imgUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + codePoint + '.svg';
+                    var imgUrl = TWEMOJI_BASE + codePoint + '.svg';
                     var img = document.createElement('img');
                     img.src = imgUrl;
                     img.alt = emoji;
@@ -1175,7 +1206,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         e.stopPropagation();
                         if (editor) {
                             var emojiChar = this.getAttribute('data-emoji');
-                            var emojiUrl = 'https://twemoji.maxcdn.com/v/latest/svg/' + emojiToCodePoint(emojiChar) + '.svg';
+                            var emojiUrl = TWEMOJI_BASE + emojiToCodePoint(emojiChar) + '.svg';
                             editor.chain().focus().insertContent({
                                 type: 'image',
                                 attrs: {
@@ -1349,9 +1380,11 @@ var MessengerModule = (function(Utils, EventBus) {
                 const Editor = core.Editor || (core.default && core.default.Editor);
                 const Node = core.Node || (core.default && core.default.Node);
                 const Mark = core.Mark || (core.default && core.default.Mark);
+                const Extension = core.Extension || (core.default && core.default.Extension);
+                const InputRule = core.InputRule || (core.default && core.default.InputRule);
 
-                if (!Editor || !Node || !Mark) {
-                    throw new Error('Editor, Node, or Mark not found in @tiptap/core');
+                if (!Editor || !Node || !Mark || !Extension || !InputRule) {
+                    throw new Error('Editor, Node, Mark, Extension, or InputRule not found in @tiptap/core');
                 }
 
                 const { Plugin, PluginKey } = await import('https://esm.sh/prosemirror-state@1.4.3');
@@ -1407,6 +1440,51 @@ var MessengerModule = (function(Utils, EventBus) {
                             },
                         ];
                     },
+                });
+
+                // -------------------------------------------------------------
+                // ASCII EMOTICON INPUT RULE
+                // Converts text like ":)", "<3", ":D" to Twemoji image nodes
+                // as the user types. Uses the Converse.js ASCII_LIST map.
+                // -----------------------------------------------------------------
+                const emoticonPattern = Object.keys(ASCII_EMOTICON_MAP)
+                    .sort(function(a, b) { return b.length - a.length; })
+                    .map(function(e) { return e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
+                    .join('|');
+                const emoticonRegex = new RegExp('(?:^|\\s)(' + emoticonPattern + ')$');
+
+                const EmoticonRule = Extension.create({
+                    name: 'emoticonRule',
+                    addInputRules() {
+                        return [
+                            new InputRule({
+                                find: emoticonRegex,
+                                handler: function({ state, range, match }) {
+                                    const emoticon = match[1];
+                                    const codepoint = ASCII_EMOTICON_MAP[emoticon];
+                                    if (!codepoint) return;
+
+                                    const unicodeEmoji = String.fromCodePoint(parseInt(codepoint, 16));
+                                    const emojiUrl = TWEMOJI_BASE + codepoint + '.svg';
+
+                                    // range.to is right after the emoticon; range.from
+                                    // points at the preceding whitespace (or start).
+                                    // Only replace the emoticon itself, keep the space.
+                                    const emoticonStart = range.to - emoticon.length;
+
+                                    const imageNode = state.schema.nodes.image.create({
+                                        src: emojiUrl,
+                                        alt: unicodeEmoji,
+                                        loading: 'lazy',
+                                        decoding: 'async',
+                                        width: 24,
+                                        height: 24
+                                    });
+                                    state.tr.replaceWith(emoticonStart, range.to, imageNode);
+                                }
+                            })
+                        ];
+                    }
                 });
 
                 const LinkPreview = Node.create({
@@ -1882,11 +1960,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
                 // -----------------------------------------------------------------
                 // INITIAL CONTENT
-                // We rely entirely on the legacy textarea for persistence — it
-                // already has onchange/onclick/onkeyup/onselect handlers that
-                // cache the current value. On load we just read whatever the
-                // server put in there (quote for a reply, empty for fresh
-                // compose) and use it as the editor's initial content.
                 // -----------------------------------------------------------------
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
@@ -1904,6 +1977,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         LinkPreview,
                         SemanticColor,
                         CustomMention,
+                        EmoticonRule,
                     ],
                     content: initialHtml,
                     editorProps: {
@@ -1947,7 +2021,7 @@ var MessengerModule = (function(Utils, EventBus) {
                         }
                         var previewContent = document.querySelector('#modern-preview-area .preview-content');
                         if (previewContent && window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
+                            window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
                         }
                         updateSendState();
                         updateCharCounter();
@@ -2328,7 +2402,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 if (previewContent) {
                     previewContent.innerHTML = previewHtml;
                     if (window.twemoji) {
-                        window.twemoji.parse(previewContent, { base: 'https://twemoji.maxcdn.com/v/latest/svg/', ext: '.svg' });
+                        window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
                     }
                 }
                 previewArea.style.display = 'block';
@@ -2662,4 +2736,5 @@ var MessengerModule = (function(Utils, EventBus) {
         initialize: initialize,
         reset: reset
     };
-})(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumEventBus);
+})(typeof ForumDOMUtils !== 'undefined' ? ForumDOMUtils : window.ForumDOMUtils,
+   typeof ForumEventBus !== 'undefined' ? ForumEventBus : window.ForumEventBus);
