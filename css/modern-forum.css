@@ -3783,6 +3783,129 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .contacts-actions { padding: var(--space-md); text-align: right; border-top: 1px solid var(--border-color); }
 
 /* ------------------------------------------------------------------
+   Send confirmation banner
+   Shown at the top of the messages list immediately after a send.
+   The compose section writes a record to sessionStorage just before
+   the form submits; the messages section reads it back on the next
+   page load and clears it. Any older record is discarded, so the
+   banner never appears on unrelated visits.
+   ------------------------------------------------------------------ */
+.modern-send-confirmation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--pad-4) var(--pad-5);
+  margin: var(--space-md) var(--space-md) 0;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--success-color);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  animation: sendConfirmIn 0.25s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+}
+
+@keyframes sendConfirmIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.modern-send-confirmation-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: 50%;
+  color: var(--success-color);
+  font-size: 1.1rem;
+}
+
+.modern-send-confirmation-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modern-send-confirmation-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.modern-send-confirmation-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.modern-send-confirmation-avatar:hover {
+  transform: scale(1.05);
+  text-decoration: none;
+  color: #fff;
+}
+
+.modern-send-confirmation-subject {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.modern-send-confirmation-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.modern-send-confirmation-action {
+  padding: var(--pad-2) var(--pad-4);
+  font-size: var(--text-xs);
+}
+
+.modern-send-confirmation-dismiss {
+  background: transparent;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.modern-send-confirmation-dismiss:hover {
+  background: var(--surface-light);
+  color: var(--text-primary);
+}
+.modern-send-confirmation-dismiss i {
+  font-size: 0.8rem;
+}
+
+/* ------------------------------------------------------------------
    Mobile
    ------------------------------------------------------------------ */
 @media (max-width: 680px) {
