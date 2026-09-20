@@ -48,6 +48,17 @@ var MessengerModule = (function(Utils, EventBus) {
         return AVATAR_COLORS[colorIndex];
     }
 
+    // Extract a single character to use as an avatar initial. Skips
+    // leading punctuation, whitespace, and emoji so a username like
+    // "-JuNioR-" renders "J" rather than "-". Falls back to '?' if
+    // the name contains no letter or digit at all.
+    function getInitialFromName(name) {
+        if (!name || typeof name !== 'string') return '?';
+        var match = name.match(/[\p{L}\p{N}]/u);
+        if (!match) return '?';
+        return match[0].toUpperCase();
+    }
+
     // ------------------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------------------
@@ -166,13 +177,22 @@ var MessengerModule = (function(Utils, EventBus) {
         var avatarHtml = '';
         if (data && data.id && nameText) {
             var profileUrl = '/?act=Profile&MID=' + encodeURIComponent(data.id);
-            var bgColor = getColorFromNickname(nameText, data.id);
-            var initial = nameText.charAt(0).toUpperCase();
-            avatarHtml =
-                '<a href="' + escapeHtml(profileUrl) + '" class="modern-send-confirmation-avatar" ' +
-                'style="background-color:#' + bgColor + ';" aria-hidden="true" tabindex="-1">' +
-                escapeHtml(initial) +
-                '</a>';
+
+            if (data.avatar) {
+                var avatarUrl = optimizeAvatarUrl(data.avatar, 22, 22) || data.avatar;
+                avatarHtml =
+                    '<a href="' + escapeHtml(profileUrl) + '" class="modern-send-confirmation-avatar modern-send-confirmation-avatar--image" aria-hidden="true" tabindex="-1">' +
+                        '<img src="' + escapeHtml(avatarUrl) + '" alt="" loading="lazy" decoding="async">' +
+                    '</a>';
+            } else {
+                var bgColor = getColorFromNickname(nameText, data.id);
+                var initial = getInitialFromName(nameText);
+                avatarHtml =
+                    '<a href="' + escapeHtml(profileUrl) + '" class="modern-send-confirmation-avatar" ' +
+                    'style="background-color:#' + bgColor + ';" aria-hidden="true" tabindex="-1">' +
+                        escapeHtml(initial) +
+                    '</a>';
+            }
         }
 
         var titleHtml = nameText
@@ -503,7 +523,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 'alt="Avatar of ' + escapeHtml(username) + '" ' +
                 'width="36" height="36" loading="lazy" decoding="async">';
         } else {
-            var initial = (username.charAt(0) || '?').toUpperCase();
+            var initial = getInitialFromName(username);
             var bgColor = getColorFromNickname(username, mid);
             avatarHtml = '<span class="modern-replying-avatar modern-replying-avatar--initial" ' +
                 'style="background-color:#' + bgColor + ';">' +
@@ -599,7 +619,7 @@ var MessengerModule = (function(Utils, EventBus) {
             var span = document.createElement('span');
             span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
             span.style.backgroundColor = '#' + getColorFromNickname(name, id);
-            span.textContent = (name || '?').charAt(0).toUpperCase();
+            span.textContent = getInitialFromName(name);
             return span;
         }
 
@@ -1079,7 +1099,7 @@ var MessengerModule = (function(Utils, EventBus) {
             recipientChipAvatar.innerHTML = '';
             recipientChipAvatar.style.background = '';
             var name = recipient ? recipient.name : '';
-            var initial = (name || '?').charAt(0).toUpperCase();
+            var initial = getInitialFromName(name);
 
             if (recipient && recipient.avatar) {
                 var img = document.createElement('img');
@@ -2073,7 +2093,7 @@ var MessengerModule = (function(Utils, EventBus) {
                             }
 
                             function makeInitialAvatar(name, userId) {
-                                var initial = (name || '?').charAt(0).toUpperCase();
+                                var initial = getInitialFromName(name);
                                 var span = document.createElement('span');
                                 span.className = 'mention-suggestion-avatar mention-suggestion-avatar--initial';
                                 span.style.backgroundColor = '#' + getColorFromNickname(name, userId);
@@ -2708,6 +2728,7 @@ var MessengerModule = (function(Utils, EventBus) {
                     stashLastSentMessage({
                         id: currentRecipient ? currentRecipient.id : null,
                         name: currentRecipient ? currentRecipient.name : '',
+                        avatar: currentRecipient ? currentRecipient.avatar : null,
                         subject: subjectValue
                     });
 
