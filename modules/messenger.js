@@ -1059,6 +1059,60 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         })();
 
+        (function resolveInitialRecipientAvatar() {
+    if (!currentRecipient) return;
+    var pending = currentRecipient;
+
+    function applyAvatar(avatarUrl) {
+        if (!avatarUrl) return;
+        if (currentRecipient !== pending) return;
+        if (typeof avatarUrl !== 'string') return;
+        pending.avatar = avatarUrl;
+        renderChipAvatar(pending);
+    }
+
+    function fetchById(mid) {
+        fetch('/api.php?mid=' + encodeURIComponent(mid))
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                var user = data['m' + mid] || data.info;
+                if (user && typeof user.avatar === 'string') {
+                    applyAvatar(user.avatar);
+                }
+            })
+            .catch(function() {});
+    }
+
+    if (pending.id) {
+        // We know the MID from from_contact — fetch directly.
+        fetchById(pending.id);
+        return;
+    }
+
+    // No MID — try to resolve one by searching the display name.
+    // Only adopt the result when the name matches exactly and
+    // there is no ambiguity (single match).
+    if (pending.name) {
+        searchMentions(pending.name).then(function(users) {
+            if (currentRecipient !== pending) return;
+            if (!users || users.length === 0) return;
+            var matches = users.filter(function(u) {
+                return u && u.name === pending.name;
+            });
+            if (matches.length !== 1) return;
+            var match = matches[0];
+            if (match.id && !pending.id) {
+                pending.id = String(match.id);
+                syncToOriginal();
+            }
+            if (typeof match.avatar === 'string' && match.avatar) {
+                applyAvatar(match.avatar);
+            }
+        }).catch(function() {});
+    }
+})();
+
         if (recipientChipRemove) {
             recipientChipRemove.addEventListener('click', function(e) {
                 e.preventDefault();
