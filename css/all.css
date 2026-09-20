@@ -254,6 +254,7 @@
 .fa-remove-format::before {content: "\f87d"; }
 .fa-undo::before {content: "\f0e2"; }
 .fa-redo::before {content: "\f01e"; }
+.fa-circle-check::before {content: "\f058"; }
 
 :root, :host {
   --fa-font-regular: normal 400 1em/1 "Font Awesome 6 Pro";
