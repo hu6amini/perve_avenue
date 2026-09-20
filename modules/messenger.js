@@ -858,7 +858,6 @@ var MessengerModule = (function(Utils, EventBus) {
             +   '<label class="modern-compose-label" for="modern-title">Subject</label>'
             +   '<div class="modern-compose-control">'
             +     '<input type="text" id="modern-title" class="modern-input-bare" placeholder="Add a subject" aria-label="Subject">'
-            +     '<span class="modern-field-error" id="modern-title-error" role="alert">Please enter a subject before sending</span>'
             +   '</div>'
             + '</div>';
         container.appendChild(composeHeader);
@@ -866,7 +865,7 @@ var MessengerModule = (function(Utils, EventBus) {
         // ------------------------------------------------------------------
         // OUTER-SCOPE STATE
         // These live at the buildComposeSection level (not inside the async
-        // IIFE) so applyRecipient / clearRecipient / showTitleError can see
+        // IIFE) so applyRecipient / clearRecipient / updateSendState can see
         // them without hitting a ReferenceError.
         // ------------------------------------------------------------------
         var currentRecipient   = null;
@@ -881,9 +880,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
 
-        var titleField = modernTitle ? modernTitle.closest('.modern-compose-field') : null;
-        var titleError = titleField ? titleField.querySelector('#modern-title-error') : null;
-
         // ------------------------------------------------------------------
         // OUTER-SCOPE HELPERS
         // Declared as function declarations so hoisting makes them visible
@@ -891,30 +887,30 @@ var MessengerModule = (function(Utils, EventBus) {
         // order.
         // ------------------------------------------------------------------
 
-function updateSendState() {
-    if (!modernSubmitBtnRef) return;
+        function updateSendState() {
+            if (!modernSubmitBtnRef) return;
 
-    var hasRecipient = !!currentRecipient;
-    var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
-    var hasBody      = !!(editor && !editor.isEmpty);
-    var ready        = hasRecipient && hasSubject && hasBody;
+            var hasRecipient = !!currentRecipient;
+            var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
+            var hasBody      = !!(editor && !editor.isEmpty);
+            var ready        = hasRecipient && hasSubject && hasBody;
 
-    modernSubmitBtnRef.disabled = !ready;
-    modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
+            modernSubmitBtnRef.disabled = !ready;
+            modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
 
-    // The dim state alone doesn't tell the user *which* field is
-    // missing. A native title tooltip fills that gap for mouse
-    // hover, and gets read out on focus for assistive tech.
-    if (ready) {
-        modernSubmitBtnRef.removeAttribute('title');
-    } else {
-        var missing = [];
-        if (!hasRecipient) missing.push('a recipient');
-        if (!hasSubject)   missing.push('a subject');
-        if (!hasBody)      missing.push('a message body');
-        modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
-    }
-}
+            // The dim state alone doesn't tell the user *which* field is
+            // missing. A native title tooltip fills that gap for mouse
+            // hover, and gets read out on focus for assistive tech.
+            if (ready) {
+                modernSubmitBtnRef.removeAttribute('title');
+            } else {
+                var missing = [];
+                if (!hasRecipient) missing.push('a recipient');
+                if (!hasSubject)   missing.push('a subject');
+                if (!hasBody)      missing.push('a message body');
+                modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
+            }
+        }
 
         function updateCharCounter() {
             if (!MAX_MESSAGE_LENGTH) return;
@@ -933,29 +929,6 @@ function updateSendState() {
             if (modernSubmitBtnRef) {
                 modernSubmitBtnRef.disabled = modernSubmitBtnRef.disabled || len > MAX_MESSAGE_LENGTH;
             }
-        }
-
-        function showTitleError() {
-            if (!modernTitle || !titleError) return;
-            modernTitle.classList.add('has-error');
-            modernTitle.setAttribute('aria-invalid', 'true');
-            modernTitle.setAttribute('aria-describedby', 'modern-title-error');
-            titleError.classList.add('visible');
-            modernTitle.classList.remove('shake');
-            void modernTitle.offsetWidth;
-            modernTitle.classList.add('shake');
-            modernTitle.focus();
-            setTimeout(function() {
-                if (modernTitle) modernTitle.classList.remove('shake');
-            }, 400);
-        }
-
-        function clearTitleError() {
-            if (!modernTitle || !titleError) return;
-            modernTitle.classList.remove('has-error', 'shake');
-            modernTitle.removeAttribute('aria-invalid');
-            modernTitle.removeAttribute('aria-describedby');
-            titleError.classList.remove('visible');
         }
 
         function setContactSelectValue(mid) {
@@ -1096,12 +1069,12 @@ function updateSendState() {
         // Wire the autocomplete — commits go through applyRecipient.
         attachRecipientAutocomplete(modernRecipient, applyRecipient);
 
-        // Title input — clears error, keeps legacy in sync, updates Send state.
+        // Title input — keeps legacy in sync, updates Send state.
         if (modernTitle) {
             modernTitle.addEventListener('input', function() {
-    syncToOriginal();
-    updateSendState();
-});
+                syncToOriginal();
+                updateSendState();
+            });
             modernTitle.addEventListener('keydown', function(e) {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     e.preventDefault();
@@ -2528,20 +2501,20 @@ function updateSendState() {
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
-    e.preventDefault();
+                e.preventDefault();
 
-    // Defensive: if the button somehow fires while state is incomplete
-    // (extension, stale DOM, whatever), refuse silently rather than
-    // navigate with bad data.
-    if (!currentRecipient || !currentRecipient.name) return;
-    var subjectValue = modernTitle ? modernTitle.value.trim() : '';
-    if (!subjectValue) return;
-    if (!editor || editor.isEmpty) return;
+                // Defensive: if the button somehow fires while state is
+                // incomplete (extension, stale DOM, whatever), refuse
+                // silently rather than navigate with bad data.
+                if (!currentRecipient || !currentRecipient.name) return;
+                var subjectValue = modernTitle ? modernTitle.value.trim() : '';
+                if (!subjectValue) return;
+                if (!editor || editor.isEmpty) return;
 
-    if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
-        showToast('Message exceeds the maximum length', { type: 'error' });
-        return;
-    }
+                if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
+                    showToast('Message exceeds the maximum length', { type: 'error' });
+                    return;
+                }
 
                 if (addSentCheckbox) addSentCheckbox.checked = true;
                 if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
