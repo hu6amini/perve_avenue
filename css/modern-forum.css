@@ -3717,7 +3717,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .msg-sender { flex: 1; font-size: var(--text-xs); text-align: left; }
 .msg-sender a { color: var(--text-secondary); text-decoration: none; }
 .msg-sender a:hover { color: var(--primary-light); }
-.msg-date { width: 120px; font-size: var(--text-xs); color: var(--text-tertiary); }
+.msg-date { width: 120px; font-size: var(--text-xs); color: var(--text-tertiary); text-align: left; }
 .msg-select { width: 40px; text-align: center; }
 
 .messages-action-bar {
