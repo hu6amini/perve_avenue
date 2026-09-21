@@ -2815,69 +2815,86 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         // Submit
-        var modernSubmitBtn = container.querySelector('#modern-submit');
-        if (modernSubmitBtn) {
-            modernSubmitBtn.onclick = function(e) {
-                e.preventDefault();
+        modernSubmitBtn.onclick = function(e) {
+            e.preventDefault();
 
-                // Defensive: if the button somehow fires while state is
-                // incomplete (extension, stale DOM, whatever), refuse
-                // silently rather than navigate with bad data.
-                if (!currentRecipient || !currentRecipient.name) return;
-                var subjectValue = modernTitle ? modernTitle.value.trim() : '';
-                if (!subjectValue) return;
-                if (!editor || editor.isEmpty) return;
+            // Defensive: if the button somehow fires while state is
+            // incomplete, refuse silently rather than send bad data.
+            if (!currentRecipient || !currentRecipient.name) return;
+            var subjectValue = modernTitle ? modernTitle.value.trim() : '';
+            if (!subjectValue) return;
+            if (!editor || editor.isEmpty) return;
 
-                if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
-                    showToast('Message exceeds the maximum length', { type: 'error' });
+            if (MAX_MESSAGE_LENGTH && editor.getText().length > MAX_MESSAGE_LENGTH) {
+                showToast('Message exceeds the maximum length', { type: 'error' });
+                return;
+            }
+
+            if (addSentCheckbox) addSentCheckbox.checked = true;
+            if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
+            if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
+            syncToOriginal();
+
+            var originalLabel = modernSubmitBtn.innerHTML;
+            modernSubmitBtn.disabled = true;
+            modernSubmitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Sending…';
+
+            try {
+                if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
+                    modernSubmitBtn.disabled = false;
+                    modernSubmitBtn.innerHTML = originalLabel;
                     return;
                 }
 
-                if (addSentCheckbox) addSentCheckbox.checked = true;
-                if (addTrackingCheckbox) addTrackingCheckbox.checked = true;
-                if (originalTextarea && editor) originalTextarea.value = htmlToLegacy(editor.getHTML());
-                syncToOriginal();
+                if (submitButton) submitButton.disabled = false;
 
-                var originalLabel = modernSubmitBtn.innerHTML;
-                modernSubmitBtn.disabled = true;
-                modernSubmitBtn.innerHTML = '<i class="fa-regular fa-spinner fa-spin"></i> Sending…';
+                // Stash a record so the messages page can show a
+                // confirmation banner after the send resolves. Fires
+                // after validation so we don't confuse a validation
+                // failure with a real send.
+                stashLastSentMessage({
+                    id: currentRecipient ? currentRecipient.id : null,
+                    name: currentRecipient ? currentRecipient.name : '',
+                    avatar: currentRecipient ? currentRecipient.avatar : null,
+                    subject: subjectValue
+                });
 
-                try {
-                    if (typeof ValidateForm === 'function' && !ValidateForm(1)) {
+                var formToSubmit = originalForm;
+                if (!formToSubmit && submitButton) {
+                    formToSubmit = submitButton.form;
+                }
+
+                if (!formToSubmit) {
+                    throw new Error('No form submit handler found');
+                }
+
+                performOptimisticSend(
+                    formToSubmit,
+                    function(finalUrl) {
+                        // Success. Navigate to the URL the server chose.
+                        // location.replace so the compose page doesn't
+                        // pollute the back stack — same as the 303 that
+                        // a native form POST would have followed.
+                        window.location.replace(finalUrl);
+                    },
+                    function(errorMsg) {
+                        // Failure. Restore the button, clear the stash
+                        // (since we know the message wasn't sent), and
+                        // surface the reason as a toast.
                         modernSubmitBtn.disabled = false;
                         modernSubmitBtn.innerHTML = originalLabel;
-                        return;
+                        clearLastSentMessage();
+                        showToast(errorMsg, { type: 'error', duration: 5000 });
                     }
-
-                    if (submitButton) submitButton.disabled = false;
-
-                    // Stash a record so the messages page can show a
-                    // confirmation banner after the server redirect.
-                    // Fires after validation so we don't confuse a
-                    // validation failure with a real send.
-                    stashLastSentMessage({
-                        id: currentRecipient ? currentRecipient.id : null,
-                        name: currentRecipient ? currentRecipient.name : '',
-                        avatar: currentRecipient ? currentRecipient.avatar : null,
-                        subject: subjectValue
-                    });
-
-                    if (originalForm && originalForm instanceof HTMLFormElement) {
-                        HTMLFormElement.prototype.submit.call(originalForm);
-                    } else if (submitButton) {
-                        submitButton.click();
-                    } else if (originalForm && typeof originalForm.submit === 'function') {
-                        originalForm.submit();
-                    } else {
-                        throw new Error('No form submit handler found');
-                    }
-                } catch (err) {
-                    console.error('[MessengerModule] Submit failed:', err);
-                    modernSubmitBtn.disabled = false;
-                    modernSubmitBtn.innerHTML = originalLabel;
-                    showToast('Could not send message', { type: 'error' });
-                }
-            };
+                );
+            } catch (err) {
+                console.error('[MessengerModule] Submit failed:', err);
+                modernSubmitBtn.disabled = false;
+                modernSubmitBtn.innerHTML = originalLabel;
+                clearLastSentMessage();
+                showToast('Could not send message', { type: 'error' });
+            }
+        };
         }
 
         return container;
