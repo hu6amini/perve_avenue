@@ -2,7 +2,7 @@
 // Includes custom emoji picker with Twemoji images, semantic color palette,
 // mention autocomplete, recipient chip with autocomplete, image paste,
 // plain-text paste, toast notifications, link preview skeleton, ASCII
-// emoticon conversion, post-send confirmation banner, and optimistic send.
+// emoticon conversion, and a post-send confirmation banner.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -405,198 +405,6 @@ var MessengerModule = (function(Utils, EventBus) {
             toast.style.transform = 'translateY(8px)';
             setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 250);
         }, duration);
-    }
-
-    // ------------------------------------------------------------------------
-    // OPTIMISTIC SEND
-    // POSTs the compose form via fetch() instead of a native form submit.
-    // Two things have to be handled that FormData(form) doesn't do on its own:
-    //
-    //   1. FormData(form) excludes submit buttons by spec, but the server
-    //      checks for the submit button's name (sub_mit) to recognise a
-    //      real submission. We append it manually.
-    //
-    //   2. window.REPLIER is a legacy wrapper object, not necessarily the
-    //      <form> element. We resolve the actual form through the submit
-    //      button, which is guaranteed to live inside it.
-    //
-    // If anything about the fetch path fails (unexpected response shape,
-    // network error, timeout), we fall back to the native form submit
-    // so the message still goes through. Worst case the user sees the
-    // old slow reload; they never lose a message.
-    // ------------------------------------------------------------------------
-    function performOptimisticSend(originalForm, submitButton, onSuccess, onError) {
-        // Resolve the actual form element. Prefer the form that contains
-        // the submit button; fall back to originalForm only if it's a
-        // real HTMLFormElement (not the REPLIER wrapper).
-        var form = null;
-        if (submitButton && submitButton.form instanceof HTMLFormElement) {
-            form = submitButton.form;
-        } else if (originalForm instanceof HTMLFormElement) {
-            form = originalForm;
-        }
-
-        if (!form) {
-            onError('No form to submit.');
-            return;
-        }
-
-        if (typeof fetch !== 'function' || typeof FormData !== 'function') {
-            // Fallback for very old browsers — the browser navigates as it
-            // always did. The caller's spinner stays on until then.
-            HTMLFormElement.prototype.submit.call(form);
-            return;
-        }
-
-        // Message forms are always POST. Read the method attribute
-        // directly (not form.method, which returns "get" for forms
-        // without an explicit method attribute — and fetch refuses to
-        // send a body with GET, which would silently fail the send).
-        var methodAttr = form.getAttribute('method');
-        var method = (methodAttr ? methodAttr.toUpperCase() : 'POST');
-        if (method !== 'POST' && method !== 'GET') method = 'POST';
-
-        var action  = form.action || window.location.href;
-        var enctype = form.enctype || 'application/x-www-form-urlencoded';
-
-        var formData = new FormData(form);
-
-        // FormData(form) excludes submit buttons by design. ForumFree's
-        // server expects the submit button's name in the POST body to
-        // recognise a real submission, so append it manually.
-        if (submitButton && submitButton.name) {
-            if (submitButton.type === 'image') {
-                formData.append(submitButton.name + '.x', '0');
-                formData.append(submitButton.name + '.y', '0');
-            } else {
-                formData.append(submitButton.name, submitButton.value || '1');
-            }
-        }
-
-        var hasFile = false;
-        formData.forEach(function(value) {
-            if (value && typeof value === 'object' &&
-                (value instanceof File || value instanceof Blob)) {
-                hasFile = true;
-            }
-        });
-
-        var body;
-        var headers = {};
-
-        if (hasFile || enctype === 'multipart/form-data') {
-            // Let the browser set Content-Type with the multipart boundary.
-            body = formData;
-        } else {
-            var params = new URLSearchParams();
-            formData.forEach(function(value, key) {
-                if (typeof value === 'string') params.append(key, value);
-            });
-            body = params.toString();
-            headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
-        }
-
-        var controller = new AbortController();
-        var timeoutId = setTimeout(function() { controller.abort(); }, 45000);
-
-        // Diagnostic — open DevTools console to see exactly what the
-        // module thinks it's about to send. If this doesn't appear when
-        // you click Send, the handler never fired.
-        console.log('[MessengerModule] Optimistic send →', {
-            method: method,
-            action: action,
-            enctype: enctype,
-            hasFile: hasFile,
-            entries: body instanceof FormData ? '(multipart)' : body
-        });
-
-        fetch(action, {
-            method: method,
-            body: body,
-            headers: headers,
-            credentials: 'same-origin',
-            redirect: 'follow',
-            signal: controller.signal
-        })
-        .then(function(response) {
-            clearTimeout(timeoutId);
-            return response.text().then(function(html) {
-                return { response: response, html: html };
-            });
-        })
-        .then(function(result) {
-            var response = result.response;
-            var finalUrl = response.url || action;
-
-            // Failure signal #1: the server sent us back to the compose page.
-            // That's the shape of a validation error — the message did not
-            // go through.
-            var onComposePage = finalUrl.indexOf('CODE=04') !== -1;
-
-            // Failure signal #2: the response body still contains the
-            // compose textarea, meaning the server re-rendered the form
-            // rather than redirecting. Same conclusion — the message
-            // didn't send.
-            var looksLikeComposeForm = /<textarea[^>]*id=["']Post["']/i.test(result.html);
-
-            if (onComposePage || looksLikeComposeForm) {
-                var serverError = extractComposeError(result.html);
-                onError(serverError || 'The server rejected the message. Please try again.');
-                return;
-            }
-
-            // Anything else with a 2xx status is treated as success. The
-            // server may have redirected to the inbox, the sent folder, or
-            // a confirmation page — we navigate to whichever URL it chose.
-            if (response.ok) {
-                onSuccess(finalUrl);
-                return;
-            }
-
-            // Non-2xx and not back on the compose form — unusual. Surface
-            // the status code but don't assume the message wasn't sent.
-            onError('The server returned an unexpected response (' + response.status + '). Please check your Sent folder.');
-        })
-        .catch(function(err) {
-            clearTimeout(timeoutId);
-            if (err && err.name === 'AbortError') {
-                onError('The send timed out. Please check your connection and try again.');
-                return;
-            }
-            console.error('[MessengerModule] Optimistic send failed, falling back to native submit:', err);
-            // Fetch failed before we could determine the server's response.
-            // Fall back to the native form submit so the message still goes
-            // through. This is exactly the behaviour the composer had before
-            // the optimistic path existed — worst case the user sees a
-            // duplicate, never a lost message.
-            try {
-                HTMLFormElement.prototype.submit.call(form);
-            } catch (fallbackErr) {
-                console.error('[MessengerModule] Native fallback also failed:', fallbackErr);
-                onError('Could not send the message. Please check your connection.');
-            }
-        });
-    }
-
-    // Best-effort extraction of a validation error message from the
-    // compose-page HTML the server returns when a send is rejected.
-    function extractComposeError(html) {
-        if (!html || typeof html !== 'string') return '';
-        var patterns = [
-            /<div[^>]*class="[^"]*\berror\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-            /<span[^>]*class="[^"]*\berror\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
-            /<td[^>]*class="[^"]*\berror\b[^"]*"[^>]*>([\s\S]*?)<\/td>/i
-        ];
-        for (var i = 0; i < patterns.length; i++) {
-            var m = html.match(patterns[i]);
-            if (m && m[1]) {
-                var div = document.createElement('div');
-                div.innerHTML = m[1];
-                var text = (div.textContent || '').replace(/\s+/g, ' ').trim();
-                if (text) return text.slice(0, 200);
-            }
-        }
-        return '';
     }
 
     // ------------------------------------------------------------------------
@@ -2883,7 +2691,8 @@ var MessengerModule = (function(Utils, EventBus) {
                 e.preventDefault();
 
                 // Defensive: if the button somehow fires while state is
-                // incomplete, refuse silently rather than send bad data.
+                // incomplete (extension, stale DOM, whatever), refuse
+                // silently rather than navigate with bad data.
                 if (!currentRecipient || !currentRecipient.name) return;
                 var subjectValue = modernTitle ? modernTitle.value.trim() : '';
                 if (!subjectValue) return;
@@ -2913,9 +2722,9 @@ var MessengerModule = (function(Utils, EventBus) {
                     if (submitButton) submitButton.disabled = false;
 
                     // Stash a record so the messages page can show a
-                    // confirmation banner after the send resolves. Fires
-                    // after validation so we don't confuse a validation
-                    // failure with a real send.
+                    // confirmation banner after the server redirect.
+                    // Fires after validation so we don't confuse a
+                    // validation failure with a real send.
                     stashLastSentMessage({
                         id: currentRecipient ? currentRecipient.id : null,
                         name: currentRecipient ? currentRecipient.name : '',
@@ -2923,31 +2732,19 @@ var MessengerModule = (function(Utils, EventBus) {
                         subject: subjectValue
                     });
 
-                    performOptimisticSend(
-                        originalForm,
-                        submitButton,
-                        function(finalUrl) {
-                            // Success. Navigate to the URL the server chose.
-                            // location.replace so the compose page doesn't
-                            // pollute the back stack — same as the 303 that
-                            // a native form POST would have followed.
-                            window.location.replace(finalUrl);
-                        },
-                        function(errorMsg) {
-                            // Failure. Restore the button, clear the stash
-                            // (since we know the message wasn't sent), and
-                            // surface the reason as a toast.
-                            modernSubmitBtn.disabled = false;
-                            modernSubmitBtn.innerHTML = originalLabel;
-                            clearLastSentMessage();
-                            showToast(errorMsg, { type: 'error', duration: 5000 });
-                        }
-                    );
+                    if (originalForm && originalForm instanceof HTMLFormElement) {
+                        HTMLFormElement.prototype.submit.call(originalForm);
+                    } else if (submitButton) {
+                        submitButton.click();
+                    } else if (originalForm && typeof originalForm.submit === 'function') {
+                        originalForm.submit();
+                    } else {
+                        throw new Error('No form submit handler found');
+                    }
                 } catch (err) {
                     console.error('[MessengerModule] Submit failed:', err);
                     modernSubmitBtn.disabled = false;
                     modernSubmitBtn.innerHTML = originalLabel;
-                    clearLastSentMessage();
                     showToast('Could not send message', { type: 'error' });
                 }
             };
