@@ -3112,7 +3112,6 @@ section.modern-stats { flex-direction: column; width: 100%; }
   font-size: 12px;
   font-weight: 600;
   color: #fff;
-  background-color: var(--primary-color);
   flex-shrink: 0;
   overflow: hidden;
   line-height: 1;
