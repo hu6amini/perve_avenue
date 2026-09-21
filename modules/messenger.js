@@ -2,7 +2,7 @@
 // Includes custom emoji picker with Twemoji images, semantic color palette,
 // mention autocomplete, recipient chip with autocomplete, image paste,
 // plain-text paste, toast notifications, link preview skeleton, ASCII
-// emoticon conversion, and a post-send confirmation banner.
+// emoticon conversion, post-send confirmation banner, and optimistic send.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -407,7 +407,7 @@ var MessengerModule = (function(Utils, EventBus) {
         }, duration);
     }
 
-        // ------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
     // OPTIMISTIC SEND
     // POSTs the compose form via fetch() instead of a native form submit,
     // inspects the response URL to determine success or failure, and either
