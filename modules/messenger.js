@@ -407,6 +407,136 @@ var MessengerModule = (function(Utils, EventBus) {
         }, duration);
     }
 
+        // ------------------------------------------------------------------------
+    // OPTIMISTIC SEND
+    // POSTs the compose form via fetch() instead of a native form submit,
+    // inspects the response URL to determine success or failure, and either
+    // navigates to the success URL or keeps the user on the composer with
+    // an inline error. The native form remains the fallback: if fetch isn't
+    // available for any reason, we fall back to HTMLFormElement.submit(),
+    // which is exactly what we had before.
+    // ------------------------------------------------------------------------
+    function performOptimisticSend(originalForm, onSuccess, onError) {
+        if (!originalForm) {
+            onError('No form to submit.');
+            return;
+        }
+        if (typeof fetch !== 'function' || typeof FormData !== 'function') {
+            // Fallback for very old browsers — the browser navigates as it
+            // always did. The caller's spinner stays on until then.
+            HTMLFormElement.prototype.submit.call(originalForm);
+            return;
+        }
+
+        var method  = (originalForm.method || 'GET').toUpperCase();
+        var action  = originalForm.action || window.location.href;
+        var enctype = originalForm.enctype || 'application/x-www-form-urlencoded';
+
+        var formData = new FormData(originalForm);
+        var hasFile = false;
+        formData.forEach(function(value) {
+            if (value && typeof value === 'object' &&
+                (value instanceof File || value instanceof Blob)) {
+                hasFile = true;
+            }
+        });
+
+        var body;
+        var headers = {};
+
+        if (hasFile || enctype === 'multipart/form-data') {
+            body = formData;
+        } else {
+            var params = new URLSearchParams();
+            formData.forEach(function(value, key) {
+                if (typeof value === 'string') params.append(key, value);
+            });
+            body = params.toString();
+            headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+        }
+
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function() { controller.abort(); }, 45000);
+
+        fetch(action, {
+            method: method,
+            body: body,
+            headers: headers,
+            credentials: 'same-origin',
+            redirect: 'follow',
+            signal: controller.signal
+        })
+        .then(function(response) {
+            clearTimeout(timeoutId);
+            return response.text().then(function(html) {
+                return { response: response, html: html };
+            });
+        })
+        .then(function(result) {
+            var response = result.response;
+            var finalUrl = response.url || action;
+
+            // Failure signal #1: the server sent us back to the compose page.
+            // That's the shape of a validation error — the message did not
+            // go through.
+            var onComposePage = finalUrl.indexOf('CODE=04') !== -1;
+
+            // Failure signal #2: the response body still contains the
+            // compose textarea, meaning the server re-rendered the form
+            // rather than redirecting. Same conclusion — the message
+            // didn't send.
+            var looksLikeComposeForm = /<textarea[^>]*id=["']Post["']/i.test(result.html);
+
+            if (onComposePage || looksLikeComposeForm) {
+                var serverError = extractComposeError(result.html);
+                onError(serverError || 'The server rejected the message. Please try again.');
+                return;
+            }
+
+            // Anything else with a 2xx status is treated as success. The
+            // server may have redirected to the inbox, the sent folder, or
+            // a confirmation page — we navigate to whichever URL it chose.
+            if (response.ok) {
+                onSuccess(finalUrl);
+                return;
+            }
+
+            // Non-2xx and not back on the compose form — unusual. Surface
+            // the status code but don't assume the message wasn't sent.
+            onError('The server returned an unexpected response (' + response.status + '). Please check your Sent folder.');
+        })
+        .catch(function(err) {
+            clearTimeout(timeoutId);
+            if (err && err.name === 'AbortError') {
+                onError('The send timed out. Please check your connection and try again.');
+            } else {
+                console.error('[MessengerModule] Fetch send failed:', err);
+                onError('Could not send the message. Please check your connection.');
+            }
+        });
+    }
+
+    // Best-effort extraction of a validation error message from the
+    // compose-page HTML the server returns when a send is rejected.
+    function extractComposeError(html) {
+        if (!html || typeof html !== 'string') return '';
+        var patterns = [
+            /<div[^>]*class="[^"]*\berror\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+            /<span[^>]*class="[^"]*\berror\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+            /<td[^>]*class="[^"]*\berror\b[^"]*"[^>]*>([\s\S]*?)<\/td>/i
+        ];
+        for (var i = 0; i < patterns.length; i++) {
+            var m = html.match(patterns[i]);
+            if (m && m[1]) {
+                var div = document.createElement('div');
+                div.innerHTML = m[1];
+                var text = (div.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text) return text.slice(0, 200);
+            }
+        }
+        return '';
+    }
+
     // ------------------------------------------------------------------------
     // CURRENT USER RESOLUTION
     // ------------------------------------------------------------------------
