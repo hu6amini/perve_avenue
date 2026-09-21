@@ -4159,6 +4159,11 @@ input[type="radio"]:checked::before {
     white-space: nowrap;
 }
 
+.modern-wysiwyg .ProseMirror mark[data-uid]::before,
+.modern-preview .preview-content mark[data-uid]::before {
+    content: '@';
+}
+
 /* ------------------------------------------------------------
    Mention autocomplete popup
    ------------------------------------------------------------ */
