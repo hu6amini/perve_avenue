@@ -428,7 +428,7 @@ var MessengerModule = (function(Utils, EventBus) {
             return;
         }
 
-        var method  = (originalForm.method || 'GET').toUpperCase();
+        var method = 'POST';
         var action  = originalForm.action || window.location.href;
         var enctype = originalForm.enctype || 'application/x-www-form-urlencoded';
 
@@ -505,15 +505,25 @@ var MessengerModule = (function(Utils, EventBus) {
             // the status code but don't assume the message wasn't sent.
             onError('The server returned an unexpected response (' + response.status + '). Please check your Sent folder.');
         })
-        .catch(function(err) {
-            clearTimeout(timeoutId);
-            if (err && err.name === 'AbortError') {
-                onError('The send timed out. Please check your connection and try again.');
-            } else {
-                console.error('[MessengerModule] Fetch send failed:', err);
-                onError('Could not send the message. Please check your connection.');
-            }
-        });
+.catch(function(err) {
+    clearTimeout(timeoutId);
+    if (err && err.name === 'AbortError') {
+        onError('The send timed out. Please check your connection and try again.');
+        return;
+    }
+    console.error('[MessengerModule] Optimistic send failed, falling back to native submit:', err);
+    // Fetch failed before we could determine the server's response.
+    // Fall back to the native form submit so the message still goes
+    // through. This is exactly the behaviour the composer had before
+    // the optimistic path existed — worst case the user sees a
+    // duplicate, never a lost message.
+    try {
+        HTMLFormElement.prototype.submit.call(originalForm);
+    } catch (fallbackErr) {
+        console.error('[MessengerModule] Native fallback also failed:', fallbackErr);
+        onError('Could not send the message. Please check your connection.');
+    }
+});
     }
 
     // Best-effort extraction of a validation error message from the
