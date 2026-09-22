@@ -944,15 +944,12 @@
   border: 1px solid var(--border-color);
   border-left: 4px solid var(--accent-color);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   margin: var(--space-md) 0;
   overflow: hidden;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .modern-code:hover {
   border-left-color: var(--primary-color);
-  box-shadow: var(--shadow-md);
-  transform: translateX(2px);
 }
 .code-header {
   align-items: center;
