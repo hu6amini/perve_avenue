@@ -10,6 +10,9 @@
 // v3: spoiler titles. TipTap Spoiler node gains a `title` attr; the
 //     marker travels as <span class="ff-spoiler-title">TITLE</span> immediately
 //     before the [SPOILER] block, which ForumFree preserves verbatim.
+// v4: code block language labels. TipTap CodeBlock gains a `language` attr;
+//     marker travels as <span class="ff-code-lang">LANG</span> immediately
+//     before the [CODE] block, same channel as spoiler titles.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -805,8 +808,7 @@ var MessengerModule = (function(Utils, EventBus) {
         if (!legacy) return '';
         var html = legacy;
 
-        // Pre-pass: titled spoiler markers → single spoiler div with data-title.
-        // Runs before the [spoiler] regex so the marker span isn't left stranded.
+        // Pre-pass 1: titled spoiler markers → single spoiler div with data-title.
         // The optional <br> between the span and the block is consumed so it
         // doesn't render as a stray line break around the spoiler node.
         html = html.replace(
@@ -814,6 +816,17 @@ var MessengerModule = (function(Utils, EventBus) {
             function(_, title, body) {
                 var decoded = decodeHtmlEntities(title.replace(/<[^>]*>/g, '')).trim();
                 return '<div class="spoiler" data-title="' + escapeHtml(decoded) + '">' + body + '</div>';
+            }
+        );
+
+        // Pre-pass 2: code language markers → pre with data-language.
+        // Same channel as spoiler titles; the [CODE] regex below only
+        // picks up the remaining un-marked code blocks.
+        html = html.replace(
+            /<span[^>]*\bff-code-lang\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[code\]([\s\S]*?)\[\/code\]/gis,
+            function(_, lang, body) {
+                var decoded = decodeHtmlEntities(lang.replace(/<[^>]*>/g, '')).trim();
+                return '<pre data-language="' + escapeHtml(decoded) + '"><code>' + body + '</code></pre>';
             }
         );
 
@@ -879,14 +892,23 @@ var MessengerModule = (function(Utils, EventBus) {
                 return prefix + '[SPOILER]' + cleaned + '[/SPOILER]';
             });
 
-            result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, inner) {
+            // Code blocks: extract data-language and emit the marker span
+            // before [CODE] when present.
+            result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, preAttrs, inner) {
                 var decoded = inner
                     .replace(/&lt;/g, '<')
                     .replace(/&gt;/g, '>')
                     .replace(/&amp;/g, '&')
                     .replace(/&quot;/g, '"')
                     .replace(/&#39;/g, "'");
-                return '[CODE]' + decoded + '[/CODE]';
+
+                var langMatch = preAttrs.match(/data-language="([^"]*)"/);
+                var lang = langMatch ? decodeHtmlEntities(langMatch[1]).trim() : '';
+
+                var prefix = lang
+                    ? '<span class="ff-code-lang">' + escapeHtml(lang) + '</span>'
+                    : '';
+                return prefix + '[CODE]' + decoded + '[/CODE]';
             });
 
             if (result === before) break;
@@ -960,16 +982,18 @@ var MessengerModule = (function(Utils, EventBus) {
         // --- Code blocks → .modern-code ---
         // Note: this runs after the blockquote/spoiler passes, so any <pre>
         // that was nested inside a quote or spoiler has already been moved
-        // into its new home and is still discoverable here.
+        // into its new home and is still discoverable here. Reads
+        // data-language for the header label.
         Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
             var codeContent = code ? code.innerHTML : pre.innerHTML;
+            var lang = (pre.getAttribute('data-language') || '').trim() || 'Code';
             var modernHtml =
                 '<div class="modern-code">' +
                     '<div class="code-header" style="cursor: default;">' +
                         '<div class="code-icon"><i class="fa-regular fa-code" aria-hidden="true"></i></div>' +
-                        '<div class="code-info"><span class="code-title">Code</span></div>' +
+                        '<div class="code-info"><span class="code-title">' + escapeHtml(lang) + '</span></div>' +
                         '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>' +
                     '</div>' +
                     '<div class="code-content collapsible-content"><pre><code>' + codeContent + '</code></pre></div>' +
@@ -1281,6 +1305,20 @@ var MessengerModule = (function(Utils, EventBus) {
     };
 
     // ------------------------------------------------------------------------
+    // CODE LANGUAGE SUGGESTIONS
+    // Used by the language dialog's <datalist>. Order roughly by expected
+    // frequency for the AVN community, then general-purpose.
+    // ------------------------------------------------------------------------
+    var CODE_LANGUAGE_SUGGESTIONS = [
+        "Ren'Py", 'Python', 'JavaScript', 'TypeScript', 'Lua',
+        'HTML', 'CSS', 'JSON', 'XML', 'YAML',
+        'SQL', 'Bash', 'Shell', 'PowerShell',
+        'C', 'C++', 'C#', 'Java', 'Kotlin',
+        'Rust', 'Go', 'Ruby', 'PHP', 'Swift',
+        'Markdown', 'Plain text'
+    ];
+
+    // ------------------------------------------------------------------------
     // EMOJI PICKER
     // ------------------------------------------------------------------------
     var EMOJI_GROUPS = [
@@ -1378,9 +1416,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
         // ------------------------------------------------------------------
         // OUTER-SCOPE STATE
-        // These live at the buildComposeSection level (not inside the async
-        // IIFE) so applyRecipient / clearRecipient / updateSendState can see
-        // them without hitting a ReferenceError.
         // ------------------------------------------------------------------
         var currentRecipient    = null;
 var editor              = null;
@@ -1397,9 +1432,6 @@ var charCounter         = null;
 
         // ------------------------------------------------------------------
         // OUTER-SCOPE HELPERS
-        // Declared as function declarations so hoisting makes them visible
-        // to every other function in this scope, regardless of declaration
-        // order.
         // ------------------------------------------------------------------
 
 function updateSendState() {
@@ -1407,7 +1439,6 @@ function updateSendState() {
     var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
     var hasBody      = !!(editor && !editor.isEmpty);
 
-    // ---- Send button: needs recipient + subject + body ----
     if (modernSubmitBtnRef) {
         var sendReady = hasRecipient && hasSubject && hasBody;
         modernSubmitBtnRef.disabled = !sendReady;
@@ -1424,7 +1455,6 @@ function updateSendState() {
         }
     }
 
-    // ---- Preview button: needs body only ----
     if (modernPreviewBtnRef) {
         var previewReady = hasBody;
         modernPreviewBtnRef.disabled = !previewReady;
@@ -1437,10 +1467,6 @@ function updateSendState() {
         }
     }
 
-    // ---- Preview area: hide when the body becomes empty again ----
-    // If the user opens a preview, then clears the editor, the stale
-    // preview would otherwise stay on screen while its button sits
-    // disabled right below it.
     if (!hasBody) {
         var previewArea = container.querySelector('#modern-preview-area');
         if (previewArea && previewArea.style.display !== 'none') {
@@ -1481,8 +1507,6 @@ function updateSendState() {
                     return;
                 }
             }
-            // MID isn't in the friend list — the server falls back to
-            // entered_name, so leave the select at "-".
             contactSelect.value = '-';
         }
 
@@ -1540,7 +1564,6 @@ function updateSendState() {
 
             syncToOriginal();
 
-            // Smooth flow: after picking a recipient, jump to the subject.
             if (modernTitle && !modernTitle.value.trim()) {
                 modernTitle.focus();
             }
@@ -1622,14 +1645,10 @@ function updateSendState() {
             }
 
             if (pending.id) {
-                // We know the MID from from_contact — fetch directly.
                 fetchById(pending.id);
                 return;
             }
 
-            // No MID — try to resolve one by searching the display name.
-            // Only adopt the result when the name matches exactly and
-            // there is no ambiguity (single match).
             if (pending.name) {
                 searchMentions(pending.name).then(function(users) {
                     if (currentRecipient !== pending) return;
@@ -1657,10 +1676,8 @@ function updateSendState() {
             });
         }
 
-        // Wire the autocomplete — commits go through applyRecipient.
         attachRecipientAutocomplete(modernRecipient, applyRecipient);
 
-        // Title input — keeps legacy in sync, updates Send state.
         if (modernTitle) {
             modernTitle.addEventListener('input', function() {
                 syncToOriginal();
@@ -2138,9 +2155,8 @@ function updateSendState() {
             });
         }
 
-        // Spoiler title modal — separate from showInputModal because an
-        // empty input is meaningful here ("plain spoiler, no title"), so
-        // we must always invoke the callback.
+        // Spoiler title modal — an empty input is meaningful here ("plain
+        // spoiler, no title"), so we must always invoke the callback.
         function showSpoilerTitleModal(callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -2168,13 +2184,60 @@ function updateSendState() {
             }
             function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
             function submit() {
-                // Braces only matter for the fallback marker format, but
-                // rejecting them here keeps both formats symmetric.
-                // Newlines would break the CSS attr() editor label.
                 var cleaned = input.value.trim()
                     .replace(/[{}]/g, '')
                     .replace(/[\r\n]+/g, ' ')
                     .trim();
+                callback(cleaned);
+                close();
+            }
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = submit;
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            });
+        }
+
+        // Code language modal — same structural pattern as the spoiler
+        // dialog, but with a <datalist> of common languages so authors
+        // get suggestions without being forced into a fixed enum.
+        function showCodeLangModal(callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+
+            var optionsHtml = CODE_LANGUAGE_SUGGESTIONS.map(function(lang) {
+                return '<option value="' + escapeHtml(lang) + '"></option>';
+            }).join('');
+
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-code"></i> Code language</h3>'
+                + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Optional. Shown on the code block header. Leave empty for a plain "Code" label.</p>'
+                + '<input type="text" id="modal-code-lang" class="modern-input" list="modal-code-lang-list" placeholder="e.g. Python, Ren\'Py" maxlength="40" autocomplete="off" style="width:100%;">'
+                + '<datalist id="modal-code-lang-list">' + optionsHtml + '</datalist>'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert code block</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-code-lang');
+            input.focus();
+
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+            function submit() {
+                // Newlines would break the CSS attr() editor label.
+                var cleaned = input.value.trim().replace(/[\r\n]+/g, ' ').trim();
                 callback(cleaned);
                 close();
             }
@@ -2257,6 +2320,7 @@ function updateSendState() {
                 const imageModule = await import('https://esm.sh/@tiptap/extension-image@2.5.2');
                 const linkModule = await import('https://esm.sh/@tiptap/extension-link@2.5.2');
                 const mentionModule = await import('https://esm.sh/@tiptap/extension-mention@2.5.2');
+                const codeBlockModule = await import('https://esm.sh/@tiptap/extension-code-block@2.5.2');
 
                 const StarterKit = starterKitModule.StarterKit || (starterKitModule.default && starterKitModule.default.StarterKit);
                 const Placeholder = placeholderModule.Placeholder || (placeholderModule.default && placeholderModule.default.Placeholder);
@@ -2264,8 +2328,10 @@ function updateSendState() {
                 const BaseImage = imageModule.Image || (imageModule.default && imageModule.default.Image);
                 const Link = linkModule.Link || (linkModule.default && linkModule.default.Link);
                 const Mention = mentionModule.Mention || (mentionModule.default && mentionModule.default.Mention);
+                const BaseCodeBlock = codeBlockModule.CodeBlock || (codeBlockModule.default && codeBlockModule.default.CodeBlock);
 
                 if (!Mention) throw new Error('Mention extension not found');
+                if (!BaseCodeBlock) throw new Error('CodeBlock extension not found');
 
                 const CustomLink = Link.configure({
                     openOnClick: true,
@@ -2301,6 +2367,22 @@ function updateSendState() {
                                 height: node.attrs.height,
                             },
                         ];
+                    },
+                });
+
+                // Custom CodeBlock — adds a `language` attribute rendered
+                // as data-language on the <pre>. Same shape as the built-in
+                // extension, just carries a label.
+                const CustomCodeBlock = BaseCodeBlock.extend({
+                    addAttributes() {
+                        return {
+                            ...this.parent?.(),
+                            language: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('data-language') || null,
+                                renderHTML: attrs => attrs.language ? { 'data-language': attrs.language } : {},
+                            },
+                        };
                     },
                 });
 
@@ -2463,10 +2545,7 @@ function updateSendState() {
                     },
                 });
 
-                // Spoiler node — now with a title attribute. The title is
-                // stored as data-title on the .spoiler div in the editor;
-                // htmlToLegacy turns it into a <span class="ff-spoiler-title">
-                // marker that ForumFree preserves.
+                // Spoiler node — title attribute travels as data-title.
                 const Spoiler = Node.create({
                     name: 'spoiler',
                     group: 'block',
@@ -2832,7 +2911,11 @@ function updateSendState() {
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        StarterKit,
+                        // Disable StarterKit's own codeBlock so our extended
+                        // version (with the language attribute) is the one
+                        // that gets instantiated.
+                        StarterKit.configure({ codeBlock: false }),
+                        CustomCodeBlock,
                         Placeholder.configure({ placeholder: 'Write your message…' }),
                         Underline,
                         CustomImage,
@@ -2892,8 +2975,6 @@ function updateSendState() {
                     }
                 });
 
-                // Capture the submit button reference at outer scope so
-                // updateSendState() can use it.
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
 modernPreviewBtnRef = container.querySelector('#modern-preview');
 
@@ -2932,11 +3013,30 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                 };
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
-                codeBtn.onclick       = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
 
-                // Spoiler: dialog-first when inserting a fresh one; inside an
-                // existing spoiler, toggle off without prompting. Changing a
-                // title is done by removing and re-adding (v1 behaviour).
+                // Code block: dialog-first when inserting a fresh one; inside
+                // an existing code block, toggling off (turns back into a
+                // paragraph) without prompting. Changing a language is done
+                // by removing and re-adding (v1 behaviour), same as spoilers.
+                codeBtn.onclick = function() {
+                    if (!editor) return;
+
+                    if (editor.isActive('codeBlock')) {
+                        editor.chain().focus().toggleCodeBlock().run();
+                        return;
+                    }
+
+                    showCodeLangModal(function(lang) {
+                        var chain = editor.chain().focus();
+                        if (lang) {
+                            chain.setCodeBlock({ language: lang }).run();
+                        } else {
+                            chain.setCodeBlock().run();
+                        }
+                    });
+                };
+
+                // Spoiler: dialog-first when inserting a fresh one.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
 
@@ -3130,7 +3230,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     }
                 };
 
-                // Prime the state and the counter now that editor exists.
                 updateSendState();
                 updateCharCounter();
                 syncToOriginal();
@@ -3149,10 +3248,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
         previewArea.innerHTML = '<h3 class="modern-preview-title"><i class="fa-regular fa-eye"></i> Preview</h3><div class="preview-content"></div>';
         container.appendChild(previewArea);
 
-        // Wire up preview interactions once. Uses stopPropagation so the
-        // posts module's document-level handlers (which also listen for
-        // .quote-expand-btn, .code-expand-btn, .code-copy-btn, and
-        // .spoiler-header on the same page) don't fire twice on the same click.
         attachPreviewHandlers(previewArea);
 
         var actions = document.createElement('div');
@@ -3176,9 +3271,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     }
                 }
                 previewArea.style.display = 'block';
-                // Strip expand affordances from quotes / code that already
-                // fit inside the collapsed max-height. Runs after display
-                // so the measurements are accurate.
                 initPreviewQuotesAndSpoilers(previewArea);
                 previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             };
@@ -3190,9 +3282,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
             modernSubmitBtn.onclick = function(e) {
                 e.preventDefault();
 
-                // Defensive: if the button somehow fires while state is
-                // incomplete (extension, stale DOM, whatever), refuse
-                // silently rather than navigate with bad data.
                 if (!currentRecipient || !currentRecipient.name) return;
                 var subjectValue = modernTitle ? modernTitle.value.trim() : '';
                 if (!subjectValue) return;
@@ -3221,10 +3310,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                     if (submitButton) submitButton.disabled = false;
 
-                    // Stash a record so the messages page can show a
-                    // confirmation banner after the server redirect.
-                    // Fires after validation so we don't confuse a
-                    // validation failure with a real send.
                     stashLastSentMessage({
                         id: currentRecipient ? currentRecipient.id : null,
                         name: currentRecipient ? currentRecipient.name : '',
@@ -3261,9 +3346,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
         container.className = 'modern-messenger-section';
         container.id = 'messages-section';
 
-        // Confirmation banner — only present on the immediate post-send
-        // page load. Any error here is non-fatal: worst case the user
-        // just doesn't see the banner.
         try {
             var lastSend = loadLastSentMessage();
             if (lastSend) {
