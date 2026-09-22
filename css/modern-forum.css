@@ -895,13 +895,23 @@
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .spoiler-content {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.modern-spoiler.expanded .spoiler-content {
+  opacity: 1;
+}
+.spoiler-content-inner {
   padding: var(--pad-5);
   border-top: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 0.95rem;
   line-height: 1.5;
 }
-.spoiler-content[hidden] { display: none; }
 .modern-spoiler .spoiler-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
 
 /* ------------------------------------------------------------
