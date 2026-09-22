@@ -928,86 +928,99 @@ function parseDateFromTitle(title) {
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
-function initQuotesAndSpoilers() {
-    const quotes = document.querySelectorAll('.modern-quote.long-quote');
+    function initQuotesAndSpoilers() {
+        const quotes = document.querySelectorAll('.modern-quote.long-quote');
 
-    const checkQuote = (quote) => {
-        const content = quote.querySelector('.quote-content');
-        const expandBtn = quote.querySelector('.quote-expand-btn');
-        if (!content || !expandBtn) return;
+        const checkQuote = (quote) => {
+            const content = quote.querySelector('.quote-content');
+            const expandBtn = quote.querySelector('.quote-expand-btn');
+            if (!content || !expandBtn) return;
 
-        const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
-        if (isNaN(maxHeight)) return;
+            const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+            if (isNaN(maxHeight)) return;
 
-        // Wait for layout to settle
-        const actualHeight = content.getBoundingClientRect().height;
-        let anyImageTall = false;
-        const images = content.querySelectorAll('img');
-        images.forEach(img => {
-            const imgHeight = img.getBoundingClientRect().height;
-            if (imgHeight > maxHeight + 2) anyImageTall = true;
+            const actualHeight = content.getBoundingClientRect().height;
+            let anyImageTall = false;
+            const images = content.querySelectorAll('img');
+            images.forEach(img => {
+                const imgHeight = img.getBoundingClientRect().height;
+                if (imgHeight > maxHeight + 2) anyImageTall = true;
+            });
+
+            const overflows = (content.scrollHeight > maxHeight + 2) || (actualHeight > maxHeight + 2) || anyImageTall;
+
+            if (!overflows) {
+                expandBtn.remove();
+                quote.classList.remove('long-quote');
+            } else {
+                let icon = expandBtn.querySelector('i');
+                if (!icon) {
+                    icon = document.createElement('i');
+                    icon.className = 'fa-regular fa-angle-down';
+                    expandBtn.prepend(icon);
+                }
+                let textSpan = expandBtn.querySelector('.expand-text');
+                if (!textSpan) {
+                    textSpan = document.createElement('span');
+                    textSpan.className = 'expand-text';
+                    expandBtn.appendChild(textSpan);
+                }
+                textSpan.textContent = 'Show more';
+
+                if (quote.classList.contains('expanded')) {
+                    quote.classList.remove('expanded');
+                    expandBtn.setAttribute('aria-expanded', 'false');
+                }
+            }
+        };
+
+        quotes.forEach(quote => {
+            const content = quote.querySelector('.quote-content');
+            if (!content) return;
+
+            const images = content.querySelectorAll('img');
+            if (images.length === 0) {
+                checkQuote(quote);
+            } else {
+                let pending = images.length;
+                const onLoadOrError = () => {
+                    pending--;
+                    if (pending === 0) {
+                        requestAnimationFrame(() => {
+                            setTimeout(() => checkQuote(quote), 50);
+                        });
+                    }
+                };
+                images.forEach(img => {
+                    if (img.complete && img.naturalHeight !== 0) {
+                        onLoadOrError();
+                    } else {
+                        img.addEventListener('load', onLoadOrError);
+                        img.addEventListener('error', onLoadOrError);
+                    }
+                });
+            }
         });
 
-        const overflows = (content.scrollHeight > maxHeight + 2) || (actualHeight > maxHeight + 2) || anyImageTall;
+        // Code blocks: measure after layout and strip the collapse UI
+        // when the content fits inside the collapsed max-height.
+        requestAnimationFrame(() => {
+            document.querySelectorAll('.modern-code').forEach(codeBlock => {
+                const content = codeBlock.querySelector('.code-content.collapsible-content');
+                const expandBtn = codeBlock.querySelector('.code-expand-btn');
+                if (!content || !expandBtn) return;
 
-        if (!overflows) {
-            // No overflow: remove the button and the 'long-quote' class
-            expandBtn.remove();
-            quote.classList.remove('long-quote');
-        } else {
-            // Overflow exists: ensure the button has the correct text and icon
-            // Make sure the <i> exists (if not, create it)
-            let icon = expandBtn.querySelector('i');
-            if (!icon) {
-                icon = document.createElement('i');
-                icon.className = 'fa-regular fa-angle-down';
-                expandBtn.prepend(icon);
-            }
-            // Make sure the <span> exists and has the right text
-            let textSpan = expandBtn.querySelector('.expand-text');
-            if (!textSpan) {
-                textSpan = document.createElement('span');
-                textSpan.className = 'expand-text';
-                expandBtn.appendChild(textSpan);
-            }
-            textSpan.textContent = 'Show more';
+                const maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+                if (isNaN(maxHeight)) return;
 
-            // Start collapsed (if not already)
-            if (quote.classList.contains('expanded')) {
-                quote.classList.remove('expanded');
-                expandBtn.setAttribute('aria-expanded', 'false');
-            }
-        }
-    };
-
-    quotes.forEach(quote => {
-        const content = quote.querySelector('.quote-content');
-        if (!content) return;
-
-        const images = content.querySelectorAll('img');
-        if (images.length === 0) {
-            checkQuote(quote);
-        } else {
-            let pending = images.length;
-            const onLoadOrError = () => {
-                pending--;
-                if (pending === 0) {
-                    requestAnimationFrame(() => {
-                        setTimeout(() => checkQuote(quote), 50);
-                    });
-                }
-            };
-            images.forEach(img => {
-                if (img.complete && img.naturalHeight !== 0) {
-                    onLoadOrError();
-                } else {
-                    img.addEventListener('load', onLoadOrError);
-                    img.addEventListener('error', onLoadOrError);
+                const actualHeight = content.scrollHeight;
+                if (actualHeight <= maxHeight + 2) {
+                    content.classList.remove('collapsible-content');
+                    expandBtn.remove();
                 }
             });
-        }
-    });
-}
+        });
+    }
 
     // ============================================================================
     // FIX MISSING IMAGE DIMENSIONS
@@ -2202,19 +2215,81 @@ function initQuotesAndSpoilers() {
         if (linkWithMsid) return linkWithMsid.closest('.post');
         return null;
     }
-function handleQuoteExpand(btn) {
-    const quote = btn.closest('.modern-quote');
-    if (!quote) return;
+    function handleQuoteExpand(btn) {
+        const quote = btn.closest('.modern-quote');
+        if (!quote) return;
+        const content = quote.querySelector('.quote-content');
+        if (!content) return;
 
-    quote.classList.toggle('expanded');
-    const isExpanded = quote.classList.contains('expanded');
-    btn.setAttribute('aria-expanded', String(isExpanded));
+        const isExpanded = quote.classList.contains('expanded');
 
-    const textSpan = btn.querySelector('.expand-text');
-    if (textSpan) {
-        textSpan.textContent = isExpanded ? 'Show less' : 'Show more';
+        if (isExpanded) {
+            // Collapsing: capture the current full height as the starting
+            // value, force a reflow so the browser registers it, then
+            // release to CSS (which applies the 250px collapsed max-height).
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight;
+            content.style.maxHeight = '';
+            quote.classList.remove('expanded');
+        } else {
+            // Expanding: set an explicit pixel target so the browser has
+            // two length values to interpolate between. Clean up after the
+            // transition so future content growth isn't clipped by a stale
+            // inline max-height.
+            content.style.maxHeight = content.scrollHeight + 'px';
+            quote.classList.add('expanded');
+
+            const cleanup = function (e) {
+                if (e.propertyName !== 'max-height') return;
+                content.removeEventListener('transitionend', cleanup);
+                if (quote.classList.contains('expanded')) {
+                    content.style.maxHeight = '';
+                }
+            };
+            content.addEventListener('transitionend', cleanup);
+        }
+
+        btn.setAttribute('aria-expanded', String(!isExpanded));
+        const textSpan = btn.querySelector('.expand-text');
+        if (textSpan) {
+            textSpan.textContent = isExpanded ? 'Show more' : 'Show less';
+        }
     }
-}
+
+    function handleCodeExpand(btn) {
+        const codeBlock = btn.closest('.modern-code');
+        if (!codeBlock) return;
+        const content = codeBlock.querySelector('.code-content');
+        if (!content) return;
+
+        const isExpanded = codeBlock.classList.contains('expanded');
+
+        if (isExpanded) {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight;
+            content.style.maxHeight = '';
+            codeBlock.classList.remove('expanded');
+        } else {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            codeBlock.classList.add('expanded');
+
+            const cleanup = function (e) {
+                if (e.propertyName !== 'max-height') return;
+                content.removeEventListener('transitionend', cleanup);
+                if (codeBlock.classList.contains('expanded')) {
+                    content.style.maxHeight = '';
+                }
+            };
+            content.addEventListener('transitionend', cleanup);
+        }
+
+        btn.setAttribute('aria-expanded', String(!isExpanded));
+        const textSpan = btn.querySelector('.expand-text');
+        if (textSpan) {
+            textSpan.textContent = isExpanded ? 'Show more' : 'Show less';
+        }
+    }
+    
     function handleQuoteJump(btn) {
         const targetUrl = btn.getAttribute('data-target-url');
         if (targetUrl) window.location.href = targetUrl;
@@ -2368,6 +2443,10 @@ function handleQuoteExpand(btn) {
             const expandBtn = e.target.closest('.quote-expand-btn');
             if (expandBtn) { e.preventDefault(); handleQuoteExpand(expandBtn); }
         });
+                document.addEventListener('click', function (e) {
+            const expandBtn = e.target.closest('.code-expand-btn');
+            if (expandBtn) { e.preventDefault(); handleCodeExpand(expandBtn); }
+        });
         document.addEventListener('click', function (e) {
             const jumpBtn = e.target.closest('.quote-jump-btn');
             if (jumpBtn) { e.preventDefault(); handleQuoteJump(jumpBtn); }
@@ -2399,33 +2478,31 @@ function handleQuoteExpand(btn) {
         tempDiv.innerHTML = htmlContent;
         const codeTops = tempDiv.querySelectorAll('.code_top');
         codeTops.forEach(codeTop => {
-            // Find the next sibling with class .code
             let codeBody = codeTop.nextElementSibling;
             while (codeBody && !codeBody.classList.contains('code')) {
                 codeBody = codeBody.nextElementSibling;
             }
             if (!codeBody) return;
 
-            // Extract title from .code_top <b> tag
             const titleTag = codeTop.querySelector('b');
             const title = titleTag ? titleTag.textContent.trim() : 'CODE';
 
-            // Extract code content (preserve HTML as is)
             const codeContent = codeBody.innerHTML;
 
-            // Build modern HTML
             const modernHtml = `<div class="modern-code">
                 <div class="code-header" style="cursor: default;">
                     <div class="code-icon"><i class="fa-regular fa-code" aria-hidden="true"></i></div>
                     <div class="code-info"><span class="code-title">${escapeHtml(title)}</span></div>
                     <button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>
                 </div>
-                <div class="code-content"><pre><code>${codeContent}</code></pre></div>
+                <div class="code-content collapsible-content"><pre><code>${codeContent}</code></pre></div>
+                <button class="code-expand-btn" type="button" aria-expanded="false" aria-label="Show full code">
+                    <i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>
+                </button>
             </div>`;
 
             const modernNode = createElementFromHTML(modernHtml);
             if (modernNode) {
-                // Check if the codeTop is inside a <div align="center"> wrapper
                 const parent = codeTop.parentNode;
                 let wrapper = null;
                 if (parent && parent.tagName === 'DIV' && parent.getAttribute('align') === 'center') {
@@ -2434,12 +2511,10 @@ function handleQuoteExpand(btn) {
                 const target = wrapper || codeTop;
                 target.parentNode.insertBefore(modernNode, target);
                 target.remove();
-                // Remove codeBody if it wasn't inside the wrapper
                 if (!wrapper && codeBody.parentNode) {
                     codeBody.remove();
                 }
 
-                // ---- Remove following <br> tags ----
                 let nextSibling = modernNode.nextSibling;
                 while (nextSibling && nextSibling.tagName === 'BR') {
                     const toRemove = nextSibling;
