@@ -3,6 +3,11 @@
 // mention autocomplete, recipient chip with autocomplete, image paste,
 // plain-text paste, toast notifications, link preview skeleton, ASCII
 // emoticon conversion, and a post-send confirmation banner.
+//
+// v2: preview area now renders quotes / spoilers / code blocks using the
+// same .modern-quote / .modern-spoiler / .modern-code structures the posts
+// module uses on the reader side, complete with expand/collapse, copy, and
+// auto-hide-when-short behaviour.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -862,6 +867,356 @@ var MessengerModule = (function(Utils, EventBus) {
             if (result === before) break;
         }
         return result;
+    }
+
+    // ------------------------------------------------------------------------
+    // PREVIEW HTML TRANSFORM
+    // The TipTap editor emits raw <blockquote>, <div class="spoiler">, and
+    // <pre><code> for these three nodes (correct for authoring). The reader
+    // side – the posts module – renders them as .modern-quote, .modern-spoiler,
+    // and .modern-code. This function converts the editor's HTML into those
+    // same structures so the author's preview matches what a recipient sees.
+    //
+    // The transform is HTML-string in / HTML-string out. It does not touch
+    // the editor itself – the editor continues to use its own node styling.
+    // ------------------------------------------------------------------------
+    function transformPreviewHtml(html) {
+        if (!html || typeof html !== 'string') return html;
+
+        var temp = document.createElement('div');
+        temp.innerHTML = html;
+
+        // --- Blockquotes → .modern-quote ---
+        Array.from(temp.querySelectorAll('blockquote')).forEach(function(bq) {
+            var innerHtml = bq.innerHTML;
+            var modernHtml =
+                '<div class="modern-quote long-quote">' +
+                    '<div class="quote-header">' +
+                        '<div class="quote-meta">' +
+                            '<div class="quote-icon"><i class="fa-regular fa-quote-left" aria-hidden="true"></i></div>' +
+                            '<div class="quote-info">' +
+                                '<span class="quote-author">Quote</span>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="quote-content">' + innerHtml + '</div>' +
+                    '<button class="quote-expand-btn" type="button" aria-expanded="false" aria-label="Show full quote">' +
+                        '<i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>' +
+                    '</button>' +
+                '</div>';
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = modernHtml;
+            if (bq.parentNode) bq.parentNode.replaceChild(wrapper.firstElementChild, bq);
+        });
+
+        // --- Spoilers → .modern-spoiler ---
+        Array.from(temp.querySelectorAll('div.spoiler')).forEach(function(sp) {
+            var innerHtml = sp.innerHTML;
+            var spoilerId = 'preview-spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+            var modernHtml =
+                '<div class="modern-spoiler">' +
+                    '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
+                        '<div class="spoiler-icon"><i class="fa-regular fa-eye-slash" aria-hidden="true"></i></div>' +
+                        '<div class="spoiler-info"><span class="spoiler-title">Spoiler</span></div>' +
+                        '<button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="' + spoilerId + '">' +
+                            '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div id="' + spoilerId + '" class="spoiler-content" aria-hidden="true">' +
+                        '<div class="spoiler-content-inner">' + innerHtml + '</div>' +
+                    '</div>' +
+                '</div>';
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = modernHtml;
+            if (sp.parentNode) sp.parentNode.replaceChild(wrapper.firstElementChild, sp);
+        });
+
+        // --- Code blocks → .modern-code ---
+        // Note: this runs after the blockquote/spoiler passes, so any <pre>
+        // that was nested inside a quote or spoiler has already been moved
+        // into its new home and is still discoverable here.
+        Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
+            if (pre.closest('.modern-code')) return;
+            var code = pre.querySelector('code');
+            var codeContent = code ? code.innerHTML : pre.innerHTML;
+            var modernHtml =
+                '<div class="modern-code">' +
+                    '<div class="code-header" style="cursor: default;">' +
+                        '<div class="code-icon"><i class="fa-regular fa-code" aria-hidden="true"></i></div>' +
+                        '<div class="code-info"><span class="code-title">Code</span></div>' +
+                        '<button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>' +
+                    '</div>' +
+                    '<div class="code-content collapsible-content"><pre><code>' + codeContent + '</code></pre></div>' +
+                    '<button class="code-expand-btn" type="button" aria-expanded="false" aria-label="Show full code">' +
+                        '<i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>' +
+                    '</button>' +
+                '</div>';
+            var wrapper = document.createElement('div');
+            wrapper.innerHTML = modernHtml;
+            if (pre.parentNode) pre.parentNode.replaceChild(wrapper.firstElementChild, pre);
+        });
+
+        return temp.innerHTML;
+    }
+
+    // ------------------------------------------------------------------------
+    // PREVIEW INTERACTION HANDLERS
+    // These mirror the posts module's handlers one-for-one, but they're
+    // scoped to the preview area so we don't fight the document-level
+    // listeners the posts module attaches on the same page.
+    // ------------------------------------------------------------------------
+    function handlePreviewQuoteExpand(btn) {
+        var quote = btn.closest('.modern-quote');
+        if (!quote) return;
+        var content = quote.querySelector('.quote-content');
+        if (!content) return;
+
+        var isExpanded = quote.classList.contains('expanded');
+
+        if (isExpanded) {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight;
+            content.style.maxHeight = '';
+            quote.classList.remove('expanded');
+        } else {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            quote.classList.add('expanded');
+
+            var cleanup = function (e) {
+                if (e.propertyName !== 'max-height') return;
+                content.removeEventListener('transitionend', cleanup);
+                if (quote.classList.contains('expanded')) {
+                    content.style.maxHeight = '';
+                }
+            };
+            content.addEventListener('transitionend', cleanup);
+        }
+
+        btn.setAttribute('aria-expanded', String(!isExpanded));
+        var textSpan = btn.querySelector('.expand-text');
+        if (textSpan) {
+            textSpan.textContent = isExpanded ? 'Show more' : 'Show less';
+        }
+    }
+
+    function handlePreviewCodeExpand(btn) {
+        var codeBlock = btn.closest('.modern-code');
+        if (!codeBlock) return;
+        var content = codeBlock.querySelector('.code-content');
+        if (!content) return;
+
+        var isExpanded = codeBlock.classList.contains('expanded');
+
+        if (isExpanded) {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight;
+            content.style.maxHeight = '';
+            codeBlock.classList.remove('expanded');
+        } else {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            codeBlock.classList.add('expanded');
+
+            var cleanup = function (e) {
+                if (e.propertyName !== 'max-height') return;
+                content.removeEventListener('transitionend', cleanup);
+                if (codeBlock.classList.contains('expanded')) {
+                    content.style.maxHeight = '';
+                }
+            };
+            content.addEventListener('transitionend', cleanup);
+        }
+
+        btn.setAttribute('aria-expanded', String(!isExpanded));
+        var textSpan = btn.querySelector('.expand-text');
+        if (textSpan) {
+            textSpan.textContent = isExpanded ? 'Show more' : 'Show less';
+        }
+    }
+
+    function handlePreviewCodeCopy(btn) {
+        var codeBlock = btn.closest('.modern-code');
+        if (!codeBlock) return;
+        var codeContent = codeBlock.querySelector('.code-content code');
+        if (!codeContent) return;
+        var text = codeContent.textContent;
+
+        var flashIcon = function() {
+            var icon = btn.querySelector('i');
+            if (!icon) return;
+            var originalClass = icon.className;
+            icon.className = 'fa-regular fa-check';
+            setTimeout(function() { icon.className = originalClass; }, 1500);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(flashIcon).catch(function(err) {
+                console.error('[MessengerModule] Copy failed:', err);
+            });
+        } else {
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                flashIcon();
+            } catch (e) {
+                console.error('[MessengerModule] Copy failed:', e);
+            }
+            document.body.removeChild(textarea);
+        }
+    }
+
+    function handlePreviewSpoilerToggle(trigger) {
+        var header = trigger.closest('.spoiler-header');
+        if (!header) return;
+        var spoiler = header.closest('.modern-spoiler');
+        if (!spoiler) return;
+        var content = spoiler.querySelector('.spoiler-content');
+        var toggleBtn = header.querySelector('.spoiler-toggle');
+        if (!content) return;
+
+        var isExpanded = spoiler.classList.contains('expanded');
+
+        if (isExpanded) {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight;
+            content.style.maxHeight = '0';
+            spoiler.classList.remove('expanded');
+        } else {
+            var targetHeight = content.scrollHeight;
+            if (targetHeight <= 0) return;
+            content.style.maxHeight = targetHeight + 'px';
+            spoiler.classList.add('expanded');
+        }
+
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(!isExpanded));
+        header.setAttribute('aria-expanded', String(!isExpanded));
+        content.setAttribute('aria-hidden', String(isExpanded));
+    }
+
+    // Attach once to the preview area. stopPropagation is used so the
+    // posts module's document-level handlers don't also fire (which would
+    // double-toggle on the same click).
+    function attachPreviewHandlers(previewArea) {
+        previewArea.addEventListener('click', function(e) {
+            var expandBtn = e.target.closest('.quote-expand-btn');
+            if (expandBtn && previewArea.contains(expandBtn)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewQuoteExpand(expandBtn);
+                return;
+            }
+
+            var codeExpandBtn = e.target.closest('.code-expand-btn');
+            if (codeExpandBtn && previewArea.contains(codeExpandBtn)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewCodeExpand(codeExpandBtn);
+                return;
+            }
+
+            var codeCopyBtn = e.target.closest('.code-copy-btn');
+            if (codeCopyBtn && previewArea.contains(codeCopyBtn)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewCodeCopy(codeCopyBtn);
+                return;
+            }
+
+            var spoilerHeader = e.target.closest('.spoiler-header');
+            if (spoilerHeader && previewArea.contains(spoilerHeader)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewSpoilerToggle(spoilerHeader);
+                return;
+            }
+        });
+
+        // Keyboard parity for spoiler header (it has role="button")
+        previewArea.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+            var spoilerHeader = e.target.closest('.spoiler-header');
+            if (spoilerHeader && previewArea.contains(spoilerHeader)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewSpoilerToggle(spoilerHeader);
+            }
+        });
+    }
+
+    // Auto-hide the expand button on quotes / code blocks that already fit.
+    // Mirrors the posts module's initQuotesAndSpoilers pass, scoped to the
+    // preview area. Image-aware for quotes.
+    function initPreviewQuotesAndSpoilers(previewArea) {
+        var checkQuoteOverflow = function(quote) {
+            var content = quote.querySelector('.quote-content');
+            var expandBtn = quote.querySelector('.quote-expand-btn');
+            if (!content || !expandBtn) return;
+
+            var maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+            if (isNaN(maxHeight)) return;
+
+            var actualHeight = content.getBoundingClientRect().height;
+            var anyImageTall = false;
+            content.querySelectorAll('img').forEach(function(img) {
+                if (img.getBoundingClientRect().height > maxHeight + 2) anyImageTall = true;
+            });
+
+            var overflows = (content.scrollHeight > maxHeight + 2)
+                || (actualHeight > maxHeight + 2)
+                || anyImageTall;
+
+            if (!overflows) {
+                expandBtn.remove();
+                quote.classList.remove('long-quote');
+            }
+        };
+
+        previewArea.querySelectorAll('.modern-quote.long-quote').forEach(function(quote) {
+            var content = quote.querySelector('.quote-content');
+            if (!content) return;
+
+            var images = content.querySelectorAll('img');
+            if (images.length === 0) {
+                checkQuoteOverflow(quote);
+            } else {
+                var pending = images.length;
+                var onLoadOrError = function() {
+                    pending--;
+                    if (pending === 0) {
+                        requestAnimationFrame(function() {
+                            setTimeout(function() { checkQuoteOverflow(quote); }, 50);
+                        });
+                    }
+                };
+                images.forEach(function(img) {
+                    if (img.complete && img.naturalHeight !== 0) {
+                        onLoadOrError();
+                    } else {
+                        img.addEventListener('load', onLoadOrError);
+                        img.addEventListener('error', onLoadOrError);
+                    }
+                });
+            }
+        });
+
+        // Code blocks: measure after layout, strip collapse UI when it fits.
+        requestAnimationFrame(function() {
+            previewArea.querySelectorAll('.modern-code').forEach(function(codeBlock) {
+                var content = codeBlock.querySelector('.code-content.collapsible-content');
+                var expandBtn = codeBlock.querySelector('.code-expand-btn');
+                if (!content || !expandBtn) return;
+
+                var maxHeight = parseFloat(getComputedStyle(content).maxHeight);
+                if (isNaN(maxHeight)) return;
+
+                if (content.scrollHeight <= maxHeight + 2) {
+                    content.classList.remove('collapsible-content');
+                    expandBtn.remove();
+                }
+            });
+        });
     }
 
     // ------------------------------------------------------------------------
@@ -2683,6 +3038,12 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
         previewArea.innerHTML = '<h3 class="modern-preview-title"><i class="fa-regular fa-eye"></i> Preview</h3><div class="preview-content"></div>';
         container.appendChild(previewArea);
 
+        // Wire up preview interactions once. Uses stopPropagation so the
+        // posts module's document-level handlers (which also listen for
+        // .quote-expand-btn, .code-expand-btn, .code-copy-btn, and
+        // .spoiler-header on the same page) don't fire twice on the same click.
+        attachPreviewHandlers(previewArea);
+
         var actions = document.createElement('div');
         actions.className = 'modern-actions';
         actions.innerHTML = ''
@@ -2695,7 +3056,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
     modernPreviewBtn.onclick = function() {
         if (!editor || editor.isEmpty) return;
-        var previewHtml = editor.getHTML();
+        var previewHtml = transformPreviewHtml(editor.getHTML());
                 var previewContent = previewArea.querySelector('.preview-content');
                 if (previewContent) {
                     previewContent.innerHTML = previewHtml;
@@ -2704,6 +3065,10 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     }
                 }
                 previewArea.style.display = 'block';
+                // Strip expand affordances from quotes / code that already
+                // fit inside the collapsed max-height. Runs after display
+                // so the measurements are accurate.
+                initPreviewQuotesAndSpoilers(previewArea);
                 previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             };
         }
