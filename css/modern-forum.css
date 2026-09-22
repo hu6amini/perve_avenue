@@ -1001,6 +1001,9 @@
   overflow-y: hidden;
   position: relative;
 }
+.modern-code.expanded .code-content.collapsible-content {
+  max-height: none;
+}
 .code-content.collapsible-content::after {
   background: linear-gradient(to bottom, transparent, var(--bg-color) 80%);
   border-radius: 0 0 var(--radius) var(--radius);
