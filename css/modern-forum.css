@@ -798,11 +798,15 @@
   color: var(--text-secondary);
   max-height: none;
   overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .modern-quote.long-quote .quote-content {
   max-height: 250px;
   overflow: hidden;
   position: relative;
+}
+.modern-quote.expanded .quote-content {
+  max-height: none;
 }
 .modern-quote.long-quote .quote-content::-webkit-scrollbar { width: 6px; }
 .modern-quote.long-quote .quote-content::-webkit-scrollbar-track { background: var(--border-color); }
@@ -989,11 +993,12 @@
   max-height: none;
   overflow-x: auto;
   padding: var(--space-md);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .code-content.collapsible-content {
   max-height: 250px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   position: relative;
 }
 .code-content.collapsible-content::after {
@@ -1007,6 +1012,8 @@
   position: absolute;
   right: 0;
   z-index: 1;
+  opacity: 1;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .code-content pre {
   background: transparent;
@@ -1061,12 +1068,12 @@
   justify-content: center;
   padding: var(--pad-4) var(--pad-5);
   text-align: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.2s ease, color 0.2s ease;
   width: 100%;
 }
 .code-expand-btn:hover { background: var(--hover-color); color: var(--text-primary); }
-.code-expand-btn i { color: var(--accent-color); font-size: 11px; transition: transform 0.2s ease; }
-.modern-code.expanded .code-expand-btn { display: none; }
+.code-expand-btn i { color: var(--accent-color); font-size: 11px; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.modern-code.expanded .code-expand-btn i { transform: rotate(180deg); }
 .modern-code.expanded .code-content.collapsible-content::after { opacity: 0; }
 
 /* ------------------------------------------------------------
