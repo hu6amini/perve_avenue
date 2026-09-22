@@ -1001,10 +1001,11 @@ var MessengerModule = (function(Utils, EventBus) {
         // IIFE) so applyRecipient / clearRecipient / updateSendState can see
         // them without hitting a ReferenceError.
         // ------------------------------------------------------------------
-        var currentRecipient   = null;
-        var editor             = null;
-        var modernSubmitBtnRef = null;
-        var charCounter        = null;
+        var currentRecipient    = null;
+var editor              = null;
+var modernSubmitBtnRef  = null;
+var modernPreviewBtnRef = null;
+var charCounter         = null;
 
         var modernRecipient     = container.querySelector('#modern-recipient');
         var modernTitle         = container.querySelector('#modern-title');
@@ -1020,30 +1021,52 @@ var MessengerModule = (function(Utils, EventBus) {
         // order.
         // ------------------------------------------------------------------
 
-        function updateSendState() {
-            if (!modernSubmitBtnRef) return;
+function updateSendState() {
+    var hasRecipient = !!currentRecipient;
+    var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
+    var hasBody      = !!(editor && !editor.isEmpty);
 
-            var hasRecipient = !!currentRecipient;
-            var hasSubject   = !!(modernTitle && modernTitle.value.trim().length > 0);
-            var hasBody      = !!(editor && !editor.isEmpty);
-            var ready        = hasRecipient && hasSubject && hasBody;
+    // ---- Send button: needs recipient + subject + body ----
+    if (modernSubmitBtnRef) {
+        var sendReady = hasRecipient && hasSubject && hasBody;
+        modernSubmitBtnRef.disabled = !sendReady;
+        modernSubmitBtnRef.setAttribute('aria-disabled', String(!sendReady));
 
-            modernSubmitBtnRef.disabled = !ready;
-            modernSubmitBtnRef.setAttribute('aria-disabled', String(!ready));
-
-            // The dim state alone doesn't tell the user *which* field is
-            // missing. A native title tooltip fills that gap for mouse
-            // hover, and gets read out on focus for assistive tech.
-            if (ready) {
-                modernSubmitBtnRef.removeAttribute('title');
-            } else {
-                var missing = [];
-                if (!hasRecipient) missing.push('a recipient');
-                if (!hasSubject)   missing.push('a subject');
-                if (!hasBody)      missing.push('a message body');
-                modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
-            }
+        if (sendReady) {
+            modernSubmitBtnRef.removeAttribute('title');
+        } else {
+            var missing = [];
+            if (!hasRecipient) missing.push('a recipient');
+            if (!hasSubject)   missing.push('a subject');
+            if (!hasBody)      missing.push('a message body');
+            modernSubmitBtnRef.setAttribute('title', 'Add ' + missing.join(', ') + ' to send');
         }
+    }
+
+    // ---- Preview button: needs body only ----
+    if (modernPreviewBtnRef) {
+        var previewReady = hasBody;
+        modernPreviewBtnRef.disabled = !previewReady;
+        modernPreviewBtnRef.setAttribute('aria-disabled', String(!previewReady));
+
+        if (previewReady) {
+            modernPreviewBtnRef.removeAttribute('title');
+        } else {
+            modernPreviewBtnRef.setAttribute('title', 'Write a message to preview it');
+        }
+    }
+
+    // ---- Preview area: hide when the body becomes empty again ----
+    // If the user opens a preview, then clears the editor, the stale
+    // preview would otherwise stay on screen while its button sits
+    // disabled right below it.
+    if (!hasBody) {
+        var previewArea = container.querySelector('#modern-preview-area');
+        if (previewArea && previewArea.style.display !== 'none') {
+            previewArea.style.display = 'none';
+        }
+    }
+}
 
         function updateCharCounter() {
             if (!MAX_MESSAGE_LENGTH) return;
@@ -2426,6 +2449,7 @@ var MessengerModule = (function(Utils, EventBus) {
                 // Capture the submit button reference at outer scope so
                 // updateSendState() can use it.
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
+modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 // Toolbar actions
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
@@ -2669,9 +2693,9 @@ var MessengerModule = (function(Utils, EventBus) {
         // Preview
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
-            modernPreviewBtn.onclick = function() {
-                if (!editor) return;
-                var previewHtml = editor.getHTML();
+    modernPreviewBtn.onclick = function() {
+        if (!editor || editor.isEmpty) return;
+        var previewHtml = editor.getHTML();
                 var previewContent = previewArea.querySelector('.preview-content');
                 if (previewContent) {
                     previewContent.innerHTML = previewHtml;
