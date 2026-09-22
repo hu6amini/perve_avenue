@@ -840,6 +840,27 @@ function parseDateFromTitle(title) {
             const modernQuote = convertLegacyQuote(quoteTop, quoteBody);
             if (modernQuote) wrapper.parentNode.replaceChild(modernQuote, wrapper);
         });
+        // NEW: extract spoiler title markers before converting spoilers
+const titleMarkers = tempDiv.querySelectorAll('.ff-spoiler-title');
+titleMarkers.forEach(marker => {
+    let next = marker.nextElementSibling;
+    while (next && next.tagName === 'BR') next = next.nextElementSibling;
+    if (next && next.classList && next.classList.contains('spoiler')) {
+        const title = (marker.textContent || '').trim();
+        if (title) next.setAttribute('data-ff-title', title);
+    }
+    marker.remove();
+});
+
+const spoilerDivs = tempDiv.querySelectorAll('div.spoiler[align="center"]');
+spoilerDivs.forEach(spoiler => {
+    const codeTop = spoiler.querySelector('.code_top');
+    const codeBody = spoiler.querySelector('.code');
+    if (!codeTop || !codeBody) return;
+    const title = spoiler.getAttribute('data-ff-title') || 'Spoiler';
+    const modernSpoiler = convertLegacySpoiler(codeTop, codeBody, title);
+    if (modernSpoiler) spoiler.parentNode.replaceChild(modernSpoiler, spoiler);
+});
         const spoilerDivs = tempDiv.querySelectorAll('div.spoiler[align="center"]');
         spoilerDivs.forEach(spoiler => {
             const codeTop = spoiler.querySelector('.code_top');
@@ -902,28 +923,28 @@ function parseDateFromTitle(title) {
         } catch (e) { return null; }
     }
 
-    function convertLegacySpoiler(codeTopElem, codeBodyElem) {
-        try {
-            const title = 'Spoiler';
-            const contentClone = codeBodyElem.cloneNode(true);
-            contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
-            const innerHtml = contentClone.innerHTML;
-            const spoilerId = 'spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
-            const spoilerHtml = `<div class="modern-spoiler">
-                <div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">
-                    <div class="spoiler-icon"><i class="fa-regular fa-eye-slash"></i></div>
-                    <div class="spoiler-info"><span class="spoiler-title">${escapeHtml(title)}</span></div>
-                    <button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="${spoilerId}">
-                        <i class="fa-regular fa-angle-down"></i>
-                    </button>
-                </div>
-                <div id="${spoilerId}" class="spoiler-content" aria-hidden="true">
-                    <div class="spoiler-content-inner">${innerHtml}</div>
-                </div>
-            </div>`;
-            return createElementFromHTML(spoilerHtml);
-        } catch (e) { return null; }
-    }
+function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
+    try {
+        const spoilerTitle = title || 'Spoiler';
+        const contentClone = codeBodyElem.cloneNode(true);
+        contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
+        const innerHtml = contentClone.innerHTML;
+        const spoilerId = 'spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+        const spoilerHtml = `<div class="modern-spoiler">
+            <div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">
+                <div class="spoiler-icon"><i class="fa-regular fa-eye-slash"></i></div>
+                <div class="spoiler-info"><span class="spoiler-title">${escapeHtml(spoilerTitle)}</span></div>
+                <button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="${spoilerId}">
+                    <i class="fa-regular fa-angle-down"></i>
+                </button>
+            </div>
+            <div id="${spoilerId}" class="spoiler-content" aria-hidden="true">
+                <div class="spoiler-content-inner">${innerHtml}</div>
+            </div>
+        </div>`;
+        return createElementFromHTML(spoilerHtml);
+    } catch (e) { return null; }
+}
     
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits (image-aware)
