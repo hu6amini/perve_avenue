@@ -2206,6 +2206,13 @@ body.modal-open {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* Hide ForumFree's injected iframe wrapper that trails the legacy footer. */
+.footer ~ div.iframe-wrapper {
+  position: absolute !important;
+  height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
 
 /* ------------------------------------------------------------
    14. NAVIGATION — BREADCRUMBS, PAGINATION, TOPIC HEADER
