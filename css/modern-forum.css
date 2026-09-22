@@ -918,6 +918,24 @@
 }
 .modern-spoiler .spoiler-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
 
+.spoiler-content-inner ul,
+.spoiler-content-inner ol,
+.quote-content ul,
+.quote-content ol {
+  margin: var(--space-sm) 0;
+  padding-left: var(--space-lg);
+}
+
+.spoiler-content-inner li,
+.quote-content li {
+  margin-bottom: var(--space-xs);
+}
+
+.spoiler-content-inner li:last-child,
+.quote-content li:last-child {
+  margin-bottom: 0;
+}
+
 /* ------------------------------------------------------------
    7. MODERN CODE
    ------------------------------------------------------------ */
