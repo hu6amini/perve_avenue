@@ -836,7 +836,7 @@
   margin-right: var(--space-xs);
   transition: transform 0.2s;
 }
-.modern-quote.long-quote.expanded .quote-content { max-height: none; overflow-y: visible; }
+.modern-quote.long-quote.expanded .quote-content { max-height: none; overflow-y: hidden; }
 .modern-quote.long-quote.expanded .quote-expand-btn i { transform: rotate(180deg); }
 
 /* ------------------------------------------------------------
