@@ -843,8 +843,9 @@
    6. MODERN SPOILER
    ------------------------------------------------------------ */
 .modern-spoiler {
-  background: var(--surface-color);
+  background: var(--bg-color);
   border: 1px solid var(--border-color);
+  border-left: 3px solid var(--warning-color);
   border-radius: var(--radius);
   margin: var(--space-md) 0;
   overflow: hidden;
