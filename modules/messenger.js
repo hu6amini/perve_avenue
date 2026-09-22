@@ -4,10 +4,12 @@
 // plain-text paste, toast notifications, link preview skeleton, ASCII
 // emoticon conversion, and a post-send confirmation banner.
 //
-// v2: preview area now renders quotes / spoilers / code blocks using the
-// same .modern-quote / .modern-spoiler / .modern-code structures the posts
-// module uses on the reader side, complete with expand/collapse, copy, and
-// auto-hide-when-short behaviour.
+// v2: preview area renders quotes / spoilers / code blocks using the same
+//     .modern-quote / .modern-spoiler / .modern-code structures the posts
+//     module uses on the reader side.
+// v3: spoiler titles. TipTap Spoiler node gains a `title` attr; the
+//     marker travels as <span class="ff-spoiler-title">TITLE</span> immediately
+//     before the [SPOILER] block, which ForumFree preserves verbatim.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -802,6 +804,19 @@ var MessengerModule = (function(Utils, EventBus) {
     function legacyToHtml(legacy) {
         if (!legacy) return '';
         var html = legacy;
+
+        // Pre-pass: titled spoiler markers → single spoiler div with data-title.
+        // Runs before the [spoiler] regex so the marker span isn't left stranded.
+        // The optional <br> between the span and the block is consumed so it
+        // doesn't render as a stray line break around the spoiler node.
+        html = html.replace(
+            /<span[^>]*\bff-spoiler-title\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[spoiler\]([\s\S]*?)\[\/spoiler\]/gis,
+            function(_, title, body) {
+                var decoded = decodeHtmlEntities(title.replace(/<[^>]*>/g, '')).trim();
+                return '<div class="spoiler" data-title="' + escapeHtml(decoded) + '">' + body + '</div>';
+            }
+        );
+
         html = html.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>');
         html = html.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>');
         html = html.replace(/\[u\](.*?)\[\/u\]/gi, '<u>$1</u>');
@@ -848,10 +863,20 @@ var MessengerModule = (function(Utils, EventBus) {
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
-            result = result.replace(/<div class="spoiler"[^>]*>([\s\S]*?)<\/div>/gi, function(match, inner) {
+            // Titled and untitled spoilers both flow through here. A title
+            // becomes a <span class="ff-spoiler-title"> marker before the
+            // [SPOILER] block; ForumFree's parser preserves that span.
+            result = result.replace(/<div class="spoiler"([^>]*)>([\s\S]*?)<\/div>/gi, function(match, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
-                return '[SPOILER]' + cleaned + '[/SPOILER]';
+
+                var titleMatch = attrs.match(/data-title="([^"]*)"/);
+                var title = titleMatch ? decodeHtmlEntities(titleMatch[1]).trim() : '';
+
+                var prefix = title
+                    ? '<span class="ff-spoiler-title">' + escapeHtml(title) + '</span>'
+                    : '';
+                return prefix + '[SPOILER]' + cleaned + '[/SPOILER]';
             });
 
             result = result.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, inner) {
@@ -912,12 +937,13 @@ var MessengerModule = (function(Utils, EventBus) {
         // --- Spoilers → .modern-spoiler ---
         Array.from(temp.querySelectorAll('div.spoiler')).forEach(function(sp) {
             var innerHtml = sp.innerHTML;
+            var title = sp.getAttribute('data-title') || 'Spoiler';
             var spoilerId = 'preview-spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
             var modernHtml =
                 '<div class="modern-spoiler">' +
                     '<div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">' +
                         '<div class="spoiler-icon"><i class="fa-regular fa-eye-slash" aria-hidden="true"></i></div>' +
-                        '<div class="spoiler-info"><span class="spoiler-title">Spoiler</span></div>' +
+                        '<div class="spoiler-info"><span class="spoiler-title">' + escapeHtml(title) + '</span></div>' +
                         '<button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="' + spoilerId + '">' +
                             '<i class="fa-regular fa-angle-down" aria-hidden="true"></i>' +
                         '</button>' +
@@ -2112,6 +2138,55 @@ function updateSendState() {
             });
         }
 
+        // Spoiler title modal — separate from showInputModal because an
+        // empty input is meaningful here ("plain spoiler, no title"), so
+        // we must always invoke the callback.
+        function showSpoilerTitleModal(callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-eye-slash"></i> Spoiler title</h3>'
+                + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Optional. Leave empty for a plain spoiler.</p>'
+                + '<input type="text" id="modal-spoiler-title" class="modern-input" placeholder="e.g. Route: Lily - Chapter 5" maxlength="80" style="width:100%;">'
+                + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert spoiler</button>'
+                + '</div>';
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+            var input = modalBox.querySelector('#modal-spoiler-title');
+            input.focus();
+
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+            function submit() {
+                // Braces only matter for the fallback marker format, but
+                // rejecting them here keeps both formats symmetric.
+                // Newlines would break the CSS attr() editor label.
+                var cleaned = input.value.trim()
+                    .replace(/[{}]/g, '')
+                    .replace(/[\r\n]+/g, ' ')
+                    .trim();
+                callback(cleaned);
+                close();
+            }
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = submit;
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); submit(); }
+            });
+        }
+
         function showLinkModal(callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -2388,18 +2463,34 @@ function updateSendState() {
                     },
                 });
 
+                // Spoiler node — now with a title attribute. The title is
+                // stored as data-title on the .spoiler div in the editor;
+                // htmlToLegacy turns it into a <span class="ff-spoiler-title">
+                // marker that ForumFree preserves.
                 const Spoiler = Node.create({
                     name: 'spoiler',
                     group: 'block',
                     content: 'block+',
                     defining: true,
+                    addAttributes() {
+                        return {
+                            title: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('data-title') || null,
+                                renderHTML: attrs => attrs.title ? { 'data-title': attrs.title } : {},
+                            },
+                        };
+                    },
                     parseHTML: () => [{ tag: 'div.spoiler' }],
-                    renderHTML: () => ['div', { class: 'spoiler' }, 0],
+                    renderHTML({ HTMLAttributes }) {
+                        return ['div', { ...HTMLAttributes, class: 'spoiler' }, 0];
+                    },
                     addCommands() {
                         return {
                             setSpoiler: () => ({ commands }) => commands.wrapIn(this.name),
                             toggleSpoiler: () => ({ commands }) => commands.toggleWrap(this.name),
                             unsetSpoiler: () => ({ commands }) => commands.lift(this.name),
+                            setSpoilerTitle: (title) => ({ commands }) => commands.updateAttributes(this.name, { title }),
                         };
                     },
                 });
@@ -2842,7 +2933,27 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
                 codeBtn.onclick       = function() { exec(function() { editor.chain().focus().toggleCodeBlock().run(); }); };
-                spoilerBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleSpoiler().run(); }); };
+
+                // Spoiler: dialog-first when inserting a fresh one; inside an
+                // existing spoiler, toggle off without prompting. Changing a
+                // title is done by removing and re-adding (v1 behaviour).
+                spoilerBtn.onclick = function() {
+                    if (!editor) return;
+
+                    if (editor.isActive('spoiler')) {
+                        editor.chain().focus().lift('spoiler').run();
+                        return;
+                    }
+
+                    showSpoilerTitleModal(function(title) {
+                        var chain = editor.chain().focus();
+                        if (title) {
+                            chain.wrapIn('spoiler', { title: title }).run();
+                        } else {
+                            chain.wrapIn('spoiler').run();
+                        }
+                    });
+                };
 
                 linkBtn.onclick = function() {
                     if (!editor) return;
@@ -3001,7 +3112,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                                 }
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
-                                    editor.chain().focus().toggleSpoiler().run();
+                                    spoilerBtn.click();
                                     return true;
                                 }
                                 return false;
