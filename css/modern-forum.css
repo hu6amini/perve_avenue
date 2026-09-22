@@ -990,7 +990,10 @@
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .code-copy-btn {
   align-items: center;
@@ -3466,6 +3469,10 @@ section.modern-stats { flex-direction: column; width: 100%; }
     font-weight: 600;
     white-space: nowrap;
     pointer-events: none;
+}
+
+.modern-wysiwyg .ProseMirror pre[data-language]::after {
+    content: attr(data-language);
 }
 
 .modern-wysiwyg .ProseMirror pre code {
