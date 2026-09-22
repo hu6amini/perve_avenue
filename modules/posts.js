@@ -910,19 +910,21 @@ function parseDateFromTitle(title) {
             const innerHtml = contentClone.innerHTML;
             const spoilerId = 'spoiler-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
             const spoilerHtml = `<div class="modern-spoiler">
-                <div class="spoiler-header" role="button" tabindex="0">
+                <div class="spoiler-header" role="button" tabindex="0" aria-expanded="false">
                     <div class="spoiler-icon"><i class="fa-regular fa-eye-slash"></i></div>
                     <div class="spoiler-info"><span class="spoiler-title">${escapeHtml(title)}</span></div>
                     <button class="spoiler-toggle" type="button" aria-expanded="false" aria-controls="${spoilerId}">
                         <i class="fa-regular fa-angle-down"></i>
                     </button>
                 </div>
-                <div id="${spoilerId}" class="spoiler-content" hidden>${innerHtml}</div>
+                <div id="${spoilerId}" class="spoiler-content" aria-hidden="true">
+                    <div class="spoiler-content-inner">${innerHtml}</div>
+                </div>
             </div>`;
             return createElementFromHTML(spoilerHtml);
         } catch (e) { return null; }
     }
-
+    
     // ============================================================================
     // POST-PROCESSING: remove expand button if content fits (image-aware)
     // ============================================================================
@@ -1004,11 +1006,6 @@ function initQuotesAndSpoilers() {
                 }
             });
         }
-    });
-
-    // Spoilers start hidden
-    document.querySelectorAll('.modern-spoiler .spoiler-content').forEach(content => {
-        if (!content.hasAttribute('hidden')) content.setAttribute('hidden', '');
     });
 }
 
@@ -2222,20 +2219,40 @@ function handleQuoteExpand(btn) {
         const targetUrl = btn.getAttribute('data-target-url');
         if (targetUrl) window.location.href = targetUrl;
     }
+    
     function handleSpoilerToggle(trigger) {
         const header = trigger.closest('.spoiler-header');
         if (!header) return;
         const spoiler = header.closest('.modern-spoiler');
+        if (!spoiler) return;
         const content = spoiler.querySelector('.spoiler-content');
         const toggleBtn = header.querySelector('.spoiler-toggle');
-        if (content && content.hidden !== undefined) {
-            const isExpanded = !content.hidden;
-            content.hidden = isExpanded;
-            if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(!isExpanded));
-            header.setAttribute('aria-expanded', String(!isExpanded));
+        if (!content) return;
+
+        const isExpanded = spoiler.classList.contains('expanded');
+
+        if (isExpanded) {
+            // Collapsing — set the current height as the starting point,
+            // then animate to 0 on the next frame. Without the explicit
+            // starting value, the browser would skip the transition
+            // because the value change from `auto` to `0` has no
+            // interpolatable state.
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight; // force reflow
+            content.style.maxHeight = '0';
+            spoiler.classList.remove('expanded');
         } else {
-            spoiler.classList.toggle('open');
+            // Expanding — measure the content's natural height and
+            // animate from 0 up to it.
+            const targetHeight = content.scrollHeight;
+            if (targetHeight <= 0) return;
+            content.style.maxHeight = targetHeight + 'px';
+            spoiler.classList.add('expanded');
         }
+
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(!isExpanded));
+        header.setAttribute('aria-expanded', String(!isExpanded));
+        content.setAttribute('aria-hidden', String(isExpanded));
     }
 
     // ---- Copy code button ----
