@@ -828,49 +828,44 @@ function parseDateFromTitle(title) {
     // ============================================================================
     // LEGACY QUOTE & SPOILER CONVERSION (FIXED AUTHOR EXTRACTION)
     // ============================================================================
-    function transformLegacyQuotesAndSpoilers(htmlContent) {
-        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-        const quoteWrappers = tempDiv.querySelectorAll('div[align="center"]:has(> .quote_top)');
-        quoteWrappers.forEach(wrapper => {
-            const quoteTop = wrapper.querySelector('.quote_top');
-            const quoteBody = wrapper.querySelector('.quote');
-            if (!quoteTop || !quoteBody) return;
-            const modernQuote = convertLegacyQuote(quoteTop, quoteBody);
-            if (modernQuote) wrapper.parentNode.replaceChild(modernQuote, wrapper);
-        });
-        // NEW: extract spoiler title markers before converting spoilers
-const titleMarkers = tempDiv.querySelectorAll('.ff-spoiler-title');
-titleMarkers.forEach(marker => {
-    let next = marker.nextElementSibling;
-    while (next && next.tagName === 'BR') next = next.nextElementSibling;
-    if (next && next.classList && next.classList.contains('spoiler')) {
-        const title = (marker.textContent || '').trim();
-        if (title) next.setAttribute('data-ff-title', title);
-    }
-    marker.remove();
-});
+function transformLegacyQuotesAndSpoilers(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
 
-const spoilerDivs = tempDiv.querySelectorAll('div.spoiler[align="center"]');
-spoilerDivs.forEach(spoiler => {
-    const codeTop = spoiler.querySelector('.code_top');
-    const codeBody = spoiler.querySelector('.code');
-    if (!codeTop || !codeBody) return;
-    const title = spoiler.getAttribute('data-ff-title') || 'Spoiler';
-    const modernSpoiler = convertLegacySpoiler(codeTop, codeBody, title);
-    if (modernSpoiler) spoiler.parentNode.replaceChild(modernSpoiler, spoiler);
-});
-        const spoilerDivs = tempDiv.querySelectorAll('div.spoiler[align="center"]');
-        spoilerDivs.forEach(spoiler => {
-            const codeTop = spoiler.querySelector('.code_top');
-            const codeBody = spoiler.querySelector('.code');
-            if (!codeTop || !codeBody) return;
-            const modernSpoiler = convertLegacySpoiler(codeTop, codeBody);
-            if (modernSpoiler) spoiler.parentNode.replaceChild(modernSpoiler, spoiler);
-        });
-        return tempDiv.innerHTML;
-    }
+    const quoteWrappers = tempDiv.querySelectorAll('div[align="center"]:has(> .quote_top)');
+    quoteWrappers.forEach(wrapper => {
+        const quoteTop = wrapper.querySelector('.quote_top');
+        const quoteBody = wrapper.querySelector('.quote');
+        if (!quoteTop || !quoteBody) return;
+        const modernQuote = convertLegacyQuote(quoteTop, quoteBody);
+        if (modernQuote) wrapper.parentNode.replaceChild(modernQuote, wrapper);
+    });
+
+    // Extract spoiler title markers before converting spoilers.
+    const titleMarkers = tempDiv.querySelectorAll('.ff-spoiler-title');
+    titleMarkers.forEach(marker => {
+        let next = marker.nextElementSibling;
+        while (next && next.tagName === 'BR') next = next.nextElementSibling;
+        if (next && next.classList && next.classList.contains('spoiler')) {
+            const title = (marker.textContent || '').trim();
+            if (title) next.setAttribute('data-ff-title', title);
+        }
+        marker.remove();
+    });
+
+    const spoilerDivs = tempDiv.querySelectorAll('div.spoiler[align="center"]');
+    spoilerDivs.forEach(spoiler => {
+        const codeTop = spoiler.querySelector('.code_top');
+        const codeBody = spoiler.querySelector('.code');
+        if (!codeTop || !codeBody) return;
+        const title = spoiler.getAttribute('data-ff-title') || 'Spoiler';
+        const modernSpoiler = convertLegacySpoiler(codeTop, codeBody, title);
+        if (modernSpoiler) spoiler.parentNode.replaceChild(modernSpoiler, spoiler);
+    });
+
+    return tempDiv.innerHTML;
+}
 
     function convertLegacyQuote(quoteTopElem, quoteBodyElem) {
         try {
