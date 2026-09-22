@@ -2493,59 +2493,89 @@ function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
     // CODE BLOCK CONVERSION
     // ============================================================================
 
-    function transformLegacyCodeBlocks(htmlContent) {
-        if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-        const codeTops = tempDiv.querySelectorAll('.code_top');
-        codeTops.forEach(codeTop => {
-            let codeBody = codeTop.nextElementSibling;
-            while (codeBody && !codeBody.classList.contains('code')) {
-                codeBody = codeBody.nextElementSibling;
+function transformLegacyCodeBlocks(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+
+    // NEW: extract language markers before processing code blocks.
+    // A marker is a <span class="ff-code-lang"> that sits immediately
+    // before the .code_top, with optional <br> between them. ForumFree
+    // can wrap the [CODE] block in a div[align="center"], so we probe
+    // both the marker's direct next sibling and its subtree.
+    const langMarkers = tempDiv.querySelectorAll('.ff-code-lang');
+    langMarkers.forEach(marker => {
+        let next = marker.nextElementSibling;
+        while (next && next.tagName === 'BR') next = next.nextElementSibling;
+
+        let codeTop = null;
+        if (next && next.classList && next.classList.contains('code_top')) {
+            codeTop = next;
+        } else if (next && next.querySelector) {
+            codeTop = next.querySelector('.code_top');
+        }
+
+        if (codeTop) {
+            const lang = (marker.textContent || '').trim();
+            if (lang) codeTop.setAttribute('data-ff-lang', lang);
+        }
+        marker.remove();
+    });
+
+    const codeTops = tempDiv.querySelectorAll('.code_top');
+    codeTops.forEach(codeTop => {
+        let codeBody = codeTop.nextElementSibling;
+        while (codeBody && !codeBody.classList.contains('code')) {
+            codeBody = codeBody.nextElementSibling;
+        }
+        if (!codeBody) return;
+
+        // CHANGED: prefer the stashed language marker over the default
+        // "CODE" title. The <b> tag inside .code_top is ForumFree's own
+        // label ("CODE" or "SPOILER"); we only override it when the
+        // author provided a language.
+        const titleTag = codeTop.querySelector('b');
+        const defaultTitle = titleTag ? titleTag.textContent.trim() : 'CODE';
+        const title = codeTop.getAttribute('data-ff-lang') || defaultTitle;
+
+        const codeContent = codeBody.innerHTML;
+
+        const modernHtml = `<div class="modern-code">
+            <div class="code-header" style="cursor: default;">
+                <div class="code-icon"><i class="fa-regular fa-code" aria-hidden="true"></i></div>
+                <div class="code-info"><span class="code-title">${escapeHtml(title)}</span></div>
+                <button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>
+            </div>
+            <div class="code-content collapsible-content"><pre><code>${codeContent}</code></pre></div>
+            <button class="code-expand-btn" type="button" aria-expanded="false" aria-label="Show full code">
+                <i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>
+            </button>
+        </div>`;
+
+        const modernNode = createElementFromHTML(modernHtml);
+        if (modernNode) {
+            const parent = codeTop.parentNode;
+            let wrapper = null;
+            if (parent && parent.tagName === 'DIV' && parent.getAttribute('align') === 'center') {
+                wrapper = parent;
             }
-            if (!codeBody) return;
-
-            const titleTag = codeTop.querySelector('b');
-            const title = titleTag ? titleTag.textContent.trim() : 'CODE';
-
-            const codeContent = codeBody.innerHTML;
-
-            const modernHtml = `<div class="modern-code">
-                <div class="code-header" style="cursor: default;">
-                    <div class="code-icon"><i class="fa-regular fa-code" aria-hidden="true"></i></div>
-                    <div class="code-info"><span class="code-title">${escapeHtml(title)}</span></div>
-                    <button class="code-copy-btn" type="button" aria-label="Copy code" tabindex="0"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>
-                </div>
-                <div class="code-content collapsible-content"><pre><code>${codeContent}</code></pre></div>
-                <button class="code-expand-btn" type="button" aria-expanded="false" aria-label="Show full code">
-                    <i class="fa-regular fa-angle-down" aria-hidden="true"></i> <span class="expand-text">Show more</span>
-                </button>
-            </div>`;
-
-            const modernNode = createElementFromHTML(modernHtml);
-            if (modernNode) {
-                const parent = codeTop.parentNode;
-                let wrapper = null;
-                if (parent && parent.tagName === 'DIV' && parent.getAttribute('align') === 'center') {
-                    wrapper = parent;
-                }
-                const target = wrapper || codeTop;
-                target.parentNode.insertBefore(modernNode, target);
-                target.remove();
-                if (!wrapper && codeBody.parentNode) {
-                    codeBody.remove();
-                }
-
-                let nextSibling = modernNode.nextSibling;
-                while (nextSibling && nextSibling.tagName === 'BR') {
-                    const toRemove = nextSibling;
-                    nextSibling = nextSibling.nextSibling;
-                    toRemove.remove();
-                }
+            const target = wrapper || codeTop;
+            target.parentNode.insertBefore(modernNode, target);
+            target.remove();
+            if (!wrapper && codeBody.parentNode) {
+                codeBody.remove();
             }
-        });
-        return tempDiv.innerHTML;
-    }
+
+            let nextSibling = modernNode.nextSibling;
+            while (nextSibling && nextSibling.tagName === 'BR') {
+                const toRemove = nextSibling;
+                nextSibling = nextSibling.nextSibling;
+                toRemove.remove();
+            }
+        }
+    });
+    return tempDiv.innerHTML;
+}
 
     // ============================================================================
     // ATTACHMENT CONVERSION
