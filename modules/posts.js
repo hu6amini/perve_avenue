@@ -53,6 +53,14 @@ const ForumPostsModule = (function () {
         return div.innerHTML;
     };
 
+    const decodeHtmlEntities = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    if (str.indexOf('&') === -1) return str;
+    const ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value;
+};
+
     // ============================================================================
     // HTML SANITIZER
     // ============================================================================
@@ -920,6 +928,7 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
 
 function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
     try {
+        const spoilerTitle = decodeHtmlEntities(title) || 'Spoiler';
         const spoilerTitle = title || 'Spoiler';
         const contentClone = codeBodyElem.cloneNode(true);
         contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
@@ -2511,8 +2520,8 @@ function transformLegacyCodeBlocks(htmlContent) {
         }
 
         if (codeTop) {
-            const lang = (marker.textContent || '').trim();
-            if (lang) codeTop.setAttribute('data-ff-lang', lang);
+            const lang = decodeHtmlEntities((marker.textContent || '').trim());
+if (lang) codeTop.setAttribute('data-ff-lang', lang);
         }
         marker.remove();
     });
