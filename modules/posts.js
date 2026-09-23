@@ -929,7 +929,6 @@ function transformLegacyQuotesAndSpoilers(htmlContent) {
 function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
     try {
         const spoilerTitle = decodeHtmlEntities(title) || 'Spoiler';
-        const spoilerTitle = title || 'Spoiler';
         const contentClone = codeBodyElem.cloneNode(true);
         contentClone.querySelectorAll('.code_top, .code').forEach(el => el.remove());
         const innerHtml = contentClone.innerHTML;
