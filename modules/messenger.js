@@ -879,7 +879,7 @@ var MessengerModule = (function(Utils, EventBus) {
             // Titled and untitled spoilers both flow through here. A title
             // becomes a <span class="ff-spoiler-title"> marker before the
             // [SPOILER] block; ForumFree's parser preserves that span.
-            result = result.replace(/<div class="spoiler"([^>]*)>([\s\S]*?)<\/div>/gi, function(match, attrs, inner) {
+            result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function(match, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
 
@@ -2562,8 +2562,8 @@ function updateSendState() {
                     },
                     parseHTML: () => [{ tag: 'div.spoiler' }],
                     renderHTML({ HTMLAttributes }) {
-                        return ['div', { ...HTMLAttributes, class: 'spoiler' }, 0];
-                    },
+    return ['div', { class: 'spoiler', ...HTMLAttributes }, 0];
+},
                     addCommands() {
                         return {
                             setSpoiler: () => ({ commands }) => commands.wrapIn(this.name),
