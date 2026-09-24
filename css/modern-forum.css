@@ -1430,6 +1430,49 @@
 .user-tag:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 
 /* ------------------------------------------------------------
+   10a. NSFW INLINE TAG (click to reveal)
+   ------------------------------------------------------------ */
+.nsfw-tag {
+  display: inline;
+  background-color: var(--danger-color);
+  color: transparent;
+  border-radius: 3px;
+  padding: 0 0.35em;
+  margin: 0 0.05em;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  line-height: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.nsfw-tag:hover {
+  filter: brightness(1.08);
+}
+.nsfw-tag:focus-visible {
+  outline: 2px solid var(--danger-color);
+  outline-offset: 2px;
+}
+.nsfw-tag.revealed {
+  background-color: rgba(220, 38, 38, 0.12);
+  color: inherit;
+  user-select: text;
+}
+.nsfw-tag.revealed:hover {
+  filter: none;
+  background-color: rgba(220, 38, 38, 0.15);
+}
+
+/* Editor: content stays visible while authoring, with a red dashed
+   border so the author sees the mark is applied. */
+.modern-wysiwyg .ProseMirror span.ff-nsfw {
+  background-color: rgba(220, 38, 38, 0.1);
+  border: 1px dashed var(--danger-color);
+  border-radius: 3px;
+  padding: 0 0.2em;
+}
+
+/* ------------------------------------------------------------
    10b. SEMANTIC TEXT COLORS
    Each variant maps to a CSS variable that adapts to theme.
    ------------------------------------------------------------ */
