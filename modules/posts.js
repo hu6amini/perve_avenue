@@ -61,6 +61,17 @@ const ForumPostsModule = (function () {
     return ta.value;
 };
 
+    const decodeTextNodesInPlace = (node) => {
+    if (!node) return;
+    if (node.nodeType === 3) {
+        node.nodeValue = decodeHtmlEntities(node.nodeValue || '');
+        return;
+    }
+    if (node.nodeType === 1) {
+        Array.from(node.childNodes).forEach(decodeTextNodesInPlace);
+    }
+};
+
     // ============================================================================
     // HTML SANITIZER
     // ============================================================================
@@ -440,6 +451,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
         html = transformUserTags(html);
+        html = transformNSFWTags(html);
         return html;
     }
 
@@ -579,6 +591,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
         html = transformUserTags(html);
+        html = transformNSFWTags(html);
         return html;
     }
     function getMessagePostDate($post) {
@@ -640,6 +653,7 @@ function parseDateFromTitle(title) {
             contentHtml = transformLegacyAttachments(contentHtml);
             contentHtml = transformLegacyCodeBlocks(contentHtml);
             contentHtml = transformUserTags(contentHtml);
+            contentHtml = transformNSFWTags(contentHtml);
         }
         const pointsPos = articleLi.querySelector('.points_pos');
         const likes = pointsPos ? parseInt(pointsPos.textContent.replace(/[^0-9]/g, '')) || 0 : 0;
@@ -832,6 +846,27 @@ function parseDateFromTitle(title) {
         });
         return tempDiv.innerHTML;
     }
+
+    function transformNSFWTags(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    if (htmlContent.indexOf('ff-nsfw') === -1) return htmlContent;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    const tags = tempDiv.querySelectorAll('span.ff-nsfw');
+    tags.forEach(tag => {
+        const replacement = document.createElement('span');
+        replacement.className = 'nsfw-tag';
+        replacement.setAttribute('role', 'button');
+        replacement.setAttribute('tabindex', '0');
+        replacement.setAttribute('aria-pressed', 'false');
+        replacement.setAttribute('aria-label', 'Hidden content, click to reveal');
+        replacement.innerHTML = tag.innerHTML;
+        decodeTextNodesInPlace(replacement);
+        tag.parentNode.replaceChild(replacement, tag);
+    });
+    return tempDiv.innerHTML;
+}
 
     // ============================================================================
     // LEGACY QUOTE & SPOILER CONVERSION (FIXED AUTHOR EXTRACTION)
@@ -2430,6 +2465,26 @@ function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
             }
         });
         document.addEventListener('click', function (e) {
+    const tag = e.target.closest('.nsfw-tag');
+    if (tag) {
+        e.preventDefault();
+        e.stopPropagation();
+        const isRevealed = tag.classList.toggle('revealed');
+        tag.setAttribute('aria-pressed', String(isRevealed));
+    }
+});
+
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    const tag = e.target.closest('.nsfw-tag');
+    if (tag) {
+        e.preventDefault();
+        e.stopPropagation();
+        const isRevealed = tag.classList.toggle('revealed');
+        tag.setAttribute('aria-pressed', String(isRevealed));
+    }
+});
+        document.addEventListener('click', function (e) {
             const likeBtn = e.target.closest('.like-btn');
             if (likeBtn) {
                 e.preventDefault();
@@ -3339,6 +3394,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacyAttachments(contentHtml);
                 contentHtml = transformLegacyCodeBlocks(contentHtml);
                 contentHtml = transformUserTags(contentHtml);
+                contentHtml = transformNSFWTags(contentHtml);
             }
             postsData.push({
                 postId: 'summary_' + i, mid, username, groupText: groupName, contentHtml,
