@@ -959,7 +959,7 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .modern-code:hover {
-  border-left-color: var(--primary-color);
+  border: var(--accent-color);
 }
 .code-header {
   align-items: center;
