@@ -721,7 +721,7 @@
   overflow: hidden;
   transition: all 0.2s ease;
 }
-.modern-quote:hover { border-color: var(--primary-color); }
+.modern-quote:hover {border-color: var(--primary-color); }
 
 .quote-header {
   display: flex;
@@ -959,7 +959,7 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .modern-code:hover {
-  border: var(--accent-color);
+  border-color: var(--accent-color);
 }
 .code-header {
   align-items: center;
