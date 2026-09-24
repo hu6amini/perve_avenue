@@ -13,6 +13,9 @@
 // v4: code block language labels. TipTap CodeBlock gains a `language` attr;
 //     marker travels as <span class="ff-code-lang">LANG</span> immediately
 //     before the [CODE] block, same channel as spoiler titles.
+// v5: NSFW inline tag. TipTap gains an `nsfw` mark rendered as
+//     <span class="ff-nsfw">text</span>; reader side + preview convert it
+//     to a click-to-reveal .nsfw-tag element.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -58,10 +61,6 @@ var MessengerModule = (function(Utils, EventBus) {
         return AVATAR_COLORS[colorIndex];
     }
 
-    // Extract a single character to use as an avatar initial. Skips
-    // leading punctuation, whitespace, and emoji so a username like
-    // "-JuNioR-" renders "J" rather than "-". Falls back to '?' if
-    // the name contains no letter or digit at all.
     function getInitialFromName(name) {
         if (!name || typeof name !== 'string') return '?';
         var match = name.match(/[\p{L}\p{N}]/u);
@@ -113,6 +112,19 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
+    // Decode entities on every text node under the given root, in place.
+    // Used by the NSFW transform to undo ForumFree's double-escaping.
+    function decodeTextNodesInPlace(node) {
+        if (!node) return;
+        if (node.nodeType === 3) { // text node
+            node.nodeValue = decodeHtmlEntities(node.nodeValue || '');
+            return;
+        }
+        if (node.nodeType === 1) { // element
+            Array.from(node.childNodes).forEach(decodeTextNodesInPlace);
+        }
+    }
+
     function formatDate(dateStr) {
         if (!dateStr) return '';
         try {
@@ -122,10 +134,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // SEND CONFIRMATION
-    // The compose section writes a small record to sessionStorage right
-    // before submitting. The messages section reads it back on the next
-    // page load to show a confirmation banner. Nothing here touches the
-    // actual send — it's purely a side channel for the confirmation UI.
     // ------------------------------------------------------------------------
     var LAST_SEND_KEY = 'messenger-last-send-v1';
     var LAST_SEND_TTL = 60000;
@@ -145,7 +153,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (!raw) return null;
             var data = JSON.parse(raw);
             if (!data || typeof data !== 'object') return null;
-            // Guard against a stale record from an unrelated earlier visit.
             if (typeof data.ts !== 'number' || Date.now() - data.ts > LAST_SEND_TTL) {
                 sessionStorage.removeItem(LAST_SEND_KEY);
                 return null;
@@ -551,7 +558,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // MENTION SEARCH (shared by mention autocomplete + recipient autocomplete)
+    // MENTION SEARCH
     // ------------------------------------------------------------------------
     var _mentionSearchAbort = null;
 
@@ -590,8 +597,7 @@ var MessengerModule = (function(Utils, EventBus) {
     }
 
     // ------------------------------------------------------------------------
-    // RECIPIENT AUTOCOMPLETE (with chip commit callback)
-    // onCommit receives: { id: string|null, name: string, avatar: string|null }
+    // RECIPIENT AUTOCOMPLETE
     // ------------------------------------------------------------------------
     function attachRecipientAutocomplete(inputEl, onCommit) {
         if (!inputEl) return;
@@ -754,7 +760,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 }
             }
 
-            // Free-text commit when no suggestion is active
             if (e.key === 'Enter') {
                 e.preventDefault();
                 var text = inputEl.value.trim();
@@ -809,8 +814,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var html = legacy;
 
         // Pre-pass 1: titled spoiler markers → single spoiler div with data-title.
-        // The optional <br> between the span and the block is consumed so it
-        // doesn't render as a stray line break around the spoiler node.
         html = html.replace(
             /<span[^>]*\bff-spoiler-title\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[spoiler\]([\s\S]*?)\[\/spoiler\]/gis,
             function(_, title, body) {
@@ -820,8 +823,6 @@ var MessengerModule = (function(Utils, EventBus) {
         );
 
         // Pre-pass 2: code language markers → pre with data-language.
-        // Same channel as spoiler titles; the [CODE] regex below only
-        // picks up the remaining un-marked code blocks.
         html = html.replace(
             /<span[^>]*\bff-code-lang\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[code\]([\s\S]*?)\[\/code\]/gis,
             function(_, lang, body) {
@@ -876,9 +877,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return '[QUOTE]' + cleaned + '[/QUOTE]';
             });
 
-            // Titled and untitled spoilers both flow through here. A title
-            // becomes a <span class="ff-spoiler-title"> marker before the
-            // [SPOILER] block; ForumFree's parser preserves that span.
             result = result.replace(/<div\b([^>]*\bclass="[^"]*\bspoiler\b[^"]*"[^>]*)>([\s\S]*?)<\/div>/gi, function(match, attrs, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
                 cleaned = cleaned.replace(/\n+$/, '');
@@ -892,8 +890,6 @@ var MessengerModule = (function(Utils, EventBus) {
                 return prefix + '[SPOILER]' + cleaned + '[/SPOILER]';
             });
 
-            // Code blocks: extract data-language and emit the marker span
-            // before [CODE] when present.
             result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, preAttrs, inner) {
                 var decoded = inner
                     .replace(/&lt;/g, '<')
@@ -918,14 +914,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // PREVIEW HTML TRANSFORM
-    // The TipTap editor emits raw <blockquote>, <div class="spoiler">, and
-    // <pre><code> for these three nodes (correct for authoring). The reader
-    // side – the posts module – renders them as .modern-quote, .modern-spoiler,
-    // and .modern-code. This function converts the editor's HTML into those
-    // same structures so the author's preview matches what a recipient sees.
-    //
-    // The transform is HTML-string in / HTML-string out. It does not touch
-    // the editor itself – the editor continues to use its own node styling.
     // ------------------------------------------------------------------------
     function transformPreviewHtml(html) {
         if (!html || typeof html !== 'string') return html;
@@ -980,10 +968,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
 
         // --- Code blocks → .modern-code ---
-        // Note: this runs after the blockquote/spoiler passes, so any <pre>
-        // that was nested inside a quote or spoiler has already been moved
-        // into its new home and is still discoverable here. Reads
-        // data-language for the header label.
         Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
@@ -1006,14 +990,29 @@ var MessengerModule = (function(Utils, EventBus) {
             if (pre.parentNode) pre.parentNode.replaceChild(wrapper.firstElementChild, pre);
         });
 
+        // --- NSFW inline tags → .nsfw-tag ---
+        // Runs last so NSFW tags that were nested inside a quote, spoiler,
+        // or code block have already been reparented into their modern
+        // containers. Content is preserved as innerHTML (so nested inline
+        // formatting survives), with entity decoding applied to text nodes
+        // in place.
+        Array.from(temp.querySelectorAll('span.ff-nsfw')).forEach(function(sp) {
+            var replacement = document.createElement('span');
+            replacement.className = 'nsfw-tag';
+            replacement.setAttribute('role', 'button');
+            replacement.setAttribute('tabindex', '0');
+            replacement.setAttribute('aria-pressed', 'false');
+            replacement.setAttribute('aria-label', 'Hidden content, click to reveal');
+            replacement.innerHTML = sp.innerHTML;
+            decodeTextNodesInPlace(replacement);
+            if (sp.parentNode) sp.parentNode.replaceChild(replacement, sp);
+        });
+
         return temp.innerHTML;
     }
 
     // ------------------------------------------------------------------------
     // PREVIEW INTERACTION HANDLERS
-    // These mirror the posts module's handlers one-for-one, but they're
-    // scoped to the preview area so we don't fight the document-level
-    // listeners the posts module attaches on the same page.
     // ------------------------------------------------------------------------
     function handlePreviewQuoteExpand(btn) {
         var quote = btn.closest('.modern-quote');
@@ -1145,11 +1144,21 @@ var MessengerModule = (function(Utils, EventBus) {
         content.setAttribute('aria-hidden', String(isExpanded));
     }
 
-    // Attach once to the preview area. stopPropagation is used so the
-    // posts module's document-level handlers don't also fire (which would
-    // double-toggle on the same click).
+    function handlePreviewNSFWToggle(el) {
+        var isRevealed = el.classList.toggle('revealed');
+        el.setAttribute('aria-pressed', String(isRevealed));
+    }
+
     function attachPreviewHandlers(previewArea) {
         previewArea.addEventListener('click', function(e) {
+            var nsfwTag = e.target.closest('.nsfw-tag');
+            if (nsfwTag && previewArea.contains(nsfwTag)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewNSFWToggle(nsfwTag);
+                return;
+            }
+
             var expandBtn = e.target.closest('.quote-expand-btn');
             if (expandBtn && previewArea.contains(expandBtn)) {
                 e.preventDefault();
@@ -1183,9 +1192,17 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // Keyboard parity for spoiler header (it has role="button")
         previewArea.addEventListener('keydown', function(e) {
             if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+
+            var nsfwTag = e.target.closest('.nsfw-tag');
+            if (nsfwTag && previewArea.contains(nsfwTag)) {
+                e.preventDefault();
+                e.stopPropagation();
+                handlePreviewNSFWToggle(nsfwTag);
+                return;
+            }
+
             var spoilerHeader = e.target.closest('.spoiler-header');
             if (spoilerHeader && previewArea.contains(spoilerHeader)) {
                 e.preventDefault();
@@ -1195,9 +1212,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // Auto-hide the expand button on quotes / code blocks that already fit.
-    // Mirrors the posts module's initQuotesAndSpoilers pass, scoped to the
-    // preview area. Image-aware for quotes.
     function initPreviewQuotesAndSpoilers(previewArea) {
         var checkQuoteOverflow = function(quote) {
             var content = quote.querySelector('.quote-content');
@@ -1251,7 +1265,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         });
 
-        // Code blocks: measure after layout, strip collapse UI when it fits.
         requestAnimationFrame(function() {
             previewArea.querySelectorAll('.modern-code').forEach(function(codeBlock) {
                 var content = codeBlock.querySelector('.code-content.collapsible-content');
@@ -1306,8 +1319,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // CODE LANGUAGE SUGGESTIONS
-    // Used by the language dialog's <datalist>. Order roughly by expected
-    // frequency for the AVN community, then general-purpose.
     // ------------------------------------------------------------------------
     var CODE_LANGUAGE_SUGGESTIONS = [
         "Ren'Py", 'Python', 'JavaScript', 'TypeScript', 'Lua',
@@ -1389,7 +1400,6 @@ var MessengerModule = (function(Utils, EventBus) {
         replyingAsPlaceholder.className = 'modern-replying-as-placeholder';
         container.appendChild(replyingAsPlaceholder);
 
-        // ----- Stacked compose header (To + Subject) -----
         var composeHeader = document.createElement('div');
         composeHeader.className = 'modern-compose-header';
         composeHeader.innerHTML = ''
@@ -1414,9 +1424,6 @@ var MessengerModule = (function(Utils, EventBus) {
             + '</div>';
         container.appendChild(composeHeader);
 
-        // ------------------------------------------------------------------
-        // OUTER-SCOPE STATE
-        // ------------------------------------------------------------------
         var currentRecipient    = null;
 var editor              = null;
 var modernSubmitBtnRef  = null;
@@ -1429,10 +1436,6 @@ var charCounter         = null;
         var recipientChipAvatar = container.querySelector('.modern-recipient-chip-avatar');
         var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
-
-        // ------------------------------------------------------------------
-        // OUTER-SCOPE HELPERS
-        // ------------------------------------------------------------------
 
 function updateSendState() {
     var hasRecipient = !!currentRecipient;
@@ -1583,9 +1586,6 @@ function updateSendState() {
             updateSendState();
         }
 
-        // ------------------------------------------------------------------
-        // Initialize from legacy inputs
-        // ------------------------------------------------------------------
         (function initRecipientFromLegacy() {
             var initialName = recipientInput ? (recipientInput.value || '').trim() : '';
             var initialId = null;
@@ -1691,14 +1691,12 @@ function updateSendState() {
             });
         }
 
-        // ----- Toolbar -----
         var toolbar = document.createElement('div');
         toolbar.className = 'modern-editor-toolbar';
         toolbar.setAttribute('role', 'toolbar');
         toolbar.setAttribute('aria-label', 'Formatting');
         container.appendChild(toolbar);
 
-        // ----- Replying-as header -----
         var syncUser = getCurrentUserSync();
         var currentHeader = null;
         if (syncUser) {
@@ -1787,20 +1785,17 @@ function updateSendState() {
             return btn;
         }
 
-        // Undo / Redo
         var undoBtn = makeToolbarButton('fa-regular fa-undo', 'Undo', { shortcut: 'Control+Z' });
         undoBtn.disabled = true;
         var redoBtn = makeToolbarButton('fa-regular fa-redo', 'Redo', { shortcut: 'Control+Shift+Z' });
         redoBtn.disabled = true;
         addSeparator();
 
-        // Inline formatting
         var boldBtn      = makeToolbarButton('fa-regular fa-bold', 'Bold', { shortcut: 'Control+B' });
         var italicBtn    = makeToolbarButton('fa-regular fa-italic', 'Italic', { shortcut: 'Control+I' });
         var underlineBtn = makeToolbarButton('fa-regular fa-underline', 'Underline', { shortcut: 'Control+U' });
         var strikeBtn    = makeToolbarButton('fa-regular fa-strikethrough', 'Strikethrough');
 
-        // Color dropdown
         var colorDropdownContainer = document.createElement('div');
         colorDropdownContainer.className = 'modern-dropdown';
         colorDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -1862,7 +1857,6 @@ function updateSendState() {
         var clearFormatBtn = makeToolbarButton('fa-regular fa-remove-format', 'Clear formatting');
         addSeparator();
 
-        // Heading dropdown
         var headingDropdownContainer = document.createElement('div');
         headingDropdownContainer.className = 'modern-dropdown';
         headingDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -1900,7 +1894,6 @@ function updateSendState() {
             h3: headingDropdownMenu.querySelector('[data-level="3"]')
         };
 
-        // List dropdown
         var listDropdownContainer = document.createElement('div');
         listDropdownContainer.className = 'modern-dropdown';
         listDropdownContainer.style.cssText = 'position:relative;display:inline-block';
@@ -1969,8 +1962,8 @@ function updateSendState() {
 
         addSeparator();
         var spoilerBtn = makeToolbarButton('fa-regular fa-eye-slash', 'Spoiler', { shortcut: 'Control+Shift+S' });
+        var nsfwBtn = makeToolbarButton('fa-regular fa-fire', 'NSFW (hidden content)', { shortcut: 'Control+Shift+N' });
 
-        // Dropdown-close listeners
         document.addEventListener('click', function() {
             document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
             document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
@@ -1986,7 +1979,6 @@ function updateSendState() {
             }
         });
 
-        // Emoji picker
         var emojiBtn = makeToolbarButton('fa-regular fa-face-smile', 'Insert emoji');
         var emojiPickerPanel = document.createElement('div');
         emojiPickerPanel.className = 'modern-emoji-picker';
@@ -2076,7 +2068,6 @@ function updateSendState() {
             }
         });
 
-        // Upload
         function uploadImageToWorker(file, editorInstance) {
             var formData = new FormData();
             formData.append('image', file);
@@ -2116,7 +2107,6 @@ function updateSendState() {
                 });
         }
 
-        // Modals
         function showInputModal(title, placeholder, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -2155,8 +2145,6 @@ function updateSendState() {
             });
         }
 
-        // Spoiler title modal — an empty input is meaningful here ("plain
-        // spoiler, no title"), so we must always invoke the callback.
         function showSpoilerTitleModal(callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -2200,9 +2188,6 @@ function updateSendState() {
             });
         }
 
-        // Code language modal — same structural pattern as the spoiler
-        // dialog, but with a <datalist> of common languages so authors
-        // get suggestions without being forced into a fixed enum.
         function showCodeLangModal(callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
@@ -2236,7 +2221,6 @@ function updateSendState() {
             }
             function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
             function submit() {
-                // Newlines would break the CSS attr() editor label.
                 var cleaned = input.value.trim().replace(/[\r\n]+/g, ' ').trim();
                 callback(cleaned);
                 close();
@@ -2370,9 +2354,6 @@ function updateSendState() {
                     },
                 });
 
-                // Custom CodeBlock — adds a `language` attribute rendered
-                // as data-language on the <pre>. Same shape as the built-in
-                // extension, just carries a label.
                 const CustomCodeBlock = BaseCodeBlock.extend({
                     addAttributes() {
                         return {
@@ -2386,7 +2367,6 @@ function updateSendState() {
                     },
                 });
 
-                // ASCII emoticon input rule
                 const emoticonPattern = Object.keys(ASCII_EMOTICON_MAP)
                     .sort(function(a, b) { return b.length - a.length; })
                     .map(function(e) { return e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); })
@@ -2545,7 +2525,6 @@ function updateSendState() {
                     },
                 });
 
-                // Spoiler node — title attribute travels as data-title.
                 const Spoiler = Node.create({
                     name: 'spoiler',
                     group: 'block',
@@ -2562,14 +2541,38 @@ function updateSendState() {
                     },
                     parseHTML: () => [{ tag: 'div.spoiler' }],
                     renderHTML({ HTMLAttributes }) {
-    return ['div', { class: 'spoiler', ...HTMLAttributes }, 0];
-},
+                        return ['div', { class: 'spoiler', ...HTMLAttributes }, 0];
+                    },
                     addCommands() {
                         return {
                             setSpoiler: () => ({ commands }) => commands.wrapIn(this.name),
                             toggleSpoiler: () => ({ commands }) => commands.toggleWrap(this.name),
                             unsetSpoiler: () => ({ commands }) => commands.lift(this.name),
                             setSpoilerTitle: (title) => ({ commands }) => commands.updateAttributes(this.name, { title }),
+                        };
+                    },
+                });
+
+                // NSFW inline mark. Renders as <span class="ff-nsfw">text</span>
+                // in the stored HTML; the reader side and preview convert it
+                // to a click-to-reveal .nsfw-tag.
+                const NSFW = Mark.create({
+                    name: 'nsfw',
+                    inclusive: false,
+                    parseHTML() {
+                        return [{
+                            tag: 'span',
+                            getAttrs: el => el.classList.contains('ff-nsfw') ? {} : false,
+                        }];
+                    },
+                    renderHTML() {
+                        return ['span', { class: 'ff-nsfw' }, 0];
+                    },
+                    addCommands() {
+                        return {
+                            setNSFW: () => ({ commands }) => commands.setMark(this.name),
+                            toggleNSFW: () => ({ commands }) => commands.toggleMark(this.name),
+                            unsetNSFW: () => ({ commands }) => commands.unsetMark(this.name),
                         };
                     },
                 });
@@ -2911,9 +2914,6 @@ function updateSendState() {
                 editor = new Editor({
                     element: editorElement,
                     extensions: [
-                        // Disable StarterKit's own codeBlock so our extended
-                        // version (with the language attribute) is the one
-                        // that gets instantiated.
                         StarterKit.configure({ codeBlock: false }),
                         CustomCodeBlock,
                         Placeholder.configure({ placeholder: 'Write your message…' }),
@@ -2921,6 +2921,7 @@ function updateSendState() {
                         CustomImage,
                         CustomLink,
                         Spoiler,
+                        NSFW,
                         LinkPreview,
                         SemanticColor,
                         CustomMention,
@@ -2978,7 +2979,6 @@ function updateSendState() {
                 modernSubmitBtnRef = container.querySelector('#modern-submit');
 modernPreviewBtnRef = container.querySelector('#modern-preview');
 
-                // Toolbar actions
                 undoBtn.onclick = function() { exec(function() { editor.chain().focus().undo().run(); }); };
                 redoBtn.onclick = function() { exec(function() { editor.chain().focus().redo().run(); }); };
                 clearFormatBtn.onclick = function() {
@@ -3014,10 +3014,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
 
-                // Code block: dialog-first when inserting a fresh one; inside
-                // an existing code block, toggling off (turns back into a
-                // paragraph) without prompting. Changing a language is done
-                // by removing and re-adding (v1 behaviour), same as spoilers.
                 codeBtn.onclick = function() {
                     if (!editor) return;
 
@@ -3036,7 +3032,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     });
                 };
 
-                // Spoiler: dialog-first when inserting a fresh one.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
 
@@ -3053,6 +3048,10 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                             chain.wrapIn('spoiler').run();
                         }
                     });
+                };
+
+                nsfwBtn.onclick = function() {
+                    exec(function() { editor.chain().focus().toggleNSFW().run(); });
                 };
 
                 linkBtn.onclick = function() {
@@ -3122,6 +3121,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                         blockquote: editor.isActive('blockquote'),
                         codeBlock: editor.isActive('codeBlock'),
                         spoiler: editor.isActive('spoiler'),
+                        nsfw: editor.isActive('nsfw'),
                         heading1: editor.isActive('heading', { level: 1 }),
                         heading2: editor.isActive('heading', { level: 2 }),
                         heading3: editor.isActive('heading', { level: 3 })
@@ -3133,6 +3133,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
                     codeBtn.classList.toggle('active', isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
+                    nsfwBtn.classList.toggle('active', isActive.nsfw);
                     if (isActive.heading1 || isActive.heading2 || isActive.heading3) {
                         headingDropdownBtn.style.backgroundColor = 'var(--primary-color)';
                         headingDropdownBtn.style.color = 'white';
@@ -3180,7 +3181,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
-                // Drag-drop images
                 var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
@@ -3192,7 +3192,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     });
                 }
 
-                // Keyboard shortcuts
                 editor.setOptions({
                     editorProps: {
                         handleDOMEvents: {
@@ -3213,6 +3212,11 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     spoilerBtn.click();
+                                    return true;
+                                }
+                                if (event.ctrlKey && event.shiftKey && (event.key === 'n' || event.key === 'N')) {
+                                    event.preventDefault();
+                                    nsfwBtn.click();
                                     return true;
                                 }
                                 return false;
@@ -3240,7 +3244,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
             }
         })();
 
-        // ----- Preview -----
         var previewArea = document.createElement('div');
         previewArea.id = 'modern-preview-area';
         previewArea.className = 'modern-preview';
@@ -3257,7 +3260,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
             + '<button type="button" id="modern-submit" class="modern-btn modern-btn-primary" aria-keyshortcuts="Control+Enter"><i class="fa-regular fa-paper-plane"></i> Send message</button>';
         container.appendChild(actions);
 
-        // Preview
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
     modernPreviewBtn.onclick = function() {
@@ -3276,7 +3278,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
             };
         }
 
-        // Submit
         var modernSubmitBtn = container.querySelector('#modern-submit');
         if (modernSubmitBtn) {
             modernSubmitBtn.onclick = function(e) {
