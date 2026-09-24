@@ -756,7 +756,6 @@
 .quote-author {
   font-weight: 600;
   color: var(--text-primary);
-  font-size: var(--text-sm);
   word-break: break-word;
 }
 .quote-said {
@@ -874,7 +873,7 @@
   line-height: 28;
 }
 .spoiler-title {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
   flex: 1;
   min-width: 0;
@@ -990,7 +989,6 @@
 .code-info { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .code-title {
   color: var(--text-primary);
-  font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.05em;
