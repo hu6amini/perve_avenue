@@ -732,6 +732,7 @@
   border-bottom: 1px solid var(--border-color);
   flex-wrap: nowrap;
   gap: var(--space-sm);
+  font-size: var(--text-sm);
 }
 .quote-meta {
   display: flex;
@@ -750,6 +751,7 @@
   height: 28px;
   justify-content: center;
   width: 28px;
+  line-height: 28;
 }
 .quote-author {
   font-weight: 600;
@@ -759,8 +761,6 @@
 }
 .quote-said {
   color: var(--text-secondary);
-  font-size: 0.8125rem;
-  font-style: italic;
   font-weight: 400;
 }
 .quote-jump-btn {
@@ -858,6 +858,7 @@
   background: var(--bg-color);
   cursor: pointer;
   user-select: none;
+  font-size: var(--text-sm);
   transition: background 0.2s;
 }
 .spoiler-header:hover { background: var(--hover-color); }
@@ -870,6 +871,7 @@
   height: 28px;
   justify-content: center;
   width: 28px;
+  line-height: 28;
 }
 .spoiler-title {
   font-weight: 500;
@@ -969,6 +971,7 @@
   gap: var(--space-md);
   justify-content: space-between;
   padding: var(--pad-3) var(--pad-5);
+  font-size: var(--text-sm);
   transition: background-color 0.2s ease;
 }
 .code-header:hover { background: var(--bg-color); }
@@ -981,6 +984,7 @@
   height: 28px;
   justify-content: center;
   width: 28px;
+  line-height: 28;
 }
 .code-icon i { color: #FFF; font-size: var(--text-sm); }
 .code-info { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
