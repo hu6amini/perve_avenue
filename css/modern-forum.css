@@ -3552,7 +3552,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .ProseMirror p,
 .modern-preview .preview-content p,
 .post-message p {
-  margin: 0 0 0.75em 0;
+  margin: 0 0 var(--space-md) 0;
 }
 .ProseMirror p:first-child,
 .modern-preview .preview-content p:first-child,
