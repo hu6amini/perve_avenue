@@ -1472,6 +1472,37 @@
   padding: 0 0.2em;
 }
 
+/* Media inside an NSFW tag: blur while hidden, clear on reveal.
+   color: transparent only hides glyphs, so images need their own
+   treatment. clip-path keeps the blur from bleeding past the edge. */
+.nsfw-tag img,
+.nsfw-tag video,
+.nsfw-tag iframe,
+.nsfw-tag picture,
+.nsfw-tag canvas {
+  filter: blur(14px) saturate(0.5);
+  clip-path: inset(0);
+  transition: filter 0.2s ease;
+  pointer-events: none;
+}
+
+.nsfw-tag.revealed img,
+.nsfw-tag.revealed video,
+.nsfw-tag.revealed iframe,
+.nsfw-tag.revealed picture,
+.nsfw-tag.revealed canvas {
+  filter: none;
+  pointer-events: auto;
+}
+
+.nsfw-tag:has(img),
+.nsfw-tag:has(video),
+.nsfw-tag:has(iframe) {
+  display: inline-block;
+  padding: 0;
+  background-color: transparent;
+}
+
 /* ------------------------------------------------------------
    10b. SEMANTIC TEXT COLORS
    Each variant maps to a CSS variable that adapts to theme.
