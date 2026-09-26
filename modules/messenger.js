@@ -3355,71 +3355,15 @@ function updateSendState() {
                         // entirely when the HTML has nothing to fix.
                         transformPastedHTML: function(html) {
                             if (!html || typeof html !== 'string') return html;
-
-                            // TEMPORARY — remove after we confirm the shape.
-                            try {
-                                console.log('[MessengerPaste] len=' + html.length,
-                                            '| sample:', html.slice(0, 500));
-                            } catch (e) {}
-
-                            // --- Word nbsp litter ---
-                            if (html.indexOf('&nbsp') !== -1 ||
-                                html.indexOf('&#160') !== -1 ||
-                                html.indexOf('\u00a0') !== -1) {
-                                html = html
-                                    .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
-                                    .replace(/\u00a0/g, ' ')
-                                    .replace(/ {2,}/g, ' ');
+                            if (html.indexOf('&nbsp') === -1 &&
+                                html.indexOf('&#160') === -1 &&
+                                html.indexOf('\u00a0') === -1) {
+                                return html;
                             }
-
-                            // --- Mass-bold artifact ---
-                            // Broader than before: matches <strong>, <b>, and
-                            // <span style="font-weight:bold"> (the form some
-                            // copy handlers emit), across both <p> and <div>
-                            // block containers. Only strips when EVERY leaf
-                            // block in the paste is fully wrapped — a single
-                            // partial-bold block disables the strip.
-                            if (html.indexOf('<strong') !== -1 ||
-                                html.indexOf('<b>') !== -1 ||
-                                /font-weight/i.test(html)) {
-                                try {
-                                    var probe = document.createElement('div');
-                                    probe.innerHTML = html;
-
-                                    function isFullyBold(el) {
-                                        var first = el.firstElementChild;
-                                        if (!first) return false;
-                                        if (first.nextElementSibling !== null) return false;
-                                        if (first.tagName === 'STRONG' || first.tagName === 'B') return true;
-                                        if (first.tagName === 'SPAN') {
-                                            var style = first.getAttribute('style') || '';
-                                            if (/font-weight\s*:\s*(bold|bolder|[5-9]\d{2})/i.test(style)) return true;
-                                        }
-                                        return false;
-                                    }
-
-                                    var blocks = Array.from(probe.querySelectorAll('p, div'))
-                                        .filter(function(b) {
-                                            return b.querySelector('p, div') === null &&
-                                                   b.textContent.trim().length > 0;
-                                        });
-
-                                    if (blocks.length >= 2 && blocks.every(isFullyBold)) {
-                                        blocks.forEach(function(b) {
-                                            var wrapper = b.firstElementChild;
-                                            while (wrapper.firstChild) {
-                                                b.insertBefore(wrapper.firstChild, wrapper);
-                                            }
-                                            b.removeChild(wrapper);
-                                        });
-                                        html = probe.innerHTML;
-                                    }
-                                } catch (e) {
-                                    // Fail open — paste as-is.
-                                }
-                            }
-
-                            return html;
+                            return html
+                                .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
+                                .replace(/\u00a0/g, ' ')
+                                .replace(/ {2,}/g, ' ');
                         },
                         handlePaste: function(view, event) {
                             var files = event.clipboardData ? event.clipboardData.files : null;
