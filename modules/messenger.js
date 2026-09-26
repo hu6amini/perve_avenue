@@ -1502,16 +1502,20 @@ var MessengerModule = (function(Utils, EventBus) {
         wink: '😉',
         thinking: '🤔',
         cry: '😢',
+        sweat: '😅',
         eyeroll: '🙄',
+        eyebrow: '🤨',
         facepalm: '🤦',
         hearteyes: '😍',
         party: '🥳',
+        frown: '🙁',
         heart: '❤️',
         fire: '🔥',
         hundred: '💯',
         eyes: '👀',
         skull: '💀',
         thumbsup: '👍',
+        thumbsdown: '👎',
         clap: '👏',
         wave: '👋',
         pray: '🙏',
@@ -2811,7 +2815,7 @@ function updateSendState() {
                     if (aExact !== bExact) return aExact - bExact;
                     return a.name.localeCompare(b.name);
                 });
-                matches = matches.slice(0, 21);
+                matches = matches.slice(0, 25);
 
                 items = matches;
                 selectedIndex = 0;
