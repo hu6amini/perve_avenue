@@ -4378,6 +4378,18 @@ input[type="radio"]:checked::before {
     padding: var(--space-xs);
 }
 
+.mention-suggestions-header {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    padding: var(--pad-2) var(--pad-3) var(--pad-1);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    user-select: none;
+    pointer-events: none;
+    text-align: left;
+}
+
 .mention-suggestions::-webkit-scrollbar { width: 6px; }
 .mention-suggestions::-webkit-scrollbar-track { background: transparent; }
 .mention-suggestions::-webkit-scrollbar-thumb {
