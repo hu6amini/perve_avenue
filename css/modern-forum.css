@@ -1495,14 +1495,6 @@
   pointer-events: auto;
 }
 
-.nsfw-tag:has(img),
-.nsfw-tag:has(video),
-.nsfw-tag:has(iframe) {
-  display: inline-block;
-  padding: 0;
-  background-color: transparent;
-}
-
 /* ------------------------------------------------------------
    10b. SEMANTIC TEXT COLORS
    Each variant maps to a CSS variable that adapts to theme.
