@@ -3356,47 +3356,11 @@ function updateSendState() {
                         transformPastedHTML: function(html) {
                             if (!html || typeof html !== 'string') return html;
 
-                            // --- Mass-bold artifact ---
-                            // Some sites (and some browsers on copy) wrap every
-                            // paragraph's content in <strong> or <b>, producing
-                            // a fully-bold paste even though the source isn't
-                            // bold. If EVERY paragraph in the paste follows
-                            // that pattern (>= 2 paragraphs, each fully wrapped
-                            // in strong/b, no siblings), treat it as an artifact
-                            // and strip the wrappers. If only some are wrapped,
-                            // leave them alone — the user probably intends the
-                            // emphasis.
-                            if (html.indexOf('<strong') !== -1 || html.indexOf('<b>') !== -1) {
-                                try {
-                                    var probe = document.createElement('div');
-                                    probe.innerHTML = html;
-                                    var paragraphs = probe.querySelectorAll('p');
-                                    if (paragraphs.length >= 2) {
-                                        var allBold = true;
-                                        for (var i = 0; i < paragraphs.length; i++) {
-                                            var p = paragraphs[i];
-                                            var first = p.firstElementChild;
-                                            if (!first ||
-                                                (first.tagName !== 'STRONG' && first.tagName !== 'B') ||
-                                                first.nextElementSibling !== null) {
-                                                allBold = false;
-                                                break;
-                                            }
-                                        }
-                                        if (allBold) {
-                                            for (var j = 0; j < paragraphs.length; j++) {
-                                                var p2 = paragraphs[j];
-                                                var strong = p2.firstElementChild;
-                                                while (strong.firstChild) {
-                                                    p2.insertBefore(strong.firstChild, strong);
-                                                }
-                                                p2.removeChild(strong);
-                                            }
-                                            html = probe.innerHTML;
-                                        }
-                                    }
-                                } catch (e) { /* fail open — paste as-is */ }
-                            }
+                            // TEMPORARY — remove after we confirm the shape.
+                            try {
+                                console.log('[MessengerPaste] len=' + html.length,
+                                            '| sample:', html.slice(0, 500));
+                            } catch (e) {}
 
                             // --- Word nbsp litter ---
                             if (html.indexOf('&nbsp') !== -1 ||
@@ -3406,6 +3370,53 @@ function updateSendState() {
                                     .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
                                     .replace(/\u00a0/g, ' ')
                                     .replace(/ {2,}/g, ' ');
+                            }
+
+                            // --- Mass-bold artifact ---
+                            // Broader than before: matches <strong>, <b>, and
+                            // <span style="font-weight:bold"> (the form some
+                            // copy handlers emit), across both <p> and <div>
+                            // block containers. Only strips when EVERY leaf
+                            // block in the paste is fully wrapped — a single
+                            // partial-bold block disables the strip.
+                            if (html.indexOf('<strong') !== -1 ||
+                                html.indexOf('<b>') !== -1 ||
+                                /font-weight/i.test(html)) {
+                                try {
+                                    var probe = document.createElement('div');
+                                    probe.innerHTML = html;
+
+                                    function isFullyBold(el) {
+                                        var first = el.firstElementChild;
+                                        if (!first) return false;
+                                        if (first.nextElementSibling !== null) return false;
+                                        if (first.tagName === 'STRONG' || first.tagName === 'B') return true;
+                                        if (first.tagName === 'SPAN') {
+                                            var style = first.getAttribute('style') || '';
+                                            if (/font-weight\s*:\s*(bold|bolder|[5-9]\d{2})/i.test(style)) return true;
+                                        }
+                                        return false;
+                                    }
+
+                                    var blocks = Array.from(probe.querySelectorAll('p, div'))
+                                        .filter(function(b) {
+                                            return b.querySelector('p, div') === null &&
+                                                   b.textContent.trim().length > 0;
+                                        });
+
+                                    if (blocks.length >= 2 && blocks.every(isFullyBold)) {
+                                        blocks.forEach(function(b) {
+                                            var wrapper = b.firstElementChild;
+                                            while (wrapper.firstChild) {
+                                                b.insertBefore(wrapper.firstChild, wrapper);
+                                            }
+                                            b.removeChild(wrapper);
+                                        });
+                                        html = probe.innerHTML;
+                                    }
+                                } catch (e) {
+                                    // Fail open — paste as-is.
+                                }
                             }
 
                             return html;
