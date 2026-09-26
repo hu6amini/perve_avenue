@@ -1505,12 +1505,13 @@
   overflow: hidden;
 }
 .nsfw-image img {
-  filter: blur(16px) saturate(0.4);
+  filter: blur(32px) saturate(0.4);
   clip-path: inset(0);
   transition: filter 0.25s ease;
   display: block;
   pointer-events: none;
   user-select: none;
+  border-radius: var(--radius);
 }
 .nsfw-image.revealed {
   cursor: default;
