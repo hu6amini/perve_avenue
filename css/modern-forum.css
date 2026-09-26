@@ -1511,7 +1511,6 @@
   display: block;
   pointer-events: none;
   user-select: none;
-  border-radius: var(--radius);
 }
 .nsfw-image.revealed {
   cursor: default;
