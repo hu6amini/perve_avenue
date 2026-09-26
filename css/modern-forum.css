@@ -3549,6 +3549,13 @@ section.modern-stats { flex-direction: column; width: 100%; }
   color: var(--text-secondary);
 }
 
+.ProseMirror p {
+  margin: 0 0 var(--space-sm) 0;
+}
+.ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+
 /* Code blocks */
 .modern-wysiwyg .ProseMirror pre {
     position: relative;
