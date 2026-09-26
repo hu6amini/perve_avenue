@@ -2826,7 +2826,7 @@ function updateSendState() {
                     if (aExact !== bExact) return aExact - bExact;
                     return a.name.localeCompare(b.name);
                 });
-                matches = matches.slice(0, 8);
+                matches = matches.slice(0, 15);
 
                 items = matches;
                 selectedIndex = 0;
