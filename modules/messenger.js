@@ -3102,6 +3102,23 @@ function updateSendState() {
                             'aria-label': 'Message body',
                         },
                         plugins: [linkPreviewPlugin],
+                        // Normalize Word's nbsp litter and stray multi-space
+                        // runs before ProseMirror parses the paste. Skipped
+                        // entirely when the HTML has nothing to fix — most
+                        // pastes from normal web pages or other editors
+                        // won't hit the replace chain at all.
+                        transformPastedHTML: function(html) {
+                            if (!html || typeof html !== 'string') return html;
+                            if (html.indexOf('&nbsp') === -1 &&
+                                html.indexOf('&#160') === -1 &&
+                                html.indexOf('\u00a0') === -1) {
+                                return html;
+                            }
+                            return html
+                                .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
+                                .replace(/\u00a0/g, ' ')
+                                .replace(/ {2,}/g, ' ');
+                        },
                         handlePaste: function(view, event) {
                             var files = event.clipboardData ? event.clipboardData.files : null;
                             if (files && files.length) {
