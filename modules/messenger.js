@@ -1497,41 +1497,26 @@ var MessengerModule = (function(Utils, EventBus) {
     // noise, and the picker handles browsing.
     var EMOJI_NAME_MAP = {
         smile: '🙂',
-        grin: '😃',
         joy: '😂',
-        rofl: '🤣',
+        lol: '😆',
         wink: '😉',
-        blush: '😊',
-        heart: '❤️',
-        kiss: '😘',
-        cry: '😢',
-        sob: '😭',
-        angry: '😠',
-        rage: '😡',
-        shock: '😱',
         thinking: '🤔',
+        cry: '😢',
+        eyeroll: '🙄',
         facepalm: '🤦',
-        shrug: '🤷',
-        wave: '👋',
-        thumbsup: '👍',
-        thumbsdown: '👎',
-        clap: '👏',
-        pray: '🙏',
-        fire: '🔥',
-        star: '⭐',
-        sparkles: '✨',
-        eyes: '👀',
-        sweat: '😅',
-        sleep: '😴',
+        hearteyes: '😍',
         party: '🥳',
-        tada: '🎉',
+        heart: '❤️',
+        fire: '🔥',
         hundred: '💯',
-        heartbreak: '💔',
-        clown: '🤡',
+        eyes: '👀',
         skull: '💀',
-        poop: '💩',
-        check: '✅',
-        cross: '❌'
+        thumbsup: '👍',
+        clap: '👏',
+        wave: '👋',
+        pray: '🙏',
+        pepper: '🌶️',
+        banana: '🍌'
     };
 
     var EMOJI_RECENTS_KEY = 'messenger-emoji-recents-v1';
@@ -2826,7 +2811,7 @@ function updateSendState() {
                     if (aExact !== bExact) return aExact - bExact;
                     return a.name.localeCompare(b.name);
                 });
-                matches = matches.slice(0, 15);
+                matches = matches.slice(0, 21);
 
                 items = matches;
                 selectedIndex = 0;
