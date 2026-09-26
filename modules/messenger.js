@@ -2577,6 +2577,251 @@ function updateSendState() {
             var hoveredImg = null;
             var hideTimer = null;
 
+                    // Emoticon autocomplete. Watching the editor for a `:` at a word
+        // boundary with word characters following, showing a small popup of
+        // matching emoji by name. Insertion goes through the same Twemoji
+        // image path as the picker and ASCII emoticon rule, so all three
+        // representations land as the same node shape in the document.
+        function setupEmoticonAutocomplete(editorInstance, editorRoot) {
+            if (!editorInstance || !editorRoot) return;
+
+            var popup = null;
+            var items = [];
+            var selectedIndex = 0;
+            var itemEls = [];
+            var currentQuery = '';
+
+            function closePopup() {
+                if (popup) { popup.remove(); popup = null; }
+                items = []; itemEls = []; selectedIndex = 0;
+                currentQuery = '';
+            }
+
+            function ensurePopup() {
+                if (!popup) {
+                    popup = document.createElement('div');
+                    popup.className = 'mention-suggestions emoticon-suggestions';
+                    popup.setAttribute('role', 'listbox');
+                    document.body.appendChild(popup);
+                }
+                return popup;
+            }
+
+            function positionPopup() {
+                if (!popup) return;
+                try {
+                    var coords = editorInstance.view.coordsAtPos(
+                        editorInstance.state.selection.from
+                    );
+                    popup.style.left = (coords.left + window.pageXOffset) + 'px';
+                    popup.style.top = (coords.bottom + window.pageYOffset + 4) + 'px';
+                } catch (e) { /* coordsAtPos can throw on stale positions */ }
+            }
+
+            function updateSelected() {
+                itemEls.forEach(function(el, i) {
+                    el.classList.toggle('is-selected', i === selectedIndex);
+                });
+            }
+
+            function buildPopup() {
+                if (!popup) return;
+                popup.innerHTML = '';
+                itemEls = [];
+
+                items.forEach(function(item) {
+                    var el = document.createElement('button');
+                    el.type = 'button';
+                    el.className = 'mention-suggestion-item';
+                    el.setAttribute('role', 'option');
+
+                    var img = document.createElement('img');
+                    img.className = 'emoticon-suggestion-icon';
+                    img.src = TWEMOJI_BASE + emojiToCodePoint(item.emoji) + '.svg';
+                    img.alt = item.emoji;
+                    img.loading = 'lazy';
+                    img.onerror = function() {
+                        // Fall back to the literal character if Twemoji
+                        // can't be reached for this codepoint.
+                        var span = document.createElement('span');
+                        span.className = 'emoticon-suggestion-icon';
+                        span.textContent = item.emoji;
+                        this.replaceWith(span);
+                    };
+                    el.appendChild(img);
+
+                    var label = document.createElement('span');
+                    label.className = 'mention-suggestion-name';
+                    label.textContent = ':' + item.name;
+                    el.appendChild(label);
+
+                    el.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        commit(item);
+                    });
+
+                    itemEls.push(el);
+                    popup.appendChild(el);
+                });
+
+                popup.style.display = 'block';
+                updateSelected();
+            }
+
+            function detectTrigger() {
+                var sel = editorInstance.state.selection;
+                if (!sel || !sel.empty) return null;
+                var from = sel.from;
+                var start = Math.max(0, from - 80);
+                // \uFFFC is what textBetween emits for inline atom nodes
+                // (our image nodes). We only care about the tail, but the
+                // separator has to be something so we can still parse text
+                // that contains images without confusing them for chars.
+                var textBefore = editorInstance.state.doc.textBetween(
+                    start, from, '\n', '\uFFFC'
+                );
+                var m = textBefore.match(/(^|\s):([a-zA-Z0-9_+\-]*)$/);
+                if (!m) return null;
+                return { query: m[2] };
+            }
+
+            function refresh() {
+                var trigger = detectTrigger();
+                if (!trigger) { closePopup(); return; }
+
+                var query = trigger.query.toLowerCase();
+                var matches = [];
+                Object.keys(EMOJI_NAME_MAP).forEach(function(name) {
+                    if (name.indexOf(query) === 0) {
+                        matches.push({ name: name, emoji: EMOJI_NAME_MAP[name] });
+                    }
+                });
+
+                if (matches.length === 0) { closePopup(); return; }
+
+                // Exact matches first, then alphabetical. An exact match is
+                // almost certainly what the user meant, so it should always
+                // be the default Enter target.
+                matches.sort(function(a, b) {
+                    var aExact = a.name === query ? 0 : 1;
+                    var bExact = b.name === query ? 0 : 1;
+                    if (aExact !== bExact) return aExact - bExact;
+                    return a.name.localeCompare(b.name);
+                });
+                matches = matches.slice(0, 8);
+
+                items = matches;
+                selectedIndex = 0;
+                currentQuery = trigger.query;
+                ensurePopup();
+                buildPopup();
+                positionPopup();
+            }
+
+            function commit(item) {
+                if (!item) return;
+
+                // Recompute the trigger range at commit time. The selection
+                // has been stable since the last refresh (keyboard nav
+                // doesn't change it), but recomputing is safer than trusting
+                // a stale value if the document changed between refresh and
+                // keydown.
+                var from = editorInstance.state.selection.from;
+                var queryLen = currentQuery.length;
+                var triggerStart = from - queryLen - 1;
+
+                var cp = emojiToCodePoint(item.emoji);
+                editorInstance.chain().focus()
+                    .deleteRange({ from: triggerStart, to: from })
+                    .insertContent({
+                        type: 'image',
+                        attrs: {
+                            src: TWEMOJI_BASE + cp + '.svg',
+                            alt: item.emoji,
+                            loading: 'lazy',
+                            decoding: 'async',
+                            width: 24,
+                            height: 24
+                        }
+                    })
+                    .run();
+                pushEmojiRecent(item.emoji);
+                closePopup();
+            }
+
+            // Arrow-key handling needs to run before ProseMirror's own
+            // keydown, otherwise the selection moves and the trigger
+            // disappears before we can navigate. Capture-phase listener on
+            // the editor root achieves that.
+            editorRoot.addEventListener('keydown', function(e) {
+                if (!popup) return;
+
+                // Let modifier combos through untouched — Ctrl+Enter sends,
+                // Ctrl+K opens the link modal, Cmd+Z undoes, etc. Without
+                // this guard, Enter with any modifier would commit the
+                // emoji instead.
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closePopup();
+                    return;
+                }
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectedIndex = (selectedIndex + 1) % items.length;
+                    updateSelected();
+                    return;
+                }
+
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                    updateSelected();
+                    return;
+                }
+
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    commit(items[selectedIndex]);
+                    return;
+                }
+
+                if (e.key === ' ') {
+                    // Space closes the popup and lets the space through —
+                    // the author wrote a literal `:something`, not an
+                    // emoji shortcode.
+                    closePopup();
+                }
+            }, true);
+
+            // Recompute on every document or selection change. `update`
+            // covers typing; `selectionUpdate` covers arrow-key moves and
+            // clicks elsewhere in the doc. Neither fires on mouse-hover or
+            // scroll, so we're not doing redundant work.
+            editorInstance.on('update', refresh);
+            editorInstance.on('selectionUpdate', refresh);
+
+            // If the popup is open when the editor loses focus, close it —
+            // a stranded popup with a stale query would be confusing.
+            editorInstance.on('blur', function() {
+                // Defer to next frame so a click into the popup itself
+                // (which fires blur before mousedown commits) doesn't
+                // kill the commit.
+                setTimeout(function() {
+                    if (document.activeElement !== editorRoot &&
+                        !(popup && popup.contains(document.activeElement))) {
+                        closePopup();
+                    }
+                }, 0);
+            });
+        }
+
             function updateButtonState(img) {
                 if (!img) return;
                 var isNsfw = img.getAttribute('data-nsfw') === 'true';
