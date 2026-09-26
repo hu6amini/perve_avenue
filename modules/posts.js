@@ -1656,6 +1656,13 @@ function wrapImagesWithDimensions(container) {
             let idx = 0;
 
             images.forEach(img => {
+                    // Never hand NSFW-marked images to the gallery. The reveal click
+    // has to stay exclusive to the nsfw-image toggle, and an NSFW
+    // image opening full-screen in a lightbox is the wrong default
+    // anyway. Users who want the full size can right-click → open
+    // image in new tab.
+    if (img.getAttribute('data-nsfw') === 'true') return;
+                
                 // Skip twemoji
                 if (img.classList.contains('twemoji')) return;
 
