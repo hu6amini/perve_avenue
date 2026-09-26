@@ -15,7 +15,10 @@
 //     before the [CODE] block, same channel as spoiler titles.
 // v5: NSFW inline tag. TipTap gains an `nsfw` mark rendered as
 //     <span class="ff-nsfw">text</span>; reader side + preview convert it
-//     to a click-to-reveal .nsfw-tag element.
+//     to a click-to-reveal .nsfw-tag element. Image-level NSFW added on top.
+// v6: recipient recents in the compose autocomplete (empty-field shows
+//     recently-used recipients), and per-recipient drafts that persist
+//     across page loads and are cleared on send.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -247,6 +250,93 @@ var MessengerModule = (function(Utils, EventBus) {
         }
 
         return banner;
+    }
+
+    // ------------------------------------------------------------------------
+    // RECENTS + PER-RECIPIENT DRAFTS
+    // Both live in localStorage. Recents are a small LRU of the last N
+    // recipients the user composed to; drafts are keyed by recipient MID
+    // (or the constant __no_recipient__ when nothing is selected yet).
+    // ------------------------------------------------------------------------
+    var RECENTS_KEY = 'messenger-recents-v1';
+    var RECENTS_MAX = 8;
+
+    var DRAFTS_KEY = 'messenger-drafts-v1';
+    var DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
+    var DRAFT_DEBOUNCE_MS = 600;
+    var NO_RECIPIENT_KEY = '__no_recipient__';
+
+    function loadRecents() {
+        try {
+            var raw = localStorage.getItem(RECENTS_KEY);
+            if (!raw) return [];
+            var arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return [];
+            return arr.filter(function(u) {
+                return u && u.id != null && typeof u.name === 'string' && u.name;
+            });
+        } catch (e) { return []; }
+    }
+
+    function pushRecent(user) {
+        if (!user || user.id == null || !user.name) return;
+        var recents = loadRecents();
+        recents = recents.filter(function(u) {
+            return String(u.id) !== String(user.id);
+        });
+        recents.unshift({
+            id: String(user.id),
+            name: user.name,
+            avatar: typeof user.avatar === 'string' ? user.avatar : null,
+            ts: Date.now()
+        });
+        recents = recents.slice(0, RECENTS_MAX);
+        try { localStorage.setItem(RECENTS_KEY, JSON.stringify(recents)); } catch (e) {}
+    }
+
+    function loadAllDrafts() {
+        try {
+            var raw = localStorage.getItem(DRAFTS_KEY);
+            if (!raw) return {};
+            var data = JSON.parse(raw);
+            if (!data || typeof data !== 'object') return {};
+            var now = Date.now();
+            var pruned = {};
+            Object.keys(data).forEach(function(k) {
+                var d = data[k];
+                if (d && typeof d.ts === 'number' && (now - d.ts) < DRAFT_MAX_AGE) {
+                    pruned[k] = d;
+                }
+            });
+            return pruned;
+        } catch (e) { return {}; }
+    }
+
+    function saveAllDrafts(drafts) {
+        try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)); } catch (e) {}
+    }
+
+    function saveDraft(key, draft) {
+        var drafts = loadAllDrafts();
+        if (draft && (draft.subject || draft.bodyHtml)) {
+            drafts[key] = Object.assign({}, draft, { ts: Date.now() });
+        } else {
+            delete drafts[key];
+        }
+        saveAllDrafts(drafts);
+    }
+
+    function getDraft(key) {
+        var drafts = loadAllDrafts();
+        return drafts[key] || null;
+    }
+
+    function clearDraft(key) {
+        var drafts = loadAllDrafts();
+        if (drafts[key]) {
+            delete drafts[key];
+            saveAllDrafts(drafts);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -598,6 +688,8 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // RECIPIENT AUTOCOMPLETE
+    // Empty input (either on focus or after clearing) shows recent recipients
+    // instead of nothing. Typing switches to live search.
     // ------------------------------------------------------------------------
     function attachRecipientAutocomplete(inputEl, onCommit) {
         if (!inputEl) return;
@@ -623,6 +715,19 @@ var MessengerModule = (function(Utils, EventBus) {
             window.removeEventListener('resize', reposition);
             if (popup) { popup.remove(); popup = null; }
             items = []; itemEls = []; selectedIndex = 0;
+            lastQuery = '';
+        }
+
+        function ensurePopup() {
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.className = 'mention-suggestions';
+                popup.setAttribute('role', 'listbox');
+                document.body.appendChild(popup);
+                window.addEventListener('scroll', reposition, true);
+                window.addEventListener('resize', reposition);
+            }
+            return popup;
         }
 
         function updateSelected() {
@@ -653,13 +758,27 @@ var MessengerModule = (function(Utils, EventBus) {
             onCommit({ id: null, name: text, avatar: null });
         }
 
-        function buildPopup(users) {
+        function buildPopup(users, opts) {
+            opts = opts || {};
             if (!popup) return;
             popup.innerHTML = '';
             itemEls = [];
             items = users;
 
+            if (opts.headerText) {
+                var header = document.createElement('div');
+                header.className = 'mention-suggestions-header';
+                header.textContent = opts.headerText;
+                popup.appendChild(header);
+            }
+
             if (users.length === 0) {
+                if (opts.isRecents) {
+                    // Nothing to show for an empty-field state — don't
+                    // leave a dangling popup behind.
+                    closePopup();
+                    return;
+                }
                 var empty = document.createElement('div');
                 empty.style.cssText = 'padding:var(--pad-2) var(--pad-3);color:var(--text-tertiary);font-size:var(--text-xs);font-style:italic;';
                 empty.textContent = 'No users found — press Enter to use "' + inputEl.value.trim() + '"';
@@ -713,27 +832,37 @@ var MessengerModule = (function(Utils, EventBus) {
             updateSelected();
         }
 
+        function showRecents() {
+            var recents = loadRecents();
+            if (recents.length === 0) { closePopup(); return; }
+            ensurePopup();
+            buildPopup(recents, { isRecents: true, headerText: 'Recent' });
+            reposition();
+        }
+
+        function runSearch(query) {
+            searchMentions(query).then(function(users) {
+                if (inputEl.value.trim() !== query) return;
+                ensurePopup();
+                buildPopup(users, {
+                    headerText: users.length > 0 ? 'Search results' : null
+                });
+                reposition();
+            });
+        }
+
         inputEl.addEventListener('input', function() {
             var query = inputEl.value.trim();
             if (debounceTimer) clearTimeout(debounceTimer);
-            if (!query) { closePopup(); return; }
+
+            if (!query) {
+                lastQuery = '';
+                showRecents();
+                return;
+            }
             if (query === lastQuery) return;
             lastQuery = query;
-            debounceTimer = setTimeout(function() {
-                searchMentions(query).then(function(users) {
-                    if (inputEl.value.trim() !== query) return;
-                    if (!popup) {
-                        popup = document.createElement('div');
-                        popup.className = 'mention-suggestions';
-                        popup.setAttribute('role', 'listbox');
-                        document.body.appendChild(popup);
-                        window.addEventListener('scroll', reposition, true);
-                        window.addEventListener('resize', reposition);
-                    }
-                    buildPopup(users);
-                    reposition();
-                });
-            }, 180);
+            debounceTimer = setTimeout(function() { runSearch(query); }, 180);
         });
 
         inputEl.addEventListener('keydown', function(e) {
@@ -772,6 +901,9 @@ var MessengerModule = (function(Utils, EventBus) {
 
         inputEl.addEventListener('focus', function() {
             if (blurCloseTimer) { clearTimeout(blurCloseTimer); blurCloseTimer = null; }
+            if (!inputEl.value.trim()) {
+                showRecents();
+            }
         });
 
         inputEl.addEventListener('blur', function() {
@@ -991,11 +1123,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
 
         // --- NSFW inline tags → .nsfw-tag ---
-        // Runs last so NSFW tags that were nested inside a quote, spoiler,
-        // or code block have already been reparented into their modern
-        // containers. Content is preserved as innerHTML (so nested inline
-        // formatting survives), with entity decoding applied to text nodes
-        // in place.
         Array.from(temp.querySelectorAll('span.ff-nsfw')).forEach(function(sp) {
             var replacement = document.createElement('span');
             replacement.className = 'nsfw-tag';
@@ -1009,9 +1136,6 @@ var MessengerModule = (function(Utils, EventBus) {
         });
 
         // --- NSFW images → .nsfw-image ---
-        // Wraps any image carrying data-nsfw="true" in a click-to-reveal
-        // container. The wrapper reserves the image's aspect ratio when
-        // width/height are present, so blurring doesn't cause layout shift.
         Array.from(temp.querySelectorAll('img[data-nsfw="true"]')).forEach(function(img) {
             if (img.closest('.nsfw-image')) return;
             var wrapper = document.createElement('span');
@@ -1033,7 +1157,7 @@ var MessengerModule = (function(Utils, EventBus) {
 
         return temp.innerHTML;
     }
-    
+
     // ------------------------------------------------------------------------
     // PREVIEW INTERACTION HANDLERS
     // ------------------------------------------------------------------------
@@ -1470,6 +1594,7 @@ var editor              = null;
 var modernSubmitBtnRef  = null;
 var modernPreviewBtnRef = null;
 var charCounter         = null;
+var draftSaveTimer      = null;
 
         var modernRecipient     = container.querySelector('#modern-recipient');
         var modernTitle         = container.querySelector('#modern-title');
@@ -1477,6 +1602,76 @@ var charCounter         = null;
         var recipientChipAvatar = container.querySelector('.modern-recipient-chip-avatar');
         var recipientChipName   = container.querySelector('.modern-recipient-chip-name');
         var recipientChipRemove = container.querySelector('.modern-recipient-chip-remove');
+
+        // ------------------------------------------------------------------
+        // DRAFT MANAGEMENT
+        // The current draft key is derived from the recipient. Everything
+        // else (save, load, clear) keys off it.
+        // ------------------------------------------------------------------
+        function getCurrentDraftKey() {
+            return (currentRecipient && currentRecipient.id)
+                ? String(currentRecipient.id)
+                : NO_RECIPIENT_KEY;
+        }
+
+        function captureCurrentDraft() {
+            if (!editor) return null;
+            var subject = modernTitle ? modernTitle.value.trim() : '';
+            var bodyHtml = editor.getHTML();
+            var bodyHasContent = !editor.isEmpty;
+            if (!subject && !bodyHasContent) return null;
+            return {
+                subject: subject,
+                bodyHtml: bodyHasContent ? bodyHtml : ''
+            };
+        }
+
+        function persistCurrentDraft() {
+            saveDraft(getCurrentDraftKey(), captureCurrentDraft());
+        }
+
+        function persistCurrentDraftDebounced() {
+            if (draftSaveTimer) clearTimeout(draftSaveTimer);
+            draftSaveTimer = setTimeout(function() {
+                draftSaveTimer = null;
+                persistCurrentDraft();
+            }, DRAFT_DEBOUNCE_MS);
+        }
+
+        function flushPendingDraft() {
+            if (draftSaveTimer) {
+                clearTimeout(draftSaveTimer);
+                draftSaveTimer = null;
+                persistCurrentDraft();
+            }
+        }
+
+        function isComposerEmpty() {
+            if (editor && !editor.isEmpty) return false;
+            if (modernTitle && modernTitle.value.trim()) return false;
+            return true;
+        }
+
+        function applyDraftToComposer(draft) {
+            if (!draft) return;
+            if (modernTitle) {
+                modernTitle.value = draft.subject || '';
+            }
+            if (editor && draft.bodyHtml) {
+                editor.commands.setContent(draft.bodyHtml, true);
+            }
+            syncToOriginal();
+            updateSendState();
+            updateCharCounter();
+        }
+
+        // Flush pending saves when the page is hidden or about to unload.
+        // Without this, a user who closes the tab right after typing would
+        // lose the last debounce window.
+        window.addEventListener('beforeunload', flushPendingDraft);
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'hidden') flushPendingDraft();
+        });
 
 function updateSendState() {
     var hasRecipient = !!currentRecipient;
@@ -1591,11 +1786,19 @@ function updateSendState() {
 
         function applyRecipient(recipient) {
             if (!recipient || !recipient.name) return;
+
+            // Capture the old draft key before we switch, and flush any
+            // pending debounced save so the current text is persisted
+            // against the OLD key (the one the user was writing to).
+            var oldKey = getCurrentDraftKey();
+            flushPendingDraft();
+
             currentRecipient = {
                 id: recipient.id || null,
                 name: recipient.name,
                 avatar: recipient.avatar || null
             };
+            pushRecent(currentRecipient);
 
             if (recipientChipName) recipientChipName.textContent = currentRecipient.name;
             renderChipAvatar(currentRecipient);
@@ -1608,6 +1811,23 @@ function updateSendState() {
 
             syncToOriginal();
 
+            var newKey = getCurrentDraftKey();
+            if (oldKey !== newKey) {
+                if (isComposerEmpty()) {
+                    // Nothing in the composer yet — restore the new
+                    // recipient's saved draft if one exists.
+                    var newDraft = getDraft(newKey);
+                    if (newDraft) applyDraftToComposer(newDraft);
+                } else {
+                    // The user has already typed something. Adopt it under
+                    // the new key rather than clobbering it with a stale
+                    // draft. If the old key was the unaddressed bucket,
+                    // clear it so it doesn't reappear later.
+                    saveDraft(newKey, captureCurrentDraft());
+                    if (oldKey === NO_RECIPIENT_KEY) clearDraft(oldKey);
+                }
+            }
+
             if (modernTitle && !modernTitle.value.trim()) {
                 modernTitle.focus();
             }
@@ -1616,13 +1836,28 @@ function updateSendState() {
         }
 
         function clearRecipient() {
+            var oldKey = getCurrentDraftKey();
+            flushPendingDraft();
+
             currentRecipient = null;
+
             if (recipientChip) recipientChip.hidden = true;
             if (modernRecipient) {
                 modernRecipient.hidden = false;
                 modernRecipient.value = '';
             }
             syncToOriginal();
+
+            var newKey = getCurrentDraftKey();
+            if (oldKey !== newKey) {
+                if (isComposerEmpty()) {
+                    var newDraft = getDraft(newKey);
+                    if (newDraft) applyDraftToComposer(newDraft);
+                } else {
+                    saveDraft(newKey, captureCurrentDraft());
+                }
+            }
+
             if (modernRecipient) modernRecipient.focus();
             updateSendState();
         }
@@ -1644,6 +1879,7 @@ function updateSendState() {
 
             if (initialName) {
                 currentRecipient = { id: initialId, name: initialName, avatar: null };
+                pushRecent(currentRecipient);
                 if (recipientChipName) recipientChipName.textContent = initialName;
                 renderChipAvatar(currentRecipient);
                 if (recipientChip) recipientChip.hidden = false;
@@ -1723,6 +1959,7 @@ function updateSendState() {
             modernTitle.addEventListener('input', function() {
                 syncToOriginal();
                 updateSendState();
+                persistCurrentDraftDebounced();
             });
             modernTitle.addEventListener('keydown', function(e) {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -2321,7 +2558,7 @@ function updateSendState() {
             urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
 
-                // Hover overlay for image-level NSFW. Watches the editor for
+        // Hover overlay for image-level NSFW. Watches the editor for
         // mouseover on any non-emoji image, positions a small toggle button
         // in its top-right corner, and on click updates the image node's
         // `nsfw` attribute. The attribute round-trips through
@@ -2424,8 +2661,6 @@ function updateSendState() {
                 var newAttrs = Object.assign({}, imageNode.attrs, { nsfw: !imageNode.attrs.nsfw });
                 view.dispatch(view.state.tr.setNodeMarkup(imagePos, undefined, newAttrs));
 
-                // ProseMirror may replace the DOM node on attribute change,
-                // so drop the reference and hide — a fresh hover re-reads state.
                 btn.style.display = 'none';
                 hoveredImg = null;
             });
@@ -2721,9 +2956,6 @@ function updateSendState() {
                     },
                 });
 
-                // NSFW inline mark. Renders as <span class="ff-nsfw">text</span>
-                // in the stored HTML; the reader side and preview convert it
-                // to a click-to-reveal .nsfw-tag.
                 const NSFW = Mark.create({
                     name: 'nsfw',
                     inclusive: false,
@@ -3075,8 +3307,24 @@ function updateSendState() {
                     },
                 });
 
+                // Build the editor's initial content. If the legacy textarea
+                // is empty (fresh compose, not a reply), pull any existing
+                // draft for the current recipient instead.
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
+
+                if (!textareaRaw.trim()) {
+                    var initDraft = getDraft(getCurrentDraftKey());
+                    if (initDraft) {
+                        if (initDraft.bodyHtml) {
+                            initialHtml = initDraft.bodyHtml;
+                        }
+                        if (initDraft.subject && modernTitle) {
+                            modernTitle.value = initDraft.subject;
+                        }
+                    }
+                }
+
                 initialHtml = ensureTrailingParagraphInHtml(initialHtml);
 
                 editor = new Editor({
@@ -3104,9 +3352,7 @@ function updateSendState() {
                         plugins: [linkPreviewPlugin],
                         // Normalize Word's nbsp litter and stray multi-space
                         // runs before ProseMirror parses the paste. Skipped
-                        // entirely when the HTML has nothing to fix — most
-                        // pastes from normal web pages or other editors
-                        // won't hit the replace chain at all.
+                        // entirely when the HTML has nothing to fix.
                         transformPastedHTML: function(html) {
                             if (!html || typeof html !== 'string') return html;
                             if (html.indexOf('&nbsp') === -1 &&
@@ -3156,6 +3402,7 @@ function updateSendState() {
                         if (previewContent && window.twemoji) {
                             window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
                         }
+                        persistCurrentDraftDebounced();
                         updateSendState();
                         updateCharCounter();
                     }
@@ -3366,7 +3613,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
-                                var editorRoot = editorElement.querySelector('.ProseMirror');
+                var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
                     editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -3497,6 +3744,10 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     }
 
                     if (submitButton) submitButton.disabled = false;
+
+                    // Clear the draft for this recipient — the message is
+                    // about to be sent, so there's nothing left to restore.
+                    clearDraft(getCurrentDraftKey());
 
                     stashLastSentMessage({
                         id: currentRecipient ? currentRecipient.id : null,
