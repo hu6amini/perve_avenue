@@ -1434,42 +1434,40 @@
    ------------------------------------------------------------ */
 .nsfw-tag {
   display: inline;
-  background-color: var(--surface-light);
+  background-color: var(--text-tertiary);
   color: transparent;
-  border: 1px solid rgba(220, 38, 38, 0.4);
   border-radius: 3px;
   padding: 0 0.35em;
   margin: 0 0.05em;
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   line-height: inherit;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
 .nsfw-tag:hover {
-  background-color: var(--border-color);
-  border-color: var(--danger-color);
+  filter: brightness(1.08);
 }
 .nsfw-tag:focus-visible {
-  outline: 2px solid var(--danger-color);
+  outline: 2px solid var(--text-secondary);
   outline-offset: 2px;
 }
 .nsfw-tag.revealed {
-  background-color: rgba(220, 38, 38, 0.08);
-  border-color: rgba(220, 38, 38, 0.3);
+  background-color: var(--hover-color);
   color: inherit;
   user-select: text;
 }
 .nsfw-tag.revealed:hover {
-  background-color: rgba(220, 38, 38, 0.12);
+  filter: none;
+  background-color: var(--surface-light);
 }
 
-/* Editor: content stays visible while authoring, with a red dashed
+/* Editor: content stays visible while authoring, with a grey dashed
    border so the author sees the mark is applied. */
 .modern-wysiwyg .ProseMirror span.ff-nsfw {
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px dashed var(--danger-color);
+  background-color: rgba(107, 114, 128, 0.12);
+  border: 1px dashed var(--text-tertiary);
   border-radius: 3px;
   padding: 0 0.2em;
 }
