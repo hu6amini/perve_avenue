@@ -847,7 +847,7 @@ function parseDateFromTitle(title) {
         return tempDiv.innerHTML;
     }
 
-    function transformNSFWTags(htmlContent) {
+function transformNSFWTags(htmlContent) {
     if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
     if (htmlContent.indexOf('ff-nsfw') === -1) return htmlContent;
 
@@ -855,6 +855,27 @@ function parseDateFromTitle(title) {
     tempDiv.innerHTML = htmlContent;
     const tags = tempDiv.querySelectorAll('span.ff-nsfw');
     tags.forEach(tag => {
+        // Pull any non-emoji images out of the text span. They're marked
+        // with data-nsfw="true" and moved out as siblings; the image
+        // wrapper pass further down the pipeline turns them into
+        // .nsfw-image wrappers.
+        const images = Array.from(tag.querySelectorAll('img'));
+        const extracted = [];
+        images.forEach(img => {
+            if (img.classList.contains('twemoji')) return;
+            const alt = img.getAttribute('alt') || '';
+            if (alt.startsWith(':') && alt.endsWith(':')) return;
+            img.setAttribute('data-nsfw', 'true');
+            extracted.push(img);
+        });
+
+        let insertAfter = tag;
+        extracted.forEach(img => {
+            if (img.parentNode) img.parentNode.removeChild(img);
+            insertAfter.parentNode.insertBefore(img, insertAfter.nextSibling);
+            insertAfter = img;
+        });
+
         const replacement = document.createElement('span');
         replacement.className = 'nsfw-tag';
         replacement.setAttribute('role', 'button');
@@ -1105,79 +1126,93 @@ function convertLegacySpoiler(codeTopElem, codeBodyElem, title) {
     // ============================================================================
     // WRAP IMAGES WITH DIMENSIONS TO PREVENT CLS + BROKEN IMAGE FALLBACK
     // ============================================================================
-    function wrapImagesWithDimensions(container) {
-        if (!container) return;
-        const images = container.querySelectorAll('.post-message img, .post-signature img, .attachment-preview img');
-        images.forEach(img => {
-            // Skip if already wrapped or inside embed
-            if (img.closest('.modern-embedded-link, .image-wrapper')) return;
-            if (img.classList.contains('twemoji')) return;
-            const alt = img.getAttribute('alt');
-            if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
+function wrapImagesWithDimensions(container) {
+    if (!container) return;
+    const images = container.querySelectorAll('.post-message img, .post-signature img, .attachment-preview img');
+    images.forEach(img => {
+        if (img.closest('.modern-embedded-link, .image-wrapper, .nsfw-image')) return;
+        if (img.classList.contains('twemoji')) return;
+        const alt = img.getAttribute('alt');
+        if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
 
-            const currentSrc = img.src;
-            const isWeserv = currentSrc.indexOf('weserv.nl') !== -1 || currentSrc.indexOf('wsrv.nl') !== -1;
+        const isNSFW = img.getAttribute('data-nsfw') === 'true';
 
-            // --- Extract original source for fallback ---
-            let originalSrc = img.getAttribute('data-original');
-            if (!originalSrc && isWeserv) {
-                try {
-                    const url = new URL(currentSrc);
-                    const param = url.searchParams.get('url');
-                    if (param) originalSrc = decodeURIComponent(param);
-                } catch (e) {}
+        const currentSrc = img.src;
+        const isWeserv = currentSrc.indexOf('weserv.nl') !== -1 || currentSrc.indexOf('wsrv.nl') !== -1;
+
+        let originalSrc = img.getAttribute('data-original');
+        if (!originalSrc && isWeserv) {
+            try {
+                const url = new URL(currentSrc);
+                const param = url.searchParams.get('url');
+                if (param) originalSrc = decodeURIComponent(param);
+            } catch (e) {}
+        }
+        if (!originalSrc) originalSrc = currentSrc;
+
+        if (isWeserv && img.complete && img.naturalWidth === 0) {
+            if (originalSrc && originalSrc !== currentSrc) {
+                img.src = originalSrc;
+                img.setAttribute('data-optimized', 'failed');
+                img.onerror = null;
+                img.removeEventListener('error', () => {});
             }
-            if (!originalSrc) originalSrc = currentSrc;
+            return;
+        }
 
-            // --- BROKEN WESERV IMAGES: revert immediately ---
-            if (isWeserv && img.complete && img.naturalWidth === 0) {
-                if (originalSrc && originalSrc !== currentSrc) {
-                    img.src = originalSrc;
-                    img.setAttribute('data-optimized', 'failed');
-                    img.onerror = null;
-                    // Remove any leftover listeners
-                    img.removeEventListener('error', () => {});
-                }
-                // Do NOT wrap; skip further processing
-                return;
-            }
+        const width = img.getAttribute('width');
+        const height = img.getAttribute('height');
+        const hasDimensions = width && height && !isNaN(width) && !isNaN(height) && parseInt(width) > 0 && parseInt(height) > 0;
 
-            // --- Only wrap if image has width/height attributes ---
-            const width = img.getAttribute('width');
-            const height = img.getAttribute('height');
-            if (!width || !height || isNaN(width) || isNaN(height) || parseInt(width) <= 0 || parseInt(height) <= 0) {
-                return;
-            }
-
-            // --- Wrap in a div for CLS prevention ---
-            const wrapper = document.createElement('div');
-            wrapper.className = 'image-wrapper';
-            wrapper.style.width = width + 'px';
-            wrapper.style.aspectRatio = width + '/' + height;
-            wrapper.style.maxWidth = '100%';
-            wrapper.style.position = 'relative';
-            wrapper.style.overflow = 'hidden';
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.objectFit = 'contain';
+        // NSFW images without dimensions still need to be hidden —
+        // wrap them in a bare .nsfw-image span (no aspect-ratio reserve).
+        if (isNSFW && !hasDimensions) {
+            const wrapper = document.createElement('span');
+            wrapper.className = 'nsfw-image';
+            wrapper.setAttribute('role', 'button');
+            wrapper.setAttribute('tabindex', '0');
+            wrapper.setAttribute('aria-pressed', 'false');
+            wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
             img.parentNode.insertBefore(wrapper, img);
             wrapper.appendChild(img);
+            return;
+        }
 
-            // --- Set fallback for images that might fail later ---
-            if (isWeserv && originalSrc && originalSrc !== currentSrc) {
-                const fallbackHandler = function() {
-                    if (this.src !== originalSrc) {
-                        this.src = originalSrc;
-                        this.setAttribute('data-optimized', 'failed');
-                        this.onerror = null;
-                        this.removeEventListener('error', fallbackHandler);
-                    }
-                };
-                img.onerror = fallbackHandler;
-                img.addEventListener('error', fallbackHandler);
-            }
-        });
-    }
+        if (!hasDimensions) return;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'image-wrapper' + (isNSFW ? ' nsfw-image' : '');
+        if (isNSFW) {
+            wrapper.setAttribute('role', 'button');
+            wrapper.setAttribute('tabindex', '0');
+            wrapper.setAttribute('aria-pressed', 'false');
+            wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
+        }
+        wrapper.style.width = width + 'px';
+        wrapper.style.aspectRatio = width + '/' + height;
+        wrapper.style.maxWidth = '100%';
+        wrapper.style.position = 'relative';
+        wrapper.style.overflow = 'hidden';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'contain';
+        img.parentNode.insertBefore(wrapper, img);
+        wrapper.appendChild(img);
+
+        if (isWeserv && originalSrc && originalSrc !== currentSrc) {
+            const fallbackHandler = function() {
+                if (this.src !== originalSrc) {
+                    this.src = originalSrc;
+                    this.setAttribute('data-optimized', 'failed');
+                    this.onerror = null;
+                    this.removeEventListener('error', fallbackHandler);
+                }
+            };
+            img.onerror = fallbackHandler;
+            img.addEventListener('error', fallbackHandler);
+        }
+    });
+}
 
     // ============================================================================
     // GLOBAL BROKEN IMAGE FIXER (runs after page load)
@@ -2484,6 +2519,26 @@ document.addEventListener('keydown', function (e) {
         tag.setAttribute('aria-pressed', String(isRevealed));
     }
 });
+                document.addEventListener('click', function (e) {
+            const wrapper = e.target.closest('.nsfw-image');
+            if (wrapper) {
+                e.preventDefault();
+                e.stopPropagation();
+                const isRevealed = wrapper.classList.toggle('revealed');
+                wrapper.setAttribute('aria-pressed', String(isRevealed));
+            }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+            const wrapper = e.target.closest('.nsfw-image');
+            if (wrapper) {
+                e.preventDefault();
+                e.stopPropagation();
+                const isRevealed = wrapper.classList.toggle('revealed');
+                wrapper.setAttribute('aria-pressed', String(isRevealed));
+            }
+        });
         document.addEventListener('click', function (e) {
             const likeBtn = e.target.closest('.like-btn');
             if (likeBtn) {
