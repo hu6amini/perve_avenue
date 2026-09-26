@@ -3692,6 +3692,7 @@ section.modern-stats { flex-direction: column; width: 100%; }
   max-width: calc(100% - var(--pad-4));
   border-left: var(--space-micro) solid transparent;
   border-right: var(--space-micro) solid transparent;
+  border-radius: var(--radius);
 }
 
 /* Quotes */
