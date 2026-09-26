@@ -2481,7 +2481,7 @@ function updateSendState() {
                 if (!BaseCodeBlock) throw new Error('CodeBlock extension not found');
 
                 const CustomLink = Link.configure({
-                    openOnClick: true,
+                    openOnClick: false,
                     autolink: true,
                     linkOnPaste: true,
                     HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
