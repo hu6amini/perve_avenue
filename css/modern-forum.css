@@ -4439,6 +4439,13 @@ input[type="radio"]:checked::before {
     font-weight: 500;
 }
 
+.emoticon-suggestion-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  flex-shrink: 0;
+}
+
 /* ------------------------------------------------------------
    24. REDUCED MOTION
    ------------------------------------------------------------ */
