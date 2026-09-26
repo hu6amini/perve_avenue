@@ -19,6 +19,9 @@
 // v6: recipient recents in the compose autocomplete (empty-field shows
 //     recently-used recipients), and per-recipient drafts that persist
 //     across page loads and are cleared on send.
+// v7: emoticon autocomplete on `:` prefix. Watches the editor for a
+//     trigger and shows a small emoji-by-name popup; insertion goes
+//     through the same Twemoji image path as the picker.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -115,15 +118,13 @@ var MessengerModule = (function(Utils, EventBus) {
         });
     }
 
-    // Decode entities on every text node under the given root, in place.
-    // Used by the NSFW transform to undo ForumFree's double-escaping.
     function decodeTextNodesInPlace(node) {
         if (!node) return;
-        if (node.nodeType === 3) { // text node
+        if (node.nodeType === 3) {
             node.nodeValue = decodeHtmlEntities(node.nodeValue || '');
             return;
         }
-        if (node.nodeType === 1) { // element
+        if (node.nodeType === 1) {
             Array.from(node.childNodes).forEach(decodeTextNodesInPlace);
         }
     }
@@ -254,9 +255,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // RECENTS + PER-RECIPIENT DRAFTS
-    // Both live in localStorage. Recents are a small LRU of the last N
-    // recipients the user composed to; drafts are keyed by recipient MID
-    // (or the constant __no_recipient__ when nothing is selected yet).
     // ------------------------------------------------------------------------
     var RECENTS_KEY = 'messenger-recents-v1';
     var RECENTS_MAX = 8;
@@ -688,8 +686,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
     // ------------------------------------------------------------------------
     // RECIPIENT AUTOCOMPLETE
-    // Empty input (either on focus or after clearing) shows recent recipients
-    // instead of nothing. Typing switches to live search.
     // ------------------------------------------------------------------------
     function attachRecipientAutocomplete(inputEl, onCommit) {
         if (!inputEl) return;
@@ -774,8 +770,6 @@ var MessengerModule = (function(Utils, EventBus) {
 
             if (users.length === 0) {
                 if (opts.isRecents) {
-                    // Nothing to show for an empty-field state — don't
-                    // leave a dangling popup behind.
                     closePopup();
                     return;
                 }
@@ -945,7 +939,6 @@ var MessengerModule = (function(Utils, EventBus) {
         if (!legacy) return '';
         var html = legacy;
 
-        // Pre-pass 1: titled spoiler markers → single spoiler div with data-title.
         html = html.replace(
             /<span[^>]*\bff-spoiler-title\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[spoiler\]([\s\S]*?)\[\/spoiler\]/gis,
             function(_, title, body) {
@@ -954,7 +947,6 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         );
 
-        // Pre-pass 2: code language markers → pre with data-language.
         html = html.replace(
             /<span[^>]*\bff-code-lang\b[^>]*>([\s\S]*?)<\/span>\s*(?:<br\s*\/?>)*\s*\[code\]([\s\S]*?)\[\/code\]/gis,
             function(_, lang, body) {
@@ -1053,7 +1045,6 @@ var MessengerModule = (function(Utils, EventBus) {
         var temp = document.createElement('div');
         temp.innerHTML = html;
 
-        // --- Blockquotes → .modern-quote ---
         Array.from(temp.querySelectorAll('blockquote')).forEach(function(bq) {
             var innerHtml = bq.innerHTML;
             var modernHtml =
@@ -1076,7 +1067,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (bq.parentNode) bq.parentNode.replaceChild(wrapper.firstElementChild, bq);
         });
 
-        // --- Spoilers → .modern-spoiler ---
         Array.from(temp.querySelectorAll('div.spoiler')).forEach(function(sp) {
             var innerHtml = sp.innerHTML;
             var title = sp.getAttribute('data-title') || 'Spoiler';
@@ -1099,7 +1089,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (sp.parentNode) sp.parentNode.replaceChild(wrapper.firstElementChild, sp);
         });
 
-        // --- Code blocks → .modern-code ---
         Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
@@ -1122,7 +1111,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (pre.parentNode) pre.parentNode.replaceChild(wrapper.firstElementChild, pre);
         });
 
-        // --- NSFW inline tags → .nsfw-tag ---
         Array.from(temp.querySelectorAll('span.ff-nsfw')).forEach(function(sp) {
             var replacement = document.createElement('span');
             replacement.className = 'nsfw-tag';
@@ -1135,7 +1123,6 @@ var MessengerModule = (function(Utils, EventBus) {
             if (sp.parentNode) sp.parentNode.replaceChild(replacement, sp);
         });
 
-        // --- NSFW images → .nsfw-image ---
         Array.from(temp.querySelectorAll('img[data-nsfw="true"]')).forEach(function(img) {
             if (img.closest('.nsfw-image')) return;
             var wrapper = document.createElement('span');
@@ -1503,6 +1490,50 @@ var MessengerModule = (function(Utils, EventBus) {
         ] }
     ];
 
+    // Name → emoji-character map for the `:` autocomplete. Names are what
+    // the author types after the colon; the emoji character is what gets
+    // converted to a Twemoji SVG on insert. Curated for common chat
+    // reactions rather than the full Unicode set — a long list would be
+    // noise, and the picker handles browsing.
+    var EMOJI_NAME_MAP = {
+        smile: '🙂',
+        grin: '😃',
+        joy: '😂',
+        rofl: '🤣',
+        wink: '😉',
+        blush: '😊',
+        heart: '❤️',
+        kiss: '😘',
+        cry: '😢',
+        sob: '😭',
+        angry: '😠',
+        rage: '😡',
+        shock: '😱',
+        thinking: '🤔',
+        facepalm: '🤦',
+        shrug: '🤷',
+        wave: '👋',
+        thumbsup: '👍',
+        thumbsdown: '👎',
+        clap: '👏',
+        pray: '🙏',
+        fire: '🔥',
+        star: '⭐',
+        sparkles: '✨',
+        eyes: '👀',
+        sweat: '😅',
+        sleep: '😴',
+        party: '🥳',
+        tada: '🎉',
+        hundred: '💯',
+        heartbreak: '💔',
+        clown: '🤡',
+        skull: '💀',
+        poop: '💩',
+        check: '✅',
+        cross: '❌'
+    };
+
     var EMOJI_RECENTS_KEY = 'messenger-emoji-recents-v1';
     var EMOJI_RECENTS_MAX = 16;
 
@@ -1605,8 +1636,6 @@ var draftSaveTimer      = null;
 
         // ------------------------------------------------------------------
         // DRAFT MANAGEMENT
-        // The current draft key is derived from the recipient. Everything
-        // else (save, load, clear) keys off it.
         // ------------------------------------------------------------------
         function getCurrentDraftKey() {
             return (currentRecipient && currentRecipient.id)
@@ -1665,9 +1694,6 @@ var draftSaveTimer      = null;
             updateCharCounter();
         }
 
-        // Flush pending saves when the page is hidden or about to unload.
-        // Without this, a user who closes the tab right after typing would
-        // lose the last debounce window.
         window.addEventListener('beforeunload', flushPendingDraft);
         document.addEventListener('visibilitychange', function() {
             if (document.visibilityState === 'hidden') flushPendingDraft();
@@ -1787,9 +1813,6 @@ function updateSendState() {
         function applyRecipient(recipient) {
             if (!recipient || !recipient.name) return;
 
-            // Capture the old draft key before we switch, and flush any
-            // pending debounced save so the current text is persisted
-            // against the OLD key (the one the user was writing to).
             var oldKey = getCurrentDraftKey();
             flushPendingDraft();
 
@@ -1814,15 +1837,9 @@ function updateSendState() {
             var newKey = getCurrentDraftKey();
             if (oldKey !== newKey) {
                 if (isComposerEmpty()) {
-                    // Nothing in the composer yet — restore the new
-                    // recipient's saved draft if one exists.
                     var newDraft = getDraft(newKey);
                     if (newDraft) applyDraftToComposer(newDraft);
                 } else {
-                    // The user has already typed something. Adopt it under
-                    // the new key rather than clobbering it with a stale
-                    // draft. If the old key was the unaddressed bucket,
-                    // clear it so it doesn't reappear later.
                     saveDraft(newKey, captureCurrentDraft());
                     if (oldKey === NO_RECIPIENT_KEY) clearDraft(oldKey);
                 }
@@ -2577,7 +2594,108 @@ function updateSendState() {
             var hoveredImg = null;
             var hideTimer = null;
 
-                    // Emoticon autocomplete. Watching the editor for a `:` at a word
+            function updateButtonState(img) {
+                if (!img) return;
+                var isNsfw = img.getAttribute('data-nsfw') === 'true';
+                btn.classList.toggle('is-active', isNsfw);
+                var label = isNsfw
+                    ? 'Unmark NSFW (make visible on reader side)'
+                    : 'Mark as NSFW (hide on reader side)';
+                btn.title = label;
+                btn.setAttribute('aria-label', label);
+            }
+
+            function positionBtn(img) {
+                var rect = img.getBoundingClientRect();
+                btn.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+                btn.style.left = (rect.right + window.pageXOffset - 38) + 'px';
+            }
+
+            function showBtn(img) {
+                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+                hoveredImg = img;
+                updateButtonState(img);
+                positionBtn(img);
+                btn.style.display = 'flex';
+            }
+
+            function hideBtnDelayed() {
+                if (hideTimer) clearTimeout(hideTimer);
+                hideTimer = setTimeout(function() {
+                    btn.style.display = 'none';
+                    hoveredImg = null;
+                }, 120);
+            }
+
+            editorRoot.addEventListener('mouseover', function(e) {
+                var img = e.target.closest('img');
+                if (!img) return;
+                if (img.classList.contains('twemoji')) return;
+                var alt = img.getAttribute('alt') || '';
+                if (alt.startsWith(':') && alt.endsWith(':')) return;
+                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return;
+                showBtn(img);
+            });
+
+            editorRoot.addEventListener('mouseout', function(e) {
+                var img = e.target.closest('img');
+                if (!img || img !== hoveredImg) return;
+                if (btn.contains(e.relatedTarget)) return;
+                var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
+                if (nextImg === img) return;
+                hideBtnDelayed();
+            });
+
+            btn.addEventListener('mouseenter', function() {
+                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            });
+            btn.addEventListener('mouseleave', function() {
+                if (!hoveredImg) return;
+                hideBtnDelayed();
+            });
+
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredImg) return;
+
+                var view = editorInstance.view;
+                var pos = view.posAtDOM(hoveredImg, 0);
+                var $pos = view.state.doc.resolve(pos);
+
+                var imageNode = null;
+                var imagePos = -1;
+                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
+                    imageNode = $pos.nodeAfter;
+                    imagePos = pos;
+                } else if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
+                    imageNode = $pos.nodeBefore;
+                    imagePos = pos - $pos.nodeBefore.nodeSize;
+                }
+
+                if (!imageNode || imagePos < 0) return;
+
+                var newAttrs = Object.assign({}, imageNode.attrs, { nsfw: !imageNode.attrs.nsfw });
+                view.dispatch(view.state.tr.setNodeMarkup(imagePos, undefined, newAttrs));
+
+                btn.style.display = 'none';
+                hoveredImg = null;
+            });
+
+            window.addEventListener('scroll', function() {
+                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
+            }, true);
+            window.addEventListener('resize', function() {
+                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
+            });
+
+            editorInstance.on('blur', function() {
+                btn.style.display = 'none';
+                hoveredImg = null;
+            });
+        }
+
+        // Emoticon autocomplete. Watching the editor for a `:` at a word
         // boundary with word characters following, showing a small popup of
         // matching emoji by name. Insertion goes through the same Twemoji
         // image path as the picker and ASCII emoticon rule, so all three
@@ -2802,8 +2920,7 @@ function updateSendState() {
 
             // Recompute on every document or selection change. `update`
             // covers typing; `selectionUpdate` covers arrow-key moves and
-            // clicks elsewhere in the doc. Neither fires on mouse-hover or
-            // scroll, so we're not doing redundant work.
+            // clicks elsewhere in the doc.
             editorInstance.on('update', refresh);
             editorInstance.on('selectionUpdate', refresh);
 
@@ -2819,107 +2936,6 @@ function updateSendState() {
                         closePopup();
                     }
                 }, 0);
-            });
-        }
-
-            function updateButtonState(img) {
-                if (!img) return;
-                var isNsfw = img.getAttribute('data-nsfw') === 'true';
-                btn.classList.toggle('is-active', isNsfw);
-                var label = isNsfw
-                    ? 'Unmark NSFW (make visible on reader side)'
-                    : 'Mark as NSFW (hide on reader side)';
-                btn.title = label;
-                btn.setAttribute('aria-label', label);
-            }
-
-            function positionBtn(img) {
-                var rect = img.getBoundingClientRect();
-                btn.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                btn.style.left = (rect.right + window.pageXOffset - 38) + 'px';
-            }
-
-            function showBtn(img) {
-                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-                hoveredImg = img;
-                updateButtonState(img);
-                positionBtn(img);
-                btn.style.display = 'flex';
-            }
-
-            function hideBtnDelayed() {
-                if (hideTimer) clearTimeout(hideTimer);
-                hideTimer = setTimeout(function() {
-                    btn.style.display = 'none';
-                    hoveredImg = null;
-                }, 120);
-            }
-
-            editorRoot.addEventListener('mouseover', function(e) {
-                var img = e.target.closest('img');
-                if (!img) return;
-                if (img.classList.contains('twemoji')) return;
-                var alt = img.getAttribute('alt') || '';
-                if (alt.startsWith(':') && alt.endsWith(':')) return;
-                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return;
-                showBtn(img);
-            });
-
-            editorRoot.addEventListener('mouseout', function(e) {
-                var img = e.target.closest('img');
-                if (!img || img !== hoveredImg) return;
-                if (btn.contains(e.relatedTarget)) return;
-                var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
-                if (nextImg === img) return;
-                hideBtnDelayed();
-            });
-
-            btn.addEventListener('mouseenter', function() {
-                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-            });
-            btn.addEventListener('mouseleave', function() {
-                if (!hoveredImg) return;
-                hideBtnDelayed();
-            });
-
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (!hoveredImg) return;
-
-                var view = editorInstance.view;
-                var pos = view.posAtDOM(hoveredImg, 0);
-                var $pos = view.state.doc.resolve(pos);
-
-                var imageNode = null;
-                var imagePos = -1;
-                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
-                    imageNode = $pos.nodeAfter;
-                    imagePos = pos;
-                } else if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
-                    imageNode = $pos.nodeBefore;
-                    imagePos = pos - $pos.nodeBefore.nodeSize;
-                }
-
-                if (!imageNode || imagePos < 0) return;
-
-                var newAttrs = Object.assign({}, imageNode.attrs, { nsfw: !imageNode.attrs.nsfw });
-                view.dispatch(view.state.tr.setNodeMarkup(imagePos, undefined, newAttrs));
-
-                btn.style.display = 'none';
-                hoveredImg = null;
-            });
-
-            window.addEventListener('scroll', function() {
-                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
-            }, true);
-            window.addEventListener('resize', function() {
-                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
-            });
-
-            editorInstance.on('blur', function() {
-                btn.style.display = 'none';
-                hoveredImg = null;
             });
         }
 
@@ -3552,9 +3568,6 @@ function updateSendState() {
                     },
                 });
 
-                // Build the editor's initial content. If the legacy textarea
-                // is empty (fresh compose, not a reply), pull any existing
-                // draft for the current recipient instead.
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
 
@@ -3595,9 +3608,6 @@ function updateSendState() {
                             'aria-label': 'Message body',
                         },
                         plugins: [linkPreviewPlugin],
-                        // Normalize Word's nbsp litter and stray multi-space
-                        // runs before ProseMirror parses the paste. Skipped
-                        // entirely when the HTML has nothing to fix.
                         transformPastedHTML: function(html) {
                             if (!html || typeof html !== 'string') return html;
                             if (html.indexOf('&nbsp') === -1 &&
@@ -3869,6 +3879,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     });
 
                     setupImageNsfwOverlay(editorRoot, editor);
+                    setupEmoticonAutocomplete(editor, editorRoot);
                 }
 
                 editor.setOptions({
@@ -3990,8 +4001,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                     if (submitButton) submitButton.disabled = false;
 
-                    // Clear the draft for this recipient — the message is
-                    // about to be sent, so there's nothing left to restore.
                     clearDraft(getCurrentDraftKey());
 
                     stashLastSentMessage({
