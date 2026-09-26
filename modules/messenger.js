@@ -3355,15 +3355,60 @@ function updateSendState() {
                         // entirely when the HTML has nothing to fix.
                         transformPastedHTML: function(html) {
                             if (!html || typeof html !== 'string') return html;
-                            if (html.indexOf('&nbsp') === -1 &&
-                                html.indexOf('&#160') === -1 &&
-                                html.indexOf('\u00a0') === -1) {
-                                return html;
+
+                            // --- Mass-bold artifact ---
+                            // Some sites (and some browsers on copy) wrap every
+                            // paragraph's content in <strong> or <b>, producing
+                            // a fully-bold paste even though the source isn't
+                            // bold. If EVERY paragraph in the paste follows
+                            // that pattern (>= 2 paragraphs, each fully wrapped
+                            // in strong/b, no siblings), treat it as an artifact
+                            // and strip the wrappers. If only some are wrapped,
+                            // leave them alone — the user probably intends the
+                            // emphasis.
+                            if (html.indexOf('<strong') !== -1 || html.indexOf('<b>') !== -1) {
+                                try {
+                                    var probe = document.createElement('div');
+                                    probe.innerHTML = html;
+                                    var paragraphs = probe.querySelectorAll('p');
+                                    if (paragraphs.length >= 2) {
+                                        var allBold = true;
+                                        for (var i = 0; i < paragraphs.length; i++) {
+                                            var p = paragraphs[i];
+                                            var first = p.firstElementChild;
+                                            if (!first ||
+                                                (first.tagName !== 'STRONG' && first.tagName !== 'B') ||
+                                                first.nextElementSibling !== null) {
+                                                allBold = false;
+                                                break;
+                                            }
+                                        }
+                                        if (allBold) {
+                                            for (var j = 0; j < paragraphs.length; j++) {
+                                                var p2 = paragraphs[j];
+                                                var strong = p2.firstElementChild;
+                                                while (strong.firstChild) {
+                                                    p2.insertBefore(strong.firstChild, strong);
+                                                }
+                                                p2.removeChild(strong);
+                                            }
+                                            html = probe.innerHTML;
+                                        }
+                                    }
+                                } catch (e) { /* fail open — paste as-is */ }
                             }
-                            return html
-                                .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
-                                .replace(/\u00a0/g, ' ')
-                                .replace(/ {2,}/g, ' ');
+
+                            // --- Word nbsp litter ---
+                            if (html.indexOf('&nbsp') !== -1 ||
+                                html.indexOf('&#160') !== -1 ||
+                                html.indexOf('\u00a0') !== -1) {
+                                html = html
+                                    .replace(/&nbsp;?|&#160;|&#xA0;/gi, ' ')
+                                    .replace(/\u00a0/g, ' ')
+                                    .replace(/ {2,}/g, ' ');
+                            }
+
+                            return html;
                         },
                         handlePaste: function(view, event) {
                             var files = event.clipboardData ? event.clipboardData.files : null;
