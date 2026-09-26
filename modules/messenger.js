@@ -1008,9 +1008,32 @@ var MessengerModule = (function(Utils, EventBus) {
             if (sp.parentNode) sp.parentNode.replaceChild(replacement, sp);
         });
 
+        // --- NSFW images → .nsfw-image ---
+        // Wraps any image carrying data-nsfw="true" in a click-to-reveal
+        // container. The wrapper reserves the image's aspect ratio when
+        // width/height are present, so blurring doesn't cause layout shift.
+        Array.from(temp.querySelectorAll('img[data-nsfw="true"]')).forEach(function(img) {
+            if (img.closest('.nsfw-image')) return;
+            var wrapper = document.createElement('span');
+            wrapper.className = 'nsfw-image';
+            wrapper.setAttribute('role', 'button');
+            wrapper.setAttribute('tabindex', '0');
+            wrapper.setAttribute('aria-pressed', 'false');
+            wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
+            var w = img.getAttribute('width');
+            var h = img.getAttribute('height');
+            if (w && h) {
+                wrapper.style.width = w + 'px';
+                wrapper.style.aspectRatio = w + '/' + h;
+                wrapper.style.maxWidth = '100%';
+            }
+            img.parentNode.insertBefore(wrapper, img);
+            wrapper.appendChild(img);
+        });
+
         return temp.innerHTML;
     }
-
+    
     // ------------------------------------------------------------------------
     // PREVIEW INTERACTION HANDLERS
     // ------------------------------------------------------------------------
@@ -1151,6 +1174,15 @@ var MessengerModule = (function(Utils, EventBus) {
 
     function attachPreviewHandlers(previewArea) {
         previewArea.addEventListener('click', function(e) {
+            var nsfwImage = e.target.closest('.nsfw-image');
+            if (nsfwImage && previewArea.contains(nsfwImage)) {
+                e.preventDefault();
+                e.stopPropagation();
+                var isRevealedImg = nsfwImage.classList.toggle('revealed');
+                nsfwImage.setAttribute('aria-pressed', String(isRevealedImg));
+                return;
+            }
+
             var nsfwTag = e.target.closest('.nsfw-tag');
             if (nsfwTag && previewArea.contains(nsfwTag)) {
                 e.preventDefault();
@@ -1194,6 +1226,15 @@ var MessengerModule = (function(Utils, EventBus) {
 
         previewArea.addEventListener('keydown', function(e) {
             if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+
+            var nsfwImage = e.target.closest('.nsfw-image');
+            if (nsfwImage && previewArea.contains(nsfwImage)) {
+                e.preventDefault();
+                e.stopPropagation();
+                var isRevealedImg = nsfwImage.classList.toggle('revealed');
+                nsfwImage.setAttribute('aria-pressed', String(isRevealedImg));
+                return;
+            }
 
             var nsfwTag = e.target.closest('.nsfw-tag');
             if (nsfwTag && previewArea.contains(nsfwTag)) {
@@ -2280,6 +2321,128 @@ function updateSendState() {
             urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
 
+                // Hover overlay for image-level NSFW. Watches the editor for
+        // mouseover on any non-emoji image, positions a small toggle button
+        // in its top-right corner, and on click updates the image node's
+        // `nsfw` attribute. The attribute round-trips through
+        // htmlToLegacy / legacyToHtml as data-nsfw="true".
+        function setupImageNsfwOverlay(editorRoot, editorInstance) {
+            if (!editorRoot || !editorInstance) return;
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'editor-image-nsfw-btn';
+            btn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
+            btn.title = 'Mark as NSFW (hide on reader side)';
+            btn.setAttribute('aria-label', 'Toggle NSFW for this image');
+            document.body.appendChild(btn);
+
+            var hoveredImg = null;
+            var hideTimer = null;
+
+            function updateButtonState(img) {
+                if (!img) return;
+                var isNsfw = img.getAttribute('data-nsfw') === 'true';
+                btn.classList.toggle('is-active', isNsfw);
+                var label = isNsfw
+                    ? 'Unmark NSFW (make visible on reader side)'
+                    : 'Mark as NSFW (hide on reader side)';
+                btn.title = label;
+                btn.setAttribute('aria-label', label);
+            }
+
+            function positionBtn(img) {
+                var rect = img.getBoundingClientRect();
+                btn.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+                btn.style.left = (rect.right + window.pageXOffset - 38) + 'px';
+            }
+
+            function showBtn(img) {
+                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+                hoveredImg = img;
+                updateButtonState(img);
+                positionBtn(img);
+                btn.style.display = 'flex';
+            }
+
+            function hideBtnDelayed() {
+                if (hideTimer) clearTimeout(hideTimer);
+                hideTimer = setTimeout(function() {
+                    btn.style.display = 'none';
+                    hoveredImg = null;
+                }, 120);
+            }
+
+            editorRoot.addEventListener('mouseover', function(e) {
+                var img = e.target.closest('img');
+                if (!img) return;
+                if (img.classList.contains('twemoji')) return;
+                var alt = img.getAttribute('alt') || '';
+                if (alt.startsWith(':') && alt.endsWith(':')) return;
+                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return;
+                showBtn(img);
+            });
+
+            editorRoot.addEventListener('mouseout', function(e) {
+                var img = e.target.closest('img');
+                if (!img || img !== hoveredImg) return;
+                if (btn.contains(e.relatedTarget)) return;
+                var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
+                if (nextImg === img) return;
+                hideBtnDelayed();
+            });
+
+            btn.addEventListener('mouseenter', function() {
+                if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            });
+            btn.addEventListener('mouseleave', function() {
+                if (!hoveredImg) return;
+                hideBtnDelayed();
+            });
+
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredImg) return;
+
+                var view = editorInstance.view;
+                var pos = view.posAtDOM(hoveredImg, 0);
+                var $pos = view.state.doc.resolve(pos);
+
+                var imageNode = null;
+                var imagePos = -1;
+                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
+                    imageNode = $pos.nodeAfter;
+                    imagePos = pos;
+                } else if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
+                    imageNode = $pos.nodeBefore;
+                    imagePos = pos - $pos.nodeBefore.nodeSize;
+                }
+
+                if (!imageNode || imagePos < 0) return;
+
+                var newAttrs = Object.assign({}, imageNode.attrs, { nsfw: !imageNode.attrs.nsfw });
+                view.dispatch(view.state.tr.setNodeMarkup(imagePos, undefined, newAttrs));
+
+                // ProseMirror may replace the DOM node on attribute change,
+                // so drop the reference and hide — a fresh hover re-reads state.
+                btn.style.display = 'none';
+                hoveredImg = null;
+            });
+
+            window.addEventListener('scroll', function() {
+                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
+            }, true);
+            window.addEventListener('resize', function() {
+                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
+            });
+
+            editorInstance.on('blur', function() {
+                btn.style.display = 'none';
+                hoveredImg = null;
+            });
+        }
+
         // =================================================================
         // TipTap bootstrap
         // =================================================================
@@ -2336,6 +2499,11 @@ function updateSendState() {
                             height: { default: null },
                             loading: { default: 'lazy' },
                             decoding: { default: 'async' },
+                            nsfw: {
+                                default: false,
+                                parseHTML: el => el.getAttribute('data-nsfw') === 'true',
+                                renderHTML: attrs => attrs.nsfw ? { 'data-nsfw': 'true' } : {},
+                            },
                         };
                     },
                     renderHTML({ node, HTMLAttributes }) {
@@ -3181,7 +3349,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                 editor.on('transaction', updateActiveStates);
                 updateActiveStates();
 
-                var editorRoot = editorElement.querySelector('.ProseMirror');
+                                var editorRoot = editorElement.querySelector('.ProseMirror');
                 if (editorRoot) {
                     editorRoot.setAttribute('dropzone', 'copy');
                     editorRoot.addEventListener('dragover', function(e) { e.preventDefault(); });
@@ -3190,6 +3358,8 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                         var file = e.dataTransfer.files[0];
                         if (file && file.type.startsWith('image/')) uploadImageToWorker(file, editor);
                     });
+
+                    setupImageNsfwOverlay(editorRoot, editor);
                 }
 
                 editor.setOptions({
