@@ -3549,10 +3549,19 @@ section.modern-stats { flex-direction: column; width: 100%; }
   color: var(--text-secondary);
 }
 
-.ProseMirror p {
-  margin: 0 0 var(--space-sm) 0;
+.ProseMirror p,
+.modern-preview .preview-content p,
+.post-message p {
+  margin: 0 0 0.75em 0;
 }
-.ProseMirror p:last-child {
+.ProseMirror p:first-child,
+.modern-preview .preview-content p:first-child,
+.post-message p:first-child {
+  margin-top: 0;
+}
+.ProseMirror p:last-child,
+.modern-preview .preview-content p:last-child,
+.post-message p:last-child {
   margin-bottom: 0;
 }
 
