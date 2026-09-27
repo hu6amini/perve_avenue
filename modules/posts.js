@@ -71,6 +71,63 @@ const ForumPostsModule = (function () {
         Array.from(node.childNodes).forEach(decodeTextNodesInPlace);
     }
 };
+    // ----------------------------------------------------------------------------
+// SYNTAX HIGHLIGHTING
+// A deliberately small generic tokenizer. Handles the shapes common to every
+// language in the reader-side pipeline — line/block comments, strings,
+// numbers, and a curated keyword union. Not a real parser; produces a
+// visual hint, not a correctness guarantee. Kept identical to the version
+// in the messenger so preview and reader output match.
+// ----------------------------------------------------------------------------
+const CODE_HIGHLIGHT_KEYWORDS = [
+    'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
+    'def','default','del','delete','do','elif','else','enum','except','export','extends','False','false',
+    'final','finally','float','for','from','func','function','global','goto','if','import','in',
+    'int','interface','is','lambda','let','match','module','new','None','null','not','or','pass','print',
+    'private','protected','public','raise','return','self','static','str','super','switch','this','throw',
+    'True','true','try','typeof','var','void','while','with','yield'
+].join('|');
+
+const highlightCode = (codeText) => {
+    if (codeText == null) return '';
+    let html = String(codeText)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const stash = [];
+    const keep = (htmlStr) => {
+        const key = '\uE000A' + stash.length.toString(36) + 'Z\uE001';
+        stash.push(htmlStr);
+        return key;
+    };
+
+    // Block comments
+    html = html.replace(/\/\*[\s\S]*?\*\//g, m => keep('<span class="code-comment">' + m + '</span>'));
+
+    // // line comments (not part of URLs)
+    html = html.replace(/(^|[^:\w])(\/\/[^\n]*)/g, (m, pre, com) => pre + keep('<span class="code-comment">' + com + '</span>'));
+
+    // # line comments at line start (Python). Guard against hex colors.
+    html = html.replace(/^(\s*)(#[^\n]*)/gm, (m, ws, com) => {
+        if (/^#[0-9a-fA-F]{3,8}$/.test(com.trim())) return m;
+        return ws + keep('<span class="code-comment">' + com + '</span>');
+    });
+
+    // Strings
+    html = html.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, m => keep('<span class="code-string">' + m + '</span>'));
+
+    // Numbers
+    html = html.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="code-number">$&</span>');
+
+    // Keywords
+    html = html.replace(new RegExp('\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g'), '<span class="code-keyword">$1</span>');
+
+    // Restore
+    html = html.replace(/\uE000A([0-9a-z]+)Z\uE001/g, (m, idx) => stash[parseInt(idx, 36)]);
+
+    return html;
+};
 
     // ============================================================================
     // HTML SANITIZER
@@ -1130,16 +1187,19 @@ function wrapImagesWithDimensions(container) {
     if (!container) return;
     const images = container.querySelectorAll('.post-message img, .post-signature img, .attachment-preview img');
     images.forEach(img => {
+        // Skip if already wrapped or inside embed
         if (img.closest('.modern-embedded-link, .image-wrapper, .nsfw-image')) return;
         if (img.classList.contains('twemoji')) return;
         const alt = img.getAttribute('alt');
         if (alt && alt.startsWith(':') && alt.endsWith(':')) return;
 
         const isNSFW = img.getAttribute('data-nsfw') === 'true';
+        const dataSize = img.getAttribute('data-size');
 
         const currentSrc = img.src;
         const isWeserv = currentSrc.indexOf('weserv.nl') !== -1 || currentSrc.indexOf('wsrv.nl') !== -1;
 
+        // --- Extract original source for fallback ---
         let originalSrc = img.getAttribute('data-original');
         if (!originalSrc && isWeserv) {
             try {
@@ -1150,6 +1210,7 @@ function wrapImagesWithDimensions(container) {
         }
         if (!originalSrc) originalSrc = currentSrc;
 
+        // --- BROKEN WESERV IMAGES: revert immediately ---
         if (isWeserv && img.complete && img.naturalWidth === 0) {
             if (originalSrc && originalSrc !== currentSrc) {
                 img.src = originalSrc;
@@ -1160,6 +1221,7 @@ function wrapImagesWithDimensions(container) {
             return;
         }
 
+        // --- Only wrap if image has width/height attributes ---
         const width = img.getAttribute('width');
         const height = img.getAttribute('height');
         const hasDimensions = width && height && !isNaN(width) && !isNaN(height) && parseInt(width) > 0 && parseInt(height) > 0;
@@ -1173,6 +1235,9 @@ function wrapImagesWithDimensions(container) {
             wrapper.setAttribute('tabindex', '0');
             wrapper.setAttribute('aria-pressed', 'false');
             wrapper.setAttribute('aria-label', 'Hidden image, click to reveal');
+            if (dataSize === 'small') wrapper.style.maxWidth = '25%';
+            else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
+            else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
             img.parentNode.insertBefore(wrapper, img);
             wrapper.appendChild(img);
             return;
@@ -1180,6 +1245,7 @@ function wrapImagesWithDimensions(container) {
 
         if (!hasDimensions) return;
 
+        // --- Wrap in a div for CLS prevention ---
         const wrapper = document.createElement('div');
         wrapper.className = 'image-wrapper' + (isNSFW ? ' nsfw-image' : '');
         if (isNSFW) {
@@ -1191,6 +1257,13 @@ function wrapImagesWithDimensions(container) {
         wrapper.style.width = width + 'px';
         wrapper.style.aspectRatio = width + '/' + height;
         wrapper.style.maxWidth = '100%';
+        // Apply the author's chosen display size (overrides the default
+        // 100% max-width). The explicit width set above becomes the
+        // upper bound; max-width shrinks it further when the size is
+        // smaller than the natural width.
+        if (dataSize === 'small') wrapper.style.maxWidth = '25%';
+        else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
+        else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
         wrapper.style.position = 'relative';
         wrapper.style.overflow = 'hidden';
         img.style.width = '100%';
@@ -1199,6 +1272,7 @@ function wrapImagesWithDimensions(container) {
         img.parentNode.insertBefore(wrapper, img);
         wrapper.appendChild(img);
 
+        // --- Set fallback for images that might fail later ---
         if (isWeserv && originalSrc && originalSrc !== currentSrc) {
             const fallbackHandler = function() {
                 if (this.src !== originalSrc) {
@@ -2618,7 +2692,7 @@ function transformLegacyCodeBlocks(htmlContent) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlContent;
 
-    // NEW: extract language markers before processing code blocks.
+    // Extract language markers before processing code blocks.
     // A marker is a <span class="ff-code-lang"> that sits immediately
     // before the .code_top, with optional <br> between them. ForumFree
     // can wrap the [CODE] block in a div[align="center"], so we probe
@@ -2637,7 +2711,7 @@ function transformLegacyCodeBlocks(htmlContent) {
 
         if (codeTop) {
             const lang = decodeHtmlEntities((marker.textContent || '').trim());
-if (lang) codeTop.setAttribute('data-ff-lang', lang);
+            if (lang) codeTop.setAttribute('data-ff-lang', lang);
         }
         marker.remove();
     });
@@ -2650,15 +2724,18 @@ if (lang) codeTop.setAttribute('data-ff-lang', lang);
         }
         if (!codeBody) return;
 
-        // CHANGED: prefer the stashed language marker over the default
-        // "CODE" title. The <b> tag inside .code_top is ForumFree's own
-        // label ("CODE" or "SPOILER"); we only override it when the
-        // author provided a language.
+        // Prefer the stashed language marker over the default "CODE"
+        // title. The <b> tag inside .code_top is ForumFree's own label
+        // ("CODE" or "SPOILER"); we only override it when the author
+        // provided a language.
         const titleTag = codeTop.querySelector('b');
         const defaultTitle = titleTag ? titleTag.textContent.trim() : 'CODE';
         const title = codeTop.getAttribute('data-ff-lang') || defaultTitle;
 
-        const codeContent = codeBody.innerHTML;
+        // textContent gives us the plain-text body — the browser has
+        // already decoded entities like &lt;. highlightCode then escapes
+        // it back to HTML and layers on the token spans.
+        const codeContent = highlightCode(codeBody.textContent || '');
 
         const modernHtml = `<div class="modern-code">
             <div class="code-header" style="cursor: default;">
