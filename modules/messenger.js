@@ -2195,7 +2195,6 @@ function updateSendState() {
         var italicBtn    = makeToolbarButton('fa-regular fa-italic', 'Italic', { shortcut: 'Control+I' });
         var underlineBtn = makeToolbarButton('fa-regular fa-underline', 'Underline', { shortcut: 'Control+U' });
         var strikeBtn    = makeToolbarButton('fa-regular fa-strikethrough', 'Strikethrough');
-        var inlineCodeBtn = makeToolbarButton('fa-regular fa-code', 'Inline code', { shortcut: 'Control+E' });
 
         var colorDropdownContainer = document.createElement('div');
         colorDropdownContainer.className = 'modern-dropdown';
@@ -2326,8 +2325,73 @@ function updateSendState() {
         listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
-        var codeBtn       = makeToolbarButton('fa-regular fa-file-code', 'Code block');
-        addSeparator();
+
+// Unified Code dropdown — replaces the two separate code buttons.
+// Trigger highlights when either inline code or code block is active.
+// Keyboard shortcuts (Ctrl+E for inline) bypass the dropdown and
+// apply directly, since keyboard users don't want extra clicks.
+var codeDropdownContainer = document.createElement('div');
+codeDropdownContainer.className = 'modern-dropdown';
+codeDropdownContainer.style.cssText = 'position:relative;display:inline-block';
+var codeDropdownBtn = document.createElement('button');
+codeDropdownBtn.type = 'button';
+codeDropdownBtn.className = 'modern-editor-btn';
+codeDropdownBtn.innerHTML = '<i class="fa-regular fa-code"></i>';
+codeDropdownBtn.title = 'Code';
+codeDropdownBtn.setAttribute('aria-label', 'Code');
+codeDropdownBtn.setAttribute('aria-haspopup', 'menu');
+codeDropdownBtn.setAttribute('aria-expanded', 'false');
+var codeDropdownMenu = document.createElement('div');
+codeDropdownMenu.className = 'modern-dropdown-menu';
+codeDropdownMenu.setAttribute('role', 'menu');
+codeDropdownMenu.style.cssText = 'position:absolute;top:100%;left:0;background:var(--surface-color);border:1px solid var(--border-color);border-radius:var(--radius-sm);z-index:1000;min-width:180px;display:none;';
+codeDropdownMenu.innerHTML = ''
+    + '<button class="modern-dropdown-item" role="menuitem" id="inline-code-option"><i class="fa-regular fa-code" aria-hidden="true"></i> Inline code</button>'
+    + '<button class="modern-dropdown-item" role="menuitem" id="block-code-option"><i class="fa-regular fa-file-code" aria-hidden="true"></i> Code block</button>';
+codeDropdownContainer.appendChild(codeDropdownBtn);
+codeDropdownContainer.appendChild(codeDropdownMenu);
+toolbar.appendChild(codeDropdownContainer);
+
+codeDropdownBtn.onclick = function(e) {
+    e.stopPropagation();
+    var isOpen = codeDropdownMenu.style.display === 'block';
+    document.querySelectorAll('.modern-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+    document.querySelectorAll('.modern-editor-btn[aria-haspopup="menu"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+    if (!isOpen) openDropdown(codeDropdownBtn, codeDropdownMenu);
+};
+codeDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
+
+codeDropdownMenu.querySelector('#inline-code-option').onclick = function() {
+    if (!editor) return;
+    exec(function() { editor.chain().focus().toggleCode().run(); });
+    closeDropdown(codeDropdownBtn, codeDropdownMenu);
+};
+
+codeDropdownMenu.querySelector('#block-code-option').onclick = function() {
+    if (!editor) return;
+    closeDropdown(codeDropdownBtn, codeDropdownMenu);
+
+    if (editor.isActive('codeBlock')) {
+        var currentLang = editor.getAttributes('codeBlock').language || '';
+        showCodeLangModal(currentLang, function(lang) {
+            editor.chain().focus().updateAttributes('codeBlock', {
+                language: lang || null
+            }).run();
+        });
+        return;
+    }
+
+    showCodeLangModal('', function(lang) {
+        var chain = editor.chain().focus();
+        if (lang) {
+            chain.setCodeBlock({ language: lang }).run();
+        } else {
+            chain.setCodeBlock().run();
+        }
+    });
+};
+
+addSeparator();
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
 
@@ -3947,30 +4011,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
 
-                // Edit-in-place when inside a code block; insert-new otherwise.
-                codeBtn.onclick = function() {
-                    if (!editor) return;
-
-                    if (editor.isActive('codeBlock')) {
-                        var currentLang = editor.getAttributes('codeBlock').language || '';
-                        showCodeLangModal(currentLang, function(lang) {
-                            editor.chain().focus().updateAttributes('codeBlock', {
-                                language: lang || null
-                            }).run();
-                        });
-                        return;
-                    }
-
-                    showCodeLangModal('', function(lang) {
-                        var chain = editor.chain().focus();
-                        if (lang) {
-                            chain.setCodeBlock({ language: lang }).run();
-                        } else {
-                            chain.setCodeBlock().run();
-                        }
-                    });
-                };
-
                 // Edit-in-place when inside a spoiler; insert-new otherwise.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
@@ -4089,9 +4129,9 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     italicBtn.classList.toggle('active', isActive.italic);
                     underlineBtn.classList.toggle('active', isActive.underline);
                     strikeBtn.classList.toggle('active', isActive.strike);
-                    inlineCodeBtn.classList.toggle('active', isActive.code);
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
-                    codeBtn.classList.toggle('active', isActive.codeBlock);
+// The unified Code trigger lights up when either variant is active.
+codeDropdownBtn.classList.toggle('active', isActive.code || isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
                     nsfwBtn.classList.toggle('active', isActive.nsfw);
                     linkBtn.classList.toggle('active', isActive.link);
@@ -4174,10 +4214,12 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                                     return true;
                                 }
                                 if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) {
-                                    event.preventDefault();
-                                    inlineCodeBtn.click();
-                                    return true;
-                                }
+    event.preventDefault();
+    if (editor) {
+        editor.chain().focus().toggleCode().run();
+    }
+    return true;
+}
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     spoilerBtn.click();
