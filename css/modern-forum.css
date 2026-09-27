@@ -284,7 +284,8 @@
 .post-message img[data-size="large"]  { max-width: 75%; height: auto; }
 
 /* Inline code — non-block code elements in a post body */
-.post-message :not(pre) > code {
+.post-message :not(pre) > code,
+.post-message .ff-inline-code {
   background: var(--surface-light);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -4196,7 +4197,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .modern-preview .preview-content img[data-size="medium"] { max-width: 50%; height: auto; }
 .modern-preview .preview-content img[data-size="large"]  { max-width: 75%; height: auto; }
 
-.modern-preview .preview-content :not(pre) > code {
+.modern-preview .preview-content :not(pre) > code,
+.modern-preview .preview-content .ff-inline-code {
   background: var(--surface-light);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
