@@ -3855,17 +3855,20 @@ section.modern-stats { flex-direction: column; width: 100%; }
 /* ------------------------------------------------------------------
    Lite embeds (lite-youtube / lite-vimeo)
    The custom element ships its own shadow-DOM styles via the CDN CSS
-   loaded in boot. These rules only handle layout inside the editor
-   and preview: block spacing, container radius, and the selection
-   outline ProseMirror adds to atom nodes.
+   loaded in boot. These rules handle layout inside the editor,
+   preview, and reader sides: cap the width, center the element in
+   the content column, and give the atom nodes a selection outline.
    ------------------------------------------------------------------ */
 .modern-wysiwyg .ProseMirror lite-youtube,
 .modern-wysiwyg .ProseMirror lite-vimeo,
 .modern-preview .preview-content lite-youtube,
-.modern-preview .preview-content lite-vimeo {
+.modern-preview .preview-content lite-vimeo,
+.post-message lite-youtube,
+.post-message lite-vimeo {
     display: block;
-    margin: var(--space-md) 0;
-    max-width: 100%;
+    width: 100%;
+    max-width: 560px;
+    margin: var(--space-md) auto;
     border-radius: var(--radius);
     overflow: hidden;
     background: var(--bg-color);
