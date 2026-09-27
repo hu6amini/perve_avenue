@@ -3985,7 +3985,6 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                 italicBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); };
                 underlineBtn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
                 strikeBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
-                inlineCodeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCode().run(); }); };
 
                 headingButtons.h1.onclick = function() {
                     exec(function() { editor.chain().focus().toggleHeading({ level: 1 }).run(); });
