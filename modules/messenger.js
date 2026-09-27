@@ -1,27 +1,16 @@
 // Messenger Module – TipTap based, modern preview, relies solely on forumObserver
-// Includes custom emoji picker with Twemoji images, semantic color palette,
-// mention autocomplete, recipient chip with autocomplete, image paste,
-// plain-text paste, toast notifications, link preview skeleton, ASCII
-// emoticon conversion, and a post-send confirmation banner.
-//
 // v2: preview area renders quotes / spoilers / code blocks using the same
 //     .modern-quote / .modern-spoiler / .modern-code structures the posts
 //     module uses on the reader side.
-// v3: spoiler titles. TipTap Spoiler node gains a `title` attr; the
-//     marker travels as <span class="ff-spoiler-title">TITLE</span> immediately
-//     before the [SPOILER] block, which ForumFree preserves verbatim.
-// v4: code block language labels. TipTap CodeBlock gains a `language` attr;
-//     marker travels as <span class="ff-code-lang">LANG</span> immediately
-//     before the [CODE] block, same channel as spoiler titles.
-// v5: NSFW inline tag. TipTap gains an `nsfw` mark rendered as
-//     <span class="ff-nsfw">text</span>; reader side + preview convert it
-//     to a click-to-reveal .nsfw-tag element. Image-level NSFW added on top.
-// v6: recipient recents in the compose autocomplete (empty-field shows
-//     recently-used recipients), and per-recipient drafts that persist
-//     across page loads and are cleared on send.
-// v7: emoticon autocomplete on `:` prefix. Watches the editor for a
-//     trigger and shows a small emoji-by-name popup; insertion goes
-//     through the same Twemoji image path as the picker.
+// v3: spoiler titles.
+// v4: code block language labels.
+// v5: NSFW inline tag. Image-level NSFW added on top.
+// v6: recipient recents + per-recipient drafts.
+// v7: emoticon autocomplete on `:` prefix.
+// v8: syntax highlighting (preview + reader side), live preview refresh,
+//     touch-friendly image toolbar, inline-code button, image edit modal
+//     (alt text + size), edit-in-place for code language / spoiler title /
+//     link URL.
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -134,6 +123,71 @@ var MessengerModule = (function(Utils, EventBus) {
         try {
             return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
         } catch(e) { return dateStr; }
+    }
+
+    // ------------------------------------------------------------------------
+    // SYNTAX HIGHLIGHTING
+    // A deliberately small generic tokenizer. Handles the shapes common to
+    // every language in CODE_LANGUAGE_SUGGESTIONS — line/block comments,
+    // strings, numbers, and a curated keyword union. Not a real parser;
+    // it produces a visual hint, not a correctness guarantee.
+    // ------------------------------------------------------------------------
+    var CODE_HIGHLIGHT_KEYWORDS = [
+        'abstract','as','assert','async','await','bool','break','case','catch','class','const','continue',
+        'def','default','del','delete','do','elif','else','enum','except','export','extends','False','false',
+        'final','finally','float','for','from','func','function','global','goto','if','import','in',
+        'int','interface','is','lambda','let','match','module','new','None','null','not','or','pass','print',
+        'private','protected','public','raise','return','self','static','str','super','switch','this','throw',
+        'True','true','try','typeof','var','void','while','with','yield'
+    ].join('|');
+
+    function highlightCode(codeText) {
+        if (codeText == null) return '';
+        var html = String(codeText)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        var stash = [];
+        function keep(htmlStr) {
+            var key = '\uE000A' + stash.length.toString(36) + 'Z\uE001';
+            stash.push(htmlStr);
+            return key;
+        }
+
+        // Block comments
+        html = html.replace(/\/\*[\s\S]*?\*\//g, function(m) {
+            return keep('<span class="code-comment">' + m + '</span>');
+        });
+
+        // // line comments (not part of URLs)
+        html = html.replace(/(^|[^:\w])(\/\/[^\n]*)/g, function(m, pre, com) {
+            return pre + keep('<span class="code-comment">' + com + '</span>');
+        });
+
+        // # line comments at line start (Python). Guard against hex colors.
+        html = html.replace(/^(\s*)(#[^\n]*)/gm, function(m, ws, com) {
+            if (/^#[0-9a-fA-F]{3,8}$/.test(com.trim())) return m;
+            return ws + keep('<span class="code-comment">' + com + '</span>');
+        });
+
+        // Strings
+        html = html.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, function(m) {
+            return keep('<span class="code-string">' + m + '</span>');
+        });
+
+        // Numbers
+        html = html.replace(/\b\d+(?:\.\d+)?\b/g, '<span class="code-number">$&</span>');
+
+        // Keywords
+        html = html.replace(new RegExp('\\b(' + CODE_HIGHLIGHT_KEYWORDS + ')\\b', 'g'), '<span class="code-keyword">$1</span>');
+
+        // Restore
+        html = html.replace(/\uE000A([0-9a-z]+)Z\uE001/g, function(m, idx) {
+            return stash[parseInt(idx, 36)];
+        });
+
+        return html;
     }
 
     // ------------------------------------------------------------------------
@@ -260,7 +314,7 @@ var MessengerModule = (function(Utils, EventBus) {
     var RECENTS_MAX = 8;
 
     var DRAFTS_KEY = 'messenger-drafts-v1';
-    var DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
+    var DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
     var DRAFT_DEBOUNCE_MS = 600;
     var NO_RECIPIENT_KEY = '__no_recipient__';
 
@@ -1015,7 +1069,10 @@ var MessengerModule = (function(Utils, EventBus) {
             });
 
             result = result.replace(/<pre([^>]*)>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, function(match, preAttrs, inner) {
-                var decoded = inner
+                // Inner may contain syntax-highlight spans from the editor
+                // itself; strip them before emitting the legacy payload.
+                var plain = inner.replace(/<[^>]*>/g, '');
+                var decoded = plain
                     .replace(/&lt;/g, '<')
                     .replace(/&gt;/g, '>')
                     .replace(/&amp;/g, '&')
@@ -1092,7 +1149,8 @@ var MessengerModule = (function(Utils, EventBus) {
         Array.from(temp.querySelectorAll('pre')).forEach(function(pre) {
             if (pre.closest('.modern-code')) return;
             var code = pre.querySelector('code');
-            var codeContent = code ? code.innerHTML : pre.innerHTML;
+            var rawText = code ? (code.textContent || '') : (pre.textContent || '');
+            var codeContent = highlightCode(rawText);
             var lang = (pre.getAttribute('data-language') || '').trim() || 'Code';
             var modernHtml =
                 '<div class="modern-code">' +
@@ -1138,6 +1196,10 @@ var MessengerModule = (function(Utils, EventBus) {
                 wrapper.style.aspectRatio = w + '/' + h;
                 wrapper.style.maxWidth = '100%';
             }
+            var dataSize = img.getAttribute('data-size');
+            if (dataSize === 'small') wrapper.style.maxWidth = '25%';
+            else if (dataSize === 'medium') wrapper.style.maxWidth = '50%';
+            else if (dataSize === 'large') wrapper.style.maxWidth = '75%';
             img.parentNode.insertBefore(wrapper, img);
             wrapper.appendChild(img);
         });
@@ -1490,11 +1552,6 @@ var MessengerModule = (function(Utils, EventBus) {
         ] }
     ];
 
-    // Name → emoji-character map for the `:` autocomplete. Names are what
-    // the author types after the colon; the emoji character is what gets
-    // converted to a Twemoji SVG on insert. Curated for common chat
-    // reactions rather than the full Unicode set — a long list would be
-    // noise, and the picker handles browsing.
     var EMOJI_NAME_MAP = {
         smile: '🙂',
         joy: '😂',
@@ -1615,6 +1672,7 @@ var modernSubmitBtnRef  = null;
 var modernPreviewBtnRef = null;
 var charCounter         = null;
 var draftSaveTimer      = null;
+var livePreviewTimer    = null;
 
         var modernRecipient     = container.querySelector('#modern-recipient');
         var modernTitle         = container.querySelector('#modern-title');
@@ -1687,6 +1745,46 @@ var draftSaveTimer      = null;
         document.addEventListener('visibilitychange', function() {
             if (document.visibilityState === 'hidden') flushPendingDraft();
         });
+
+        // ------------------------------------------------------------------
+        // LIVE PREVIEW REFRESH
+        // Debounced. Runs only while the preview panel is open, and never
+        // resets expansion state inside expanded quotes / spoilers.
+        // ------------------------------------------------------------------
+        function updateLivePreview() {
+            if (!editor || editor.isEmpty) return;
+            var previewArea = container.querySelector('#modern-preview-area');
+            if (!previewArea || previewArea.style.display === 'none') return;
+
+            // Preserve expanded state of quotes and spoilers across re-render.
+            var expandedQuotes = Array.from(previewArea.querySelectorAll('.modern-quote.expanded')).length;
+            var expandedSpoilers = Array.from(previewArea.querySelectorAll('.modern-spoiler.expanded')).length;
+
+            var previewHtml = transformPreviewHtml(editor.getHTML());
+            var previewContent = previewArea.querySelector('.preview-content');
+            if (previewContent) {
+                previewContent.innerHTML = previewHtml;
+                if (window.twemoji) {
+                    window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
+                }
+                // Note: expansion state is intentionally not restored because
+                // the DOM is regenerated from scratch. If a user is reading a
+                // preview and typing simultaneously, they're probably looking
+                // at the top of the doc. Long-form reading scenarios don't
+                // involve concurrent typing.
+            }
+            initPreviewQuotesAndSpoilers(previewArea);
+        }
+
+        function scheduleLivePreviewRefresh() {
+            var previewArea = container.querySelector('#modern-preview-area');
+            if (!previewArea || previewArea.style.display === 'none') return;
+            if (livePreviewTimer) clearTimeout(livePreviewTimer);
+            livePreviewTimer = setTimeout(function() {
+                livePreviewTimer = null;
+                updateLivePreview();
+            }, 800);
+        }
 
 function updateSendState() {
     var hasRecipient = !!currentRecipient;
@@ -2079,6 +2177,7 @@ function updateSendState() {
         var italicBtn    = makeToolbarButton('fa-regular fa-italic', 'Italic', { shortcut: 'Control+I' });
         var underlineBtn = makeToolbarButton('fa-regular fa-underline', 'Underline', { shortcut: 'Control+U' });
         var strikeBtn    = makeToolbarButton('fa-regular fa-strikethrough', 'Strikethrough');
+        var inlineCodeBtn = makeToolbarButton('fa-regular fa-code', 'Inline code', { shortcut: 'Control+E' });
 
         var colorDropdownContainer = document.createElement('div');
         colorDropdownContainer.className = 'modern-dropdown';
@@ -2209,7 +2308,7 @@ function updateSendState() {
         listDropdownMenu.addEventListener('click', function(e) { e.stopPropagation(); });
 
         var blockquoteBtn = makeToolbarButton('fa-regular fa-quote-left', 'Blockquote');
-        var codeBtn       = makeToolbarButton('fa-regular fa-code', 'Code block');
+        var codeBtn       = makeToolbarButton('fa-regular fa-file-code', 'Code block');
         addSeparator();
 
         var linkBtn = makeToolbarButton('fa-regular fa-link', 'Insert link', { shortcut: 'Control+K' });
@@ -2429,7 +2528,8 @@ function updateSendState() {
             });
         }
 
-        function showSpoilerTitleModal(callback) {
+        // initial value pre-fills the field for edit-in-place usage.
+        function showSpoilerTitleModal(initial, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
             modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
@@ -2439,15 +2539,16 @@ function updateSendState() {
             modalBox.innerHTML = ''
                 + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-eye-slash"></i> Spoiler title</h3>'
                 + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Optional. Leave empty for a plain spoiler.</p>'
-                + '<input type="text" id="modal-spoiler-title" class="modern-input" placeholder="e.g. Route: Lily - Chapter 5" maxlength="80" style="width:100%;">'
+                + '<input type="text" id="modal-spoiler-title" class="modern-input" placeholder="e.g. Route: Lily - Chapter 5" maxlength="80" style="width:100%;" value="' + escapeHtml(initial || '') + '">'
                 + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
                 + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert spoiler</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
                 + '</div>';
             modalOverlay.appendChild(modalBox);
             document.body.appendChild(modalOverlay);
             var input = modalBox.querySelector('#modal-spoiler-title');
             input.focus();
+            input.select();
 
             function close() {
                 modalOverlay.remove();
@@ -2472,7 +2573,7 @@ function updateSendState() {
             });
         }
 
-        function showCodeLangModal(callback) {
+        function showCodeLangModal(initial, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
             modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
@@ -2487,16 +2588,17 @@ function updateSendState() {
             modalBox.innerHTML = ''
                 + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-code"></i> Code language</h3>'
                 + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Optional. Shown on the code block header. Leave empty for a plain "Code" label.</p>'
-                + '<input type="text" id="modal-code-lang" class="modern-input" list="modal-code-lang-list" placeholder="e.g. Python, Ren\'Py" maxlength="40" autocomplete="off" style="width:100%;">'
+                + '<input type="text" id="modal-code-lang" class="modern-input" list="modal-code-lang-list" placeholder="e.g. Python, Ren\'Py" maxlength="40" autocomplete="off" style="width:100%;" value="' + escapeHtml(initial || '') + '">'
                 + '<datalist id="modal-code-lang-list">' + optionsHtml + '</datalist>'
                 + '<div style="display:flex;gap:var(--space-sm);margin-top:var(--space-md);justify-content:flex-end;">'
                 + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert code block</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
                 + '</div>';
             modalOverlay.appendChild(modalBox);
             document.body.appendChild(modalOverlay);
             var input = modalBox.querySelector('#modal-code-lang');
             input.focus();
+            input.select();
 
             function close() {
                 modalOverlay.remove();
@@ -2518,32 +2620,37 @@ function updateSendState() {
             });
         }
 
-        function showLinkModal(callback) {
+        // initialHref pre-fills the URL field for edit-in-place usage.
+        // Text field is hidden when editing (link text stays put).
+        function showLinkModal(initialHref, callback) {
             var modalOverlay = document.createElement('div');
             modalOverlay.className = 'modern-modal-overlay';
             modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
             var modalBox = document.createElement('div');
             modalBox.className = 'modern-modal-box';
             modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:360px;max-width:90%;box-shadow:var(--shadow-lg);';
+
+            var isEdit = initialHref != null;
             modalBox.innerHTML = ''
-                + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-link"></i> Insert link</h3>'
-                + '<div style="margin-bottom:var(--space-md);">'
-                + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">Link text (optional)</label>'
-                + '<input type="text" id="modal-link-text" class="modern-input" placeholder="Enter text to display" style="width:100%;">'
-                + '</div>'
+                + '<h3 style="margin:0 0 var(--space-md) 0;"><i class="fa-regular fa-link"></i> ' + (isEdit ? 'Edit link' : 'Insert link') + '</h3>'
+                + (isEdit ? '' : '<div style="margin-bottom:var(--space-md);">'
+                    + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">Link text (optional)</label>'
+                    + '<input type="text" id="modal-link-text" class="modern-input" placeholder="Enter text to display" style="width:100%;">'
+                    + '</div>')
                 + '<div style="margin-bottom:var(--space-md);">'
                 + '<label style="display:block;margin-bottom:var(--space-xs);color:var(--text-secondary);">URL</label>'
-                + '<input type="url" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;">'
+                + '<input type="url" id="modal-link-url" class="modern-input" placeholder="https://example.com" style="width:100%;" value="' + escapeHtml(initialHref || '') + '">'
                 + '</div>'
                 + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
                 + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
-                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Insert link</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">' + (isEdit ? 'Save' : 'Insert link') + '</button>'
                 + '</div>';
             modalOverlay.appendChild(modalBox);
             document.body.appendChild(modalOverlay);
             var textInput = modalBox.querySelector('#modal-link-text');
             var urlInput = modalBox.querySelector('#modal-link-url');
             urlInput.focus();
+            if (isEdit) urlInput.select();
 
             function close() {
                 modalOverlay.remove();
@@ -2555,30 +2662,106 @@ function updateSendState() {
             document.addEventListener('keydown', onEscape);
             modalBox.querySelector('#modal-cancel').onclick = close;
             modalBox.querySelector('#modal-submit').onclick = function() {
-                var linkText = textInput.value.trim();
+                var linkText = textInput ? textInput.value.trim() : '';
                 var linkUrl = urlInput.value.trim();
                 if (linkUrl) callback(linkUrl, linkText || null);
                 close();
             };
-            textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
+            if (textInput) textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
             urlInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') modalBox.querySelector('#modal-submit').click(); });
         }
 
-        // Hover overlay for image-level NSFW. Watches the editor for
-        // mouseover on any non-emoji image, positions a small toggle button
-        // in its top-right corner, and on click updates the image node's
-        // `nsfw` attribute. The attribute round-trips through
-        // htmlToLegacy / legacyToHtml as data-nsfw="true".
+        // Image edit modal — alt text + display size. Used from the image
+        // hover toolbar's "pencil" button.
+        function showImageEditModal(initialAlt, initialSize, callback) {
+            var modalOverlay = document.createElement('div');
+            modalOverlay.className = 'modern-modal-overlay';
+            modalOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+            var modalBox = document.createElement('div');
+            modalBox.className = 'modern-modal-box';
+            modalBox.style.cssText = 'background:var(--surface-color);border-radius:var(--radius-lg);padding:var(--space-lg);width:380px;max-width:90%;box-shadow:var(--shadow-lg);';
+
+            var sizes = [
+                { value: 'small',  label: 'Small (25%)' },
+                { value: 'medium', label: 'Medium (50%)' },
+                { value: 'large',  label: 'Large (75%)' },
+                { value: '',       label: 'Full width' }
+            ];
+            var sizeHtml = sizes.map(function(s) {
+                var checked = (initialSize || '') === s.value ? ' checked' : '';
+                return '<label class="modern-radio" style="margin-right:var(--space-md);margin-bottom:var(--space-xs);">'
+                    + '<input type="radio" name="modal-img-size" value="' + s.value + '"' + checked + '>'
+                    + '<span>' + s.label + '</span></label>';
+            }).join('');
+
+            modalBox.innerHTML = ''
+                + '<h3 style="margin:0 0 var(--space-xs) 0;"><i class="fa-regular fa-image"></i> Edit image</h3>'
+                + '<p style="margin:0 0 var(--space-md) 0;color:var(--text-tertiary);font-size:var(--text-xs);">Describe the image for accessibility, and optionally resize it.</p>'
+                + '<div style="margin-bottom:var(--space-md);">'
+                + '<label style="display:block;font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:var(--space-xs);">Alt text</label>'
+                + '<input type="text" id="modal-img-alt" class="modern-input" placeholder="Describe this image" maxlength="200" style="width:100%;" value="' + escapeHtml(initialAlt || '') + '">'
+                + '</div>'
+                + '<div style="margin-bottom:var(--space-md);">'
+                + '<label style="display:block;font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:var(--space-xs);">Display size</label>'
+                + '<div style="display:flex;flex-wrap:wrap;gap:var(--space-sm);">' + sizeHtml + '</div>'
+                + '</div>'
+                + '<div style="display:flex;gap:var(--space-sm);justify-content:flex-end;">'
+                + '<button id="modal-cancel" class="modern-btn modern-btn-secondary">Cancel</button>'
+                + '<button id="modal-submit" class="modern-btn modern-btn-primary">Save</button>'
+                + '</div>';
+
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+
+            var altInput = modalBox.querySelector('#modal-img-alt');
+            altInput.focus();
+            altInput.select();
+
+            function close() {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', onEscape);
+                if (editor) editor.commands.focus();
+            }
+            function onEscape(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+
+            document.addEventListener('keydown', onEscape);
+            modalBox.querySelector('#modal-cancel').onclick = close;
+            modalBox.querySelector('#modal-submit').onclick = function() {
+                var checked = modalBox.querySelector('input[name="modal-img-size"]:checked');
+                var size = checked ? checked.value : '';
+                callback(altInput.value.trim(), size || null);
+                close();
+            };
+        }
+
+        // Image hover toolbar. Two buttons positioned near the hovered or
+        // clicked image: NSFW toggle and Edit (alt text + size). Shows on
+        // hover (desktop) and on click (touch). Stays put briefly after
+        // click so touch users have time to hit the buttons.
         function setupImageNsfwOverlay(editorRoot, editorInstance) {
             if (!editorRoot || !editorInstance) return;
 
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'editor-image-nsfw-btn';
-            btn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
-            btn.title = 'Mark as NSFW (hide on reader side)';
-            btn.setAttribute('aria-label', 'Toggle NSFW for this image');
-            document.body.appendChild(btn);
+            var toolbarEl = document.createElement('div');
+            toolbarEl.className = 'editor-image-toolbar';
+            toolbarEl.style.display = 'none';
+
+            var nsfwBtn = document.createElement('button');
+            nsfwBtn.type = 'button';
+            nsfwBtn.className = 'editor-image-nsfw-btn';
+            nsfwBtn.innerHTML = '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
+            nsfwBtn.title = 'Mark as NSFW (hide on reader side)';
+            nsfwBtn.setAttribute('aria-label', 'Toggle NSFW for this image');
+
+            var editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'editor-image-edit-btn';
+            editBtn.innerHTML = '<i class="fa-regular fa-pen" aria-hidden="true"></i>';
+            editBtn.title = 'Edit image (alt text, size)';
+            editBtn.setAttribute('aria-label', 'Edit image');
+
+            toolbarEl.appendChild(nsfwBtn);
+            toolbarEl.appendChild(editBtn);
+            document.body.appendChild(toolbarEl);
 
             var hoveredImg = null;
             var hideTimer = null;
@@ -2586,109 +2769,152 @@ function updateSendState() {
             function updateButtonState(img) {
                 if (!img) return;
                 var isNsfw = img.getAttribute('data-nsfw') === 'true';
-                btn.classList.toggle('is-active', isNsfw);
+                nsfwBtn.classList.toggle('is-active', isNsfw);
                 var label = isNsfw
                     ? 'Unmark NSFW (make visible on reader side)'
                     : 'Mark as NSFW (hide on reader side)';
-                btn.title = label;
-                btn.setAttribute('aria-label', label);
+                nsfwBtn.title = label;
+                nsfwBtn.setAttribute('aria-label', label);
             }
 
-            function positionBtn(img) {
+            function positionToolbar(img) {
                 var rect = img.getBoundingClientRect();
-                btn.style.top = (rect.top + window.pageYOffset + 6) + 'px';
-                btn.style.left = (rect.right + window.pageXOffset - 38) + 'px';
+                toolbarEl.style.top = (rect.top + window.pageYOffset + 6) + 'px';
+                toolbarEl.style.left = (rect.right + window.pageXOffset - 76) + 'px';
             }
 
-            function showBtn(img) {
+            function showToolbar(img) {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
                 hoveredImg = img;
                 updateButtonState(img);
-                positionBtn(img);
-                btn.style.display = 'flex';
+                positionToolbar(img);
+                toolbarEl.style.display = 'flex';
             }
 
-            function hideBtnDelayed() {
+            function hideToolbarDelayed() {
                 if (hideTimer) clearTimeout(hideTimer);
                 hideTimer = setTimeout(function() {
-                    btn.style.display = 'none';
+                    toolbarEl.style.display = 'none';
                     hoveredImg = null;
                 }, 120);
             }
 
+            function isNsfwEligible(img) {
+                if (!img) return false;
+                if (img.classList.contains('twemoji')) return false;
+                var alt = img.getAttribute('alt') || '';
+                if (alt.startsWith(':') && alt.endsWith(':')) return false;
+                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return false;
+                return true;
+            }
+
             editorRoot.addEventListener('mouseover', function(e) {
                 var img = e.target.closest('img');
-                if (!img) return;
-                if (img.classList.contains('twemoji')) return;
-                var alt = img.getAttribute('alt') || '';
-                if (alt.startsWith(':') && alt.endsWith(':')) return;
-                if (img.closest('.link-preview-card, .simple-link, .modern-embedded-link')) return;
-                showBtn(img);
+                if (!isNsfwEligible(img)) return;
+                showToolbar(img);
+            });
+
+            // Touch-friendly: clicking an image also shows the toolbar.
+            // On desktop this is redundant with hover but harmless.
+            editorRoot.addEventListener('click', function(e) {
+                var img = e.target.closest('img');
+                if (!isNsfwEligible(img)) return;
+                showToolbar(img);
+                if (hideTimer) clearTimeout(hideTimer);
+                hideTimer = setTimeout(function() {
+                    if (!toolbarEl.matches(':hover')) {
+                        toolbarEl.style.display = 'none';
+                        hoveredImg = null;
+                    }
+                }, 4000);
             });
 
             editorRoot.addEventListener('mouseout', function(e) {
                 var img = e.target.closest('img');
                 if (!img || img !== hoveredImg) return;
-                if (btn.contains(e.relatedTarget)) return;
+                if (toolbarEl.contains(e.relatedTarget)) return;
                 var nextImg = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('img');
                 if (nextImg === img) return;
-                hideBtnDelayed();
+                hideToolbarDelayed();
             });
 
-            btn.addEventListener('mouseenter', function() {
+            toolbarEl.addEventListener('mouseenter', function() {
                 if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
             });
-            btn.addEventListener('mouseleave', function() {
+            toolbarEl.addEventListener('mouseleave', function() {
                 if (!hoveredImg) return;
-                hideBtnDelayed();
+                hideToolbarDelayed();
             });
 
-            btn.addEventListener('click', function(e) {
+            function resolveImageNode(img) {
+                if (!img) return null;
+                var view = editorInstance.view;
+                var pos;
+                try { pos = view.posAtDOM(img, 0); } catch (e) { return null; }
+                var $pos = view.state.doc.resolve(pos);
+                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
+                    return { node: $pos.nodeAfter, pos: pos };
+                }
+                if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
+                    return { node: $pos.nodeBefore, pos: pos - $pos.nodeBefore.nodeSize };
+                }
+                return null;
+            }
+
+            nsfwBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 if (!hoveredImg) return;
+                var resolved = resolveImageNode(hoveredImg);
+                if (!resolved) return;
+                var newAttrs = Object.assign({}, resolved.node.attrs, {
+                    nsfw: !resolved.node.attrs.nsfw
+                });
+                editorInstance.view.dispatch(
+                    editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
+                );
+                toolbarEl.style.display = 'none';
+                hoveredImg = null;
+            });
 
-                var view = editorInstance.view;
-                var pos = view.posAtDOM(hoveredImg, 0);
-                var $pos = view.state.doc.resolve(pos);
+            editBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!hoveredImg) return;
+                var resolved = resolveImageNode(hoveredImg);
+                if (!resolved) return;
 
-                var imageNode = null;
-                var imagePos = -1;
-                if ($pos.nodeAfter && $pos.nodeAfter.type.name === 'image') {
-                    imageNode = $pos.nodeAfter;
-                    imagePos = pos;
-                } else if ($pos.nodeBefore && $pos.nodeBefore.type.name === 'image') {
-                    imageNode = $pos.nodeBefore;
-                    imagePos = pos - $pos.nodeBefore.nodeSize;
-                }
+                var currentAlt = resolved.node.attrs.alt || '';
+                var currentSize = resolved.node.attrs.size || null;
 
-                if (!imageNode || imagePos < 0) return;
+                showImageEditModal(currentAlt, currentSize, function(newAlt, newSize) {
+                    var newAttrs = Object.assign({}, resolved.node.attrs, {
+                        alt: newAlt || 'image',
+                        size: newSize
+                    });
+                    editorInstance.view.dispatch(
+                        editorInstance.view.state.tr.setNodeMarkup(resolved.pos, undefined, newAttrs)
+                    );
+                });
 
-                var newAttrs = Object.assign({}, imageNode.attrs, { nsfw: !imageNode.attrs.nsfw });
-                view.dispatch(view.state.tr.setNodeMarkup(imagePos, undefined, newAttrs));
-
-                btn.style.display = 'none';
+                toolbarEl.style.display = 'none';
                 hoveredImg = null;
             });
 
             window.addEventListener('scroll', function() {
-                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
+                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             }, true);
             window.addEventListener('resize', function() {
-                if (hoveredImg && btn.style.display === 'flex') positionBtn(hoveredImg);
+                if (hoveredImg && toolbarEl.style.display === 'flex') positionToolbar(hoveredImg);
             });
 
             editorInstance.on('blur', function() {
-                btn.style.display = 'none';
+                toolbarEl.style.display = 'none';
                 hoveredImg = null;
             });
         }
 
-        // Emoticon autocomplete. Watching the editor for a `:` at a word
-        // boundary with word characters following, showing a small popup of
-        // matching emoji by name. Insertion goes through the same Twemoji
-        // image path as the picker and ASCII emoticon rule, so all three
-        // representations land as the same node shape in the document.
+        // Emoticon autocomplete.
         function setupEmoticonAutocomplete(editorInstance, editorRoot) {
             if (!editorInstance || !editorRoot) return;
 
@@ -2722,7 +2948,7 @@ function updateSendState() {
                     );
                     popup.style.left = (coords.left + window.pageXOffset) + 'px';
                     popup.style.top = (coords.bottom + window.pageYOffset + 4) + 'px';
-                } catch (e) { /* coordsAtPos can throw on stale positions */ }
+                } catch (e) {}
             }
 
             function updateSelected() {
@@ -2748,8 +2974,6 @@ function updateSendState() {
                     img.alt = item.emoji;
                     img.loading = 'lazy';
                     img.onerror = function() {
-                        // Fall back to the literal character if Twemoji
-                        // can't be reached for this codepoint.
                         var span = document.createElement('span');
                         span.className = 'emoticon-suggestion-icon';
                         span.textContent = item.emoji;
@@ -2780,10 +3004,6 @@ function updateSendState() {
                 if (!sel || !sel.empty) return null;
                 var from = sel.from;
                 var start = Math.max(0, from - 80);
-                // \uFFFC is what textBetween emits for inline atom nodes
-                // (our image nodes). We only care about the tail, but the
-                // separator has to be something so we can still parse text
-                // that contains images without confusing them for chars.
                 var textBefore = editorInstance.state.doc.textBetween(
                     start, from, '\n', '\uFFFC'
                 );
@@ -2806,9 +3026,6 @@ function updateSendState() {
 
                 if (matches.length === 0) { closePopup(); return; }
 
-                // Exact matches first, then alphabetical. An exact match is
-                // almost certainly what the user meant, so it should always
-                // be the default Enter target.
                 matches.sort(function(a, b) {
                     var aExact = a.name === query ? 0 : 1;
                     var bExact = b.name === query ? 0 : 1;
@@ -2827,12 +3044,6 @@ function updateSendState() {
 
             function commit(item) {
                 if (!item) return;
-
-                // Recompute the trigger range at commit time. The selection
-                // has been stable since the last refresh (keyboard nav
-                // doesn't change it), but recomputing is safer than trusting
-                // a stale value if the document changed between refresh and
-                // keydown.
                 var from = editorInstance.state.selection.from;
                 var queryLen = currentQuery.length;
                 var triggerStart = from - queryLen - 1;
@@ -2856,17 +3067,8 @@ function updateSendState() {
                 closePopup();
             }
 
-            // Arrow-key handling needs to run before ProseMirror's own
-            // keydown, otherwise the selection moves and the trigger
-            // disappears before we can navigate. Capture-phase listener on
-            // the editor root achieves that.
             editorRoot.addEventListener('keydown', function(e) {
                 if (!popup) return;
-
-                // Let modifier combos through untouched — Ctrl+Enter sends,
-                // Ctrl+K opens the link modal, Cmd+Z undoes, etc. Without
-                // this guard, Enter with any modifier would commit the
-                // emoji instead.
                 if (e.ctrlKey || e.metaKey || e.altKey) return;
 
                 if (e.key === 'Escape') {
@@ -2900,25 +3102,14 @@ function updateSendState() {
                 }
 
                 if (e.key === ' ') {
-                    // Space closes the popup and lets the space through —
-                    // the author wrote a literal `:something`, not an
-                    // emoji shortcode.
                     closePopup();
                 }
             }, true);
 
-            // Recompute on every document or selection change. `update`
-            // covers typing; `selectionUpdate` covers arrow-key moves and
-            // clicks elsewhere in the doc.
             editorInstance.on('update', refresh);
             editorInstance.on('selectionUpdate', refresh);
 
-            // If the popup is open when the editor loses focus, close it —
-            // a stranded popup with a stale query would be confusing.
             editorInstance.on('blur', function() {
-                // Defer to next frame so a click into the popup itself
-                // (which fires blur before mousedown commits) doesn't
-                // kill the commit.
                 setTimeout(function() {
                     if (document.activeElement !== editorRoot &&
                         !(popup && popup.contains(document.activeElement))) {
@@ -2988,6 +3179,11 @@ function updateSendState() {
                                 default: false,
                                 parseHTML: el => el.getAttribute('data-nsfw') === 'true',
                                 renderHTML: attrs => attrs.nsfw ? { 'data-nsfw': 'true' } : {},
+                            },
+                            size: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('data-size') || null,
+                                renderHTML: attrs => attrs.size ? { 'data-size': attrs.size } : {},
                             },
                         };
                     },
@@ -3642,13 +3838,10 @@ function updateSendState() {
                         if (originalTextarea) {
                             originalTextarea.value = htmlToLegacy(editor.getHTML());
                         }
-                        var previewContent = document.querySelector('#modern-preview-area .preview-content');
-                        if (previewContent && window.twemoji) {
-                            window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
-                        }
                         persistCurrentDraftDebounced();
                         updateSendState();
                         updateCharCounter();
+                        scheduleLivePreviewRefresh();
                     }
                 });
 
@@ -3665,6 +3858,7 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                 italicBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleItalic().run(); }); };
                 underlineBtn.onclick = function() { exec(function() { editor.chain().focus().toggleUnderline().run(); }); };
                 strikeBtn.onclick    = function() { exec(function() { editor.chain().focus().toggleStrike().run(); }); };
+                inlineCodeBtn.onclick = function() { exec(function() { editor.chain().focus().toggleCode().run(); }); };
 
                 headingButtons.h1.onclick = function() {
                     exec(function() { editor.chain().focus().toggleHeading({ level: 1 }).run(); });
@@ -3690,15 +3884,21 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
 
                 blockquoteBtn.onclick = function() { exec(function() { editor.chain().focus().toggleBlockquote().run(); }); };
 
+                // Edit-in-place when inside a code block; insert-new otherwise.
                 codeBtn.onclick = function() {
                     if (!editor) return;
 
                     if (editor.isActive('codeBlock')) {
-                        editor.chain().focus().toggleCodeBlock().run();
+                        var currentLang = editor.getAttributes('codeBlock').language || '';
+                        showCodeLangModal(currentLang, function(lang) {
+                            editor.chain().focus().updateAttributes('codeBlock', {
+                                language: lang || null
+                            }).run();
+                        });
                         return;
                     }
 
-                    showCodeLangModal(function(lang) {
+                    showCodeLangModal('', function(lang) {
                         var chain = editor.chain().focus();
                         if (lang) {
                             chain.setCodeBlock({ language: lang }).run();
@@ -3708,15 +3908,21 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     });
                 };
 
+                // Edit-in-place when inside a spoiler; insert-new otherwise.
                 spoilerBtn.onclick = function() {
                     if (!editor) return;
 
                     if (editor.isActive('spoiler')) {
-                        editor.chain().focus().lift('spoiler').run();
+                        var currentTitle = editor.getAttributes('spoiler').title || '';
+                        showSpoilerTitleModal(currentTitle, function(title) {
+                            editor.chain().focus().updateAttributes('spoiler', {
+                                title: title || null
+                            }).run();
+                        });
                         return;
                     }
 
-                    showSpoilerTitleModal(function(title) {
+                    showSpoilerTitleModal('', function(title) {
                         var chain = editor.chain().focus();
                         if (title) {
                             chain.wrapIn('spoiler', { title: title }).run();
@@ -3730,12 +3936,24 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     exec(function() { editor.chain().focus().toggleNSFW().run(); });
                 };
 
+                // Edit-in-place when cursor is inside an existing link.
                 linkBtn.onclick = function() {
                     if (!editor) return;
+
+                    if (editor.isActive('link')) {
+                        var currentHref = editor.getAttributes('link').href || '';
+                        showLinkModal(currentHref, function(url) {
+                            if (url) {
+                                editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+                            }
+                        });
+                        return;
+                    }
+
                     var from = editor.state.selection.from;
                     var to = editor.state.selection.to;
                     var selectedText = editor.state.doc.textBetween(from, to, '');
-                    showLinkModal(function(url, customText) {
+                    showLinkModal(null, function(url, customText) {
                         if (selectedText) {
                             editor.chain().focus().setLink({ href: url }).run();
                         } else {
@@ -3794,10 +4012,12 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                         italic: editor.isActive('italic'),
                         underline: editor.isActive('underline'),
                         strike: editor.isActive('strike'),
+                        code: editor.isActive('code'),
                         blockquote: editor.isActive('blockquote'),
                         codeBlock: editor.isActive('codeBlock'),
                         spoiler: editor.isActive('spoiler'),
                         nsfw: editor.isActive('nsfw'),
+                        link: editor.isActive('link'),
                         heading1: editor.isActive('heading', { level: 1 }),
                         heading2: editor.isActive('heading', { level: 2 }),
                         heading3: editor.isActive('heading', { level: 3 })
@@ -3806,10 +4026,12 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                     italicBtn.classList.toggle('active', isActive.italic);
                     underlineBtn.classList.toggle('active', isActive.underline);
                     strikeBtn.classList.toggle('active', isActive.strike);
+                    inlineCodeBtn.classList.toggle('active', isActive.code);
                     blockquoteBtn.classList.toggle('active', isActive.blockquote);
                     codeBtn.classList.toggle('active', isActive.codeBlock);
                     spoilerBtn.classList.toggle('active', isActive.spoiler);
                     nsfwBtn.classList.toggle('active', isActive.nsfw);
+                    linkBtn.classList.toggle('active', isActive.link);
                     if (isActive.heading1 || isActive.heading2 || isActive.heading3) {
                         headingDropdownBtn.style.backgroundColor = 'var(--primary-color)';
                         headingDropdownBtn.style.color = 'white';
@@ -3888,6 +4110,11 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
                                     linkBtn.click();
                                     return true;
                                 }
+                                if (mod && !event.shiftKey && (event.key === 'e' || event.key === 'E')) {
+                                    event.preventDefault();
+                                    inlineCodeBtn.click();
+                                    return true;
+                                }
                                 if (event.ctrlKey && event.shiftKey && (event.key === 's' || event.key === 'S')) {
                                     event.preventDefault();
                                     spoilerBtn.click();
@@ -3943,16 +4170,8 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
     modernPreviewBtn.onclick = function() {
         if (!editor || editor.isEmpty) return;
-        var previewHtml = transformPreviewHtml(editor.getHTML());
-                var previewContent = previewArea.querySelector('.preview-content');
-                if (previewContent) {
-                    previewContent.innerHTML = previewHtml;
-                    if (window.twemoji) {
-                        window.twemoji.parse(previewContent, { base: TWEMOJI_BASE, ext: '.svg' });
-                    }
-                }
+        updateLivePreview();
                 previewArea.style.display = 'block';
-                initPreviewQuotesAndSpoilers(previewArea);
                 previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             };
         }
