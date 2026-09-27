@@ -234,7 +234,7 @@ whenBodyReady(() => {
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@542dedb572fef90b64ec5ea91274ead2e347680d/modules/boards.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@0edc62223f2b2578361e7369f2be9a9d21bfd38d/modules/posts.min.js"),
                     loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@403484e8351e4fd2b9f757b5c340979cf7d452b8/modules/modals.min.js"),
-                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@f1d7d8d4bcd4f442215eb91664d77190ae164098/modules/messenger.js")
+                    loadScript("https://cdn.jsdelivr.net/gh/hu6amini/perve_avenue@969ba190cc69ce644fd50e5c4a06d6f443bd151b/modules/messenger.js")
                 ]);
 
                 const failed = results.filter(r => r.status === 'rejected');
