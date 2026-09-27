@@ -11,6 +11,7 @@
 //     touch-friendly image toolbar, inline-code button, image edit modal
 //     (alt text + size), edit-in-place for code language / spoiler title /
 //     link URL.
+// v9: lite YouTube and Vimeo embeds (lite-youtube-embed, lite-vimeo-embed).
 var MessengerModule = (function(Utils, EventBus) {
     'use strict';
 
@@ -1009,6 +1010,28 @@ var MessengerModule = (function(Utils, EventBus) {
             }
         );
 
+        // Lite embed markers → custom elements. Round-trips the payload
+        // written by htmlToLegacy; LiteYouTube/LiteVimeo parseHTML then
+        // converts them into editor nodes on load.
+        html = html.replace(
+            /<span\b[^>]*\bff-lite-youtube\b[^>]*>([\s\S]*?)<\/span>/gis,
+            function(match) {
+                var idMatch = match.match(/data-videoid="([^"]*)"/);
+                var videoid = idMatch ? idMatch[1] : '';
+                if (!videoid) return '';
+                return '<lite-youtube videoid="' + escapeHtml(videoid) + '"></lite-youtube>';
+            }
+        );
+        html = html.replace(
+            /<span\b[^>]*\bff-lite-vimeo\b[^>]*>([\s\S]*?)<\/span>/gis,
+            function(match) {
+                var idMatch = match.match(/data-videoid="([^"]*)"/);
+                var videoid = idMatch ? idMatch[1] : '';
+                if (!videoid) return '';
+                return '<lite-vimeo videoid="' + escapeHtml(videoid) + '"></lite-vimeo>';
+            }
+        );
+
         html = html.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>');
         html = html.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>');
         html = html.replace(/\[u\](.*?)\[\/u\]/gi, '<u>$1</u>');
@@ -1059,6 +1082,22 @@ html = html.replace(
         var maxIterations = 10;
         for (var i = 0; i < maxIterations; i++) {
             var before = result;
+
+            // Lite embeds. Run first so an embed nested inside a quote
+            // or spoiler gets serialized before the outer container's
+            // regex can strip or re-escape the custom element.
+            result = result.replace(
+                /<lite-youtube\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-youtube>/gi,
+                function(match, videoid) {
+                    return '<span class="ff-lite-youtube" data-videoid="' + escapeHtml(videoid) + '"></span>';
+                }
+            );
+            result = result.replace(
+                /<lite-vimeo\b[^>]*\bvideoid="([^"]*)"[^>]*>\s*<\/lite-vimeo>/gi,
+                function(match, videoid) {
+                    return '<span class="ff-lite-vimeo" data-videoid="' + escapeHtml(videoid) + '"></span>';
+                }
+            );
 
             result = result.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, function(match, inner) {
                 var cleaned = inner.replace(/<p[^>]*>/gi, '').replace(/<\/p>\s*/gi, '\n');
@@ -3334,6 +3373,20 @@ addSeparator();
                     }
                 });
 
+                // ------------------------------------------------------------------
+                // Lite embed URL extractors. Used by the paste handler below.
+                // ------------------------------------------------------------------
+                function parseYouTubeUrl(url) {
+                    if (!url || typeof url !== 'string') return null;
+                    const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+                    return m ? m[1] : null;
+                }
+                function parseVimeoUrl(url) {
+                    if (!url || typeof url !== 'string') return null;
+                    const m = url.match(/vimeo\.com\/(?:[^\/\s]+\/)*?(\d+)/);
+                    return m ? m[1] : null;
+                }
+
                 const LinkPreview = Node.create({
                     name: 'linkPreview',
                     inline: true,
@@ -3453,6 +3506,67 @@ addSeparator();
                                 ]
                             ]
                         ];
+                    },
+                });
+
+                // ------------------------------------------------------------------
+                // Lite embeds — YouTube and Vimeo.
+                // Atom block nodes that render the lite-* custom elements
+                // defined by the boot loader. Two parseHTML rules each: one for
+                // the live editor DOM (tag = lite-youtube), one for the
+                // legacy serialization produced by htmlToLegacy
+                // (span.ff-lite-youtube). The videoid attribute is the only
+                // payload; the lite library reads it on upgrade.
+                // ------------------------------------------------------------------
+                const LiteYouTube = Node.create({
+                    name: 'liteYouTube',
+                    group: 'block',
+                    atom: true,
+                    draggable: true,
+                    selectable: true,
+                    addAttributes() {
+                        return {
+                            videoid: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
+                            },
+                        };
+                    },
+                    parseHTML() {
+                        return [
+                            { tag: 'lite-youtube' },
+                            { tag: 'span.ff-lite-youtube' },
+                        ];
+                    },
+                    renderHTML({ HTMLAttributes }) {
+                        return ['lite-youtube', HTMLAttributes];
+                    },
+                });
+
+                const LiteVimeo = Node.create({
+                    name: 'liteVimeo',
+                    group: 'block',
+                    atom: true,
+                    draggable: true,
+                    selectable: true,
+                    addAttributes() {
+                        return {
+                            videoid: {
+                                default: null,
+                                parseHTML: el => el.getAttribute('videoid') || el.getAttribute('data-videoid') || null,
+                                renderHTML: attrs => attrs.videoid ? { videoid: attrs.videoid } : {},
+                            },
+                        };
+                    },
+                    parseHTML() {
+                        return [
+                            { tag: 'lite-vimeo' },
+                            { tag: 'span.ff-lite-vimeo' },
+                        ];
+                    },
+                    renderHTML({ HTMLAttributes }) {
+                        return ['lite-vimeo', HTMLAttributes];
                     },
                 });
 
@@ -3861,6 +3975,8 @@ addSeparator();
                         Underline,
                         CustomImage,
                         CustomLink,
+                        LiteYouTube,
+                        LiteVimeo,
                         Spoiler,
                         NSFW,
                         LinkPreview,
@@ -3948,7 +4064,63 @@ handlePaste: function(view, event) {
         }
     }
 
-    // ----- 4. Fall through -----
+    // ----- 4. Lite embeds (YouTube, Vimeo) -----
+    // Two entry points: pasted iframe HTML from an embed code, or a
+    // bare video URL. Both resolve to the same atom nodes so the reader
+    // side can render the lite facade.
+    var clipboard = event.clipboardData;
+    if (clipboard) {
+        // 4a. iframe HTML — user copied an embed code from a provider
+        var htmlData = clipboard.getData('text/html');
+        if (htmlData && htmlData.indexOf('<iframe') !== -1) {
+            var ytIframe = htmlData.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
+            if (ytIframe) {
+                event.preventDefault();
+                editor.chain().focus().insertContent({
+                    type: 'liteYouTube',
+                    attrs: { videoid: ytIframe[1] }
+                }).run();
+                return true;
+            }
+            var vimeoIframe = htmlData.match(/player\.vimeo\.com\/video\/(\d+)/);
+            if (vimeoIframe) {
+                event.preventDefault();
+                editor.chain().focus().insertContent({
+                    type: 'liteVimeo',
+                    attrs: { videoid: vimeoIframe[1] }
+                }).run();
+                return true;
+            }
+        }
+
+        // 4b. Bare URL — user copied a share link
+        var textData = clipboard.getData('text/plain');
+        if (textData) {
+            var candidate = textData.trim();
+            if (/^https?:\/\/\S+$/.test(candidate)) {
+                var ytId = parseYouTubeUrl(candidate);
+                if (ytId) {
+                    event.preventDefault();
+                    editor.chain().focus().insertContent({
+                        type: 'liteYouTube',
+                        attrs: { videoid: ytId }
+                    }).run();
+                    return true;
+                }
+                var vmId = parseVimeoUrl(candidate);
+                if (vmId) {
+                    event.preventDefault();
+                    editor.chain().focus().insertContent({
+                        type: 'liteVimeo',
+                        attrs: { videoid: vmId }
+                    }).run();
+                    return true;
+                }
+            }
+        }
+    }
+
+    // ----- 5. Fall through -----
     // Let the default ProseMirror paste handler run. This covers
     // ordinary rich-text pastes (from web pages, Word, other editors)
     // that go through the transformPastedHTML preprocessing.
