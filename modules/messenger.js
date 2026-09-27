@@ -1038,6 +1038,17 @@ var MessengerModule = (function(Utils, EventBus) {
                 : content;
         });
 
+        // Inline code marker → <code>. ForumFree re-escapes the & in &lt;
+// when it round-trips, so one decode pass undoes that and the
+// subsequent escape restores well-formed HTML for TipTap to parse.
+html = html.replace(
+    /<span[^>]*\bff-inline-code\b[^>]*>([\s\S]*?)<\/span>/gis,
+    function(_, content) {
+        var decoded = decodeHtmlEntities(content);
+        return '<code>' + escapeHtml(decoded) + '</code>';
+    }
+);
+
         html = html.replace(/\[EMAIL\](.*?)\[\/EMAIL\]/gi, '<a href="mailto:$1">$1</a>');
         return html;
     }
@@ -1087,6 +1098,13 @@ var MessengerModule = (function(Utils, EventBus) {
                     : '';
                 return prefix + '[CODE]' + decoded + '[/CODE]';
             });
+
+            // Inline code → ff-inline-code marker. Runs after the pre pass, so
+// any <code> still present is guaranteed to be inline (the block
+// form was already consumed by the <pre><code> pair above).
+result = result.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, function(match, inner) {
+    return '<span class="ff-inline-code">' + inner + '</span>';
+});
 
             if (result === before) break;
         }
