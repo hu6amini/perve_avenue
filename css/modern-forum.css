@@ -3513,6 +3513,19 @@ section.modern-stats { flex-direction: column; width: 100%; }
   font-family: var(--font-primary);
 }
 .modern-dropdown-item:hover { background: var(--hover-color); }
+.modern-dropdown-menu .modern-dropdown-item {
+  border-radius: var(--radius-sm);
+  margin: 2px var(--space-xs);
+  width: calc(100% - var(--space-xs) * 2);
+}
+.modern-dropdown-item i {
+  width: 1.1rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.modern-dropdown-item:hover i {
+  color: var(--primary-light);
+}
 
 /* ------------------------------------------------------------------
    TipTap base
