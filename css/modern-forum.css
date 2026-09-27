@@ -3852,6 +3852,31 @@ section.modern-stats { flex-direction: column; width: 100%; }
   caret-color: var(--text-primary);
 }
 
+/* ------------------------------------------------------------------
+   Lite embeds (lite-youtube / lite-vimeo)
+   The custom element ships its own shadow-DOM styles via the CDN CSS
+   loaded in boot. These rules only handle layout inside the editor
+   and preview: block spacing, container radius, and the selection
+   outline ProseMirror adds to atom nodes.
+   ------------------------------------------------------------------ */
+.modern-wysiwyg .ProseMirror lite-youtube,
+.modern-wysiwyg .ProseMirror lite-vimeo,
+.modern-preview .preview-content lite-youtube,
+.modern-preview .preview-content lite-vimeo {
+    display: block;
+    margin: var(--space-md) 0;
+    max-width: 100%;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--bg-color);
+}
+
+.modern-wysiwyg .ProseMirror lite-youtube.ProseMirror-selectednode,
+.modern-wysiwyg .ProseMirror lite-vimeo.ProseMirror-selectednode {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 .modern-checkbox {
   display: inline-flex;
   align-items: center;
