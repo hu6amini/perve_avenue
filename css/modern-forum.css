@@ -278,6 +278,22 @@
   height: auto;
 }
 
+/* Reader-side image sizes (matches editor + preview) */
+.post-message img[data-size="small"]  { max-width: 25%; height: auto; }
+.post-message img[data-size="medium"] { max-width: 50%; height: auto; }
+.post-message img[data-size="large"]  { max-width: 75%; height: auto; }
+
+/* Inline code — non-block code elements in a post body */
+.post-message :not(pre) > code {
+  background: var(--surface-light);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--primary-light);
+}
+
 .post-edit-info {
   display: inline-flex;
   align-items: center;
@@ -1533,9 +1549,15 @@
   outline-offset: 2px;
   opacity: 0.75;
 }
-.editor-image-nsfw-btn {
+.editor-image-toolbar {
   position: absolute;
   z-index: 99999;
+  display: none;
+  gap: 6px;
+  align-items: center;
+}
+.editor-image-nsfw-btn,
+.editor-image-edit-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -1543,14 +1565,15 @@
   background: rgba(20, 20, 20, 0.85);
   color: #fff;
   cursor: pointer;
-  display: none;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   padding: 0;
   transition: background 0.15s, transform 0.15s;
 }
-.editor-image-nsfw-btn:hover {
+.editor-image-nsfw-btn:hover,
+.editor-image-edit-btn:hover {
   background: rgba(40, 40, 40, 0.95);
   transform: scale(1.05);
 }
@@ -1558,7 +1581,8 @@
   background: var(--text-tertiary);
   border-color: var(--text-secondary);
 }
-.editor-image-nsfw-btn i { pointer-events: none; }
+.editor-image-nsfw-btn i,
+.editor-image-edit-btn i { pointer-events: none; }
 
 /* ------------------------------------------------------------
    10b. SEMANTIC TEXT COLORS
@@ -3711,6 +3735,22 @@ section.modern-stats { flex-direction: column; width: 100%; }
   border-radius: var(--radius);
 }
 
+/* Editor image sizes */
+.ProseMirror img[data-size="small"]  { max-width: 25%; height: auto; }
+.ProseMirror img[data-size="medium"] { max-width: 50%; height: auto; }
+.ProseMirror img[data-size="large"]  { max-width: 75%; height: auto; }
+
+/* Inline code (not inside a pre block) */
+.ProseMirror :not(pre) > code {
+  background: var(--surface-light);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--primary-light);
+}
+
 /* Quotes */
 .modern-wysiwyg .ProseMirror blockquote {
     position: relative;
@@ -4114,6 +4154,20 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 .modern-send-confirmation-dismiss i {
   font-size: 0.8rem;
+}
+/* Preview-side image sizes and inline code */
+.modern-preview .preview-content img[data-size="small"]  { max-width: 25%; height: auto; }
+.modern-preview .preview-content img[data-size="medium"] { max-width: 50%; height: auto; }
+.modern-preview .preview-content img[data-size="large"]  { max-width: 75%; height: auto; }
+
+.modern-preview .preview-content :not(pre) > code {
+  background: var(--surface-light);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--primary-light);
 }
 
 /* ------------------------------------------------------------------
