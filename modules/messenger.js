@@ -3823,28 +3823,73 @@ function updateSendState() {
                                 .replace(/\u00a0/g, ' ')
                                 .replace(/ {2,}/g, ' ');
                         },
-                        handlePaste: function(view, event) {
-                            var files = event.clipboardData ? event.clipboardData.files : null;
-                            if (files && files.length) {
-                                var imgs = Array.prototype.slice.call(files).filter(function(f) {
-                                    return f.type && f.type.indexOf('image/') === 0;
-                                });
-                                if (imgs.length) {
-                                    event.preventDefault();
-                                    imgs.forEach(function(f) { uploadImageToWorker(f, editor); });
-                                    return true;
-                                }
-                            }
-                            if (event.shiftKey) {
-                                var text = event.clipboardData.getData('text/plain');
-                                if (text) {
-                                    event.preventDefault();
-                                    view.dispatch(view.state.tr.insertText(text));
-                                    return true;
-                                }
-                            }
-                            return false;
-                        },
+handlePaste: function(view, event) {
+    // ----- 1. File paste (images) -----
+    // Runs first because a pasted file is orthogonal to cursor
+    // position — if the clipboard carries an image, we always
+    // want to upload it, regardless of where the cursor is.
+    var files = event.clipboardData ? event.clipboardData.files : null;
+    if (files && files.length) {
+        var imgs = Array.prototype.slice.call(files).filter(function(f) {
+            return f.type && f.type.indexOf('image/') === 0;
+        });
+        if (imgs.length) {
+            event.preventDefault();
+            imgs.forEach(function(f) { uploadImageToWorker(f, editor); });
+            return true;
+        }
+    }
+
+    // ----- 2. Inline-code paste -----
+    // When the cursor is inside a code mark and the clipboard
+    // carries plain text, insert it as a single text node with the
+    // mark explicitly applied. Without this, the default paste path
+    // treats the insertion as a batch and the mark's boundary rules
+    // (inclusive: false, same as bold) can leave the pasted run
+    // unmarked — the pill splits into two around the pasted word.
+    // Newlines and whitespace runs collapse to single spaces so a
+    // multi-line snippet becomes a one-line pill; a multi-line
+    // paste isn't what inline code is for, and forcing the collapse
+    // nudges users toward the code-block button for real snippets.
+    if (view.state.selection.empty) {
+        var $from = view.state.selection.$from;
+        var codeMarkType = view.state.schema.marks.code;
+        var hasCode = codeMarkType && codeMarkType.isInSet($from.marks());
+        if (hasCode) {
+            var pasteText = event.clipboardData
+                ? event.clipboardData.getData('text/plain')
+                : '';
+            if (pasteText && pasteText.length > 0) {
+                event.preventDefault();
+                var collapsed = pasteText.replace(/\s+/g, ' ').trim();
+                if (collapsed) {
+                    view.dispatch(view.state.tr.insertText(collapsed));
+                }
+                return true;
+            }
+        }
+    }
+
+    // ----- 3. Shift + paste override -----
+    // Shift+paste is the browser-level "paste as plain text" gesture.
+    // If the user is not inside a code mark and held Shift, we insert
+    // the plain-text version directly so the source's rich formatting
+    // is dropped.
+    if (event.shiftKey) {
+        var text = event.clipboardData.getData('text/plain');
+        if (text) {
+            event.preventDefault();
+            view.dispatch(view.state.tr.insertText(text));
+            return true;
+        }
+    }
+
+    // ----- 4. Fall through -----
+    // Let the default ProseMirror paste handler run. This covers
+    // ordinary rich-text pastes (from web pages, Word, other editors)
+    // that go through the transformPastedHTML preprocessing.
+    return false;
+},
                     },
                     onCreate: function({ editor }) {
                         if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
