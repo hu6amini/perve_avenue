@@ -4169,11 +4169,11 @@ modernPreviewBtnRef = container.querySelector('#modern-preview');
         var modernPreviewBtn = container.querySelector('#modern-preview');
         if (modernPreviewBtn) {
     modernPreviewBtn.onclick = function() {
-        if (!editor || editor.isEmpty) return;
-        updateLivePreview();
-                previewArea.style.display = 'block';
-                previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            };
+    if (!editor || editor.isEmpty) return;
+    previewArea.style.display = 'block';
+    updateLivePreview();
+    previewArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
         }
 
         var modernSubmitBtn = container.querySelector('#modern-submit');
