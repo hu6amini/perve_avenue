@@ -3866,15 +3866,35 @@ section.modern-stats { flex-direction: column; width: 100%; }
 .post-message lite-youtube,
 .post-message lite-vimeo {
     display: block;
+    position: relative;           /* containing block for the iframe */
     width: 100%;
     max-width: 560px;
+    aspect-ratio: 16 / 9;         /* reserves height even if library CSS is missing */
     margin: var(--space-md) var(--space-sm);
     border-radius: var(--radius);
     overflow: hidden;
-    background: var(--bg-color);
+    background-color: var(--bg-color);
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    cursor: pointer;
+}
+
+/* Force the iframe to overlay the facade. Mirrors the library's own
+   rule but with higher specificity, so it wins even if the library
+   stylesheet hasn't loaded or has been overridden. */
+.modern-wysiwyg .ProseMirror lite-youtube > iframe,
+.modern-wysiwyg .ProseMirror lite-vimeo > iframe,
+.modern-preview .preview-content lite-youtube > iframe,
+.modern-preview .preview-content lite-vimeo > iframe,
+.post-message lite-youtube > iframe,
+.post-message lite-vimeo > iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
 }
 
 .modern-wysiwyg .ProseMirror lite-youtube.ProseMirror-selectednode,
