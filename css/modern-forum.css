@@ -3859,24 +3859,60 @@ section.modern-stats { flex-direction: column; width: 100%; }
 }
 
 /* ------------------------------------------------------------------
-   Lite embeds (lite-youtube / lite-vimeo)
+   Lite embeds (lite-youtube / lite-vimeo) with caption wrapper
    The custom element ships its own shadow-DOM styles via the CDN CSS
    loaded in boot. These rules handle layout inside the editor,
-   preview, and reader sides: cap the width, center the element in
-   the content column, and give the atom nodes a selection outline.
+   preview, and reader sides: cap the width, add a small gutter,
+   reserve the 16:9 aspect ratio, and style the caption.
    ------------------------------------------------------------------ */
-.modern-wysiwyg .ProseMirror lite-youtube,
-.modern-wysiwyg .ProseMirror lite-vimeo,
-.modern-preview .preview-content lite-youtube,
-.modern-preview .preview-content lite-vimeo,
-.post-message lite-youtube,
-.post-message lite-vimeo {
+
+/* Outer wrapper — the atom node's root. Holds margin, width cap,
+   aspect-ratio reservation, and the selection rings. */
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper,
+.modern-preview .preview-content .lite-embed-wrapper,
+.post-message .lite-embed-wrapper {
     display: block;
-    position: relative;           /* containing block for the iframe */
     width: 100%;
     max-width: 560px;
-    aspect-ratio: 16 / 9;         /* reserves height even if library CSS is missing */
     margin: var(--space-md) var(--space-sm);
+}
+
+/* Legacy fallback — a bare embed with no wrapper still lays out
+   correctly if it slips through from older content. */
+.modern-wysiwyg .ProseMirror > lite-youtube,
+.modern-wysiwyg .ProseMirror > lite-vimeo,
+.modern-preview .preview-content > lite-youtube,
+.modern-preview .preview-content > lite-vimeo,
+.post-message > lite-youtube,
+.post-message > lite-vimeo {
+    display: block;
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+    aspect-ratio: 16 / 9;
+    margin: var(--space-md) var(--space-sm);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background-color: var(--bg-color);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    cursor: pointer;
+}
+
+/* The custom element inside the wrapper — fills the wrapper width,
+   keeps the rounded corners, and provides a background while the
+   poster image loads. */
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper > lite-youtube,
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper > lite-vimeo,
+.modern-preview .preview-content .lite-embed-wrapper > lite-youtube,
+.modern-preview .preview-content .lite-embed-wrapper > lite-vimeo,
+.post-message .lite-embed-wrapper > lite-youtube,
+.post-message .lite-embed-wrapper > lite-vimeo {
+    display: block;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
     border-radius: var(--radius);
     overflow: hidden;
     background-color: var(--bg-color);
@@ -3903,24 +3939,62 @@ section.modern-stats { flex-direction: column; width: 100%; }
     border: 0;
 }
 
-.modern-wysiwyg .ProseMirror lite-youtube.ProseMirror-selectednode,
-.modern-wysiwyg .ProseMirror lite-vimeo.ProseMirror-selectednode {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
-}
-
-/* Node selection — a click landed on the embed itself. */
-.modern-wysiwyg .ProseMirror lite-youtube.ProseMirror-selectednode,
-.modern-wysiwyg .ProseMirror lite-vimeo.ProseMirror-selectednode {
+/* Node selection — a click landed on the embed itself. The class
+   lands on the wrapper (the atom's root), so the ring has to be
+   drawn on the inner custom element to hug its rounded corners. */
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.ProseMirror-selectednode > lite-youtube,
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.ProseMirror-selectednode > lite-vimeo {
     box-shadow:
         0 0 0 2px var(--primary-color),
         0 0 0 4px var(--focus-ring);
 }
 
 /* Range selection — the embed is inside a text drag-select. */
-.modern-wysiwyg .ProseMirror lite-youtube.lite-embed-in-selection,
-.modern-wysiwyg .ProseMirror lite-vimeo.lite-embed-in-selection {
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.lite-embed-in-selection > lite-youtube,
+.modern-wysiwyg .ProseMirror .lite-embed-wrapper.lite-embed-in-selection > lite-vimeo {
     box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* Caption — two lines below the embed. */
+.lite-embed-caption {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-xs) var(--space-sm) 0;
+}
+
+.lite-embed-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.35;
+}
+
+.lite-embed-author {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.35;
+}
+
+/* Mobile — tighten the gutter, allow the title to wrap to two lines. */
+@media (max-width: 680px) {
+    .modern-wysiwyg .ProseMirror .lite-embed-wrapper,
+    .modern-preview .preview-content .lite-embed-wrapper,
+    .post-message .lite-embed-wrapper {
+        margin: var(--space-sm) var(--space-xs);
+    }
+    .lite-embed-title {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
 }
 
 .modern-checkbox {
