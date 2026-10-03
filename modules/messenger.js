@@ -1731,6 +1731,25 @@ var charCounter         = null;
 var draftSaveTimer      = null;
 var livePreviewTimer    = null;
 
+        // After inserting a lite embed, if the doc now ends with an empty
+// paragraph directly following the embed, move the cursor into it.
+// The trailing-paragraph plugin guarantees that paragraph exists
+// when the embed is the last node, but ProseMirror leaves the
+// selection in a gap position — no text cursor, no typing.
+function focusTrailingEmbedParagraph() {
+    if (!editor) return;
+    const doc = editor.state.doc;
+    if (doc.childCount < 2) return;
+    const last = doc.child(doc.childCount - 1);
+    const secondLast = doc.child(doc.childCount - 2);
+    if (last.type.name !== 'paragraph' || last.content.size !== 0) return;
+    if (secondLast.type.name !== 'liteYouTube' && secondLast.type.name !== 'liteVimeo') return;
+    // doc.content.size - 1 is the single cursor position inside the
+    // empty trailing paragraph. setTextSelection on that puts a real
+    // text cursor there and chain().focus() gives it focus.
+    editor.chain().focus().setTextSelection(doc.content.size - 1).run();
+}
+
         var modernRecipient     = container.querySelector('#modern-recipient');
         var modernTitle         = container.querySelector('#modern-title');
         var recipientChip       = container.querySelector('.modern-recipient-chip');
@@ -4143,54 +4162,58 @@ handlePaste: function(view, event) {
     // side can render the lite facade.
     var clipboard = event.clipboardData;
     if (clipboard) {
-        // 4a. iframe HTML — user copied an embed code from a provider
-        var htmlData = clipboard.getData('text/html');
-        if (htmlData && htmlData.indexOf('<iframe') !== -1) {
-            var ytIframe = htmlData.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
-            if (ytIframe) {
-                event.preventDefault();
-                editor.chain().focus().insertContent({
-                    type: 'liteYouTube',
-                    attrs: { videoid: ytIframe[1] }
-                }).run();
-                return true;
-            }
-            var vimeoIframe = htmlData.match(/player\.vimeo\.com\/video\/(\d+)/);
-            if (vimeoIframe) {
-                event.preventDefault();
-                editor.chain().focus().insertContent({
-                    type: 'liteVimeo',
-                    attrs: { videoid: vimeoIframe[1] }
-                }).run();
-                return true;
-            }
-        }
+// 4a. iframe HTML — user copied an embed code from a provider
+var htmlData = clipboard.getData('text/html');
+if (htmlData && htmlData.indexOf('<iframe') !== -1) {
+    var ytIframe = htmlData.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/);
+    if (ytIframe) {
+        event.preventDefault();
+        editor.chain().focus().insertContent({
+            type: 'liteYouTube',
+            attrs: { videoid: ytIframe[1] }
+        }).run();
+        focusTrailingEmbedParagraph();
+        return true;
+    }
+    var vimeoIframe = htmlData.match(/player\.vimeo\.com\/video\/(\d+)/);
+    if (vimeoIframe) {
+        event.preventDefault();
+        editor.chain().focus().insertContent({
+            type: 'liteVimeo',
+            attrs: { videoid: vimeoIframe[1] }
+        }).run();
+        focusTrailingEmbedParagraph();
+        return true;
+    }
+}
 
-        // 4b. Bare URL — user copied a share link
-        var textData = clipboard.getData('text/plain');
-        if (textData) {
-            var candidate = textData.trim();
-            if (/^https?:\/\/\S+$/.test(candidate)) {
-                var ytId = parseYouTubeUrl(candidate);
-                if (ytId) {
-                    event.preventDefault();
-                    editor.chain().focus().insertContent({
-                        type: 'liteYouTube',
-                        attrs: { videoid: ytId }
-                    }).run();
-                    return true;
-                }
-                var vmId = parseVimeoUrl(candidate);
-                if (vmId) {
-                    event.preventDefault();
-                    editor.chain().focus().insertContent({
-                        type: 'liteVimeo',
-                        attrs: { videoid: vmId }
-                    }).run();
-                    return true;
-                }
-            }
+// 4b. Bare URL — user copied a share link
+var textData = clipboard.getData('text/plain');
+if (textData) {
+    var candidate = textData.trim();
+    if (/^https?:\/\/\S+$/.test(candidate)) {
+        var ytId = parseYouTubeUrl(candidate);
+        if (ytId) {
+            event.preventDefault();
+            editor.chain().focus().insertContent({
+                type: 'liteYouTube',
+                attrs: { videoid: ytId }
+            }).run();
+            focusTrailingEmbedParagraph();
+            return true;
         }
+        var vmId = parseVimeoUrl(candidate);
+        if (vmId) {
+            event.preventDefault();
+            editor.chain().focus().insertContent({
+                type: 'liteVimeo',
+                attrs: { videoid: vmId }
+            }).run();
+            focusTrailingEmbedParagraph();
+            return true;
+        }
+    }
+}
     }
 
     // ----- 5. Fall through -----
