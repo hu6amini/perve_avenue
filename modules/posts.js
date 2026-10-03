@@ -507,6 +507,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyQuotesAndSpoilers(html);
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
+        html = transformLegacyIframes(html);
         html = transformLiteEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
@@ -648,6 +649,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyQuotesAndSpoilers(html);
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
+        html = transformLegacyIframes(html);
         html = transformLiteEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
@@ -711,7 +713,8 @@ function parseDateFromTitle(title) {
             contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
             contentHtml = transformLegacyAttachments(contentHtml);
             contentHtml = transformLegacyCodeBlocks(contentHtml);
-            contentHtml = transformLiteEmbeds(html);
+            contentHtml = transformLegacyIframes(contentHtml);
+            contentHtml = transformLiteEmbeds(contentHtml);
             contentHtml = transformUserTags(contentHtml);
             contentHtml = transformNSFWTags(contentHtml);
         }
@@ -2835,6 +2838,70 @@ function transformLegacyCodeBlocks(htmlContent) {
     });
     return tempDiv.innerHTML;
 }
+    // ============================================================================
+// LEGACY IFRAME TRANSFORMATION
+// ForumFree historically rendered [youtube]ID[/youtube] and similar
+// BBCode as raw <iframe> elements. The sanitizer strips every iframe, so
+// legacy embeds vanish from modern cards. This transform runs BEFORE the
+// sanitizer sees the content: it matches known providers and rewrites
+// each iframe into the same .lite-embed-wrapper structure the composer
+// produces, so the CDN custom element upgrades it and the existing
+// stylesheet handles layout.
+//
+// Non-whitelisted iframes are left in place — the sanitizer removes them,
+// same as today.
+// ============================================================================
+function transformLegacyIframes(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    if (htmlContent.indexOf('<iframe') === -1) return htmlContent;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+
+    const iframes = tempDiv.querySelectorAll('iframe[src]');
+    iframes.forEach(iframe => {
+        const src = iframe.getAttribute('src') || '';
+        const parsed = parseLegacyIframeProvider(src);
+        if (!parsed) return;   // leave for the sanitizer
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'lite-embed-wrapper';
+        wrapper.setAttribute('data-videoid', parsed.videoid);
+
+        const lite = document.createElement(
+            parsed.kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo'
+        );
+        lite.setAttribute('videoid', parsed.videoid);
+        wrapper.appendChild(lite);
+
+        // If the iframe sits alone inside a div[align="center"], replace
+        // that too so no empty centered container is left behind.
+        const parent = iframe.parentNode;
+        const target = (
+            parent && parent.tagName === 'DIV' &&
+            parent.getAttribute('align') === 'center' &&
+            parent.children.length === 1
+        ) ? parent : iframe;
+
+        target.parentNode.replaceChild(wrapper, target);
+    });
+
+    return tempDiv.innerHTML;
+}
+
+function parseLegacyIframeProvider(src) {
+    if (!src) return null;
+
+    // YouTube — three historical URL shapes
+    let m = src.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+    if (m) return { kind: 'youtube', videoid: m[1] };
+
+    // Vimeo
+    m = src.match(/player\.vimeo\.com\/video\/(\d+)/);
+    if (m) return { kind: 'vimeo', videoid: m[1] };
+
+    return null;
+}
 
     // ============================================================================
     // ATTACHMENT CONVERSION
@@ -3594,6 +3661,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
                 contentHtml = transformLegacyAttachments(contentHtml);
                 contentHtml = transformLegacyCodeBlocks(contentHtml);
+                contentHtml = transformLegacyIframes(contentHtml);
                 contentHtml = transformLiteEmbeds(contentHtml);
                 contentHtml = transformUserTags(contentHtml);
                 contentHtml = transformNSFWTags(contentHtml);
