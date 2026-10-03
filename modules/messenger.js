@@ -3419,6 +3419,7 @@ addSeparator();
                             href: { default: '' },
                             title: { default: '' },
                             description: { default: '' },
+                            author: { default: '' },
                             imageSrc: { default: '' },
                             loading: { default: false },
                         };
@@ -3515,7 +3516,10 @@ addSeparator();
                                         'span',
                                         { class: 'link-preview-text' },
                                         ['span', { class: 'link-preview-title' }, title || href],
-                                        description ? ['span', { class: 'link-preview-description' }, description] : '',
+node.attrs.author
+    ? ['span', { class: 'link-preview-author' }, node.attrs.author]
+    : '',
+description ? ['span', { class: 'link-preview-description' }, description] : '',
                                         [
                                             'span',
                                             { class: 'link-preview-url-wrapper' },
@@ -3949,6 +3953,7 @@ addSeparator();
                                         href: data.href || url,
                                         title: data.title || url,
                                         description: data.description || '',
+                                        author: data.author || '',
                                         imageSrc: data.imageSrc || '',
                                         loading: false,
                                     });
