@@ -674,7 +674,6 @@
   padding: var(--pad-4) var(--pad-5);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   box-sizing: border-box;
 }
 .link-preview-title {
