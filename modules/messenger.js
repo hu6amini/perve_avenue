@@ -3950,25 +3950,36 @@ addSeparator();
                     },
                 });
 
-                // ------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Trailing paragraph after a lite embed.
 // A liteYouTube / liteVimeo node is a block-level leaf, so it has no
 // internal text positions. When it's the last node in the doc there
 // is no position after it for a cursor to land on. This plugin
 // appends an empty paragraph whenever the doc would otherwise end on
 // a lite embed.
+//
+// Wrapped as a TipTap Extension so ProseMirror receives it through
+// the state pipeline — appendTransaction is a state-level hook and
+// cannot be passed via editorProps.plugins.
 // ------------------------------------------------------------------
-const trailingEmbedParagraphPlugin = new Plugin({
-    key: new PluginKey('trailingEmbedParagraph'),
-    appendTransaction(transactions, oldState, newState) {
-        if (!transactions.some(tr => tr.docChanged)) return null;
-        const lastNode = newState.doc.lastChild;
-        if (!lastNode) return null;
-        if (lastNode.type.name !== 'liteYouTube' && lastNode.type.name !== 'liteVimeo') {
-            return null;
-        }
-        const paragraph = newState.schema.nodes.paragraph.create();
-        return newState.tr.insert(newState.doc.content.size, paragraph);
+const TrailingEmbedParagraph = Extension.create({
+    name: 'trailingEmbedParagraph',
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('trailingEmbedParagraph'),
+                appendTransaction(transactions, oldState, newState) {
+                    if (!transactions.some(tr => tr.docChanged)) return null;
+                    const lastNode = newState.doc.lastChild;
+                    if (!lastNode) return null;
+                    if (lastNode.type.name !== 'liteYouTube' && lastNode.type.name !== 'liteVimeo') {
+                        return null;
+                    }
+                    const paragraph = newState.schema.nodes.paragraph.create();
+                    return newState.tr.insert(newState.doc.content.size, paragraph);
+                },
+            }),
+        ];
     },
 });
 
@@ -3981,27 +3992,34 @@ const trailingEmbedParagraphPlugin = new Plugin({
 // custom element. This plugin adds .lite-embed-in-selection to any
 // embed that participates in a non-empty range selection.
 // ------------------------------------------------------------------
-const liteEmbedSelectionPlugin = new Plugin({
-    key: new PluginKey('liteEmbedSelection'),
-    props: {
-        decorations(state) {
-            const { from, to, empty } = state.selection;
-            if (empty) return null;
-            const decorations = [];
-            state.doc.nodesBetween(from, to, (node, pos) => {
-                if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
-                    decorations.push(
-                        Decoration.node(pos, pos + node.nodeSize, {
-                            class: 'lite-embed-in-selection',
-                        })
-                    );
-                }
-            });
-            return DecorationSet.create(state.doc, decorations);
-        },
+const LiteEmbedSelection = Extension.create({
+    name: 'liteEmbedSelection',
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('liteEmbedSelection'),
+                props: {
+                    decorations(state) {
+                        const { from, to, empty } = state.selection;
+                        if (empty) return null;
+                        const decorations = [];
+                        state.doc.nodesBetween(from, to, (node, pos) => {
+                            if (node.type.name === 'liteYouTube' || node.type.name === 'liteVimeo') {
+                                decorations.push(
+                                    Decoration.node(pos, pos + node.nodeSize, {
+                                        class: 'lite-embed-in-selection',
+                                    })
+                                );
+                            }
+                        });
+                        return DecorationSet.create(state.doc, decorations);
+                    },
+                },
+            }),
+        ];
     },
 });
-
+                
                 var textareaRaw = originalTextarea ? (originalTextarea.value || '') : '';
                 var initialHtml = textareaRaw ? legacyToHtml(textareaRaw) : '';
 
@@ -4036,6 +4054,8 @@ const liteEmbedSelectionPlugin = new Plugin({
                         SemanticColor,
                         CustomMention,
                         EmoticonRule,
+                        TrailingEmbedParagraph,
+                        LiteEmbedSelection,
                     ],
                     content: initialHtml,
                     editorProps: {
@@ -4043,7 +4063,7 @@ const liteEmbedSelectionPlugin = new Plugin({
                             class: 'modern-wysiwyg-content',
                             'aria-label': 'Message body',
                         },
-                        plugins: [linkPreviewPlugin, trailingEmbedParagraphPlugin, liteEmbedSelectionPlugin],
+                        plugins: [linkPreviewPlugin],
                         transformPastedHTML: function(html) {
                             if (!html || typeof html !== 'string') return html;
                             if (html.indexOf('&nbsp') === -1 &&
