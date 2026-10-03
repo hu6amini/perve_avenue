@@ -509,6 +509,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyCodeBlocks(html);
         html = transformLegacyIframes(html);
         html = transformLiteEmbeds(html);
+        html = transformLegacySocialEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
         return html;
@@ -651,6 +652,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyCodeBlocks(html);
         html = transformLegacyIframes(html);
         html = transformLiteEmbeds(html);
+        html = transformLegacySocialEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
         return html;
@@ -715,6 +717,7 @@ function parseDateFromTitle(title) {
             contentHtml = transformLegacyCodeBlocks(contentHtml);
             contentHtml = transformLegacyIframes(contentHtml);
             contentHtml = transformLiteEmbeds(contentHtml);
+            contentHtml = transformLegacySocialEmbeds(contentHtml);
             contentHtml = transformUserTags(contentHtml);
             contentHtml = transformNSFWTags(contentHtml);
         }
@@ -2838,6 +2841,179 @@ function transformLegacyCodeBlocks(htmlContent) {
     });
     return tempDiv.innerHTML;
 }
+
+    // ============================================================================
+// LEGACY SOCIAL EMBED TRANSFORMATION
+// Twitter and Instagram store their embeds as <blockquote class="twitter-tweet">
+// / <blockquote class="instagram-media">. With their widget scripts gone,
+// they render as plain text. This pair of functions replaces them with
+// the same .link-preview-card structure the composer uses:
+//
+//   transformLegacySocialEmbeds — synchronous, runs in the pipeline. Emits
+//   a skeleton card with a data-social-hydrate="URL" marker so the swap
+//   happens in the same render pass as the post itself. The user sees the
+//   card frame immediately, not after a network round-trip.
+//
+//   hydrateSocialEmbeds — asynchronous, runs once per card after insertion.
+//   Collects the marked skeletons, batches the worker fetches, fills each
+//   card in place. Failures leave the skeleton styled as a plain link so
+//   nothing collapses.
+// ============================================================================
+function transformLegacySocialEmbeds(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    if (htmlContent.indexOf('<blockquote') === -1) return htmlContent;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+
+    const blockquotes = tempDiv.querySelectorAll(
+        'blockquote.twitter-tweet, blockquote.instagram-media'
+    );
+
+    blockquotes.forEach(bq => {
+        // Twitter: the canonical tweet URL is the last <a> inside the
+        // blockquote (the "replies/likes" link points at the same status,
+        // but the first <a> is usually the author handle, so taking the
+        // last one is more reliable across templates).
+        // Instagram: same shape — one <a href> per post.
+        const links = bq.querySelectorAll('a[href]');
+        let url = '';
+        for (let i = links.length - 1; i >= 0; i--) {
+            const href = links[i].href || '';
+            if (/twitter\.com|x\.com|instagram\.com/i.test(href)) { url = href; break; }
+        }
+        if (!url && links.length) url = links[links.length - 1].href || '';
+        if (!url) { bq.remove(); return; }
+
+        // Skeleton card. Same classes the stylesheet styles, so the frame
+        // renders with correct dimensions the instant the post appears.
+        const skeleton = document.createElement('span');
+        skeleton.className = 'link-preview-card link-preview-card--loading';
+        skeleton.setAttribute('data-type', 'link-preview');
+        skeleton.setAttribute('data-social-hydrate', url);
+
+        const hostname = (() => {
+            try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; }
+        })();
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'link-preview-link';
+
+        const content = document.createElement('span');
+        content.className = 'link-preview-content';
+
+        const text = document.createElement('span');
+        text.className = 'link-preview-text';
+
+        const title = document.createElement('span');
+        title.className = 'link-preview-title';
+        title.textContent = hostname;
+
+        const urlWrap = document.createElement('span');
+        urlWrap.className = 'link-preview-url-wrapper';
+        const host = document.createElement('span');
+        host.className = 'link-preview-hostname';
+        host.textContent = hostname;
+        urlWrap.appendChild(host);
+
+        text.appendChild(title);
+        text.appendChild(urlWrap);
+        content.appendChild(text);
+        link.appendChild(content);
+        skeleton.appendChild(link);
+
+        bq.parentNode.replaceChild(skeleton, bq);
+    });
+
+    return tempDiv.innerHTML;
+}
+
+// Runs once per card after insertion. Handles all the async work.
+// Deduplicated per URL across the page so a tweet embedded in five
+// posts still triggers one worker request.
+const _socialHydrationCache = new Map();  // url → Promise<metadata | null>
+const _hydratedUrls = new Set();
+
+function hydrateSocialEmbeds(root) {
+    if (!root) return;
+    const skeletons = root.querySelectorAll('[data-social-hydrate]');
+    if (!skeletons.length) return;
+
+    skeletons.forEach(skeleton => {
+        const url = skeleton.getAttribute('data-social-hydrate');
+        if (!url) return;
+
+        // One promise per unique URL
+        let promise = _socialHydrationCache.get(url);
+        if (!promise) {
+            promise = fetch(OG_WORKER_URL + encodeURIComponent(url))
+                .then(r => r.ok ? r.json() : null)
+                .catch(() => null);
+            _socialHydrationCache.set(url, promise);
+        }
+
+        promise.then(data => {
+            // Card may have been removed while the fetch was in flight
+            if (!skeleton.parentNode) return;
+
+            if (!data || data.error || !data.title) {
+                // Graceful fallback — strip the loading state, keep the
+                // hostname-only card that already rendered. No layout shift.
+                skeleton.classList.remove('link-preview-card--loading');
+                return;
+            }
+
+            const link = skeleton.querySelector('.link-preview-link');
+            const text = skeleton.querySelector('.link-preview-text');
+            if (!link || !text) return;
+
+            // Replace the placeholder title with the real one
+            const titleEl = text.querySelector('.link-preview-title');
+            if (titleEl) titleEl.textContent = data.title || url;
+
+            // Insert author line + description between title and url row
+            const urlRow = text.querySelector('.link-preview-url-wrapper');
+
+            if (data.author) {
+                const author = document.createElement('span');
+                author.className = 'link-preview-author';
+                author.textContent = data.author;
+                text.insertBefore(author, urlRow);
+            }
+
+            if (data.description) {
+                const desc = document.createElement('span');
+                desc.className = 'link-preview-description';
+                desc.textContent = data.description;
+                text.insertBefore(desc, urlRow);
+            }
+
+            // If the worker returned a thumbnail, convert the card from
+            // the simple text-only form to the rich two-column form.
+            if (data.imageSrc) {
+                const finalImageUrl = data.imageSrc;
+                const proxied = finalImageUrl;  // simple pass-through; the worker already
+                                                 // returns a resolved URL
+                const imageWrap = document.createElement('span');
+                imageWrap.className = 'embedded-link-image';
+                const img = document.createElement('img');
+                img.className = 'link-preview-image';
+                img.loading = 'lazy';
+                img.alt = '';
+                img.src = proxied;
+                imageWrap.appendChild(img);
+                // Insert image column before the text column
+                const contentWrap = skeleton.querySelector('.link-preview-content');
+                if (contentWrap) contentWrap.insertBefore(imageWrap, text);
+            }
+
+            skeleton.classList.remove('link-preview-card--loading');
+        });
+    });
+}
     // ============================================================================
 // LEGACY IFRAME TRANSFORMATION
 // ForumFree historically rendered [youtube]ID[/youtube] and similar
@@ -3662,6 +3838,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacyAttachments(contentHtml);
                 contentHtml = transformLegacyCodeBlocks(contentHtml);
                 contentHtml = transformLegacyIframes(contentHtml);
+                contentHtml = transformLegacySocialEmbeds(contentHtml);
                 contentHtml = transformLiteEmbeds(contentHtml);
                 contentHtml = transformUserTags(contentHtml);
                 contentHtml = transformNSFWTags(contentHtml);
@@ -3686,6 +3863,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             applyFaviconsToMessageLinks(card);
             wrapImagesWithDimensions(card);
             attachTips(card, completeData);
+            hydrateSocialEmbeds(card);
         }
         initQuotesAndSpoilers();
         // Convert any remaining native titles into tippys
