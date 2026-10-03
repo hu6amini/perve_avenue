@@ -507,6 +507,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyQuotesAndSpoilers(html);
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
+        html = transformLiteEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
         return html;
@@ -647,6 +648,7 @@ function parseDateFromTitle(title) {
         html = transformLegacyQuotesAndSpoilers(html);
         html = transformLegacyAttachments(html);
         html = transformLegacyCodeBlocks(html);
+        html = transformLiteEmbeds(html);
         html = transformUserTags(html);
         html = transformNSFWTags(html);
         return html;
@@ -709,6 +711,7 @@ function parseDateFromTitle(title) {
             contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
             contentHtml = transformLegacyAttachments(contentHtml);
             contentHtml = transformLegacyCodeBlocks(contentHtml);
+            contentHtml = transformLiteEmbeds(html);
             contentHtml = transformUserTags(contentHtml);
             contentHtml = transformNSFWTags(contentHtml);
         }
@@ -943,6 +946,65 @@ function transformNSFWTags(htmlContent) {
         decodeTextNodesInPlace(replacement);
         tag.parentNode.replaceChild(replacement, tag);
     });
+    return tempDiv.innerHTML;
+}
+
+    // ============================================================================
+// LITE EMBED TRANSFORMATION
+// The messenger serialises TipTap's liteYouTube / liteVimeo nodes as
+// <span class="ff-lite-youtube" data-videoid data-title data-author>. This
+// reverses that on the reader side, building the same wrapper structure
+// the composer's renderHTML produces so the caption and facade styling in
+// the stylesheet applies. The custom element itself is upgraded by the
+// lite-youtube-embed / lite-vimeo-embed scripts loaded in Phase C.
+// ============================================================================
+function transformLiteEmbeds(htmlContent) {
+    if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
+    if (htmlContent.indexOf('ff-lite-') === -1) return htmlContent;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+
+    function buildWrapper(kind, marker) {
+        const videoid = marker.getAttribute('data-videoid') || '';
+        if (!videoid) { marker.remove(); return; }
+        const title = marker.getAttribute('data-title') || '';
+        const author = marker.getAttribute('data-author') || '';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'lite-embed-wrapper';
+        wrapper.setAttribute('data-videoid', videoid);
+        if (title) wrapper.setAttribute('data-title', title);
+        if (author) wrapper.setAttribute('data-author', author);
+
+        const lite = document.createElement(kind === 'youtube' ? 'lite-youtube' : 'lite-vimeo');
+        lite.setAttribute('videoid', videoid);
+        wrapper.appendChild(lite);
+
+        if (title || author) {
+            const caption = document.createElement('div');
+            caption.className = 'lite-embed-caption';
+            if (title) {
+                const t = document.createElement('span');
+                t.className = 'lite-embed-title';
+                t.textContent = title;
+                caption.appendChild(t);
+            }
+            if (author) {
+                const a = document.createElement('span');
+                a.className = 'lite-embed-author';
+                a.textContent = author;
+                caption.appendChild(a);
+            }
+            wrapper.appendChild(caption);
+        }
+
+        marker.parentNode.replaceChild(wrapper, marker);
+    }
+
+    tempDiv.querySelectorAll('span.ff-lite-youtube').forEach(span => buildWrapper('youtube', span));
+    tempDiv.querySelectorAll('span.ff-lite-vimeo').forEach(span => buildWrapper('vimeo', span));
+
     return tempDiv.innerHTML;
 }
 
@@ -3532,6 +3594,7 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacyQuotesAndSpoilers(contentHtml);
                 contentHtml = transformLegacyAttachments(contentHtml);
                 contentHtml = transformLegacyCodeBlocks(contentHtml);
+                contentHtml = transformLiteEmbeds(contentHtml);
                 contentHtml = transformUserTags(contentHtml);
                 contentHtml = transformNSFWTags(contentHtml);
             }
