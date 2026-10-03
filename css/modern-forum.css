@@ -3918,11 +3918,8 @@ section.modern-stats { flex-direction: column; width: 100%; }
     cursor: pointer;
 }
 
-.modern-wysiwyg .ProseMirror lite-youtube::before,
 .modern-wysiwyg .ProseMirror lite-vimeo::before,
-.modern-preview .preview-content lite-youtube::before,
 .modern-preview .preview-content lite-vimeo::before,
-.post-message lite-youtube::before,
 .post-message lite-vimeo::before {
     content: attr(data-title);
     display: block;
