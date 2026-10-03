@@ -3903,6 +3903,20 @@ section.modern-stats { flex-direction: column; width: 100%; }
     outline-offset: 2px;
 }
 
+/* Node selection — a click landed on the embed itself. */
+.modern-wysiwyg .ProseMirror lite-youtube.ProseMirror-selectednode,
+.modern-wysiwyg .ProseMirror lite-vimeo.ProseMirror-selectednode {
+    box-shadow:
+        0 0 0 2px var(--primary-color),
+        0 0 0 4px var(--focus-ring);
+}
+
+/* Range selection — the embed is inside a text drag-select. */
+.modern-wysiwyg .ProseMirror lite-youtube.lite-embed-in-selection,
+.modern-wysiwyg .ProseMirror lite-vimeo.lite-embed-in-selection {
+    box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
 .modern-checkbox {
   display: inline-flex;
   align-items: center;
