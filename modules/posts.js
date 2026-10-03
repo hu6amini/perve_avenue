@@ -2845,13 +2845,14 @@ function transformLegacyCodeBlocks(htmlContent) {
     return tempDiv.innerHTML;
 }
 
-// ============================================================================
-// EMBED HYDRATION — async caption/thumbnail fill-in after card insertion
-//   • hydrateSocialEmbeds  — Twitter/Instagram blockquote upgrades
-//   • hydrateLiteEmbeds    — YouTube/Vimeo iframe caption upgrades
-// Both use the same skeleton-first pattern: the pipeline emits a marked
-// card, insertion appends it, this section fills it in when the worker
-// responds. Failures are silent; the skeleton stays as a fallback.
+    // ============================================================================
+// EMBEDS — synchronous transforms + async post-insertion hydration
+//   Pipeline transforms (run on HTML before insertion):
+//     • transformLegacySocialEmbeds — Twitter/Instagram blockquotes → skeletons
+//     • transformLegacyIframes      — raw <iframe> → lite-embed wrappers
+//   Hydration (runs on DOM after insertion):
+//     • hydrateSocialEmbeds         — fills skeleton cards from OG worker
+//     • hydrateLiteEmbeds           — fills lite wrapper captions from OG worker
 // ============================================================================
 function transformLegacySocialEmbeds(htmlContent) {
     if (!htmlContent || typeof htmlContent !== 'string') return htmlContent;
@@ -2929,9 +2930,8 @@ function transformLegacySocialEmbeds(htmlContent) {
 // Deduplicated per URL across the page so a tweet embedded in five
 // posts still triggers one worker request.
 const _socialHydrationCache = new Map();  // url → Promise<metadata | null>
-const _hydratedUrls = new Set();
 
-    const _liteEmbedCache = new Map();
+const _liteEmbedCache = new Map();
 
 function hydrateLiteEmbeds(root) {
     if (!root) return;
@@ -3705,7 +3705,16 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 applyFaviconsToMessageLinks(card);
                 wrapImagesWithDimensions(card);
                 attachTips(card, completeData);
-                hydrateSocialEmbeds(card);
+                try {
+                    hydrateSocialEmbeds(card);
+                } catch (e) {
+                    console.warn('[PostsModule] Social embed hydration skipped:', e);
+                }
+                try {
+                    hydrateLiteEmbeds(card);
+                } catch (e) {
+                    console.warn('[PostsModule] Lite embed hydration skipped:', e);
+                }
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
@@ -3749,11 +3758,16 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 fixMissingImageDimensions(blogCard);
                 applyFaviconsToMessageLinks(blogCard);
                 wrapImagesWithDimensions(blogCard);
-                                attachTips(blogCard, { ...blogData, apiUser });
+                attachTips(blogCard, { ...blogData, apiUser });
                 try {
                     hydrateSocialEmbeds(blogCard);
                 } catch (e) {
                     console.warn('[PostsModule] Social embed hydration skipped (blog):', e);
+                }
+                try {
+                    hydrateLiteEmbeds(blogCard);
+                } catch (e) {
+                    console.warn('[PostsModule] Lite embed hydration skipped (blog):', e);
                 }
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
@@ -3826,7 +3840,16 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 applyFaviconsToMessageLinks(card);
                 wrapImagesWithDimensions(card);
                 attachTips(card, completeData);
-                hydrateSocialEmbeds(card);
+                try {
+                    hydrateSocialEmbeds(card);
+                } catch (e) {
+                    console.warn('[PostsModule] Social embed hydration skipped:', e);
+                }
+                try {
+                    hydrateLiteEmbeds(card);
+                } catch (e) {
+                    console.warn('[PostsModule] Lite embed hydration skipped:', e);
+                }
             }
             attachEventHandlers();
             initQuotesAndSpoilers();
@@ -3890,8 +3913,8 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 contentHtml = transformLegacyAttachments(contentHtml);
                 contentHtml = transformLegacyCodeBlocks(contentHtml);
                 contentHtml = transformLegacyIframes(contentHtml);
-                contentHtml = transformLegacySocialEmbeds(contentHtml);
                 contentHtml = transformLiteEmbeds(contentHtml);
+                contentHtml = transformLegacySocialEmbeds(contentHtml);
                 contentHtml = transformUserTags(contentHtml);
                 contentHtml = transformNSFWTags(contentHtml);
             }
@@ -3919,6 +3942,11 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 hydrateSocialEmbeds(card);
             } catch (e) {
                 console.warn('[PostsModule] Social embed hydration skipped:', e);
+            }
+            try {
+                hydrateLiteEmbeds(card);
+            } catch (e) {
+                console.warn('[PostsModule] Lite embed hydration skipped:', e);
             }
         }
         initQuotesAndSpoilers();
