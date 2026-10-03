@@ -24,6 +24,8 @@ const ForumPostsModule = (function () {
         QUALITY: 80
     });
 
+    const OG_WORKER_URL = 'https://og-worker.nhristakiev.workers.dev/?url=';
+
     const AVATAR_COLORS = [
         '059669', '10B981', '34D399', '6EE7B7', 'A7F3D0',
         '0D9488', '14B8A6', '2DD4BF', '5EEAD4', '99F6E4',
@@ -3705,7 +3707,12 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
                 fixMissingImageDimensions(blogCard);
                 applyFaviconsToMessageLinks(blogCard);
                 wrapImagesWithDimensions(blogCard);
-                attachTips(blogCard, { ...blogData, apiUser });
+                                attachTips(blogCard, { ...blogData, apiUser });
+                try {
+                    hydrateSocialEmbeds(blogCard);
+                } catch (e) {
+                    console.warn('[PostsModule] Social embed hydration skipped (blog):', e);
+                }
                 if (blogData.postId) convertedPostIds.add(blogData.postId);
                 blogCount++;
             }
@@ -3866,7 +3873,11 @@ function attachPollHandlers(modernPoll, legacyPoll, pollData) {
             applyFaviconsToMessageLinks(card);
             wrapImagesWithDimensions(card);
             attachTips(card, completeData);
-            hydrateSocialEmbeds(card);
+            try {
+                hydrateSocialEmbeds(card);
+            } catch (e) {
+                console.warn('[PostsModule] Social embed hydration skipped:', e);
+            }
         }
         initQuotesAndSpoilers();
         // Convert any remaining native titles into tippys
